@@ -19,5 +19,5 @@ stock_env/
 data/
 !data/.gitignore
 
- # Local environment variables (not committed)
- .env
+# Local environment variables (not committed)
+.env
