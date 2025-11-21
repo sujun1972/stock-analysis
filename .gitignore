@@ -1,0 +1,23 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+stock_env/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# macOS system files
+.DS_Store
+
+# Project data outputs (generated analysis csv/png etc.)
+data/
+!data/.gitignore
+
+ # Local environment variables (not committed)
+ .env
