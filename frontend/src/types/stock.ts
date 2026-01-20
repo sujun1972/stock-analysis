@@ -7,6 +7,14 @@ export interface StockInfo {
   industry?: string
   area?: string
   status?: string
+  // 实时行情信息
+  latest_price?: number
+  pct_change?: number
+  change_amount?: number
+  volume?: number
+  amount?: number
+  turnover?: number
+  trade_time?: string
 }
 
 // 股票日线数据类型

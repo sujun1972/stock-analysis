@@ -29,7 +29,7 @@ class DatabaseService:
         limit: int = 100
     ) -> Dict:
         """
-        获取股票列表
+        获取股票列表（包含实时价格信息）
 
         Args:
             market: 市场类型
@@ -41,18 +41,62 @@ class DatabaseService:
             {total: int, data: List[Dict]}
         """
         try:
-            df = self.db.get_stock_list(market=market, status=status)
-            total = len(df)
+            # 构建 SQL 查询，左连接实时行情表
+            query = """
+                SELECT
+                    s.code,
+                    s.name,
+                    s.market,
+                    s.industry,
+                    s.area,
+                    s.list_date,
+                    s.status,
+                    r.latest_price,
+                    r.pct_change,
+                    r.change_amount,
+                    r.volume,
+                    r.amount,
+                    r.turnover,
+                    r.trade_time
+                FROM stock_basic s
+                LEFT JOIN stock_realtime r ON s.code = r.code
+                WHERE s.status = %s
+            """
+            params = [status]
 
-            # 分页
-            df_page = df.iloc[skip:skip + limit]
+            if market:
+                query += " AND s.market = %s"
+                params.append(market)
 
-            return {
-                "total": total,
-                "skip": skip,
-                "limit": limit,
-                "data": df_page.to_dict('records')
-            }
+            query += " ORDER BY s.code LIMIT %s OFFSET %s"
+            params.extend([limit, skip])
+
+            # 获取数据
+            conn = self.db.get_connection()
+            try:
+                import pandas as pd
+                df = pd.read_sql(query, conn, params=params)
+
+                # 获取总数
+                count_query = "SELECT COUNT(*) FROM stock_basic WHERE status = %s"
+                count_params = [status]
+                if market:
+                    count_query += " AND market = %s"
+                    count_params.append(market)
+
+                cursor = conn.cursor()
+                cursor.execute(count_query, count_params)
+                total = cursor.fetchone()[0]
+                cursor.close()
+
+                return {
+                    "total": total,
+                    "skip": skip,
+                    "limit": limit,
+                    "data": df.to_dict('records')
+                }
+            finally:
+                self.db.release_connection(conn)
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
             raise
