@@ -1,0 +1,33 @@
+# 开发环境 Docker Compose 配置
+# 使用方式: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+version: '3.8'
+
+services:
+  # Backend 开发模式配置（已经支持热重载）
+  backend:
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # 已经挂载了代码卷，无需额外配置
+
+  # Frontend 开发模式配置
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev  # 使用开发模式Dockerfile
+      target: development
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      # 挂载源代码，实现热重载
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/next.config.js:/app/next.config.js
+      - ./frontend/tailwind.config.ts:/app/tailwind.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      # 排除node_modules，使用容器内的
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev

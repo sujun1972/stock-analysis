@@ -1,0 +1,20 @@
+# Frontend 开发模式 Dockerfile
+FROM node:20-alpine AS development
+
+WORKDIR /app
+
+# 安装依赖
+COPY package*.json ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# 复制配置文件
+COPY next.config.js ./
+COPY tsconfig.json ./
+COPY tailwind.config.ts ./
+COPY postcss.config.mjs ./
+
+# 暴露端口
+EXPOSE 3000
+
+# 开发模式启动命令（支持热重载）
+CMD ["npm", "run", "dev"]
