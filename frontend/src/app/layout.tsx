@@ -31,11 +31,17 @@ export default function RootLayout({
                 <a href="/stocks" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
                   股票列表
                 </a>
+                <a href="/sync" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                  数据同步
+                </a>
                 <a href="/analysis" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
                   数据分析
                 </a>
                 <a href="/backtest" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
                   策略回测
+                </a>
+                <a href="/settings" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                  系统设置
                 </a>
               </div>
             </div>

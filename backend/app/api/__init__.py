@@ -3,7 +3,7 @@ API路由模块
 """
 
 from fastapi import APIRouter
-from .endpoints import stocks, data, features, models, backtest
+from .endpoints import stocks, data, features, models, backtest, config, sync, scheduler
 
 # 创建主路由
 router = APIRouter()
@@ -14,5 +14,10 @@ router.include_router(data.router, prefix="/data", tags=["data"])
 router.include_router(features.router, prefix="/features", tags=["features"])
 router.include_router(models.router, prefix="/models", tags=["models"])
 router.include_router(backtest.router, prefix="/backtest", tags=["backtest"])
+
+# 数据引擎路由
+router.include_router(config.router, prefix="/config", tags=["配置管理"])
+router.include_router(sync.router, prefix="/sync", tags=["数据同步"])
+router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 
 __all__ = ['router']

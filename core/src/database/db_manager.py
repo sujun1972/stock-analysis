@@ -67,6 +67,61 @@ class DatabaseManager:
             self.connection_pool.closeall()
             logger.info("所有数据库连接已关闭")
 
+    def _execute_query(self, query: str, params: Optional[tuple] = None):
+        """
+        执行查询并返回结果
+
+        Args:
+            query: SQL查询语句
+            params: 查询参数
+
+        Returns:
+            查询结果列表
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            result = cursor.fetchall()
+            cursor.close()
+            return result
+        except Exception as e:
+            logger.error(f"查询执行失败: {e}")
+            raise
+        finally:
+            if conn:
+                self.release_connection(conn)
+
+    def _execute_update(self, query: str, params: Optional[tuple] = None):
+        """
+        执行更新操作（INSERT, UPDATE, DELETE）
+
+        Args:
+            query: SQL语句
+            params: 参数
+
+        Returns:
+            影响的行数
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            return affected_rows
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"更新执行失败: {e}")
+            raise
+        finally:
+            if conn:
+                self.release_connection(conn)
+
     def init_database(self):
         """初始化数据库表结构"""
         conn = None
@@ -196,12 +251,13 @@ class DatabaseManager:
                 cursor.close()
                 self.release_connection(conn)
 
-    def save_stock_list(self, df: pd.DataFrame) -> int:
+    def save_stock_list(self, df: pd.DataFrame, data_source: str = 'akshare') -> int:
         """
         保存股票列表到数据库
 
         Args:
             df: 包含股票信息的DataFrame
+            data_source: 数据源名称 (akshare 或 tushare)
 
         Returns:
             插入/更新的记录数
@@ -218,24 +274,28 @@ class DatabaseManager:
                     row.get('code', row.get('股票代码')),
                     row.get('name', row.get('股票名称')),
                     row.get('market', row.get('市场类型')),
-                    row.get('list_date', row.get('上市日期')),
                     row.get('industry', row.get('行业')),
                     row.get('area', row.get('地域')),
-                    row.get('status', '正常')
+                    row.get('list_date', row.get('上市日期')),
+                    row.get('delist_date', row.get('退市日期')),
+                    row.get('status', '正常'),
+                    data_source
                 ))
 
-            # 批量插入（冲突时更新）
+            # 批量插入（冲突时更新）- 使用 stock_basic 表
             insert_query = """
-                INSERT INTO stock_info (code, name, market, list_date, industry, area, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO stock_basic (code, name, market, industry, area, list_date, delist_date, status, data_source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (code)
                 DO UPDATE SET
                     name = EXCLUDED.name,
                     market = EXCLUDED.market,
-                    list_date = EXCLUDED.list_date,
                     industry = EXCLUDED.industry,
                     area = EXCLUDED.area,
+                    list_date = EXCLUDED.list_date,
+                    delist_date = EXCLUDED.delist_date,
                     status = EXCLUDED.status,
+                    data_source = EXCLUDED.data_source,
                     updated_at = CURRENT_TIMESTAMP;
             """
 
@@ -243,7 +303,7 @@ class DatabaseManager:
             conn.commit()
 
             count = len(records)
-            logger.info(f"✓ 保存股票列表: {count} 条记录")
+            logger.info(f"✓ 保存股票列表到 stock_basic: {count} 条记录")
             return count
 
         except Exception as e:
@@ -261,7 +321,7 @@ class DatabaseManager:
         保存股票日线数据到数据库
 
         Args:
-            df: 包含OHLCV数据的DataFrame，索引为日期
+            df: 包含OHLCV数据的DataFrame，可能有 trade_date 列或日期索引
             stock_code: 股票代码
 
         Returns:
@@ -274,14 +334,25 @@ class DatabaseManager:
 
             # 准备数据
             records = []
-            for date_idx, row in df.iterrows():
-                # 处理日期
-                if isinstance(date_idx, str):
-                    date_val = datetime.strptime(date_idx, '%Y-%m-%d').date()
-                elif isinstance(date_idx, pd.Timestamp):
-                    date_val = date_idx.date()
+            for idx, row in df.iterrows():
+                # 处理日期 - 优先使用 trade_date 列
+                if 'trade_date' in row:
+                    date_val = row['trade_date']
+                    if isinstance(date_val, str):
+                        date_val = datetime.strptime(date_val, '%Y-%m-%d').date()
+                    elif isinstance(date_val, pd.Timestamp):
+                        date_val = date_val.date()
+                    elif not isinstance(date_val, date):
+                        # 如果已经是 date 类型，直接使用
+                        date_val = pd.to_datetime(date_val).date()
                 else:
-                    date_val = date_idx
+                    # 使用索引作为日期
+                    if isinstance(idx, str):
+                        date_val = datetime.strptime(idx, '%Y-%m-%d').date()
+                    elif isinstance(idx, pd.Timestamp):
+                        date_val = idx.date()
+                    else:
+                        date_val = idx
 
                 records.append((
                     stock_code,
@@ -294,7 +365,7 @@ class DatabaseManager:
                     float(row.get('amount', row.get('成交额', 0))),
                     float(row.get('amplitude', row.get('振幅', 0))),
                     float(row.get('pct_change', row.get('涨跌幅', 0))),
-                    float(row.get('change', row.get('涨跌额', 0))),
+                    float(row.get('change', row.get('涨跌额', row.get('change_amount', 0)))),
                     float(row.get('turnover', row.get('换手率', 0)))
                 ))
 

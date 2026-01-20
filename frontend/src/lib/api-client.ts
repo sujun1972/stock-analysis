@@ -21,7 +21,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
  */
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 600000, // 增加到 600 秒 (10分钟)，用于处理大批量同步操作
   headers: {
     'Content-Type': 'application/json',
   },
@@ -156,6 +156,138 @@ class ApiClient {
     return response.data
   }
 
+  // ========== 数据引擎配置API ==========
+
+  /**
+   * 获取数据源配置
+   */
+  async getDataSourceConfig(): Promise<ApiResponse<{
+    data_source: string
+    tushare_token: string
+  }>> {
+    const response = await axiosInstance.get('/api/config/source')
+    return response.data
+  }
+
+  /**
+   * 更新数据源配置
+   */
+  async updateDataSourceConfig(params: {
+    data_source: string
+    tushare_token?: string
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post('/api/config/source', params)
+    return response.data
+  }
+
+  /**
+   * 获取所有系统配置
+   */
+  async getAllConfigs(): Promise<ApiResponse<Record<string, any>>> {
+    const response = await axiosInstance.get('/api/config/all')
+    return response.data
+  }
+
+  // ========== 数据同步API ==========
+
+  /**
+   * 获取同步状态
+   */
+  async getSyncStatus(): Promise<ApiResponse<{
+    status: string
+    last_sync_date: string
+    progress: number
+    total: number
+    completed: number
+  }>> {
+    const response = await axiosInstance.get('/api/sync/status')
+    return response.data
+  }
+
+  /**
+   * 同步股票列表
+   */
+  async syncStockList(): Promise<ApiResponse<{ total: number }>> {
+    const response = await axiosInstance.post('/api/sync/stock-list')
+    return response.data
+  }
+
+  /**
+   * 同步新股列表
+   */
+  async syncNewStocks(days: number = 30): Promise<ApiResponse<{ total: number }>> {
+    const response = await axiosInstance.post('/api/sync/new-stocks', { days })
+    return response.data
+  }
+
+  /**
+   * 同步退市列表
+   */
+  async syncDelistedStocks(): Promise<ApiResponse<{ total: number }>> {
+    const response = await axiosInstance.post('/api/sync/delisted-stocks')
+    return response.data
+  }
+
+  /**
+   * 批量同步日线数据
+   */
+  async syncDailyBatch(params: {
+    codes?: string[]
+    years?: number
+    max_stocks?: number
+  }): Promise<ApiResponse<{
+    success: number
+    failed: number
+    total: number
+  }>> {
+    const response = await axiosInstance.post('/api/sync/daily/batch', params)
+    return response.data
+  }
+
+  /**
+   * 同步单只股票日线数据
+   */
+  async syncDailyStock(code: string, years: number = 5): Promise<ApiResponse<{
+    code: string
+    records: number
+  }>> {
+    const response = await axiosInstance.post(`/api/sync/daily/${code}`, { years })
+    return response.data
+  }
+
+  /**
+   * 同步分时数据
+   */
+  async syncMinuteData(code: string, params: {
+    period?: string
+    days?: number
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post(`/api/sync/minute/${code}`, params)
+    return response.data
+  }
+
+  /**
+   * 更新实时行情
+   */
+  async syncRealtimeQuotes(codes?: string[]): Promise<ApiResponse<{
+    total: number
+    updated_at: string
+  }>> {
+    const response = await axiosInstance.post('/api/sync/realtime', { codes })
+    return response.data
+  }
+
+  /**
+   * 获取同步历史记录
+   */
+  async getSyncHistory(params?: {
+    limit?: number
+    offset?: number
+  }): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/sync/history', { params })
+    return response.data
+  }
+
   // 获取预测结果
   async getPrediction(
     code: string,
@@ -183,6 +315,105 @@ class ApiClient {
   // 获取回测结果
   async getBacktestResult(taskId: string): Promise<BacktestResult> {
     const response = await axiosInstance.get(`/api/backtest/result/${taskId}`)
+    return response.data
+  }
+
+  /**
+   * 获取特定模块的同步状态
+   */
+  async getModuleSyncStatus(module: string): Promise<ApiResponse<{
+    status: string
+    total: number
+    success: number
+    failed: number
+    progress: number
+    error_message: string
+    started_at: string
+    completed_at: string
+  }>> {
+    const response = await axiosInstance.get(`/api/sync/status/${module}`)
+    return response.data
+  }
+
+  // ========== Scheduler API ==========
+
+  /**
+   * 获取所有定时任务
+   */
+  async getScheduledTasks(): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/scheduler/tasks')
+    return response.data
+  }
+
+  /**
+   * 获取单个定时任务详情
+   */
+  async getScheduledTask(taskId: number): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get(`/api/scheduler/tasks/${taskId}`)
+    return response.data
+  }
+
+  /**
+   * 创建定时任务
+   */
+  async createScheduledTask(data: {
+    task_name: string
+    module: string
+    description?: string
+    cron_expression: string
+    enabled?: boolean
+    params?: any
+  }): Promise<ApiResponse<{ id: number }>> {
+    const response = await axiosInstance.post('/api/scheduler/tasks', data)
+    return response.data
+  }
+
+  /**
+   * 更新定时任务
+   */
+  async updateScheduledTask(taskId: number, data: {
+    description?: string
+    cron_expression?: string
+    enabled?: boolean
+    params?: any
+  }): Promise<ApiResponse<{ id: number }>> {
+    const response = await axiosInstance.put(`/api/scheduler/tasks/${taskId}`, data)
+    return response.data
+  }
+
+  /**
+   * 删除定时任务
+   */
+  async deleteScheduledTask(taskId: number): Promise<ApiResponse<{ id: number }>> {
+    const response = await axiosInstance.delete(`/api/scheduler/tasks/${taskId}`)
+    return response.data
+  }
+
+  /**
+   * 切换定时任务启用状态
+   */
+  async toggleScheduledTask(taskId: number): Promise<ApiResponse<{ enabled: boolean }>> {
+    const response = await axiosInstance.post(`/api/scheduler/tasks/${taskId}/toggle`)
+    return response.data
+  }
+
+  /**
+   * 获取任务执行历史
+   */
+  async getTaskExecutionHistory(taskId: number, limit: number = 20): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get(`/api/scheduler/tasks/${taskId}/history`, {
+      params: { limit }
+    })
+    return response.data
+  }
+
+  /**
+   * 获取最近的任务执行历史
+   */
+  async getRecentExecutionHistory(limit: number = 50): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/scheduler/history/recent', {
+      params: { limit }
+    })
     return response.data
   }
 }
