@@ -26,6 +26,8 @@ class DatabaseService:
         market: Optional[str] = None,
         status: str = "正常",
         search: Optional[str] = None,
+        sort_by: str = "pct_change",
+        sort_order: str = "desc",
         skip: int = 0,
         limit: int = 100
     ) -> Dict:
@@ -36,6 +38,8 @@ class DatabaseService:
             market: 市场类型
             status: 股票状态
             search: 搜索关键词（股票代码或名称）
+            sort_by: 排序字段
+            sort_order: 排序方向（asc/desc）
             skip: 跳过记录数
             limit: 返回记录数
 
@@ -76,7 +80,24 @@ class DatabaseService:
                 search_pattern = f"%{search}%"
                 params.extend([search_pattern, search_pattern])
 
-            query += " ORDER BY s.code LIMIT %s OFFSET %s"
+            # 添加排序（防止SQL注入，只允许特定字段）
+            allowed_sort_fields = {
+                'code': 's.code',
+                'name': 's.name',
+                'market': 's.market',
+                'latest_price': 'r.latest_price',
+                'pct_change': 'r.pct_change',
+                'change_amount': 'r.change_amount',
+                'volume': 'r.volume',
+                'amount': 'r.amount'
+            }
+
+            sort_field = allowed_sort_fields.get(sort_by, 'r.pct_change')
+            sort_direction = 'DESC' if sort_order.lower() == 'desc' else 'ASC'
+
+            # 对于可能为NULL的字段，使用NULLS LAST确保NULL值排在最后
+            query += f" ORDER BY {sort_field} {sort_direction} NULLS LAST, s.code ASC"
+            query += " LIMIT %s OFFSET %s"
             params.extend([limit, skip])
 
             # 获取数据

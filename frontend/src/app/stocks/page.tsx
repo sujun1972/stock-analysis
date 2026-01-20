@@ -13,12 +13,14 @@ export default function StocksPage() {
   const [totalStocks, setTotalStocks] = useState(0)
   const [isUpdating, setIsUpdating] = useState(false)
   const [updateMessage, setUpdateMessage] = useState<string | null>(null)
-  const pageSize = 20
+  const [pageSize, setPageSize] = useState(20)
+  const [sortBy, setSortBy] = useState('pct_change')
+  const [sortOrder, setSortOrder] = useState('desc')
 
   useEffect(() => {
     loadStocks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, marketFilter, searchTerm])
+  }, [currentPage, marketFilter, searchTerm, pageSize, sortBy, sortOrder])
 
   const loadStocks = async () => {
     try {
@@ -28,6 +30,8 @@ export default function StocksPage() {
       const params: any = {
         skip: (currentPage - 1) * pageSize,
         limit: pageSize,
+        sort_by: sortBy,
+        sort_order: sortOrder,
       }
 
       if (marketFilter !== 'all') {
@@ -153,15 +157,6 @@ export default function StocksPage() {
 
       {/* 股票表格 */}
       <div className="card">
-        <div className="mb-4 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            股票列表 ({totalStocks} 只)
-          </h2>
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            显示 {stocks.length} 条结果
-          </span>
-        </div>
-
         {isLoading ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
@@ -185,39 +180,51 @@ export default function StocksPage() {
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    股票代码
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    股票名称
+                    股票
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     最新价
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    涨跌幅
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    市场
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    行业
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    状态
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    操作
+                    <button
+                      onClick={() => {
+                        if (sortBy === 'pct_change') {
+                          setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')
+                        } else {
+                          setSortBy('pct_change')
+                          setSortOrder('desc')
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200"
+                    >
+                      涨跌幅
+                      {sortBy === 'pct_change' && (
+                        <svg
+                          className="w-3 h-3 text-blue-600 dark:text-blue-400"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          {sortOrder === 'desc' ? (
+                            <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          ) : (
+                            <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                          )}
+                        </svg>
+                      )}
+                    </button>
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
                 {stocks.map((stock) => (
                   <tr key={stock.code} className="table-row">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {stock.code}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {stock.name}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <a
+                        href={`/analysis?code=${stock.code}`}
+                        className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                      >
+                        {stock.name}({stock.code})
+                      </a>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
                       {stock.latest_price ? (
@@ -240,29 +247,6 @@ export default function StocksPage() {
                           {stock.pct_change > 0 ? '+' : ''}{stock.pct_change.toFixed(2)}%
                         </span>
                       ) : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {stock.market || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {stock.industry || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        stock.status === 'L' || stock.status === '正常'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                          : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                      }`}>
-                        {stock.status === 'L' ? '上市' : stock.status || '-'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <a
-                        href={`/analysis?code=${stock.code}`}
-                        className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                      >
-                        分析
-                      </a>
                     </td>
                   </tr>
                 ))}
@@ -291,12 +275,27 @@ export default function StocksPage() {
               </button>
             </div>
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
+              <div className="flex items-center gap-4">
                 <p className="text-sm text-gray-700 dark:text-gray-300">
                   显示第 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> 到{' '}
                   <span className="font-medium">{Math.min(currentPage * pageSize, totalStocks)}</span> 条，
                   共 <span className="font-medium">{totalStocks}</span> 条
                 </p>
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  <label className="text-sm text-gray-700 dark:text-gray-300">每页:</label>
+                  <select
+                    className="input-field py-1 px-2 text-sm"
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setCurrentPage(1) // 重置到第一页
+                    }}
+                  >
+                    <option value="10">10条</option>
+                    <option value="20">20条</option>
+                    <option value="30">30条</option>
+                  </select>
+                </div>
               </div>
               <div>
                 <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
