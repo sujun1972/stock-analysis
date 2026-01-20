@@ -17,25 +17,29 @@ router = APIRouter()
 @router.get("/{code}")
 async def get_features(
     code: str,
-    start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    feature_type: Optional[str] = None
+    feature_type: Optional[str] = None,
+    limit: int = 500
 ):
     """
-    获取股票特征数据
+    获取股票特征数据（支持懒加载）
 
     参数:
     - code: 股票代码
-    - start_date: 开始日期
-    - end_date: 结束日期
+    - end_date: 结束日期（不包含），默认为今天。返回该日期之前的数据
     - feature_type: 特征类型（technical/alpha/transformed）
+    - limit: 返回记录数限制，默认500条
 
     返回:
-    - 特征数据
+    - 特征数据（按日期降序，从end_date往前取limit条）
+
+    示例:
+    - GET /api/features/000031 → 返回最新500条（从今天往前）
+    - GET /api/features/000031?end_date=2023-12-27 → 返回2023-12-27之前的500条
     """
     try:
         feature_service = FeatureService()
-        df = await feature_service.get_features(code, feature_type)
+        df = await feature_service.get_features(code, feature_type, end_date=end_date)
 
         if df is None or df.empty:
             raise HTTPException(status_code=404, detail=f"股票 {code} 无特征数据")
@@ -44,21 +48,31 @@ async def get_features(
         df_reset = df.reset_index()
 
         # 替换Inf和NaN为None，以便JSON序列化
-        # 技术指标计算初期会产生NaN值（如MA需要足够的历史数据）
         df_reset = df_reset.replace([np.inf, -np.inf], np.nan)
+
+        # 按日期降序排列（从新到旧）
+        df_reset = df_reset.sort_values('date', ascending=False)
+
+        # 获取总数（不受limit影响）
+        total_count = len(df_reset)
+
+        # 限制返回数量
+        df_reset = df_reset.head(limit)
 
         # 转换为字典列表，将NaN转为None
         data_list = [
             {k: (None if pd.isna(v) else v) for k, v in record.items()}
-            for record in df_reset.head(100).to_dict('records')
+            for record in df_reset.to_dict('records')
         ]
 
         return {
             "code": code,
             "feature_type": feature_type or "all",
-            "count": len(df),
+            "total": total_count,  # 总数据量（截止到end_date）
+            "returned": len(data_list),  # 实际返回数量
+            "has_more": total_count > limit,  # 是否还有更多数据
             "columns": list(df.columns),
-            "data": data_list  # 返回前100条记录
+            "data": data_list
         }
     except HTTPException:
         raise

@@ -37,12 +37,29 @@ export interface TechnicalIndicator {
   [key: string]: number | string
 }
 
-// 特征数据类型
+// 特征数据类型（包含OHLCV和技术指标）
 export interface FeatureData {
-  code: string
   date: string
-  feature_type: string
-  feature_data: Record<string, number>
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  // 技术指标（可选）
+  MA5?: number | null
+  MA20?: number | null
+  MA60?: number | null
+  MACD?: number | null
+  MACD_SIGNAL?: number | null
+  MACD_HIST?: number | null
+  KDJ_K?: number | null
+  KDJ_D?: number | null
+  KDJ_J?: number | null
+  RSI?: number | null
+  BOLL_UPPER?: number | null
+  BOLL_MIDDLE?: number | null
+  BOLL_LOWER?: number | null
+  [key: string]: number | string | null | undefined
 }
 
 // 模型预测结果类型

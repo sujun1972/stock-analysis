@@ -98,23 +98,24 @@ class FeatureService:
     async def get_features(
         self,
         code: str,
-        feature_type: Optional[str] = None
+        feature_type: Optional[str] = None,
+        end_date = None
     ) -> pd.DataFrame:
         """
-        获取股票特征数据
+        获取股票特征数据（支持懒加载）
 
         Args:
             code: 股票代码
-            feature_type: 特征类型
+            feature_type: 特征类型（不影响返回列，仅作为标记）
+            end_date: 结束日期（不包含），返回该日期之前的数据
 
         Returns:
-            特征数据DataFrame
+            特征数据DataFrame（按日期降序排列）
         """
         try:
-            # TODO: 从stock_features表查询
-            # 目前简化：直接重新计算
-            logger.info(f"获取 {code} 的特征数据...")
+            logger.info(f"获取 {code} 的特征数据 (end_date={end_date})...")
 
+            # 加载日线数据
             df = await asyncio.to_thread(
                 self.db.load_daily_data,
                 code
@@ -123,14 +124,17 @@ class FeatureService:
             if df is None or df.empty:
                 raise ValueError(f"股票 {code} 无数据")
 
-            # 计算技术指标
+            # 计算技术指标（先计算，后过滤，确保指标计算的连续性）
             ti = TechnicalIndicators(df)
             df = await asyncio.to_thread(ti.add_all_indicators)
 
-            # 如果指定了特征类型，只返回相关列
-            if feature_type == "technical":
-                feature_cols = ti.get_feature_names()
-                df = df[['close'] + feature_cols]
+            # 按日期过滤（如果提供了end_date，只返回该日期之前的数据，不包含end_date当天）
+            if end_date is not None:
+                df_reset = df.reset_index()
+                # 确保date列是datetime类型，并与end_date比较（end_date可能是date对象或字符串）
+                end_dt = pd.Timestamp(end_date)
+                df_reset = df_reset[pd.to_datetime(df_reset['date']) < end_dt]
+                df = df_reset.set_index('date')
 
             logger.info(f"✓ 获取 {code} 特征: {len(df)} 行, {len(df.columns)} 列")
 

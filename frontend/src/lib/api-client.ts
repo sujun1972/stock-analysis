@@ -136,10 +136,22 @@ class ApiClient {
   // 获取特征数据
   async getFeatures(
     code: string,
-    params?: { feature_type?: string }
-  ): Promise<FeatureData[]> {
+    params?: {
+      feature_type?: string
+      limit?: number
+      end_date?: string
+    }
+  ): Promise<{
+    code: string
+    feature_type: string
+    total: number
+    returned: number
+    has_more: boolean
+    columns: string[]
+    data: FeatureData[]
+  }> {
     const response = await axiosInstance.get(`/api/features/${code}`, { params })
-    return response.data.data
+    return response.data
   }
 
   // 计算特征
