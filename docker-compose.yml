@@ -1,0 +1,106 @@
+services:
+  # 数据库服务
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: stock_timescaledb
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=stock_analysis
+      - POSTGRES_USER=stock_user
+      - POSTGRES_PASSWORD=stock_password_123
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8
+    ports:
+      - "5432:5432"
+    volumes:
+      # 数据持久化
+      - timescaledb_data:/var/lib/postgresql/data
+      # 初始化脚本（可选）
+      - ./db_init:/docker-entrypoint-initdb.d
+    networks:
+      - stock_network
+    # 资源限制（根据你的硬件调整）
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    # 健康检查
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock_user -d stock_analysis"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Backend API 服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stock_backend
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_HOST=timescaledb
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=stock_analysis
+      - DATABASE_USER=stock_user
+      - DATABASE_PASSWORD=stock_password_123
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      # 代码热重载
+      - ./backend:/app
+      # 共享数据目录
+      - ./data:/data
+      # 挂载核心代码目录
+      - ./core/src:/app/src
+    networks:
+      - stock_network
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Web服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stock_frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    ports:
+      - "3000:3000"
+    networks:
+      - stock_network
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  timescaledb_data:
+    driver: local
+    # 可选：指定本地路径
+    driver_opts:
+      type: none
+      device: ./data/timescaledb
+      o: bind
+
+networks:
+  stock_network:
+    driver: bridge

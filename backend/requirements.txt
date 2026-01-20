@@ -1,0 +1,50 @@
+# Web框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.4.0
+pydantic-settings>=2.0.0
+
+# 数据处理
+pandas>=1.5.0
+numpy>=1.21.0
+
+# 数据源
+akshare>=1.12.0
+yfinance>=0.2.18
+tushare>=1.2.89
+
+# 数据库
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0
+alembic>=1.12.0
+
+# 技术分析
+TA-Lib>=0.4.28
+
+# 机器学习
+lightgbm>=4.0.0
+scikit-learn>=1.2.0
+scipy>=1.10.0
+
+# 数据存储
+pyarrow>=10.0.0
+
+# 工具
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+httpx>=0.25.0
+
+# CORS支持（FastAPI内置，无需额外包）
+# python-cors不存在，FastAPI通过CORSMiddleware实现
+
+# 日期处理
+python-dateutil>=2.8.2
+
+# 日志
+loguru>=0.7.0
+
+# 任务调度
+apscheduler>=3.10.0
+
+# Redis (可选，用于缓存)
+redis>=5.0.0

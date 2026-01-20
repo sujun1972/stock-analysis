@@ -16,8 +16,38 @@ stock_env/
 .DS_Store
 
 # Project data outputs (generated analysis csv/png etc.)
-data/
+/data/
 !data/.gitignore
 
 # Local environment variables (not committed)
 .env
+
+# Docker volumes and build artifacts
+backend/src/  # Docker挂载创建的目录
+backend/src_legacy/  # 已废弃
+src/  # Docker挂载可能创建的临时目录
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Models and results (now in data/)
+data/models/**/*.pkl
+data/models/**/*.h5
+data/results/**/*.png
+data/results/**/*.csv
+
+# Logs
+*.log
+logs/
+
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env*.local
+frontend/.vercel
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
