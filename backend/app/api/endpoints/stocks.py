@@ -15,6 +15,7 @@ router = APIRouter()
 async def get_stock_list(
     market: Optional[str] = Query(None, description="市场类型"),
     status: str = Query("正常", description="股票状态"),
+    search: Optional[str] = Query(None, description="搜索关键词（股票代码或名称）"),
     skip: int = Query(0, ge=0, description="跳过记录数"),
     limit: int = Query(100, ge=1, le=1000, description="返回记录数")
 ):
@@ -24,6 +25,7 @@ async def get_stock_list(
     参数:
     - market: 市场类型（上海主板、深圳主板、创业板、科创板等）
     - status: 股票状态（正常、退市等）
+    - search: 搜索关键词（支持股票代码或名称模糊搜索）
     - skip: 分页-跳过记录数
     - limit: 分页-每页记录数
 
@@ -35,6 +37,7 @@ async def get_stock_list(
         result = db_service.get_stock_list(
             market=market,
             status=status,
+            search=search,
             skip=skip,
             limit=limit
         )

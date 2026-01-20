@@ -18,7 +18,7 @@ export default function StocksPage() {
   useEffect(() => {
     loadStocks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, marketFilter])
+  }, [currentPage, marketFilter, searchTerm])
 
   const loadStocks = async () => {
     try {
@@ -32,6 +32,10 @@ export default function StocksPage() {
 
       if (marketFilter !== 'all') {
         params.market = marketFilter
+      }
+
+      if (searchTerm && searchTerm.trim()) {
+        params.search = searchTerm.trim()
       }
 
       const response = await apiClient.getStockList(params)
@@ -71,51 +75,15 @@ export default function StocksPage() {
     }
   }
 
-  const filteredStocks = stocks.filter(stock => {
-    if (!searchTerm) return true
-    const term = searchTerm.toLowerCase()
-    return (
-      stock.code.toLowerCase().includes(term) ||
-      stock.name.toLowerCase().includes(term)
-    )
-  })
-
   const totalPages = Math.ceil(totalStocks / pageSize)
 
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            股票列表
-          </h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">
-            查看所有A股股票，支持搜索和筛选
-          </p>
-        </div>
-
-        {/* 更新按钮 */}
-        <button
-          onClick={handleUpdateStockList}
-          disabled={isUpdating || isLoading}
-          className="btn-primary flex items-center gap-2"
-        >
-          <svg
-            className={'w-4 h-4 ' + (isUpdating ? 'animate-spin' : '')}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          {isUpdating ? '更新中...' : '更新股票列表'}
-        </button>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          股票列表
+        </h1>
       </div>
 
       {/* 成功消息提示 */}
@@ -144,20 +112,7 @@ export default function StocksPage() {
 
       {/* 搜索和筛选 */}
       <div className="card">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              搜索股票
-            </label>
-            <input
-              type="text"
-              placeholder="输入股票代码或名称..."
-              className="input-field"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               市场筛选
@@ -178,14 +133,20 @@ export default function StocksPage() {
             </select>
           </div>
 
-          <div className="flex items-end">
-            <button
-              onClick={loadStocks}
-              disabled={isLoading}
-              className="btn-primary w-full"
-            >
-              {isLoading ? '加载中...' : '刷新列表'}
-            </button>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              搜索股票
+            </label>
+            <input
+              type="text"
+              placeholder="输入股票代码或名称..."
+              className="input-field"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value)
+                setCurrentPage(1) // 搜索时重置到第一页
+              }}
+            />
           </div>
         </div>
       </div>
@@ -197,7 +158,7 @@ export default function StocksPage() {
             股票列表 ({totalStocks} 只)
           </h2>
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            显示 {filteredStocks.length} 条结果
+            显示 {stocks.length} 条结果
           </span>
         </div>
 
@@ -206,7 +167,7 @@ export default function StocksPage() {
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
           </div>
-        ) : filteredStocks.length === 0 ? (
+        ) : stocks.length === 0 ? (
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -250,7 +211,7 @@ export default function StocksPage() {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredStocks.map((stock) => (
+                {stocks.map((stock) => (
                   <tr key={stock.code} className="table-row">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {stock.code}
@@ -258,8 +219,20 @@ export default function StocksPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {stock.name}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-white">
-                      {stock.latest_price ? stock.latest_price.toFixed(2) : '-'}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+                      {stock.latest_price ? (
+                        <span className={
+                          stock.pct_change !== null && stock.pct_change !== undefined
+                            ? stock.pct_change > 0
+                              ? 'text-red-600 dark:text-red-400'
+                              : stock.pct_change < 0
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-gray-900 dark:text-white'
+                            : 'text-gray-900 dark:text-white'
+                        }>
+                          {stock.latest_price.toFixed(2)}
+                        </span>
+                      ) : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
                       {stock.pct_change !== null && stock.pct_change !== undefined ? (
@@ -334,9 +307,31 @@ export default function StocksPage() {
                   >
                     上一页
                   </button>
-                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                    const page = i + 1
-                    return (
+
+                  {/* 第一页 */}
+                  {currentPage > 3 && (
+                    <>
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium"
+                      >
+                        1
+                      </button>
+                      {currentPage > 4 && (
+                        <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          ...
+                        </span>
+                      )}
+                    </>
+                  )}
+
+                  {/* 当前页周围的页码 */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(page => {
+                      // 显示当前页及其前后各2页
+                      return page >= currentPage - 2 && page <= currentPage + 2
+                    })
+                    .map(page => (
                       <button
                         key={page}
                         onClick={() => setCurrentPage(page)}
@@ -348,8 +343,25 @@ export default function StocksPage() {
                       >
                         {page}
                       </button>
-                    )
-                  })}
+                    ))}
+
+                  {/* 最后一页 */}
+                  {currentPage < totalPages - 2 && (
+                    <>
+                      {currentPage < totalPages - 3 && (
+                        <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          ...
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium"
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+
                   <button
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}

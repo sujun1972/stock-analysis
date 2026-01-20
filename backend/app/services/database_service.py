@@ -25,6 +25,7 @@ class DatabaseService:
         self,
         market: Optional[str] = None,
         status: str = "正常",
+        search: Optional[str] = None,
         skip: int = 0,
         limit: int = 100
     ) -> Dict:
@@ -34,6 +35,7 @@ class DatabaseService:
         Args:
             market: 市场类型
             status: 股票状态
+            search: 搜索关键词（股票代码或名称）
             skip: 跳过记录数
             limit: 返回记录数
 
@@ -68,6 +70,12 @@ class DatabaseService:
                 query += " AND s.market = %s"
                 params.append(market)
 
+            # 添加搜索条件（支持股票代码或名称模糊搜索）
+            if search:
+                query += " AND (s.code LIKE %s OR s.name LIKE %s)"
+                search_pattern = f"%{search}%"
+                params.extend([search_pattern, search_pattern])
+
             query += " ORDER BY s.code LIMIT %s OFFSET %s"
             params.extend([limit, skip])
 
@@ -83,17 +91,40 @@ class DatabaseService:
                 if market:
                     count_query += " AND market = %s"
                     count_params.append(market)
+                if search:
+                    count_query += " AND (code LIKE %s OR name LIKE %s)"
+                    count_params.extend([search_pattern, search_pattern])
 
                 cursor = conn.cursor()
                 cursor.execute(count_query, count_params)
                 total = cursor.fetchone()[0]
                 cursor.close()
 
+                # 转换为字典列表
+                data = df.to_dict('records')
+
+                # 清理所有 NaN 和 Infinity 值，确保 JSON 可序列化
+                import math
+                def clean_value(val):
+                    """清理值，将 NaN/Infinity 替换为 None"""
+                    if val is None:
+                        return None
+                    if isinstance(val, float):
+                        if math.isnan(val) or math.isinf(val):
+                            return None
+                    return val
+
+                # 清理每条记录中的所有值
+                data = [
+                    {k: clean_value(v) for k, v in record.items()}
+                    for record in data
+                ]
+
                 return {
                     "total": total,
                     "skip": skip,
                     "limit": limit,
-                    "data": df.to_dict('records')
+                    "data": data
                 }
             finally:
                 self.db.release_connection(conn)
