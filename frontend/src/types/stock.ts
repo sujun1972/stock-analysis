@@ -55,7 +55,9 @@ export interface FeatureData {
   KDJ_K?: number | null
   KDJ_D?: number | null
   KDJ_J?: number | null
-  RSI?: number | null
+  RSI6?: number | null
+  RSI12?: number | null
+  RSI24?: number | null
   BOLL_UPPER?: number | null
   BOLL_MIDDLE?: number | null
   BOLL_LOWER?: number | null

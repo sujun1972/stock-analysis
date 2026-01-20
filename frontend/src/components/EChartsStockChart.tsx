@@ -20,7 +20,9 @@ interface ChartData {
   KDJ_K?: number | null
   KDJ_D?: number | null
   KDJ_J?: number | null
-  RSI?: number | null
+  RSI6?: number | null
+  RSI12?: number | null
+  RSI24?: number | null
   BOLL_UPPER?: number | null
   BOLL_MIDDLE?: number | null
   BOLL_LOWER?: number | null
@@ -52,7 +54,12 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
   const [showSettings, setShowSettings] = useState(false)
 
   // 检查数据是否可用
-  const hasRSI = allData.some(d => d.RSI !== null && d.RSI !== undefined)
+  // RSI支持多周期：RSI6, RSI12, RSI24
+  const hasRSI = allData.some(d =>
+    (d.RSI6 !== null && d.RSI6 !== undefined) ||
+    (d.RSI12 !== null && d.RSI12 !== undefined) ||
+    (d.RSI24 !== null && d.RSI24 !== undefined)
+  )
   const hasBOLL = allData.some(d => d.BOLL_UPPER !== null && d.BOLL_UPPER !== undefined)
   const hasKDJ = allData.some(d => d.KDJ_K !== null && d.KDJ_K !== undefined)
   const hasMACD = allData.some(d => d.MACD !== null && d.MACD !== undefined)
@@ -194,8 +201,8 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
     const kdjDData = sortedData.map(d => d.KDJ_D ?? '-')
     const kdjJData = sortedData.map(d => d.KDJ_J ?? '-')
 
-    // RSI数据
-    const rsiData = sortedData.map(d => d.RSI ?? '-')
+    // RSI数据（优先使用RSI6，其次RSI12，最后RSI24）
+    const rsiData = sortedData.map(d => d.RSI6 ?? d.RSI12 ?? d.RSI24 ?? '-')
 
     // BOLL数据
     const bollUpperData = sortedData.map(d => d.BOLL_UPPER ?? '-')
