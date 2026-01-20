@@ -406,6 +406,103 @@ class DatabaseManager:
                 cursor.close()
                 self.release_connection(conn)
 
+    def save_realtime_quotes(self, df: pd.DataFrame, data_source: str = 'akshare') -> int:
+        """
+        保存实时行情数据到数据库
+
+        Args:
+            df: 包含实时行情数据的DataFrame
+            data_source: 数据源名称
+
+        Returns:
+            插入/更新的记录数
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # 辅助函数：安全地转换值，处理 NaN 和 None
+            def safe_float(val, default=0.0):
+                """安全转换为 float，处理 NaN"""
+                if pd.isna(val) or val is None:
+                    return default
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+
+            def safe_int(val, default=0):
+                """安全转换为 int，处理 NaN"""
+                if pd.isna(val) or val is None:
+                    return default
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    return default
+
+            # 准备数据
+            records = []
+            for idx, row in df.iterrows():
+                records.append((
+                    row.get('code', row.get('代码')),
+                    row.get('name', row.get('名称')),
+                    safe_float(row.get('latest_price', row.get('最新价', row.get('现价')))),
+                    safe_float(row.get('open', row.get('今开'))),
+                    safe_float(row.get('high', row.get('最高'))),
+                    safe_float(row.get('low', row.get('最低'))),
+                    safe_float(row.get('pre_close', row.get('昨收'))),
+                    safe_int(row.get('volume', row.get('成交量'))),
+                    safe_float(row.get('amount', row.get('成交额'))),
+                    safe_float(row.get('pct_change', row.get('涨跌幅'))),
+                    safe_float(row.get('change_amount', row.get('涨跌额'))),
+                    safe_float(row.get('turnover', row.get('换手率'))),
+                    safe_float(row.get('amplitude', row.get('振幅'))),
+                    data_source
+                ))
+
+            # 批量插入（冲突时更新）
+            insert_query = """
+                INSERT INTO stock_realtime
+                (code, name, latest_price, open, high, low, pre_close, volume, amount,
+                 pct_change, change_amount, turnover, amplitude, data_source, trade_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (code)
+                DO UPDATE SET
+                    name = EXCLUDED.name,
+                    latest_price = EXCLUDED.latest_price,
+                    open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    pre_close = EXCLUDED.pre_close,
+                    volume = EXCLUDED.volume,
+                    amount = EXCLUDED.amount,
+                    pct_change = EXCLUDED.pct_change,
+                    change_amount = EXCLUDED.change_amount,
+                    turnover = EXCLUDED.turnover,
+                    amplitude = EXCLUDED.amplitude,
+                    data_source = EXCLUDED.data_source,
+                    trade_time = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP;
+            """
+
+            extras.execute_batch(cursor, insert_query, records, page_size=1000)
+            conn.commit()
+
+            count = len(records)
+            logger.info(f"✓ 保存实时行情数据: {count} 条记录")
+            return count
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存实时行情数据失败: {e}")
+            raise
+        finally:
+            if conn:
+                cursor.close()
+                self.release_connection(conn)
+
     def load_daily_data(self, stock_code: str,
                        start_date: Optional[str] = None,
                        end_date: Optional[str] = None) -> pd.DataFrame:

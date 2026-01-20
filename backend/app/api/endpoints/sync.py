@@ -755,13 +755,15 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
         if df.empty:
             raise HTTPException(status_code=404, detail="无实时行情数据")
 
-        # TODO: 保存实时行情到数据库
-        # await asyncio.to_thread(
-        #     data_service.db.save_realtime_quotes,
-        #     df
-        # )
+        # 保存实时行情到数据库
+        data_service = DataDownloadService()
+        count = await asyncio.to_thread(
+            data_service.db.save_realtime_quotes,
+            df,
+            config['data_source']
+        )
 
-        logger.info(f"✓ 实时行情更新完成: {len(df)} 只股票")
+        logger.info(f"✓ 实时行情更新完成: {count} 只股票")
 
         return {
             "code": 200,
