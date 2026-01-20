@@ -95,6 +95,15 @@ class ApiClient {
     return response.data
   }
 
+  /**
+   * 更新股票列表（从数据源获取最新列表）
+   * @returns 包含更新股票总数的响应对象
+   */
+  async updateStockList(): Promise<ApiResponse<{ total: number }>> {
+    const response = await axiosInstance.post('/api/stocks/update')
+    return response.data
+  }
+
   // ========== 数据相关API ==========
 
   // 获取日线数据

@@ -11,6 +11,8 @@ export default function StocksPage() {
   const [marketFilter, setMarketFilter] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalStocks, setTotalStocks] = useState(0)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
   const pageSize = 20
 
   useEffect(() => {
@@ -43,6 +45,32 @@ export default function StocksPage() {
     }
   }
 
+  /**
+   * 更新股票列表（从数据源拉取最新数据）
+   */
+  const handleUpdateStockList = async () => {
+    try {
+      setIsUpdating(true)
+      setUpdateMessage(null)
+      setError(null)
+
+      const response = await apiClient.updateStockList()
+
+      setUpdateMessage('成功更新股票列表！共获取 ' + (response.data?.total || 0) + ' 只股票')
+
+      // 重新加载股票列表
+      await loadStocks()
+
+      // 5秒后清除成功消息
+      setTimeout(() => setUpdateMessage(null), 5000)
+    } catch (err: any) {
+      setError(err.message || '更新股票列表失败')
+      console.error('Failed to update stock list:', err)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const filteredStocks = stocks.filter(stock => {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
@@ -57,14 +85,62 @@ export default function StocksPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          股票列表
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          查看所有A股股票，支持搜索和筛选
-        </p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            股票列表
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">
+            查看所有A股股票，支持搜索和筛选
+          </p>
+        </div>
+
+        {/* 更新按钮 */}
+        <button
+          onClick={handleUpdateStockList}
+          disabled={isUpdating || isLoading}
+          className="btn-primary flex items-center gap-2"
+        >
+          <svg
+            className={'w-4 h-4 ' + (isUpdating ? 'animate-spin' : '')}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          {isUpdating ? '更新中...' : '更新股票列表'}
+        </button>
       </div>
+
+      {/* 成功消息提示 */}
+      {updateMessage && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span className="text-green-800 dark:text-green-200">{updateMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 错误提示 */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <span className="text-red-800 dark:text-red-200">{error}</span>
+          </div>
+        </div>
+      )}
 
       {/* 搜索和筛选 */}
       <div className="card">
@@ -114,18 +190,6 @@ export default function StocksPage() {
         </div>
       </div>
 
-      {/* 错误提示 */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <span className="text-red-800 dark:text-red-200">{error}</span>
-          </div>
-        </div>
-      )}
-
       {/* 股票表格 */}
       <div className="card">
         <div className="mb-4 flex justify-between items-center">
@@ -148,6 +212,11 @@ export default function StocksPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <p className="mt-4 text-gray-600 dark:text-gray-400">没有找到股票</p>
+            {totalStocks === 0 && (
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
+                请点击右上角的&ldquo;更新股票列表&rdquo;按钮获取股票数据
+              </p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
