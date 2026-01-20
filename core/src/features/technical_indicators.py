@@ -278,16 +278,18 @@ class TechnicalIndicators:
 
         返回:
             添加KDJ列的DataFrame
+
+        注意:
+            移除了slowk_matype和slowd_matype参数，因为某些版本的TA-Lib不支持
         """
+        # 调用STOCH计算随机指标（KDJ的K和D值）
         slowk, slowd = talib.STOCH(
             self.df['high'],
             self.df['low'],
             self.df['close'],
             fastk_period=fastk_period,
             slowk_period=slowk_period,
-            slowk_matype=0,
-            slowd_period=slowd_period,
-            slowd_matype=0
+            slowd_period=slowd_period
         )
 
         self.df['KDJ_K'] = slowk

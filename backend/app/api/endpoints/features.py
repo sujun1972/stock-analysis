@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional, List
 from datetime import date
 from loguru import logger
+import pandas as pd
+import numpy as np
 
 from app.services import FeatureService
 
@@ -41,12 +43,22 @@ async def get_features(
         # 重置索引
         df_reset = df.reset_index()
 
+        # 替换Inf和NaN为None，以便JSON序列化
+        # 技术指标计算初期会产生NaN值（如MA需要足够的历史数据）
+        df_reset = df_reset.replace([np.inf, -np.inf], np.nan)
+
+        # 转换为字典列表，将NaN转为None
+        data_list = [
+            {k: (None if pd.isna(v) else v) for k, v in record.items()}
+            for record in df_reset.head(100).to_dict('records')
+        ]
+
         return {
             "code": code,
             "feature_type": feature_type or "all",
             "count": len(df),
             "columns": list(df.columns),
-            "data": df_reset.head(100).to_dict('records')  # 只返回前100条
+            "data": data_list  # 返回前100条记录
         }
     except HTTPException:
         raise

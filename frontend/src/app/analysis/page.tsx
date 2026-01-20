@@ -318,49 +318,104 @@ function AnalysisContent() {
       {/* 技术指标展示 */}
       <div className="card">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          技术指标
+          技术指标（最新数据）
         </h2>
         {features.length > 0 ? (
-          <div className="space-y-4">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-800">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      日期
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      指标类型
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      指标值
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                  {features.slice(0, 10).map((feature, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {feature.date}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {feature.feature_type}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                        <div className="max-w-md truncate">
-                          {JSON.stringify(feature.feature_data)}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {features.length > 10 && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                显示最近10条记录，共{features.length}条
+          <div className="space-y-6">
+            {/* 最新日期的技术指标卡片 */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                数据日期: {features[features.length - 1]?.date || '-'}
               </p>
-            )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {(() => {
+                  const latestData = features[features.length - 1]
+                  if (!latestData) return null
+
+                  // 选择16个关键技术指标进行展示
+                  // 包括: 均线(MA)、相对强弱指标(RSI)、MACD、KDJ、布林带、ATR、CCI
+                  const keyIndicators = [
+                    { key: 'MA5', label: 'MA5' },
+                    { key: 'MA20', label: 'MA20' },
+                    { key: 'MA60', label: 'MA60' },
+                    { key: 'RSI6', label: 'RSI(6)' },
+                    { key: 'RSI12', label: 'RSI(12)' },
+                    { key: 'RSI24', label: 'RSI(24)' },
+                    { key: 'MACD', label: 'MACD' },
+                    { key: 'MACD_SIGNAL', label: 'MACD信号' },
+                    { key: 'KDJ_K', label: 'KDJ-K' },
+                    { key: 'KDJ_D', label: 'KDJ-D' },
+                    { key: 'KDJ_J', label: 'KDJ-J' },
+                    { key: 'BOLL_UPPER', label: '布林上轨' },
+                    { key: 'BOLL_MIDDLE', label: '布林中轨' },
+                    { key: 'BOLL_LOWER', label: '布林下轨' },
+                    { key: 'ATR', label: 'ATR' },
+                    { key: 'CCI', label: 'CCI' },
+                  ]
+
+                  return keyIndicators.map(({ key, label }) => {
+                    const value = (latestData as any)[key]
+                    return (
+                      <div key={key} className="bg-white dark:bg-gray-800 rounded p-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {value !== null && value !== undefined ? (typeof value === 'number' ? value.toFixed(2) : value) : '-'}
+                        </p>
+                      </div>
+                    )
+                  })
+                })()}
+              </div>
+            </div>
+
+            {/* 历史数据表格（最近10条） */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                历史数据（最近10天）
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">日期</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">收盘价</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">MA5</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">MA20</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">RSI(6)</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">MACD</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">KDJ-K</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {features.slice(-10).reverse().map((feature: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <td className="px-4 py-2 whitespace-nowrap text-gray-900 dark:text-white">
+                          {feature.date}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-gray-900 dark:text-white">
+                          {feature.close !== null && feature.close !== undefined ? feature.close.toFixed(2) : '-'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-gray-900 dark:text-white">
+                          {feature.MA5 !== null && feature.MA5 !== undefined ? feature.MA5.toFixed(2) : '-'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-gray-900 dark:text-white">
+                          {feature.MA20 !== null && feature.MA20 !== undefined ? feature.MA20.toFixed(2) : '-'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-gray-900 dark:text-white">
+                          {feature.RSI6 !== null && feature.RSI6 !== undefined ? feature.RSI6.toFixed(2) : '-'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-gray-900 dark:text-white">
+                          {feature.MACD !== null && feature.MACD !== undefined ? feature.MACD.toFixed(4) : '-'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-gray-900 dark:text-white">
+                          {feature.KDJ_K !== null && feature.KDJ_K !== undefined ? feature.KDJ_K.toFixed(2) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="text-center py-12">
@@ -369,7 +424,7 @@ function AnalysisContent() {
             </svg>
             <p className="mt-4 text-gray-600 dark:text-gray-400">暂无技术指标数据</p>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
-              可以在特征计算页面计算该股票的技术指标
+              系统会自动计算技术指标，如果没有数据，请确保已同步该股票的历史数据
             </p>
           </div>
         )}
