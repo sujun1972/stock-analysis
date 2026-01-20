@@ -649,7 +649,7 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
       window.removeEventListener('resize', handleResize)
       chart.off('dataZoom')
     }
-  }, [allData, visibleIndicators, loadMoreData])
+  }, [allData, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData])
 
   // 显示加载状态
   useEffect(() => {

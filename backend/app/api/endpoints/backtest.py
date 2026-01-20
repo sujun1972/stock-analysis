@@ -2,47 +2,68 @@
 回测API
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
-from datetime import date
+from fastapi import APIRouter, HTTPException
+from typing import Optional, List, Union, Dict, Any
+from pydantic import BaseModel, Field
 from loguru import logger
 
+from app.services.backtest_service import BacktestService
+
 router = APIRouter()
+backtest_service = BacktestService()
+
+
+class BacktestRequest(BaseModel):
+    """回测请求模型"""
+    symbols: Union[str, List[str]] = Field(..., description="股票代码(单个或列表)")
+    start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
+    end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(1000000.0, description="初始资金")
+    strategy_params: Optional[Dict[str, Any]] = Field(
+        default={
+            'top_n': 10,
+            'holding_period': 5,
+            'rebalance_freq': 'W'
+        },
+        description="策略参数"
+    )
 
 
 @router.post("/run")
-async def run_backtest(
-    strategy_name: str,
-    start_date: date,
-    end_date: date,
-    initial_capital: float = Query(1000000, description="初始资金"),
-    top_n: int = Query(10, description="选股数量"),
-    holding_period: int = Query(5, description="持仓期"),
-    rebalance_freq: str = Query("W", description="调仓频率")
-):
+async def run_backtest(request: BacktestRequest):
     """
     运行回测
 
     参数:
-    - strategy_name: 策略名称
+    - symbols: 股票代码(单个字符串或列表)
     - start_date: 开始日期
     - end_date: 结束日期
-    - initial_capital: 初始资金
-    - top_n: 选股数量
-    - holding_period: 持仓期（天）
-    - rebalance_freq: 调仓频率（D/W/M）
+    - initial_cash: 初始资金
+    - strategy_params: 策略参数
+      - top_n: 选股数量(多股模式)
+      - holding_period: 持仓期（天）
+      - rebalance_freq: 调仓频率（D/W/M）
 
     返回:
-    - 回测任务信息
+    - 单股模式: K线数据 + 买卖信号点 + 每日净值 + 基准对比
+    - 多股模式: 组合净值曲线 + 绩效指标 + 基准对比
     """
     try:
-        # TODO: 启动回测任务
+        logger.info(f"收到回测请求: symbols={request.symbols}")
+
+        result = await backtest_service.run_backtest(
+            symbols=request.symbols,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            initial_cash=request.initial_cash,
+            strategy_params=request.strategy_params
+        )
+
         return {
-            "task_id": "backtest_123456",
-            "strategy_name": strategy_name,
-            "status": "started",
-            "message": "回测任务已启动"
+            "status": "success",
+            "data": result
         }
+
     except Exception as e:
         logger.error(f"启动回测失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -60,58 +81,17 @@ async def get_backtest_result(task_id: str):
     - 回测结果
     """
     try:
-        # TODO: 从数据库获取回测结果
+        result = backtest_service.get_task_result(task_id)
+
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
         return {
-            "task_id": task_id,
-            "status": "completed",
-            "metrics": {
-                "total_return": 1.07,
-                "annualized_return": 1.07,
-                "sharpe_ratio": 12.85,
-                "max_drawdown": -0.0134,
-                "win_rate": 0.7092
-            },
-            "equity_curve": [
-                {"date": "2023-01-01", "value": 1000000},
-                {"date": "2023-12-31", "value": 2070000}
-            ]
+            "status": "success",
+            "data": result
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取回测结果失败 {task_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/history")
-async def get_backtest_history(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100)
-):
-    """
-    获取历史回测记录
-
-    参数:
-    - skip: 跳过记录数
-    - limit: 返回记录数
-
-    返回:
-    - 历史回测列表
-    """
-    try:
-        # TODO: 从数据库查询回测历史
-        return {
-            "total": 25,
-            "data": [
-                {
-                    "id": 1,
-                    "strategy_name": "LightGBM_Strategy_v1",
-                    "start_date": "2023-01-01",
-                    "end_date": "2023-12-31",
-                    "total_return": 1.07,
-                    "sharpe_ratio": 12.85,
-                    "created_at": "2024-01-19T10:00:00"
-                }
-            ]
-        }
-    except Exception as e:
-        logger.error(f"获取回测历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

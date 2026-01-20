@@ -320,19 +320,22 @@ class ApiClient {
 
   // 运行回测
   async runBacktest(params: {
-    strategy: string
-    stock_codes: string[]
+    symbols: string | string[]
     start_date: string
     end_date: string
-    initial_capital?: number
-    config?: Record<string, any>
-  }): Promise<ApiResponse<{ task_id: string }>> {
+    initial_cash?: number
+    strategy_params?: {
+      top_n?: number
+      holding_period?: number
+      rebalance_freq?: string
+    }
+  }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/backtest/run', params)
     return response.data
   }
 
   // 获取回测结果
-  async getBacktestResult(taskId: string): Promise<BacktestResult> {
+  async getBacktestResult(taskId: string): Promise<ApiResponse<any>> {
     const response = await axiosInstance.get(`/api/backtest/result/${taskId}`)
     return response.data
   }
