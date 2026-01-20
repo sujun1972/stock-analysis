@@ -91,8 +91,15 @@ class ApiClient {
 
   // 获取单只股票信息
   async getStock(code: string): Promise<StockInfo> {
-    const response = await axiosInstance.get(`/api/stocks/${code}`)
-    return response.data
+    // 通过搜索API获取单个股票信息
+    const response = await axiosInstance.get(`/api/stocks/list`, {
+      params: { search: code, limit: 1 }
+    })
+    const data = response.data as PaginatedResponse<StockInfo>
+    if (data.data && data.data.length > 0) {
+      return data.data[0]
+    }
+    throw new Error(`Stock ${code} not found`)
   }
 
   /**
