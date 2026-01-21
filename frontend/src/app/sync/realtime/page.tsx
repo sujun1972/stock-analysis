@@ -12,15 +12,22 @@ interface SyncStatus {
   completed: number
 }
 
+interface DataSourceConfig {
+  data_source: string
+  tushare_token: string
+}
+
 export default function RealtimeSyncPage() {
   const router = useRouter()
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
+  const [dataSource, setDataSource] = useState<DataSourceConfig | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   useEffect(() => {
     loadSyncStatus()
+    loadDataSource()
   }, [])
 
   const loadSyncStatus = async () => {
@@ -31,6 +38,17 @@ export default function RealtimeSyncPage() {
       }
     } catch (err) {
       console.error('Failed to load sync status:', err)
+    }
+  }
+
+  const loadDataSource = async () => {
+    try {
+      const response = await apiClient.getDataSourceConfig()
+      if (response.data) {
+        setDataSource(response.data)
+      }
+    } catch (err) {
+      console.error('Failed to load data source config:', err)
     }
   }
 
@@ -154,8 +172,19 @@ export default function RealtimeSyncPage() {
         </h2>
         <div className="space-y-4">
           <p className="text-gray-600 dark:text-gray-400">
-            点击下方按钮获取所有 A 股的最新实时行情快照。此操作会获取当前市场上所有股票的实时数据，通常需要几秒钟时间。
+            点击下方按钮获取所有 A 股的最新实时行情快照。此操作会获取当前市场上所有股票的实时数据。
           </p>
+
+          {/* AkShare 数据源警告 */}
+          {dataSource?.data_source?.toLowerCase() === 'akshare' && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+              <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                <strong>⚠️ AkShare数据源说明：</strong>实时行情接口需要分批次爬取东方财富网数据，
+                <strong>耗时约3-5分钟</strong>（共58个批次）。网络不稳定时可能会失败，请耐心等待或稍后重试。
+                建议在<strong>交易时段（9:30-15:00）</strong>使用，数据更稳定可靠。
+              </p>
+            </div>
+          )}
 
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
             <p className="text-sm text-blue-800 dark:text-blue-300">

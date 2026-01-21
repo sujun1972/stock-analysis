@@ -366,13 +366,20 @@ class AkShareProvider(BaseDataProvider):
             pd.DataFrame: 标准化的实时行情数据
         """
         try:
-            logger.info("正在获取实时行情... (此操作可能需要 20-30 秒)")
+            logger.info("正在获取实时行情... (此操作可能需要 3-5 分钟，共58个批次)")
+            logger.warning("AkShare实时行情接口需要分批次爬取东方财富网数据，请耐心等待...")
 
             # 获取全部实时行情
+            # 注意：此接口会分58个批次请求，每批次约2-3秒，总耗时3-5分钟
+            # 由于是爬虫方式，可能会因网络问题超时，建议增加重试次数
             df = self._retry_request(ak.stock_zh_a_spot_em)
 
             if df is None or df.empty:
-                raise ValueError("获取实时行情失败，返回数据为空")
+                raise ValueError("获取实时行情失败，返回数据为空。可能原因：\n"
+                              "1. 网络连接超时（数据获取需3-5分钟）\n"
+                              "2. 东方财富网接口限流\n"
+                              "3. 非交易时段数据源无响应\n"
+                              "建议：稍后重试或使用Tushare数据源")
 
             # 标准化字段名
             df = df.rename(columns={

@@ -848,12 +848,26 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
         )
 
         logger.info("更新实时行情...")
+        logger.warning(f"使用数据源: {config['data_source']}")
 
-        # 获取实时行情
-        df = await asyncio.to_thread(
-            provider.get_realtime_quotes,
-            codes=request.codes
-        )
+        if config['data_source'].lower() == 'akshare':
+            logger.warning("AkShare实时行情获取需要3-5分钟，请耐心等待...")
+
+        # 获取实时行情（设置10分钟超时，因为AkShare需要分批次爬取）
+        try:
+            df = await asyncio.wait_for(
+                asyncio.to_thread(
+                    provider.get_realtime_quotes,
+                    codes=request.codes
+                ),
+                timeout=600.0  # 10分钟超时
+            )
+        except asyncio.TimeoutError:
+            error_msg = "实时行情获取超时（10分钟）"
+            if config['data_source'].lower() == 'akshare':
+                error_msg += "\n\nAkShare说明：该接口需要分58个批次爬取数据，耗时较长且容易超时。\n建议：\n1. 检查网络连接\n2. 在交易时段（9:30-15:00）使用\n3. 稍后重试"
+            logger.error(error_msg)
+            raise HTTPException(status_code=504, detail=error_msg)
 
         if df.empty:
             raise HTTPException(status_code=404, detail="无实时行情数据")
