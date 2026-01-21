@@ -7,6 +7,7 @@ import type {
   BacktestResult,
   ApiResponse,
   PaginatedResponse,
+  MinuteData,
 } from '@/types'
 
 /**
@@ -304,6 +305,58 @@ class ApiClient {
     offset?: number
   }): Promise<ApiResponse<any[]>> {
     const response = await axiosInstance.get('/api/sync/history', { params })
+    return response.data
+  }
+
+  // ========== 分时数据相关API ==========
+
+  /**
+   * 获取股票1分钟K线数据（按需加载）
+   *
+   * 注意：后端只返回1分钟数据，前端需要自行聚合为其他周期
+   */
+  async getMinuteData(
+    code: string,
+    date?: string,
+    forceRefresh: boolean = false
+  ): Promise<ApiResponse<{
+    code: string
+    date: string
+    records: MinuteData[]
+    from_cache: boolean
+    completeness?: number
+    record_count: number
+  }>> {
+    const params: any = {}
+    if (date) params.date = date
+    if (forceRefresh) params.force_refresh = true
+
+    const response = await axiosInstance.get(`/api/stocks/${code}/minute`, { params })
+    return response.data
+  }
+
+  /**
+   * 获取股票分时数据（日期范围）
+   */
+  async getMinuteDataRange(
+    code: string,
+    period: string = '5',
+    startDate?: string,
+    endDate?: string,
+    limit: number = 1000
+  ): Promise<ApiResponse<{
+    code: string
+    period: string
+    start_date: string
+    end_date: string
+    records: MinuteData[]
+    record_count: number
+  }>> {
+    const params: any = { period, limit }
+    if (startDate) params.start_date = startDate
+    if (endDate) params.end_date = endDate
+
+    const response = await axiosInstance.get(`/api/stocks/${code}/minute/range`, { params })
     return response.data
   }
 

@@ -245,6 +245,96 @@ class DatabaseService:
             logger.error(f"保存日线数据失败 {code}: {e}")
             raise
 
+    # ========== 分时数据相关方法 ==========
+
+    def save_minute_data(self, df: pd.DataFrame, code: str, period: str, trade_date: str) -> int:
+        """
+        保存分时数据到数据库
+
+        Args:
+            df: 包含分时数据的DataFrame
+            code: 股票代码
+            period: 分时周期
+            trade_date: 交易日期
+
+        Returns:
+            插入的记录数
+        """
+        try:
+            count = self.db.save_minute_data(df, code, period, trade_date)
+            logger.info(f"✓ 保存 {code} {period}分钟数据: {count} 条")
+            return count
+        except Exception as e:
+            logger.error(f"保存分时数据失败 {code}: {e}")
+            raise
+
+    def load_minute_data(self, code: str, period: str, trade_date: str) -> pd.DataFrame:
+        """
+        从数据库加载分时数据
+
+        Args:
+            code: 股票代码
+            period: 分时周期
+            trade_date: 交易日期
+
+        Returns:
+            包含分时数据的DataFrame
+        """
+        try:
+            df = self.db.load_minute_data(code, period, trade_date)
+            logger.info(f"✓ 加载 {code} {period}分钟数据: {len(df)} 条")
+            return df
+        except Exception as e:
+            logger.error(f"加载分时数据失败 {code}: {e}")
+            raise
+
+    def check_minute_data_complete(self, code: str, period: str, trade_date: str) -> dict:
+        """
+        检查分时数据是否完整
+
+        Returns:
+            {
+                'is_complete': bool,
+                'record_count': int,
+                'expected_count': int,
+                'completeness': float
+            }
+        """
+        try:
+            return self.db.check_minute_data_complete(code, period, trade_date)
+        except Exception as e:
+            logger.error(f"检查数据完整性失败 {code}: {e}")
+            return {
+                'is_complete': False,
+                'record_count': 0,
+                'expected_count': 0,
+                'completeness': 0
+            }
+
+    def is_trading_day(self, trade_date: str) -> bool:
+        """
+        检查是否为交易日
+
+        Args:
+            trade_date: 日期字符串 (YYYY-MM-DD)
+
+        Returns:
+            是否为交易日
+        """
+        try:
+            return self.db.is_trading_day(trade_date)
+        except Exception as e:
+            logger.warning(f"检查交易日失败: {e}")
+            return True  # 默认为交易日
+
+    def get_connection(self):
+        """获取数据库连接"""
+        return self.db.get_connection()
+
+    def release_connection(self, conn):
+        """释放数据库连接"""
+        return self.db.release_connection(conn)
+
     def __del__(self):
         """析构函数"""
         if hasattr(self, 'db'):

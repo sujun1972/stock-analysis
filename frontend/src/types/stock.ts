@@ -31,6 +31,19 @@ export interface StockDaily {
   pct_change?: number
 }
 
+// 分时数据类型
+export interface MinuteData {
+  trade_time: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  amount?: number
+  pct_change?: number
+  change_amount?: number
+}
+
 // 技术指标数据类型
 export interface TechnicalIndicator {
   date: string

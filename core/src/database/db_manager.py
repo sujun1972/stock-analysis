@@ -64,8 +64,12 @@ class DatabaseManager:
     def close_all_connections(self):
         """关闭所有连接"""
         if self.connection_pool:
-            self.connection_pool.closeall()
-            logger.info("所有数据库连接已关闭")
+            try:
+                self.connection_pool.closeall()
+                logger.info("所有数据库连接已关闭")
+            except Exception as e:
+                # 连接池可能已经关闭，忽略错误
+                logger.debug(f"关闭连接池时出现异常（可忽略）: {e}")
 
     def _execute_query(self, query: str, params: Optional[tuple] = None):
         """
@@ -231,12 +235,134 @@ class DatabaseManager:
             """)
             logger.info("✓ 回测结果表创建/验证完成")
 
-            # 7. 创建常用索引
+            # 7. 创建分时数据表（新增）
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS stock_minute (
+                    code VARCHAR(20) NOT NULL,
+                    trade_time TIMESTAMP NOT NULL,
+                    period VARCHAR(10) NOT NULL,
+                    open DECIMAL(10, 3),
+                    high DECIMAL(10, 3),
+                    low DECIMAL(10, 3),
+                    close DECIMAL(10, 3),
+                    volume BIGINT,
+                    amount DECIMAL(20, 2),
+                    pct_change DECIMAL(10, 3),
+                    change_amount DECIMAL(10, 3),
+                    data_source VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, trade_time, period)
+                );
+            """)
+            logger.info("✓ 分时数据表创建/验证完成")
+
+            # 8. 创建分时数据元数据表（用于完整性检查）
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS stock_minute_meta (
+                    code VARCHAR(20) NOT NULL,
+                    trade_date DATE NOT NULL,
+                    period VARCHAR(10) NOT NULL,
+                    is_complete BOOLEAN DEFAULT FALSE,
+                    record_count INTEGER DEFAULT 0,
+                    expected_count INTEGER,
+                    first_time TIMESTAMP,
+                    last_time TIMESTAMP,
+                    data_source VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, trade_date, period)
+                );
+            """)
+            logger.info("✓ 分时数据元数据表创建/验证完成")
+
+            # 9. 创建交易日历表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS trading_calendar (
+                    trade_date DATE PRIMARY KEY,
+                    is_trading_day BOOLEAN DEFAULT TRUE,
+                    market VARCHAR(20) DEFAULT 'A股',
+                    reason VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            logger.info("✓ 交易日历表创建/验证完成")
+
+            # 10. 创建实时行情表（如果不存在）
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS stock_realtime (
+                    code VARCHAR(20) PRIMARY KEY,
+                    name VARCHAR(100),
+                    latest_price DECIMAL(10, 2),
+                    open DECIMAL(10, 2),
+                    high DECIMAL(10, 2),
+                    low DECIMAL(10, 2),
+                    pre_close DECIMAL(10, 2),
+                    volume BIGINT,
+                    amount DECIMAL(20, 2),
+                    pct_change DECIMAL(10, 2),
+                    change_amount DECIMAL(10, 2),
+                    turnover DECIMAL(10, 2),
+                    amplitude DECIMAL(10, 2),
+                    data_source VARCHAR(50),
+                    trade_time TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            logger.info("✓ 实时行情表创建/验证完成")
+
+            # 11. 创建常用索引
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_daily_code ON stock_daily(code);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_daily_date ON stock_daily(date);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_features_code_date ON stock_features(code, date);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_code_date ON stock_predictions(code, pred_date);")
+
+            # 分时数据索引
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_minute_code_time ON stock_minute(code, trade_time DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_minute_time ON stock_minute(trade_time DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_minute_period ON stock_minute(period);")
+
+            # 分时元数据索引
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_minute_meta_date ON stock_minute_meta(trade_date DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_minute_meta_complete ON stock_minute_meta(is_complete);")
+
+            # 交易日历索引
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_date ON trading_calendar(trade_date DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_trading ON trading_calendar(is_trading_day);")
+
             logger.info("✓ 索引创建完成")
+
+            # 12. TimescaleDB优化分时数据表（可选）
+            try:
+                cursor.execute("SELECT extname FROM pg_extension WHERE extname = 'timescaledb';")
+                if cursor.fetchone():
+                    # 将stock_minute转换为时序表
+                    cursor.execute("""
+                        SELECT create_hypertable('stock_minute', 'trade_time',
+                            chunk_time_interval => INTERVAL '7 days',
+                            if_not_exists => TRUE,
+                            migrate_data => TRUE
+                        );
+                    """)
+                    logger.info("✓ 分时数据TimescaleDB优化完成")
+
+                    # 设置压缩策略
+                    cursor.execute("""
+                        ALTER TABLE stock_minute SET (
+                            timescaledb.compress,
+                            timescaledb.compress_segmentby = 'code, period',
+                            timescaledb.compress_orderby = 'trade_time DESC'
+                        );
+                    """)
+
+                    # 自动压缩30天前的数据
+                    cursor.execute("""
+                        SELECT add_compression_policy('stock_minute', INTERVAL '30 days');
+                    """)
+                    logger.info("✓ 分时数据压缩策略设置完成")
+            except Exception as e:
+                logger.warning(f"TimescaleDB分时数据优化跳过: {e}")
 
             conn.commit()
             logger.info("\n✅ 数据库初始化完成！")
@@ -586,9 +712,264 @@ class DatabaseManager:
             if conn:
                 self.release_connection(conn)
 
+    def save_minute_data(self, df: pd.DataFrame, code: str, period: str, trade_date: str) -> int:
+        """
+        保存分时数据到数据库
+
+        Args:
+            df: 包含分时数据的DataFrame
+            code: 股票代码
+            period: 分时周期 ('1', '5', '15', '30', '60')
+            trade_date: 交易日期 (YYYY-MM-DD)
+
+        Returns:
+            插入的记录数
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # 准备数据
+            records = []
+            for _, row in df.iterrows():
+                records.append((
+                    code,
+                    row.get('trade_time'),
+                    period,
+                    float(row.get('open', 0)) if pd.notna(row.get('open')) else None,
+                    float(row.get('high', 0)) if pd.notna(row.get('high')) else None,
+                    float(row.get('low', 0)) if pd.notna(row.get('low')) else None,
+                    float(row.get('close', 0)) if pd.notna(row.get('close')) else None,
+                    int(row.get('volume', 0)) if pd.notna(row.get('volume')) else 0,
+                    float(row.get('amount', 0)) if pd.notna(row.get('amount')) else None,
+                    float(row.get('pct_change', 0)) if pd.notna(row.get('pct_change')) else None,
+                    float(row.get('change_amount', 0)) if pd.notna(row.get('change_amount')) else None,
+                    'akshare'
+                ))
+
+            # 批量插入（冲突时更新）
+            insert_query = """
+                INSERT INTO stock_minute
+                (code, trade_time, period, open, high, low, close, volume, amount,
+                 pct_change, change_amount, data_source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (code, trade_time, period)
+                DO UPDATE SET
+                    open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    close = EXCLUDED.close,
+                    volume = EXCLUDED.volume,
+                    amount = EXCLUDED.amount,
+                    pct_change = EXCLUDED.pct_change,
+                    change_amount = EXCLUDED.change_amount,
+                    data_source = EXCLUDED.data_source,
+                    updated_at = CURRENT_TIMESTAMP;
+            """
+
+            extras.execute_batch(cursor, insert_query, records, page_size=1000)
+
+            # 更新元数据
+            self._update_minute_meta(cursor, code, trade_date, period, len(records))
+
+            conn.commit()
+
+            logger.info(f"✓ 保存 {code} {period}分钟数据: {len(records)} 条记录")
+            return len(records)
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存分时数据失败: {e}")
+            raise
+        finally:
+            if conn:
+                cursor.close()
+                self.release_connection(conn)
+
+    def _update_minute_meta(self, cursor, code: str, trade_date: str, period: str, record_count: int):
+        """更新分时数据元数据"""
+        # 获取期望的记录数（根据周期计算）
+        expected_count = self._get_expected_minute_count(period)
+        is_complete = record_count >= expected_count * 0.95  # 允许5%的数据缺失
+
+        # 获取时间范围
+        cursor.execute("""
+            SELECT MIN(trade_time), MAX(trade_time)
+            FROM stock_minute
+            WHERE code = %s AND DATE(trade_time) = %s AND period = %s
+        """, (code, trade_date, period))
+
+        result = cursor.fetchone()
+        first_time, last_time = result if result else (None, None)
+
+        # 插入或更新元数据
+        cursor.execute("""
+            INSERT INTO stock_minute_meta
+            (code, trade_date, period, is_complete, record_count, expected_count,
+             first_time, last_time, data_source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'akshare')
+            ON CONFLICT (code, trade_date, period)
+            DO UPDATE SET
+                is_complete = EXCLUDED.is_complete,
+                record_count = EXCLUDED.record_count,
+                expected_count = EXCLUDED.expected_count,
+                first_time = EXCLUDED.first_time,
+                last_time = EXCLUDED.last_time,
+                updated_at = CURRENT_TIMESTAMP;
+        """, (code, trade_date, period, is_complete, record_count, expected_count,
+              first_time, last_time))
+
+    def _get_expected_minute_count(self, period: str) -> int:
+        """获取期望的分时记录数"""
+        # A股交易时间：9:30-11:30 (120分钟) + 13:00-15:00 (120分钟) = 240分钟
+        total_minutes = 240
+        period_map = {
+            '1': total_minutes,      # 240条
+            '5': total_minutes // 5,  # 48条
+            '15': total_minutes // 15,  # 16条
+            '30': total_minutes // 30,  # 8条
+            '60': total_minutes // 60   # 4条
+        }
+        return period_map.get(period, 48)
+
+    def load_minute_data(self, code: str, period: str, trade_date: str) -> pd.DataFrame:
+        """
+        从数据库加载分时数据
+
+        Args:
+            code: 股票代码
+            period: 分时周期
+            trade_date: 交易日期
+
+        Returns:
+            包含分时数据的DataFrame
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+
+            query = """
+                SELECT trade_time, open, high, low, close, volume, amount,
+                       pct_change, change_amount
+                FROM stock_minute
+                WHERE code = %s AND period = %s AND DATE(trade_time) = %s
+                ORDER BY trade_time ASC
+            """
+
+            df = pd.read_sql_query(query, conn, params=(code, period, trade_date))
+            logger.info(f"✓ 加载 {code} {period}分钟数据: {len(df)} 条记录")
+            return df
+
+        except Exception as e:
+            logger.error(f"❌ 加载分时数据失败: {e}")
+            raise
+        finally:
+            if conn:
+                self.release_connection(conn)
+
+    def check_minute_data_complete(self, code: str, period: str, trade_date: str) -> dict:
+        """
+        检查分时数据是否完整
+
+        Returns:
+            {
+                'is_complete': bool,
+                'record_count': int,
+                'expected_count': int,
+                'completeness': float  # 完整度百分比
+            }
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # 查询元数据
+            cursor.execute("""
+                SELECT is_complete, record_count, expected_count
+                FROM stock_minute_meta
+                WHERE code = %s AND trade_date = %s AND period = %s
+            """, (code, trade_date, period))
+
+            result = cursor.fetchone()
+
+            if result:
+                is_complete, record_count, expected_count = result
+                completeness = (record_count / expected_count * 100) if expected_count > 0 else 0
+            else:
+                # 如果元数据不存在，直接查询数据表
+                cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM stock_minute
+                    WHERE code = %s AND DATE(trade_time) = %s AND period = %s
+                """, (code, trade_date, period))
+
+                record_count = cursor.fetchone()[0]
+                expected_count = self._get_expected_minute_count(period)
+                is_complete = record_count >= expected_count * 0.95
+                completeness = (record_count / expected_count * 100) if expected_count > 0 else 0
+
+            return {
+                'is_complete': is_complete,
+                'record_count': record_count,
+                'expected_count': expected_count,
+                'completeness': round(completeness, 2)
+            }
+
+        except Exception as e:
+            logger.error(f"❌ 检查数据完整性失败: {e}")
+            return {
+                'is_complete': False,
+                'record_count': 0,
+                'expected_count': 0,
+                'completeness': 0
+            }
+        finally:
+            if conn:
+                cursor.close()
+                self.release_connection(conn)
+
+    def is_trading_day(self, trade_date: str) -> bool:
+        """检查是否为交易日"""
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT is_trading_day
+                FROM trading_calendar
+                WHERE trade_date = %s
+            """, (trade_date,))
+
+            result = cursor.fetchone()
+
+            if result:
+                return result[0]
+            else:
+                # 如果日历表中没有数据，简单判断：周一到周五为交易日
+                from datetime import datetime
+                date_obj = datetime.strptime(trade_date, '%Y-%m-%d')
+                return date_obj.weekday() < 5  # 0-4 为周一到周五
+
+        except Exception as e:
+            logger.warning(f"检查交易日失败: {e}")
+            return True  # 默认为交易日
+        finally:
+            if conn:
+                cursor.close()
+                self.release_connection(conn)
+
     def __del__(self):
         """析构函数，确保连接池关闭"""
-        self.close_all_connections()
+        try:
+            self.close_all_connections()
+        except Exception:
+            # 忽略析构时的异常，避免日志污染
+            # 连接池可能已经被其他地方关闭
+            pass
 
 
 # 便捷函数

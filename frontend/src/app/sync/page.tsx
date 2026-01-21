@@ -81,14 +81,6 @@ export default function SyncOverviewPage() {
       color: 'green'
     },
     {
-      id: 'minute',
-      title: '分时数据同步',
-      description: '同步股票的分钟级数据（1/5/15/30/60 分钟），适用于短期交易分析',
-      icon: '⏱️',
-      path: '/sync/minute',
-      color: 'purple'
-    },
-    {
       id: 'realtime',
       title: '实时行情同步',
       description: '获取最新的实时行情快照，包括当前价格、涨跌幅等信息',
@@ -97,6 +89,8 @@ export default function SyncOverviewPage() {
       color: 'yellow'
     }
   ]
+
+  // 分时数据已改为按需加载，在股票分析页面自动获取
 
   const getStatusColor = (status: string) => {
     switch (status) {
