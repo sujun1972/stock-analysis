@@ -13,6 +13,7 @@ import uuid
 from src.backtest import BacktestEngine, PerformanceAnalyzer
 from src.features import TechnicalIndicators, AlphaFactors
 from src.database.db_manager import DatabaseManager
+from app.strategies.strategy_manager import strategy_manager
 
 
 class BacktestService:
@@ -39,7 +40,8 @@ class BacktestService:
         start_date: str,
         end_date: str,
         initial_cash: float = 1000000.0,
-        strategy_params: Optional[Dict] = None
+        strategy_params: Optional[Dict] = None,
+        strategy_id: str = "complex_indicator"
     ) -> Dict:
         """
         运行回测任务
@@ -50,6 +52,7 @@ class BacktestService:
             end_date: 结束日期
             initial_cash: 初始资金
             strategy_params: 策略参数
+            strategy_id: 策略ID (默认使用复合指标策略)
 
         返回:
             回测结果字典
@@ -60,15 +63,10 @@ class BacktestService:
         if isinstance(symbols, str):
             symbols = [symbols]
 
-        # 默认策略参数
-        if strategy_params is None:
-            strategy_params = {
-                'top_n': 10,
-                'holding_period': 5,
-                'rebalance_freq': 'W'
-            }
+        # 获取策略实例
+        strategy = strategy_manager.get_strategy(strategy_id, strategy_params)
 
-        logger.info(f"开始回测任务 {task_id}: symbols={symbols}, period={start_date}~{end_date}")
+        logger.info(f"开始回测任务 {task_id}: symbols={symbols}, strategy={strategy_id}, period={start_date}~{end_date}")
 
         try:
             # 判断单股还是多股模式
@@ -78,7 +76,7 @@ class BacktestService:
                     start_date=start_date,
                     end_date=end_date,
                     initial_cash=initial_cash,
-                    strategy_params=strategy_params
+                    strategy=strategy
                 )
             else:
                 result = await self._run_multi_stock_backtest(
@@ -86,7 +84,7 @@ class BacktestService:
                     start_date=start_date,
                     end_date=end_date,
                     initial_cash=initial_cash,
-                    strategy_params=strategy_params
+                    strategy=strategy
                 )
 
             # 添加任务元信息
@@ -95,7 +93,9 @@ class BacktestService:
             result['start_date'] = start_date
             result['end_date'] = end_date
             result['initial_cash'] = initial_cash
-            result['strategy_params'] = strategy_params
+            result['strategy_id'] = strategy_id
+            result['strategy_name'] = strategy.name
+            result['strategy_params'] = strategy.params
             result['created_at'] = datetime.now().isoformat()
 
             # 缓存结果
@@ -114,13 +114,13 @@ class BacktestService:
         start_date: str,
         end_date: str,
         initial_cash: float,
-        strategy_params: Dict
+        strategy
     ) -> Dict:
         """
         单股回测模式
         返回: K线数据 + 买卖信号点 + 每日净值
         """
-        logger.info(f"运行单股回测: {symbol}")
+        logger.info(f"运行单股回测: {symbol}, 策略: {strategy.name}")
 
         # 标准化股票代码(去除后缀)
         normalized_symbol = self._normalize_symbol(symbol)
@@ -145,24 +145,21 @@ class BacktestService:
         # 确保按日期排序
         df = df.sort_index()
 
-        # 2. 计算技术指标
-        ti = TechnicalIndicators(df)
-        df = ti.add_all_indicators()
+        # 2. 生成交易信号 (使用策略)
+        logger.info(f"使用策略生成信号: {strategy.name}")
+        signals = strategy.generate_signals(df)
 
-        # 3. 生成交易信号 (简单的均线策略)
-        signals = self._generate_simple_ma_signals(df)
-
-        # 4. 模拟交易并计算净值
+        # 3. 模拟交易并计算净值
         equity_curve, trades = self._simulate_trades(
             df,
             signals,
             initial_cash
         )
 
-        # 5. 获取基准数据(沪深300)
+        # 4. 获取基准数据(沪深300)
         benchmark_data = await self._get_benchmark_data(start_date, end_date)
 
-        # 6. 计算绩效指标
+        # 5. 计算绩效指标
         analyzer = PerformanceAnalyzer(equity_curve['returns'])
         if benchmark_data is not None and len(benchmark_data) > 0:
             analyzer.set_benchmark(benchmark_data['returns'])
@@ -179,7 +176,7 @@ class BacktestService:
             'sortino_ratio': analyzer.sortino_ratio()
         }
 
-        # 7. 准备返回数据
+        # 6. 准备返回数据
         # K线数据(优化传输,降采样)
         kline_data = self._optimize_kline_data(df)
 
@@ -212,13 +209,13 @@ class BacktestService:
         start_date: str,
         end_date: str,
         initial_cash: float,
-        strategy_params: Dict
+        strategy
     ) -> Dict:
         """
         多股组合回测模式
         返回: 组合净值曲线 + 绩效指标
         """
-        logger.info(f"运行多股组合回测: {len(symbols)}只股票")
+        logger.info(f"运行多股组合回测: {len(symbols)}只股票, 策略: {strategy.name}")
 
         # 1. 获取所有股票的价格数据
         import asyncio

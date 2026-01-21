@@ -324,13 +324,24 @@ class ApiClient {
     start_date: string
     end_date: string
     initial_cash?: number
-    strategy_params?: {
-      top_n?: number
-      holding_period?: number
-      rebalance_freq?: string
-    }
+    strategy_id?: string
+    strategy_params?: Record<string, any>
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/backtest/run', params)
+    return response.data
+  }
+
+  // 获取策略列表
+  async getStrategyList(): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/strategy/list')
+    return response.data
+  }
+
+  // 获取策略元数据
+  async getStrategyMetadata(strategyId: string = 'complex_indicator'): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/strategy/metadata', {
+      params: { strategy_id: strategyId }
+    })
     return response.data
   }
 

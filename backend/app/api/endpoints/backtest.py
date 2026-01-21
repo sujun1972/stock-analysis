@@ -19,13 +19,10 @@ class BacktestRequest(BaseModel):
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
     initial_cash: float = Field(1000000.0, description="初始资金")
+    strategy_id: str = Field("complex_indicator", description="策略ID")
     strategy_params: Optional[Dict[str, Any]] = Field(
-        default={
-            'top_n': 10,
-            'holding_period': 5,
-            'rebalance_freq': 'W'
-        },
-        description="策略参数"
+        default=None,
+        description="策略参数（如不提供则使用默认值）"
     )
 
 
@@ -39,24 +36,24 @@ async def run_backtest(request: BacktestRequest):
     - start_date: 开始日期
     - end_date: 结束日期
     - initial_cash: 初始资金
-    - strategy_params: 策略参数
-      - top_n: 选股数量(多股模式)
-      - holding_period: 持仓期（天）
-      - rebalance_freq: 调仓频率（D/W/M）
+    - strategy_id: 策略ID (默认: complex_indicator)
+    - strategy_params: 策略参数（如不提供则使用默认值）
+      完整参数列表可通过 GET /api/strategy/metadata?strategy_id=xxx 获取
 
     返回:
     - 单股模式: K线数据 + 买卖信号点 + 每日净值 + 基准对比
     - 多股模式: 组合净值曲线 + 绩效指标 + 基准对比
     """
     try:
-        logger.info(f"收到回测请求: symbols={request.symbols}")
+        logger.info(f"收到回测请求: symbols={request.symbols}, strategy={request.strategy_id}")
 
         result = await backtest_service.run_backtest(
             symbols=request.symbols,
             start_date=request.start_date,
             end_date=request.end_date,
             initial_cash=request.initial_cash,
-            strategy_params=request.strategy_params
+            strategy_params=request.strategy_params,
+            strategy_id=request.strategy_id
         )
 
         return {
