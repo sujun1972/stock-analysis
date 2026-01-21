@@ -712,6 +712,91 @@ class DatabaseManager:
             if conn:
                 self.release_connection(conn)
 
+    def check_daily_data_completeness(self, code: str, start_date: str, end_date: str,
+                                     min_expected_days: int = None) -> Dict[str, Any]:
+        """
+        检查股票的日线数据是否完整
+
+        Args:
+            code: 股票代码
+            start_date: 开始日期 (YYYYMMDD)
+            end_date: 结束日期 (YYYYMMDD)
+            min_expected_days: 最小期望交易日数量（可选，如果不提供则不检查）
+
+        Returns:
+            Dict包含：
+                - has_data: bool, 是否有数据
+                - is_complete: bool, 数据是否完整（如果提供了min_expected_days）
+                - record_count: int, 实际记录数
+                - earliest_date: str, 最早日期
+                - latest_date: str, 最新日期
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # 转换日期格式 YYYYMMDD -> YYYY-MM-DD
+            start_date_formatted = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
+            end_date_formatted = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
+
+            query = """
+                SELECT
+                    COUNT(*) as record_count,
+                    MIN(date) as earliest_date,
+                    MAX(date) as latest_date
+                FROM stock_daily
+                WHERE code = %s
+                    AND date >= %s
+                    AND date <= %s
+            """
+
+            cursor.execute(query, (code, start_date_formatted, end_date_formatted))
+            result = cursor.fetchone()
+
+            record_count = result[0] if result else 0
+            earliest_date = result[1] if result and result[1] else None
+            latest_date = result[2] if result and result[2] else None
+
+            has_data = record_count > 0
+
+            # 如果提供了最小期望天数，检查是否完整
+            is_complete = False
+            if min_expected_days is not None:
+                # 数据被认为是完整的，如果：
+                # 1. 记录数达到最小期望的80%以上（考虑节假日等）
+                # 2. 最新日期接近结束日期（在30天内）
+                if has_data and record_count >= min_expected_days * 0.8:
+                    if latest_date:
+                        from datetime import datetime, timedelta
+                        latest_dt = datetime.strptime(str(latest_date), '%Y-%m-%d')
+                        end_dt = datetime.strptime(end_date_formatted, '%Y-%m-%d')
+                        days_diff = (end_dt - latest_dt).days
+                        is_complete = days_diff <= 30
+
+            cursor.close()
+
+            return {
+                'has_data': has_data,
+                'is_complete': is_complete,
+                'record_count': record_count,
+                'earliest_date': str(earliest_date) if earliest_date else None,
+                'latest_date': str(latest_date) if latest_date else None
+            }
+
+        except Exception as e:
+            logger.error(f"❌ 检查 {code} 数据完整性失败: {e}")
+            return {
+                'has_data': False,
+                'is_complete': False,
+                'record_count': 0,
+                'earliest_date': None,
+                'latest_date': None
+            }
+        finally:
+            if conn:
+                self.release_connection(conn)
+
     def save_minute_data(self, df: pd.DataFrame, code: str, period: str, trade_date: str) -> int:
         """
         保存分时数据到数据库

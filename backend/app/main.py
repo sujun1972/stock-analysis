@@ -41,6 +41,20 @@ async def startup_event():
     logger.info(f"🔗 数据库: {settings.DATABASE_HOST}:{settings.DATABASE_PORT}")
     logger.info(f"✅ API文档: http://localhost:8000/api/docs")
 
+    # 重置遗留的同步状态（如果容器重启导致状态卡在running）
+    try:
+        from app.services.config_service import ConfigService
+        config_service = ConfigService()
+        status = await config_service.get_sync_status()
+        if status.get('status') == 'running':
+            logger.warning("⚠️ 检测到遗留的running状态，重置为failed")
+            await config_service.update_sync_status(
+                status='failed',
+                progress=status.get('progress', 0)
+            )
+    except Exception as e:
+        logger.error(f"重置同步状态失败: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():

@@ -271,6 +271,40 @@ class ConfigService:
             completed=0
         )
 
+    async def set_sync_abort_flag(self, abort: bool = True) -> None:
+        """
+        设置同步中止标志
+
+        Args:
+            abort: True表示请求中止，False表示清除中止标志
+        """
+        try:
+            await self.set_config('sync_abort_flag', 'true' if abort else 'false')
+            logger.info(f"同步中止标志已设置为: {abort}")
+        except Exception as e:
+            logger.error(f"设置同步中止标志失败: {e}")
+            raise
+
+    async def check_sync_abort_flag(self) -> bool:
+        """
+        检查是否有中止同步的请求
+
+        Returns:
+            bool: True表示应该中止，False表示继续
+        """
+        try:
+            flag = await self.get_config('sync_abort_flag')
+            return flag == 'true'
+        except Exception as e:
+            logger.error(f"检查同步中止标志失败: {e}")
+            return False
+
+    async def clear_sync_abort_flag(self) -> None:
+        """
+        清除同步中止标志
+        """
+        await self.set_sync_abort_flag(False)
+
     # ========== 模块化同步状态管理 ==========
 
     async def get_module_sync_status(self, module: str) -> Dict:

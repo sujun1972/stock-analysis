@@ -40,6 +40,40 @@ class SyncNewStocksRequest(BaseModel):
     days: Optional[int] = 30
 
 
+@router.post("/abort")
+async def abort_sync():
+    """
+    中止当前正在运行的同步任务
+
+    Returns:
+        中止请求结果
+    """
+    try:
+        config_service = ConfigService()
+
+        # 检查当前是否有正在运行的同步
+        status = await config_service.get_sync_status()
+        if status.get('status') != 'running':
+            return {
+                "code": 400,
+                "message": "没有正在运行的同步任务",
+                "data": None
+            }
+
+        # 设置中止标志
+        await config_service.set_sync_abort_flag(True)
+        logger.info("收到同步中止请求")
+
+        return {
+            "code": 200,
+            "message": "中止请求已发送，同步将在当前股票完成后停止",
+            "data": None
+        }
+    except Exception as e:
+        logger.error(f"中止同步失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/status")
 async def get_sync_status():
     """
@@ -479,13 +513,16 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
         else:
             codes = request.codes
 
-        # 限制数量
-        if request.max_stocks:
+        # 限制数量（0表示全部，不限制）
+        if request.max_stocks and request.max_stocks > 0:
             codes = codes[:request.max_stocks]
 
         total = len(codes)
         success_count = 0
         failed_count = 0
+
+        # 清除之前的中止标志
+        await config_service.clear_sync_abort_flag()
 
         # 更新同步状态
         await config_service.update_sync_status(
@@ -501,10 +538,50 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
         end_date = datetime.now().strftime('%Y%m%d')
         start_date = (datetime.now() - timedelta(days=request.years * 365)).strftime('%Y%m%d')
 
+        # 计算最小期望交易日数（按每年约250个交易日计算）
+        min_expected_days = request.years * 250
+
         # 批量同步
+        skipped_count = 0
+        aborted = False
         for idx, code in enumerate(codes, 1):
             try:
-                logger.info(f"[{idx}/{total}] 同步 {code}")
+                # 检查是否收到中止请求
+                if await config_service.check_sync_abort_flag():
+                    logger.warning(f"⚠️ 收到中止请求，停止同步（已完成 {idx-1}/{total}）")
+                    aborted = True
+                    break
+
+                logger.info(f"[{idx}/{total}] 检查 {code}")
+
+                # 检查数据完整性
+                completeness = await asyncio.to_thread(
+                    data_service.db.check_daily_data_completeness,
+                    code=code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    min_expected_days=min_expected_days
+                )
+
+                # 如果数据已经完整，跳过
+                if completeness['is_complete']:
+                    logger.info(f"  ⊙ {code}: 数据已完整 ({completeness['record_count']} 条记录，最新日期: {completeness['latest_date']})，跳过")
+                    success_count += 1
+                    skipped_count += 1
+
+                    # 更新进度
+                    progress = int((idx / total) * 100)
+                    await config_service.update_sync_status(
+                        progress=progress,
+                        completed=idx
+                    )
+                    continue
+
+                # 如果有部分数据，提示更新
+                if completeness['has_data']:
+                    logger.info(f"  ↻ {code}: 数据不完整 ({completeness['record_count']} 条记录)，更新中...")
+                else:
+                    logger.info(f"  + {code}: 无数据，开始同步...")
 
                 # 获取日线数据 (添加30秒超时)
                 try:
@@ -550,29 +627,55 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
                 logger.error(f"  ✗ {code}: {e}")
                 failed_count += 1
 
-        # 更新同步状态为完成
-        await config_service.update_sync_status(
-            status='completed',
-            last_sync_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            progress=100
-        )
+        # 清除中止标志
+        await config_service.clear_sync_abort_flag()
 
-        logger.info(f"✓ 批量同步完成: 成功 {success_count}, 失败 {failed_count}")
+        # 根据是否中止来更新状态
+        if aborted:
+            await config_service.update_sync_status(
+                status='aborted',
+                last_sync_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
+            logger.warning(f"⚠️ 同步已中止: 成功 {success_count} (跳过 {skipped_count}), 失败 {failed_count}, 总计 {total}")
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "success": success_count,
-                "failed": failed_count,
-                "total": total
+            return {
+                "code": 200,
+                "message": "同步已中止",
+                "data": {
+                    "success": success_count,
+                    "failed": failed_count,
+                    "skipped": skipped_count,
+                    "total": total,
+                    "aborted": True
+                }
             }
-        }
+        else:
+            # 更新同步状态为完成
+            await config_service.update_sync_status(
+                status='completed',
+                last_sync_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                progress=100
+            )
+
+            logger.info(f"✓ 批量同步完成: 成功 {success_count} (跳过 {skipped_count}), 失败 {failed_count}")
+
+            return {
+                "code": 200,
+                "message": "success",
+                "data": {
+                    "success": success_count,
+                    "failed": failed_count,
+                    "skipped": skipped_count,
+                    "total": total,
+                    "aborted": False
+                }
+            }
     except Exception as e:
         logger.error(f"批量同步失败: {e}")
 
         config_service = ConfigService()
         await config_service.update_sync_status(status='failed')
+        await config_service.clear_sync_abort_flag()
 
         raise HTTPException(status_code=500, detail=str(e))
 

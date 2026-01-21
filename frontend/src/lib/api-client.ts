@@ -258,7 +258,9 @@ class ApiClient {
   }): Promise<ApiResponse<{
     success: number
     failed: number
+    skipped: number
     total: number
+    aborted: boolean
   }>> {
     const response = await axiosInstance.post('/api/sync/daily/batch', params)
     return response.data
@@ -272,6 +274,14 @@ class ApiClient {
     records: number
   }>> {
     const response = await axiosInstance.post(`/api/sync/daily/${code}`, { years })
+    return response.data
+  }
+
+  /**
+   * 中止当前正在运行的同步任务
+   */
+  async abortSync(): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post('/api/sync/abort')
     return response.data
   }
 
