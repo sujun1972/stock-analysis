@@ -5,6 +5,8 @@ import BacktestPanel from '@/components/BacktestPanel'
 import BacktestKLineChart from '@/components/BacktestKLineChart'
 import EquityCurveChart from '@/components/EquityCurveChart'
 import PerformanceMetrics from '@/components/PerformanceMetrics'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 interface BacktestHistory {
   id: string
@@ -61,32 +63,32 @@ export default function BacktestPage() {
     return (
       <div className="space-y-6">
         {/* 策略信息卡片 */}
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                {backtestResult.strategy_name || '回测策略'}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                股票: {backtestResult.symbol} |
-                周期: {backtestResult.start_date} 至 {backtestResult.end_date} |
-                交易次数: {backtestResult.total_trades || 0}
-              </p>
+        <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>{backtestResult.strategy_name || '回测策略'}</CardTitle>
+                <CardDescription className="mt-1">
+                  股票: {backtestResult.symbol} |
+                  周期: {backtestResult.start_date} 至 {backtestResult.end_date} |
+                  交易次数: {backtestResult.total_trades || 0}
+                </CardDescription>
+              </div>
+              <Button
+                onClick={() => {
+                  // 自动选中当前结果用于对比
+                  const currentId = backtestHistory[0]?.id
+                  if (currentId) {
+                    toggleHistorySelection(currentId)
+                  }
+                }}
+                size="sm"
+              >
+                添加到对比
+              </Button>
             </div>
-            <button
-              onClick={() => {
-                // 自动选中当前结果用于对比
-                const currentId = backtestHistory[0]?.id
-                if (currentId) {
-                  toggleHistorySelection(currentId)
-                }
-              }}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
-            >
-              添加到对比
-            </button>
-          </div>
-        </div>
+          </CardHeader>
+        </Card>
 
         {/* K线图 + 买卖信号 */}
         <BacktestKLineChart
@@ -110,10 +112,11 @@ export default function BacktestPage() {
 
         {/* 交易明细 */}
         {backtestResult.trades && backtestResult.trades.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              交易明细 (最近{backtestResult.trades.length}笔)
-            </h2>
+          <Card>
+            <CardHeader>
+              <CardTitle>交易明细 (最近{backtestResult.trades.length}笔)</CardTitle>
+            </CardHeader>
+            <CardContent>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700">
@@ -164,12 +167,13 @@ export default function BacktestPage() {
                 </tbody>
               </table>
             </div>
-            {backtestResult.total_trades > backtestResult.trades.length && (
-              <p className="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
-                共{backtestResult.total_trades}笔交易,显示最近{backtestResult.trades.length}笔
-              </p>
-            )}
-          </div>
+              {backtestResult.total_trades > backtestResult.trades.length && (
+                <p className="mt-4 text-sm text-muted-foreground text-center">
+                  共{backtestResult.total_trades}笔交易,显示最近{backtestResult.trades.length}笔
+                </p>
+              )}
+            </CardContent>
+          </Card>
         )}
       </div>
     )
@@ -181,15 +185,15 @@ export default function BacktestPage() {
     return (
       <div className="space-y-6">
         {/* 策略信息卡片 */}
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-            {backtestResult.strategy_name || '组合回测策略'}
-          </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            股票组合: {backtestResult.symbols?.length || 0} 只 |
-            周期: {backtestResult.start_date} 至 {backtestResult.end_date}
-          </p>
-        </div>
+        <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <CardTitle>{backtestResult.strategy_name || '组合回测策略'}</CardTitle>
+            <CardDescription>
+              股票组合: {backtestResult.symbols?.length || 0} 只 |
+              周期: {backtestResult.start_date} 至 {backtestResult.end_date}
+            </CardDescription>
+          </CardHeader>
+        </Card>
 
         {/* 资金曲线对比 */}
         <EquityCurveChart
@@ -205,11 +209,12 @@ export default function BacktestPage() {
         />
 
         {/* 组合信息 */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-            组合信息
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>组合信息</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
               <div className="text-sm text-gray-600 dark:text-gray-400">股票数量</div>
               <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
@@ -230,23 +235,24 @@ export default function BacktestPage() {
             </div>
           </div>
 
-          {/* 股票列表 */}
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-              回测股票池 ({backtestResult.symbols.length}只)
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {backtestResult.symbols.map((symbol: string, idx: number) => (
-                <span
-                  key={idx}
-                  className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm"
-                >
-                  {symbol}
-                </span>
-              ))}
+            {/* 股票列表 */}
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                回测股票池 ({backtestResult.symbols.length}只)
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {backtestResult.symbols.map((symbol: string, idx: number) => (
+                  <span
+                    key={idx}
+                    className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm"
+                  >
+                    {symbol}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -345,16 +351,17 @@ export default function BacktestPage() {
 
             {/* 历史记录面板 */}
             {backtestHistory.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                    回测历史
-                  </h3>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    选择2-3个对比
-                  </span>
-                </div>
-                <div className="space-y-2 max-h-96 overflow-y-auto">
+              <Card>
+                <CardHeader className="p-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm">回测历史</CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      选择2-3个对比
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
                   {backtestHistory.map((item) => (
                     <div
                       key={item.id}
@@ -386,17 +393,18 @@ export default function BacktestPage() {
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
 
           {/* 右侧: 结果展示 */}
           <div className="lg:col-span-2">
             {!backtestResult ? (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-12 text-center">
+              <Card className="p-12 text-center">
                 <svg
-                  className="mx-auto h-24 w-24 text-gray-400"
+                  className="mx-auto h-24 w-24 text-muted-foreground"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -408,13 +416,11 @@ export default function BacktestPage() {
                     d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                   />
                 </svg>
-                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-                  等待回测结果
-                </h3>
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                <CardTitle className="mt-4">等待回测结果</CardTitle>
+                <CardDescription className="mt-2">
                   在左侧配置回测参数并点击&ldquo;运行回测&rdquo;按钮
-                </p>
-              </div>
+                </CardDescription>
+              </Card>
             ) : (
               <>
                 {backtestResult.mode === 'single' ? renderSingleStockResults() : renderMultiStockResults()}

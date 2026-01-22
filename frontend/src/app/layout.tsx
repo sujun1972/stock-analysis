@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
   title: "A股AI量化交易系统",
@@ -12,13 +15,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <body className="antialiased">
-        <div className="min-h-screen flex flex-col">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div className="min-h-screen flex flex-col">
           <header className="bg-blue-600 text-white shadow-lg">
             <div className="container-custom py-4">
-              <h1 className="text-2xl font-bold">A股AI量化交易系统</h1>
-              <p className="text-blue-100 text-sm">Stock Analysis Platform</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold">A股AI量化交易系统</h1>
+                  <p className="text-blue-100 text-sm">Stock Analysis Platform</p>
+                </div>
+                <ThemeToggle />
+              </div>
             </div>
           </header>
 
@@ -64,7 +78,9 @@ export default function RootLayout({
               </p>
             </div>
           </footer>
-        </div>
+          </div>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

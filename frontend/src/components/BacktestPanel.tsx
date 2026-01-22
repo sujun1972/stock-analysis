@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react'
 import { apiClient } from '@/lib/api-client'
 import StrategyParamsPanel from './StrategyParamsPanel'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
+import { useToast } from '@/hooks/use-toast'
+import { format, subYears } from 'date-fns'
 
 interface BacktestPanelProps {
   onBacktestComplete?: (result: any) => void
@@ -19,8 +26,8 @@ interface Strategy {
 export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps) {
   // 表单状态
   const [symbols, setSymbols] = useState<string>('600000')
-  const [startDate, setStartDate] = useState<string>('2024-01-01')
-  const [endDate, setEndDate] = useState<string>('2024-12-31')
+  const [startDate, setStartDate] = useState<Date>(() => subYears(new Date(), 5)) // 默认开始日期为5年前
+  const [endDate, setEndDate] = useState<Date>(new Date()) // 默认结束日期为今天
   const [initialCash, setInitialCash] = useState<number>(1000000)
 
   // 策略相关状态
@@ -33,6 +40,9 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
   const [isLoading, setIsLoading] = useState(false)
   const [progress, setProgress] = useState<string>('')
   const [error, setError] = useState<string>('')
+
+  // Toast hook
+  const { toast } = useToast()
 
   // 加载策略列表
   useEffect(() => {
@@ -88,11 +98,11 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
 
       setProgress('正在获取历史数据...')
 
-      // 调用回测API
+      // 调用回测API，将日期对象格式化为字符串
       const response = await apiClient.runBacktest({
         symbols: symbolList.length === 1 ? symbolList[0] : symbolList,
-        start_date: startDate,
-        end_date: endDate,
+        start_date: format(startDate, 'yyyy-MM-dd'),
+        end_date: format(endDate, 'yyyy-MM-dd'),
         initial_cash: initialCash,
         strategy_id: selectedStrategyId,
         strategy_params: Object.keys(strategyParams).length > 0 ? strategyParams : undefined
@@ -102,6 +112,11 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
 
       if (response.data) {
         setProgress('回测完成！')
+        // 显示成功 toast
+        toast({
+          title: "回测完成",
+          description: `策略 ${response.data.strategy_name} 回测成功`,
+        })
         // 将结果传递给父组件
         if (onBacktestComplete) {
           onBacktestComplete(response.data)
@@ -111,7 +126,14 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
       }
     } catch (err: any) {
       console.error('回测错误:', err)
-      setError(err.response?.data?.detail || err.message || '回测失败，请检查参数')
+      const errorMsg = err.response?.data?.detail || err.message || '回测失败，请检查参数'
+      setError(errorMsg)
+      // 显示错误 toast
+      toast({
+        variant: "destructive",
+        title: "回测失败",
+        description: errorMsg,
+      })
     } finally {
       setIsLoading(false)
       setTimeout(() => setProgress(''), 3000)
@@ -119,75 +141,66 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-        回测配置
-      </h2>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Card>
+      <CardHeader>
+        <CardTitle>回测配置</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
         {/* 基础配置 */}
-        <div className="space-y-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="space-y-4 pb-4 border-b">
           {/* 股票代码 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              股票代码
-            </label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="symbols">股票代码</Label>
+            <Input
+              id="symbols"
               type="text"
               value={symbols}
               onChange={(e) => setSymbols(e.target.value)}
               placeholder="600000 或 000031,600519"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
               required
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-muted-foreground">
               支持单股或多股（逗号分隔），无需添加交易所后缀
             </p>
           </div>
 
           {/* 日期范围 */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                开始日期
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                required
+            <div className="space-y-2">
+              <Label>开始日期</Label>
+              <DatePicker
+                date={startDate}
+                onDateChange={(date) => date && setStartDate(date)}
+                placeholder="选择开始日期"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                结束日期
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                required
+            <div className="space-y-2">
+              <Label>结束日期</Label>
+              <DatePicker
+                date={endDate}
+                onDateChange={(date) => date && setEndDate(date)}
+                placeholder="选择结束日期"
               />
             </div>
           </div>
 
           {/* 初始资金 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="space-y-2">
+            <Label htmlFor="initialCash">
               初始资金: ¥{initialCash.toLocaleString()}
-            </label>
+            </Label>
             <input
+              id="initialCash"
               type="range"
               min="100000"
               max="10000000"
               step="100000"
               value={initialCash}
               onChange={(e) => setInitialCash(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
             />
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
               <span>10万</span>
               <span>1000万</span>
             </div>
@@ -196,9 +209,7 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
 
         {/* 策略选择 */}
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            回测策略
-          </label>
+          <Label>回测策略</Label>
 
           <div className="space-y-2">
             {strategies.map(strategy => (
@@ -243,36 +254,33 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
 
           {/* 参数配置按钮 */}
           {(strategies.find(s => s.id === selectedStrategyId)?.parameter_count || 0) > 0 && (
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => setShowParams(!showParams)}
-              className="w-full px-4 py-2 text-sm text-blue-600 dark:text-blue-400 border border-blue-600 dark:border-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              className="w-full"
             >
               {showParams ? '收起' : '展开'}策略参数配置
-            </button>
+            </Button>
           )}
         </div>
 
         {/* 错误提示 */}
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-sm text-destructive">{error}</p>
           </div>
         )}
 
         {/* 运行按钮 */}
-        <button
+        <Button
           type="submit"
           disabled={isLoading}
-          className={`w-full py-3 rounded-lg font-medium transition-colors ${
-            isLoading
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
-          }`}
+          className="w-full"
         >
           {isLoading ? (
             <span className="flex items-center justify-center">
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
@@ -281,18 +289,19 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
           ) : (
             '运行回测'
           )}
-        </button>
+        </Button>
       </form>
 
-      {/* 参数配置面板（弹出式） */}
-      {showParams && (
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <StrategyParamsPanel
-            strategyId={selectedStrategyId}
-            onParamsChange={setStrategyParams}
-          />
-        </div>
-      )}
-    </div>
+        {/* 参数配置面板（弹出式） */}
+        {showParams && (
+          <div className="mt-4 pt-4 border-t">
+            <StrategyParamsPanel
+              strategyId={selectedStrategyId}
+              onParamsChange={setStrategyParams}
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
