@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface SyncStatus {
   status: string
@@ -107,7 +108,7 @@ export default function RealtimeSyncPage() {
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          ⚡ 实时行情同步
+          实时行情同步
         </h1>
         <p className="text-gray-600 dark:text-gray-300 mt-2">
           获取最新的实时行情快照，包括当前价格、涨跌幅、成交量等关键指标
@@ -129,10 +130,11 @@ export default function RealtimeSyncPage() {
       )}
 
       {/* 当前同步状态 */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          当前同步状态
-        </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>当前同步状态</CardTitle>
+        </CardHeader>
+        <CardContent>
         {syncStatus ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
@@ -163,13 +165,15 @@ export default function RealtimeSyncPage() {
         ) : (
           <div className="text-gray-600 dark:text-gray-400">加载状态中...</div>
         )}
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 同步操作 */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          获取实时行情
-        </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>获取实时行情</CardTitle>
+        </CardHeader>
+        <CardContent>
         <div className="space-y-4">
           <p className="text-gray-600 dark:text-gray-400">
             点击下方按钮获取所有 A 股的最新实时行情快照。此操作会获取当前市场上所有股票的实时数据。
@@ -179,7 +183,7 @@ export default function RealtimeSyncPage() {
           {dataSource?.data_source?.toLowerCase() === 'akshare' && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
               <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                <strong>⚠️ AkShare数据源说明：</strong>实时行情接口需要分批次爬取东方财富网数据，
+                <strong>AkShare数据源说明：</strong>实时行情接口需要分批次爬取东方财富网数据，
                 <strong>耗时约3-5分钟</strong>（共58个批次）。网络不稳定时可能会失败，请耐心等待或稍后重试。
                 建议在<strong>交易时段（9:30-15:00）</strong>使用，数据更稳定可靠。
               </p>
@@ -201,13 +205,15 @@ export default function RealtimeSyncPage() {
             {isLoading ? '获取中...' : '立即获取实时行情'}
           </button>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 数据说明 */}
-      <div className="card bg-gray-50 dark:bg-gray-800">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-          📊 数据说明
-        </h3>
+      <Card className="bg-gray-50 dark:bg-gray-800">
+        <CardHeader>
+          <CardTitle className="text-lg">数据说明</CardTitle>
+        </CardHeader>
+        <CardContent>
         <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -239,13 +245,15 @@ export default function RealtimeSyncPage() {
             </div>
           </div>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 应用场景 */}
-      <div className="card bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
-        <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-200 mb-3">
-          🎯 典型应用场景
-        </h3>
+      <Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+        <CardHeader>
+          <CardTitle className="text-lg text-purple-900 dark:text-purple-200">典型应用场景</CardTitle>
+        </CardHeader>
+        <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-purple-800 dark:text-purple-300">
           <div>
             <strong>场景 1: 市场概览</strong>
@@ -264,13 +272,15 @@ export default function RealtimeSyncPage() {
             <p className="mt-1">设置价格或涨跌幅阈值，盘中自动监控并发送提醒通知。</p>
           </div>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 注意事项 */}
-      <div className="card bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-        <h3 className="text-lg font-semibold text-yellow-900 dark:text-yellow-200 mb-3">
-          ⚠️ 注意事项
-        </h3>
+      <Card className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+        <CardHeader>
+          <CardTitle className="text-lg text-yellow-900 dark:text-yellow-200">注意事项</CardTitle>
+        </CardHeader>
+        <CardContent>
         <ul className="space-y-2 text-sm text-yellow-800 dark:text-yellow-300">
           <li className="flex items-start">
             <span className="mr-2">•</span>
@@ -296,14 +306,16 @@ export default function RealtimeSyncPage() {
             <span className="mr-2">•</span>
             <span>数据源可在<a href="/settings" className="underline">系统设置</a>中切换（AkShare 或 Tushare）</span>
           </li>
-        </ul>
-      </div>
+          </ul>
+        </CardContent>
+      </Card>
 
       {/* 交易时间提示 */}
-      <div className="card bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-        <h3 className="text-lg font-semibold text-green-900 dark:text-green-200 mb-3">
-          🕐 A股交易时间
-        </h3>
+      <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+        <CardHeader>
+          <CardTitle className="text-lg text-green-900 dark:text-green-200">A股交易时间</CardTitle>
+        </CardHeader>
+        <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-800 dark:text-green-300">
           <div>
             <strong>上午交易时段（集合竞价）</strong>
@@ -326,7 +338,8 @@ export default function RealtimeSyncPage() {
         <p className="text-xs text-green-700 dark:text-green-400 mt-3">
           * 非交易时段获取的数据为前一交易日的收盘数据
         </p>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

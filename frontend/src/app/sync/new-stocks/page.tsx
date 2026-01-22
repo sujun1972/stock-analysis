@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface ModuleSyncStatus {
   status: string
@@ -147,7 +148,7 @@ export default function NewStocksSyncPage() {
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          🆕 新股列表同步
+          新股列表同步
         </h1>
         <p className="text-gray-600 dark:text-gray-300 mt-2">
           获取最近上市的新股信息，支持增量更新。建议每日同步以保持数据最新。
@@ -169,10 +170,11 @@ export default function NewStocksSyncPage() {
       )}
 
       {/* 当前状态 */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          上次同步信息
-        </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>上次同步信息</CardTitle>
+        </CardHeader>
+        <CardContent>
         {syncStatus ? (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -231,13 +233,15 @@ export default function NewStocksSyncPage() {
         ) : (
           <div className="text-gray-600 dark:text-gray-400">加载状态中...</div>
         )}
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 定时任务配置 */}
-      <div className="card bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          ⏰ 定时任务配置
-        </h2>
+      <Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+        <CardHeader>
+          <CardTitle>定时任务配置</CardTitle>
+        </CardHeader>
+        <CardContent>
         {scheduledTask ? (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -280,13 +284,15 @@ export default function NewStocksSyncPage() {
         ) : (
           <div className="text-gray-600 dark:text-gray-400">加载定时任务配置中...</div>
         )}
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 同步操作 */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          开始同步
-        </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>开始同步</CardTitle>
+        </CardHeader>
+        <CardContent>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -313,13 +319,15 @@ export default function NewStocksSyncPage() {
             {isLoading || syncStatus?.status === 'running' ? '同步中...' : '开始同步新股列表'}
           </button>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 数据说明 */}
-      <div className="card bg-gray-50 dark:bg-gray-800">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-          📊 数据说明
-        </h3>
+      <Card className="bg-gray-50 dark:bg-gray-800">
+        <CardHeader>
+          <CardTitle className="text-lg">数据说明</CardTitle>
+        </CardHeader>
+        <CardContent>
         <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -343,13 +351,15 @@ export default function NewStocksSyncPage() {
             </div>
           </div>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 注意事项 */}
-      <div className="card bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-        <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-200 mb-3">
-          💡 使用建议
-        </h3>
+      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+        <CardHeader>
+          <CardTitle className="text-lg text-blue-900 dark:text-blue-200">使用建议</CardTitle>
+        </CardHeader>
+        <CardContent>
         <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-300">
           <li className="flex items-start">
             <span className="mr-2">•</span>
@@ -367,8 +377,9 @@ export default function NewStocksSyncPage() {
             <span className="mr-2">•</span>
             <span>可在<a href="/settings" className="underline">系统设置</a>中配置定时任务自动执行</span>
           </li>
-        </ul>
-      </div>
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   )
 }

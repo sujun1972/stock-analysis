@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 /**
  * 模块同步状态接口（用于股票列表同步）
@@ -215,7 +216,7 @@ export default function InitializePage() {
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          🚀 数据初始化
+          数据初始化
         </h1>
         <p className="text-gray-600 dark:text-gray-300 mt-2">
           系统首次使用时的必要步骤，请按顺序完成以下初始化操作
@@ -223,57 +224,63 @@ export default function InitializePage() {
       </div>
 
       {/* 使用建议 */}
-      <div className="card bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-        <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-200 mb-3">
-          💡 使用建议
-        </h3>
-        <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-300">
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>建议先完成<strong>步骤1（股票列表初始化）</strong>，再进行步骤2</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>首次使用建议从少量股票开始测试（10-100只）</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>大批量同步建议在非交易时段进行，避免影响数据源性能</span>
-          </li>
-        </ul>
-      </div>
+      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+        <CardHeader>
+          <CardTitle className="text-lg text-blue-900 dark:text-blue-200">
+            使用建议
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-300">
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>建议先完成<strong>步骤1（股票列表初始化）</strong>，再进行步骤2</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>首次使用建议从少量股票开始测试（10-100只）</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>大批量同步建议在非交易时段进行，避免影响数据源性能</span>
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
 
       {/* ========== 步骤1: 股票列表初始化 ========== */}
-      <div className="card border-2 border-blue-200 dark:border-blue-800">
-        <div className="flex items-center mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 text-white font-bold mr-3">
-            1
+      <Card className="border-2 border-blue-200 dark:border-blue-800">
+        <CardHeader>
+          <div className="flex items-center">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 text-white font-bold mr-3">
+              1
+            </div>
+            <CardTitle className="text-xl">
+              股票列表初始化
+            </CardTitle>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            股票列表初始化
-          </h2>
-        </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-gray-600 dark:text-gray-400">
+            获取A股市场所有股票基本信息（约5000+只），包括股票代码、名称、行业、地区等
+          </p>
 
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          获取A股市场所有股票基本信息（约5000+只），包括股票代码、名称、行业、地区等
-        </p>
+          {/* 错误提示 */}
+          {stockListError && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <p className="text-red-800 dark:text-red-200">{stockListError}</p>
+            </div>
+          )}
 
-        {/* 错误提示 */}
-        {stockListError && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
-            <p className="text-red-800 dark:text-red-200">{stockListError}</p>
-          </div>
-        )}
+          {/* 成功提示 */}
+          {stockListSuccess && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+              <p className="text-green-800 dark:text-green-200">{stockListSuccess}</p>
+            </div>
+          )}
 
-        {/* 成功提示 */}
-        {stockListSuccess && (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
-            <p className="text-green-800 dark:text-green-200">{stockListSuccess}</p>
-          </div>
-        )}
-
-        {/* 上次同步信息 */}
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-4">
+          {/* 上次同步信息 */}
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">上次同步信息</h3>
           {stockListStatus ? (
             <div className="space-y-3">
@@ -331,25 +338,25 @@ export default function InitializePage() {
               )}
             </div>
           ) : (
-            <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
+              <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
           )}
-        </div>
+          </div>
 
-        {/* 开始同步按钮 */}
-        <button
-          onClick={handleStockListSync}
-          disabled={isStockListLoading || stockListStatus?.status === 'running'}
-          className="btn-primary w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isStockListLoading || stockListStatus?.status === 'running' ? '同步中...' : '开始同步股票列表'}
-        </button>
+          {/* 开始同步按钮 */}
+          <button
+            onClick={handleStockListSync}
+            disabled={isStockListLoading || stockListStatus?.status === 'running'}
+            className="btn-primary w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isStockListLoading || stockListStatus?.status === 'running' ? '同步中...' : '开始同步股票列表'}
+          </button>
 
-        {/* 数据说明 */}
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <details className="text-sm">
-            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-              📊 查看数据说明
-            </summary>
+          {/* 数据说明 */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                查看数据说明
+              </summary>
             <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -371,41 +378,44 @@ export default function InitializePage() {
                 </div>
               </div>
             </div>
-          </details>
-        </div>
-      </div>
+            </details>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ========== 步骤2: 日线数据初始化 ========== */}
-      <div className="card border-2 border-purple-200 dark:border-purple-800">
-        <div className="flex items-center mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-purple-600 text-white font-bold mr-3">
-            2
+      <Card className="border-2 border-purple-200 dark:border-purple-800">
+        <CardHeader>
+          <div className="flex items-center">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-purple-600 text-white font-bold mr-3">
+              2
+            </div>
+            <CardTitle className="text-xl">
+              日线数据初始化
+            </CardTitle>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            日线数据初始化
-          </h2>
-        </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-gray-600 dark:text-gray-400">
+            批量同步股票的历史日线数据（OHLCV），支持自定义时间范围和股票数量
+          </p>
 
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          批量同步股票的历史日线数据（OHLCV），支持自定义时间范围和股票数量
-        </p>
+          {/* 错误提示 */}
+          {dailyError && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <p className="text-red-800 dark:text-red-200">{dailyError}</p>
+            </div>
+          )}
 
-        {/* 错误提示 */}
-        {dailyError && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
-            <p className="text-red-800 dark:text-red-200">{dailyError}</p>
-          </div>
-        )}
+          {/* 成功提示 */}
+          {dailySuccess && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+              <p className="text-green-800 dark:text-green-200">{dailySuccess}</p>
+            </div>
+          )}
 
-        {/* 成功提示 */}
-        {dailySuccess && (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
-            <p className="text-green-800 dark:text-green-200">{dailySuccess}</p>
-          </div>
-        )}
-
-        {/* 当前同步状态 */}
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-4">
+          {/* 当前同步状态 */}
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">当前同步状态</h3>
           {dailySyncStatus ? (
             <div className="space-y-3">
@@ -451,10 +461,10 @@ export default function InitializePage() {
           ) : (
             <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
           )}
-        </div>
+          </div>
 
-        {/* 同步参数配置 */}
-        <div className="space-y-4 mb-4">
+          {/* 同步参数配置 */}
+          <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">同步参数配置</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 股票数量 */}
@@ -515,34 +525,34 @@ export default function InitializePage() {
               {maxStocks > 1000 && ' 约 3-5 小时或更长'}
             </p>
           </div>
-        </div>
+          </div>
 
-        {/* 开始同步和中止按钮 */}
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleDailySync}
-            disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
-            className="btn-primary flex-1 md:flex-initial md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isDailyLoading || dailySyncStatus?.status === 'running' ? '同步中...' : '开始批量同步'}
-          </button>
-
-          {(isDailyLoading || dailySyncStatus?.status === 'running') && (
+          {/* 开始同步和中止按钮 */}
+          <div className="flex flex-wrap gap-3">
             <button
-              onClick={handleAbortSync}
-              className="btn-secondary flex-1 md:flex-initial md:w-auto bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700"
+              onClick={handleDailySync}
+              disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
+              className="btn-primary flex-1 md:flex-initial md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              中止同步
+              {isDailyLoading || dailySyncStatus?.status === 'running' ? '同步中...' : '开始批量同步'}
             </button>
-          )}
-        </div>
 
-        {/* 数据说明 */}
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <details className="text-sm">
-            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-              📊 查看数据说明
-            </summary>
+            {(isDailyLoading || dailySyncStatus?.status === 'running') && (
+              <button
+                onClick={handleAbortSync}
+                className="btn-secondary flex-1 md:flex-initial md:w-auto bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700"
+              >
+                中止同步
+              </button>
+            )}
+          </div>
+
+          {/* 数据说明 */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                查看数据说明
+              </summary>
             <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -564,16 +574,20 @@ export default function InitializePage() {
                 </div>
               </div>
             </div>
-          </details>
-        </div>
-      </div>
+            </details>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 注意事项 */}
-      <div className="card bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-        <h3 className="text-lg font-semibold text-yellow-900 dark:text-yellow-200 mb-3">
-          ⚠️ 重要提示
-        </h3>
-        <ul className="space-y-2 text-sm text-yellow-800 dark:text-yellow-300">
+      <Card className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+        <CardHeader>
+          <CardTitle className="text-lg text-yellow-900 dark:text-yellow-200">
+            重要提示
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-2 text-sm text-yellow-800 dark:text-yellow-300">
           <li className="flex items-start">
             <span className="mr-2">•</span>
             <span>数据源可在<a href="/settings" className="underline font-medium">系统设置</a>中切换（AkShare 或 Tushare）</span>
@@ -586,8 +600,9 @@ export default function InitializePage() {
             <span className="mr-2">•</span>
             <span>如遇到大量失败，建议减少批量大小或稍后重试</span>
           </li>
-        </ul>
-      </div>
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   )
 }
