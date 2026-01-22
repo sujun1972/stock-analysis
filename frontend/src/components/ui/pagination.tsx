@@ -8,7 +8,8 @@ const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
   <nav
     role="navigation"
     aria-label="pagination"
-    className={cn("mx-auto flex w-full justify-center", className)}
+    // 响应式对齐：移动端居中，桌面端靠右
+    className={cn("flex flex-1 w-full justify-center md:justify-end", className)}
     {...props}
   />
 )

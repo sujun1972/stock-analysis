@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { useStockStore } from '@/store/stock-store'
-import type { StockInfo } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -256,68 +255,20 @@ export default function StocksPage() {
           </div>
         )}
 
-          {/* 分页 */}
+          {/* 分页工具栏 */}
           {totalPages > 1 && (
             <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-              {/* 移动端：垂直布局 */}
-              <div className="flex flex-col gap-4 md:hidden">
-                <div className="flex items-center justify-between">
+              {/* 响应式布局：移动端垂直排列，桌面端水平排列（左右分布） */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                {/* 左侧区域：分页信息 + 每页条数选择器 */}
+                <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6">
+                  {/* 分页信息：移动端显示简化版，桌面端显示详细信息 */}
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    第 <span className="font-medium">{currentPage}</span> / {totalPages} 页
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="page-size-mobile" className="text-sm">每页</Label>
-                    <Select
-                      value={pageSize.toString()}
-                      onValueChange={(value) => {
-                        setPageSize(Number(value))
-                        setCurrentPage(1)
-                      }}
-                    >
-                      <SelectTrigger id="page-size-mobile" className="w-[80px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="20">20</SelectItem>
-                        <SelectItem value="30">30</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                    </PaginationItem>
-                    <PaginationItem>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-
-              {/* 桌面端：单行布局，翻页控件靠右 */}
-              <div className="hidden md:flex items-center justify-end gap-6">
-                {/* 左侧：信息统计和每页选择 */}
-                <div className="flex items-center gap-6 mr-auto">
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
-                    显示 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-medium">{Math.min(currentPage * pageSize, totalStocks)}</span>
-                    {' '}共 <span className="font-medium">{totalStocks}</span> 条
+                    <span className="md:hidden">第 <span className="font-medium">{currentPage}</span> / {totalPages} 页</span>
+                    <span className="hidden md:inline">
+                      显示 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-medium">{Math.min(currentPage * pageSize, totalStocks)}</span>
+                      {' '}共 <span className="font-medium">{totalStocks}</span> 条
+                    </span>
                   </p>
                   <div className="flex items-center gap-2">
                     <Label htmlFor="page-size" className="text-sm">每页</Label>
@@ -340,10 +291,10 @@ export default function StocksPage() {
                   </div>
                 </div>
 
-                {/* 右侧：分页控件 */}
+                {/* 右侧区域：分页导航控件（桌面端靠右对齐） */}
                 <Pagination>
                   <PaginationContent>
-                    {/* 上一页 */}
+                    {/* 上一页按钮（移动端仅显示图标，桌面端显示文字） */}
                     <PaginationItem>
                       <Button
                         variant="outline"
@@ -353,12 +304,12 @@ export default function StocksPage() {
                         className="gap-1"
                       >
                         <ChevronLeft className="h-4 w-4" />
-                        上一页
+                        <span className="hidden md:inline">上一页</span>
                       </Button>
                     </PaginationItem>
 
-                    {/* 第一页 */}
-                    {currentPage > 3 && (
+                    {/* 第一页链接（当前页距离第一页较远时显示） */}
+                    {currentPage > 2 && (
                       <>
                         <PaginationItem>
                           <PaginationLink
@@ -369,19 +320,20 @@ export default function StocksPage() {
                             1
                           </PaginationLink>
                         </PaginationItem>
-                        {currentPage > 4 && (
-                          <PaginationItem>
+                        {/* 省略号（仅桌面端显示） */}
+                        {currentPage > 3 && (
+                          <PaginationItem className="hidden md:inline-flex">
                             <PaginationEllipsis />
                           </PaginationItem>
                         )}
                       </>
                     )}
 
-                    {/* 当前页周围的页码 */}
+                    {/* 页码列表：移动端仅显示当前页，桌面端显示当前页前后2页 */}
                     {Array.from({ length: totalPages }, (_, i) => i + 1)
                       .filter(page => page >= currentPage - 2 && page <= currentPage + 2)
                       .map(page => (
-                        <PaginationItem key={page}>
+                        <PaginationItem key={page} className={page === currentPage ? "" : "hidden md:inline-flex"}>
                           <PaginationLink
                             onClick={() => setCurrentPage(page)}
                             isActive={currentPage === page}
@@ -392,11 +344,12 @@ export default function StocksPage() {
                         </PaginationItem>
                       ))}
 
-                    {/* 最后一页 */}
-                    {currentPage < totalPages - 2 && (
+                    {/* 最后一页链接（当前页距离最后一页较远时显示） */}
+                    {currentPage < totalPages - 1 && (
                       <>
-                        {currentPage < totalPages - 3 && (
-                          <PaginationItem>
+                        {/* 省略号（仅桌面端显示） */}
+                        {currentPage < totalPages - 2 && (
+                          <PaginationItem className="hidden md:inline-flex">
                             <PaginationEllipsis />
                           </PaginationItem>
                         )}
@@ -412,7 +365,7 @@ export default function StocksPage() {
                       </>
                     )}
 
-                    {/* 下一页 */}
+                    {/* 下一页按钮（移动端仅显示图标，桌面端显示文字） */}
                     <PaginationItem>
                       <Button
                         variant="outline"
@@ -421,7 +374,7 @@ export default function StocksPage() {
                         disabled={currentPage === totalPages}
                         className="gap-1"
                       >
-                        下一页
+                        <span className="hidden md:inline">下一页</span>
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                     </PaginationItem>
