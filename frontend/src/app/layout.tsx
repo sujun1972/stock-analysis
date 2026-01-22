@@ -3,6 +3,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { MobileNav } from "@/components/mobile-nav";
 
 export const metadata: Metadata = {
   title: "A股AI量化交易系统",
@@ -26,38 +27,42 @@ export default function RootLayout({
           <div className="min-h-screen flex flex-col">
           <header className="bg-blue-600 text-white shadow-lg">
             <div className="container-custom py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold">A股AI量化交易系统</h1>
-                  <p className="text-blue-100 text-sm">Stock Analysis Platform</p>
+              <div className="flex items-center justify-between gap-4">
+                {/* 移动端汉堡菜单 */}
+                <MobileNav />
+
+                {/* 标题 */}
+                <div className="flex-1">
+                  <h1 className="text-xl sm:text-2xl font-bold">A股AI量化交易系统</h1>
+                  <p className="text-blue-100 text-xs sm:text-sm hidden sm:block">Stock Analysis Platform</p>
                 </div>
+
+                {/* 主题切换 */}
                 <ThemeToggle />
               </div>
             </div>
           </header>
 
-          <nav className="bg-white dark:bg-gray-800 shadow">
+          {/* 桌面端导航栏 - 在中等屏幕及以上显示 */}
+          <nav className="bg-white dark:bg-gray-800 shadow hidden md:block">
             <div className="container-custom">
               <div className="flex space-x-8 py-4">
-                <a href="/" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                <a href="/" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                   首页
                 </a>
-                <a href="/stocks" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
-                  股票列表
-                </a>
-                <a href="/sync" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
-                  数据同步
-                </a>
-                <a href="/analysis" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
-                  数据分析
-                </a>
-                <a href="/ai-lab" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
-                  🧪 AI实验舱
-                </a>
-                <a href="/backtest" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                <a href="/backtest" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                   策略回测
                 </a>
-                <a href="/settings" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                <a href="/ai-lab" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  AI实验舱
+                </a>
+                <a href="/sync" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  数据同步
+                </a>
+                <a href="/stocks" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  股票列表
+                </a>
+                <a href="/settings" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                   系统设置
                 </a>
               </div>

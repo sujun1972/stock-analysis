@@ -28,12 +28,14 @@ interface StrategyParamsPanelProps {
   strategyId: string
   onParamsChange: (params: Record<string, any>) => void
   onApply?: () => void
+  isInDialog?: boolean // 是否在对话框中显示（影响展开/折叠行为）
 }
 
 export default function StrategyParamsPanel({
   strategyId,
   onParamsChange,
-  onApply
+  onApply,
+  isInDialog = false
 }: StrategyParamsPanelProps) {
   const [metadata, setMetadata] = useState<StrategyMetadata | null>(null)
   const [params, setParams] = useState<Record<string, any>>({})
@@ -49,6 +51,15 @@ export default function StrategyParamsPanel({
 
         if (response.data) {
           setMetadata(response.data)
+
+          // 如果在对话框中，默认展开所有分类
+          if (isInDialog) {
+            const allCategories = new Set<string>()
+            response.data.parameters.forEach((param: StrategyParameter) => {
+              allCategories.add(param.category)
+            })
+            setExpandedCategories(allCategories)
+          }
 
           // 初始化参数为默认值
           const defaultParams: Record<string, any> = {}
@@ -68,7 +79,7 @@ export default function StrategyParamsPanel({
     fetchMetadata()
     // onParamsChange 会导致无限循环，这里不添加到依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strategyId])
+  }, [strategyId, isInDialog])
 
   // 参数值变化处理
   const handleParamChange = (name: string, value: any) => {
@@ -221,7 +232,7 @@ export default function StrategyParamsPanel({
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <div className={isInDialog ? "p-6" : "bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"}>
         <div className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           <span className="ml-3 text-gray-600 dark:text-gray-400">加载策略参数...</span>
@@ -232,7 +243,7 @@ export default function StrategyParamsPanel({
 
   if (!metadata) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <div className={isInDialog ? "p-6" : "bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"}>
         <p className="text-red-600 dark:text-red-400">无法加载策略参数</p>
       </div>
     )
@@ -247,6 +258,38 @@ export default function StrategyParamsPanel({
     paramsByCategory[param.category].push(param)
   })
 
+  // 对话框中的简化布局
+  if (isInDialog) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        {/* 重置按钮 */}
+        <div className="flex justify-end">
+          <button
+            onClick={handleReset}
+            className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            重置为默认值
+          </button>
+        </div>
+
+        {/* 参数配置区域 - 两列布局（大屏幕） */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+          {Object.entries(paramsByCategory).map(([category, categoryParams]) => (
+            <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 sm:p-4 space-y-3 sm:space-y-4">
+              <h4 className="font-semibold text-sm sm:text-base text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                {category}
+              </h4>
+              <div className="space-y-3 sm:space-y-4">
+                {categoryParams.map(param => renderParamInput(param))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // 原有的完整布局（用于非对话框场景）
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg">
       {/* 策略信息头部 */}

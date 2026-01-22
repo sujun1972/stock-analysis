@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { format, subYears } from 'date-fns'
+import { Settings } from 'lucide-react'
 
 interface BacktestPanelProps {
   onBacktestComplete?: (result: any) => void
@@ -34,7 +36,7 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>('complex_indicator')
   const [strategyParams, setStrategyParams] = useState<Record<string, any>>({})
-  const [showParams, setShowParams] = useState<boolean>(false)
+  const [dialogOpenStrategyId, setDialogOpenStrategyId] = useState<string | null>(null) // 控制哪个策略的对话框打开
 
   // 加载状态
   const [isLoading, setIsLoading] = useState(false)
@@ -215,54 +217,86 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
             {strategies.map(strategy => (
               <div
                 key={strategy.id}
-                className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                className={`p-3 border rounded-lg transition-colors ${
                   selectedStrategyId === strategy.id
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
                 }`}
-                onClick={() => setSelectedStrategyId(strategy.id)}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        checked={selectedStrategyId === strategy.id}
-                        onChange={() => setSelectedStrategyId(strategy.id)}
-                        className="text-blue-600"
-                      />
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {strategy.name}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        v{strategy.version}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 ml-6">
-                      {strategy.description}
-                    </p>
-                  </div>
-                  {strategy.parameter_count > 0 && (
-                    <span className="ml-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-600 dark:text-gray-400 rounded">
-                      {strategy.parameter_count} 个参数
+                {/* 第一行: 单选框 + 名称 + 版本号 + 设置按钮 */}
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    className="flex items-center gap-2 flex-1 cursor-pointer"
+                    onClick={() => setSelectedStrategyId(strategy.id)}
+                  >
+                    <input
+                      type="radio"
+                      checked={selectedStrategyId === strategy.id}
+                      onChange={() => setSelectedStrategyId(strategy.id)}
+                      className="text-blue-600"
+                    />
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {strategy.name}
                     </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      v{strategy.version}
+                    </span>
+                  </div>
+
+                  {/* 参数配置按钮 - 在第一行右侧 */}
+                  {strategy.parameter_count > 0 && (
+                    <Dialog
+                      open={dialogOpenStrategyId === strategy.id}
+                      onOpenChange={(open) => setDialogOpenStrategyId(open ? strategy.id : null)}
+                    >
+                      <DialogTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedStrategyId(strategy.id)
+                          }}
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <DialogHeader>
+                          <DialogTitle className="text-base sm:text-lg">
+                            {strategy.name} - 参数配置
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="flex-1 overflow-y-auto py-2 sm:py-4 px-1">
+                          <StrategyParamsPanel
+                            strategyId={strategy.id}
+                            onParamsChange={setStrategyParams}
+                            isInDialog={true}
+                          />
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   )}
                 </div>
+
+                {/* 第二行: 参数数量标签 */}
+                {strategy.parameter_count > 0 && (
+                  <div className="ml-6">
+                    <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-xs text-gray-600 dark:text-gray-400 rounded">
+                      {strategy.parameter_count} 个参数
+                    </span>
+                  </div>
+                )}
+
+                {/* 第三行: 描述信息 */}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 ml-6">
+                  {strategy.description}
+                </p>
               </div>
             ))}
           </div>
-
-          {/* 参数配置按钮 */}
-          {(strategies.find(s => s.id === selectedStrategyId)?.parameter_count || 0) > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowParams(!showParams)}
-              className="w-full"
-            >
-              {showParams ? '收起' : '展开'}策略参数配置
-            </Button>
-          )}
         </div>
 
         {/* 错误提示 */}
@@ -290,17 +324,7 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
             '运行回测'
           )}
         </Button>
-      </form>
-
-        {/* 参数配置面板（弹出式） */}
-        {showParams && (
-          <div className="mt-4 pt-4 border-t">
-            <StrategyParamsPanel
-              strategyId={selectedStrategyId}
-              onParamsChange={setStrategyParams}
-            />
-          </div>
-        )}
+        </form>
       </CardContent>
     </Card>
   )
