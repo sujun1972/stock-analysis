@@ -253,8 +253,10 @@ class ApiClient {
    */
   async syncDailyBatch(params: {
     codes?: string[]
-    years?: number
-    max_stocks?: number
+    start_date?: string  // 开始日期，格式: YYYY-MM-DD
+    end_date?: string    // 结束日期，格式: YYYY-MM-DD
+    years?: number       // 兼容旧参数
+    max_stocks?: number  // 已废弃
   }): Promise<ApiResponse<{
     success: number
     failed: number

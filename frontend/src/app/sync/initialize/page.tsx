@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DatePicker } from '@/components/ui/date-picker'
+import { format, subDays, subMonths, subYears } from 'date-fns'
 
 /**
  * 模块同步状态接口（用于股票列表同步）
@@ -45,9 +51,39 @@ export default function InitializePage() {
   const [dailyError, setDailyError] = useState<string | null>(null)
   const [dailySuccess, setDailySuccess] = useState<string | null>(null)
 
-  // 日线数据同步参数
-  const [maxStocks, setMaxStocks] = useState<number>(100)
-  const [years, setYears] = useState<number>(5)
+  // 日线数据同步参数 - 使用日期范围
+  const [startDate, setStartDate] = useState<Date>(() => subDays(new Date(), 3)) // 默认3天前
+  const [endDate, setEndDate] = useState<Date>(new Date()) // 默认今天
+  const [datePreset, setDatePreset] = useState<string>('3days') // 默认预设：3天历史
+
+  // 预设日期范围映射
+  const applyDatePreset = (preset: string) => {
+    const today = new Date()
+    setEndDate(today)
+
+    switch (preset) {
+      case '3days':
+        setStartDate(subDays(today, 3))
+        break
+      case '1month':
+        setStartDate(subMonths(today, 1))
+        break
+      case '3years':
+        setStartDate(subYears(today, 3))
+        break
+      case '5years':
+        setStartDate(subYears(today, 5))
+        break
+      case '10years':
+        setStartDate(subYears(today, 10))
+        break
+    }
+  }
+
+  // 当预设改变时应用
+  useEffect(() => {
+    applyDatePreset(datePreset)
+  }, [datePreset])
 
   // ========== 股票列表同步逻辑 ==========
   useEffect(() => {
@@ -137,13 +173,17 @@ export default function InitializePage() {
         status: 'running',
         last_sync_date: dailySyncStatus?.last_sync_date || '',
         progress: 0,
-        total: maxStocks,
+        total: 0,
         completed: 0
       })
 
+      // 格式化日期为 YYYY-MM-DD
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd')
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd')
+
       const response = await apiClient.syncDailyBatch({
-        years,
-        max_stocks: maxStocks
+        start_date: formattedStartDate,
+        end_date: formattedEndDate
       })
 
       if (response.data) {
@@ -206,12 +246,11 @@ export default function InitializePage() {
   return (
     <div className="space-y-6">
       {/* 返回按钮 */}
-      <button
-        onClick={() => router.back()}
-        className="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
-      >
-        ← 返回数据同步管理
-      </button>
+      <div>
+        <Button variant="ghost" onClick={() => router.back()}>
+          ← 返回数据同步管理
+        </Button>
+      </div>
 
       {/* 页面标题 */}
       <div>
@@ -238,11 +277,15 @@ export default function InitializePage() {
             </li>
             <li className="flex items-start">
               <span className="mr-2">•</span>
-              <span>首次使用建议从少量股票开始测试（10-100只）</span>
+              <span>首次使用建议选择较短时间范围（如3天或1个月）进行测试</span>
             </li>
             <li className="flex items-start">
               <span className="mr-2">•</span>
               <span>大批量同步建议在非交易时段进行，避免影响数据源性能</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>系统会自动过滤退市和停牌股票，只同步正常交易的股票</span>
             </li>
           </ul>
         </CardContent>
@@ -267,89 +310,93 @@ export default function InitializePage() {
 
           {/* 错误提示 */}
           {stockListError && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-              <p className="text-red-800 dark:text-red-200">{stockListError}</p>
-            </div>
+            <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <AlertDescription className="text-red-800 dark:text-red-200">
+                {stockListError}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* 成功提示 */}
           {stockListSuccess && (
-            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-              <p className="text-green-800 dark:text-green-200">{stockListSuccess}</p>
-            </div>
+            <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                {stockListSuccess}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* 上次同步信息 */}
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">上次同步信息</h3>
-          {stockListStatus ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
-                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(stockListStatus.status)}`}>
-                    {getStatusText(stockListStatus.status)}
-                  </span>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">开始时间</div>
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    {stockListStatus.started_at || '未同步'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">完成时间</div>
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    {stockListStatus.completed_at || '-'}
-                  </div>
-                </div>
-              </div>
-
-              {stockListStatus.status === 'completed' && stockListStatus.success > 0 && (
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">上次同步信息</h3>
+            {stockListStatus ? (
+              <div className="space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">同步总数</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(stockListStatus.status)}`}>
+                      {getStatusText(stockListStatus.status)}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">开始时间</div>
                     <div className="font-medium text-gray-900 dark:text-white">
-                      {stockListStatus.total || 0} 只
+                      {stockListStatus.started_at || '未同步'}
                     </div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">成功</div>
-                    <div className="font-medium text-green-600 dark:text-green-400">
-                      {stockListStatus.success || 0} 只
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">失败</div>
-                    <div className="font-medium text-red-600 dark:text-red-400">
-                      {stockListStatus.failed || 0} 只
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">完成时间</div>
+                    <div className="font-medium text-gray-900 dark:text-white">
+                      {stockListStatus.completed_at || '-'}
                     </div>
                   </div>
                 </div>
-              )}
 
-              {stockListStatus.error_message && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <div className="text-sm font-medium text-red-900 dark:text-red-200 mb-1">错误详情：</div>
-                  <div className="text-sm text-red-800 dark:text-red-300 whitespace-pre-wrap">
-                    {stockListStatus.error_message}
+                {stockListStatus.status === 'completed' && stockListStatus.success > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">同步总数</div>
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {stockListStatus.total || 0} 只
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">成功</div>
+                      <div className="font-medium text-green-600 dark:text-green-400">
+                        {stockListStatus.success || 0} 只
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">失败</div>
+                      <div className="font-medium text-red-600 dark:text-red-400">
+                        {stockListStatus.failed || 0} 只
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ) : (
+                )}
+
+                {stockListStatus.error_message && (
+                  <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+                    <AlertDescription className="text-sm text-red-900 dark:text-red-200">
+                      <div className="font-medium mb-1">错误详情：</div>
+                      <div className="whitespace-pre-wrap">{stockListStatus.error_message}</div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            ) : (
               <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
-          )}
+            )}
           </div>
 
           {/* 开始同步按钮 */}
-          <button
+          <Button
             onClick={handleStockListSync}
             disabled={isStockListLoading || stockListStatus?.status === 'running'}
-            className="btn-primary w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full md:w-auto"
           >
             {isStockListLoading || stockListStatus?.status === 'running' ? '同步中...' : '开始同步股票列表'}
-          </button>
+          </Button>
 
           {/* 数据说明 */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -357,27 +404,27 @@ export default function InitializePage() {
               <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 查看数据说明
               </summary>
-            <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
-                  <ul className="list-disc list-inside mt-1 space-y-1">
-                    <li>股票代码、名称</li>
-                    <li>市场类型</li>
-                    <li>所属行业、地区</li>
-                    <li>上市日期</li>
-                  </ul>
-                </div>
-                <div>
-                  <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
-                  <ul className="list-disc list-inside mt-1 space-y-1">
-                    <li>建议每月更新一次</li>
-                    <li>同步会覆盖更新现有数据</li>
-                    <li>通常需要几秒到几分钟</li>
-                  </ul>
+              <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>股票代码、名称</li>
+                      <li>市场类型</li>
+                      <li>所属行业、地区</li>
+                      <li>上市日期</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>建议每月更新一次</li>
+                      <li>同步会覆盖更新现有数据</li>
+                      <li>通常需要几秒到几分钟</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
-            </div>
             </details>
           </div>
         </CardContent>
@@ -397,153 +444,150 @@ export default function InitializePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-gray-600 dark:text-gray-400">
-            批量同步股票的历史日线数据（OHLCV），支持自定义时间范围和股票数量
+            批量同步所有正常股票的历史日线数据（自动过滤退市和停牌股票）
           </p>
 
           {/* 错误提示 */}
           {dailyError && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-              <p className="text-red-800 dark:text-red-200">{dailyError}</p>
-            </div>
+            <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <AlertDescription className="text-red-800 dark:text-red-200">
+                {dailyError}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* 成功提示 */}
           {dailySuccess && (
-            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-              <p className="text-green-800 dark:text-green-200">{dailySuccess}</p>
-            </div>
+            <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                {dailySuccess}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* 当前同步状态 */}
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">当前同步状态</h3>
-          {dailySyncStatus ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
-                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(dailySyncStatus.status)}`}>
-                    {getStatusText(dailySyncStatus.status)}
-                  </span>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">最后同步</div>
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    {dailySyncStatus.last_sync_date || '未同步'}
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">当前同步状态</h3>
+            {dailySyncStatus ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(dailySyncStatus.status)}`}>
+                      {getStatusText(dailySyncStatus.status)}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">最后同步</div>
+                    <div className="font-medium text-gray-900 dark:text-white">
+                      {dailySyncStatus.last_sync_date || '未同步'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">进度</div>
+                    <div className="font-medium text-gray-900 dark:text-white">
+                      {dailySyncStatus.completed} / {dailySyncStatus.total}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">完成率</div>
+                    <div className="font-medium text-gray-900 dark:text-white">
+                      {dailySyncStatus.progress}%
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">进度</div>
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    {dailySyncStatus.completed} / {dailySyncStatus.total}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">完成率</div>
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    {dailySyncStatus.progress}%
-                  </div>
-                </div>
-              </div>
 
-              {/* 进度条 */}
-              {dailySyncStatus.status === 'running' && (
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                  <div
-                    className="bg-purple-600 h-3 rounded-full transition-all duration-300 flex items-center justify-center text-xs text-white"
-                    style={{ width: `${dailySyncStatus.progress}%` }}
-                  >
-                    {dailySyncStatus.progress > 10 && `${dailySyncStatus.progress}%`}
+                {/* 进度条 */}
+                {dailySyncStatus.status === 'running' && (
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                    <div
+                      className="bg-purple-600 h-3 rounded-full transition-all duration-300 flex items-center justify-center text-xs text-white"
+                      style={{ width: `${dailySyncStatus.progress}%` }}
+                    >
+                      {dailySyncStatus.progress > 10 && `${dailySyncStatus.progress}%`}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
-          )}
+                )}
+              </div>
+            ) : (
+              <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
+            )}
           </div>
 
           {/* 同步参数配置 */}
           <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">同步参数配置</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 股票数量 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                同步股票数量
-              </label>
-              <select
-                value={maxStocks}
-                onChange={(e) => setMaxStocks(Number(e.target.value))}
-                disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50"
-              >
-                <option value={10}>10 只（快速测试）</option>
-                <option value={50}>50 只（小批量）</option>
-                <option value={100}>100 只（推荐）</option>
-                <option value={500}>500 只（中批量）</option>
-                <option value={1000}>1000 只（大批量）</option>
-                <option value={0}>全部股票（耗时较长，根据实际股票数量）</option>
-              </select>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                首次使用建议选择 10-100 只进行测试
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">同步参数配置</h3>
+
+            {/* 快捷预设 */}
+            <div className="space-y-2">
+              <Label htmlFor="preset">历史数据范围预设</Label>
+              <Select value={datePreset} onValueChange={setDatePreset} disabled={isDailyLoading || dailySyncStatus?.status === 'running'}>
+                <SelectTrigger id="preset" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3days">3天历史（推荐测试）</SelectItem>
+                  <SelectItem value="1month">1个月历史</SelectItem>
+                  <SelectItem value="3years">3年历史</SelectItem>
+                  <SelectItem value="5years">5年历史（推荐）</SelectItem>
+                  <SelectItem value="10years">10年历史</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                选择预设后，起始日期和结束日期会自动更新
               </p>
             </div>
 
-            {/* 历史年数 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                历史数据年限
-              </label>
-              <select
-                value={years}
-                onChange={(e) => setYears(Number(e.target.value))}
-                disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50"
-              >
-                <option value={1}>1 年</option>
-                <option value={3}>3 年</option>
-                <option value={5}>5 年（推荐）</option>
-                <option value={10}>10 年</option>
-                <option value={20}>20 年（全部历史数据）</option>
-              </select>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                年限越长，数据量越大，同步时间越久
-              </p>
+            {/* 日期范围选择 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>起始日期</Label>
+                <DatePicker
+                  date={startDate}
+                  onDateChange={(date) => date && setStartDate(date)}
+                  placeholder="选择起始日期"
+                  disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>结束日期</Label>
+                <DatePicker
+                  date={endDate}
+                  onDateChange={(date) => date && setEndDate(date)}
+                  placeholder="选择结束日期"
+                  disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
+                />
+              </div>
             </div>
-          </div>
 
-          {/* 预估时间提示 */}
-          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3">
-            <p className="text-sm text-purple-800 dark:text-purple-300">
-              <strong>预估同步时间：</strong>
-              {maxStocks <= 10 && ' 约 30秒 - 1分钟'}
-              {maxStocks > 10 && maxStocks <= 50 && ' 约 2-3 分钟'}
-              {maxStocks > 50 && maxStocks <= 100 && ' 约 5-8 分钟'}
-              {maxStocks > 100 && maxStocks <= 500 && ' 约 20-40 分钟'}
-              {maxStocks > 500 && maxStocks <= 1000 && ' 约 1-2 小时'}
-              {maxStocks > 1000 && ' 约 3-5 小时或更长'}
-            </p>
-          </div>
+            {/* 日期范围提示 */}
+            <Alert className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+              <AlertDescription className="text-sm text-purple-800 dark:text-purple-300">
+                <strong>当前选择：</strong>从 {format(startDate, 'yyyy年MM月dd日')} 至 {format(endDate, 'yyyy年MM月dd日')}
+                <br />
+                <strong>同步范围：</strong>所有正常状态股票（自动排除退市、停牌股票）
+              </AlertDescription>
+            </Alert>
           </div>
 
           {/* 开始同步和中止按钮 */}
           <div className="flex flex-wrap gap-3">
-            <button
+            <Button
               onClick={handleDailySync}
               disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
-              className="btn-primary flex-1 md:flex-initial md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 md:flex-initial md:w-auto"
             >
               {isDailyLoading || dailySyncStatus?.status === 'running' ? '同步中...' : '开始批量同步'}
-            </button>
+            </Button>
 
             {(isDailyLoading || dailySyncStatus?.status === 'running') && (
-              <button
+              <Button
                 onClick={handleAbortSync}
-                className="btn-secondary flex-1 md:flex-initial md:w-auto bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700"
+                variant="destructive"
+                className="flex-1 md:flex-initial md:w-auto"
               >
                 中止同步
-              </button>
+              </Button>
             )}
           </div>
 
@@ -553,27 +597,28 @@ export default function InitializePage() {
               <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 查看数据说明
               </summary>
-            <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
-                  <ul className="list-disc list-inside mt-1 space-y-1">
-                    <li>开盘价、收盘价</li>
-                    <li>最高价、最低价</li>
-                    <li>成交量、成交额</li>
-                    <li>涨跌幅、振幅</li>
-                  </ul>
-                </div>
-                <div>
-                  <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
-                  <ul className="list-disc list-inside mt-1 space-y-1">
-                    <li>同步过程中不要关闭浏览器</li>
-                    <li>同步会覆盖更新现有数据</li>
-                    <li>注意API限流问题</li>
-                  </ul>
+              <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>开盘价、收盘价</li>
+                      <li>最高价、最低价</li>
+                      <li>成交量、成交额</li>
+                      <li>涨跌幅、振幅</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>同步过程中不要关闭浏览器</li>
+                      <li>同步会覆盖更新现有数据</li>
+                      <li>注意API限流问题</li>
+                      <li>自动过滤退市和停牌股票</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
-            </div>
             </details>
           </div>
         </CardContent>
@@ -588,18 +633,22 @@ export default function InitializePage() {
         </CardHeader>
         <CardContent>
           <ul className="space-y-2 text-sm text-yellow-800 dark:text-yellow-300">
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>数据源可在<a href="/settings" className="underline font-medium">系统设置</a>中切换（AkShare 或 Tushare）</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>完成初始化后，建议配置<a href="/settings/scheduler" className="underline font-medium">定时任务</a>实现数据自动更新</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>如遇到大量失败，建议减少批量大小或稍后重试</span>
-          </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>数据源可在系统设置中切换（AkShare 或 Tushare）</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>完成初始化后，建议配置定时任务实现数据自动更新</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>如遇到大量失败，建议减小日期范围或稍后重试</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>系统会自动检查数据完整性，已有完整数据的股票会被跳过</span>
+            </li>
           </ul>
         </CardContent>
       </Card>

@@ -101,7 +101,7 @@ export default function SyncOverviewPage() {
             </li>
             <li className="flex items-start">
               <span className="mr-2">2.</span>
-              <span>完成初始化后，可使用<strong>增量同步</strong>功能定期更新新股、退市和实时行情数据</span>
+              <span>每个交易日收盘后可在<strong>数据初始化</strong>页面选择近3天同步，更新最新日线数据</span>
             </li>
             <li className="flex items-start">
               <span className="mr-2">3.</span>

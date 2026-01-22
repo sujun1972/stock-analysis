@@ -20,8 +20,10 @@ router = APIRouter()
 class SyncDailyBatchRequest(BaseModel):
     """批量同步日线数据请求"""
     codes: Optional[List[str]] = None
-    years: Optional[int] = 5
-    max_stocks: Optional[int] = None
+    start_date: Optional[str] = None  # 开始日期，格式: YYYYMMDD 或 YYYY-MM-DD
+    end_date: Optional[str] = None    # 结束日期，格式: YYYYMMDD 或 YYYY-MM-DD
+    years: Optional[int] = None       # 兼容旧参数：历史年数（如果提供start_date则忽略）
+    max_stocks: Optional[int] = None  # 已废弃，始终同步全部股票
 
 
 class SyncMinuteRequest(BaseModel):
@@ -485,8 +487,10 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
     Args:
         request: 批量同步请求
             - codes: 股票代码列表 (None 表示全部)
-            - years: 历史年数 (默认 5 年)
-            - max_stocks: 最大同步数量 (限制批量大小)
+            - start_date: 开始日期 (优先使用，格式: YYYYMMDD 或 YYYY-MM-DD)
+            - end_date: 结束日期 (默认今天)
+            - years: 历史年数 (仅在未提供start_date时使用，默认 5 年)
+            - max_stocks: 已废弃，始终同步全部股票
 
     Returns:
         同步结果统计
@@ -504,18 +508,20 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
             token=config.get('tushare_token', '')
         )
 
-        # 获取要同步的股票代码
+        # 获取要同步的股票代码（只获取正常状态和非停牌股票）
         if request.codes is None:
             stock_list_df = await asyncio.to_thread(
                 data_service.db.get_stock_list
             )
-            codes = stock_list_df['code'].tolist()
+            # 过滤：只同步状态为"正常"或空字符串的股票（排除退市、停牌等）
+            normal_stocks = stock_list_df[
+                stock_list_df['status'].isin(['正常', '']) |
+                stock_list_df['status'].isna()
+            ]
+            codes = normal_stocks['code'].tolist()
+            logger.info(f"从 {len(stock_list_df)} 只股票中筛选出 {len(codes)} 只正常股票")
         else:
             codes = request.codes
-
-        # 限制数量（0表示全部，不限制）
-        if request.max_stocks and request.max_stocks > 0:
-            codes = codes[:request.max_stocks]
 
         total = len(codes)
         success_count = 0
@@ -532,14 +538,29 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
             completed=0
         )
 
-        logger.info(f"开始批量同步 {total} 只股票的日线数据 (近 {request.years} 年)")
-
         # 计算日期范围
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=request.years * 365)).strftime('%Y%m%d')
+        # 优先使用 start_date/end_date，否则使用 years
+        if request.end_date:
+            end_date = request.end_date.replace('-', '')
+        else:
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        if request.start_date:
+            start_date = request.start_date.replace('-', '')
+        else:
+            years = request.years if request.years else 5
+            start_date = (datetime.now() - timedelta(days=years * 365)).strftime('%Y%m%d')
+
+        logger.info(f"开始批量同步 {total} 只股票的日线数据 ({start_date} 至 {end_date})")
 
         # 计算最小期望交易日数（按每年约250个交易日计算）
-        min_expected_days = request.years * 250
+        # 根据日期范围计算天数
+        from datetime import datetime as dt
+        start_dt = dt.strptime(start_date, '%Y%m%d')
+        end_dt = dt.strptime(end_date, '%Y%m%d')
+        date_diff_days = (end_dt - start_dt).days
+        # 估算交易日数量：约为自然日的 70%（一年365天约有250个交易日）
+        min_expected_days = int(date_diff_days * 0.7)
 
         # 批量同步
         skipped_count = 0
