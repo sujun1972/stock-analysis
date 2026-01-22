@@ -96,14 +96,16 @@ class ConfigService:
         获取数据源配置
 
         Returns:
-            Dict: 包含 data_source 和 tushare_token
+            Dict: 包含 data_source、realtime_data_source 和 tushare_token
         """
         try:
             data_source = await self.get_config('data_source')
+            realtime_data_source = await self.get_config('realtime_data_source')
             tushare_token = await self.get_config('tushare_token')
 
             return {
                 'data_source': data_source or 'akshare',
+                'realtime_data_source': realtime_data_source or 'akshare',  # 实时数据默认使用 AkShare
                 'tushare_token': tushare_token or ''
             }
 
@@ -148,13 +150,15 @@ class ConfigService:
     async def update_data_source(
         self,
         data_source: str,
+        realtime_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None
     ) -> Dict:
         """
         更新数据源配置
 
         Args:
-            data_source: 数据源 ('akshare' 或 'tushare')
+            data_source: 主数据源 ('akshare' 或 'tushare')，用于历史数据、股票列表等
+            realtime_data_source: 实时数据源 ('akshare' 或 'tushare')，用于实时行情
             tushare_token: Tushare Token (可选)
 
         Returns:
@@ -165,20 +169,27 @@ class ConfigService:
             if data_source not in ['akshare', 'tushare']:
                 raise ValueError(f"不支持的数据源: {data_source}")
 
+            if realtime_data_source and realtime_data_source not in ['akshare', 'tushare']:
+                raise ValueError(f"不支持的实时数据源: {realtime_data_source}")
+
             # 如果切换到 Tushare，必须提供 Token
             if data_source == 'tushare' and not tushare_token:
                 current_token = await self.get_config('tushare_token')
                 if not current_token:
                     raise ValueError("切换到 Tushare 需要提供 Token")
 
-            # 更新数据源
+            # 更新主数据源
             await self.set_config('data_source', data_source)
+
+            # 更新实时数据源（如果提供）
+            if realtime_data_source:
+                await self.set_config('realtime_data_source', realtime_data_source)
 
             # 更新 Token (如果提供)
             if tushare_token:
                 await self.set_config('tushare_token', tushare_token)
 
-            logger.info(f"✓ 数据源已切换为: {data_source}")
+            logger.info(f"✓ 数据源已切换为: 主数据源={data_source}, 实时数据源={realtime_data_source or '未更改'}")
 
             return await self.get_data_source_config()
 

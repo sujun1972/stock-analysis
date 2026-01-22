@@ -183,6 +183,7 @@ class ApiClient {
    */
   async getDataSourceConfig(): Promise<ApiResponse<{
     data_source: string
+    realtime_data_source: string
     tushare_token: string
   }>> {
     const response = await axiosInstance.get('/api/config/source')
@@ -194,6 +195,7 @@ class ApiClient {
    */
   async updateDataSourceConfig(params: {
     data_source: string
+    realtime_data_source?: string
     tushare_token?: string
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/config/source', params)

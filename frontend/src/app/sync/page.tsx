@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 interface DataSourceConfig {
   data_source: string
+  realtime_data_source: string
   tushare_token: string
 }
 
