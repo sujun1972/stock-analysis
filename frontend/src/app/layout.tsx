@@ -37,6 +37,9 @@ export default function RootLayout({
                 <a href="/analysis" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
                   数据分析
                 </a>
+                <a href="/ai-lab" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                  🧪 AI实验舱
+                </a>
                 <a href="/backtest" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
                   策略回测
                 </a>

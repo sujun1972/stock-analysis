@@ -665,7 +665,15 @@ class DatabaseManager:
 
             query += " ORDER BY date ASC"
 
-            df = pd.read_sql_query(query, conn, params=params, index_col='date')
+            df = pd.read_sql_query(query, conn, params=params, index_col='date', parse_dates=['date'])
+
+            # 确保数值列是正确的类型
+            numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'amount',
+                              'amplitude', 'pct_change', 'change', 'turnover']
+            for col in numeric_columns:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
             logger.info(f"✓ 加载 {stock_code} 数据: {len(df)} 条记录")
             return df
 

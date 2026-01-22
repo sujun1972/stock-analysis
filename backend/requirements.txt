@@ -25,6 +25,7 @@ TA-Lib>=0.4.28
 lightgbm>=4.0.0
 scikit-learn>=1.2.0
 scipy>=1.10.0
+imbalanced-learn>=0.11.0
 
 # 数据存储
 pyarrow>=10.0.0

@@ -145,7 +145,10 @@ class TechnicalIndicators:
             添加MA列的DataFrame
         """
         for period in periods:
-            self.df[f'MA{period}'] = talib.SMA(self.df[price_col], timeperiod=period)
+            # 确保period是整数，并将数据转换为数值类型
+            period = int(period)
+            price_series = pd.to_numeric(self.df[price_col], errors='coerce')
+            self.df[f'MA{period}'] = talib.SMA(price_series, timeperiod=period)
 
         return self.df
 
@@ -300,23 +303,28 @@ class TechnicalIndicators:
 
     def add_cci(
         self,
-        period: int = 14
+        periods: list = [14, 28]
     ) -> pd.DataFrame:
         """
         添加CCI指标（商品通道指标）
 
         参数:
-            period: 周期
+            periods: 周期列表
 
         返回:
             添加CCI列的DataFrame
         """
-        self.df['CCI'] = talib.CCI(
-            self.df['high'],
-            self.df['low'],
-            self.df['close'],
-            timeperiod=period
-        )
+        # 支持单个整数或列表
+        if isinstance(periods, int):
+            periods = [periods]
+
+        for period in periods:
+            period = int(period)
+            high = pd.to_numeric(self.df['high'], errors='coerce')
+            low = pd.to_numeric(self.df['low'], errors='coerce')
+            close = pd.to_numeric(self.df['close'], errors='coerce')
+
+            self.df[f'CCI{period}'] = talib.CCI(high, low, close, timeperiod=period)
 
         return self.df
 
@@ -324,26 +332,30 @@ class TechnicalIndicators:
 
     def add_atr(
         self,
-        period: int = 14
+        periods: list = [14, 28]
     ) -> pd.DataFrame:
         """
         添加ATR指标（平均真实波幅）
 
         参数:
-            period: 周期
+            periods: 周期列表
 
         返回:
             添加ATR列的DataFrame
         """
-        self.df['ATR'] = talib.ATR(
-            self.df['high'],
-            self.df['low'],
-            self.df['close'],
-            timeperiod=period
-        )
+        # 支持单个整数或列表
+        if isinstance(periods, int):
+            periods = [periods]
 
-        # ATR百分比（相对于价格的波动率）
-        self.df['ATR_PCT'] = self.df['ATR'] / self.df['close'] * 100
+        for period in periods:
+            period = int(period)
+            high = pd.to_numeric(self.df['high'], errors='coerce')
+            low = pd.to_numeric(self.df['low'], errors='coerce')
+            close = pd.to_numeric(self.df['close'], errors='coerce')
+
+            self.df[f'ATR{period}'] = talib.ATR(high, low, close, timeperiod=period)
+            # ATR百分比（相对于价格的波动率）
+            self.df[f'ATR{period}_PCT'] = self.df[f'ATR{period}'] / close * 100
 
         return self.df
 
