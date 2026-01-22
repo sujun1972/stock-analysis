@@ -4,6 +4,20 @@ import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { useStockStore } from '@/store/stock-store'
 import type { StockInfo } from '@/types'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+} from '@/components/ui/pagination'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 export default function StocksPage() {
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
@@ -84,96 +98,100 @@ export default function StocksPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
+      <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           股票列表
         </h1>
+        <Button
+          onClick={handleUpdateStockList}
+          disabled={isUpdating}
+          variant="outline"
+        >
+          {isUpdating ? '更新中...' : '更新股票列表'}
+        </Button>
       </div>
 
       {/* 成功消息提示 */}
       {updateMessage && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-          <div className="flex items-center">
-            <svg className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span className="text-green-800 dark:text-green-200">{updateMessage}</span>
-          </div>
-        </div>
+        <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+          <AlertDescription className="text-green-800 dark:text-green-200">
+            {updateMessage}
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* 错误提示 */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <span className="text-red-800 dark:text-red-200">{error}</span>
-          </div>
-        </div>
+        <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+          <AlertDescription className="text-red-800 dark:text-red-200">
+            {error}
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* 搜索和筛选 */}
-      <div className="card">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              市场筛选
-            </label>
-            <select
-              className="input-field"
-              value={marketFilter}
-              onChange={(e) => {
-                setMarketFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="all">全部市场</option>
-              <option value="上海主板">上海主板</option>
-              <option value="深圳主板">深圳主板</option>
-              <option value="创业板">创业板</option>
-              <option value="科创板">科创板</option>
-            </select>
-          </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="market-filter">市场筛选</Label>
+              <Select
+                value={marketFilter}
+                onValueChange={(value) => {
+                  setMarketFilter(value)
+                  setCurrentPage(1)
+                }}
+              >
+                <SelectTrigger id="market-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部市场</SelectItem>
+                  <SelectItem value="上海主板">上海主板</SelectItem>
+                  <SelectItem value="深圳主板">深圳主板</SelectItem>
+                  <SelectItem value="创业板">创业板</SelectItem>
+                  <SelectItem value="科创板">科创板</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              搜索股票
-            </label>
-            <input
-              type="text"
-              placeholder="输入股票代码或名称..."
-              className="input-field"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value)
-                setCurrentPage(1) // 搜索时重置到第一页
-              }}
-            />
+            <div className="space-y-2">
+              <Label htmlFor="search-input">搜索股票</Label>
+              <Input
+                id="search-input"
+                type="text"
+                placeholder="输入股票代码或名称..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setCurrentPage(1)
+                }}
+              />
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 股票表格 */}
-      <div className="card">
-        {isLoading ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
-          </div>
-        ) : stocks.length === 0 ? (
-          <div className="text-center py-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <p className="mt-4 text-gray-600 dark:text-gray-400">没有找到股票</p>
-            {totalStocks === 0 && (
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
-                请点击右上角的&ldquo;更新股票列表&rdquo;按钮获取股票数据
-              </p>
-            )}
-          </div>
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
+            </div>
+          ) : stocks.length === 0 ? (
+            <div className="text-center py-12">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">没有找到股票</p>
+              {totalStocks === 0 && (
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
+                  请点击右上角的&ldquo;更新股票列表&rdquo;按钮获取股票数据
+                </p>
+              )}
+            </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -255,125 +273,182 @@ export default function StocksPage() {
           </div>
         )}
 
-        {/* 分页 */}
-        {totalPages > 1 && (
-          <div className="mt-6 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="btn-secondary disabled:opacity-50"
-              >
-                上一页
-              </button>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="btn-secondary disabled:opacity-50"
-              >
-                下一页
-              </button>
-            </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4">
-                <p className="text-sm text-gray-700 dark:text-gray-300">
-                  显示第 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> 到{' '}
-                  <span className="font-medium">{Math.min(currentPage * pageSize, totalStocks)}</span> 条，
-                  共 <span className="font-medium">{totalStocks}</span> 条
-                </p>
-                <div className="flex items-center gap-2 whitespace-nowrap">
-                  <label className="text-sm text-gray-700 dark:text-gray-300">每页:</label>
-                  <select
-                    className="input-field py-1 px-2 text-sm"
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value))
-                      setCurrentPage(1) // 重置到第一页
-                    }}
-                  >
-                    <option value="10">10条</option>
-                    <option value="20">20条</option>
-                    <option value="30">30条</option>
-                  </select>
+          {/* 分页 */}
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+              {/* 移动端：垂直布局 */}
+              <div className="flex flex-col gap-4 md:hidden">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    第 <span className="font-medium">{currentPage}</span> / {totalPages} 页
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="page-size-mobile" className="text-sm">每页</Label>
+                    <Select
+                      value={pageSize.toString()}
+                      onValueChange={(value) => {
+                        setPageSize(Number(value))
+                        setCurrentPage(1)
+                      }}
+                    >
+                      <SelectTrigger id="page-size-mobile" className="w-[80px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                    </PaginationItem>
+                    <PaginationItem>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-                  >
-                    上一页
-                  </button>
 
-                  {/* 第一页 */}
-                  {currentPage > 3 && (
-                    <>
-                      <button
-                        onClick={() => setCurrentPage(1)}
-                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium"
+              {/* 桌面端：单行布局，翻页控件靠右 */}
+              <div className="hidden md:flex items-center justify-end gap-6">
+                {/* 左侧：信息统计和每页选择 */}
+                <div className="flex items-center gap-6 mr-auto">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    显示 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-medium">{Math.min(currentPage * pageSize, totalStocks)}</span>
+                    {' '}共 <span className="font-medium">{totalStocks}</span> 条
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="page-size" className="text-sm">每页</Label>
+                    <Select
+                      value={pageSize.toString()}
+                      onValueChange={(value) => {
+                        setPageSize(Number(value))
+                        setCurrentPage(1)
+                      }}
+                    >
+                      <SelectTrigger id="page-size" className="w-[80px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* 右侧：分页控件 */}
+                <Pagination>
+                  <PaginationContent>
+                    {/* 上一页 */}
+                    <PaginationItem>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="gap-1"
                       >
-                        1
-                      </button>
-                      {currentPage > 4 && (
-                        <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium">
-                          ...
-                        </span>
-                      )}
-                    </>
-                  )}
+                        <ChevronLeft className="h-4 w-4" />
+                        上一页
+                      </Button>
+                    </PaginationItem>
 
-                  {/* 当前页周围的页码 */}
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(page => {
-                      // 显示当前页及其前后各2页
-                      return page >= currentPage - 2 && page <= currentPage + 2
-                    })
-                    .map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium ${
-                          currentPage === page
-                            ? 'z-10 bg-blue-600 border-blue-600 text-white'
-                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                        }`}
+                    {/* 第一页 */}
+                    {currentPage > 3 && (
+                      <>
+                        <PaginationItem>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(1)}
+                            isActive={false}
+                            className="cursor-pointer"
+                          >
+                            1
+                          </PaginationLink>
+                        </PaginationItem>
+                        {currentPage > 4 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                      </>
+                    )}
+
+                    {/* 当前页周围的页码 */}
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(page => page >= currentPage - 2 && page <= currentPage + 2)
+                      .map(page => (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(page)}
+                            isActive={currentPage === page}
+                            className="cursor-pointer"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+
+                    {/* 最后一页 */}
+                    {currentPage < totalPages - 2 && (
+                      <>
+                        {currentPage < totalPages - 3 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                        <PaginationItem>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(totalPages)}
+                            isActive={false}
+                            className="cursor-pointer"
+                          >
+                            {totalPages}
+                          </PaginationLink>
+                        </PaginationItem>
+                      </>
+                    )}
+
+                    {/* 下一页 */}
+                    <PaginationItem>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="gap-1"
                       >
-                        {page}
-                      </button>
-                    ))}
-
-                  {/* 最后一页 */}
-                  {currentPage < totalPages - 2 && (
-                    <>
-                      {currentPage < totalPages - 3 && (
-                        <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium">
-                          ...
-                        </span>
-                      )}
-                      <button
-                        onClick={() => setCurrentPage(totalPages)}
-                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium"
-                      >
-                        {totalPages}
-                      </button>
-                    </>
-                  )}
-
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-                  >
-                    下一页
-                  </button>
-                </nav>
+                        下一页
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
