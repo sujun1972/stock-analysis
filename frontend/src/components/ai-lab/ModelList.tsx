@@ -8,6 +8,10 @@
 import { useEffect, useState } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import axios from 'axios';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -204,74 +208,80 @@ export default function ModelList() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        模型仓库
-      </h2>
-
-      {/* 过滤器 */}
-      <div className="flex gap-3 mb-4">
-        <input
-          type="text"
-          placeholder="股票代码过滤..."
-          value={filterSymbol}
-          onChange={(e) => setFilterSymbol(e.target.value)}
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={filterModelType}
-          onChange={(e) => setFilterModelType(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">所有模型类型</option>
-          <option value="lightgbm">LightGBM</option>
-          <option value="gru">GRU</option>
-        </select>
-        <button
-          onClick={loadModels}
-          className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-        >
-          刷新
-        </button>
-      </div>
-
-      {/* 模型列表 */}
-      {loading ? (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          加载中...
+    <Card>
+      <CardHeader>
+        {/* 标题行 - 标题和刷新按钮左右排列 */}
+        <div className="flex items-center justify-between">
+          <CardTitle>模型仓库</CardTitle>
+          <Button
+            onClick={loadModels}
+            variant="outline"
+            size="sm"
+          >
+            刷新
+          </Button>
         </div>
-      ) : models.length === 0 ? (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          暂无训练完成的模型，请先创建训练任务
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* 过滤器 */}
+        <div className="flex gap-3">
+          <Input
+            type="text"
+            placeholder="股票代码过滤..."
+            value={filterSymbol}
+            onChange={(e) => setFilterSymbol(e.target.value)}
+            className="flex-1"
+          />
+          <Select value={filterModelType || "all"} onValueChange={(value) => setFilterModelType(value === "all" ? "" : value)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="所有模型类型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">所有模型类型</SelectItem>
+              <SelectItem value="lightgbm">LightGBM</SelectItem>
+              <SelectItem value="gru">GRU</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto">
-          {models.map((model) => (
-            <ModelCard
-              key={model.model_id}
-              model={model}
-              isSelected={selectedModel?.model_id === model.model_id}
-              onSelect={() => handleSelectModel(model)}
-              onPredict={() => handlePredict(model)}
-              onDelete={() => handleDelete(model)}
-            />
-          ))}
-        </div>
-      )}
 
-      {/* 加载提示 */}
-      {predictingModelId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <div className="text-gray-900 dark:text-white font-medium">
-                正在运行预测，请稍候...
+        {/* 模型列表 */}
+        {loading ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            加载中...
+          </div>
+        ) : models.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            暂无训练完成的模型，请先创建训练任务
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            {models.map((model) => (
+              <ModelCard
+                key={model.model_id}
+                model={model}
+                isSelected={selectedModel?.model_id === model.model_id}
+                onSelect={() => handleSelectModel(model)}
+                onPredict={() => handlePredict(model)}
+                onDelete={() => handleDelete(model)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* 加载提示 */}
+        {predictingModelId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="text-gray-900 dark:text-white font-medium">
+                  正在运行预测，请稍候...
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

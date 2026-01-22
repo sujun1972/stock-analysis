@@ -55,3 +55,8 @@ frontend/.env*.local
 frontend/.vercel
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
+
+# Root-level node artifacts (should not exist)
+/node_modules/
+/package-lock.json
+/package.json

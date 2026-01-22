@@ -4,6 +4,7 @@
  */
 
 import { create } from 'zustand';
+import { format, subYears } from 'date-fns';
 
 export interface MLTrainingConfig {
   symbol: string;
@@ -118,10 +119,20 @@ interface MLStore {
   setShowPredictionChart: (show: boolean) => void;
 }
 
+// 计算默认日期：开始日期为5年前，结束日期为今天（与策略回测页面保持一致）
+const getDefaultDates = () => {
+  const today = new Date();
+  const fiveYearsAgo = subYears(today, 5);
+
+  return {
+    start_date: format(fiveYearsAgo, 'yyyyMMdd'),
+    end_date: format(today, 'yyyyMMdd'),
+  };
+};
+
 const defaultConfig: MLTrainingConfig = {
   symbol: '000001',
-  start_date: '20200101',
-  end_date: '20231231',
+  ...getDefaultDates(),
   model_type: 'lightgbm',
   target_period: 5,
   train_ratio: 0.7,
