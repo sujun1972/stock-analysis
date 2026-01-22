@@ -895,55 +895,88 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
             logger.info(f"将更新 {len(codes_to_update)} 只股票的实时行情")
 
         # 根据是否指定代码选择不同的超时时间
-        if codes_to_update and len(codes_to_update) <= 100:
-            # 小批量更新，1分钟超时（每只股票约0.3秒）
-            timeout = 60.0
-            logger.info(f"批量更新 {len(codes_to_update)} 只股票...")
+        if codes_to_update and len(codes_to_update) <= 500:
+            # 小批量更新，动态计算超时时间
+            # 每只股票约1.5秒（0.3秒请求 + 网络延迟），再加30秒缓冲
+            timeout = len(codes_to_update) * 1.5 + 30
+            logger.info(f"批量更新 {len(codes_to_update)} 只股票（预计耗时约{len(codes_to_update) * 0.3 / 60:.1f}分钟）...")
         else:
             # 全量更新，10分钟超时
             timeout = 600.0
             if realtime_source.lower() == 'akshare':
                 logger.warning("AkShare全量实时行情获取需要3-5分钟，请耐心等待...")
 
-        # 获取实时行情
+        # 增量保存计数器
+        saved_count = 0
+
+        # 定义保存回调函数，每获取一条数据就立即保存
+        def save_callback(quote: dict):
+            nonlocal saved_count
+            try:
+                data_service.db.save_realtime_quote_single(quote, realtime_source)
+                saved_count += 1
+            except Exception as e:
+                logger.warning(f"增量保存 {quote.get('code', 'Unknown')} 失败: {e}")
+
+        # 获取实时行情（使用增量保存回调）
         try:
             df = await asyncio.wait_for(
                 asyncio.to_thread(
                     provider.get_realtime_quotes,
-                    codes=codes_to_update
+                    codes=codes_to_update,
+                    save_callback=save_callback
                 ),
                 timeout=timeout
             )
         except asyncio.TimeoutError:
-            error_msg = f"实时行情获取超时（{timeout/60:.0f}分钟）"
+            # 超时时，部分数据已经通过回调保存
+            error_msg = f"实时行情获取超时（{timeout:.0f}秒）"
             if realtime_source.lower() == 'akshare':
-                if codes_to_update and len(codes_to_update) <= 100:
-                    error_msg += f"\n\n批量获取 {len(codes_to_update)} 只股票超时。\n建议：检查网络连接或减少batch_size"
+                if codes_to_update and len(codes_to_update) <= 500:
+                    error_msg += f"\n\n批量获取 {len(codes_to_update)} 只股票超时（预期{len(codes_to_update) * 0.3:.0f}秒）。"
+                    if saved_count > 0:
+                        error_msg += f"\n\n✓ 已成功保存 {saved_count} 只股票的数据（增量保存）"
+                    error_msg += f"\n\n可能原因：\n1. 网络延迟较大\n2. AkShare接口响应慢\n\n建议：\n1. 检查网络连接\n2. 减少batch_size（当前{len(codes_to_update)}）\n3. 在交易时段使用"
                 else:
-                    error_msg += "\n\nAkShare说明：全量获取需要分58个批次爬取数据，耗时较长且容易超时。\n建议：\n1. 使用渐进式更新模式（update_oldest=true）\n2. 在交易时段（9:30-15:00）使用\n3. 检查网络连接"
-            logger.error(error_msg)
-            raise HTTPException(status_code=504, detail=error_msg)
+                    error_msg += "\n\nAkShare说明：全量获取需要分58个批次爬取数据，耗时较长且容易超时。"
+                    if saved_count > 0:
+                        error_msg += f"\n\n✓ 已成功保存 {saved_count} 只股票的数据（增量保存）"
+                    error_msg += "\n\n建议：\n1. 使用渐进式更新模式（update_oldest=true）\n2. 在交易时段（9:30-15:00）使用\n3. 检查网络连接"
+            logger.warning(error_msg)
+
+            # 如果有部分数据保存成功，返回部分成功响应而不是抛出异常
+            if saved_count > 0:
+                return {
+                    "code": 206,  # 206 Partial Content
+                    "message": "partial_success",
+                    "data": {
+                        "total": saved_count,
+                        "requested": len(codes_to_update) if codes_to_update else "all",
+                        "batch_size": request.batch_size or "all",
+                        "update_mode": "oldest_first" if request.update_oldest else "full",
+                        "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "timeout": True,
+                        "timeout_message": error_msg
+                    }
+                }
+            else:
+                raise HTTPException(status_code=504, detail=error_msg)
 
         if df.empty:
             raise HTTPException(status_code=404, detail="无实时行情数据")
 
-        # 保存实时行情到数据库
-        count = await asyncio.to_thread(
-            data_service.db.save_realtime_quotes,
-            df,
-            realtime_source
-        )
-
-        logger.info(f"✓ 实时行情更新完成: {count} 只股票")
+        # 数据已通过回调增量保存，这里只记录日志
+        logger.info(f"✓ 实时行情更新完成: {saved_count} 只股票（增量保存）")
 
         return {
             "code": 200,
             "message": "success",
             "data": {
-                "total": len(df),
+                "total": saved_count,
                 "batch_size": request.batch_size or "all",
                 "update_mode": "oldest_first" if request.update_oldest else "full",
-                "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "incremental_save": True
             }
         }
     except HTTPException:

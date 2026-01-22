@@ -532,6 +532,99 @@ class DatabaseManager:
                 cursor.close()
                 self.release_connection(conn)
 
+    def save_realtime_quote_single(self, quote: dict, data_source: str = 'akshare') -> int:
+        """
+        保存单条实时行情数据到数据库（用于增量保存）
+
+        Args:
+            quote: 包含实时行情数据的字典
+            data_source: 数据源名称
+
+        Returns:
+            插入/更新的记录数（1或0）
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # 辅助函数：安全地转换值，处理 NaN 和 None
+            def safe_float(val, default=0.0):
+                """安全转换为 float，处理 NaN"""
+                if pd.isna(val) or val is None:
+                    return default
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+
+            def safe_int(val, default=0):
+                """安全转换为 int，处理 NaN"""
+                if pd.isna(val) or val is None:
+                    return default
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    return default
+
+            # 准备数据
+            record = (
+                quote.get('code'),
+                quote.get('name', ''),
+                safe_float(quote.get('latest_price')),
+                safe_float(quote.get('open')),
+                safe_float(quote.get('high')),
+                safe_float(quote.get('low')),
+                safe_float(quote.get('pre_close')),
+                safe_int(quote.get('volume')),
+                safe_float(quote.get('amount')),
+                safe_float(quote.get('pct_change')),
+                safe_float(quote.get('change_amount')),
+                safe_float(quote.get('turnover')),
+                safe_float(quote.get('amplitude')),
+                data_source
+            )
+
+            # 插入或更新单条记录
+            insert_query = """
+                INSERT INTO stock_realtime
+                (code, name, latest_price, open, high, low, pre_close, volume, amount,
+                 pct_change, change_amount, turnover, amplitude, data_source, trade_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (code)
+                DO UPDATE SET
+                    name = EXCLUDED.name,
+                    latest_price = EXCLUDED.latest_price,
+                    open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    pre_close = EXCLUDED.pre_close,
+                    volume = EXCLUDED.volume,
+                    amount = EXCLUDED.amount,
+                    pct_change = EXCLUDED.pct_change,
+                    change_amount = EXCLUDED.change_amount,
+                    turnover = EXCLUDED.turnover,
+                    amplitude = EXCLUDED.amplitude,
+                    data_source = EXCLUDED.data_source,
+                    trade_time = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP;
+            """
+
+            cursor.execute(insert_query, record)
+            conn.commit()
+
+            return 1
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存单条实时行情数据失败 {quote.get('code', 'Unknown')}: {e}")
+            raise
+        finally:
+            if conn:
+                cursor.close()
+                self.release_connection(conn)
+
     def save_realtime_quotes(self, df: pd.DataFrame, data_source: str = 'akshare') -> int:
         """
         保存实时行情数据到数据库

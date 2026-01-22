@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  reactStrictMode: false, // 禁用 Strict Mode 以避免开发模式下的双重请求
   async rewrites() {
     return [
       {

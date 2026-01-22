@@ -18,6 +18,7 @@ import { CalendarIcon } from 'lucide-react'
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { useSmartRefresh } from '@/hooks/useMarketStatus'
 
 type ChartType = 'daily' | 'minute'
 
@@ -87,6 +88,28 @@ function AnalysisContent() {
       setIsLoading(false)
     }
   }
+
+  // 使用 useMemo 稳定 codes 数组引用，避免重复触发刷新
+  const codes = useMemo(() => code ? [code] : undefined, [code])
+
+  // 使用智能刷新Hook - 刷新股票实时数据（自动后台刷新）
+  useSmartRefresh(
+    async () => {
+      if (!code) return
+
+      // 先同步最新的实时数据（从数据源获取）
+      await apiClient.syncRealtimeQuotes({
+        codes: [code],
+        batch_size: 1
+      })
+
+      // 然后重新获取股票信息（从数据库读取已更新的数据）
+      const stockInfoData = await apiClient.getStock(code)
+      setStockInfo(stockInfoData)
+    },
+    codes,  // 使用稳定的引用
+    true    // 启用自动刷新
+  )
 
   const loadMinuteData = async () => {
     if (!code) return

@@ -327,6 +327,113 @@ class DatabaseService:
             logger.warning(f"检查交易日失败: {e}")
             return True  # 默认为交易日
 
+    async def get_stock_realtime(self, code: str) -> Optional[Dict]:
+        """
+        获取单只股票的实时行情数据
+
+        Args:
+            code: 股票代码
+
+        Returns:
+            实时行情数据字典，不存在则返回None
+        """
+        try:
+            import asyncio
+
+            query = """
+                SELECT
+                    code, name, latest_price, open, high, low, pre_close,
+                    volume, amount, pct_change, change_amount, turnover,
+                    amplitude, trade_time, updated_at
+                FROM stock_realtime
+                WHERE code = %s
+            """
+
+            result = await asyncio.to_thread(
+                self.db._execute_query,
+                query,
+                (code,)
+            )
+
+            if result and len(result) > 0:
+                row = result[0]
+                return {
+                    'code': row[0],
+                    'name': row[1],
+                    'latest_price': float(row[2]) if row[2] else None,
+                    'open': float(row[3]) if row[3] else None,
+                    'high': float(row[4]) if row[4] else None,
+                    'low': float(row[5]) if row[5] else None,
+                    'pre_close': float(row[6]) if row[6] else None,
+                    'volume': int(row[7]) if row[7] else None,
+                    'amount': float(row[8]) if row[8] else None,
+                    'pct_change': float(row[9]) if row[9] else None,
+                    'change_amount': float(row[10]) if row[10] else None,
+                    'turnover': float(row[11]) if row[11] else None,
+                    'amplitude': float(row[12]) if row[12] else None,
+                    'trade_time': row[13],
+                    'updated_at': row[14]
+                }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"获取股票实时数据失败 ({code}): {e}")
+            raise
+
+    async def get_realtime_oldest_update(self, codes: Optional[List[str]] = None):
+        """
+        获取实时数据表中最旧的更新时间
+
+        注意：只返回有效数据的更新时间（latest_price > 0）
+        如果数据存在但价格为0或NULL，视为无效数据，返回None以触发刷新
+
+        Args:
+            codes: 股票代码列表（可选），如果提供则只查询这些股票
+
+        Returns:
+            datetime: 最旧的更新时间，如果没有数据则返回None
+        """
+        try:
+            import asyncio
+
+            if codes and len(codes) > 0:
+                # 查询指定股票的最旧更新时间（只统计有效数据）
+                placeholders = ','.join(['%s'] * len(codes))
+                query = f"""
+                    SELECT MIN(updated_at)
+                    FROM stock_realtime
+                    WHERE code IN ({placeholders})
+                      AND latest_price IS NOT NULL
+                      AND latest_price > 0
+                """
+                result = await asyncio.to_thread(
+                    self.db._execute_query,
+                    query,
+                    tuple(codes)
+                )
+            else:
+                # 查询所有股票的最旧更新时间（只统计有效数据）
+                query = """
+                    SELECT MIN(updated_at)
+                    FROM stock_realtime
+                    WHERE latest_price IS NOT NULL
+                      AND latest_price > 0
+                """
+                result = await asyncio.to_thread(
+                    self.db._execute_query,
+                    query
+                )
+
+            if result and len(result) > 0 and result[0][0]:
+                return result[0][0]
+
+            return None
+
+        except Exception as e:
+            logger.error(f"获取最旧更新时间失败: {e}")
+            return None
+
     def get_connection(self):
         """获取数据库连接"""
         return self.db.get_connection()

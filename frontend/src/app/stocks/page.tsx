@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { useStockStore } from '@/store/stock-store'
 import type { StockInfo } from '@/types'
@@ -18,6 +18,7 @@ import {
   PaginationLink,
 } from '@/components/ui/pagination'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useSmartRefresh } from '@/hooks/useMarketStatus'
 
 export default function StocksPage() {
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
@@ -64,6 +65,29 @@ export default function StocksPage() {
       setLoading(false)
     }
   }
+
+  // 获取当前页面显示的股票代码列表
+  const currentPageCodes = useMemo(() => {
+    return stocks.map(stock => stock.code)
+  }, [stocks])
+
+  // 使用智能刷新Hook - 只刷新当前页面的股票（自动后台刷新）
+  useSmartRefresh(
+    async () => {
+      // 只同步当前页面股票的实时数据
+      if (currentPageCodes.length > 0) {
+        await apiClient.syncRealtimeQuotes({
+          codes: currentPageCodes,
+          batch_size: currentPageCodes.length
+        })
+      }
+
+      // 然后重新加载股票列表
+      await loadStocks()
+    },
+    currentPageCodes,  // 监控当前页面的股票
+    true               // 启用自动刷新
+  )
 
   const totalPages = Math.ceil(totalStocks / pageSize)
 

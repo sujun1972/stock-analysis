@@ -522,6 +522,49 @@ class ApiClient {
     })
     return response.data
   }
+
+  // ========== 市场状态相关API ==========
+
+  /**
+   * 获取当前市场状态
+   */
+  async getMarketStatus(): Promise<ApiResponse<{
+    status: string
+    description: string
+    is_trading: boolean
+    should_refresh: boolean
+    next_session_time: string | null
+    next_session_desc: string | null
+  }>> {
+    const response = await axiosInstance.get('/api/market/status')
+    return response.data
+  }
+
+  /**
+   * 检查实时数据新鲜度
+   */
+  async checkDataFreshness(params?: {
+    codes?: string[]
+    force?: boolean
+  }): Promise<ApiResponse<{
+    should_refresh: boolean
+    reason: string
+    market_status: string
+    market_description: string
+    last_update: string | null
+    codes_count: number | null
+  }>> {
+    const response = await axiosInstance.post('/api/market/check-freshness', params || {})
+    return response.data
+  }
+
+  /**
+   * 获取单只股票的实时信息（包含新鲜度）
+   */
+  async getRealtimeInfo(code: string): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get(`/api/market/realtime-info/${code}`)
+    return response.data
+  }
 }
 
 // 导出单例

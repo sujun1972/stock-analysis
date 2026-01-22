@@ -351,7 +351,8 @@ class AkShareProvider(BaseDataProvider):
 
     def get_realtime_quotes(
         self,
-        codes: Optional[List[str]] = None
+        codes: Optional[List[str]] = None,
+        save_callback=None
     ) -> pd.DataFrame:
         """
         获取实时行情数据
@@ -361,6 +362,7 @@ class AkShareProvider(BaseDataProvider):
 
         Args:
             codes: 股票代码列表 (None 表示获取全部)
+            save_callback: 可选的回调函数，用于每获取一条数据后立即保存
 
         Returns:
             pd.DataFrame: 标准化的实时行情数据
@@ -368,7 +370,7 @@ class AkShareProvider(BaseDataProvider):
         try:
             # 如果指定了股票代码，使用单个股票行情接口（更快）
             if codes and len(codes) <= 100:
-                return self._get_realtime_quotes_batch(codes)
+                return self._get_realtime_quotes_batch(codes, save_callback=save_callback)
 
             # 获取全部实时行情
             logger.info("正在获取实时行情... (此操作可能需要 3-5 分钟，共58个批次)")
@@ -425,12 +427,14 @@ class AkShareProvider(BaseDataProvider):
             logger.error(f"获取实时行情失败: {e}")
             raise
 
-    def _get_realtime_quotes_batch(self, codes: List[str]) -> pd.DataFrame:
+    def _get_realtime_quotes_batch(self, codes: List[str], save_callback=None) -> pd.DataFrame:
         """
         批量获取指定股票的实时行情（使用单个股票接口）
 
         Args:
             codes: 股票代码列表
+            save_callback: 可选的回调函数，用于每获取一条数据后立即保存
+                          函数签名: callback(quote_dict) -> None
 
         Returns:
             pd.DataFrame: 标准化的实时行情数据
@@ -444,8 +448,8 @@ class AkShareProvider(BaseDataProvider):
 
             for i, code in enumerate(codes, 1):
                 try:
-                    # 使用stock_individual_info_em接口获取单只股票实时行情
-                    data = self._retry_request(ak.stock_individual_info_em, symbol=code)
+                    # 使用 stock_bid_ask_em 接口获取实时盘口数据（包含完整行情信息）
+                    data = self._retry_request(ak.stock_bid_ask_em, symbol=code)
 
                     if data is not None and not data.empty:
                         # 提取关键字段
@@ -455,26 +459,51 @@ class AkShareProvider(BaseDataProvider):
                             value = row.get('value', row.get('值', ''))
                             info[key] = value
 
+                        # 获取股票名称（从 stock_individual_info_em 接口）
+                        try:
+                            basic_info = self._retry_request(ak.stock_individual_info_em, symbol=code)
+                            basic_dict = {}
+                            if basic_info is not None and not basic_info.empty:
+                                for _, row in basic_info.iterrows():
+                                    key = row.get('item', row.get('属性', ''))
+                                    value = row.get('value', row.get('值', ''))
+                                    basic_dict[key] = value
+                            stock_name = basic_dict.get('股票简称', '')
+                        except:
+                            stock_name = ''
+
                         # 构造标准格式
+                        # stock_bid_ask_em 返回完整的实时行情数据
                         quote = {
                             'code': code,
-                            'name': info.get('股票简称', ''),
-                            'latest_price': self._safe_float(info.get('最新价', info.get('现价', 0))),
+                            'name': stock_name,
+                            'latest_price': self._safe_float(info.get('最新', 0)),
                             'open': self._safe_float(info.get('今开', 0)),
                             'high': self._safe_float(info.get('最高', 0)),
                             'low': self._safe_float(info.get('最低', 0)),
                             'pre_close': self._safe_float(info.get('昨收', 0)),
-                            'volume': self._safe_int(info.get('成交量', 0)),
-                            'amount': self._safe_float(info.get('成交额', 0)),
-                            'pct_change': self._safe_float(info.get('涨跌幅', 0)),
-                            'change_amount': self._safe_float(info.get('涨跌额', 0)),
-                            'turnover': self._safe_float(info.get('换手率', 0)),
-                            'amplitude': self._safe_float(info.get('振幅', 0)),
+                            'volume': self._safe_int(info.get('总手', 0)),  # 注意：单位是手
+                            'amount': self._safe_float(info.get('金额', 0)),
+                            'pct_change': self._safe_float(info.get('涨幅', 0)),
+                            'change_amount': self._safe_float(info.get('涨跌', 0)),
+                            'turnover': self._safe_float(info.get('换手', 0)),
+                            'amplitude': self._safe_float(info.get('振幅', 0)),  # 如果没有振幅字段，计算
                             'trade_time': datetime.now()
                         }
 
+                        # 如果没有振幅数据，根据高低价计算
+                        if quote['amplitude'] == 0 and quote['pre_close'] > 0:
+                            quote['amplitude'] = (quote['high'] - quote['low']) / quote['pre_close'] * 100
+
                         all_data.append(quote)
                         success_count += 1
+
+                        # 如果提供了回调函数，立即保存这条数据
+                        if save_callback:
+                            try:
+                                save_callback(quote)
+                            except Exception as callback_error:
+                                logger.warning(f"保存 {code} 数据时回调失败: {callback_error}")
 
                         if i % 10 == 0:
                             logger.info(f"进度: {i}/{len(codes)} ({success_count} 成功)")
