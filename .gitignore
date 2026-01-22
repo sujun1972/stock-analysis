@@ -39,6 +39,10 @@ data/models/**/*.h5
 data/results/**/*.png
 data/results/**/*.csv
 
+# Backend ML models and training data
+backend/data/
+!backend/data/.gitkeep
+
 # Logs
 *.log
 logs/

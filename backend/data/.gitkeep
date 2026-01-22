@@ -1,0 +1,2 @@
+# This file ensures the data directory is tracked by git
+# The directory contains ML models and training metadata (ignored by .gitignore)
