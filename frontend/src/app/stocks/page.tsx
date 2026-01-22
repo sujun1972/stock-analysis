@@ -25,8 +25,6 @@ export default function StocksPage() {
   const [marketFilter, setMarketFilter] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalStocks, setTotalStocks] = useState(0)
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
   const [pageSize, setPageSize] = useState(20)
   const [sortBy, setSortBy] = useState('pct_change')
   const [sortOrder, setSortOrder] = useState('desc')
@@ -67,58 +65,19 @@ export default function StocksPage() {
     }
   }
 
-  /**
-   * 更新股票列表（从数据源拉取最新数据）
-   */
-  const handleUpdateStockList = async () => {
-    try {
-      setIsUpdating(true)
-      setUpdateMessage(null)
-      setError(null)
-
-      const response = await apiClient.updateStockList()
-
-      setUpdateMessage('成功更新股票列表！共获取 ' + (response.data?.total || 0) + ' 只股票')
-
-      // 重新加载股票列表
-      await loadStocks()
-
-      // 5秒后清除成功消息
-      setTimeout(() => setUpdateMessage(null), 5000)
-    } catch (err: any) {
-      setError(err.message || '更新股票列表失败')
-      console.error('Failed to update stock list:', err)
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
   const totalPages = Math.ceil(totalStocks / pageSize)
 
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
+      <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           股票列表
         </h1>
-        <Button
-          onClick={handleUpdateStockList}
-          disabled={isUpdating}
-          variant="outline"
-        >
-          {isUpdating ? '更新中...' : '更新股票列表'}
-        </Button>
+        <p className="text-gray-600 dark:text-gray-300 mt-2">
+          共 {totalStocks.toLocaleString()} 只股票
+        </p>
       </div>
-
-      {/* 成功消息提示 */}
-      {updateMessage && (
-        <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-          <AlertDescription className="text-green-800 dark:text-green-200">
-            {updateMessage}
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* 错误提示 */}
       {error && (
@@ -188,7 +147,7 @@ export default function StocksPage() {
               <p className="mt-4 text-gray-600 dark:text-gray-400">没有找到股票</p>
               {totalStocks === 0 && (
                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
-                  请点击右上角的&ldquo;更新股票列表&rdquo;按钮获取股票数据
+                  请前往<a href="/sync" className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300">数据同步</a>页面同步股票列表
                 </p>
               )}
             </div>
