@@ -272,7 +272,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
 
         # 4. 波动指标
         # ATR (平均真实波幅)
-        df = ti.add_atr(period=atr_period)
+        df = ti.add_atr(periods=[atr_period])
 
         # 布林带
         df = ti.add_bollinger_bands()
@@ -282,11 +282,12 @@ class ComplexIndicatorStrategy(BaseStrategy):
         df['ADX'] = df['close'].pct_change().abs().rolling(window=adx_period).mean() * 100
 
         # SuperTrend (简化版 - 使用ATR)
-        if 'ATR' in df.columns:
+        atr_col = f'ATR{atr_period}'
+        if atr_col in df.columns:
             multiplier = self.params.get('supertrend_multiplier', 3.0)
             hl_avg = (df['high'] + df['low']) / 2
-            upperband = hl_avg + (multiplier * df['ATR'])
-            lowerband = hl_avg - (multiplier * df['ATR'])
+            upperband = hl_avg + (multiplier * df[atr_col])
+            lowerband = hl_avg - (multiplier * df[atr_col])
 
             supertrend = np.zeros(len(df))
             for i in range(1, len(df)):
