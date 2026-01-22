@@ -303,11 +303,17 @@ class ApiClient {
   /**
    * 更新实时行情
    */
-  async syncRealtimeQuotes(codes?: string[]): Promise<ApiResponse<{
+  async syncRealtimeQuotes(params?: {
+    codes?: string[]
+    batch_size?: number
+    update_oldest?: boolean
+  }): Promise<ApiResponse<{
     total: number
+    batch_size: number | string
+    update_mode: string
     updated_at: string
   }>> {
-    const response = await axiosInstance.post('/api/sync/realtime', { codes })
+    const response = await axiosInstance.post('/api/sync/realtime', params || {})
     return response.data
   }
 

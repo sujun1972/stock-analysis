@@ -366,10 +366,14 @@ class AkShareProvider(BaseDataProvider):
             pd.DataFrame: 标准化的实时行情数据
         """
         try:
+            # 如果指定了股票代码，使用单个股票行情接口（更快）
+            if codes and len(codes) <= 100:
+                return self._get_realtime_quotes_batch(codes)
+
+            # 获取全部实时行情
             logger.info("正在获取实时行情... (此操作可能需要 3-5 分钟，共58个批次)")
             logger.warning("AkShare实时行情接口需要分批次爬取东方财富网数据，请耐心等待...")
 
-            # 获取全部实时行情
             # 注意：此接口会分58个批次请求，每批次约2-3秒，总耗时3-5分钟
             # 由于是爬虫方式，可能会因网络问题超时，建议增加重试次数
             df = self._retry_request(ak.stock_zh_a_spot_em)
@@ -420,6 +424,100 @@ class AkShareProvider(BaseDataProvider):
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}")
             raise
+
+    def _get_realtime_quotes_batch(self, codes: List[str]) -> pd.DataFrame:
+        """
+        批量获取指定股票的实时行情（使用单个股票接口）
+
+        Args:
+            codes: 股票代码列表
+
+        Returns:
+            pd.DataFrame: 标准化的实时行情数据
+        """
+        try:
+            logger.info(f"正在批量获取 {len(codes)} 只股票的实时行情...")
+
+            all_data = []
+            success_count = 0
+            failed_codes = []
+
+            for i, code in enumerate(codes, 1):
+                try:
+                    # 使用stock_individual_info_em接口获取单只股票实时行情
+                    data = self._retry_request(ak.stock_individual_info_em, symbol=code)
+
+                    if data is not None and not data.empty:
+                        # 提取关键字段
+                        info = {}
+                        for _, row in data.iterrows():
+                            key = row.get('item', row.get('属性', ''))
+                            value = row.get('value', row.get('值', ''))
+                            info[key] = value
+
+                        # 构造标准格式
+                        quote = {
+                            'code': code,
+                            'name': info.get('股票简称', ''),
+                            'latest_price': self._safe_float(info.get('最新价', info.get('现价', 0))),
+                            'open': self._safe_float(info.get('今开', 0)),
+                            'high': self._safe_float(info.get('最高', 0)),
+                            'low': self._safe_float(info.get('最低', 0)),
+                            'pre_close': self._safe_float(info.get('昨收', 0)),
+                            'volume': self._safe_int(info.get('成交量', 0)),
+                            'amount': self._safe_float(info.get('成交额', 0)),
+                            'pct_change': self._safe_float(info.get('涨跌幅', 0)),
+                            'change_amount': self._safe_float(info.get('涨跌额', 0)),
+                            'turnover': self._safe_float(info.get('换手率', 0)),
+                            'amplitude': self._safe_float(info.get('振幅', 0)),
+                            'trade_time': datetime.now()
+                        }
+
+                        all_data.append(quote)
+                        success_count += 1
+
+                        if i % 10 == 0:
+                            logger.info(f"进度: {i}/{len(codes)} ({success_count} 成功)")
+
+                    time.sleep(0.3)  # API限流
+
+                except Exception as e:
+                    logger.warning(f"获取 {code} 实时行情失败: {e}")
+                    failed_codes.append(code)
+                    continue
+
+            if not all_data:
+                raise ValueError(f"批量获取实时行情失败，所有股票均失败")
+
+            df = pd.DataFrame(all_data)
+
+            logger.info(f"✓ 批量获取完成: {success_count}/{len(codes)} 成功")
+            if failed_codes:
+                logger.warning(f"失败股票 ({len(failed_codes)}): {', '.join(failed_codes[:10])}...")
+
+            return df
+
+        except Exception as e:
+            logger.error(f"批量获取实时行情失败: {e}")
+            raise
+
+    def _safe_float(self, value, default=0.0):
+        """安全转换为float"""
+        try:
+            if value is None or value == '' or value == '-':
+                return default
+            return float(str(value).replace(',', '').replace('%', ''))
+        except (ValueError, TypeError):
+            return default
+
+    def _safe_int(self, value, default=0):
+        """安全转换为int"""
+        try:
+            if value is None or value == '' or value == '-':
+                return default
+            return int(float(str(value).replace(',', '')))
+        except (ValueError, TypeError):
+            return default
 
     def get_new_stocks(self, days: int = 30) -> pd.DataFrame:
         """

@@ -35,6 +35,8 @@ class SyncMinuteRequest(BaseModel):
 class SyncRealtimeRequest(BaseModel):
     """同步实时行情请求"""
     codes: Optional[List[str]] = None
+    batch_size: Optional[int] = 100  # 每批次更新的股票数量
+    update_oldest: Optional[bool] = False  # 是否优先更新最旧的数据
 
 
 class SyncNewStocksRequest(BaseModel):
@@ -852,12 +854,15 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
     Args:
         request: 实时行情请求
             - codes: 股票代码列表 (None 表示全部)
+            - batch_size: 每批次更新的股票数量（默认100）
+            - update_oldest: 是否优先更新最旧的数据（默认False）
 
     Returns:
         更新结果
     """
     try:
         config_service = ConfigService()
+        data_service = DataDownloadService()
 
         # 获取数据源配置
         config = await config_service.get_data_source_config()
@@ -874,22 +879,48 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
         logger.info("更新实时行情...")
         logger.warning(f"使用实时数据源: {realtime_source}")
 
-        if realtime_source.lower() == 'akshare':
-            logger.warning("AkShare实时行情获取需要3-5分钟，请耐心等待...")
+        # 确定要更新的股票代码
+        codes_to_update = request.codes
 
-        # 获取实时行情（设置10分钟超时，因为AkShare需要分批次爬取）
+        # 如果启用了优先更新最旧数据的模式
+        if request.update_oldest and not request.codes:
+            batch_size = request.batch_size or 100
+            logger.info(f"渐进式更新模式：获取最早更新的 {batch_size} 只股票...")
+
+            codes_to_update = await asyncio.to_thread(
+                data_service.db.get_oldest_realtime_stocks,
+                limit=batch_size
+            )
+
+            logger.info(f"将更新 {len(codes_to_update)} 只股票的实时行情")
+
+        # 根据是否指定代码选择不同的超时时间
+        if codes_to_update and len(codes_to_update) <= 100:
+            # 小批量更新，1分钟超时（每只股票约0.3秒）
+            timeout = 60.0
+            logger.info(f"批量更新 {len(codes_to_update)} 只股票...")
+        else:
+            # 全量更新，10分钟超时
+            timeout = 600.0
+            if realtime_source.lower() == 'akshare':
+                logger.warning("AkShare全量实时行情获取需要3-5分钟，请耐心等待...")
+
+        # 获取实时行情
         try:
             df = await asyncio.wait_for(
                 asyncio.to_thread(
                     provider.get_realtime_quotes,
-                    codes=request.codes
+                    codes=codes_to_update
                 ),
-                timeout=600.0  # 10分钟超时
+                timeout=timeout
             )
         except asyncio.TimeoutError:
-            error_msg = "实时行情获取超时（10分钟）"
+            error_msg = f"实时行情获取超时（{timeout/60:.0f}分钟）"
             if realtime_source.lower() == 'akshare':
-                error_msg += "\n\nAkShare说明：该接口需要分58个批次爬取数据，耗时较长且容易超时。\n建议：\n1. 检查网络连接\n2. 在交易时段（9:30-15:00）使用\n3. 稍后重试"
+                if codes_to_update and len(codes_to_update) <= 100:
+                    error_msg += f"\n\n批量获取 {len(codes_to_update)} 只股票超时。\n建议：检查网络连接或减少batch_size"
+                else:
+                    error_msg += "\n\nAkShare说明：全量获取需要分58个批次爬取数据，耗时较长且容易超时。\n建议：\n1. 使用渐进式更新模式（update_oldest=true）\n2. 在交易时段（9:30-15:00）使用\n3. 检查网络连接"
             logger.error(error_msg)
             raise HTTPException(status_code=504, detail=error_msg)
 
@@ -897,7 +928,6 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
             raise HTTPException(status_code=404, detail="无实时行情数据")
 
         # 保存实时行情到数据库
-        data_service = DataDownloadService()
         count = await asyncio.to_thread(
             data_service.db.save_realtime_quotes,
             df,
@@ -911,6 +941,8 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
             "message": "success",
             "data": {
                 "total": len(df),
+                "batch_size": request.batch_size or "all",
+                "update_mode": "oldest_first" if request.update_oldest else "full",
                 "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
         }

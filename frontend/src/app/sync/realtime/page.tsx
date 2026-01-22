@@ -26,6 +26,8 @@ export default function RealtimeSyncPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [updateMode, setUpdateMode] = useState<'full' | 'incremental'>('incremental')
+  const [batchSize, setBatchSize] = useState(100)
 
   useEffect(() => {
     loadSyncStatus()
@@ -60,11 +62,16 @@ export default function RealtimeSyncPage() {
       setError(null)
       setSuccessMessage(null)
 
-      const response = await apiClient.syncRealtimeQuotes()
+      const params = updateMode === 'incremental'
+        ? { update_oldest: true, batch_size: batchSize }
+        : {}
+
+      const response = await apiClient.syncRealtimeQuotes(params)
 
       if (response.data) {
-        const { total, updated_at } = response.data
-        setSuccessMessage(`成功获取实时行情！共 ${total} 只股票，更新时间: ${updated_at}`)
+        const { total, batch_size: actualBatchSize, update_mode, updated_at } = response.data
+        const modeText = update_mode === 'oldest_first' ? '渐进式更新' : '全量更新'
+        setSuccessMessage(`${modeText}成功！共 ${total} 只股票，批次大小: ${actualBatchSize}，更新时间: ${updated_at}`)
       }
 
       await loadSyncStatus()
@@ -176,17 +183,93 @@ export default function RealtimeSyncPage() {
         </CardHeader>
         <CardContent>
         <div className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-400">
-            点击下方按钮获取所有 A 股的最新实时行情快照。此操作会获取当前市场上所有股票的实时数据。
-          </p>
+          {/* 更新模式选择 */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">更新模式</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className={`flex items-start p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                updateMode === 'incremental'
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="updateMode"
+                  value="incremental"
+                  checked={updateMode === 'incremental'}
+                  onChange={() => setUpdateMode('incremental')}
+                  className="mt-1 mr-3"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900 dark:text-white">渐进式更新</span>
+                    <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded">
+                      推荐
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    优先更新最旧的数据，每次更新{batchSize}只股票
+                  </p>
+                  <div className="mt-2 text-xs text-gray-500">
+                    <p>• 耗时短（约{Math.ceil(batchSize * 0.3 / 60)}分钟）</p>
+                    <p>• 可重复执行，逐步覆盖全部股票</p>
+                    <p>• 适合定时任务</p>
+                  </div>
+                </div>
+              </label>
+
+              <label className={`flex items-start p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                updateMode === 'full'
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="updateMode"
+                  value="full"
+                  checked={updateMode === 'full'}
+                  onChange={() => setUpdateMode('full')}
+                  className="mt-1 mr-3"
+                />
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900 dark:text-white">全量更新</div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    一次性更新所有股票的实时行情
+                  </p>
+                  <div className="mt-2 text-xs text-gray-500">
+                    <p>• 耗时长（3-5分钟）</p>
+                    <p>• 容易超时</p>
+                    <p>• 仅建议在交易时段使用</p>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* 批次大小设置（仅渐进式更新） */}
+          {updateMode === 'incremental' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">批次大小</label>
+              <select
+                value={batchSize}
+                onChange={(e) => setBatchSize(Number(e.target.value))}
+                className="w-full md:w-48 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                <option value={50}>50只（约0.5分钟）</option>
+                <option value={100}>100只（约1分钟）</option>
+                <option value={200}>200只（约2分钟）</option>
+                <option value={500}>500只（约3分钟）</option>
+              </select>
+            </div>
+          )}
 
           {/* AkShare 数据源警告 */}
-          {dataSource?.data_source?.toLowerCase() === 'akshare' && (
+          {dataSource?.realtime_data_source?.toLowerCase() === 'akshare' && updateMode === 'full' && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
               <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                <strong>AkShare数据源说明：</strong>实时行情接口需要分批次爬取东方财富网数据，
-                <strong>耗时约3-5分钟</strong>（共58个批次）。网络不稳定时可能会失败，请耐心等待或稍后重试。
-                建议在<strong>交易时段（9:30-15:00）</strong>使用，数据更稳定可靠。
+                <strong>AkShare全量更新说明：</strong>需要分批次爬取东方财富网数据，
+                <strong>耗时约3-5分钟</strong>（共58个批次）。网络不稳定时可能会失败。
+                建议使用<strong>渐进式更新</strong>或在<strong>交易时段（9:30-15:00）</strong>使用。
               </p>
             </div>
           )}
@@ -203,7 +286,7 @@ export default function RealtimeSyncPage() {
             disabled={isLoading}
             className="btn-primary w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? '获取中...' : '立即获取实时行情'}
+            {isLoading ? '更新中...' : `开始${updateMode === 'incremental' ? '渐进式' : '全量'}更新`}
           </button>
         </div>
         </CardContent>

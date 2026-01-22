@@ -629,6 +629,45 @@ class DatabaseManager:
                 cursor.close()
                 self.release_connection(conn)
 
+    def get_oldest_realtime_stocks(self, limit: int = 100) -> List[str]:
+        """
+        获取更新时间最早的N只股票代码（用于渐进式更新实时行情）
+
+        Args:
+            limit: 返回的股票数量
+
+        Returns:
+            股票代码列表
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # 查询updated_at最早的股票
+            query = """
+                SELECT s.code
+                FROM stock_basic s
+                LEFT JOIN stock_realtime r ON s.code = r.code
+                WHERE s.status = '正常'
+                ORDER BY r.updated_at NULLS FIRST
+                LIMIT %s
+            """
+
+            cursor.execute(query, (limit,))
+            codes = [row[0] for row in cursor.fetchall()]
+
+            logger.info(f"✓ 获取 {len(codes)} 只最早更新的股票代码")
+            return codes
+
+        except Exception as e:
+            logger.error(f"❌ 获取最旧实时行情股票失败: {e}")
+            raise
+        finally:
+            if conn:
+                cursor.close()
+                self.release_connection(conn)
+
     def load_daily_data(self, stock_code: str,
                        start_date: Optional[str] = None,
                        end_date: Optional[str] = None) -> pd.DataFrame:
