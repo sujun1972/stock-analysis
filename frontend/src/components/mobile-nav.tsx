@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
+import Link from "next/link"
 import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,6 +12,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { cn } from "@/lib/utils"
 
 /**
  * 移动端导航菜单组件
@@ -17,6 +20,7 @@ import {
  */
 export function MobileNav() {
   const [open, setOpen] = React.useState(false)
+  const pathname = usePathname()
 
   const menuItems = [
     { href: "/", label: "首页" },
@@ -26,6 +30,13 @@ export function MobileNav() {
     { href: "/stocks", label: "股票列表" },
     { href: "/settings", label: "系统设置" },
   ]
+
+  const isActive = (href: string) => {
+    if (href === "/") {
+      return pathname === "/"
+    }
+    return pathname.startsWith(href)
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -41,14 +52,19 @@ export function MobileNav() {
         </SheetHeader>
         <nav className="flex flex-col gap-2 mt-6">
           {menuItems.map((item) => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
-              className="flex items-center px-4 py-3 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              className={cn(
+                "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                isActive(item.href)
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              )}
             >
               {item.label}
-            </a>
+            </Link>
           ))}
         </nav>
       </SheetContent>

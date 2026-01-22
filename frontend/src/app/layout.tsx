@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNav } from "@/components/mobile-nav";
+import { DesktopNav } from "@/components/desktop-nav";
 
 export const metadata: Metadata = {
   title: "A股AI量化交易系统",
@@ -44,30 +45,7 @@ export default function RootLayout({
           </header>
 
           {/* 桌面端导航栏 - 在中等屏幕及以上显示 */}
-          <nav className="bg-white dark:bg-gray-800 shadow hidden md:block">
-            <div className="container-custom">
-              <div className="flex space-x-8 py-4">
-                <a href="/" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                  首页
-                </a>
-                <a href="/backtest" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                  策略回测
-                </a>
-                <a href="/ai-lab" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                  AI实验舱
-                </a>
-                <a href="/sync" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                  数据同步
-                </a>
-                <a href="/stocks" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                  股票列表
-                </a>
-                <a href="/settings" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                  系统设置
-                </a>
-              </div>
-            </div>
-          </nav>
+          <DesktopNav />
 
           <main className="flex-1 bg-gray-50 dark:bg-gray-900">
             <div className="container-custom py-8">
