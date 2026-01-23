@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import StrategyParamsPanel from './StrategyParamsPanel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { format, subYears } from 'date-fns'
+import { format, subYears, parse } from 'date-fns'
 import { Settings } from 'lucide-react'
 
 interface BacktestPanelProps {
@@ -25,7 +26,9 @@ interface Strategy {
   parameter_count: number
 }
 
-export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps) {
+function BacktestPanelContent({ onBacktestComplete }: BacktestPanelProps) {
+  const searchParams = useSearchParams()
+
   // 表单状态
   const [symbols, setSymbols] = useState<string>('600000')
   const [startDate, setStartDate] = useState<Date>(() => subYears(new Date(), 5)) // 默认开始日期为5年前
@@ -45,6 +48,73 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
 
   // Toast hook
   const { toast } = useToast()
+
+  /**
+   * 从 URL 参数预填表单
+   *
+   * 支持两种场景：
+   * 1. 一键回测：只有 strategy_id，自动选中对应策略
+   * 2. 高级回测：有完整模型参数（model_id, symbol 等），预填表单
+   */
+  useEffect(() => {
+    const modelId = searchParams.get('model_id')
+    const symbol = searchParams.get('symbol')
+    const modelType = searchParams.get('model_type')
+    const startDateStr = searchParams.get('start_date')
+    const endDateStr = searchParams.get('end_date')
+    const strategyId = searchParams.get('strategy_id')
+
+    // 场景1：一键回测（只需选中策略）
+    if (strategyId && !modelId) {
+      setSelectedStrategyId(strategyId)
+      return
+    }
+
+    // 场景2：高级回测（预填完整参数）
+    if (modelId && symbol) {
+      // 预填股票代码
+      setSymbols(symbol)
+
+      // 预填日期（YYYYMMDD 格式转换为 Date）
+      if (startDateStr) {
+        try {
+          const parsedStartDate = parse(startDateStr, 'yyyyMMdd', new Date())
+          setStartDate(parsedStartDate)
+        } catch (e) {
+          console.error('解析开始日期失败:', e)
+        }
+      }
+
+      if (endDateStr) {
+        try {
+          const parsedEndDate = parse(endDateStr, 'yyyyMMdd', new Date())
+          setEndDate(parsedEndDate)
+        } catch (e) {
+          console.error('解析结束日期失败:', e)
+        }
+      }
+
+      // 设置 ML 模型策略参数
+      setSelectedStrategyId('ml_model')
+      setStrategyParams({
+        model_id: modelId,
+        model_type: modelType || 'lightgbm',
+        buy_threshold: 1.0,
+        sell_threshold: -1.0,
+        commission: 0.0003,
+        slippage: 0.001,
+        position_size: 1.0,
+        stop_loss: 0.05,
+        take_profit: 0.10,
+      })
+
+      // 显示提示
+      toast({
+        title: "已预填参数",
+        description: `已从 AI 模型自动填充参数：${symbol}`,
+      })
+    }
+  }, [searchParams, toast])
 
   // 加载策略列表
   useEffect(() => {
@@ -327,5 +397,22 @@ export default function BacktestPanel({ onBacktestComplete }: BacktestPanelProps
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+export default function BacktestPanel(props: BacktestPanelProps) {
+  return (
+    <Suspense fallback={
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-3 text-muted-foreground">加载配置...</span>
+          </div>
+        </CardContent>
+      </Card>
+    }>
+      <BacktestPanelContent {...props} />
+    </Suspense>
   )
 }

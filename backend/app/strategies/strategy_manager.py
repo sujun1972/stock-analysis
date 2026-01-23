@@ -8,6 +8,7 @@ from loguru import logger
 
 from .base_strategy import BaseStrategy
 from .complex_indicator_strategy import ComplexIndicatorStrategy
+from .ml_model_strategy import MLModelStrategy
 
 
 class StrategyManager:
@@ -25,6 +26,7 @@ class StrategyManager:
     def _initialize(self):
         """初始化并注册所有策略"""
         self.register_strategy('complex_indicator', ComplexIndicatorStrategy)
+        self.register_strategy('ml_model', MLModelStrategy)
         logger.info(f"策略管理器初始化完成，已注册 {len(self._strategies)} 个策略")
 
     def register_strategy(self, strategy_id: str, strategy_class: Type[BaseStrategy]):

@@ -1,12 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import BacktestPanel from '@/components/BacktestPanel'
 import BacktestKLineChart from '@/components/BacktestKLineChart'
 import EquityCurveChart from '@/components/EquityCurveChart'
 import PerformanceMetrics from '@/components/PerformanceMetrics'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import axios from 'axios'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
 
 interface BacktestHistory {
   id: string
@@ -16,10 +20,42 @@ interface BacktestHistory {
   result: any
 }
 
-export default function BacktestPage() {
+function BacktestContent() {
+  const searchParams = useSearchParams()
   const [backtestResult, setBacktestResult] = useState<any>(null)
   const [backtestHistory, setBacktestHistory] = useState<BacktestHistory[]>([])
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(false)
+
+  /**
+   * 从 URL 参数加载回测结果（一键回测功能）
+   * 当用户从 AI Lab 点击"一键回测"时，会携带 task_id 参数跳转到此页面
+   * 此 effect 会自动获取并展示回测结果
+   */
+  useEffect(() => {
+    const taskId = searchParams.get('task_id')
+    if (!taskId) return
+
+    const fetchBacktestResult = async () => {
+      setLoading(true)
+      try {
+        const response = await axios.get(`${API_BASE}/backtest/result/${taskId}`)
+
+        if (response.data.status === 'success' && response.data.data) {
+          handleBacktestComplete(response.data.data)
+        } else {
+          console.error('获取回测结果失败:', response.data)
+        }
+      } catch (error: any) {
+        console.error('获取回测结果失败:', error)
+        alert(`获取回测结果失败: ${error.response?.data?.detail || error.message}`)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchBacktestResult()
+  }, [searchParams])
 
   const handleBacktestComplete = (result: any) => {
     console.log('回测完成:', result)
@@ -34,7 +70,7 @@ export default function BacktestPage() {
       result: result
     }
 
-    setBacktestHistory(prev => [historyItem, ...prev].slice(0, 10)) // 最多保留10个
+    setBacktestHistory(prev => [historyItem, ...prev].slice(0, 10))
   }
 
   const toggleHistorySelection = (id: string) => {
@@ -401,7 +437,17 @@ export default function BacktestPage() {
 
           {/* 右侧: 结果展示 */}
           <div className="lg:col-span-2">
-            {!backtestResult ? (
+            {loading ? (
+              <Card className="p-12 text-center">
+                <div className="flex flex-col items-center justify-center">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+                  <CardTitle className="mt-4">正在加载回测结果...</CardTitle>
+                  <CardDescription className="mt-2">
+                    请稍候，正在获取回测数据
+                  </CardDescription>
+                </div>
+              </Card>
+            ) : !backtestResult ? (
               <Card className="p-12 text-center">
                 <svg
                   className="mx-auto h-24 w-24 text-muted-foreground"
@@ -431,5 +477,20 @@ export default function BacktestPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function BacktestPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">加载中...</p>
+        </div>
+      </div>
+    }>
+      <BacktestContent />
+    </Suspense>
   )
 }

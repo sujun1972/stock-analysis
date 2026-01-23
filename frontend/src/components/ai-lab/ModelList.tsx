@@ -7,11 +7,13 @@
 
 import { useEffect, useState } from 'react';
 import { useMLStore } from '@/store/mlStore';
+import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { PlayCircle, Settings, Trash2 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -21,9 +23,11 @@ interface ModelCardProps {
   onSelect: () => void;
   onPredict: () => void;
   onDelete: () => void;
+  onQuickBacktest: () => void;
+  onAdvancedBacktest: () => void;
 }
 
-function ModelCard({ model, isSelected, onSelect, onPredict, onDelete }: ModelCardProps) {
+function ModelCard({ model, isSelected, onSelect, onPredict, onDelete, onQuickBacktest, onAdvancedBacktest }: ModelCardProps) {
   const { model_id, symbol, model_type, target_period, metrics, trained_at } = model;
 
   return (
@@ -93,25 +97,62 @@ function ModelCard({ model, isSelected, onSelect, onPredict, onDelete }: ModelCa
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex gap-2">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onPredict();
-          }}
-          className="flex-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-        >
-          运行预测
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-        >
-          删除
-        </button>
+      <div className="space-y-2">
+        {/* 第一行：预测和删除 */}
+        <div className="flex gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPredict();
+            }}
+            className="flex-1 h-8"
+          >
+            <PlayCircle className="h-3.5 w-3.5 mr-1" />
+            运行预测
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="h-8 text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* 第二行：回测按钮（仅选中时显示） */}
+        {isSelected && (
+          <div className="flex gap-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickBacktest();
+              }}
+              className="flex-1 h-8 bg-green-600 hover:bg-green-700"
+            >
+              一键回测
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAdvancedBacktest();
+              }}
+              className="flex-1 h-8"
+            >
+              <Settings className="h-3.5 w-3.5 mr-1" />
+              高级回测
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* 模型ID（调试用） */}
@@ -126,10 +167,12 @@ function ModelCard({ model, isSelected, onSelect, onPredict, onDelete }: ModelCa
 
 export default function ModelList() {
   const { models, setModels, selectedModel, setSelectedModel, setPredictions } = useMLStore();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [filterSymbol, setFilterSymbol] = useState('');
   const [filterModelType, setFilterModelType] = useState('');
   const [predictingModelId, setPredictingModelId] = useState<string | null>(null);
+  const [backtestingModelId, setBacktestingModelId] = useState<string | null>(null);
 
   // 加载模型列表
   const loadModels = async () => {
@@ -207,6 +250,77 @@ export default function ModelList() {
     }
   };
 
+  // 一键回测
+  const handleQuickBacktest = async (model: any) => {
+    setBacktestingModelId(model.model_id);
+    try {
+      const config = model.config;
+
+      // 创建回测任务
+      const response = await axios.post(`${API_BASE}/backtest/run`, {
+        symbols: model.symbol,
+        start_date: config.start_date,
+        end_date: config.end_date,
+        initial_cash: 100000,
+
+        // 使用ML模型信号作为策略
+        strategy_id: 'ml_model',
+        strategy_params: {
+          model_id: model.model_id,
+          model_type: model.model_type,
+          target_period: model.target_period,
+
+          // 交易阈值
+          buy_threshold: 1.0,
+          sell_threshold: -1.0,
+
+          // 交易设置
+          commission: 0.0003,
+          slippage: 0.001,
+
+          // 风控参数
+          position_size: 1.0,
+          stop_loss: 0.05,
+          take_profit: 0.10,
+        },
+      });
+
+      // 检查响应是否成功
+      if (response.data.status === 'success' && response.data.data) {
+        const backtestId = response.data.data.task_id;
+        // 跳转到回测页面，带上 strategy_id 参数
+        router.push(`/backtest?task_id=${backtestId}&strategy_id=ml_model`);
+      } else {
+        throw new Error('回测任务创建失败：响应格式错误');
+      }
+    } catch (error: any) {
+      console.error('创建回测任务失败:', error);
+      let errorMessage = '未知错误';
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      alert(`创建失败: ${errorMessage}`);
+    } finally {
+      setBacktestingModelId(null);
+    }
+  };
+
+  // 高级回测（跳转到回测页面并预填参数）
+  const handleAdvancedBacktest = (model: any) => {
+    const params = new URLSearchParams({
+      model_id: model.model_id,
+      symbol: model.symbol,
+      model_type: model.model_type,
+      start_date: model.config.start_date,
+      end_date: model.config.end_date,
+    });
+
+    router.push(`/backtest?${params.toString()}`);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -263,12 +377,14 @@ export default function ModelList() {
                 onSelect={() => handleSelectModel(model)}
                 onPredict={() => handlePredict(model)}
                 onDelete={() => handleDelete(model)}
+                onQuickBacktest={() => handleQuickBacktest(model)}
+                onAdvancedBacktest={() => handleAdvancedBacktest(model)}
               />
             ))}
           </div>
         )}
 
-        {/* 加载提示 */}
+        {/* 加载提示 - 预测 */}
         {predictingModelId && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
@@ -276,6 +392,20 @@ export default function ModelList() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 <div className="text-gray-900 dark:text-white font-medium">
                   正在运行预测，请稍候...
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 加载提示 - 回测 */}
+        {backtestingModelId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                <div className="text-gray-900 dark:text-white font-medium">
+                  正在创建回测任务，请稍候...
                 </div>
               </div>
             </div>

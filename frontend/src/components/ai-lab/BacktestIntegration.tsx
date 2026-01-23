@@ -30,13 +30,13 @@ export default function BacktestIntegration() {
 
       // 创建回测任务
       const response = await axios.post(`${API_BASE}/backtest/run`, {
-        symbol: selectedModel.symbol,
+        symbols: selectedModel.symbol,  // 修正：使用 symbols (复数)
         start_date: config.start_date,
         end_date: config.end_date,
-        initial_capital: 100000,
+        initial_cash: 100000,  // 修正：使用 initial_cash
 
         // 使用ML模型信号作为策略
-        strategy_type: 'ml_model',
+        strategy_id: 'ml_model',  // 修正：使用 strategy_id
         strategy_params: {
           model_id: selectedModel.model_id,
           model_type: selectedModel.model_type,
@@ -45,28 +45,46 @@ export default function BacktestIntegration() {
           // 交易阈值：预测上涨超过1%才买入，预测下跌超过-1%才卖出
           buy_threshold: 1.0,
           sell_threshold: -1.0,
+
+          // 交易设置
+          commission: 0.0003,  // 万三佣金
+          slippage: 0.001,     // 0.1% 滑点
+
+          // 风控参数
+          position_size: 1.0,  // 全仓
+          stop_loss: 0.05,     // 5% 止损
+          take_profit: 0.10,   // 10% 止盈
         },
-
-        // 交易设置
-        commission: 0.0003,  // 万三佣金
-        slippage: 0.001,     // 0.1% 滑点
-
-        // 风控参数
-        position_size: 1.0,  // 全仓
-        stop_loss: 0.05,     // 5% 止损
-        take_profit: 0.10,   // 10% 止盈
       });
 
-      const backtestId = response.data.task_id || response.data.id;
+      // 检查响应是否成功
+      if (response.data.status === 'success' && response.data.data) {
+        const backtestId = response.data.data.task_id;
 
-      alert(`回测任务已创建！\n任务ID: ${backtestId}\n\n即将跳转到回测页面...`);
+        alert(`回测任务已创建！\n任务ID: ${backtestId}\n\n即将跳转到回测页面...`);
 
-      // 跳转到回测页面
-      router.push(`/backtest?task_id=${backtestId}`);
+        // 跳转到回测页面
+        router.push(`/backtest?task_id=${backtestId}`);
+      } else {
+        throw new Error('回测任务创建失败：响应格式错误');
+      }
 
     } catch (error: any) {
       console.error('创建回测任务失败:', error);
-      alert(`创建失败: ${error.response?.data?.detail || error.message}`);
+
+      // 改进错误信息提取
+      let errorMessage = '未知错误';
+
+      if (error.response?.data) {
+        // 后端返回的错误
+        const errorData = error.response.data;
+        errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+      } else if (error.message) {
+        // 前端错误
+        errorMessage = error.message;
+      }
+
+      alert(`创建失败: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

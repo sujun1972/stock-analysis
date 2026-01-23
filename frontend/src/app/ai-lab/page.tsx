@@ -12,7 +12,6 @@ import FeatureImportance from '@/components/ai-lab/FeatureImportance';
 import PredictionChart from '@/components/ai-lab/PredictionChart';
 import ModelList from '@/components/ai-lab/ModelList';
 import FeatureSnapshotViewer from '@/components/ai-lab/FeatureSnapshotViewer';
-import BacktestIntegration from '@/components/ai-lab/BacktestIntegration';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function AILabPage() {
@@ -59,7 +58,6 @@ export default function AILabPage() {
           <div className="lg:col-span-1 space-y-6">
             <TrainingConfigPanel />
             <ModelList />
-            <BacktestIntegration />
           </div>
 
           {/* 右侧：监控和可视化 */}
