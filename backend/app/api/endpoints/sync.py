@@ -797,9 +797,9 @@ async def sync_minute_data(code: str, request: SyncMinuteRequest):
         # 获取数据源配置
         config = await config_service.get_data_source_config()
 
-        # 创建数据提供者
+        # 创建数据提供者（使用分时数据源配置）
         provider = DataProviderFactory.create_provider(
-            source=config['data_source'],
+            source=config['minute_data_source'],
             token=config.get('tushare_token', '')
         )
 

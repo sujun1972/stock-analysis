@@ -183,6 +183,7 @@ class ApiClient {
    */
   async getDataSourceConfig(): Promise<ApiResponse<{
     data_source: string
+    minute_data_source: string
     realtime_data_source: string
     tushare_token: string
   }>> {
@@ -195,6 +196,7 @@ class ApiClient {
    */
   async updateDataSourceConfig(params: {
     data_source: string
+    minute_data_source?: string
     realtime_data_source?: string
     tushare_token?: string
   }): Promise<ApiResponse<any>> {

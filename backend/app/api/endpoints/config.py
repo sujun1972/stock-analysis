@@ -16,6 +16,7 @@ router = APIRouter()
 class DataSourceConfigRequest(BaseModel):
     """数据源配置请求"""
     data_source: str
+    minute_data_source: Optional[str] = None
     realtime_data_source: Optional[str] = None
     tushare_token: Optional[str] = None
 
@@ -50,6 +51,7 @@ async def update_data_source_config(request: DataSourceConfigRequest):
     Args:
         request: 数据源配置请求
             - data_source: 主数据源名称 ('akshare' 或 'tushare')
+            - minute_data_source: 分时数据源名称 ('akshare' 或 'tushare')
             - realtime_data_source: 实时数据源名称 ('akshare' 或 'tushare')
             - tushare_token: Tushare Token (可选)
 
@@ -62,13 +64,14 @@ async def update_data_source_config(request: DataSourceConfigRequest):
         # 更新数据源配置
         config = await config_service.update_data_source(
             data_source=request.data_source,
+            minute_data_source=request.minute_data_source,
             realtime_data_source=request.realtime_data_source,
             tushare_token=request.tushare_token
         )
 
         return {
             "code": 200,
-            "message": f"成功切换数据源：主数据源={request.data_source}，实时数据源={request.realtime_data_source or '未更改'}",
+            "message": f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}",
             "data": config
         }
     except ValueError as e:
