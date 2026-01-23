@@ -188,6 +188,11 @@ class ModelTrainer:
 
         self.training_history = history
 
+        # 保存 seq_length 参数供后续评估使用
+        # GRU 模型在预测时会因为序列长度导致输出样本数减少
+        if 'seq_length' not in self.model_params:
+            self.model_params['seq_length'] = seq_length
+
     def train(
         self,
         X_train: pd.DataFrame,
@@ -237,18 +242,33 @@ class ModelTrainer:
 
         print(f"\n评估 {dataset_name} 集...")
 
-        # 预测
+        # 预测并对齐标签
         if self.model_type == 'lightgbm':
             predictions = self.model.predict(X)
+            y_actual = y.values
         elif self.model_type == 'gru':
+            # GRU 模型使用序列输入，预测结果会比原始输入少 seq_length 个样本
+            # 因为前 seq_length 个样本用于构建初始序列，无法生成对应的预测
             predictions = self.model.predict(X)
+            seq_length = self.model_params.get('seq_length', 20)
+
+            # 对齐标签：去掉前 seq_length 个样本
+            y_actual = y.values[seq_length:]
+
+            # 验证数据形状一致性
+            if len(predictions) != len(y_actual):
+                raise ValueError(
+                    f"GRU预测结果与标签形状不匹配: "
+                    f"predictions={len(predictions)}, y_actual={len(y_actual)} "
+                    f"(原始y长度={len(y)}, seq_length={seq_length})"
+                )
         else:
             raise ValueError(f"不支持的模型类型: {self.model_type}")
 
-        # 评估
+        # 计算评估指标
         metrics = self.evaluator.evaluate_regression(
             predictions,
-            y.values,
+            y_actual,
             verbose=verbose
         )
 

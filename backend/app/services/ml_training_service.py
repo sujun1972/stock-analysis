@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 import json
 import pickle
 import pandas as pd
+import numpy as np
 
 from loguru import logger
 
@@ -20,6 +21,37 @@ sys.path.insert(0, '/app/src')
 
 from src.data_pipeline import DataPipeline, get_full_training_data
 from src.models.model_trainer import ModelTrainer
+
+
+def sanitize_float_values(data: Any) -> Any:
+    """
+    递归清理数据中的无效浮点数值（NaN, Inf, -Inf）
+    将无效值转换为 None 以便 JSON 序列化
+
+    此函数用于处理机器学习模型输出中可能出现的特殊浮点值，
+    这些值无法被 JSON 序列化，会导致 API 响应失败。
+
+    参数:
+        data: 待清理的数据，支持 dict, list, float, int, numpy类型等
+
+    返回:
+        清理后的数据，无效浮点数被替换为 None
+    """
+    if isinstance(data, dict):
+        return {k: sanitize_float_values(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_float_values(item) for item in data]
+    elif isinstance(data, float):
+        if np.isnan(data) or np.isinf(data):
+            return None
+        return data
+    elif isinstance(data, (np.floating, np.integer)):
+        value = float(data)
+        if np.isnan(value) or np.isinf(value):
+            return None
+        return value
+    else:
+        return data
 
 
 class MLTrainingService:
@@ -232,8 +264,8 @@ class MLTrainingService:
             with open(scaler_path, 'wb') as f:
                 pickle.dump(pipeline.get_scaler(), f)
 
-            # 保存特征数据（用于特征快照查看器）
-            # 合并训练、验证、测试集以包含所有日期的数据
+            # 保存完整特征数据用于特征快照查看器
+            # 合并训练集、验证集、测试集以覆盖所有历史日期
             X_all = pd.concat([X_train, X_valid, X_test]).sort_index()
             y_all = pd.concat([y_train, y_valid, y_test]).sort_index()
 
@@ -241,7 +273,7 @@ class MLTrainingService:
             with open(features_path, 'wb') as f:
                 pickle.dump({'X': X_all, 'y': y_all}, f)
 
-            logger.info(f"[{task_id}] 保存特征数据: {len(X_all)} 条记录")
+            logger.info(f"[{task_id}] 特征数据已保存: {len(X_all)} 条记录")
 
             # 获取特征重要性（仅LightGBM）
             feature_importance = None
@@ -253,14 +285,16 @@ class MLTrainingService:
                 ))
 
             # ======== 完成 ========
+            # ======== 任务完成 ========
             task['status'] = 'completed'
             task['progress'] = 100.0
             task['current_step'] = 'Finished'
             task['completed_at'] = datetime.now().isoformat()
-            task['metrics'] = metrics
-            task['model_name'] = model_name  # 保存模型名称用于特征快照
+            # 清理指标和特征重要性中的 NaN/Inf 值，避免 JSON 序列化错误
+            task['metrics'] = sanitize_float_values(metrics)
+            task['feature_importance'] = sanitize_float_values(feature_importance)
+            task['model_name'] = model_name  # 保存模型名称用于特征快照功能
             task['model_path'] = str(self.models_dir / f"{model_name}.txt" if config['model_type'] == 'lightgbm' else self.models_dir / f"{model_name}.pth")
-            task['feature_importance'] = feature_importance
 
             self._save_metadata()
 
@@ -396,9 +430,9 @@ class MLTrainingService:
             X_scaled
         )
 
-        # 组装结果
+        # 组装预测结果
         results = []
-        for idx, (date, pred, actual) in enumerate(zip(X.index, predictions, y.values)):
+        for date, pred, actual in zip(X.index, predictions, y.values):
             results.append({
                 'date': date.strftime('%Y-%m-%d'),
                 'prediction': float(pred),
@@ -427,5 +461,5 @@ class MLTrainingService:
 
         return {
             'predictions': results,
-            'metrics': metrics
+            'metrics': sanitize_float_values(metrics)
         }

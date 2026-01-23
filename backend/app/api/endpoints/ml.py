@@ -8,6 +8,7 @@ from typing import Optional
 import asyncio
 import json
 import pandas as pd
+import math
 
 from app.models.ml_models import (
     MLTrainingTaskCreate,
@@ -15,7 +16,7 @@ from app.models.ml_models import (
     MLPredictionRequest,
     MLPredictionResponse
 )
-from app.services.ml_training_service import MLTrainingService
+from app.services.ml_training_service import MLTrainingService, sanitize_float_values
 
 router = APIRouter()
 
@@ -199,17 +200,19 @@ async def list_models(
     models = []
     for task in tasks:
         if task['metrics']:
-            models.append({
+            model_data = {
                 'model_id': task['task_id'],
                 'symbol': task['config']['symbol'],
                 'model_type': task['config']['model_type'],
                 'target_period': task['config'].get('target_period', 5),
-                'metrics': task['metrics'],
-                'feature_importance': task['feature_importance'],
+                # 清理指标和特征重要性中的无效浮点数
+                'metrics': sanitize_float_values(task['metrics']),
+                'feature_importance': sanitize_float_values(task['feature_importance']),
                 'model_path': task['model_path'],
                 'trained_at': task['completed_at'],
                 'config': task['config']
-            })
+            }
+            models.append(model_data)
 
     return {
         "total": len(models),
@@ -340,7 +343,8 @@ async def get_feature_snapshot(
         # 构建特征字典
         features = {}
         for col in X.columns:
-            features[col] = float(row[col]) if pd.notna(row[col]) else None
+            value = float(row[col]) if pd.notna(row[col]) else None
+            features[col] = value
 
         # 获取目标值
         target = float(y.loc[date_obj]) if date_obj in y.index and pd.notna(y.loc[date_obj]) else None
@@ -355,11 +359,12 @@ async def get_feature_snapshot(
                     prediction = pred['prediction']
                     break
 
+        # 统一清理所有浮点数值（将 NaN/Inf 转换为 None）
         return {
             "date": date_obj.strftime('%Y-%m-%d'),
-            "features": features,
-            "target": target,
-            "prediction": prediction
+            "features": sanitize_float_values(features),
+            "target": sanitize_float_values(target),
+            "prediction": sanitize_float_values(prediction)
         }
 
     except HTTPException:
