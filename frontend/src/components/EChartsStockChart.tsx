@@ -41,17 +41,65 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
   const hasLoadedAllDataRef = useRef(false)  // 标记是否已加载全部数据
   const currentDataZoomRef = useRef<{ start: number; end: number } | null>(null)  // 保存当前缩放位置
 
-  // 指标显示状态（默认只显示成交量和MACD）
-  const [visibleIndicators, setVisibleIndicators] = useState({
-    volume: true,   // 成交量 - 默认开启
-    macd: true,     // MACD - 默认开启
-    kdj: false,     // KDJ - 默认关闭
-    rsi: false,     // RSI - 默认关闭
-    boll: false     // BOLL - 默认关闭
+  // 指标显示状态（默认只显示成交量和MACD，从localStorage读取保存的设置）
+  const [visibleIndicators, setVisibleIndicators] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chart_visible_indicators')
+      if (saved) {
+        try {
+          return JSON.parse(saved)
+        } catch (e) {
+          console.error('Failed to parse saved indicators:', e)
+        }
+      }
+    }
+    return {
+      volume: true,   // 成交量 - 默认开启
+      macd: true,     // MACD - 默认开启
+      kdj: false,     // KDJ - 默认关闭
+      rsi: false,     // RSI - 默认关闭
+      boll: false     // BOLL - 默认关闭
+    }
   })
+
+  // 保存指标设置到 localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('chart_visible_indicators', JSON.stringify(visibleIndicators))
+    }
+  }, [visibleIndicators])
 
   // 设置对话框显示状态
   const [showSettings, setShowSettings] = useState(false)
+
+  /**
+   * 格式化成交量：将大数值转换为中国习惯的万/亿单位
+   * @param value - 原始成交量数值
+   * @returns 格式化后的字符串（如 "1.23亿" 或 "5678万"）
+   */
+  const formatVolume = (value: number): string => {
+    if (value >= 100000000) {
+      return (value / 100000000).toFixed(2) + '亿'
+    } else if (value >= 10000) {
+      return (value / 10000).toFixed(2) + '万'
+    }
+    return value.toFixed(0)
+  }
+
+  /**
+   * 格式化日期：添加星期信息
+   * @param dateStr - 日期字符串（如 "2025-01-23"）
+   * @returns 格式化后的日期字符串（如 "2025年01月23日 星期四"）
+   */
+  const formatDateWithWeekday = (dateStr: string): string => {
+    const date = new Date(dateStr)
+    const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const weekday = weekdays[date.getDay()]
+    return `${year}年${month}月${day}日 ${weekday}`
+  }
 
   // 检查数据是否可用
   // RSI支持多周期：RSI6, RSI12, RSI24
@@ -72,11 +120,29 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
     visibleIndicators.rsi && hasRSI
   ].filter(Boolean).length
 
-  // 动态计算图表高度
-  const chartHeight = subPanelCount === 0 ? '600px' :
-                     subPanelCount === 1 ? '700px' :
-                     subPanelCount === 2 ? '850px' :
-                     subPanelCount === 3 ? '1000px' : '1100px'
+  // 图表布局配置常量（像素）
+  const MAIN_CHART_HEIGHT = 400    // 主图（K线）高度
+  const VOLUME_PANEL_HEIGHT = 180  // 成交量副图高度
+  const SUB_PANEL_HEIGHT = 150     // 其他副图（MACD/KDJ/RSI）高度
+  const PANEL_GAP = 0              // 面板间隔
+  const LEGEND_HEIGHT = 20         // 单个图例高度
+  const LEGEND_PADDING = 10        // 图例上下padding
+  const ZOOM_HEIGHT = 60           // DataZoom 滑块高度
+  const TOP_PADDING = 10           // 顶部padding
+  const BOTTOM_PADDING = 10        // 底部padding
+
+  // 动态计算图表总高度（单位：像素）
+  const volumeHeight = visibleIndicators.volume
+    ? (LEGEND_PADDING + LEGEND_HEIGHT + LEGEND_PADDING + VOLUME_PANEL_HEIGHT + PANEL_GAP)
+    : 0
+  const otherPanelsCount = subPanelCount - (visibleIndicators.volume ? 1 : 0)
+  const otherPanelsHeight = otherPanelsCount * (LEGEND_PADDING + LEGEND_HEIGHT + LEGEND_PADDING + SUB_PANEL_HEIGHT + PANEL_GAP)
+
+  const chartHeight = TOP_PADDING + 30 + MAIN_CHART_HEIGHT +
+                     (subPanelCount > 0 ? PANEL_GAP + LEGEND_PADDING : 0) +
+                     volumeHeight +
+                     otherPanelsHeight +
+                     ZOOM_HEIGHT + BOTTOM_PADDING
 
   // 初始化数据
   useEffect(() => {
@@ -165,14 +231,25 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
     }
 
     const chart = chartInstanceRef.current
+    if (!chart) return
+
+    // 图表容器高度变化时，需要先resize
+    chart.resize()
 
     // 准备数据（ECharts需要升序排列）
     const sortedData = [...allData].sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     )
 
-    // 提取日期和数据
-    const dates = sortedData.map(d => d.date)
+    // 提取日期和数据（格式化日期为 YYYY-MM-DD）
+    const dates = sortedData.map(d => {
+      const dateStr = d.date
+      // 如果是 ISO 格式（包含 T），只取日期部分
+      if (dateStr.includes('T')) {
+        return dateStr.split('T')[0]
+      }
+      return dateStr
+    })
     const ohlcData = sortedData.map(d => [d.open, d.close, d.low, d.high])
     const volumeData = sortedData.map((d, idx) => ({
       value: d.volume,
@@ -216,108 +293,119 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
     if (visibleIndicators.kdj && hasKDJ) enabledIndicators.push('kdj')
     if (visibleIndicators.rsi && hasRSI) enabledIndicators.push('rsi')
 
-    // 副图数量（不包括主图）
-    const subPanelCount = enabledIndicators.length
-
-    // 动态计算每个面板的高度
-    const mainHeight = subPanelCount === 0 ? '85%' :
-                      subPanelCount === 1 ? '60%' :
-                      subPanelCount === 2 ? '45%' :
-                      subPanelCount === 3 ? '35%' : '30%'
-
-    const subPanelHeight = subPanelCount === 0 ? '0%' :
-                          subPanelCount === 1 ? '22%' :
-                          subPanelCount === 2 ? '22%' :
-                          subPanelCount === 3 ? '18%' : '14%'
-
-    // 动态构建图例
+    // 动态构建图例（使用像素定位）
     const legends: any[] = [
       {
         data: visibleIndicators.boll && hasBOLL
           ? ['K线', 'MA5', 'MA20', 'MA60', 'BOLL上轨', 'BOLL中轨', 'BOLL下轨']
           : ['K线', 'MA5', 'MA20', 'MA60'],
-        top: 10,
-        left: 'center'
+        top: TOP_PADDING,
+        left: 'center',
+        textStyle: {
+          fontWeight: 'bold'  // 加粗图例文字
+        }
       }
     ]
 
-    let currentTop = parseFloat(mainHeight) + 2
+    // 构建副图图例，计算每个图例的垂直位置
+    let currentTop = TOP_PADDING + 30 + MAIN_CHART_HEIGHT + PANEL_GAP + LEGEND_PADDING
+
+    // 成交量图例
     if (visibleIndicators.volume) {
       legends.push({
         data: ['成交量'],
-        top: `${currentTop}%`,
-        left: 'center'
+        top: currentTop,
+        left: 'center',
+        textStyle: { fontWeight: 'bold' }
       })
-      currentTop += parseFloat(subPanelHeight) + 2
+      currentTop += VOLUME_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
     }
+
+    // MACD图例
     if (visibleIndicators.macd && hasMACD) {
       legends.push({
         data: ['DIF', 'DEA', 'MACD'],
-        top: `${currentTop}%`,
-        left: 'center'
+        top: currentTop,
+        left: 'center',
+        textStyle: { fontWeight: 'bold' }
       })
-      currentTop += parseFloat(subPanelHeight) + 2
+      currentTop += SUB_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
     }
+
+    // KDJ图例
     if (visibleIndicators.kdj && hasKDJ) {
       legends.push({
         data: ['K', 'D', 'J'],
-        top: `${currentTop}%`,
-        left: 'center'
+        top: currentTop,
+        left: 'center',
+        textStyle: { fontWeight: 'bold' }
       })
-      currentTop += parseFloat(subPanelHeight) + 2
+      currentTop += SUB_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
     }
+
+    // RSI图例
     if (visibleIndicators.rsi && hasRSI) {
       legends.push({
         data: ['RSI'],
-        top: `${currentTop}%`,
-        left: 'center'
+        top: currentTop,
+        left: 'center',
+        textStyle: { fontWeight: 'bold' }
       })
     }
 
-    // 动态构建网格
+    // 构建图表网格，定义每个面板的绘图区域
     const grids = [
       {
         left: '8%',
         right: '8%',
-        top: '8%',
-        height: mainHeight
+        top: TOP_PADDING + 30,  // 30为主图图例高度
+        height: MAIN_CHART_HEIGHT
       }
     ]
 
-    let gridTop = parseFloat(mainHeight) + 3
+    // 计算副图网格的垂直位置
+    let gridTop = TOP_PADDING + 30 + MAIN_CHART_HEIGHT + PANEL_GAP + LEGEND_PADDING
+
+    // 成交量网格
     if (visibleIndicators.volume) {
       grids.push({
         left: '8%',
         right: '8%',
-        top: `${gridTop}%`,
-        height: subPanelHeight
+        top: gridTop + LEGEND_HEIGHT + LEGEND_PADDING,
+        height: VOLUME_PANEL_HEIGHT
       })
-      gridTop += parseFloat(subPanelHeight) + 3
+      gridTop += VOLUME_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
     }
+
+    // MACD网格
     if (visibleIndicators.macd && hasMACD) {
       grids.push({
         left: '8%',
         right: '8%',
-        top: `${gridTop}%`,
-        height: subPanelHeight
+        top: gridTop + LEGEND_HEIGHT + LEGEND_PADDING,
+        height: SUB_PANEL_HEIGHT
       })
-      gridTop += parseFloat(subPanelHeight) + 3
+      gridTop += SUB_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
     }
+
+    // KDJ网格
     if (visibleIndicators.kdj && hasKDJ) {
       grids.push({
         left: '8%',
         right: '8%',
-        top: `${gridTop}%`,
-        height: subPanelHeight
+        top: gridTop + LEGEND_HEIGHT + LEGEND_PADDING,
+        height: SUB_PANEL_HEIGHT
       })
-      gridTop += parseFloat(subPanelHeight) + 3
+      gridTop += SUB_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
     }
+
+    // RSI网格
     if (visibleIndicators.rsi && hasRSI) {
       grids.push({
         left: '8%',
         right: '8%',
-        top: `${gridTop}%`,
-        height: subPanelHeight
+        top: gridTop + LEGEND_HEIGHT + LEGEND_PADDING,
+        height: SUB_PANEL_HEIGHT
       })
     }
 
@@ -333,19 +421,33 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
         boundaryGap: false,
         axisLine: { onZero: false },
         splitLine: { show: false },
-        axisLabel: { show: index === grids.length - 1 } // 只在最后一个面板显示x轴标签
+        axisLabel: { show: index === grids.length - 1 }, // 只在最后一个面板显示x轴标签
+        axisTick: { show: index === grids.length - 1 }   // 只在最后一个面板显示x轴刻度线
       })),
       yAxis: grids.map((_, index) => {
-        // RSI的Y轴需要固定范围0-100
         const isRSIPanel = index > 0 && enabledIndicators[index - 1] === 'rsi'
-        return {
+        const isVolumePanel = index > 0 && enabledIndicators[index - 1] === 'volume'
+
+        const yAxisConfig: any = {
           scale: true,
           gridIndex: index,
-          ...(isRSIPanel ? { min: 0, max: 100 } : {}),
-          splitArea: {
-            show: true
+          ...(isRSIPanel ? { min: 0, max: 100 } : {}),  // RSI固定0-100范围
+          splitArea: { show: true }
+        }
+
+        // 成交量Y轴：添加万/亿单位格式化
+        if (isVolumePanel) {
+          yAxisConfig.axisLabel = {
+            formatter: (value: number) => formatVolume(value)
+          }
+          yAxisConfig.axisPointer = {
+            label: {
+              formatter: (params: any) => formatVolume(params.value)
+            }
           }
         }
+
+        return yAxisConfig
       }),
       dataZoom: [
         {
@@ -358,7 +460,7 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
           show: true,
           xAxisIndex: Array.from({ length: grids.length }, (_, i) => i),
           type: 'slider',
-          bottom: '2%',
+          bottom: 10,  // 固定在底部
           start: currentDataZoomRef.current?.start ?? 70,
           end: currentDataZoomRef.current?.end ?? 100
         }
@@ -373,6 +475,72 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
         padding: 10,
         textStyle: {
           color: '#000'
+        },
+        formatter: (params: any) => {
+          if (!Array.isArray(params)) return ''
+
+          // 辅助函数：创建tooltip行项（左对齐标签，右对齐数值）
+          const createTooltipRow = (marker: string, label: string, value: string, color: string) => {
+            return `<div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>${marker}${label}:</span>
+              <span style="margin-left: 20px; color: ${color};">${value}</span>
+            </div>`
+          }
+
+          // 分隔线样式
+          const divider = '<hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;" />'
+
+          // 格式化日期并添加星期
+          let result = `<div style="font-weight: bold; margin-bottom: 5px;">${formatDateWithWeekday(params[0].axisValue)}</div>`
+          let hasKLine = false
+          let klineContent = ''
+          let otherContent = ''
+
+          // 提取K线数据用于确定涨跌颜色
+          let klineData: any = null
+          params.forEach((param: any) => {
+            if (param.seriesName === 'K线' && Array.isArray(param.value)) {
+              klineData = param.value
+            }
+          })
+
+          // 判断涨跌（收盘价 >= 开盘价为红色，否则为绿色）
+          const isRising = klineData && klineData[2] >= klineData[1]
+          const priceColor = isRising ? '#ef4444' : '#22c55e'
+
+          params.forEach((param: any) => {
+            const { seriesName, value, marker, color } = param
+
+            if (seriesName === '成交量') {
+              // 成交量：使用万/亿单位格式化
+              const volumeValue = Array.isArray(value) ? value[1] : value
+              otherContent += createTooltipRow(marker, seriesName, formatVolume(volumeValue), color)
+            } else if (seriesName === 'K线' && Array.isArray(value)) {
+              // K线数据：显示开高低收，保持2位小数，颜色与涨跌一致
+              hasKLine = true
+              klineContent += createTooltipRow(marker, '开', Number(value[1]).toFixed(2), priceColor)
+              klineContent += createTooltipRow(marker, '收', Number(value[2]).toFixed(2), priceColor)
+              klineContent += createTooltipRow(marker, '低', Number(value[3]).toFixed(2), priceColor)
+              klineContent += createTooltipRow(marker, '高', Number(value[4]).toFixed(2), priceColor)
+            } else {
+              // 其他指标：MA、MACD、KDJ、RSI等
+              const displayValue = Array.isArray(value) ? value[1] : value
+              if (displayValue !== '-' && displayValue !== null && displayValue !== undefined) {
+                const formattedValue = typeof displayValue === 'number' ? displayValue.toFixed(2) : displayValue
+                otherContent += createTooltipRow(marker, seriesName, formattedValue, color)
+              }
+            }
+          })
+
+          // 组装最终结果：日期 -> K线 -> 其他指标
+          if (hasKLine) {
+            result += divider + klineContent
+          }
+          if (otherContent) {
+            result += divider + otherContent
+          }
+
+          return result
         }
       },
       series: (() => {
@@ -626,8 +794,23 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
       })()
     }
 
-    // 合并配置而非替换，保留dataZoom状态避免视图跳转
-    chart.setOption(option, { notMerge: false })
+    // 应用图表配置
+    if (!chart) return
+
+    // 检测网格数量是否变化（指标增减时会改变网格数量）
+    const currentOption = chart.getOption() as any
+    const currentGridCount = (currentOption && Array.isArray(currentOption.grid)) ? currentOption.grid.length : 0
+    const newGridCount = grids.length
+    const shouldReplace = currentGridCount !== newGridCount
+
+    // 网格数量变化时完全替换配置，否则合并更新（保留缩放状态）
+    chart.setOption(option, {
+      notMerge: shouldReplace,
+      replaceMerge: shouldReplace ? ['grid', 'xAxis', 'yAxis', 'series'] : undefined
+    })
+
+    // 确保布局正确
+    chart.resize()
 
     // 监听dataZoom事件以触发懒加载
     chart.on('dataZoom', (params: any) => {
@@ -667,6 +850,18 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
       }
     }
   }, [isLoading])
+
+  // 监听容器高度变化，自动resize
+  useEffect(() => {
+    if (chartInstanceRef.current) {
+      // 使用requestAnimationFrame确保DOM更新完成
+      requestAnimationFrame(() => {
+        if (chartInstanceRef.current) {
+          chartInstanceRef.current.resize()
+        }
+      })
+    }
+  }, [chartHeight])
 
   // 清理
   useEffect(() => {
@@ -781,7 +976,16 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
 
             <div className="mt-6 flex justify-end">
               <button
-                onClick={() => setShowSettings(false)}
+                onClick={() => {
+                  setShowSettings(false)
+                  // 关闭对话框后立即触发图表resize，确保布局正确
+                  // 使用requestAnimationFrame确保DOM更新完成后再resize
+                  requestAnimationFrame(() => {
+                    if (chartInstanceRef.current) {
+                      chartInstanceRef.current.resize()
+                    }
+                  })
+                }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 确定
@@ -792,7 +996,7 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
       )}
 
       {/* 图表 */}
-      <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
+      <div ref={chartRef} style={{ width: '100%', height: `${chartHeight}px` }} />
     </div>
   )
 }
