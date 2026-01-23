@@ -325,6 +325,9 @@ class ModelTrainer:
         参数:
             model_name: 模型名称
         """
+        # 保存构造函数传入的参数（用于预测时提供必要参数如input_size）
+        init_params = self.model_params.copy()
+
         # 加载元数据
         meta_path = self.output_dir / f"{model_name}_meta.json"
         if meta_path.exists():
@@ -332,8 +335,11 @@ class ModelTrainer:
                 meta_data = json.load(f)
 
             self.model_type = meta_data.get('model_type', self.model_type)
-            self.model_params = meta_data.get('model_params', {})
+            saved_params = meta_data.get('model_params', {})
             self.training_history = meta_data.get('training_history', {})
+
+            # 合并参数：优先使用构造函数传入的参数，其次使用元数据中的参数
+            self.model_params = {**saved_params, **init_params}
 
         # 加载模型
         if self.model_type == 'lightgbm':
@@ -343,7 +349,14 @@ class ModelTrainer:
         elif self.model_type == 'gru':
             from .gru_model import GRUStockTrainer
             model_path = self.output_dir / f"{model_name}.pth"
-            self.model = GRUStockTrainer(**self.model_params)
+
+            # 过滤掉训练专用参数，只保留模型结构参数
+            gru_model_params = {
+                k: v for k, v in self.model_params.items()
+                if k in ['input_size', 'hidden_size', 'num_layers', 'dropout', 'bidirectional', 'learning_rate', 'device']
+            }
+
+            self.model = GRUStockTrainer(**gru_model_params)
             self.model.load_model(str(model_path))
         else:
             raise ValueError(f"不支持的模型类型: {self.model_type}")

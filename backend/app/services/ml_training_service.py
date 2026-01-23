@@ -425,8 +425,17 @@ class MLTrainingService:
         X_scaled = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
 
         # 加载模型并预测
+        # 从训练配置恢复模型参数（GRU需要input_size等参数才能初始化）
+        model_params = config.get('model_params') or {}
+
+        # 对于GRU模型，确保包含input_size
+        if config['model_type'] == 'gru':
+            if 'input_size' not in model_params:
+                model_params['input_size'] = len(X.columns)
+
         trainer = ModelTrainer(
             model_type=config['model_type'],
+            model_params=model_params,
             output_dir=str(self.models_dir)
         )
 

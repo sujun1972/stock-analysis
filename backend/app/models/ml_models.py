@@ -59,6 +59,7 @@ class MLTrainingTaskResponse(BaseModel):
     metrics: Optional[Dict[str, float]] = None
     model_path: Optional[str] = None
     feature_importance: Optional[Dict[str, float]] = None
+    training_history: Optional[Dict[str, list]] = None  # GRU模型的训练历史曲线
 
     # 错误信息
     error_message: Optional[str] = None
