@@ -275,14 +275,25 @@ class MLTrainingService:
 
             logger.info(f"[{task_id}] 特征数据已保存: {len(X_all)} 条记录")
 
-            # 获取特征重要性（仅LightGBM）
+            # 获取模型特定的可视化数据
             feature_importance = None
+            training_history = None
+
             if config['model_type'] == 'lightgbm' and hasattr(trainer.model, 'get_feature_importance'):
+                # LightGBM: 获取特征重要性
                 importance_df = trainer.model.get_feature_importance('gain', top_n=20)
                 feature_importance = dict(zip(
                     importance_df['feature'].tolist(),
                     importance_df['gain'].tolist()
                 ))
+            elif config['model_type'] == 'gru':
+                # GRU: 保存训练历史（损失曲线）
+                history = trainer.training_history
+                if history and 'train_loss' in history:
+                    training_history = {
+                        'train_loss': [float(loss) for loss in history['train_loss']],
+                        'valid_loss': [float(loss) for loss in history.get('valid_loss', [])]
+                    }
 
             # ======== 完成 ========
             # ======== 任务完成 ========
@@ -293,6 +304,7 @@ class MLTrainingService:
             # 清理指标和特征重要性中的 NaN/Inf 值，避免 JSON 序列化错误
             task['metrics'] = sanitize_float_values(metrics)
             task['feature_importance'] = sanitize_float_values(feature_importance)
+            task['training_history'] = sanitize_float_values(training_history)
             task['model_name'] = model_name  # 保存模型名称用于特征快照功能
             task['model_path'] = str(self.models_dir / f"{model_name}.txt" if config['model_type'] == 'lightgbm' else self.models_dir / f"{model_name}.pth")
 
@@ -424,11 +436,22 @@ class MLTrainingService:
             model_name
         )
 
-        # 预测
-        predictions = await asyncio.to_thread(
-            trainer.model.predict,
-            X_scaled
-        )
+        # 预测（GRU模型需要seq_length参数）
+        if config['model_type'] == 'gru':
+            seq_length = config.get('seq_length', 20)
+            predictions = await asyncio.to_thread(
+                trainer.model.predict,
+                X_scaled,
+                seq_length=seq_length
+            )
+            # GRU预测会损失前seq_length个样本，需要对齐
+            y = y.iloc[seq_length:]
+            X = X.iloc[seq_length:]
+        else:
+            predictions = await asyncio.to_thread(
+                trainer.model.predict,
+                X_scaled
+            )
 
         # 组装预测结果
         results = []

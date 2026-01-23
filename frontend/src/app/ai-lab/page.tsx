@@ -9,6 +9,7 @@ import { useMLStore } from '@/store/mlStore';
 import TrainingConfigPanel from '@/components/ai-lab/TrainingConfigPanel';
 import TrainingMonitor from '@/components/ai-lab/TrainingMonitor';
 import FeatureImportance from '@/components/ai-lab/FeatureImportance';
+import TrainingHistory from '@/components/ai-lab/TrainingHistory';
 import PredictionChart from '@/components/ai-lab/PredictionChart';
 import ModelList from '@/components/ai-lab/ModelList';
 import FeatureSnapshotViewer from '@/components/ai-lab/FeatureSnapshotViewer';
@@ -65,9 +66,15 @@ export default function AILabPage() {
             {/* 训练监控 */}
             {currentTask && currentTask.status === 'running' && <TrainingMonitor />}
 
-            {/* 训练完成后显示特征重要性 */}
-            {currentTask && currentTask.status === 'completed' && currentTask.feature_importance && (
-              <FeatureImportance />
+            {/* 训练完成后显示模型特定的可视化 */}
+            {currentTask && currentTask.status === 'completed' && (
+              <>
+                {/* LightGBM: 显示特征重要性 */}
+                {currentTask.feature_importance && <FeatureImportance />}
+
+                {/* GRU: 显示训练历史曲线 */}
+                {currentTask.training_history && <TrainingHistory />}
+              </>
             )}
 
             {/* 预测对比图 */}

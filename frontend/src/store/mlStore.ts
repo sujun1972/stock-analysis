@@ -59,6 +59,10 @@ export interface MLTrainingTask {
 
   model_path?: string;
   feature_importance?: Record<string, number>;
+  training_history?: {
+    train_loss: number[];
+    valid_loss: number[];
+  };
   error_message?: string;
 }
 
