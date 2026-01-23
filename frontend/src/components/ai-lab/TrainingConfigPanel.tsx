@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,13 +15,26 @@ import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { format, parse } from 'date-fns';
+import { format, parse, isValid } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 export default function TrainingConfigPanel() {
   const { config, setConfig, setCurrentTask, setShowTrainingMonitor } = useMLStore();
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  // 安全地解析日期，使用 useMemo 避免每次渲染都重新解析
+  const startDate = useMemo(() => {
+    const parsed = parse(config.start_date, 'yyyyMMdd', new Date());
+    return isValid(parsed) ? parsed : undefined;
+  }, [config.start_date]);
+
+  const endDate = useMemo(() => {
+    const parsed = parse(config.end_date, 'yyyyMMdd', new Date());
+    return isValid(parsed) ? parsed : undefined;
+  }, [config.end_date]);
 
   const handleStartTraining = async () => {
     setLoading(true);
@@ -36,7 +49,13 @@ export default function TrainingConfigPanel() {
       startPolling(task.task_id);
     } catch (error: any) {
       console.error('训练启动失败:', error);
-      alert(error.response?.data?.detail || '训练启动失败');
+
+      // 显示错误提示
+      toast({
+        variant: 'destructive',
+        title: '训练启动失败',
+        description: error.response?.data?.detail || '无法启动训练任务',
+      });
     } finally {
       setLoading(false);
     }
@@ -57,6 +76,20 @@ export default function TrainingConfigPanel() {
             setShowTrainingMonitor(false);
             // 显示特征重要性
             useMLStore.getState().setShowFeatureImportance(true);
+
+            // 显示训练完成提示
+            toast({
+              variant: 'success',
+              title: '训练完成',
+              description: `模型 ${task.config.model_type.toUpperCase()} 训练成功！`,
+            });
+          } else if (task.status === 'failed') {
+            // 显示训练失败提示
+            toast({
+              variant: 'destructive',
+              title: '训练失败',
+              description: task.error_message || '训练过程中发生错误',
+            });
           }
         }
       } catch (error) {
@@ -89,7 +122,7 @@ export default function TrainingConfigPanel() {
           <div className="space-y-2">
             <Label htmlFor="start_date">开始日期</Label>
             <DatePicker
-              date={parse(config.start_date, 'yyyyMMdd', new Date())}
+              date={startDate}
               onDateChange={(date) => {
                 if (date) {
                   setConfig({ start_date: format(date, 'yyyyMMdd') });
@@ -100,7 +133,7 @@ export default function TrainingConfigPanel() {
           <div className="space-y-2">
             <Label htmlFor="end_date">结束日期</Label>
             <DatePicker
-              date={parse(config.end_date, 'yyyyMMdd', new Date())}
+              date={endDate}
               onDateChange={(date) => {
                 if (date) {
                   setConfig({ end_date: format(date, 'yyyyMMdd') });

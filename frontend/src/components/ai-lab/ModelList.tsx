@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { PlayCircle, Settings, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -166,13 +168,15 @@ function ModelCard({ model, isSelected, onSelect, onPredict, onDelete, onQuickBa
 }
 
 export default function ModelList() {
-  const { models, setModels, selectedModel, setSelectedModel, setPredictions } = useMLStore();
+  const { models, setModels, selectedModel, setSelectedModel, setPredictions, currentTask } = useMLStore();
   const router = useRouter();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [filterSymbol, setFilterSymbol] = useState('');
   const [filterModelType, setFilterModelType] = useState('');
   const [predictingModelId, setPredictingModelId] = useState<string | null>(null);
   const [backtestingModelId, setBacktestingModelId] = useState<string | null>(null);
+  const [modelToDelete, setModelToDelete] = useState<any | null>(null);
 
   // 加载模型列表
   const loadModels = async () => {
@@ -191,10 +195,23 @@ export default function ModelList() {
     }
   };
 
+  // 初始加载和过滤条件变化时加载
   useEffect(() => {
     loadModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterSymbol, filterModelType]);
+
+  // 监听训练任务状态，训练完成后自动刷新模型列表
+  useEffect(() => {
+    if (currentTask?.status === 'completed') {
+      // 延迟一小段时间确保后端已保存模型
+      const timer = setTimeout(() => {
+        loadModels();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTask?.status]);
 
   // 选中模型
   const handleSelectModel = (model: any) => {
@@ -217,36 +234,64 @@ export default function ModelList() {
       setPredictions(response.data.predictions || []);
       setSelectedModel(model);
 
-      alert('预测完成！请查看预测结果图表。');
+      // 显示成功提示
+      toast({
+        variant: 'success',
+        title: '预测完成',
+        description: '请查看下方预测结果图表',
+      });
     } catch (error: any) {
       console.error('预测失败:', error);
-      alert(`预测失败: ${error.response?.data?.detail || error.message}`);
+
+      // 显示错误提示
+      toast({
+        variant: 'destructive',
+        title: '预测失败',
+        description: error.response?.data?.detail || error.message || '未知错误',
+      });
     } finally {
       setPredictingModelId(null);
     }
   };
 
-  // 删除模型
-  const handleDelete = async (model: any) => {
-    if (!confirm(`确定要删除模型 ${model.symbol} (${model.model_type}) 吗？`)) {
-      return;
-    }
+  // 打开删除确认对话框
+  const handleDeleteClick = (model: any) => {
+    setModelToDelete(model);
+  };
+
+  // 确认删除模型
+  const confirmDelete = async () => {
+    if (!modelToDelete) return;
 
     try {
-      await axios.delete(`${API_BASE}/ml/tasks/${model.model_id}`);
+      await axios.delete(`${API_BASE}/ml/tasks/${modelToDelete.model_id}`);
 
       // 如果删除的是当前选中的模型，清空选中状态
-      if (selectedModel?.model_id === model.model_id) {
+      if (selectedModel?.model_id === modelToDelete.model_id) {
         setSelectedModel(null);
         setPredictions([]);
       }
 
       // 重新加载列表
       loadModels();
-      alert('删除成功');
+
+      // 显示成功提示
+      toast({
+        variant: 'success',
+        title: '删除成功',
+        description: `模型 ${modelToDelete.symbol} (${modelToDelete.model_type.toUpperCase()}) 已删除`,
+      });
     } catch (error: any) {
       console.error('删除失败:', error);
-      alert(`删除失败: ${error.response?.data?.detail || error.message}`);
+
+      // 显示错误提示
+      toast({
+        variant: 'destructive',
+        title: '删除失败',
+        description: error.response?.data?.detail || error.message || '未知错误',
+      });
+    } finally {
+      setModelToDelete(null);
     }
   };
 
@@ -302,7 +347,13 @@ export default function ModelList() {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      alert(`创建失败: ${errorMessage}`);
+
+      // 显示错误提示
+      toast({
+        variant: 'destructive',
+        title: '创建回测任务失败',
+        description: errorMessage,
+      });
     } finally {
       setBacktestingModelId(null);
     }
@@ -376,7 +427,7 @@ export default function ModelList() {
                 isSelected={selectedModel?.model_id === model.model_id}
                 onSelect={() => handleSelectModel(model)}
                 onPredict={() => handlePredict(model)}
-                onDelete={() => handleDelete(model)}
+                onDelete={() => handleDeleteClick(model)}
                 onQuickBacktest={() => handleQuickBacktest(model)}
                 onAdvancedBacktest={() => handleAdvancedBacktest(model)}
               />
@@ -411,6 +462,34 @@ export default function ModelList() {
             </div>
           </div>
         )}
+
+        {/* 删除确认对话框 */}
+        <Dialog open={!!modelToDelete} onOpenChange={(open) => !open && setModelToDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>确认删除模型</DialogTitle>
+              <DialogDescription>
+                确定要删除模型 <span className="font-semibold text-gray-900 dark:text-white">{modelToDelete?.symbol}</span> ({modelToDelete?.model_type?.toUpperCase()}) 吗？
+                <br />
+                此操作无法撤销，模型文件将被永久删除。
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setModelToDelete(null)}
+              >
+                取消
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDelete}
+              >
+                确认删除
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
