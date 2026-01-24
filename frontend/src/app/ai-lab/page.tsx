@@ -5,6 +5,8 @@
 
 'use client';
 
+import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { useMLStore } from '@/store/mlStore';
 import TrainingConfigPanel from '@/components/ai-lab/TrainingConfigPanel';
 import TrainingMonitor from '@/components/ai-lab/TrainingMonitor';
@@ -13,8 +15,29 @@ import TrainingHistory from '@/components/ai-lab/TrainingHistory';
 import ModelTable from '@/components/ai-lab/ModelTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+
 export default function AILabPage() {
-  const { currentTask, models } = useMLStore();
+  const { currentTask, models, setModels } = useMLStore();
+  const [loadingModels, setLoadingModels] = useState(true);
+
+  // 加载模型列表
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/ml/models`, {
+          params: { limit: 100 }
+        });
+        setModels(response.data.models || []);
+      } catch (error) {
+        console.error('加载模型列表失败:', error);
+      } finally {
+        setLoadingModels(false);
+      }
+    };
+
+    loadModels();
+  }, [setModels]);
 
   return (
     <div className="space-y-6">

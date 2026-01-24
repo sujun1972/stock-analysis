@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, TrendingUp, Settings, Trash2 } from 'lucide-react';
+import { MoreHorizontal, PlayCircle, TrendingUp, Settings, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -21,6 +21,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -58,6 +65,7 @@ export default function ModelTable() {
   // 初始加载
   useEffect(() => {
     loadModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 运行预测
@@ -218,41 +226,38 @@ export default function ModelTable() {
                         {model.trained_at?.replace(/(\d{4})-(\d{2})-(\d{2}).*/, '$1-$2-$3') || 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handlePredict(model)}
-                            title="运行预测"
-                          >
-                            <PlayCircle className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleQuickBacktest(model)}
-                            disabled={backtestingModelId === model.model_id}
-                            title="一键回测"
-                          >
-                            <TrendingUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleAdvancedBacktest(model)}
-                            title="高级回测"
-                          >
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteClick(model)}
-                            title="删除模型"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handlePredict(model)}>
+                              <PlayCircle className="mr-2 h-4 w-4" />
+                              运行预测
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleQuickBacktest(model)}
+                              disabled={backtestingModelId === model.model_id}
+                            >
+                              <TrendingUp className="mr-2 h-4 w-4" />
+                              一键回测
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleAdvancedBacktest(model)}>
+                              <Settings className="mr-2 h-4 w-4" />
+                              高级回测
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteClick(model)}
+                              className="text-red-600 dark:text-red-400"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              删除模型
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))
