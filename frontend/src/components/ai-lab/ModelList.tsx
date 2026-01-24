@@ -174,7 +174,6 @@ export default function ModelList() {
   const [loading, setLoading] = useState(false);
   const [filterSymbol, setFilterSymbol] = useState('');
   const [filterModelType, setFilterModelType] = useState('');
-  const [predictingModelId, setPredictingModelId] = useState<string | null>(null);
   const [backtestingModelId, setBacktestingModelId] = useState<string | null>(null);
   const [modelToDelete, setModelToDelete] = useState<any | null>(null);
 
@@ -218,35 +217,14 @@ export default function ModelList() {
     setSelectedModel(model);
   };
 
-  // 运行预测 - 跳转到预测详情页面
-  const handlePredict = async (model: any) => {
-    setPredictingModelId(model.model_id);
-    try {
-      // 使用模型配置的日期范围
-      const config = model.config;
-      const response = await axios.post(`${API_BASE}/ml/predict`, {
-        model_id: model.model_id,
-        symbol: model.symbol,
-        start_date: config.start_date,
-        end_date: config.end_date,
-      });
+  // 运行预测 - 直接跳转到预测分析页面，在那里执行预测
+  const handlePredict = (model: any) => {
+    // 设置选中的模型
+    setSelectedModel(model);
 
-      setPredictions(response.data.predictions || []);
-      setSelectedModel(model);
-
-      // 跳转到预测详情页面
-      router.push(`/ai-lab/prediction/${model.model_id}`);
-    } catch (error: any) {
-      console.error('预测失败:', error);
-
-      // 显示错误提示
-      toast({
-        variant: 'destructive',
-        title: '预测失败',
-        description: error.response?.data?.detail || error.message || '未知错误',
-      });
-      setPredictingModelId(null);
-    }
+    // 直接跳转到预测分析页面，并传递modelId参数
+    // 预测页面会自动运行预测
+    router.push(`/ai-lab/prediction?modelId=${model.model_id}`);
   };
 
   // 打开删除确认对话框
@@ -426,20 +404,6 @@ export default function ModelList() {
                 onAdvancedBacktest={() => handleAdvancedBacktest(model)}
               />
             ))}
-          </div>
-        )}
-
-        {/* 加载提示 - 预测 */}
-        {predictingModelId && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
-              <div className="flex items-center gap-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <div className="text-gray-900 dark:text-white font-medium">
-                  正在运行预测，请稍候...
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
