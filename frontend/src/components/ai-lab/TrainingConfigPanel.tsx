@@ -20,7 +20,12 @@ import { useToast } from '@/hooks/use-toast';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
-export default function TrainingConfigPanel() {
+interface TrainingConfigPanelProps {
+  isInDialog?: boolean;
+  onTrainingStart?: () => void;
+}
+
+export default function TrainingConfigPanel({ isInDialog = false, onTrainingStart }: TrainingConfigPanelProps = {}) {
   const { config, setConfig, setCurrentTask, setShowTrainingMonitor } = useMLStore();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -43,7 +48,16 @@ export default function TrainingConfigPanel() {
       const task = response.data;
 
       setCurrentTask(task);
-      setShowTrainingMonitor(true);
+
+      // 如果在弹窗中，只调用父组件的回调，不使用全局的 showTrainingMonitor
+      if (isInDialog) {
+        if (onTrainingStart) {
+          onTrainingStart();
+        }
+      } else {
+        // 如果不在弹窗中，使用原有的逻辑
+        setShowTrainingMonitor(true);
+      }
 
       // 开始轮询任务状态
       startPolling(task.task_id);
@@ -99,12 +113,9 @@ export default function TrainingConfigPanel() {
     }, 2000); // 每2秒轮询一次
   };
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>训练配置</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+  // 在弹窗模式下，不显示 Card 包装
+  const content = (
+    <div className="space-y-4">
         {/* 股票代码 */}
         <div className="space-y-2">
           <Label htmlFor="symbol">股票代码</Label>
@@ -266,6 +277,22 @@ export default function TrainingConfigPanel() {
             '开始训练'
           )}
         </Button>
+    </div>
+  );
+
+  // 如果在弹窗模式下，直接返回内容
+  if (isInDialog) {
+    return content;
+  }
+
+  // 否则返回带 Card 包装的内容
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>训练配置</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {content}
       </CardContent>
     </Card>
   );

@@ -15,13 +15,9 @@ export default function TrainingMonitor() {
   const { status, progress, current_step, metrics } = currentTask;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        训练监控
-      </h2>
-
+    <div className="space-y-4">
       {/* 进度条 */}
-      <div className="mb-6">
+      <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-gray-600 dark:text-gray-400">{current_step}</span>
           <span className="text-sm font-medium text-gray-900 dark:text-white">
@@ -37,7 +33,7 @@ export default function TrainingMonitor() {
       </div>
 
       {/* 状态 */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4">
         <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
           <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">状态</div>
           <div className={`text-sm font-medium ${

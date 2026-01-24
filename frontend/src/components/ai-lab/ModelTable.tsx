@@ -12,8 +12,10 @@ import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info } from 'lucide-react';
+import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import TrainingConfigPanel from './TrainingConfigPanel';
+import TrainingMonitor from './TrainingMonitor';
 import {
   Select,
   SelectContent,
@@ -48,7 +50,7 @@ import {
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 export default function ModelTable() {
-  const { models, setModels, setSelectedModel } = useMLStore();
+  const { models, setModels, setSelectedModel, currentTask } = useMLStore();
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -57,6 +59,12 @@ export default function ModelTable() {
   // 筛选和搜索状态
   const [searchQuery, setSearchQuery] = useState('');
   const [modelTypeFilter, setModelTypeFilter] = useState('all');
+
+  // 训练配置弹窗状态
+  const [showTrainingDialog, setShowTrainingDialog] = useState(false);
+
+  // 训练进度模态窗口状态
+  const [showTrainingMonitor, setShowTrainingMonitor] = useState(false);
 
   // 加载模型列表
   const loadModels = async () => {
@@ -149,6 +157,35 @@ export default function ModelTable() {
     }
   };
 
+  // 监听训练任务状态变化
+  useEffect(() => {
+    if (currentTask) {
+      // 如果有训练任务在运行，显示训练监控窗口
+      if (currentTask.status === 'running') {
+        setShowTrainingMonitor(true);
+      }
+      // 如果训练完成，关闭监控窗口，刷新列表，显示成功提示
+      else if (currentTask.status === 'completed') {
+        setShowTrainingMonitor(false);
+        setShowTrainingDialog(false);
+
+        // 静默刷新模型列表
+        loadModels();
+
+        // 显示成功提示
+        toast({
+          title: '训练完成',
+          description: `模型 ${currentTask.config?.symbol} - ${currentTask.config?.model_type?.toUpperCase()} 训练成功！`,
+        });
+      }
+      // 如果训练失败，关闭监控窗口
+      else if (currentTask.status === 'failed') {
+        setShowTrainingMonitor(false);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTask]);
+
   // 应用筛选和搜索逻辑
   const filteredModels = models.filter(model => {
     const matchesSearch = model.symbol.toLowerCase().includes(searchQuery.toLowerCase());
@@ -205,6 +242,12 @@ export default function ModelTable() {
               {/* 刷新按钮 */}
               <Button variant="outline" size="icon" onClick={loadModels} disabled={loading}>
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+
+              {/* 训练按钮 */}
+              <Button onClick={() => setShowTrainingDialog(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                训练模型
               </Button>
             </div>
           </div>
@@ -320,6 +363,46 @@ export default function ModelTable() {
               删除
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 训练配置弹窗 */}
+      <Dialog open={showTrainingDialog} onOpenChange={setShowTrainingDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>训练新模型</DialogTitle>
+            <DialogDescription>
+              配置训练参数并开始训练机器学习模型
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <TrainingConfigPanel
+              isInDialog={true}
+              onTrainingStart={() => setShowTrainingMonitor(true)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 训练进度模态窗口 */}
+      <Dialog open={showTrainingMonitor} onOpenChange={setShowTrainingMonitor}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>训练进度</DialogTitle>
+            <DialogDescription>
+              正在训练模型，请稍候...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <TrainingMonitor />
+          </div>
+          {currentTask?.status === 'running' && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowTrainingMonitor(false)}>
+                后台运行
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </>
