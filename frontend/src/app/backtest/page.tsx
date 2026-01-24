@@ -426,115 +426,113 @@ function BacktestContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* 页面标题 */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            策略回测系统
-          </h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            支持单股K线回测和多股组合回测，动态参数配置，多策略对比分析
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* 页面标题 */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          策略回测系统
+        </h1>
+        <p className="text-gray-600 dark:text-gray-300 mt-2">
+          支持单股K线回测和多股组合回测，动态参数配置，多策略对比分析
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 左侧: 配置面板 */}
-          <div className="lg:col-span-1 space-y-6">
-            <BacktestPanel
-              onBacktestComplete={handleBacktestComplete}
-              initialConfig={backtestConfigFromResult}
-            />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 左侧: 配置面板 */}
+        <div className="lg:col-span-1 space-y-6">
+          <BacktestPanel
+            onBacktestComplete={handleBacktestComplete}
+            initialConfig={backtestConfigFromResult}
+          />
 
-            {/* 历史记录面板 */}
-            {backtestHistory.length > 0 && (
-              <Card>
-                <CardHeader className="p-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">回测历史</CardTitle>
-                    <span className="text-xs text-muted-foreground">
-                      选择2-3个对比
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {backtestHistory.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => toggleHistorySelection(item.id)}
-                      className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                        selectedHistoryIds.has(item.id)
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedHistoryIds.has(item.id)}
-                          onChange={() => {}}
-                          className="text-blue-600"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                            {item.strategy_name}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {item.symbol} | {new Date(item.timestamp).toLocaleTimeString('zh-CN', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
-                        </div>
+          {/* 历史记录面板 */}
+          {backtestHistory.length > 0 && (
+            <Card>
+              <CardHeader className="p-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">回测历史</CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    选择2-3个对比
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                {backtestHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => toggleHistorySelection(item.id)}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedHistoryIds.has(item.id)
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedHistoryIds.has(item.id)}
+                        onChange={() => {}}
+                        className="text-blue-600"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {item.strategy_name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {item.symbol} | {new Date(item.timestamp).toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
                       </div>
                     </div>
-                  ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* 右侧: 结果展示 */}
-          <div className="lg:col-span-2">
-            {loading ? (
-              <Card className="p-12 text-center">
-                <div className="flex flex-col items-center justify-center">
-                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
-                  <CardTitle className="mt-4">正在加载回测结果...</CardTitle>
-                  <CardDescription className="mt-2">
-                    请稍候，正在获取回测数据
-                  </CardDescription>
+                ))}
                 </div>
-              </Card>
-            ) : !backtestResult ? (
-              <Card className="p-12 text-center">
-                <svg
-                  className="mx-auto h-24 w-24 text-muted-foreground"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
-                </svg>
-                <CardTitle className="mt-4">等待回测结果</CardTitle>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* 右侧: 结果展示 */}
+        <div className="lg:col-span-2">
+          {loading ? (
+            <Card className="p-12 text-center">
+              <div className="flex flex-col items-center justify-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+                <CardTitle className="mt-4">正在加载回测结果...</CardTitle>
                 <CardDescription className="mt-2">
-                  在左侧配置回测参数并点击&ldquo;运行回测&rdquo;按钮
+                  请稍候，正在获取回测数据
                 </CardDescription>
-              </Card>
-            ) : (
-              <>
-                {backtestResult.mode === 'single' ? renderSingleStockResults() : renderMultiStockResults()}
-                {renderComparisonView()}
-              </>
-            )}
-          </div>
+              </div>
+            </Card>
+          ) : !backtestResult ? (
+            <Card className="p-12 text-center">
+              <svg
+                className="mx-auto h-24 w-24 text-muted-foreground"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+              <CardTitle className="mt-4">等待回测结果</CardTitle>
+              <CardDescription className="mt-2">
+                在左侧配置回测参数并点击&ldquo;运行回测&rdquo;按钮
+              </CardDescription>
+            </Card>
+          ) : (
+            <>
+              {backtestResult.mode === 'single' ? renderSingleStockResults() : renderMultiStockResults()}
+              {renderComparisonView()}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -544,11 +542,8 @@ function BacktestContent() {
 export default function BacktestPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">加载中...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     }>
       <BacktestContent />
