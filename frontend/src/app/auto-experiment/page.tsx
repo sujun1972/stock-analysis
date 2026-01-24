@@ -9,6 +9,14 @@ import { BatchConfigDialog } from '@/components/auto-experiment/BatchConfigDialo
 import { BatchCard } from '@/components/auto-experiment/BatchCard'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function AutoExperimentPage() {
   const router = useRouter()
@@ -26,6 +34,7 @@ export default function AutoExperimentPage() {
 
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [batchToDelete, setBatchToDelete] = useState<{ id: number; name: string } | null>(null)
 
   useEffect(() => {
     fetchBatches()
@@ -87,17 +96,20 @@ export default function AutoExperimentPage() {
     }
   }
 
-  const handleDeleteBatch = async (batchId: number) => {
-    if (!confirm('确定要删除此批次吗？此操作不可恢复。')) {
-      return
-    }
+  const handleDeleteBatch = (batchId: number, batchName: string) => {
+    setBatchToDelete({ id: batchId, name: batchName })
+  }
+
+  const confirmDeleteBatch = async () => {
+    if (!batchToDelete) return
 
     try {
-      await deleteBatch(batchId)
+      await deleteBatch(batchToDelete.id)
       toast({
         title: '已删除',
-        description: `批次 #${batchId} 已删除`,
+        description: `批次 "${batchToDelete.name}" 已删除`,
       })
+      setBatchToDelete(null)
       fetchBatches()
     } catch (error: any) {
       toast({
@@ -197,7 +209,7 @@ export default function AutoExperimentPage() {
                 batch={batch}
                 onStart={() => handleStartBatch(batch.batch_id)}
                 onCancel={() => handleCancelBatch(batch.batch_id)}
-                onDelete={() => handleDeleteBatch(batch.batch_id)}
+                onDelete={() => handleDeleteBatch(batch.batch_id, batch.batch_name)}
               />
             ))}
           </div>
@@ -238,6 +250,35 @@ export default function AutoExperimentPage() {
         onOpenChange={setConfigDialogOpen}
         onSuccess={handleBatchCreated}
       />
+
+      {/* 删除确认对话框 */}
+      <Dialog open={!!batchToDelete} onOpenChange={() => setBatchToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除批次</DialogTitle>
+            <DialogDescription>
+              确定要删除批次 <strong>"{batchToDelete?.name}"</strong> (#{batchToDelete?.id}) 吗？
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>警告</AlertTitle>
+              <AlertDescription>
+                此操作将永久删除该批次的所有实验数据、训练结果和模型文件，且无法恢复。
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchToDelete(null)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteBatch}>
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

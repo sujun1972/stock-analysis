@@ -177,31 +177,36 @@ async def predict(request: MLPredictionRequest):
 async def list_models(
     symbol: Optional[str] = None,
     model_type: Optional[str] = None,
-    limit: int = 50
+    source: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20
 ):
     """
-    列出可用的模型
+    列出可用的模型（支持分页）
 
     - **symbol**: 股票代码过滤
-    - **model_type**: 模型类型过滤
-    - **limit**: 返回数量限制
+    - **model_type**: 模型类型过滤 (lightgbm/gru)
+    - **source**: 来源过滤 (auto_experiment/manual_training)
+    - **page**: 页码（从1开始）
+    - **page_size**: 每页数量
     """
-    # 获取所有已完成的任务
-    tasks = ml_service.list_tasks(status='completed', limit=limit)
+    # 获取所有已完成的任务（获取足够多的数据以支持过滤）
+    tasks = ml_service.list_tasks(status='completed', limit=1000)
 
-    # 过滤
-    if symbol:
-        tasks = [t for t in tasks if t['config']['symbol'] == symbol]
-
-    if model_type:
-        tasks = [t for t in tasks if t['config']['model_type'] == model_type]
-
-    # 转换为模型元数据
+    # 转换为模型元数据并过滤
     models = []
     for task in tasks:
         # 判断模型来源：有metrics字段说明是自动化实验训练的
         has_metrics = bool(task.get('metrics'))
-        source = 'auto_experiment' if has_metrics else 'manual_training'
+        model_source = 'auto_experiment' if has_metrics else 'manual_training'
+
+        # 应用过滤条件
+        if symbol and task['config']['symbol'] != symbol:
+            continue
+        if model_type and task['config']['model_type'] != model_type:
+            continue
+        if source and model_source != source:
+            continue
 
         model_data = {
             'model_id': task['task_id'],
@@ -214,14 +219,29 @@ async def list_models(
             'model_path': task['model_path'],
             'trained_at': task['completed_at'],
             'config': task['config'],
-            'source': source,  # 添加来源标识
+            'source': model_source,  # 添加来源标识
             'has_metrics': has_metrics  # 是否有详细指标
         }
         models.append(model_data)
 
+    # 计算分页
+    total = len(models)
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+    # 确保页码在有效范围内
+    page = max(1, min(page, total_pages))
+
+    # 分页切片
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paginated_models = models[start_idx:end_idx]
+
     return {
-        "total": len(models),
-        "models": models
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "models": paginated_models
     }
 
 

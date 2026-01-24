@@ -71,11 +71,13 @@ export interface MLModel {
   symbol: string;
   model_type: 'lightgbm' | 'gru';
   target_period: number;
-  metrics: Record<string, number>;
+  metrics?: Record<string, number>;
   feature_importance?: Record<string, number>;
   model_path: string;
   trained_at: string;
   config: MLTrainingConfig;
+  source: 'auto_experiment' | 'manual_training';
+  has_metrics: boolean;
 }
 
 export interface PredictionResult {

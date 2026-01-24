@@ -13,7 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus, Sparkles, User } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus, Sparkles, User, ChevronLeft, ChevronRight, Rocket, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import TrainingConfigPanel from './TrainingConfigPanel';
 import TrainingMonitor from './TrainingMonitor';
@@ -50,7 +51,12 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
-export default function ModelTable() {
+interface ModelTableProps {
+  showTrainingDialog: boolean;
+  setShowTrainingDialog: (show: boolean) => void;
+}
+
+export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }: ModelTableProps) {
   const { models, setModels, setSelectedModel, currentTask } = useMLStore();
   const router = useRouter();
   const { toast } = useToast();
@@ -59,22 +65,58 @@ export default function ModelTable() {
 
   // 筛选和搜索状态
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [modelTypeFilter, setModelTypeFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
 
-  // 训练配置弹窗状态
-  const [showTrainingDialog, setShowTrainingDialog] = useState(false);
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalModels, setTotalModels] = useState(0);
+
+  // 初始加载状态（用于判断是否显示引导页面）
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [hasAnyModels, setHasAnyModels] = useState(true);
 
   // 训练进度模态窗口状态
   const [showTrainingMonitor, setShowTrainingMonitor] = useState(false);
 
+  // 批量选择状态
+  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
+  const [showBatchDeleteDialog, setShowBatchDeleteDialog] = useState(false);
+
   // 加载模型列表
-  const loadModels = async () => {
+  const loadModels = async (page: number = 1) => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE}/ml/models`, {
-        params: { limit: 100 }
-      });
+      const params: any = {
+        page,
+        page_size: pageSize
+      };
+
+      // 添加筛选条件（使用防抖后的搜索词）
+      if (debouncedSearchQuery) {
+        params.symbol = debouncedSearchQuery;
+      }
+      if (modelTypeFilter !== 'all') {
+        params.model_type = modelTypeFilter;
+      }
+      if (sourceFilter !== 'all') {
+        params.source = sourceFilter;
+      }
+
+      const response = await axios.get(`${API_BASE}/ml/models`, { params });
       setModels(response.data.models || []);
+      setTotalPages(response.data.total_pages || 1);
+      setTotalModels(response.data.total || 0);
+      setCurrentPage(response.data.page || 1);
+
+      // 判断是否有任何模型（在初始加载且无筛选条件时）
+      if (isInitialLoad && !debouncedSearchQuery && modelTypeFilter === 'all' && sourceFilter === 'all') {
+        setHasAnyModels(response.data.total > 0);
+        setIsInitialLoad(false);
+      }
     } catch (error) {
       console.error('加载模型列表失败:', error);
     } finally {
@@ -84,9 +126,25 @@ export default function ModelTable() {
 
   // 初始加载
   useEffect(() => {
-    loadModels();
+    loadModels(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 搜索词防抖处理（200ms延迟）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // 筛选条件变化时重置到第一页（使用防抖后的搜索词）
+  useEffect(() => {
+    setCurrentPage(1);
+    loadModels(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchQuery, modelTypeFilter, sourceFilter]);
 
   // 运行预测
   const handlePredict = (model: any) => {
@@ -98,6 +156,54 @@ export default function ModelTable() {
   const handleViewDetails = (model: any) => {
     setSelectedModel(model);
     router.push(`/ai-lab/model-details?modelId=${model.model_id}`);
+  };
+
+  // 批量选择辅助函数
+  const toggleSelectAll = () => {
+    if (selectedModels.size === models.length && models.length > 0) {
+      setSelectedModels(new Set());
+    } else {
+      setSelectedModels(new Set(models.map(m => m.model_id)));
+    }
+  };
+
+  const toggleSelectModel = (modelId: string) => {
+    const newSelected = new Set(selectedModels);
+    if (newSelected.has(modelId)) {
+      newSelected.delete(modelId);
+    } else {
+      newSelected.add(modelId);
+    }
+    setSelectedModels(newSelected);
+  };
+
+  // 批量删除
+  const handleBatchDelete = async () => {
+    try {
+      // 批量删除所有选中的模型
+      await Promise.all(
+        Array.from(selectedModels).map(modelId =>
+          axios.delete(`${API_BASE}/ml/tasks/${modelId}`)
+        )
+      );
+
+      toast({
+        title: '删除成功',
+        description: `已删除 ${selectedModels.size} 个模型`,
+      });
+
+      // 清空选择并重新加载列表
+      setSelectedModels(new Set());
+      setShowBatchDeleteDialog(false);
+      loadModels(currentPage);
+    } catch (error: any) {
+      console.error('批量删除失败:', error);
+      toast({
+        variant: 'destructive',
+        title: '删除失败',
+        description: error.response?.data?.detail || error.message || '未知错误',
+      });
+    }
   };
 
   /**
@@ -146,7 +252,7 @@ export default function ModelTable() {
       });
 
       // 重新加载列表
-      loadModels();
+      loadModels(currentPage);
       setModelToDelete(null);
     } catch (error: any) {
       console.error('删除模型失败:', error);
@@ -170,8 +276,11 @@ export default function ModelTable() {
         setShowTrainingMonitor(false);
         setShowTrainingDialog(false);
 
+        // 如果之前没有模型，现在有了
+        setHasAnyModels(true);
+
         // 静默刷新模型列表
-        loadModels();
+        loadModels(currentPage);
 
         // 显示成功提示
         toast({
@@ -187,35 +296,39 @@ export default function ModelTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTask]);
 
-  // 应用筛选和搜索逻辑
-  const filteredModels = models.filter(model => {
-    const matchesSearch = model.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = modelTypeFilter === 'all' || model.model_type === modelTypeFilter;
-    return matchesSearch && matchesType;
-  });
-
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>模型仓库</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <span className="ml-3 text-muted-foreground">加载模型列表...</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>模型仓库</CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle>模型仓库</CardTitle>
+              {selectedModels.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-sm">
+                    已选择 {selectedModels.size} 项
+                  </Badge>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowBatchDeleteDialog(true)}
+                    className="h-8"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    批量删除
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedModels(new Set())}
+                    className="h-8"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    取消选择
+                  </Button>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {/* 搜索框 */}
               <div className="relative">
@@ -240,15 +353,21 @@ export default function ModelTable() {
                 </SelectContent>
               </Select>
 
-              {/* 刷新按钮 */}
-              <Button variant="outline" size="icon" onClick={loadModels} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              </Button>
+              {/* 来源筛选 */}
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="模型来源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部来源</SelectItem>
+                  <SelectItem value="auto_experiment">自动实验</SelectItem>
+                  <SelectItem value="manual_training">手动训练</SelectItem>
+                </SelectContent>
+              </Select>
 
-              {/* 训练按钮 */}
-              <Button onClick={() => setShowTrainingDialog(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                训练模型
+              {/* 刷新按钮 */}
+              <Button variant="outline" size="icon" onClick={() => loadModels(currentPage)} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
@@ -258,9 +377,17 @@ export default function ModelTable() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={selectedModels.size === models.length && models.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="全选"
+                    />
+                  </TableHead>
                   <TableHead>股票代码</TableHead>
                   <TableHead>模型类型</TableHead>
-                  <TableHead>预测周期</TableHead>
+                  <TableHead>来源</TableHead>
+                  <TableHead className="text-right">预测周期</TableHead>
                   <TableHead className="text-right">RMSE</TableHead>
                   <TableHead className="text-right">R²</TableHead>
                   <TableHead className="text-right">IC</TableHead>
@@ -270,41 +397,127 @@ export default function ModelTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredModels.length === 0 ? (
+                {loading ? (
+                  // 加载中状态
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                      {models.length === 0 ? '暂无模型数据' : '未找到匹配的模型'}
+                    <TableCell colSpan={11} className="text-center py-8">
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                        <span className="ml-3 text-muted-foreground">加载模型列表...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : models.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-12">
+                      {!hasAnyModels ? (
+                        // 完全没有模型时显示引导内容
+                        <div className="space-y-6">
+                          <div>
+                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                              开始训练您的第一个 AI 模型
+                            </h2>
+                            <p className="text-gray-500 dark:text-gray-400 mb-4">
+                              您可以手动配置并训练单个模型，或使用自动化实验批量训练
+                            </p>
+                            <div className="flex gap-3 justify-center">
+                              <Button
+                                variant="outline"
+                                onClick={() => router.push('/auto-experiment')}
+                                className="flex items-center gap-2"
+                              >
+                                <Rocket className="h-4 w-4" />
+                                自动化实验（推荐）
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-base">数据驱动</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  自动获取60+技术指标和Alpha因子
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-base">智能预测</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  LightGBM和GRU深度学习模型
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-base">深度观察</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  特征重要性、快照查看器
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-base">一键回测</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  直接使用模型进行策略回测
+                                </p>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </div>
+                      ) : (
+                        // 有模型但筛选结果为空时显示提示
+                        <div className="text-muted-foreground">
+                          未找到匹配的模型
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredModels.map((model) => (
+                  models.map((model) => (
                     <TableRow key={model.model_id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedModels.has(model.model_id)}
+                          onCheckedChange={() => toggleSelectModel(model.model_id)}
+                          aria-label={`选择模型 ${model.symbol}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{model.symbol}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
-                              model.model_type === 'lightgbm'
-                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                            }`}
-                          >
-                            {model.model_type.toUpperCase()}
-                          </span>
-                          {model.source === 'auto_experiment' ? (
-                            <Badge variant="secondary" className="text-xs flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              自动实验
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              手动训练
-                            </Badge>
-                          )}
-                        </div>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
+                            model.model_type === 'lightgbm'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                          }`}
+                        >
+                          {model.model_type.toUpperCase()}
+                        </span>
                       </TableCell>
-                      <TableCell>{model.target_period}天</TableCell>
+                      <TableCell>
+                        {model.source === 'auto_experiment' ? (
+                          <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
+                            <Sparkles className="h-3 w-3" />
+                            自动实验
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
+                            <User className="h-3 w-3" />
+                            手动训练
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">{model.target_period}天</TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {model.metrics?.rmse?.toFixed(4) || 'N/A'}
                       </TableCell>
@@ -318,7 +531,15 @@ export default function ModelTable() {
                         {model.metrics?.rank_ic?.toFixed(4) || 'N/A'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {model.trained_at?.replace(/(\d{4})-(\d{2})-(\d{2}).*/, '$1-$2-$3') || 'N/A'}
+                        {model.trained_at ? new Date(model.trained_at).toLocaleString('zh-CN', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: false
+                        }) : 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -357,6 +578,35 @@ export default function ModelTable() {
               </TableBody>
             </Table>
           </div>
+
+          {/* 分页控件 */}
+          {totalModels > 0 && (
+            <div className="flex items-center justify-between px-2 py-4">
+              <div className="text-sm text-muted-foreground">
+                共 {totalModels} 个模型，第 {currentPage} / {totalPages} 页
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadModels(currentPage - 1)}
+                  disabled={currentPage <= 1 || loading}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  上一页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadModels(currentPage + 1)}
+                  disabled={currentPage >= totalPages || loading}
+                >
+                  下一页
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -375,6 +625,26 @@ export default function ModelTable() {
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
               删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量删除确认对话框 */}
+      <Dialog open={showBatchDeleteDialog} onOpenChange={setShowBatchDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认批量删除</DialogTitle>
+            <DialogDescription>
+              确定要删除选中的 <strong>{selectedModels.size}</strong> 个模型吗？此操作无法撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBatchDeleteDialog(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={handleBatchDelete}>
+              删除 {selectedModels.size} 个模型
             </Button>
           </DialogFooter>
         </DialogContent>
