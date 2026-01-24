@@ -8,7 +8,6 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 from pathlib import Path
-import pickle
 
 from .base_strategy import BaseStrategy, StrategyParameter, ParameterType
 
@@ -39,31 +38,11 @@ class MLModelStrategy(BaseStrategy):
                 label="模型ID",
                 type=ParameterType.SELECT,
                 default="",
-                description="使用的机器学习模型ID",
+                description="使用的机器学习模型ID（必选，如无可用模型请先在AI实验室训练）。模型类型和预测周期由训练时确定。",
                 category="model"
             ),
-            StrategyParameter(
-                name="model_type",
-                label="模型类型",
-                type=ParameterType.SELECT,
-                default="lightgbm",
-                options=[
-                    {"label": "LightGBM", "value": "lightgbm"},
-                    {"label": "GRU", "value": "gru"}
-                ],
-                description="机器学习模型类型",
-                category="model"
-            ),
-            StrategyParameter(
-                name="target_period",
-                label="预测周期",
-                type=ParameterType.INTEGER,
-                default=5,
-                min_value=1,
-                max_value=30,
-                description="预测未来N天的收益率",
-                category="model"
-            ),
+            # 注意: model_type 和 target_period 已从参数列表中移除
+            # 这些属性在模型训练时已确定，应从模型元数据中获取，而不是作为可配置参数
             StrategyParameter(
                 name="buy_threshold",
                 label="买入阈值(%)",
@@ -146,10 +125,14 @@ class MLModelStrategy(BaseStrategy):
     def __init__(self, params: Optional[Dict[str, Any]] = None):
         super().__init__(params)
 
-        # 从参数中提取模型信息
+        # 从参数中提取模型ID（必需）
         self.model_id = self.params.get('model_id', '')
-        self.model_type = self.params.get('model_type', 'lightgbm')
-        self.target_period = self.params.get('target_period', 5)
+
+        # model_type 和 target_period 不再从参数中获取
+        # 而是在需要时从模型的训练任务元数据中动态读取
+        # 这样可以确保使用的是模型实际的属性，而不是用户可能错误配置的值
+        self.model_type = None  # 延迟加载
+        self.target_period = None  # 延迟加载
 
         # 交易参数
         self.buy_threshold = self.params.get('buy_threshold', 1.0)
@@ -173,6 +156,80 @@ class MLModelStrategy(BaseStrategy):
             f"buy_threshold={self.buy_threshold}%, sell_threshold={self.sell_threshold}%"
         )
 
+    def get_metadata(self) -> Dict[str, Any]:
+        """
+        获取策略元数据，动态加载可用的ML模型列表
+
+        重写基类方法以动态填充 model_id 参数的选项列表
+        """
+        # 调用基类方法获取基础元数据
+        metadata = super().get_metadata()
+
+        # 获取可用的模型列表
+        available_models = self._get_available_models()
+
+        # 为 model_id 参数添加 options
+        for param in metadata['parameters']:
+            if param['name'] == 'model_id':
+                param['options'] = available_models
+                break
+
+        return metadata
+
+    def _get_available_models(self) -> List[Dict[str, str]]:
+        """
+        获取可用的机器学习模型列表
+
+        从任务存储中读取所有已完成的训练任务并转换为选项格式
+
+        返回:
+            模型选项列表，格式: [{"label": "股票代码 - 模型类型 (训练日期)", "value": "task_id"}, ...]
+        """
+        try:
+            # 导入 MLTrainingService 来访问任务列表
+            from app.services.ml_training_service import MLTrainingService
+
+            ml_service = MLTrainingService()
+
+            # 获取所有已完成的训练任务
+            completed_tasks = ml_service.list_tasks(status='completed', limit=100)
+
+            # 转换为选项格式
+            options = []
+            for task in completed_tasks:
+                config = task.get('config', {})
+                symbol = config.get('symbol', 'unknown')
+                model_type = config.get('model_type', 'unknown').upper()
+                target_period = config.get('target_period', 5)
+                completed_at = task.get('completed_at', '')
+
+                # 格式化日期 (取前10个字符 YYYY-MM-DD)
+                date_str = completed_at[:10] if completed_at else 'unknown'
+
+                # 构建标签: "000001 - LIGHTGBM - 5日 (2024-01-24)"
+                label = f"{symbol} - {model_type} - {target_period}日 ({date_str})"
+                value = task['task_id']
+
+                options.append({
+                    "label": label,
+                    "value": value
+                })
+
+            logger.info(f"找到 {len(options)} 个可用的ML模型")
+
+            # 如果没有可用模型，返回空列表
+            # 前端会显示 placeholder，用户无法选择
+            if not options:
+                logger.warning("没有找到可用的ML模型")
+                return []
+
+            return options
+
+        except Exception as e:
+            logger.error(f"获取可用模型列表失败: {e}")
+            # 发生错误时也返回空列表
+            return []
+
     def generate_signals(self, data: pd.DataFrame) -> pd.Series:
         """
         根据ML模型预测生成交易信号
@@ -189,23 +246,26 @@ class MLModelStrategy(BaseStrategy):
         signals = pd.Series(0, index=data.index)
 
         try:
-            # 加载模型
+            # 验证 model_id 必须提供
             if not self.model_id:
-                logger.warning("未指定model_id，使用简单移动平均策略作为替代")
-                return self._generate_fallback_signals(data)
+                error_msg = "ML模型策略必须指定 model_id 参数。请在策略配置中选择一个训练好的模型，或先在AI实验室训练新模型。"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
 
             # 尝试加载模型
             model = self._load_model_from_disk()
             if model is None:
-                logger.warning(f"无法加载模型 {self.model_id}，使用简单移动平均策略作为替代")
-                return self._generate_fallback_signals(data)
+                error_msg = f"无法加载模型 {self.model_id}。模型文件可能已被删除或损坏，请重新训练或选择其他模型。"
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
 
             # 生成预测
             predictions = self._generate_predictions(model, data)
 
             if predictions is None or len(predictions) == 0:
-                logger.warning("模型预测失败，使用简单移动平均策略作为替代")
-                return self._generate_fallback_signals(data)
+                error_msg = f"模型 {self.model_id} 预测失败。请检查模型是否正常或尝试重新训练。"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
 
             # 根据预测值生成信号
             # 预测上涨 > buy_threshold: 买入信号
@@ -226,26 +286,71 @@ class MLModelStrategy(BaseStrategy):
 
             return signals
 
+        except (ValueError, FileNotFoundError, RuntimeError) as e:
+            # 重新抛出我们自定义的错误，让上层处理
+            logger.error(f"ML模型策略执行失败: {e}")
+            raise
         except Exception as e:
-            logger.error(f"生成ML信号失败: {e}")
-            logger.warning("使用简单移动平均策略作为替代")
-            return self._generate_fallback_signals(data)
+            # 其他未预期的错误也抛出，不使用回退策略
+            logger.error(f"生成ML信号时发生未预期错误: {e}")
+            raise RuntimeError(f"ML模型策略执行失败: {str(e)}")
 
     def _load_model_from_disk(self):
-        """从磁盘加载模型"""
+        """
+        从磁盘加载模型
+
+        需要从训练任务元数据中获取模型路径和类型，因为不同类型的模型使用不同的文件格式：
+        - LightGBM: .txt 文件
+        - GRU: .pth 文件
+        """
         try:
-            model_path = self.model_dir / f"{self.model_id}.pkl"
+            # 获取训练任务信息以获取正确的模型路径和类型
+            from app.services.ml_training_service import MLTrainingService
+
+            ml_service = MLTrainingService()
+            task = ml_service.get_task(self.model_id)
+
+            if not task:
+                logger.error(f"找不到任务 {self.model_id}")
+                return None
+
+            # 从任务元数据中获取模型路径
+            model_path_str = task.get('model_path')
+            if not model_path_str:
+                logger.error(f"任务 {self.model_id} 缺少 model_path 信息")
+                return None
+
+            model_path = Path(model_path_str)
             if not model_path.exists():
                 logger.warning(f"模型文件不存在: {model_path}")
                 return None
 
-            with open(model_path, 'rb') as f:
-                model = pickle.load(f)
-            logger.info(f"成功加载模型: {model_path}")
+            # 从任务配置中获取模型的实际属性
+            config = task.get('config', {})
+            actual_model_type = config.get('model_type', 'lightgbm')
+            actual_target_period = config.get('target_period', 5)
+
+            # 设置实例属性（从模型元数据中获取，而不是从用户参数）
+            self.model_type = actual_model_type
+            self.target_period = actual_target_period
+
+            # 根据实际模型类型加载
+            if actual_model_type == 'lightgbm':
+                import lightgbm as lgb
+                model = lgb.Booster(model_file=str(model_path))
+                logger.info(f"成功加载 LightGBM 模型: {model_path} (预测周期: {actual_target_period}日)")
+            elif actual_model_type == 'gru':
+                import torch
+                model = torch.load(str(model_path))
+                logger.info(f"成功加载 GRU 模型: {model_path} (预测周期: {actual_target_period}日)")
+            else:
+                logger.error(f"不支持的模型类型: {actual_model_type}")
+                return None
+
             return model
 
         except Exception as e:
-            logger.error(f"加载模型失败: {e}")
+            logger.error(f"加载模型失败: {e}", exc_info=True)
             return None
 
     def _generate_predictions(self, model, data: pd.DataFrame) -> Optional[pd.Series]:

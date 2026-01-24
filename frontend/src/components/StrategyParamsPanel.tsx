@@ -42,16 +42,23 @@ interface StrategyParamsPanelProps {
   onParamsChange: (params: Record<string, any>) => void
   onApply?: () => void
   isInDialog?: boolean // 是否在对话框中显示（影响展开/折叠行为）
+  initialParams?: Record<string, any> // 初始参数值（用于保持用户已选择的参数）
+  onSave?: (params: Record<string, any>) => void // 保存回调（用于对话框模式）
+  onCancel?: () => void // 取消回调（用于对话框模式）
 }
 
 export default function StrategyParamsPanel({
   strategyId,
   onParamsChange,
   onApply,
-  isInDialog = false
+  isInDialog = false,
+  initialParams,
+  onSave,
+  onCancel
 }: StrategyParamsPanelProps) {
   const [metadata, setMetadata] = useState<StrategyMetadata | null>(null)
   const [params, setParams] = useState<Record<string, any>>({})
+  const [draftParams, setDraftParams] = useState<Record<string, any>>({}) // 草稿参数（仅在对话框模式使用）
   const [loading, setLoading] = useState(true)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['趋势', '超买超卖']))
 
@@ -74,13 +81,19 @@ export default function StrategyParamsPanel({
             setExpandedCategories(allCategories)
           }
 
-          // 初始化参数为默认值
+          // 初始化参数：优先使用 initialParams，否则使用默认值
           const defaultParams: Record<string, any> = {}
           response.data.parameters.forEach((param: StrategyParameter) => {
-            defaultParams[param.name] = param.default
+            // 如果 initialParams 中有该参数的值，使用它；否则使用默认值
+            defaultParams[param.name] = initialParams?.[param.name] ?? param.default
           })
           setParams(defaultParams)
-          onParamsChange(defaultParams)
+          setDraftParams(defaultParams) // 同时初始化草稿参数
+
+          // 在非对话框模式下立即通知参数变化
+          if (!isInDialog) {
+            onParamsChange(defaultParams)
+          }
         }
       } catch (error) {
         console.error('获取策略元数据失败:', error)
@@ -91,14 +104,22 @@ export default function StrategyParamsPanel({
 
     fetchMetadata()
     // onParamsChange 会导致无限循环，这里不添加到依赖
+    // initialParams 也不添加到依赖，避免每次参数变化都重新加载
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [strategyId, isInDialog])
 
   // 参数值变化处理
   const handleParamChange = (name: string, value: any) => {
-    const newParams = { ...params, [name]: value }
-    setParams(newParams)
-    onParamsChange(newParams)
+    if (isInDialog) {
+      // 对话框模式：只更新草稿参数，不立即通知外部
+      const newDraftParams = { ...draftParams, [name]: value }
+      setDraftParams(newDraftParams)
+    } else {
+      // 非对话框模式：立即更新并通知外部
+      const newParams = { ...params, [name]: value }
+      setParams(newParams)
+      onParamsChange(newParams)
+    }
   }
 
   // 重置为默认值
@@ -109,8 +130,25 @@ export default function StrategyParamsPanel({
     metadata.parameters.forEach(param => {
       defaultParams[param.name] = param.default
     })
-    setParams(defaultParams)
-    onParamsChange(defaultParams)
+
+    if (isInDialog) {
+      setDraftParams(defaultParams)
+    } else {
+      setParams(defaultParams)
+      onParamsChange(defaultParams)
+    }
+  }
+
+  // 保存参数
+  const handleSave = () => {
+    setParams(draftParams)
+    onSave?.(draftParams)
+  }
+
+  // 取消修改
+  const handleCancel = () => {
+    setDraftParams(params) // 恢复到上次保存的状态
+    onCancel?.()
   }
 
   // 切换分类折叠状态
@@ -126,7 +164,9 @@ export default function StrategyParamsPanel({
 
   // 渲染单个参数输入组件
   const renderParamInput = (param: StrategyParameter) => {
-    const value = params[param.name] ?? param.default
+    // 对话框模式使用草稿参数，非对话框模式使用正式参数
+    const currentParams = isInDialog ? draftParams : params
+    const value = currentParams[param.name] ?? param.default
 
     switch (param.type) {
       case 'integer':
@@ -215,11 +255,18 @@ export default function StrategyParamsPanel({
           <div key={param.name} className="space-y-2">
             <Label htmlFor={param.name}>{param.label}</Label>
             <Select
-              value={String(value)}
+              value={value ? String(value) : undefined}
               onValueChange={(newValue) => handleParamChange(param.name, newValue)}
+              disabled={!param.options || param.options.length === 0}
             >
               <SelectTrigger id={param.name}>
-                <SelectValue placeholder={`选择${param.label}`} />
+                <SelectValue
+                  placeholder={
+                    !param.options || param.options.length === 0
+                      ? `暂无可用${param.label}`
+                      : `选择${param.label}`
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {param.options?.map(option => (
@@ -229,7 +276,11 @@ export default function StrategyParamsPanel({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{param.description}</p>
+            <p className="text-xs text-muted-foreground">
+              {!param.options || param.options.length === 0
+                ? `请先在AI实验室训练模型`
+                : param.description}
+            </p>
           </div>
         )
 
@@ -292,6 +343,23 @@ export default function StrategyParamsPanel({
               </CardContent>
             </Card>
           ))}
+        </div>
+
+        {/* 保存和取消按钮 */}
+        <div className="flex justify-end gap-3 pt-2 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCancel}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+          >
+            保存
+          </Button>
         </div>
       </div>
     )

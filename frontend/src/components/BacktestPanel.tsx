@@ -59,7 +59,6 @@ function BacktestPanelContent({ onBacktestComplete }: BacktestPanelProps) {
   useEffect(() => {
     const modelId = searchParams.get('model_id')
     const symbol = searchParams.get('symbol')
-    const modelType = searchParams.get('model_type')
     const startDateStr = searchParams.get('start_date')
     const endDateStr = searchParams.get('end_date')
     const strategyId = searchParams.get('strategy_id')
@@ -98,7 +97,7 @@ function BacktestPanelContent({ onBacktestComplete }: BacktestPanelProps) {
       setSelectedStrategyId('ml_model')
       setStrategyParams({
         model_id: modelId,
-        model_type: modelType || 'lightgbm',
+        // 注意: model_type 已移除，模型类型信息在模型元数据中
         buy_threshold: 1.0,
         sell_threshold: -1.0,
         commission: 0.0003,
@@ -344,6 +343,19 @@ function BacktestPanelContent({ onBacktestComplete }: BacktestPanelProps) {
                             strategyId={strategy.id}
                             onParamsChange={setStrategyParams}
                             isInDialog={true}
+                            initialParams={selectedStrategyId === strategy.id ? strategyParams : undefined}
+                            onSave={(params) => {
+                              setStrategyParams(params)
+                              setSelectedStrategyId(strategy.id)
+                              setDialogOpenStrategyId(null) // 关闭对话框
+                              toast({
+                                title: '参数已保存',
+                                description: `${strategy.name}的参数配置已保存`,
+                              })
+                            }}
+                            onCancel={() => {
+                              setDialogOpenStrategyId(null) // 关闭对话框
+                            }}
                           />
                         </div>
                       </DialogContent>

@@ -312,8 +312,7 @@ export default function ModelList() {
         strategy_id: 'ml_model',
         strategy_params: {
           model_id: model.model_id,
-          model_type: model.model_type,
-          target_period: model.target_period,
+          // 注意: model_type 和 target_period 已移除，这些信息在模型元数据中
 
           // 交易阈值
           buy_threshold: 1.0,
@@ -364,7 +363,7 @@ export default function ModelList() {
     const params = new URLSearchParams({
       model_id: model.model_id,
       symbol: model.symbol,
-      model_type: model.model_type,
+      // 注意: model_type 已移除，不再需要通过 URL 传递
       start_date: model.config.start_date,
       end_date: model.config.end_date,
     });
