@@ -199,20 +199,25 @@ async def list_models(
     # 转换为模型元数据
     models = []
     for task in tasks:
-        if task['metrics']:
-            model_data = {
-                'model_id': task['task_id'],
-                'symbol': task['config']['symbol'],
-                'model_type': task['config']['model_type'],
-                'target_period': task['config'].get('target_period', 5),
-                # 清理指标和特征重要性中的无效浮点数
-                'metrics': sanitize_float_values(task['metrics']),
-                'feature_importance': sanitize_float_values(task['feature_importance']),
-                'model_path': task['model_path'],
-                'trained_at': task['completed_at'],
-                'config': task['config']
-            }
-            models.append(model_data)
+        # 判断模型来源：有metrics字段说明是自动化实验训练的
+        has_metrics = bool(task.get('metrics'))
+        source = 'auto_experiment' if has_metrics else 'manual_training'
+
+        model_data = {
+            'model_id': task['task_id'],
+            'symbol': task['config']['symbol'],
+            'model_type': task['config']['model_type'],
+            'target_period': task['config'].get('target_period', 5),
+            # 清理指标和特征重要性中的无效浮点数
+            'metrics': sanitize_float_values(task.get('metrics', {})) if has_metrics else None,
+            'feature_importance': sanitize_float_values(task.get('feature_importance', {})) if has_metrics else None,
+            'model_path': task['model_path'],
+            'trained_at': task['completed_at'],
+            'config': task['config'],
+            'source': source,  # 添加来源标识
+            'has_metrics': has_metrics  # 是否有详细指标
+        }
+        models.append(model_data)
 
     return {
         "total": len(models),

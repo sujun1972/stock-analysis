@@ -12,7 +12,8 @@ import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus, Sparkles, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import TrainingConfigPanel from './TrainingConfigPanel';
 import TrainingMonitor from './TrainingMonitor';
@@ -280,15 +281,28 @@ export default function ModelTable() {
                     <TableRow key={model.model_id}>
                       <TableCell className="font-medium">{model.symbol}</TableCell>
                       <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
-                            model.model_type === 'lightgbm'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                          }`}
-                        >
-                          {model.model_type.toUpperCase()}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
+                              model.model_type === 'lightgbm'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                            }`}
+                          >
+                            {model.model_type.toUpperCase()}
+                          </span>
+                          {model.source === 'auto_experiment' ? (
+                            <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              自动实验
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              手动训练
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{model.target_period}天</TableCell>
                       <TableCell className="text-right font-mono text-sm">

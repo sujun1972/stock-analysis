@@ -7,13 +7,17 @@
 
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useRouter } from 'next/navigation';
 import { useMLStore } from '@/store/mlStore';
 import ModelTable from '@/components/ai-lab/ModelTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Rocket } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 export default function AILabPage() {
+  const router = useRouter();
   const { models, setModels } = useMLStore();
   const [loadingModels, setLoadingModels] = useState(true);
 
@@ -38,13 +42,23 @@ export default function AILabPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          AI 策略实验舱
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          可视化机器学习模型训练和预测
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            AI 策略实验舱
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">
+            可视化机器学习模型训练和预测
+          </p>
+        </div>
+        <Button
+          size="lg"
+          onClick={() => router.push('/auto-experiment')}
+          className="flex items-center gap-2"
+        >
+          <Rocket className="h-5 w-5" />
+          自动化实验
+        </Button>
       </div>
 
       {/* 主内容区 - 只显示模型仓库 */}
@@ -59,9 +73,19 @@ export default function AILabPage() {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                 开始训练您的第一个 AI 模型
               </h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-8">
-                点击上方&quot;训练模型&quot;按钮配置参数并开始训练
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                您可以手动配置并训练单个模型，或使用自动化实验批量训练
               </p>
+              <div className="flex gap-3 justify-center mb-8">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/auto-experiment')}
+                  className="flex items-center gap-2"
+                >
+                  <Rocket className="h-4 w-4" />
+                  自动化实验（推荐）
+                </Button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 text-left max-w-2xl mx-auto">
                 <Card>
                   <CardHeader className="pb-3">
