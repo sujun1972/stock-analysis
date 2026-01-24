@@ -10,9 +10,7 @@ import TrainingConfigPanel from '@/components/ai-lab/TrainingConfigPanel';
 import TrainingMonitor from '@/components/ai-lab/TrainingMonitor';
 import FeatureImportance from '@/components/ai-lab/FeatureImportance';
 import TrainingHistory from '@/components/ai-lab/TrainingHistory';
-import PredictionChart from '@/components/ai-lab/PredictionChart';
 import ModelList from '@/components/ai-lab/ModelList';
-import FeatureSnapshotViewer from '@/components/ai-lab/FeatureSnapshotViewer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function AILabPage() {
@@ -76,12 +74,6 @@ export default function AILabPage() {
                 {currentTask.training_history && <TrainingHistory />}
               </>
             )}
-
-            {/* 预测对比图 */}
-            <PredictionChart />
-
-            {/* 特征快照查看器 */}
-            <FeatureSnapshotViewer />
 
             {/* 默认提示 */}
             {!currentTask && (

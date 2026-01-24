@@ -218,7 +218,7 @@ export default function ModelList() {
     setSelectedModel(model);
   };
 
-  // 运行预测
+  // 运行预测 - 跳转到预测详情页面
   const handlePredict = async (model: any) => {
     setPredictingModelId(model.model_id);
     try {
@@ -234,12 +234,8 @@ export default function ModelList() {
       setPredictions(response.data.predictions || []);
       setSelectedModel(model);
 
-      // 显示成功提示
-      toast({
-        variant: 'success',
-        title: '预测完成',
-        description: '请查看下方预测结果图表',
-      });
+      // 跳转到预测详情页面
+      router.push(`/ai-lab/prediction/${model.model_id}`);
     } catch (error: any) {
       console.error('预测失败:', error);
 
@@ -249,7 +245,6 @@ export default function ModelList() {
         title: '预测失败',
         description: error.response?.data?.detail || error.message || '未知错误',
       });
-    } finally {
       setPredictingModelId(null);
     }
   };
