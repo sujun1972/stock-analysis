@@ -10,11 +10,11 @@ import TrainingConfigPanel from '@/components/ai-lab/TrainingConfigPanel';
 import TrainingMonitor from '@/components/ai-lab/TrainingMonitor';
 import FeatureImportance from '@/components/ai-lab/FeatureImportance';
 import TrainingHistory from '@/components/ai-lab/TrainingHistory';
-import ModelList from '@/components/ai-lab/ModelList';
+import ModelTable from '@/components/ai-lab/ModelTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function AILabPage() {
-  const { currentTask } = useMLStore();
+  const { currentTask, models } = useMLStore();
 
   return (
     <div className="space-y-6">
@@ -53,13 +53,12 @@ export default function AILabPage() {
       {/* 主内容区 */}
       <div className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 左侧：配置面板和模型列表 */}
-          <div className="lg:col-span-1 space-y-6">
+          {/* 左侧：配置面板 */}
+          <div className="lg:col-span-1">
             <TrainingConfigPanel />
-            <ModelList />
           </div>
 
-          {/* 右侧：监控和可视化 */}
+          {/* 右侧：监控、可视化和模型列表 */}
           <div className="lg:col-span-2 space-y-6">
             {/* 训练监控 */}
             {currentTask && currentTask.status === 'running' && <TrainingMonitor />}
@@ -75,60 +74,68 @@ export default function AILabPage() {
               </>
             )}
 
-            {/* 默认提示 */}
-            {!currentTask && (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    开始训练您的第一个 AI 模型
-                  </h2>
-                  <p className="text-gray-500 dark:text-gray-400 mb-8">
-                    在左侧配置参数,点击&quot;开始训练&quot;按钮
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 text-left max-w-2xl mx-auto">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">数据驱动</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          自动获取60+技术指标和Alpha因子
-                        </p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">智能预测</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          LightGBM和GRU深度学习模型
-                        </p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">深度观察</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          特征重要性、快照查看器
-                        </p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">一键回测</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          直接使用模型进行策略回测
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* 模型仓库：当没有训练任务或训练失败时显示 */}
+            {(!currentTask || currentTask.status === 'failed') && (
+              <>
+                {models.length > 0 ? (
+                  // 有模型时显示模型表格
+                  <ModelTable />
+                ) : (
+                  // 无模型时显示引导提示
+                  <Card>
+                    <CardContent className="p-12 text-center">
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                        开始训练您的第一个 AI 模型
+                      </h2>
+                      <p className="text-gray-500 dark:text-gray-400 mb-8">
+                        在左侧配置参数,点击&quot;开始训练&quot;按钮
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 text-left max-w-2xl mx-auto">
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">数据驱动</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              自动获取60+技术指标和Alpha因子
+                            </p>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">智能预测</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              LightGBM和GRU深度学习模型
+                            </p>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">深度观察</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              特征重要性、快照查看器
+                            </p>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">一键回测</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              直接使用模型进行策略回测
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </div>
         </div>
