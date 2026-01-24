@@ -26,35 +26,93 @@ function BacktestContent() {
   const [backtestHistory, setBacktestHistory] = useState<BacktestHistory[]>([])
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
+  const [backtestConfigFromResult, setBacktestConfigFromResult] = useState<{
+    strategyId?: string
+    symbols?: string
+    startDate?: string
+    endDate?: string
+    initialCash?: number
+    strategyParams?: Record<string, any>
+  } | undefined>(undefined)
 
   /**
-   * 从 URL 参数加载回测结果（一键回测功能）
-   * 当用户从 AI Lab 点击"一键回测"时，会携带 task_id 参数跳转到此页面
-   * 此 effect 会自动获取并展示回测结果
+   * 从 URL 参数加载回测结果或配置
+   * 支持两种模式：
+   * 1. task_id: 加载已完成的回测结果
+   * 2. config: 加载回测配置并自动执行
    */
   useEffect(() => {
     const taskId = searchParams.get('task_id')
-    if (!taskId) return
+    const configParam = searchParams.get('config')
 
-    const fetchBacktestResult = async () => {
-      setLoading(true)
-      try {
-        const response = await axios.get(`${API_BASE}/backtest/result/${taskId}`)
+    // 模式1: 加载回测结果
+    if (taskId) {
+      const fetchBacktestResult = async () => {
+        setLoading(true)
+        try {
+          const response = await axios.get(`${API_BASE}/backtest/result/${taskId}`)
 
-        if (response.data.status === 'success' && response.data.data) {
-          handleBacktestComplete(response.data.data)
-        } else {
-          console.error('获取回测结果失败:', response.data)
+          if (response.data.status === 'success' && response.data.data) {
+            const result = response.data.data
+            handleBacktestComplete(result)
+
+            // 从回测结果中提取所有配置信息，用于在 BacktestPanel 中回填表单
+            const config: any = {}
+
+            if (result.strategy_id) {
+              config.strategyId = result.strategy_id
+            }
+
+            // 提取股票代码（支持单股和多股）
+            if (result.symbol) {
+              config.symbols = result.symbol
+            } else if (result.symbols && Array.isArray(result.symbols)) {
+              config.symbols = result.symbols.join(',')
+            }
+
+            // 提取日期范围
+            if (result.start_date) {
+              config.startDate = result.start_date
+            }
+            if (result.end_date) {
+              config.endDate = result.end_date
+            }
+
+            // 提取初始资金
+            if (result.initial_cash !== undefined) {
+              config.initialCash = result.initial_cash
+            }
+
+            // 提取策略参数（例如 ML 模型的 model_id）
+            if (result.strategy_params) {
+              config.strategyParams = result.strategy_params
+            }
+
+            setBacktestConfigFromResult(config)
+          } else {
+            console.error('获取回测结果失败:', response.data)
+          }
+        } catch (error: any) {
+          console.error('获取回测结果失败:', error)
+          alert(`获取回测结果失败: ${error.response?.data?.detail || error.message}`)
+        } finally {
+          setLoading(false)
         }
-      } catch (error: any) {
-        console.error('获取回测结果失败:', error)
-        alert(`获取回测结果失败: ${error.response?.data?.detail || error.message}`)
-      } finally {
-        setLoading(false)
       }
+
+      fetchBacktestResult()
+      return
     }
 
-    fetchBacktestResult()
+    // 模式2: 加载回测配置并标记为自动运行
+    if (configParam) {
+      try {
+        const config = JSON.parse(decodeURIComponent(configParam))
+        setBacktestConfigFromResult({ ...config, autoRun: true })
+      } catch (error) {
+        console.error('解析配置参数失败:', error)
+      }
+    }
   }, [searchParams])
 
   const handleBacktestComplete = (result: any) => {
@@ -383,7 +441,10 @@ function BacktestContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 左侧: 配置面板 */}
           <div className="lg:col-span-1 space-y-6">
-            <BacktestPanel onBacktestComplete={handleBacktestComplete} />
+            <BacktestPanel
+              onBacktestComplete={handleBacktestComplete}
+              initialConfig={backtestConfigFromResult}
+            />
 
             {/* 历史记录面板 */}
             {backtestHistory.length > 0 && (

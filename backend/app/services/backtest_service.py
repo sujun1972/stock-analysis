@@ -101,6 +101,9 @@ class BacktestService:
             # 缓存结果
             self._running_tasks[task_id] = result
 
+            # 将task_id添加到结果中
+            result['task_id'] = task_id
+
             logger.info(f"回测任务 {task_id} 完成")
             return result
 

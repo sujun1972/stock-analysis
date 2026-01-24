@@ -11,8 +11,16 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlayCircle, TrendingUp, Settings, Trash2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -44,8 +52,11 @@ export default function ModelTable() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [backtestingModelId, setBacktestingModelId] = useState<string | null>(null);
   const [modelToDelete, setModelToDelete] = useState<any | null>(null);
+
+  // 筛选和搜索状态
+  const [searchQuery, setSearchQuery] = useState('');
+  const [modelTypeFilter, setModelTypeFilter] = useState('all');
 
   // 加载模型列表
   const loadModels = async () => {
@@ -74,50 +85,39 @@ export default function ModelTable() {
     router.push(`/ai-lab/prediction?modelId=${model.model_id}`);
   };
 
-  // 一键回测
-  const handleQuickBacktest = async (model: any) => {
-    setBacktestingModelId(model.model_id);
-    try {
-      const response = await axios.post(`${API_BASE}/backtest/run`, {
-        strategy_id: 'ml_model',
-        strategy_params: {
-          model_id: model.model_id,
-          buy_threshold: 1.0,
-          sell_threshold: -1.0,
-          commission: 0.0003,
-          slippage: 0.001,
-          position_size: 1.0,
-          stop_loss: 0.05,
-          take_profit: 0.10,
-        },
-        symbol: model.symbol,
-        start_date: model.config?.start_date || '2020-01-01',
-        end_date: model.config?.end_date || new Date().toISOString().split('T')[0],
-        initial_capital: 100000,
-      });
-
-      toast({
-        title: '回测任务已创建',
-        description: `正在为模型 ${model.symbol} 运行回测...`,
-      });
-
-      router.push(`/backtest?task_id=${response.data.task_id}`);
-    } catch (error: any) {
-      console.error('创建回测任务失败:', error);
-      toast({
-        variant: 'destructive',
-        title: '回测失败',
-        description: error.response?.data?.detail || error.message || '未知错误',
-      });
-    } finally {
-      setBacktestingModelId(null);
-    }
+  // 查看详情
+  const handleViewDetails = (model: any) => {
+    setSelectedModel(model);
+    router.push(`/ai-lab/model-details?modelId=${model.model_id}`);
   };
 
-  // 高级回测
-  const handleAdvancedBacktest = (model: any) => {
-    setSelectedModel(model);
-    router.push(`/backtest?strategy_id=ml_model&model_id=${model.model_id}&symbol=${model.symbol}`);
+  /**
+   * 跳转到回测页面并预填参数
+   * 使用模型训练时的配置自动设置回测参数，并在页面加载后自动执行回测
+   */
+  const handleQuickBacktest = (model: any) => {
+    // 构建回测配置，使用模型训练时的日期范围
+    const config = {
+      strategyId: 'ml_model',
+      symbols: model.symbol,
+      startDate: model.config?.start_date || '2020-01-01',
+      endDate: model.config?.end_date || new Date().toISOString().split('T')[0],
+      initialCash: 100000,
+      strategyParams: {
+        model_id: model.model_id,
+        buy_threshold: 1.0,
+        sell_threshold: -1.0,
+        commission: 0.0003,
+        slippage: 0.001,
+        position_size: 1.0,
+        stop_loss: 0.05,
+        take_profit: 0.10,
+      }
+    };
+
+    // 通过 URL 参数传递配置，回测页面将自动执行
+    const configParam = encodeURIComponent(JSON.stringify(config));
+    router.push(`/backtest?config=${configParam}`);
   };
 
   // 删除模型
@@ -149,6 +149,13 @@ export default function ModelTable() {
     }
   };
 
+  // 应用筛选和搜索逻辑
+  const filteredModels = models.filter(model => {
+    const matchesSearch = model.symbol.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = modelTypeFilter === 'all' || model.model_type === modelTypeFilter;
+    return matchesSearch && matchesType;
+  });
+
   if (loading) {
     return (
       <Card>
@@ -169,7 +176,38 @@ export default function ModelTable() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>模型仓库</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>模型仓库</CardTitle>
+            <div className="flex items-center gap-2">
+              {/* 搜索框 */}
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索股票代码..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 w-[200px]"
+                />
+              </div>
+
+              {/* 模型类型筛选 */}
+              <Select value={modelTypeFilter} onValueChange={setModelTypeFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="模型类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部类型</SelectItem>
+                  <SelectItem value="lightgbm">LightGBM</SelectItem>
+                  <SelectItem value="gru">GRU</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* 刷新按钮 */}
+              <Button variant="outline" size="icon" onClick={loadModels} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -188,14 +226,14 @@ export default function ModelTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {models.length === 0 ? (
+                {filteredModels.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                      暂无模型数据
+                      {models.length === 0 ? '暂无模型数据' : '未找到匹配的模型'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  models.map((model) => (
+                  filteredModels.map((model) => (
                     <TableRow key={model.model_id}>
                       <TableCell className="font-medium">{model.symbol}</TableCell>
                       <TableCell>
@@ -233,20 +271,17 @@ export default function ModelTable() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewDetails(model)}>
+                              <Info className="mr-2 h-4 w-4" />
+                              查看详情
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handlePredict(model)}>
                               <PlayCircle className="mr-2 h-4 w-4" />
                               运行预测
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleQuickBacktest(model)}
-                              disabled={backtestingModelId === model.model_id}
-                            >
+                            <DropdownMenuItem onClick={() => handleQuickBacktest(model)}>
                               <TrendingUp className="mr-2 h-4 w-4" />
-                              一键回测
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleAdvancedBacktest(model)}>
-                              <Settings className="mr-2 h-4 w-4" />
-                              高级回测
+                              策略回测
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -287,20 +322,6 @@ export default function ModelTable() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* 加载提示 - 回测 */}
-      {backtestingModelId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-              <div className="text-gray-900 dark:text-white font-medium">
-                正在创建回测任务，请稍候...
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

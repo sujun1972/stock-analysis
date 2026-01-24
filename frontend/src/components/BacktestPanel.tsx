@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import StrategyParamsPanel from './StrategyParamsPanel'
@@ -16,6 +16,15 @@ import { Settings } from 'lucide-react'
 
 interface BacktestPanelProps {
   onBacktestComplete?: (result: any) => void
+  initialConfig?: {
+    strategyId?: string
+    symbols?: string
+    startDate?: string
+    endDate?: string
+    initialCash?: number
+    strategyParams?: Record<string, any>
+    autoRun?: boolean // 是否自动运行回测
+  } // 从回测结果中提取的配置信息，用于回填表单
 }
 
 interface Strategy {
@@ -26,7 +35,7 @@ interface Strategy {
   parameter_count: number
 }
 
-function BacktestPanelContent({ onBacktestComplete }: BacktestPanelProps) {
+function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPanelProps) {
   const searchParams = useSearchParams()
 
   // 表单状态
@@ -48,6 +57,94 @@ function BacktestPanelContent({ onBacktestComplete }: BacktestPanelProps) {
 
   // Toast hook
   const { toast } = useToast()
+
+  // 用于跟踪是否已自动运行过回测
+  const hasAutoRun = useRef(false)
+  // 用于跟踪表单是否已回填完成
+  const [isFormReady, setIsFormReady] = useState(false)
+
+  /**
+   * 从 initialConfig prop 回填表单
+   * 当用户从 URL 访问回测页面时，自动填充回测配置
+   * 支持两种场景：
+   * 1. 从回测结果页面返回（带 task_id）
+   * 2. 从模型列表跳转（带 config 参数）
+   */
+  useEffect(() => {
+    if (!initialConfig) return
+
+    // 回填策略ID
+    if (initialConfig.strategyId) {
+      setSelectedStrategyId(initialConfig.strategyId)
+    }
+
+    // 回填股票代码
+    if (initialConfig.symbols) {
+      setSymbols(initialConfig.symbols)
+    }
+
+    // 回填开始日期
+    if (initialConfig.startDate) {
+      try {
+        const parsedDate = new Date(initialConfig.startDate)
+        if (!isNaN(parsedDate.getTime())) {
+          setStartDate(parsedDate)
+        }
+      } catch (e) {
+        console.error('解析开始日期失败:', e)
+      }
+    }
+
+    // 回填结束日期
+    if (initialConfig.endDate) {
+      try {
+        const parsedDate = new Date(initialConfig.endDate)
+        if (!isNaN(parsedDate.getTime())) {
+          setEndDate(parsedDate)
+        }
+      } catch (e) {
+        console.error('解析结束日期失败:', e)
+      }
+    }
+
+    // 回填初始资金
+    if (initialConfig.initialCash !== undefined) {
+      setInitialCash(initialConfig.initialCash)
+    }
+
+    // 回填策略参数（例如 ML 模型的 model_id）
+    if (initialConfig.strategyParams) {
+      setStrategyParams(initialConfig.strategyParams)
+    }
+
+    // 标记表单已准备好（延迟以确保所有状态更新完成）
+    setTimeout(() => {
+      setIsFormReady(true)
+    }, 100)
+  }, [initialConfig])
+
+  /**
+   * 自动运行回测
+   * 当 initialConfig.autoRun 为 true 且表单已回填完成时，自动执行回测
+   * 使用 hasAutoRun ref 确保只执行一次，避免重复调用
+   */
+  useEffect(() => {
+    if (!initialConfig?.autoRun) return
+    if (!isFormReady) return // 等待表单回填完成
+    if (hasAutoRun.current) return // 已经运行过，不再重复执行
+    if (isLoading) return // 避免重复执行
+
+    hasAutoRun.current = true // 标记为已执行
+
+    // 延迟执行以确保状态已完全更新
+    const timer = setTimeout(() => {
+      const syntheticEvent = { preventDefault: () => {} } as React.FormEvent
+      handleSubmit(syntheticEvent)
+    }, 300)
+
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFormReady, initialConfig?.autoRun])
 
   /**
    * 从 URL 参数预填表单
