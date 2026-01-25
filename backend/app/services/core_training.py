@@ -236,16 +236,8 @@ class CoreTrainingService:
             logger.info(f"{validation_summary}")
             logger.info(f"{'='*80}\n")
 
-            # 如果有严重告警，标记验证失败
-            if not is_valid:
-                metrics['validation_failed'] = True
-                metrics['validation_summary'] = validation_summary
-                logger.warning(f"⚠️  模型IC验证失败: {model_id}")
-            else:
-                metrics['validation_failed'] = False
-
             # 使用测试集指标作为主要指标（向后兼容）
-            metrics = test_metrics
+            metrics = test_metrics.copy()
 
             # 添加分层指标到结果中
             metrics['train_ic'] = train_metrics.get('ic', 0)
@@ -254,6 +246,14 @@ class CoreTrainingService:
             metrics['valid_ic'] = valid_metrics.get('ic', 0)
             metrics['valid_rank_ic'] = valid_metrics.get('rank_ic', 0)
             metrics['valid_r2'] = valid_metrics.get('r2', 0)
+
+            # 添加IC验证状态
+            if not is_valid:
+                metrics['validation_failed'] = True
+                metrics['validation_summary'] = validation_summary
+                logger.warning(f"⚠️  模型IC验证失败: {model_id}")
+            else:
+                metrics['validation_failed'] = False
 
             # ======== 步骤5: 生成模型ID ========
             if model_id is None:
