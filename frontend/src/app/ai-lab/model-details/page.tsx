@@ -216,43 +216,44 @@ function ModelDetailsPageContent() {
           source: selectedModelData?.source,
         },
 
-        // 训练配置（完整配置）
+        // 训练配置（完整配置，包含默认值）
         training_config: {
           // 基本配置
           symbol: taskDetail.config?.symbol,
           start_date: taskDetail.config?.start_date,
           end_date: taskDetail.config?.end_date,
           model_type: taskDetail.config?.model_type,
-          target_period: taskDetail.config?.target_period,
+          target_period: taskDetail.config?.target_period ?? 5,
 
-          // 数据集划分
-          train_ratio: taskDetail.config?.train_ratio,
-          valid_ratio: taskDetail.config?.valid_ratio,
-          test_ratio: 1 - (taskDetail.config?.train_ratio || 0.7) - (taskDetail.config?.valid_ratio || 0.15),
+          // 数据集划分（如果后端没保存，使用默认值）
+          train_ratio: taskDetail.config?.train_ratio ?? 0.7,
+          valid_ratio: taskDetail.config?.valid_ratio ?? 0.15,
+          test_ratio: taskDetail.config?.test_ratio ?? (1 - (taskDetail.config?.train_ratio ?? 0.7) - (taskDetail.config?.valid_ratio ?? 0.15)),
 
-          // 特征选择
-          use_technical_indicators: taskDetail.config?.use_technical_indicators,
-          use_alpha_factors: taskDetail.config?.use_alpha_factors,
-          selected_features: taskDetail.config?.selected_features,
+          // 特征选择（默认值）
+          use_technical_indicators: taskDetail.config?.use_technical_indicators ?? true,
+          use_alpha_factors: taskDetail.config?.use_alpha_factors ?? true,
+          selected_features: taskDetail.config?.selected_features ?? null,
 
-          // 数据处理
-          scaler_type: taskDetail.config?.scaler_type,
-          balance_samples: taskDetail.config?.balance_samples,
-          balance_method: taskDetail.config?.balance_method,
+          // 数据处理（默认值）
+          scaler_type: taskDetail.config?.scaler_type ?? 'robust',
+          scale_features: taskDetail.config?.scale_features ?? true,
+          balance_samples: taskDetail.config?.balance_samples ?? false,
+          balance_method: taskDetail.config?.balance_method ?? 'undersample',
 
           // 模型参数
-          model_params: taskDetail.config?.model_params,
+          model_params: taskDetail.config?.model_params ?? null,
 
-          // GRU 特定参数
+          // GRU 特定参数（默认值）
           ...(taskDetail.config?.model_type === 'gru' && {
-            seq_length: taskDetail.config?.seq_length,
-            batch_size: taskDetail.config?.batch_size,
-            epochs: taskDetail.config?.epochs,
+            seq_length: taskDetail.config?.seq_length ?? 20,
+            batch_size: taskDetail.config?.batch_size ?? 64,
+            epochs: taskDetail.config?.epochs ?? 100,
           }),
 
-          // LightGBM 特定参数
+          // LightGBM 特定参数（默认值）
           ...(taskDetail.config?.model_type === 'lightgbm' && {
-            early_stopping_rounds: taskDetail.config?.early_stopping_rounds,
+            early_stopping_rounds: taskDetail.config?.early_stopping_rounds ?? 50,
           }),
         },
 

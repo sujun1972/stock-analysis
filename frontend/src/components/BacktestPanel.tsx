@@ -195,8 +195,8 @@ function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPan
       setStrategyParams({
         model_id: modelId,
         // 注意: model_type 已移除，模型类型信息在模型元数据中
-        buy_threshold: 1.0,
-        sell_threshold: -1.0,
+        buy_threshold: 0.15,  // 降低阈值以匹配模型预测范围
+        sell_threshold: -0.3, // 降低阈值以匹配模型预测范围
         commission: 0.0003,
         slippage: 0.001,
         position_size: 1.0,
@@ -440,7 +440,9 @@ function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPan
                             strategyId={strategy.id}
                             onParamsChange={setStrategyParams}
                             isInDialog={true}
-                            initialParams={selectedStrategyId === strategy.id ? strategyParams : undefined}
+                            // 直接传递 strategyParams，让 StrategyParamsPanel 自动筛选相关参数
+                            // 这避免了因异步状态更新导致的参数丢失问题
+                            initialParams={strategyParams}
                             onSave={(params) => {
                               setStrategyParams(params)
                               setSelectedStrategyId(strategy.id)

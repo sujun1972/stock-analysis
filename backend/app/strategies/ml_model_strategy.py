@@ -47,10 +47,10 @@ class MLModelStrategy(BaseStrategy):
                 name="buy_threshold",
                 label="买入阈值(%)",
                 type=ParameterType.FLOAT,
-                default=1.0,
+                default=0.15,  # 降低至 0.15% 以匹配模型实际预测范围
                 min_value=0.0,
                 max_value=10.0,
-                step=0.1,
+                step=0.05,
                 description="预测收益率超过此值时买入",
                 category="signal"
             ),
@@ -58,7 +58,7 @@ class MLModelStrategy(BaseStrategy):
                 name="sell_threshold",
                 label="卖出阈值(%)",
                 type=ParameterType.FLOAT,
-                default=-1.0,
+                default=-0.3,  # 降低至 -0.3% 以匹配模型实际预测范围
                 min_value=-10.0,
                 max_value=0.0,
                 step=0.1,
@@ -180,49 +180,59 @@ class MLModelStrategy(BaseStrategy):
         """
         获取可用的机器学习模型列表
 
-        从任务存储中读取所有已完成的训练任务并转换为选项格式
+        从数据库读取所有已完成的实验并转换为选项格式
 
         返回:
-            模型选项列表，格式: [{"label": "股票代码 - 模型类型 (训练日期)", "value": "task_id"}, ...]
+            模型选项列表，格式: [{"label": "股票代码 - 模型类型 (训练日期)", "value": "model_id"}, ...]
         """
         try:
-            # 导入 MLTrainingService 来访问任务列表
-            from app.services.ml_training_service import MLTrainingService
+            # 从数据库读取已完成的实验
+            import sys
+            sys.path.insert(0, '/app/src')
+            from database.db_manager import DatabaseManager
 
-            ml_service = MLTrainingService()
+            db = DatabaseManager()
 
-            # 获取所有已完成的训练任务
-            completed_tasks = ml_service.list_tasks(status='completed', limit=100)
+            # 查询所有已完成且有model_id的实验（按时间倒序，限制100个）
+            query = """
+                SELECT model_id,
+                       config->>'symbol' as symbol,
+                       config->>'model_type' as model_type,
+                       config->>'target_period' as target_period,
+                       train_completed_at
+                FROM experiments
+                WHERE status = 'completed'
+                  AND model_id IS NOT NULL
+                ORDER BY train_completed_at DESC
+                LIMIT 100
+            """
+
+            results = db._execute_query(query)
+
+            if not results:
+                logger.warning("数据库中没有找到可用的ML模型")
+                return []
 
             # 转换为选项格式
             options = []
-            for task in completed_tasks:
-                config = task.get('config', {})
-                symbol = config.get('symbol', 'unknown')
-                model_type = config.get('model_type', 'unknown').upper()
-                target_period = config.get('target_period', 5)
-                completed_at = task.get('completed_at', '')
+            for row in results:
+                model_id, symbol, model_type, target_period, completed_at = row
 
-                # 格式化日期 (取前10个字符 YYYY-MM-DD)
-                date_str = completed_at[:10] if completed_at else 'unknown'
+                # 格式化
+                symbol = symbol or 'unknown'
+                model_type = (model_type or 'unknown').upper()
+                target_period = target_period or 5
+                date_str = str(completed_at)[:10] if completed_at else 'unknown'
 
                 # 构建标签: "000001 - LIGHTGBM - 5日 (2024-01-24)"
                 label = f"{symbol} - {model_type} - {target_period}日 ({date_str})"
-                value = task['task_id']
 
                 options.append({
                     "label": label,
-                    "value": value
+                    "value": model_id  # 使用 model_id 而不是 task_id
                 })
 
-            logger.info(f"找到 {len(options)} 个可用的ML模型")
-
-            # 如果没有可用模型，返回空列表
-            # 前端会显示 placeholder，用户无法选择
-            if not options:
-                logger.warning("没有找到可用的ML模型")
-                return []
-
+            logger.info(f"从数据库找到 {len(options)} 个可用的ML模型")
             return options
 
         except Exception as e:
@@ -362,25 +372,121 @@ class MLModelStrategy(BaseStrategy):
         """
         使用模型生成预测
 
-        TODO: 这里需要根据实际的模型API进行调整
-        目前返回模拟数据
+        参数:
+            model: 加载的模型对象 (LightGBM Booster 或 PyTorch GRU模型)
+            data: 价格数据DataFrame (包含 open, high, low, close, volume)
+
+        返回:
+            预测的收益率序列 (%)
         """
         try:
-            # 这里应该调用实际的模型预测方法
-            # 例如: predictions = model.predict(features)
+            import sys
+            sys.path.insert(0, '/app/src')
+            from src.data_pipeline import DataPipeline
+            import pickle
 
-            # 临时方案：返回随机预测值作为演示
-            logger.warning("使用模拟预测数据（待实现真实模型预测）")
-            np.random.seed(42)
-            predictions = pd.Series(
-                np.random.randn(len(data)) * 2,  # 模拟预测收益率 (%)
-                index=data.index
+            logger.info(f"开始生成真实预测: model_type={self.model_type}, 数据长度={len(data)}")
+
+            # 步骤1: 使用DataPipeline准备特征（与训练时保持一致）
+            pipeline = DataPipeline(
+                target_periods=self.target_period,
+                scaler_type='robust',  # 使用训练时的scaler类型
+                cache_features=False,
+                verbose=False
             )
 
-            return predictions
+            # 提取股票代码（从model_id解析: 000001_lightgbm_xxx -> 000001）
+            symbol = self.model_id.split('_')[0]
+
+            # 准备特征数据（不需要目标变量）
+            # 为了获取特征,我们需要提供日期范围
+            start_date = data.index.min().strftime('%Y%m%d')
+            end_date = data.index.max().strftime('%Y%m%d')
+
+            logger.info(f"准备特征: symbol={symbol}, 日期={start_date}~{end_date}")
+
+            # 获取特征（会自动计算技术指标和Alpha因子）
+            X, _ = pipeline.get_training_data(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                use_cache=False
+            )
+
+            logger.info(f"特征准备完成: shape={X.shape}, features={len(X.columns)}")
+
+            # 步骤2: 加载保存的scaler进行特征缩放
+            scaler_path = Path(f'/data/models/ml_models/{self.model_id}_scaler.pkl')
+
+            if scaler_path.exists():
+                with open(scaler_path, 'rb') as f:
+                    scaler = pickle.load(f)
+
+                if scaler is not None:
+                    # 缩放特征
+                    X_scaled = scaler.transform(X)
+                    X_scaled = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
+                    logger.info("✅ 已应用训练时的scaler")
+                else:
+                    logger.warning("⚠️ Scaler文件损坏,使用未缩放的特征")
+                    X_scaled = X
+            else:
+                logger.warning(f"⚠️ 未找到scaler文件: {scaler_path}, 使用未缩放的特征")
+                X_scaled = X
+
+            # 步骤3: 根据模型类型进行预测
+            if self.model_type == 'lightgbm':
+                # LightGBM预测
+                predictions_raw = model.predict(X_scaled)
+                predictions = pd.Series(predictions_raw, index=X_scaled.index)
+                logger.info(f"✅ LightGBM预测完成: {len(predictions)} 个预测值")
+
+            elif self.model_type == 'gru':
+                # GRU预测需要序列数据
+                import torch
+
+                # 获取序列长度（从训练配置中获取,默认20）
+                seq_length = 20  # TODO: 应该从模型元数据中读取
+
+                # 准备序列数据
+                X_sequences = []
+                valid_indices = []
+
+                for i in range(seq_length, len(X_scaled)):
+                    seq = X_scaled.iloc[i-seq_length:i].values
+                    X_sequences.append(seq)
+                    valid_indices.append(X_scaled.index[i])
+
+                if len(X_sequences) == 0:
+                    logger.error("数据长度不足以生成序列")
+                    return None
+
+                X_sequences = np.array(X_sequences)
+                X_tensor = torch.FloatTensor(X_sequences)
+
+                # GRU模型预测
+                model.eval()
+                with torch.no_grad():
+                    predictions_raw = model(X_tensor).cpu().numpy().flatten()
+
+                predictions = pd.Series(predictions_raw, index=valid_indices)
+                logger.info(f"✅ GRU预测完成: {len(predictions)} 个预测值 (损失前{seq_length}个样本)")
+            else:
+                logger.error(f"不支持的模型类型: {self.model_type}")
+                return None
+
+            # 步骤4: 对齐预测结果与原始数据索引
+            # 确保预测值的索引与输入数据对齐
+            predictions_aligned = predictions.reindex(data.index)
+
+            # 统计信息
+            logger.info(f"预测统计: mean={predictions.mean():.4f}%, std={predictions.std():.4f}%, "
+                       f"min={predictions.min():.4f}%, max={predictions.max():.4f}%")
+
+            return predictions_aligned
 
         except Exception as e:
-            logger.error(f"模型预测失败: {e}")
+            logger.error(f"模型预测失败: {e}", exc_info=True)
             return None
 
     def _generate_fallback_signals(self, data: pd.DataFrame) -> pd.Series:

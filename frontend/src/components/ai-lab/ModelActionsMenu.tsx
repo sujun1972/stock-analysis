@@ -61,8 +61,8 @@ export default function ModelActionsMenu({
       initialCash: 100000,
       strategyParams: {
         model_id: model.model_id,
-        buy_threshold: 1.0,
-        sell_threshold: -1.0,
+        buy_threshold: 0.15,  // 使用新的默认阈值
+        sell_threshold: -0.3, // 使用新的默认阈值
         commission: 0.0003,
         slippage: 0.001,
         position_size: 1.0,

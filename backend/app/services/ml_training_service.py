@@ -239,7 +239,11 @@ class MLTrainingService:
                     start_date=config['start_date'],
                     end_date=config['end_date'],
                     strategy_id='ml_model',
-                    strategy_params={'model_id': result['model_name']}
+                    strategy_params={
+                        'model_id': result['model_name'],
+                        'buy_threshold': 0.15,   # 降低到0.15%以产生更多买入信号
+                        'sell_threshold': -0.3    # 保持-0.3%
+                    }
                 )
 
                 backtest_metrics = backtest_result.get('metrics', {})
@@ -306,16 +310,42 @@ class MLTrainingService:
             experiment_name = f"手动训练_{model_name}"
             experiment_hash = f"manual_{task_id}"
 
-            # 构建config JSON
+            # 构建config JSON（保存完整配置）
             config_json = json.dumps({
+                # 基本配置
                 'symbol': config['symbol'],
                 'model_type': config['model_type'],
                 'target_period': config.get('target_period', 5),
                 'start_date': config['start_date'],
                 'end_date': config['end_date'],
-                'test_size': config.get('test_size', 0.2),
+
+                # 数据集划分
+                'train_ratio': config.get('train_ratio', 0.7),
+                'valid_ratio': config.get('valid_ratio', 0.15),
+                'test_size': config.get('test_size', 0.2),  # 兼容旧版本
+
+                # 特征选择
+                'use_technical_indicators': config.get('use_technical_indicators', True),
+                'use_alpha_factors': config.get('use_alpha_factors', True),
+                'selected_features': config.get('selected_features'),
+
+                # 数据处理
+                'scaler_type': config.get('scaler_type', 'robust'),
+                'scale_features': config.get('scale_features', True),
+                'balance_samples': config.get('balance_samples', False),
+                'balance_method': config.get('balance_method', 'undersample'),
+
+                # 模型参数
                 'feature_config': config.get('feature_config', {}),
-                'model_params': config.get('model_params', {})
+                'model_params': config.get('model_params', {}),
+
+                # GRU特定参数
+                'seq_length': config.get('seq_length', 20),
+                'batch_size': config.get('batch_size', 64),
+                'epochs': config.get('epochs', 100),
+
+                # LightGBM特定参数
+                'early_stopping_rounds': config.get('early_stopping_rounds', 50),
             })
 
             # 构建train_metrics JSON

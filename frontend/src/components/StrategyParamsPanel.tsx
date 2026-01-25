@@ -85,7 +85,8 @@ export default function StrategyParamsPanel({
           const defaultParams: Record<string, any> = {}
           response.data.parameters.forEach((param: StrategyParameter) => {
             // 如果 initialParams 中有该参数的值，使用它；否则使用默认值
-            defaultParams[param.name] = initialParams?.[param.name] ?? param.default
+            const value = initialParams?.[param.name] ?? param.default
+            defaultParams[param.name] = value
           })
           setParams(defaultParams)
           setDraftParams(defaultParams) // 同时初始化草稿参数
@@ -107,6 +108,23 @@ export default function StrategyParamsPanel({
     // initialParams 也不添加到依赖，避免每次参数变化都重新加载
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [strategyId, isInDialog])
+
+  // 监听 initialParams 变化，动态更新 draftParams（对话框模式）
+  // 这解决了 initialParams 在组件挂载后才到达导致参数丢失的问题
+  useEffect(() => {
+    if (!isInDialog || !initialParams || !metadata) return
+
+    // 只更新在 initialParams 中存在且有效的参数
+    const updatedDraftParams = { ...draftParams }
+    Object.keys(initialParams).forEach(key => {
+      if (initialParams[key] !== undefined && initialParams[key] !== null) {
+        updatedDraftParams[key] = initialParams[key]
+      }
+    })
+
+    setDraftParams(updatedDraftParams)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialParams, isInDialog, metadata])
 
   // 参数值变化处理
   const handleParamChange = (name: string, value: any) => {
