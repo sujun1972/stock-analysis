@@ -1,6 +1,13 @@
 /**
  * 模型详情页面
- * 展示模型的完整信息、评估指标、特征重要性/训练历史、训练配置等
+ *
+ * 功能：
+ * - 展示模型的基本信息（股票代码、模型类型、预测周期、训练时间等）
+ * - 完整展示所有训练指标（RMSE、R²、IC、Rank IC、样本数等）
+ * - 展示回测指标（综合评分、年化收益、夏普比率、最大回撤、胜率）
+ * - 展示训练配置详情
+ * - 特征重要性可视化（LightGBM）或训练历史曲线（GRU）
+ * - 支持运行预测、策略回测、数据导出功能
  */
 
 'use client';
@@ -19,8 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PlayCircle, TrendingUp, Loader2, ArrowLeft } from 'lucide-react';
+import { PlayCircle, TrendingUp, Loader2, Download } from 'lucide-react';
 import axios from 'axios';
+import { useToast } from '@/hooks/use-toast';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -28,6 +36,7 @@ function ModelDetailsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { models, setModels, setSelectedModel, setCurrentTask } = useMLStore();
+  const { toast } = useToast();
 
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -165,28 +174,170 @@ function ModelDetailsPageContent() {
     router.push(`/backtest?config=${configParam}`);
   };
 
+  /**
+   * 导出模型完整数据到剪贴板
+   *
+   * 导出内容包括：
+   * - 基本信息（ID、状态、路径、时间等）
+   * - 训练配置（数据范围、模型参数、特征选择等）
+   * - 训练指标（RMSE、R²、IC、Rank IC、样本数等）
+   * - 回测指标（评分、年化收益、夏普、回撤、胜率等）
+   * - 特征重要性和训练历史
+   */
+  const handleExportData = async () => {
+    if (!taskDetail) {
+      toast({
+        variant: 'destructive',
+        title: '导出失败',
+        description: '没有可用的模型数据',
+      });
+      return;
+    }
+
+    try {
+      // 获取当前选中模型的完整数据（包含回测指标）
+      const selectedModelData = models.find(m => String(m.id) === selectedModelId);
+
+      // 收集所有模型数据
+      const exportData = {
+        // 基本信息
+        model_info: {
+          experiment_id: taskDetail.task_id,
+          model_id: taskDetail.model_id,
+          model_name: taskDetail.model_name,
+          status: taskDetail.status,
+          model_path: taskDetail.model_path,
+          created_at: taskDetail.created_at,
+          started_at: taskDetail.started_at,
+          completed_at: taskDetail.completed_at,
+          symbol: taskDetail.config?.symbol,
+          model_type: taskDetail.config?.model_type,
+          target_period: taskDetail.config?.target_period,
+          source: selectedModelData?.source,
+        },
+
+        // 训练配置（完整配置）
+        training_config: {
+          // 基本配置
+          symbol: taskDetail.config?.symbol,
+          start_date: taskDetail.config?.start_date,
+          end_date: taskDetail.config?.end_date,
+          model_type: taskDetail.config?.model_type,
+          target_period: taskDetail.config?.target_period,
+
+          // 数据集划分
+          train_ratio: taskDetail.config?.train_ratio,
+          valid_ratio: taskDetail.config?.valid_ratio,
+          test_ratio: 1 - (taskDetail.config?.train_ratio || 0.7) - (taskDetail.config?.valid_ratio || 0.15),
+
+          // 特征选择
+          use_technical_indicators: taskDetail.config?.use_technical_indicators,
+          use_alpha_factors: taskDetail.config?.use_alpha_factors,
+          selected_features: taskDetail.config?.selected_features,
+
+          // 数据处理
+          scaler_type: taskDetail.config?.scaler_type,
+          balance_samples: taskDetail.config?.balance_samples,
+          balance_method: taskDetail.config?.balance_method,
+
+          // 模型参数
+          model_params: taskDetail.config?.model_params,
+
+          // GRU 特定参数
+          ...(taskDetail.config?.model_type === 'gru' && {
+            seq_length: taskDetail.config?.seq_length,
+            batch_size: taskDetail.config?.batch_size,
+            epochs: taskDetail.config?.epochs,
+          }),
+
+          // LightGBM 特定参数
+          ...(taskDetail.config?.model_type === 'lightgbm' && {
+            early_stopping_rounds: taskDetail.config?.early_stopping_rounds,
+          }),
+        },
+
+        // 训练指标（包含所有 metrics 字段）
+        training_metrics: taskDetail.metrics || {},
+
+        // 回测指标（如果有）
+        backtest_metrics: selectedModelData ? {
+          rank_score: selectedModelData.rank_score,
+          annual_return: selectedModelData.annual_return,
+          sharpe_ratio: selectedModelData.sharpe_ratio,
+          max_drawdown: selectedModelData.max_drawdown,
+          win_rate: selectedModelData.win_rate,
+          calmar_ratio: selectedModelData.calmar_ratio,
+        } : null,
+
+        // 特征重要性
+        feature_importance: taskDetail.feature_importance,
+
+        // 训练历史（GRU模型）
+        training_history: taskDetail.training_history,
+
+        // 其他信息
+        current_step: taskDetail.current_step,
+        progress: taskDetail.progress,
+        error_message: taskDetail.error_message,
+      };
+
+      // 转换为格式化的 JSON 字符串
+      const jsonString = JSON.stringify(exportData, null, 2);
+
+      // 复制到剪贴板
+      await navigator.clipboard.writeText(jsonString);
+
+      toast({
+        title: '导出成功',
+        description: '模型数据已复制到剪贴板',
+      });
+    } catch (error) {
+      console.error('导出数据失败:', error);
+      toast({
+        variant: 'destructive',
+        title: '导出失败',
+        description: '无法复制到剪贴板，请检查浏览器权限',
+      });
+    }
+  };
+
 
   return (
     <div className="space-y-6 pb-8">
       {/* 页面头部 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push('/ai-lab')}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              模型详情
-            </h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-2">
-              查看模型的完整信息、评估指标和可视化分析
-            </p>
-          </div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            模型详情
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">
+            查看模型的完整信息、评估指标和可视化分析
+          </p>
         </div>
+        {/* 操作按钮组 */}
+        {taskDetail && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={handlePredict} className="flex items-center gap-2">
+              <PlayCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">运行预测</span>
+              <span className="sm:hidden">预测</span>
+            </Button>
+            <Button variant="outline" onClick={handleQuickBacktest} className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              <span className="hidden sm:inline">策略回测</span>
+              <span className="sm:hidden">回测</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleExportData}
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">数据导出</span>
+              <span className="sm:hidden">导出</span>
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* 模型选择器 */}
@@ -295,47 +446,103 @@ function ModelDetailsPageContent() {
               </CardContent>
             </Card>
 
-            {/* 评估指标 */}
+            {/* 训练指标 */}
             <Card>
               <CardHeader>
-                <CardTitle>评估指标</CardTitle>
+                <CardTitle>训练指标</CardTitle>
+                <CardDescription>模型在测试集上的评估结果</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex justify-between items-center pb-2 border-b">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">RMSE</span>
-                  <span className="font-mono font-medium">
-                    {taskDetail.metrics?.rmse?.toFixed(4) || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">R²</span>
-                  <span className="font-mono font-medium">
-                    {taskDetail.metrics?.r2?.toFixed(4) || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">IC</span>
-                  <span className="font-mono font-medium text-blue-600 dark:text-blue-400">
-                    {taskDetail.metrics?.ic?.toFixed(4) || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Rank IC</span>
-                  <span className="font-mono font-medium text-blue-600 dark:text-blue-400">
-                    {taskDetail.metrics?.rank_ic?.toFixed(4) || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">样本数</span>
-                  <span className="font-mono font-medium">
-                    {taskDetail.metrics?.samples !== undefined && taskDetail.metrics?.samples !== null
-                      ? taskDetail.metrics.samples.toLocaleString()
-                      : 'N/A'}
-                  </span>
-                </div>
+                {taskDetail.metrics && Object.keys(taskDetail.metrics).length > 0 ? (
+                  Object.entries(taskDetail.metrics).map(([key, value]) => (
+                    <div key={key} className="flex justify-between items-center pb-2 border-b">
+                      <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">
+                        {key.replace(/_/g, ' ')}
+                      </span>
+                      <span className={`font-mono font-medium ${
+                        ['ic', 'rank_ic'].includes(key) ? 'text-blue-600 dark:text-blue-400' : ''
+                      }`}>
+                        {typeof value === 'number'
+                          ? (key === 'samples' ? value.toLocaleString() : value.toFixed(4))
+                          : String(value)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500 dark:text-gray-400">暂无训练指标数据</div>
+                )}
               </CardContent>
             </Card>
           </div>
+
+          {/* 回测指标 */}
+          {(() => {
+            const selectedModelData = models.find(m => String(m.id) === selectedModelId);
+            const hasBacktestMetrics = selectedModelData && (
+              selectedModelData.rank_score !== null ||
+              selectedModelData.annual_return !== null ||
+              selectedModelData.sharpe_ratio !== null ||
+              selectedModelData.max_drawdown !== null ||
+              selectedModelData.win_rate !== null
+            );
+
+            return hasBacktestMetrics ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>回测指标</CardTitle>
+                  <CardDescription>模型策略在历史数据上的表现</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {selectedModelData.rank_score !== null && selectedModelData.rank_score !== undefined && (
+                      <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                        <div className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">综合评分</div>
+                        <div className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">
+                          {selectedModelData.rank_score.toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+                    {selectedModelData.annual_return !== null && selectedModelData.annual_return !== undefined && (
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="text-xs text-green-600 dark:text-green-400 mb-1">年化收益</div>
+                        <div className={`text-2xl font-bold ${
+                          selectedModelData.annual_return >= 0
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {selectedModelData.annual_return.toFixed(2)}%
+                        </div>
+                      </div>
+                    )}
+                    {selectedModelData.sharpe_ratio !== null && selectedModelData.sharpe_ratio !== undefined && (
+                      <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                        <div className="text-xs text-amber-600 dark:text-amber-400 mb-1">夏普比率</div>
+                        <div className="text-2xl font-bold text-amber-900 dark:text-amber-100">
+                          {selectedModelData.sharpe_ratio.toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+                    {selectedModelData.max_drawdown !== null && selectedModelData.max_drawdown !== undefined && (
+                      <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                        <div className="text-xs text-red-600 dark:text-red-400 mb-1">最大回撤</div>
+                        <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                          {selectedModelData.max_drawdown.toFixed(2)}%
+                        </div>
+                      </div>
+                    )}
+                    {selectedModelData.win_rate !== null && selectedModelData.win_rate !== undefined && (
+                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">胜率</div>
+                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                          {(selectedModelData.win_rate * 100).toFixed(2)}%
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null;
+          })()}
 
           {/* 训练配置 */}
           <Card>
@@ -390,28 +597,6 @@ function ModelDetailsPageContent() {
           {taskDetail.training_history && (
             <TrainingHistory />
           )}
-
-          {/* 操作按钮 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>操作</CardTitle>
-              <CardDescription>
-                使用此模型进行预测或回测
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={handlePredict}>
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                  运行预测
-                </Button>
-                <Button variant="outline" onClick={handleQuickBacktest}>
-                  <TrendingUp className="mr-2 h-4 w-4" />
-                  策略回测
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       )}
 
