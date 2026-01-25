@@ -27,11 +27,16 @@ class ExperimentRunner:
     - 实验状态更新
     """
 
-    def __init__(self):
-        """初始化实验运行器"""
-        self.db = DatabaseManager()
-        self.backtest_service = BacktestService()
-        self.experiment_repo = ExperimentRepository()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化实验运行器
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
+        self.backtest_service = BacktestService(self.db)
+        self.experiment_repo = ExperimentRepository(self.db)
 
         # 运行中的批次
         self.running_batches: Dict[int, asyncio.Task] = {}

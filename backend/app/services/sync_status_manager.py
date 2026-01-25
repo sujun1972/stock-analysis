@@ -23,10 +23,15 @@ class SyncStatusManager:
     - 中止标志管理
     """
 
-    def __init__(self):
-        """初始化同步状态管理器"""
-        self.db = DatabaseManager()
-        self.config_repo = ConfigRepository()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化同步状态管理器
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
+        self.config_repo = ConfigRepository(self.db)
 
     # ==================== 全局同步状态 ====================
 

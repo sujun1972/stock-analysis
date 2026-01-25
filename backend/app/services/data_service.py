@@ -17,9 +17,14 @@ from src.database.db_manager import DatabaseManager
 class DataDownloadService:
     """数据下载服务类"""
 
-    def __init__(self):
-        """初始化"""
-        self.db = DatabaseManager()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化数据下载服务
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
         logger.info("✓ DataDownloadService initialized")
 
     async def download_stock_list(self) -> Dict:

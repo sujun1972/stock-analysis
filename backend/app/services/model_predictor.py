@@ -26,9 +26,14 @@ class ModelPredictor:
     - 处理预测结果
     """
 
-    def __init__(self):
-        """初始化预测服务"""
-        self.db = DatabaseManager()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化预测服务
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
 
     async def predict(
         self,

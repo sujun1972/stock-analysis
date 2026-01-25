@@ -18,9 +18,14 @@ from src.database.db_manager import DatabaseManager
 class FeatureService:
     """特征工程服务类"""
 
-    def __init__(self):
-        """初始化"""
-        self.db = DatabaseManager()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化特征服务
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
         logger.info("✓ FeatureService initialized")
 
     async def calculate_features(

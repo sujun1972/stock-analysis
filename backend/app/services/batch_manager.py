@@ -24,10 +24,15 @@ class BatchManager:
     - 批次统计信息
     """
 
-    def __init__(self):
-        """初始化批次管理器"""
-        self.db = DatabaseManager()
-        self.batch_repo = BatchRepository()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化批次管理器
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
+        self.batch_repo = BatchRepository(self.db)
 
     async def create_batch(
         self,

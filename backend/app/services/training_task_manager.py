@@ -26,10 +26,11 @@ class TrainingTaskManager:
     - 执行训练流程
     """
 
-    def __init__(self, models_dir: Optional[Path] = None):
+    def __init__(self, models_dir: Optional[Path] = None, db: Optional[DatabaseManager] = None):
         """
         初始化任务管理器
 
+            db: DatabaseManager 实例（可选，用于依赖注入）
         Args:
             models_dir: 模型存储目录
         """
@@ -42,7 +43,7 @@ class TrainingTaskManager:
         self._load_metadata()
 
         # 数据库连接
-        self.db = DatabaseManager()
+        self.db = db or DatabaseManager()
 
     def _load_metadata(self):
         """加载任务元数据"""

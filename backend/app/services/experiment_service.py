@@ -6,6 +6,7 @@
 from typing import List, Dict, Any, Optional
 from loguru import logger
 
+from src.database.db_manager import DatabaseManager
 from app.services.batch_manager import BatchManager
 from app.services.experiment_runner import ExperimentRunner
 from app.services.model_ranker import ModelRanker
@@ -20,12 +21,17 @@ class ExperimentService:
     提供统一的接口供API层调用。
     """
 
-    def __init__(self):
-        """初始化服务"""
+    def __init__(self, db: Optional[DatabaseManager] = None):
+                """
+        初始化服务
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
         # 委托给专门的服务
-        self.batch_manager = BatchManager()
-        self.experiment_runner = ExperimentRunner()
-        self.experiment_repo = ExperimentRepository()
+        self.batch_manager = BatchManager(db)
+        self.experiment_runner = ExperimentRunner(db)
+        self.experiment_repo = ExperimentRepository(db)
 
     # ==================== 批次管理接口 ====================
 

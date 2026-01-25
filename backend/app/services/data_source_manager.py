@@ -6,6 +6,7 @@
 import asyncio
 from typing import Dict, Optional
 from loguru import logger
+from src.database.db_manager import DatabaseManager
 
 from app.repositories.config_repository import ConfigRepository
 
@@ -24,9 +25,14 @@ class DataSourceManager:
     # 支持的数据源列表
     SUPPORTED_SOURCES = ['akshare', 'tushare']
 
-    def __init__(self):
-        """初始化数据源管理器"""
-        self.config_repo = ConfigRepository()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化数据源管理器
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.config_repo = ConfigRepository(db)
 
     # ==================== 数据源配置查询 ====================
 

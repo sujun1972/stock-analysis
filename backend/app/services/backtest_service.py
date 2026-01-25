@@ -19,8 +19,14 @@ from app.strategies.strategy_manager import strategy_manager
 class BacktestService:
     """回测服务"""
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化回测服务
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
         # 缓存运行中的回测任务
         self._running_tasks: Dict[str, Dict] = {}
 

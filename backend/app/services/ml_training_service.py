@@ -18,16 +18,17 @@ class MLTrainingService:
     提供统一的接口供API层调用。
     """
 
-    def __init__(self, models_dir: Optional[Path] = None):
+    def __init__(self, models_dir: Optional[Path] = None, db: Optional["DatabaseManager"] = None):
         """
         初始化服务
 
         Args:
             models_dir: 模型存储目录
+            db: DatabaseManager 实例（可选，用于依赖注入）
         """
         # 委托给专门的服务
-        self.task_manager = TrainingTaskManager(models_dir)
-        self.predictor = ModelPredictor()
+        self.task_manager = TrainingTaskManager(models_dir, db)
+        self.predictor = ModelPredictor(db)
 
     # ==================== 任务管理接口 ====================
 

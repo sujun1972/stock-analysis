@@ -6,6 +6,7 @@
 from typing import Optional, Dict
 from loguru import logger
 import asyncio
+from src.database.db_manager import DatabaseManager
 
 from app.repositories.config_repository import ConfigRepository
 from app.services.data_source_manager import DataSourceManager
@@ -20,12 +21,13 @@ class ConfigService:
     提供统一的接口供API层调用。
     """
 
-    def __init__(self):
+    def __init__(self, db: Optional[DatabaseManager] = None):
         """初始化服务"""
+n        Args:n            db: DatabaseManager 实例（可选，用于依赖注入）
         # 委托给专门的服务
-        self.config_repo = ConfigRepository()
-        self.data_source_manager = DataSourceManager()
-        self.sync_status_manager = SyncStatusManager()
+        self.config_repo = ConfigRepository(db)
+        self.data_source_manager = DataSourceManager(db)
+        self.sync_status_manager = SyncStatusManager(db)
 
         logger.info("✓ ConfigService initialized")
 

@@ -19,9 +19,14 @@ from app.utils.data_cleaning import clean_value, clean_records
 class DatabaseService:
     """数据库服务类"""
 
-    def __init__(self):
-        """初始化数据库连接"""
-        self.db = DatabaseManager()
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        """
+        初始化数据库服务
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
+        self.db = db or DatabaseManager()
         logger.info("✓ DatabaseService initialized")
 
     def get_stock_list(
