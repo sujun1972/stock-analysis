@@ -5,28 +5,25 @@
 
 'use client';
 
-import { useEffect, useState, useRef, useCallback, memo } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus, Sparkles, User, ChevronLeft, ChevronRight, Rocket, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Trash2, Plus, Sparkles, User, X, Rocket, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useModels, useDeleteModel } from '@/hooks/useModels';
 import TrainingConfigPanel from './TrainingConfigPanel';
 import TrainingMonitor from './TrainingMonitor';
 import ModelActionsMenu from './ModelActionsMenu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import ModelTableFilters from './ModelTableFilters';
+import ModelTableHeader from './ModelTableHeader';
+import BatchDeleteDialog from './BatchDeleteDialog';
+import EmptyState from './EmptyState';
+import Pagination from './Pagination';
 import {
   Dialog,
   DialogContent,
@@ -264,7 +261,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     }
   }, [sortBy, sortOrder]);
 
-  // 获取排序图标 - 使用 useCallback 优化
+  // 获取排序图标
   const getSortIcon = useCallback((field: string) => {
     if (sortBy !== field) {
       return <ArrowUpDown className="h-4 w-4 ml-1 text-gray-400" />;
@@ -437,47 +434,16 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              {/* 搜索框 */}
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索股票代码..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 w-[200px]"
-                />
-              </div>
-
-              {/* 模型类型筛选 */}
-              <Select value={modelTypeFilter} onValueChange={setModelTypeFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="模型类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部类型</SelectItem>
-                  <SelectItem value="lightgbm">LightGBM</SelectItem>
-                  <SelectItem value="gru">GRU</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* 来源筛选 */}
-              <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="模型来源" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部来源</SelectItem>
-                  <SelectItem value="auto_experiment">自动实验</SelectItem>
-                  <SelectItem value="manual_training">手动训练</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* 刷新按钮 */}
-              <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
+            <ModelTableFilters
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              modelTypeFilter={modelTypeFilter}
+              onModelTypeChange={setModelTypeFilter}
+              sourceFilter={sourceFilter}
+              onSourceChange={setSourceFilter}
+              isLoading={isLoading}
+              onRefresh={() => refetch()}
+            />
           </div>
         </CardHeader>
         <CardContent>
