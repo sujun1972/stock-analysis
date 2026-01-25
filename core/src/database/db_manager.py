@@ -11,6 +11,7 @@ import psycopg2
 from psycopg2 import pool, extras
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import pandas as pd
+import numpy as np
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 import logging
@@ -441,20 +442,29 @@ class DatabaseManager:
             conn = self.get_connection()
             cursor = conn.cursor()
 
-            # 准备数据
-            records = []
-            for _, row in df.iterrows():
-                records.append((
-                    row.get('code', row.get('股票代码')),
-                    row.get('name', row.get('股票名称')),
-                    row.get('market', row.get('市场类型')),
-                    row.get('industry', row.get('行业')),
-                    row.get('area', row.get('地域')),
-                    row.get('list_date', row.get('上市日期')),
-                    row.get('delist_date', row.get('退市日期')),
-                    row.get('status', '正常'),
-                    data_source
-                ))
+            # 准备数据（向量化优化 - 避免 iterrows）
+            # 统一列名处理
+            code_col = 'code' if 'code' in df.columns else '股票代码'
+            name_col = 'name' if 'name' in df.columns else '股票名称'
+            market_col = 'market' if 'market' in df.columns else '市场类型'
+            industry_col = 'industry' if 'industry' in df.columns else '行业'
+            area_col = 'area' if 'area' in df.columns else '地域'
+            list_date_col = 'list_date' if 'list_date' in df.columns else '上市日期'
+            delist_date_col = 'delist_date' if 'delist_date' in df.columns else '退市日期'
+            status_col = 'status' if 'status' in df.columns else None
+
+            # 向量化构建记录
+            records = list(zip(
+                df[code_col].fillna('').values,
+                df[name_col].fillna('').values,
+                df[market_col].fillna('').values if market_col in df.columns else [''] * len(df),
+                df[industry_col].fillna('').values if industry_col in df.columns else [''] * len(df),
+                df[area_col].fillna('').values if area_col in df.columns else [''] * len(df),
+                df[list_date_col].fillna(None).values if list_date_col in df.columns else [None] * len(df),
+                df[delist_date_col].fillna(None).values if delist_date_col in df.columns else [None] * len(df),
+                df[status_col].fillna('正常').values if status_col in df.columns else ['正常'] * len(df),
+                [data_source] * len(df)
+            ))
 
             # 批量插入（冲突时更新）- 使用 stock_basic 表
             insert_query = """
@@ -506,42 +516,41 @@ class DatabaseManager:
             conn = self.get_connection()
             cursor = conn.cursor()
 
-            # 准备数据
-            records = []
-            for idx, row in df.iterrows():
-                # 处理日期 - 优先使用 trade_date 列
-                if 'trade_date' in row:
-                    date_val = row['trade_date']
-                    if isinstance(date_val, str):
-                        date_val = datetime.strptime(date_val, '%Y-%m-%d').date()
-                    elif isinstance(date_val, pd.Timestamp):
-                        date_val = date_val.date()
-                    elif not isinstance(date_val, date):
-                        # 如果已经是 date 类型，直接使用
-                        date_val = pd.to_datetime(date_val).date()
-                else:
-                    # 使用索引作为日期
-                    if isinstance(idx, str):
-                        date_val = datetime.strptime(idx, '%Y-%m-%d').date()
-                    elif isinstance(idx, pd.Timestamp):
-                        date_val = idx.date()
-                    else:
-                        date_val = idx
+            # 准备数据（向量化优化 - 避免 iterrows）
+            # 处理日期列
+            if 'trade_date' in df.columns:
+                dates = pd.to_datetime(df['trade_date']).dt.date
+            else:
+                # 使用索引作为日期
+                dates = pd.to_datetime(df.index).date if isinstance(df.index, pd.DatetimeIndex) else df.index
 
-                records.append((
-                    stock_code,
-                    date_val,
-                    float(row.get('open', row.get('开盘', 0))),
-                    float(row.get('high', row.get('最高', 0))),
-                    float(row.get('low', row.get('最低', 0))),
-                    float(row.get('close', row.get('收盘', 0))),
-                    int(row.get('volume', row.get('成交量', 0))),
-                    float(row.get('amount', row.get('成交额', 0))),
-                    float(row.get('amplitude', row.get('振幅', 0))),
-                    float(row.get('pct_change', row.get('涨跌幅', 0))),
-                    float(row.get('change', row.get('涨跌额', row.get('change_amount', 0)))),
-                    float(row.get('turnover', row.get('换手率', 0)))
-                ))
+            # 统一列名处理
+            open_col = 'open' if 'open' in df.columns else '开盘'
+            high_col = 'high' if 'high' in df.columns else '最高'
+            low_col = 'low' if 'low' in df.columns else '最低'
+            close_col = 'close' if 'close' in df.columns else '收盘'
+            volume_col = 'volume' if 'volume' in df.columns else '成交量'
+            amount_col = 'amount' if 'amount' in df.columns else '成交额'
+            amplitude_col = 'amplitude' if 'amplitude' in df.columns else '振幅'
+            pct_change_col = 'pct_change' if 'pct_change' in df.columns else '涨跌幅'
+            change_col = 'change' if 'change' in df.columns else ('涨跌额' if '涨跌额' in df.columns else 'change_amount')
+            turnover_col = 'turnover' if 'turnover' in df.columns else '换手率'
+
+            # 向量化构建记录
+            records = list(zip(
+                [stock_code] * len(df),
+                dates,
+                df[open_col].fillna(0).astype(float).values,
+                df[high_col].fillna(0).astype(float).values,
+                df[low_col].fillna(0).astype(float).values,
+                df[close_col].fillna(0).astype(float).values,
+                df[volume_col].fillna(0).astype(int).values,
+                df[amount_col].fillna(0).astype(float).values,
+                df[amplitude_col].fillna(0).astype(float).values if amplitude_col in df.columns else [0.0] * len(df),
+                df[pct_change_col].fillna(0).astype(float).values if pct_change_col in df.columns else [0.0] * len(df),
+                df[change_col].fillna(0).astype(float).values if change_col in df.columns else [0.0] * len(df),
+                df[turnover_col].fillna(0).astype(float).values if turnover_col in df.columns else [0.0] * len(df)
+            ))
 
             # 批量插入（冲突时更新）
             insert_query = """
@@ -708,25 +717,47 @@ class DatabaseManager:
                 except (ValueError, TypeError):
                     return default
 
-            # 准备数据
-            records = []
-            for idx, row in df.iterrows():
-                records.append((
-                    row.get('code', row.get('代码')),
-                    row.get('name', row.get('名称')),
-                    safe_float(row.get('latest_price', row.get('最新价', row.get('现价')))),
-                    safe_float(row.get('open', row.get('今开'))),
-                    safe_float(row.get('high', row.get('最高'))),
-                    safe_float(row.get('low', row.get('最低'))),
-                    safe_float(row.get('pre_close', row.get('昨收'))),
-                    safe_int(row.get('volume', row.get('成交量'))),
-                    safe_float(row.get('amount', row.get('成交额'))),
-                    safe_float(row.get('pct_change', row.get('涨跌幅'))),
-                    safe_float(row.get('change_amount', row.get('涨跌额'))),
-                    safe_float(row.get('turnover', row.get('换手率'))),
-                    safe_float(row.get('amplitude', row.get('振幅'))),
-                    data_source
-                ))
+            # 准备数据（向量化优化 - 避免 iterrows）
+            # 统一列名处理
+            code_col = 'code' if 'code' in df.columns else '代码'
+            name_col = 'name' if 'name' in df.columns else '名称'
+            latest_price_col = 'latest_price' if 'latest_price' in df.columns else ('最新价' if '最新价' in df.columns else '现价')
+            open_col = 'open' if 'open' in df.columns else '今开'
+            high_col = 'high' if 'high' in df.columns else '最高'
+            low_col = 'low' if 'low' in df.columns else '最低'
+            pre_close_col = 'pre_close' if 'pre_close' in df.columns else '昨收'
+            volume_col = 'volume' if 'volume' in df.columns else '成交量'
+            amount_col = 'amount' if 'amount' in df.columns else '成交额'
+            pct_change_col = 'pct_change' if 'pct_change' in df.columns else '涨跌幅'
+            change_amount_col = 'change_amount' if 'change_amount' in df.columns else '涨跌额'
+            turnover_col = 'turnover' if 'turnover' in df.columns else '换手率'
+            amplitude_col = 'amplitude' if 'amplitude' in df.columns else '振幅'
+
+            # 向量化构建记录（使用 safe_float/safe_int 的向量化版本）
+            def safe_float_series(series):
+                """向量化的 safe_float"""
+                return series.fillna(0.0).replace([np.inf, -np.inf], 0.0).astype(float).values
+
+            def safe_int_series(series):
+                """向量化的 safe_int"""
+                return series.fillna(0).replace([np.inf, -np.inf], 0).astype(int).values
+
+            records = list(zip(
+                df[code_col].fillna('').values,
+                df[name_col].fillna('').values,
+                safe_float_series(df[latest_price_col]) if latest_price_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[open_col]) if open_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[high_col]) if high_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[low_col]) if low_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[pre_close_col]) if pre_close_col in df.columns else [0.0] * len(df),
+                safe_int_series(df[volume_col]) if volume_col in df.columns else [0] * len(df),
+                safe_float_series(df[amount_col]) if amount_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[pct_change_col]) if pct_change_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[change_amount_col]) if change_amount_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[turnover_col]) if turnover_col in df.columns else [0.0] * len(df),
+                safe_float_series(df[amplitude_col]) if amplitude_col in df.columns else [0.0] * len(df),
+                [data_source] * len(df)
+            ))
 
             # 批量插入（冲突时更新）
             insert_query = """
@@ -1003,23 +1034,34 @@ class DatabaseManager:
             conn = self.get_connection()
             cursor = conn.cursor()
 
-            # 准备数据
-            records = []
-            for _, row in df.iterrows():
-                records.append((
-                    code,
-                    row.get('trade_time'),
-                    period,
-                    float(row.get('open', 0)) if pd.notna(row.get('open')) else None,
-                    float(row.get('high', 0)) if pd.notna(row.get('high')) else None,
-                    float(row.get('low', 0)) if pd.notna(row.get('low')) else None,
-                    float(row.get('close', 0)) if pd.notna(row.get('close')) else None,
-                    int(row.get('volume', 0)) if pd.notna(row.get('volume')) else 0,
-                    float(row.get('amount', 0)) if pd.notna(row.get('amount')) else None,
-                    float(row.get('pct_change', 0)) if pd.notna(row.get('pct_change')) else None,
-                    float(row.get('change_amount', 0)) if pd.notna(row.get('change_amount')) else None,
-                    'akshare'
-                ))
+            # 准备数据（向量化优化 - 避免 iterrows）
+            def safe_float_or_none(series):
+                """将 NaN 转为 None，其他转为 float"""
+                return series.replace({pd.NA: None, np.nan: None}).astype(object).where(pd.notna(series), None).tolist()
+
+            def safe_float_or_zero(series):
+                """将 NaN 转为 0.0"""
+                return series.fillna(0.0).astype(float).values
+
+            def safe_int_or_zero(series):
+                """将 NaN 转为 0"""
+                return series.fillna(0).astype(int).values
+
+            # 向量化构建记录
+            records = list(zip(
+                [code] * len(df),
+                df['trade_time'].values,
+                [period] * len(df),
+                safe_float_or_none(df['open']) if 'open' in df.columns else [None] * len(df),
+                safe_float_or_none(df['high']) if 'high' in df.columns else [None] * len(df),
+                safe_float_or_none(df['low']) if 'low' in df.columns else [None] * len(df),
+                safe_float_or_none(df['close']) if 'close' in df.columns else [None] * len(df),
+                safe_int_or_zero(df['volume']) if 'volume' in df.columns else [0] * len(df),
+                safe_float_or_none(df['amount']) if 'amount' in df.columns else [None] * len(df),
+                safe_float_or_none(df['pct_change']) if 'pct_change' in df.columns else [None] * len(df),
+                safe_float_or_none(df['change_amount']) if 'change_amount' in df.columns else [None] * len(df),
+                ['akshare'] * len(df)
+            ))
 
             # 批量插入（冲突时更新）
             insert_query = """
