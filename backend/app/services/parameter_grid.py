@@ -324,10 +324,10 @@ class ParameterSpaceTemplates:
             'scaler_types': ['robust'],
             'balance_samples': [False],
             'lightgbm': {
-                'num_leaves': [31],
+                'num_leaves': [15],        # 优化后参数：降低复杂度
                 'learning_rate': [0.05],
-                'n_estimators': [100],
-                'max_depth': [-1]
+                'n_estimators': [500],     # 增加轮数，配合early_stopping
+                'max_depth': [4]           # 限制深度，防止过拟合
             }
         }
 
@@ -345,10 +345,10 @@ class ParameterSpaceTemplates:
             'scaler_types': ['robust', 'standard'],
             'balance_samples': [False],
             'lightgbm': {
-                'num_leaves': [31, 63],
-                'learning_rate': [0.05, 0.1],
-                'n_estimators': [100],
-                'max_depth': [-1]
+                'num_leaves': [15],        # 使用优化后的单一参数
+                'learning_rate': [0.05],   # 使用稳定的学习率
+                'n_estimators': [500],     # 增加轮数
+                'max_depth': [4]           # 限制深度
             }
         }
 
@@ -368,10 +368,10 @@ class ParameterSpaceTemplates:
             'scaler_types': ['robust', 'standard'],
             'balance_samples': [False, True],
             'lightgbm': {
-                'num_leaves': [31, 63],
-                'learning_rate': [0.05, 0.1],
-                'n_estimators': [100, 200],
-                'max_depth': [-1, 5]
+                'num_leaves': [15],        # 优化后参数
+                'learning_rate': [0.05],
+                'n_estimators': [500],
+                'max_depth': [4]           # 移除-1（无限制）
             },
             'gru': {
                 'hidden_size': [64, 128],
@@ -402,10 +402,10 @@ class ParameterSpaceTemplates:
             'scaler_types': ['standard', 'robust', 'minmax'],
             'balance_samples': [False, True],
             'lightgbm': {
-                'num_leaves': [15, 31, 63, 127],
-                'learning_rate': [0.01, 0.03, 0.05, 0.1, 0.2],
-                'n_estimators': [50, 100, 200, 500],
-                'max_depth': [-1, 3, 5, 7, 10]
+                'num_leaves': [10, 15, 20],        # 安全范围：10-20
+                'learning_rate': [0.03, 0.05, 0.1],
+                'n_estimators': [300, 500, 700],   # 移除过小的值
+                'max_depth': [3, 4, 5]             # 移除-1和过大值，安全范围3-5
             },
             'gru': {
                 'hidden_size': [32, 64, 128, 256],

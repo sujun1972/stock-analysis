@@ -97,6 +97,9 @@ class CoreTrainingService:
         start_time = datetime.now()
 
         try:
+            # ======== 步骤0: 参数验证和修正 ========
+            self._validate_and_fix_params(config)
+
             # ======== 步骤1: 数据准备 ========
             logger.info(f"[CoreTraining] 获取训练数据...")
 
@@ -352,6 +355,63 @@ class CoreTrainingService:
         except Exception as e:
             logger.error(f"[CoreTraining] ❌ 训练失败: {e}", exc_info=True)
             raise
+
+    def _validate_and_fix_params(self, config: Dict[str, Any]) -> None:
+        """
+        验证并自动修正训练参数，防止使用过时或危险的参数
+        主要针对LightGBM过拟合风险参数进行检查
+        """
+        if config.get('model_type') != 'lightgbm':
+            return
+
+        model_params = config.get('model_params', {})
+        fixed = False
+
+        # 检查1: max_depth=-1（无限制深度）
+        if model_params.get('max_depth', 4) == -1:
+            logger.warning(f"⚠️  [参数修正] max_depth=-1会导致严重过拟合，自动修正为4")
+            model_params['max_depth'] = 4
+            fixed = True
+
+        # 检查2: max_depth过大
+        elif model_params.get('max_depth', 4) > 10:
+            old_val = model_params['max_depth']
+            model_params['max_depth'] = 5
+            logger.warning(f"⚠️  [参数修正] max_depth={old_val}过大，自动修正为5")
+            fixed = True
+
+        # 检查3: num_leaves过大
+        if model_params.get('num_leaves', 15) > 31:
+            old_val = model_params['num_leaves']
+            model_params['num_leaves'] = 15
+            logger.warning(f"⚠️  [参数修正] num_leaves={old_val}会导致过拟合，自动修正为15")
+            fixed = True
+
+        # 检查4: n_estimators过小
+        if model_params.get('n_estimators', 500) < 200:
+            old_val = model_params['n_estimators']
+            model_params['n_estimators'] = 500
+            logger.warning(f"⚠️  [参数修正] n_estimators={old_val}过小，自动修正为500")
+            fixed = True
+
+        # 检查5: 缺失正则化参数
+        if 'reg_alpha' not in model_params:
+            model_params['reg_alpha'] = 0.1
+            logger.info(f"ℹ️  [参数补充] 添加L1正则化 reg_alpha=0.1")
+            fixed = True
+
+        if 'reg_lambda' not in model_params:
+            model_params['reg_lambda'] = 0.1
+            logger.info(f"ℹ️  [参数补充] 添加L2正则化 reg_lambda=0.1")
+            fixed = True
+
+        # 注意：min_gain_to_split已在LightGBMStockModel内部设置，不需要通过model_params传入
+
+        # 更新配置
+        config['model_params'] = model_params
+
+        if fixed:
+            logger.info(f"✅ [参数验证] 参数已自动修正，当前配置: {model_params}")
 
     def _generate_model_id(self, config: Dict) -> str:
         """

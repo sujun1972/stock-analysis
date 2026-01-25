@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus, Sparkles, User, ChevronLeft, ChevronRight, Rocket, X } from 'lucide-react';
+import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus, Sparkles, User, ChevronLeft, ChevronRight, Rocket, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import TrainingConfigPanel from './TrainingConfigPanel';
 import TrainingMonitor from './TrainingMonitor';
@@ -69,6 +69,10 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   const [totalPages, setTotalPages] = useState(1);
   const [totalModels, setTotalModels] = useState(0);
 
+  // 排序状态
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
   // 初始加载状态（用于判断是否显示引导页面）
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [hasAnyModels, setHasAnyModels] = useState(true);
@@ -119,6 +123,12 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
         params.source = sourceFilter;
       }
 
+      // 添加排序参数
+      if (sortBy) {
+        params.sort_by = sortBy;
+        params.sort_order = sortOrder;
+      }
+
       const response = await axios.get(`${API_BASE}/ml/models`, { params });
       setModels(response.data.models || []);
       setTotalPages(response.data.total_pages || 1);
@@ -152,13 +162,37 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // 筛选条件变化时重置到第一页（使用防抖后的搜索词）
+  // 筛选条件或排序变化时重置到第一页（使用防抖后的搜索词）
   useEffect(() => {
     setCurrentPage(1);
     loadModels(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchQuery, modelTypeFilter, sourceFilter]);
+  }, [debouncedSearchQuery, modelTypeFilter, sourceFilter, sortBy, sortOrder]);
 
+
+  // 排序处理函数
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      // 同一字段，切换排序顺序
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // 新字段，默认降序
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+  };
+
+  // 获取排序图标
+  const getSortIcon = (field: string) => {
+    if (sortBy !== field) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 text-gray-400" />;
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="h-4 w-4 ml-1 text-blue-600" />
+    ) : (
+      <ArrowDown className="h-4 w-4 ml-1 text-blue-600" />
+    );
+  };
 
   // 批量选择辅助函数
   const toggleSelectAll = () => {
@@ -380,17 +414,79 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                     />
                   </TableHead>
                   <TableHead>股票代码</TableHead>
-                  <TableHead>模型类型</TableHead>
-                  <TableHead>来源</TableHead>
                   <TableHead className="text-right">周期</TableHead>
-                  <TableHead className="text-right">RMSE</TableHead>
-                  <TableHead className="text-right">R²</TableHead>
-                  <TableHead className="text-right">IC</TableHead>
-                  <TableHead className="text-right">Rank IC</TableHead>
-                  <TableHead className="text-right">评分</TableHead>
-                  <TableHead className="text-right">年化收益</TableHead>
-                  <TableHead className="text-right">夏普</TableHead>
-                  <TableHead className="text-right">回撤</TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('rmse')}
+                  >
+                    <div className="flex items-center justify-end">
+                      RMSE
+                      {getSortIcon('rmse')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('r2')}
+                  >
+                    <div className="flex items-center justify-end">
+                      R²
+                      {getSortIcon('r2')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('ic')}
+                  >
+                    <div className="flex items-center justify-end">
+                      IC
+                      {getSortIcon('ic')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('rank_ic')}
+                  >
+                    <div className="flex items-center justify-end">
+                      Rank IC
+                      {getSortIcon('rank_ic')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('rank_score')}
+                  >
+                    <div className="flex items-center justify-end">
+                      评分
+                      {getSortIcon('rank_score')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('annual_return')}
+                  >
+                    <div className="flex items-center justify-end">
+                      年化收益
+                      {getSortIcon('annual_return')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('sharpe_ratio')}
+                  >
+                    <div className="flex items-center justify-end">
+                      夏普
+                      {getSortIcon('sharpe_ratio')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort('max_drawdown')}
+                  >
+                    <div className="flex items-center justify-end">
+                      回撤
+                      {getSortIcon('max_drawdown')}
+                    </div>
+                  </TableHead>
                   <TableHead className="text-right">胜率</TableHead>
                   <TableHead>训练时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
@@ -400,7 +496,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                 {loading ? (
                   // 加载中状态
                   <TableRow>
-                    <TableCell colSpan={17} className="text-center py-8">
+                    <TableCell colSpan={15} className="text-center py-8">
                       <div className="flex items-center justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                         <span className="ml-3 text-muted-foreground">加载模型列表...</span>
@@ -409,7 +505,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                   </TableRow>
                 ) : models.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={17} className="text-center py-12">
+                    <TableCell colSpan={15} className="text-center py-12">
                       {!hasAnyModels ? (
                         // 完全没有模型时显示引导内容
                         <div className="space-y-6">
@@ -492,30 +588,32 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                           aria-label={`选择模型 ${model.symbol}`}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{model.symbol}</TableCell>
                       <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
-                            model.model_type === 'lightgbm'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                          }`}
-                        >
-                          {model.model_type.toUpperCase()}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {model.source === 'auto_experiment' ? (
-                          <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
-                            <Sparkles className="h-3 w-3" />
-                            自动实验
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
-                            <User className="h-3 w-3" />
-                            手动训练
-                          </Badge>
-                        )}
+                        <div className="flex flex-col gap-1.5">
+                          <div className="font-medium">{model.symbol}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
+                                model.model_type === 'lightgbm'
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                              }`}
+                            >
+                              {model.model_type.toUpperCase()}
+                            </span>
+                            {model.source === 'auto_experiment' ? (
+                              <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
+                                <Sparkles className="h-3 w-3" />
+                                自动实验
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
+                                <User className="h-3 w-3" />
+                                手动训练
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right text-sm">{model.target_period}天</TableCell>
                       <TableCell className="text-right font-mono text-sm">

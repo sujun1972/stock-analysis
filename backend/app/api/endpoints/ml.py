@@ -194,10 +194,12 @@ async def list_models(
     model_type: Optional[str] = None,
     source: Optional[str] = None,
     page: int = 1,
-    page_size: int = 20
+    page_size: int = 20,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
 ):
     """
-    列出可用的模型（支持分页）
+    列出可用的模型（支持分页和排序）
     统一从 experiments 表读取所有模型（手动训练和自动实验）
 
     - **symbol**: 股票代码过滤
@@ -205,6 +207,8 @@ async def list_models(
     - **source**: 来源过滤 (auto_experiment/manual_training)
     - **page**: 页码（从1开始）
     - **page_size**: 每页数量
+    - **sort_by**: 排序字段 (rmse/r2/ic/rank_ic/rank_score/annual_return/sharpe_ratio/max_drawdown)
+    - **sort_order**: 排序顺序 (asc/desc)，默认降序
     """
     try:
         # 构建查询条件
@@ -246,7 +250,32 @@ async def list_models(
         total_pages = (total + page_size - 1) // page_size if total > 0 else 1
         page = max(1, min(page, total_pages))
 
-        # 查询数据（带分页），添加回测指标
+        # 构建排序子句
+        order_clause = "train_completed_at DESC NULLS LAST"  # 默认排序
+        if sort_by:
+            # 验证排序字段和顺序
+            valid_sort_fields = {
+                'rmse': "train_metrics->>'rmse'",
+                'r2': "train_metrics->>'r2'",
+                'ic': "train_metrics->>'ic'",
+                'rank_ic': "train_metrics->>'rank_ic'",
+                'rank_score': "rank_score",
+                'annual_return': "backtest_metrics->>'annualized_return'",
+                'sharpe_ratio': "backtest_metrics->>'sharpe_ratio'",
+                'max_drawdown': "backtest_metrics->>'max_drawdown'"
+            }
+
+            if sort_by in valid_sort_fields:
+                sort_direction = "ASC" if sort_order and sort_order.lower() == "asc" else "DESC"
+                field_expr = valid_sort_fields[sort_by]
+
+                # 对于JSON字段，需要转换为浮点数进行排序
+                if '->' in field_expr:
+                    order_clause = f"CAST({field_expr} AS FLOAT) {sort_direction} NULLS LAST"
+                else:
+                    order_clause = f"{field_expr} {sort_direction} NULLS LAST"
+
+        # 查询数据（带分页和排序），添加回测指标
         offset = (page - 1) * page_size
         data_query = f"""
             SELECT
@@ -255,7 +284,7 @@ async def list_models(
                 train_completed_at, rank_score, created_at
             FROM experiments
             WHERE {where_clause}
-            ORDER BY train_completed_at DESC NULLS LAST
+            ORDER BY {order_clause}
             LIMIT %s OFFSET %s
         """
         params.extend([page_size, offset])
