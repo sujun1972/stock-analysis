@@ -5,6 +5,7 @@
 
 'use client';
 
+import { memo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DropdownMenu,
@@ -29,7 +30,7 @@ interface ModelActionsMenuProps {
   align?: 'start' | 'center' | 'end';
 }
 
-export default function ModelActionsMenu({
+const ModelActionsMenu = memo(function ModelActionsMenu({
   model,
   onDelete,
   triggerButton,
@@ -120,4 +121,6 @@ export default function ModelActionsMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   );
-}
+});
+
+export default ModelActionsMenu;

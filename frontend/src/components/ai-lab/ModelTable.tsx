@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -50,6 +50,112 @@ interface ModelTableProps {
   showTrainingDialog: boolean;
   setShowTrainingDialog: (show: boolean) => void;
 }
+
+// Memoized 表格行组件，避免不必要的重渲染
+const ModelRow = memo(function ModelRow({
+  model,
+  isSelected,
+  onToggleSelect,
+  onDelete
+}: {
+  model: any;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  onDelete: (model: any) => void;
+}) {
+  return (
+    <TableRow>
+      <TableCell>
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => onToggleSelect(String(model.id))}
+          aria-label={`选择模型 ${model.symbol}`}
+        />
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-col gap-1.5">
+          <div className="font-medium">{model.symbol}</div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
+                model.model_type === 'lightgbm'
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+              }`}
+            >
+              {model.model_type.toUpperCase()}
+            </span>
+            {model.source === 'auto_experiment' ? (
+              <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
+                <Sparkles className="h-3 w-3" />
+                自动实验
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
+                <User className="h-3 w-3" />
+                手动训练
+              </Badge>
+            )}
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="text-right text-sm">{model.target_period}天</TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {model.metrics?.rmse?.toFixed(4) || '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {model.metrics?.r2?.toFixed(4) || '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm text-blue-600 dark:text-blue-400">
+        {model.metrics?.ic?.toFixed(4) || '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm text-blue-600 dark:text-blue-400">
+        {model.metrics?.rank_ic?.toFixed(4) || '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm text-purple-600 dark:text-purple-400">
+        {model.backtest_metrics?.rank_score?.toFixed(2) || '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {model.backtest_metrics?.annual_return !== null && model.backtest_metrics?.annual_return !== undefined ? (
+          <span className={model.backtest_metrics.annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+            {model.backtest_metrics.annual_return.toFixed(2)}%
+          </span>
+        ) : '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {model.backtest_metrics?.sharpe_ratio !== null && model.backtest_metrics?.sharpe_ratio !== undefined ? model.backtest_metrics.sharpe_ratio.toFixed(2) : '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
+        {model.backtest_metrics?.max_drawdown !== null && model.backtest_metrics?.max_drawdown !== undefined ? `${model.backtest_metrics.max_drawdown.toFixed(2)}%` : '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {model.backtest_metrics?.win_rate !== null && model.backtest_metrics?.win_rate !== undefined ? `${(model.backtest_metrics.win_rate * 100).toFixed(2)}%` : '-'}
+      </TableCell>
+      <TableCell className="text-sm text-muted-foreground">
+        {model.trained_at ? new Date(model.trained_at).toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }) : '-'}
+      </TableCell>
+      <TableCell className="text-right">
+        <ModelActionsMenu
+          model={{
+            id: model.id,
+            experiment_id: model.id,
+            model_id: model.model_id,
+            symbol: model.symbol,
+            config: model.config
+          }}
+          onDelete={onDelete}
+        />
+      </TableCell>
+    </TableRow>
+  );
+});
+
+ModelRow.displayName = 'ModelRow';
 
 export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }: ModelTableProps) {
   const { setModels, setSelectedModel, currentTask, setCurrentTask } = useMLStore();
@@ -146,8 +252,8 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   }, [debouncedSearchQuery, modelTypeFilter, sourceFilter, sortBy, sortOrder]);
 
 
-  // 排序处理函数
-  const handleSort = (field: string) => {
+  // 排序处理函数 - 使用 useCallback 优化
+  const handleSort = useCallback((field: string) => {
     if (sortBy === field) {
       // 同一字段，切换排序顺序
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -156,10 +262,10 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
       setSortBy(field);
       setSortOrder('desc');
     }
-  };
+  }, [sortBy, sortOrder]);
 
-  // 获取排序图标
-  const getSortIcon = (field: string) => {
+  // 获取排序图标 - 使用 useCallback 优化
+  const getSortIcon = useCallback((field: string) => {
     if (sortBy !== field) {
       return <ArrowUpDown className="h-4 w-4 ml-1 text-gray-400" />;
     }
@@ -168,19 +274,19 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     ) : (
       <ArrowDown className="h-4 w-4 ml-1 text-blue-600" />
     );
-  };
+  }, [sortBy, sortOrder]);
 
-  // 批量选择辅助函数
-  const toggleSelectAll = () => {
+  // 批量选择辅助函数 - 使用 useCallback 优化
+  const toggleSelectAll = useCallback(() => {
     if (selectedModels.size === models.length && models.length > 0) {
       setSelectedModels(new Set());
     } else {
       // 使用实验ID（唯一标识符）而不是model_id
       setSelectedModels(new Set(models.map((m: any) => String(m.id))));
     }
-  };
+  }, [selectedModels.size, models]);
 
-  const toggleSelectModel = (id: string) => {
+  const toggleSelectModel = useCallback((id: string) => {
     const newSelected = new Set(selectedModels);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -188,7 +294,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
       newSelected.add(id);
     }
     setSelectedModels(newSelected);
-  };
+  }, [selectedModels]);
 
   // 批量删除
   const handleBatchDelete = async () => {
@@ -224,10 +330,10 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   };
 
 
-  // 删除模型
-  const handleDeleteClick = (model: any) => {
+  // 删除模型 - 使用 useCallback 优化
+  const handleDeleteClick = useCallback((model: any) => {
     setModelToDelete(model);
-  };
+  }, []);
 
   const confirmDelete = async () => {
     if (!modelToDelete) return;
@@ -553,94 +659,13 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                   </TableRow>
                 ) : (
                   models.map((model: any) => (
-                    <TableRow key={model.id || model.model_id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedModels.has(String(model.id))}
-                          onCheckedChange={() => toggleSelectModel(String(model.id))}
-                          aria-label={`选择模型 ${model.symbol}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1.5">
-                          <div className="font-medium">{model.symbol}</div>
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
-                                model.model_type === 'lightgbm'
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                              }`}
-                            >
-                              {model.model_type.toUpperCase()}
-                            </span>
-                            {model.source === 'auto_experiment' ? (
-                              <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
-                                <Sparkles className="h-3 w-3" />
-                                自动实验
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
-                                <User className="h-3 w-3" />
-                                手动训练
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-sm">{model.target_period}天</TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {model.metrics?.rmse?.toFixed(4) || '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {model.metrics?.r2?.toFixed(4) || '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-blue-600 dark:text-blue-400">
-                        {model.metrics?.ic?.toFixed(4) || '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-blue-600 dark:text-blue-400">
-                        {model.metrics?.rank_ic?.toFixed(4) || '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-purple-600 dark:text-purple-400">
-                        {model.backtest_metrics?.rank_score?.toFixed(2) || '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {model.backtest_metrics?.annual_return !== null && model.backtest_metrics?.annual_return !== undefined ? (
-                          <span className={model.backtest_metrics.annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                            {model.backtest_metrics.annual_return.toFixed(2)}%
-                          </span>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {model.backtest_metrics?.sharpe_ratio !== null && model.backtest_metrics?.sharpe_ratio !== undefined ? model.backtest_metrics.sharpe_ratio.toFixed(2) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
-                        {model.backtest_metrics?.max_drawdown !== null && model.backtest_metrics?.max_drawdown !== undefined ? `${model.backtest_metrics.max_drawdown.toFixed(2)}%` : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {model.backtest_metrics?.win_rate !== null && model.backtest_metrics?.win_rate !== undefined ? `${(model.backtest_metrics.win_rate * 100).toFixed(2)}%` : '-'}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {model.trained_at ? new Date(model.trained_at).toLocaleString('zh-CN', {
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        }) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <ModelActionsMenu
-                          model={{
-                            id: model.id,
-                            experiment_id: model.id,
-                            model_id: model.model_id,
-                            symbol: model.symbol,
-                            config: model.config
-                          }}
-                          onDelete={handleDeleteClick}
-                        />
-                      </TableCell>
-                    </TableRow>
+                    <ModelRow
+                      key={model.id || model.model_id}
+                      model={model}
+                      isSelected={selectedModels.has(String(model.id))}
+                      onToggleSelect={toggleSelectModel}
+                      onDelete={handleDeleteClick}
+                    />
                   ))
                 )}
               </TableBody>

@@ -5,9 +5,10 @@
 
 'use client';
 
+import { memo } from 'react';
 import { useMLStore } from '@/store/mlStore';
 
-export default function TrainingMonitor() {
+const TrainingMonitor = memo(function TrainingMonitor() {
   const { currentTask } = useMLStore();
 
   if (!currentTask) return null;
@@ -107,4 +108,6 @@ export default function TrainingMonitor() {
       )}
     </div>
   );
-}
+});
+
+export default TrainingMonitor;

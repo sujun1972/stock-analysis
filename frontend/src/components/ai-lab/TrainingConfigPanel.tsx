@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +25,7 @@ interface TrainingConfigPanelProps {
   onTrainingStart?: () => void;
 }
 
-export default function TrainingConfigPanel({ isInDialog = false, onTrainingStart }: TrainingConfigPanelProps = {}) {
+const TrainingConfigPanel = memo(function TrainingConfigPanel({ isInDialog = false, onTrainingStart }: TrainingConfigPanelProps = {}) {
   const { config, setConfig, setCurrentTask, setShowTrainingMonitor } = useMLStore();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -285,4 +285,6 @@ export default function TrainingConfigPanel({ isInDialog = false, onTrainingStar
       </CardContent>
     </Card>
   );
-}
+});
+
+export default TrainingConfigPanel;
