@@ -21,6 +21,16 @@ from database.db_manager import DatabaseManager, get_database
 from features.technical_indicators import TechnicalIndicators
 from features.alpha_factors import AlphaFactors
 from features.feature_transformer import FeatureTransformer
+from exceptions import (
+    DataError,
+    DataNotFoundError,
+    FeatureComputationError,
+    FeatureCacheError
+)
+from utils.logger import get_logger
+
+# 配置日志
+logger = get_logger(__name__)
 
 
 class DataPipeline:
@@ -260,27 +270,58 @@ class DataPipeline:
     # ==================== 内部方法 ====================
 
     def _load_raw_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """从数据库读取原始数据"""
-        df = self.db.load_daily_data(symbol, start_date, end_date)
+        """
+        从数据库读取原始数据
 
-        if df is None or len(df) == 0:
-            raise ValueError(f"无法获取股票 {symbol} 的数据")
+        Args:
+            symbol: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
 
-        self.stats['raw_samples'] = len(df)
-        self.log(f"  原始数据: {len(df)} 条记录")
+        Returns:
+            原始数据 DataFrame
 
-        # 确保索引是日期
-        if not isinstance(df.index, pd.DatetimeIndex):
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'])
-                df = df.set_index('date')
-            else:
-                raise ValueError("数据缺少日期索引")
+        Raises:
+            DataNotFoundError: 无法获取数据
+            DataError: 数据格式错误
+        """
+        try:
+            df = self.db.load_daily_data(symbol, start_date, end_date)
 
-        # 排序
-        df = df.sort_index()
+            if df is None or len(df) == 0:
+                raise DataNotFoundError(
+                    f"无法获取股票数据",
+                    details={
+                        "symbol": symbol,
+                        "start_date": start_date,
+                        "end_date": end_date
+                    }
+                )
 
-        return df
+            self.stats['raw_samples'] = len(df)
+            self.log(f"  原始数据: {len(df)} 条记录")
+            logger.info(f"加载股票 {symbol} 数据: {len(df)} 条记录")
+
+            # 确保索引是日期
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'date' in df.columns:
+                    df['date'] = pd.to_datetime(df['date'])
+                    df = df.set_index('date')
+                else:
+                    raise DataError("数据缺少日期索引", details={"symbol": symbol})
+
+            # 排序
+            df = df.sort_index()
+
+            return df
+
+        except DataNotFoundError:
+            raise
+        except DataError:
+            raise
+        except Exception as e:
+            logger.error(f"加载数据失败: {symbol}, 错误: {e}")
+            raise DataError(f"加载数据失败: {e}", details={"symbol": symbol})
 
     def _calculate_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """计算技术指标"""
