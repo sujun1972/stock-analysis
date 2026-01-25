@@ -1,18 +1,16 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
-import StrategyParamsPanel from './StrategyParamsPanel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { DatePicker } from '@/components/ui/date-picker'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { format, subYears, parse } from 'date-fns'
-import { Settings } from 'lucide-react'
+import BasicConfigSection from './backtest/BasicConfigSection'
+import StrategySelector, { type Strategy } from './backtest/StrategySelector'
+import StrategyConfigDialog from './backtest/StrategyConfigDialog'
+import ErrorDisplay from './backtest/ErrorDisplay'
+import SubmitButton from './backtest/SubmitButton'
 
 interface BacktestPanelProps {
   onBacktestComplete?: (result: any) => void
@@ -27,13 +25,7 @@ interface BacktestPanelProps {
   } // 从回测结果中提取的配置信息，用于回填表单
 }
 
-interface Strategy {
-  id: string
-  name: string
-  description: string
-  version: string
-  parameter_count: number
-}
+// Strategy type is now imported from StrategySelector
 
 function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPanelProps) {
   const searchParams = useSearchParams()
@@ -249,8 +241,37 @@ function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPan
     return cleanCode
   }
 
+  // 处理策略选择
+  const handleStrategySelect = useCallback((strategyId: string) => {
+    setSelectedStrategyId(strategyId);
+  }, []);
+
+  // 打开策略配置对话框
+  const handleOpenConfig = useCallback((strategyId: string) => {
+    setDialogOpenStrategyId(strategyId);
+  }, []);
+
+  // 保存策略参数
+  const handleSaveStrategyParams = useCallback((params: Record<string, any>) => {
+    setStrategyParams(params);
+    setDialogOpenStrategyId(null);
+
+    const strategy = strategies.find(s => s.id === dialogOpenStrategyId);
+    if (strategy) {
+      toast({
+        title: '参数已保存',
+        description: `${strategy.name}的参数配置已保存`,
+      });
+    }
+  }, [dialogOpenStrategyId, strategies, toast]);
+
+  // 取消策略参数编辑
+  const handleCancelStrategyParams = useCallback(() => {
+    setDialogOpenStrategyId(null);
+  }, []);
+
   // 处理回测提交
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setProgress('正在初始化回测引擎...')
@@ -306,7 +327,7 @@ function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPan
       setIsLoading(false)
       setTimeout(() => setProgress(''), 3000)
     }
-  }
+  }, [symbols, startDate, endDate, initialCash, selectedStrategyId, strategyParams, onBacktestComplete, toast])
 
   return (
     <Card>
@@ -315,196 +336,45 @@ function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPan
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 基础配置 */}
-        <div className="space-y-4 pb-4 border-b">
-          {/* 股票代码 */}
-          <div className="space-y-2">
-            <Label htmlFor="symbols">股票代码</Label>
-            <Input
-              id="symbols"
-              type="text"
-              value={symbols}
-              onChange={(e) => setSymbols(e.target.value)}
-              placeholder="600000 或 000031,600519"
-              required
+          {/* 基础配置 */}
+          <BasicConfigSection
+            symbols={symbols}
+            onSymbolsChange={setSymbols}
+            startDate={startDate}
+            onStartDateChange={setStartDate}
+            endDate={endDate}
+            onEndDateChange={setEndDate}
+            initialCash={initialCash}
+            onInitialCashChange={setInitialCash}
+          />
+
+          {/* 策略选择 */}
+          <StrategySelector
+            strategies={strategies}
+            selectedStrategyId={selectedStrategyId}
+            onStrategySelect={handleStrategySelect}
+            onOpenConfig={handleOpenConfig}
+          />
+
+          {/* 策略参数配置对话框 */}
+          {dialogOpenStrategyId && (
+            <StrategyConfigDialog
+              open={true}
+              onOpenChange={(open) => setDialogOpenStrategyId(open ? dialogOpenStrategyId : null)}
+              strategyId={dialogOpenStrategyId}
+              strategyName={strategies.find(s => s.id === dialogOpenStrategyId)?.name || ''}
+              strategyParams={strategyParams}
+              onParamsChange={setStrategyParams}
+              onSave={handleSaveStrategyParams}
+              onCancel={handleCancelStrategyParams}
             />
-            <p className="text-xs text-muted-foreground">
-              支持单股或多股（逗号分隔），无需添加交易所后缀
-            </p>
-          </div>
-
-          {/* 日期范围 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>开始日期</Label>
-              <DatePicker
-                date={startDate}
-                onDateChange={(date) => date && setStartDate(date)}
-                placeholder="选择开始日期"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>结束日期</Label>
-              <DatePicker
-                date={endDate}
-                onDateChange={(date) => date && setEndDate(date)}
-                placeholder="选择结束日期"
-              />
-            </div>
-          </div>
-
-          {/* 初始资金 */}
-          <div className="space-y-2">
-            <Label htmlFor="initialCash">
-              初始资金: ¥{initialCash.toLocaleString()}
-            </Label>
-            <input
-              id="initialCash"
-              type="range"
-              min="100000"
-              max="10000000"
-              step="100000"
-              value={initialCash}
-              onChange={(e) => setInitialCash(Number(e.target.value))}
-              className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>10万</span>
-              <span>1000万</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 策略选择 */}
-        <div className="space-y-3">
-          <Label>回测策略</Label>
-
-          <div className="space-y-2">
-            {strategies.map(strategy => (
-              <div
-                key={strategy.id}
-                className={`p-3 border rounded-lg transition-colors ${
-                  selectedStrategyId === strategy.id
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-                }`}
-              >
-                {/* 第一行: 单选框 + 名称 + 版本号 + 设置按钮 */}
-                <div className="flex items-center justify-between gap-2">
-                  <div
-                    className="flex items-center gap-2 flex-1 cursor-pointer"
-                    onClick={() => setSelectedStrategyId(strategy.id)}
-                  >
-                    <input
-                      type="radio"
-                      checked={selectedStrategyId === strategy.id}
-                      onChange={() => setSelectedStrategyId(strategy.id)}
-                      className="text-blue-600"
-                    />
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {strategy.name}
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      v{strategy.version}
-                    </span>
-                  </div>
-
-                  {/* 参数配置按钮 - 在第一行右侧 */}
-                  {strategy.parameter_count > 0 && (
-                    <Dialog
-                      open={dialogOpenStrategyId === strategy.id}
-                      onOpenChange={(open) => setDialogOpenStrategyId(open ? strategy.id : null)}
-                    >
-                      <DialogTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setSelectedStrategyId(strategy.id)
-                          }}
-                        >
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-                        <DialogHeader>
-                          <DialogTitle className="text-base sm:text-lg">
-                            {strategy.name} - 参数配置
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="flex-1 overflow-y-auto py-2 sm:py-4 px-1">
-                          <StrategyParamsPanel
-                            strategyId={strategy.id}
-                            onParamsChange={setStrategyParams}
-                            isInDialog={true}
-                            // 直接传递 strategyParams，让 StrategyParamsPanel 自动筛选相关参数
-                            // 这避免了因异步状态更新导致的参数丢失问题
-                            initialParams={strategyParams}
-                            onSave={(params) => {
-                              setStrategyParams(params)
-                              setSelectedStrategyId(strategy.id)
-                              setDialogOpenStrategyId(null) // 关闭对话框
-                              toast({
-                                title: '参数已保存',
-                                description: `${strategy.name}的参数配置已保存`,
-                              })
-                            }}
-                            onCancel={() => {
-                              setDialogOpenStrategyId(null) // 关闭对话框
-                            }}
-                          />
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                </div>
-
-                {/* 第二行: 参数数量标签 */}
-                {strategy.parameter_count > 0 && (
-                  <div className="ml-6">
-                    <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-xs text-gray-600 dark:text-gray-400 rounded">
-                      {strategy.parameter_count} 个参数
-                    </span>
-                  </div>
-                )}
-
-                {/* 第三行: 描述信息 */}
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 ml-6">
-                  {strategy.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 错误提示 */}
-        {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <p className="text-sm text-destructive">{error}</p>
-          </div>
-        )}
-
-        {/* 运行按钮 */}
-        <Button
-          type="submit"
-          disabled={isLoading}
-          className="w-full"
-        >
-          {isLoading ? (
-            <span className="flex items-center justify-center">
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {progress || '运行中...'}
-            </span>
-          ) : (
-            '运行回测'
           )}
-        </Button>
+
+          {/* 错误提示 */}
+          <ErrorDisplay error={error} />
+
+          {/* 运行按钮 */}
+          <SubmitButton isLoading={isLoading} progress={progress} />
         </form>
       </CardContent>
     </Card>

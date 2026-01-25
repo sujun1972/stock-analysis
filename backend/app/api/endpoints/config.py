@@ -9,6 +9,7 @@ from typing import Optional, Dict
 from loguru import logger
 
 from app.services.config_service import ConfigService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
@@ -22,6 +23,7 @@ class DataSourceConfigRequest(BaseModel):
 
 
 @router.get("/source")
+@handle_api_errors
 async def get_data_source_config():
     """
     获取数据源配置
@@ -29,21 +31,18 @@ async def get_data_source_config():
     Returns:
         当前数据源配置信息
     """
-    try:
-        config_service = ConfigService()
-        config = await config_service.get_data_source_config()
+    config_service = ConfigService()
+    config = await config_service.get_data_source_config()
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": config
-        }
-    except Exception as e:
-        logger.error(f"获取数据源配置失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "code": 200,
+        "message": "success",
+        "data": config
+    }
 
 
 @router.post("/source")
+@handle_api_errors
 async def update_data_source_config(request: DataSourceConfigRequest):
     """
     更新数据源配置
@@ -58,31 +57,25 @@ async def update_data_source_config(request: DataSourceConfigRequest):
     Returns:
         更新后的配置信息
     """
-    try:
-        config_service = ConfigService()
+    config_service = ConfigService()
 
-        # 更新数据源配置
-        config = await config_service.update_data_source(
-            data_source=request.data_source,
-            minute_data_source=request.minute_data_source,
-            realtime_data_source=request.realtime_data_source,
-            tushare_token=request.tushare_token
-        )
+    # 更新数据源配置
+    config = await config_service.update_data_source(
+        data_source=request.data_source,
+        minute_data_source=request.minute_data_source,
+        realtime_data_source=request.realtime_data_source,
+        tushare_token=request.tushare_token
+    )
 
-        return {
-            "code": 200,
-            "message": f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}",
-            "data": config
-        }
-    except ValueError as e:
-        logger.error(f"数据源配置错误: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"更新数据源配置失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "code": 200,
+        "message": f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}",
+        "data": config
+    }
 
 
 @router.get("/all")
+@handle_api_errors
 async def get_all_configs():
     """
     获取所有系统配置
@@ -90,21 +83,18 @@ async def get_all_configs():
     Returns:
         所有配置信息的字典
     """
-    try:
-        config_service = ConfigService()
-        configs = await config_service.get_all_configs()
+    config_service = ConfigService()
+    configs = await config_service.get_all_configs()
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": configs
-        }
-    except Exception as e:
-        logger.error(f"获取所有配置失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "code": 200,
+        "message": "success",
+        "data": configs
+    }
 
 
 @router.get("/sync-status")
+@handle_api_errors
 async def get_sync_status():
     """
     获取同步状态
@@ -112,15 +102,11 @@ async def get_sync_status():
     Returns:
         当前同步状态信息
     """
-    try:
-        config_service = ConfigService()
-        status = await config_service.get_sync_status()
+    config_service = ConfigService()
+    status = await config_service.get_sync_status()
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": status
-        }
-    except Exception as e:
-        logger.error(f"获取同步状态失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "code": 200,
+        "message": "success",
+        "data": status
+    }
