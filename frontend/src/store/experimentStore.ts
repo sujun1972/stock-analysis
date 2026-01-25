@@ -2,48 +2,120 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
 export interface ExperimentBatch {
+  // 基本标识 (来自数据库的 id 字段，API 返回时映射为 batch_id)
+  id?: number
   batch_id: number
   batch_name: string
   description?: string
-  strategy: string
-  status: string
+
+  // 实验策略
+  strategy: 'grid' | 'random' | 'bayesian'
+  param_space?: Record<string, any>
+
+  // 统计信息
   total_experiments: number
   completed_experiments: number
   failed_experiments: number
   running_experiments: number
   success_rate_pct: number
+
+  // 状态
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+
+  // 配置
+  config?: Record<string, any>
+
+  // 时间戳
   created_at: string
   started_at?: string
   completed_at?: string
   duration_hours?: number
+
+  // 性能统计
   avg_rank_score?: number
   max_rank_score?: number
   top_model_id?: string
+
+  // 元数据
+  created_by?: string
+  tags?: string[]
 }
 
 export interface Experiment {
+  // 基本标识
   id: number
+  batch_id: number
   experiment_name: string
+  experiment_hash?: string
+
+  // 训练配置
+  config: Record<string, any>
+
+  // 训练结果
   model_id?: string
-  config: any
-  train_metrics?: any
-  backtest_metrics?: any
+  model_path?: string
+  train_metrics?: Record<string, any>
+  feature_importance?: Record<string, any>
+
+  // 回测结果
+  backtest_status?: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+  backtest_metrics?: {
+    annual_return?: number
+    sharpe_ratio?: number
+    max_drawdown?: number
+    win_rate?: number
+    calmar_ratio?: number
+    profit_factor?: number
+    [key: string]: any
+  }
+  backtest_trades?: any
+
+  // 综合评分
   rank_score?: number
   rank_position?: number
-  status: string
+
+  // 状态和错误
+  status: 'pending' | 'training' | 'backtesting' | 'completed' | 'failed' | 'skipped'
   error_message?: string
+  retry_count?: number
+
+  // 资源消耗
+  train_duration_seconds?: number
+  backtest_duration_seconds?: number
+  total_duration_seconds?: number
+
+  // 时间戳
+  created_at?: string
+  train_started_at?: string
+  train_completed_at?: string
+  backtest_started_at?: string
+  backtest_completed_at?: string
+
+  // 元数据
+  notes?: string
 }
 
 export interface TopModel {
+  // 实验标识
   experiment_id: number
   model_id: string
+
+  // 综合评分
   rank_score?: number
+
+  // 回测指标
   annual_return?: number
   sharpe_ratio?: number
   max_drawdown?: number
   win_rate?: number
   calmar_ratio?: number
-  config: any
+  profit_factor?: number
+
+  // 训练配置
+  config: Record<string, any>
+
+  // 训练指标 (可选，用于详细分析)
+  train_metrics?: Record<string, any>
 }
 
 export interface BatchConfig {
