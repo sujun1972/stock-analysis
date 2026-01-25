@@ -63,8 +63,8 @@ export interface MLTrainingTask {
 }
 
 export interface MLModel {
-  id: number; // 实验ID（主键，唯一标识）
-  model_id: string; // 模型名称（可能重复）
+  id: number;
+  model_id: string;
   symbol: string;
   model_type: 'lightgbm' | 'gru';
   target_period: number;
@@ -75,6 +75,15 @@ export interface MLModel {
   config: MLTrainingConfig;
   source: 'auto_experiment' | 'manual_training';
   has_metrics: boolean;
+
+  backtest_metrics?: {
+    rank_score?: number | null;
+    annual_return?: number | null;
+    sharpe_ratio?: number | null;
+    max_drawdown?: number | null;
+    win_rate?: number | null;
+    calmar_ratio?: number | null;
+  };
 }
 
 export interface PredictionResult {

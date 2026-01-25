@@ -261,14 +261,7 @@ function ModelDetailsPageContent() {
         training_metrics: taskDetail.metrics || {},
 
         // 回测指标（如果有）
-        backtest_metrics: selectedModelData ? {
-          rank_score: (selectedModelData as any).rank_score,
-          annual_return: (selectedModelData as any).annual_return,
-          sharpe_ratio: (selectedModelData as any).sharpe_ratio,
-          max_drawdown: (selectedModelData as any).max_drawdown,
-          win_rate: (selectedModelData as any).win_rate,
-          calmar_ratio: (selectedModelData as any).calmar_ratio,
-        } : null,
+        backtest_metrics: selectedModelData?.backtest_metrics || null,
 
         // 特征重要性
         feature_importance: taskDetail.feature_importance,
@@ -479,12 +472,12 @@ function ModelDetailsPageContent() {
           {/* 回测指标 */}
           {(() => {
             const selectedModelData = models.find(m => String(m.id) === selectedModelId);
-            const hasBacktestMetrics = selectedModelData && (
-              (selectedModelData as any).rank_score !== null ||
-              (selectedModelData as any).annual_return !== null ||
-              (selectedModelData as any).sharpe_ratio !== null ||
-              (selectedModelData as any).max_drawdown !== null ||
-              (selectedModelData as any).win_rate !== null
+            const hasBacktestMetrics = selectedModelData?.backtest_metrics && (
+              selectedModelData.backtest_metrics.rank_score !== null ||
+              selectedModelData.backtest_metrics.annual_return !== null ||
+              selectedModelData.backtest_metrics.sharpe_ratio !== null ||
+              selectedModelData.backtest_metrics.max_drawdown !== null ||
+              selectedModelData.backtest_metrics.win_rate !== null
             );
 
             return hasBacktestMetrics ? (
@@ -495,47 +488,47 @@ function ModelDetailsPageContent() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    {(selectedModelData as any).rank_score !== null && (selectedModelData as any).rank_score !== undefined && (
+                    {selectedModelData.backtest_metrics?.rank_score !== null && selectedModelData.backtest_metrics?.rank_score !== undefined && (
                       <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
                         <div className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">综合评分</div>
                         <div className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">
-                          {(selectedModelData as any).rank_score.toFixed(2)}
+                          {selectedModelData.backtest_metrics.rank_score.toFixed(2)}
                         </div>
                       </div>
                     )}
-                    {(selectedModelData as any).annual_return !== null && (selectedModelData as any).annual_return !== undefined && (
+                    {selectedModelData.backtest_metrics?.annual_return !== null && selectedModelData.backtest_metrics?.annual_return !== undefined && (
                       <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                         <div className="text-xs text-green-600 dark:text-green-400 mb-1">年化收益</div>
                         <div className={`text-2xl font-bold ${
-                          (selectedModelData as any).annual_return >= 0
+                          selectedModelData.backtest_metrics.annual_return >= 0
                             ? 'text-green-600 dark:text-green-400'
                             : 'text-red-600 dark:text-red-400'
                         }`}>
-                          {(selectedModelData as any).annual_return.toFixed(2)}%
+                          {selectedModelData.backtest_metrics.annual_return.toFixed(2)}%
                         </div>
                       </div>
                     )}
-                    {(selectedModelData as any).sharpe_ratio !== null && (selectedModelData as any).sharpe_ratio !== undefined && (
+                    {selectedModelData.backtest_metrics?.sharpe_ratio !== null && selectedModelData.backtest_metrics?.sharpe_ratio !== undefined && (
                       <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
                         <div className="text-xs text-amber-600 dark:text-amber-400 mb-1">夏普比率</div>
                         <div className="text-2xl font-bold text-amber-900 dark:text-amber-100">
-                          {(selectedModelData as any).sharpe_ratio.toFixed(2)}
+                          {selectedModelData.backtest_metrics.sharpe_ratio.toFixed(2)}
                         </div>
                       </div>
                     )}
-                    {(selectedModelData as any).max_drawdown !== null && (selectedModelData as any).max_drawdown !== undefined && (
+                    {selectedModelData.backtest_metrics?.max_drawdown !== null && selectedModelData.backtest_metrics?.max_drawdown !== undefined && (
                       <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
                         <div className="text-xs text-red-600 dark:text-red-400 mb-1">最大回撤</div>
                         <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                          {(selectedModelData as any).max_drawdown.toFixed(2)}%
+                          {selectedModelData.backtest_metrics.max_drawdown.toFixed(2)}%
                         </div>
                       </div>
                     )}
-                    {(selectedModelData as any).win_rate !== null && (selectedModelData as any).win_rate !== undefined && (
+                    {selectedModelData.backtest_metrics?.win_rate !== null && selectedModelData.backtest_metrics?.win_rate !== undefined && (
                       <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                         <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">胜率</div>
                         <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                          {((selectedModelData as any).win_rate * 100).toFixed(2)}%
+                          {(selectedModelData.backtest_metrics.win_rate * 100).toFixed(2)}%
                         </div>
                       </div>
                     )}

@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info, Plus, Sparkles, User, ChevronLeft, ChevronRight, Rocket, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useModels, useDeleteModel } from '@/hooks/useModels';
 import TrainingConfigPanel from './TrainingConfigPanel';
 import TrainingMonitor from './TrainingMonitor';
 import ModelActionsMenu from './ModelActionsMenu';
@@ -51,10 +52,9 @@ interface ModelTableProps {
 }
 
 export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }: ModelTableProps) {
-  const { models, setModels, setSelectedModel, currentTask, setCurrentTask } = useMLStore();
+  const { setModels, setSelectedModel, currentTask, setCurrentTask } = useMLStore();
   const router = useRouter();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
   const [modelToDelete, setModelToDelete] = useState<any | null>(null);
 
   // 筛选和搜索状态
@@ -66,8 +66,6 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalModels, setTotalModels] = useState(0);
 
   // 排序状态
   const [sortBy, setSortBy] = useState<string | null>(null);
@@ -76,6 +74,23 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   // 初始加载状态（用于判断是否显示引导页面）
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [hasAnyModels, setHasAnyModels] = useState(true);
+
+  // 使用 React Query hooks
+  const { data: modelsData, isLoading, refetch } = useModels({
+    skip: (currentPage - 1) * pageSize,
+    limit: pageSize,
+    model_type: modelTypeFilter !== 'all' ? modelTypeFilter : undefined,
+    source: sourceFilter !== 'all' ? sourceFilter : undefined,
+    search: debouncedSearchQuery || undefined,
+    sort_by: sortBy || undefined,
+    sort_order: sortOrder,
+  });
+
+  const deleteModelMutation = useDeleteModel();
+
+  const models = modelsData?.models || [];
+  const totalPages = modelsData?.total_pages || 1;
+  const totalModels = modelsData?.total || 0;
 
   // 训练进度模态窗口状态
   const [showTrainingMonitor, setShowTrainingMonitor] = useState(false);
@@ -103,55 +118,18 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     }
   };
 
-  // 加载模型列表
-  const loadModels = async (page: number = 1) => {
-    setLoading(true);
-    try {
-      const params: any = {
-        page,
-        page_size: pageSize
-      };
-
-      // 添加筛选条件（使用防抖后的搜索词）
-      if (debouncedSearchQuery) {
-        params.symbol = debouncedSearchQuery;
-      }
-      if (modelTypeFilter !== 'all') {
-        params.model_type = modelTypeFilter;
-      }
-      if (sourceFilter !== 'all') {
-        params.source = sourceFilter;
-      }
-
-      // 添加排序参数
-      if (sortBy) {
-        params.sort_by = sortBy;
-        params.sort_order = sortOrder;
-      }
-
-      const response = await axios.get(`${API_BASE}/ml/models`, { params });
-      setModels(response.data.models || []);
-      setTotalPages(response.data.total_pages || 1);
-      setTotalModels(response.data.total || 0);
-      setCurrentPage(response.data.page || 1);
+  // 更新 Zustand store 和初始加载状态
+  useEffect(() => {
+    if (modelsData) {
+      setModels(modelsData.models || []);
 
       // 判断是否有任何模型（在初始加载且无筛选条件时）
       if (isInitialLoad && !debouncedSearchQuery && modelTypeFilter === 'all' && sourceFilter === 'all') {
-        setHasAnyModels(response.data.total > 0);
+        setHasAnyModels(modelsData.total > 0);
         setIsInitialLoad(false);
       }
-    } catch (error) {
-      console.error('加载模型列表失败:', error);
-    } finally {
-      setLoading(false);
     }
-  };
-
-  // 初始加载
-  useEffect(() => {
-    loadModels(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [modelsData, isInitialLoad, debouncedSearchQuery, modelTypeFilter, sourceFilter, setModels]);
 
   // 搜索词防抖处理（200ms延迟）
   useEffect(() => {
@@ -162,11 +140,9 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // 筛选条件或排序变化时重置到第一页（使用防抖后的搜索词）
+  // 筛选条件或排序变化时重置到第一页
   useEffect(() => {
     setCurrentPage(1);
-    loadModels(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery, modelTypeFilter, sourceFilter, sortBy, sortOrder]);
 
 
@@ -200,7 +176,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
       setSelectedModels(new Set());
     } else {
       // 使用实验ID（唯一标识符）而不是model_id
-      setSelectedModels(new Set(models.map(m => String(m.id))));
+      setSelectedModels(new Set(models.map((m: any) => String(m.id))));
     }
   };
 
@@ -219,11 +195,11 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     try {
       // 将选中的实验ID转换为实验记录，以便删除
       const selectedIds = Array.from(selectedModels);
-      const selectedExperiments = models.filter(m => selectedIds.includes(String(m.id)));
+      const selectedExperiments = models.filter((m: any) => selectedIds.includes(String(m.id)));
 
       // 批量删除所有选中的实验（使用实验ID）
       await Promise.all(
-        selectedExperiments.map(exp =>
+        selectedExperiments.map((exp: any) =>
           axios.delete(`${API_BASE}/experiment/${exp.id}`)
         )
       );
@@ -236,7 +212,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
       // 清空选择并重新加载列表
       setSelectedModels(new Set());
       setShowBatchDeleteDialog(false);
-      loadModels(currentPage);
+      refetch();
     } catch (error: any) {
       console.error('批量删除失败:', error);
       toast({
@@ -257,16 +233,13 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     if (!modelToDelete) return;
 
     try {
-      // 使用实验ID删除实验记录（与批量删除保持一致）
-      await axios.delete(`${API_BASE}/experiment/${modelToDelete.id}`);
+      await deleteModelMutation.mutateAsync(modelToDelete.id);
 
       toast({
         title: '删除成功',
         description: `模型 ${modelToDelete.symbol} 已删除`,
       });
 
-      // 重新加载列表
-      loadModels(currentPage);
       setModelToDelete(null);
     } catch (error: any) {
       console.error('删除模型失败:', error);
@@ -296,7 +269,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
         setHasAnyModels(true);
 
         // 静默刷新模型列表
-        loadModels(currentPage);
+        refetch();
 
         // 只在任务ID变化时显示成功提示（避免页面导航时重复显示）
         const lastProcessedId = getLastProcessedTaskId();
@@ -395,8 +368,8 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
               </Select>
 
               {/* 刷新按钮 */}
-              <Button variant="outline" size="icon" onClick={() => loadModels(currentPage)} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
@@ -493,7 +466,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {isLoading ? (
                   // 加载中状态
                   <TableRow>
                     <TableCell colSpan={15} className="text-center py-8">
@@ -579,7 +552,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                     </TableCell>
                   </TableRow>
                 ) : (
-                  models.map((model) => (
+                  models.map((model: any) => (
                     <TableRow key={model.id || model.model_id}>
                       <TableCell>
                         <Checkbox
@@ -629,23 +602,23 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                         {model.metrics?.rank_ic?.toFixed(4) || '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-purple-600 dark:text-purple-400">
-                        {(model as any).rank_score?.toFixed(2) || '-'}
+                        {model.backtest_metrics?.rank_score?.toFixed(2) || '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {(model as any).annual_return !== null && (model as any).annual_return !== undefined ? (
-                          <span className={(model as any).annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                            {(model as any).annual_return.toFixed(2)}%
+                        {model.backtest_metrics?.annual_return !== null && model.backtest_metrics?.annual_return !== undefined ? (
+                          <span className={model.backtest_metrics.annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                            {model.backtest_metrics.annual_return.toFixed(2)}%
                           </span>
                         ) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {(model as any).sharpe_ratio !== null && (model as any).sharpe_ratio !== undefined ? (model as any).sharpe_ratio.toFixed(2) : '-'}
+                        {model.backtest_metrics?.sharpe_ratio !== null && model.backtest_metrics?.sharpe_ratio !== undefined ? model.backtest_metrics.sharpe_ratio.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
-                        {(model as any).max_drawdown !== null && (model as any).max_drawdown !== undefined ? `${(model as any).max_drawdown.toFixed(2)}%` : '-'}
+                        {model.backtest_metrics?.max_drawdown !== null && model.backtest_metrics?.max_drawdown !== undefined ? `${model.backtest_metrics.max_drawdown.toFixed(2)}%` : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {(model as any).win_rate !== null && (model as any).win_rate !== undefined ? `${((model as any).win_rate * 100).toFixed(2)}%` : '-'}
+                        {model.backtest_metrics?.win_rate !== null && model.backtest_metrics?.win_rate !== undefined ? `${(model.backtest_metrics.win_rate * 100).toFixed(2)}%` : '-'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {model.trained_at ? new Date(model.trained_at).toLocaleString('zh-CN', {
@@ -684,8 +657,8 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => loadModels(currentPage - 1)}
-                  disabled={currentPage <= 1 || loading}
+                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  disabled={currentPage <= 1 || isLoading}
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   上一页
@@ -693,8 +666,8 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => loadModels(currentPage + 1)}
-                  disabled={currentPage >= totalPages || loading}
+                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  disabled={currentPage >= totalPages || isLoading}
                 >
                   下一页
                   <ChevronRight className="h-4 w-4 ml-1" />
