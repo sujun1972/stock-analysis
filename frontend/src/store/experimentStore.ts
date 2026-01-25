@@ -47,6 +47,8 @@ export interface TopModel {
   annual_return?: number
   sharpe_ratio?: number
   max_drawdown?: number
+  win_rate?: number
+  calmar_ratio?: number
   config: any
 }
 

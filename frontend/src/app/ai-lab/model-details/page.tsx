@@ -94,6 +94,9 @@ function ModelDetailsPageContent() {
         model_path: experiment.model_path,
         started_at: experiment.train_started_at,
         completed_at: experiment.train_completed_at,
+        created_at: experiment.created_at,
+        progress: 100, // 已完成的模型进度为100%
+        current_step: experiment.status === 'completed' ? '训练完成' : experiment.status,
         error_message: experiment.error_message,
       };
 
@@ -125,7 +128,8 @@ function ModelDetailsPageContent() {
   // 运行预测
   const handlePredict = () => {
     if (selectedModelId) {
-      router.push(`/ai-lab/prediction?modelId=${selectedModelId}`);
+      // 使用 experimentId 而不是 modelId
+      router.push(`/ai-lab/prediction?experimentId=${selectedModelId}`);
     }
   };
 
@@ -133,7 +137,8 @@ function ModelDetailsPageContent() {
   const handleQuickBacktest = () => {
     if (!taskDetail) return;
 
-    const model = models.find(m => m.model_id === selectedModelId);
+    // 使用 experiment ID 查找模型
+    const model = models.find(m => String(m.id) === selectedModelId);
     if (!model) return;
 
     // 构建回测配置

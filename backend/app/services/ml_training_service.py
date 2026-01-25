@@ -22,6 +22,9 @@ sys.path.insert(0, '/app/src')
 from src.data_pipeline import DataPipeline, get_full_training_data
 from src.models.model_trainer import ModelTrainer
 
+# 导入核心训练模块
+from app.services.core_training import CoreTrainingService
+
 
 def sanitize_float_values(data: Any) -> Any:
     """
@@ -154,6 +157,7 @@ class MLTrainingService:
     async def _run_training(self, task_id: str):
         """
         执行训练（内部方法）
+        使用统一的CoreTrainingService
 
         参数:
             task_id: 任务ID
@@ -162,166 +166,68 @@ class MLTrainingService:
         config = task['config']
 
         try:
-            # ======== 步骤1: 获取数据 ========
+            # ======== 步骤1: 数据准备 ========
             task['current_step'] = 'Fetching Data'
             task['progress'] = 10.0
             self._save_metadata()
 
-            logger.info(f"[{task_id}] 获取数据...")
+            logger.info(f"[{task_id}] 开始训练流程...")
 
-            # 使用DataPipeline获取数据
-            result = await asyncio.to_thread(
-                get_full_training_data,
-                symbol=config['symbol'],
-                start_date=config['start_date'],
-                end_date=config['end_date'],
-                target_period=config.get('target_period', 5),
-                train_ratio=config.get('train_ratio', 0.7),
-                valid_ratio=config.get('valid_ratio', 0.15),
-                scale_features=True,
-                balance_samples=config.get('balance_samples', False),
-                scaler_type=config.get('scaler_type', 'robust')
-            )
-
-            X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline = result
-
-            logger.info(f"[{task_id}] 数据获取完成: train={len(X_train)}, valid={len(X_valid)}, test={len(X_test)}")
-
-            # ======== 步骤2: 计算特征 ========
-            task['current_step'] = 'Calculating Features'
+            # ======== 步骤2: 训练模型（使用核心训练服务） ========
+            task['current_step'] = 'Training Model'
             task['progress'] = 30.0
             self._save_metadata()
 
-            # 如果指定了特征列表，则筛选
-            if config.get('selected_features'):
-                selected = config['selected_features']
-                X_train = X_train[selected]
-                X_valid = X_valid[selected]
-                X_test = X_test[selected]
-                logger.info(f"[{task_id}] 使用指定特征: {len(selected)} 个")
+            # 使用统一的核心训练服务
+            core_service = CoreTrainingService(models_dir=str(self.models_dir))
 
-            # ======== 步骤3: 训练模型 ========
-            task['current_step'] = 'Training Model'
-            task['progress'] = 50.0
-            self._save_metadata()
+            # 生成模型名称（使用task_id的前8位）
+            model_id = f"{config['symbol']}_{config['model_type']}_{task_id[:8]}"
 
-            logger.info(f"[{task_id}] 开始训练 {config['model_type']} 模型...")
-
-            # 创建训练器
-            model_params = config.get('model_params', {})
-            trainer = ModelTrainer(
-                model_type=config['model_type'],
-                model_params=model_params,
-                output_dir=str(self.models_dir)
+            # 调用核心训练服务
+            result = await core_service.train_model(
+                config=config,
+                model_id=model_id,
+                save_features=True,  # 手动训练需要保存特征用于特征快照
+                save_training_history=True,  # 保存训练历史（GRU损失曲线）
+                evaluate_on='test',  # 在测试集上评估
+                use_async=True  # 使用异步训练
             )
 
-            # 训练
-            if config['model_type'] == 'lightgbm':
-                await asyncio.to_thread(
-                    trainer.train,
-                    X_train, y_train,
-                    X_valid, y_valid,
-                    early_stopping_rounds=config.get('early_stopping_rounds', 50),
-                    verbose_eval=50
-                )
-            elif config['model_type'] == 'gru':
-                await asyncio.to_thread(
-                    trainer.train,
-                    X_train, y_train,
-                    X_valid, y_valid,
-                    seq_length=config.get('seq_length', 20),
-                    batch_size=config.get('batch_size', 64),
-                    epochs=config.get('epochs', 100),
-                    early_stopping_patience=10
-                )
-
-            # ======== 步骤4: 评估模型 ========
-            task['current_step'] = 'Evaluating Model'
-            task['progress'] = 80.0
-            self._save_metadata()
-
-            logger.info(f"[{task_id}] 评估模型...")
-
-            metrics = await asyncio.to_thread(
-                trainer.evaluate,
-                X_test, y_test,
-                dataset_name='test',
-                verbose=False
-            )
-
-            # ======== 步骤5: 保存模型 ========
+            # ======== 步骤3: 更新任务状态 ========
             task['current_step'] = 'Saving Model'
             task['progress'] = 90.0
             self._save_metadata()
 
-            logger.info(f"[{task_id}] 保存模型...")
-
-            model_name = f"{config['symbol']}_{config['model_type']}_{task_id[:8]}"
-            await asyncio.to_thread(
-                trainer.save_model,
-                model_name,
-                save_metrics=True
-            )
-
-            # 保存scaler
-            scaler_path = self.models_dir / f"{model_name}_scaler.pkl"
-            with open(scaler_path, 'wb') as f:
-                pickle.dump(pipeline.get_scaler(), f)
-
-            # 保存完整特征数据用于特征快照查看器
-            # 合并训练集、验证集、测试集以覆盖所有历史日期
-            X_all = pd.concat([X_train, X_valid, X_test]).sort_index()
-            y_all = pd.concat([y_train, y_valid, y_test]).sort_index()
-
-            features_path = self.models_dir / f"{model_name}_features.pkl"
-            with open(features_path, 'wb') as f:
-                pickle.dump({'X': X_all, 'y': y_all}, f)
-
-            logger.info(f"[{task_id}] 特征数据已保存: {len(X_all)} 条记录")
-
-            # 获取模型特定的可视化数据
-            feature_importance = None
-            training_history = None
-
-            if config['model_type'] == 'lightgbm' and hasattr(trainer.model, 'get_feature_importance'):
-                # LightGBM: 获取特征重要性
-                importance_df = trainer.model.get_feature_importance('gain', top_n=20)
-                feature_importance = dict(zip(
-                    importance_df['feature'].tolist(),
-                    importance_df['gain'].tolist()
-                ))
-            elif config['model_type'] == 'gru':
-                # GRU: 保存训练历史（损失曲线）
-                history = trainer.training_history
-                if history and 'train_loss' in history:
-                    training_history = {
-                        'train_loss': [float(loss) for loss in history['train_loss']],
-                        'valid_loss': [float(loss) for loss in history.get('valid_loss', [])]
-                    }
-
-            # ======== 完成 ========
-            # ======== 任务完成 ========
+            # ======== 步骤4: 任务完成 ========
             task['status'] = 'completed'
             task['progress'] = 100.0
             task['current_step'] = 'Finished'
             completed_at = datetime.now()
             task['completed_at'] = completed_at.isoformat()
+
             # 清理指标和特征重要性中的 NaN/Inf 值，避免 JSON 序列化错误
-            task['metrics'] = sanitize_float_values(metrics)
-            task['feature_importance'] = sanitize_float_values(feature_importance)
-            task['training_history'] = sanitize_float_values(training_history)
-            task['model_name'] = model_name  # 保存模型名称用于特征快照功能
-            task['model_path'] = str(self.models_dir / f"{model_name}.txt" if config['model_type'] == 'lightgbm' else self.models_dir / f"{model_name}.pth")
+            task['metrics'] = sanitize_float_values(result['metrics'])
+            task['feature_importance'] = sanitize_float_values(result['feature_importance'])
+            task['training_history'] = sanitize_float_values(result['training_history'])
+            task['model_name'] = result['model_name']
+            task['model_path'] = result['model_path']
 
             self._save_metadata()
 
             # 将模型信息写入数据库的 experiments 表
-            await self._save_to_database(task_id, model_name, metrics, feature_importance, completed_at)
+            await self._save_to_database(
+                task_id,
+                result['model_name'],
+                result['metrics'],
+                result['feature_importance'],
+                completed_at
+            )
 
-            logger.info(f"[{task_id}] 训练完成! IC={metrics.get('ic', 0):.4f}")
+            logger.info(f"[{task_id}] ✅ 训练完成! IC={result['metrics'].get('ic', 0):.4f}")
 
         except Exception as e:
-            logger.error(f"[{task_id}] 训练失败: {e}", exc_info=True)
+            logger.error(f"[{task_id}] ❌ 训练失败: {e}", exc_info=True)
 
             task['status'] = 'failed'
             task['current_step'] = 'Failed'

@@ -67,7 +67,8 @@ export interface MLTrainingTask {
 }
 
 export interface MLModel {
-  model_id: string;
+  id: number; // 实验ID（主键，唯一标识）
+  model_id: string; // 模型名称（可能重复）
   symbol: string;
   model_type: 'lightgbm' | 'gru';
   target_period: number;

@@ -246,12 +246,12 @@ async def list_models(
         total_pages = (total + page_size - 1) // page_size if total > 0 else 1
         page = max(1, min(page, total_pages))
 
-        # 查询数据（带分页）
+        # 查询数据（带分页），添加回测指标
         offset = (page - 1) * page_size
         data_query = f"""
             SELECT
                 id, batch_id, experiment_name, model_id, config,
-                train_metrics, feature_importance, model_path,
+                train_metrics, backtest_metrics, feature_importance, model_path,
                 train_completed_at, rank_score, created_at
             FROM experiments
             WHERE {where_clause}
@@ -264,7 +264,7 @@ async def list_models(
 
         models = []
         for row in results:
-            exp_id, batch_id, exp_name, model_id, config, train_metrics, feature_importance, model_path, trained_at, rank_score, created_at = row
+            exp_id, batch_id, exp_name, model_id, config, train_metrics, backtest_metrics, feature_importance, model_path, trained_at, rank_score, created_at = row
 
             # 判断来源
             is_manual = batch_id is None
@@ -287,6 +287,18 @@ async def list_models(
                 })
                 has_metrics = True
 
+            # 提取并扁平化回测指标（与 model_ranker.py 保持一致）
+            backtest_data = backtest_metrics or {}
+
+            # 转换为百分比
+            annual_return_pct = None
+            if backtest_data.get('annualized_return') is not None:
+                annual_return_pct = backtest_data['annualized_return'] * 100
+
+            max_drawdown_pct = None
+            if backtest_data.get('max_drawdown') is not None:
+                max_drawdown_pct = backtest_data['max_drawdown'] * 100
+
             model_data = {
                 'id': exp_id,  # 实验表主键，唯一标识
                 'model_id': model_id,  # 模型名称（可能重复）
@@ -301,7 +313,15 @@ async def list_models(
                 'source': source_type,
                 'has_metrics': has_metrics,
                 'rank_score': float(rank_score) if rank_score else None,
-                'batch_id': batch_id
+                'batch_id': batch_id,
+
+                # 扁平化回测指标（与 Top Models 一致）
+                'annual_return': annual_return_pct,
+                'sharpe_ratio': backtest_data.get('sharpe_ratio'),
+                'max_drawdown': max_drawdown_pct,
+                'win_rate': backtest_data.get('win_rate'),
+                'calmar_ratio': backtest_data.get('calmar_ratio'),
+                'backtest_metrics': backtest_data  # 保留完整的回测指标
             }
             models.append(model_data)
 
@@ -376,16 +396,11 @@ async def get_feature_snapshot(
                 detail="请先选择一个模型，特征快照需要从模型的训练数据中提取"
             )
 
-        # 获取模型任务信息
-        task = ml_service.get_task(model_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="模型不存在")
-
-        # 从任务的训练数据缓存中获取特征数据
-        # 训练过程会保存特征数据到文件
+        # 导入必要的模块
         import pickle
         import os
         from datetime import datetime
+        from pathlib import Path
 
         # 前端发送的是 YYYY-MM-DD 格式，需要转换
         if '-' in date:
@@ -395,16 +410,10 @@ async def get_feature_snapshot(
 
         date_obj = pd.Timestamp(target_date.date())
 
-        # 从任务信息中获取模型文件名
-        model_name = task.get('model_name')
-        if not model_name:
-            # 如果没有model_name，使用旧格式
-            model_name = f"{symbol}_{task.get('model_type', 'lightgbm')}_{model_id[:8]}"
-
-        # 特征文件路径 - 使用绝对路径
-        from pathlib import Path
+        # 直接使用model_id作为文件名（不再依赖任务查找）
+        # model_id本身就是模型名称（如：000001_lightgbm_T5_robust_1234567890）
         models_dir = Path("/data/models/ml_models")
-        features_file = models_dir / f"{model_name}_features.pkl"
+        features_file = models_dir / f"{model_id}_features.pkl"
 
         if not os.path.exists(features_file):
             # 如果没有保存的特征文件，返回提示信息
@@ -448,22 +457,15 @@ async def get_feature_snapshot(
         # 获取目标值
         target = float(y.loc[date_obj]) if date_obj in y.index and pd.notna(y.loc[date_obj]) else None
 
-        # 尝试获取预测值
-        prediction = None
-        if task.get('predictions'):
-            pred_list = task['predictions']
-            actual_date_str = date_obj.strftime('%Y-%m-%d')
-            for pred in pred_list:
-                if pred['date'] == actual_date_str or pred['date'] == date:
-                    prediction = pred['prediction']
-                    break
+        # 注意：预测值不在特征快照中存储，需要单独运行预测获取
+        # 特征快照主要用于查看训练数据的原始特征值
 
         # 统一清理所有浮点数值（将 NaN/Inf 转换为 None）
         return {
             "date": date_obj.strftime('%Y-%m-%d'),
             "features": sanitize_float_values(features),
             "target": sanitize_float_values(target),
-            "prediction": sanitize_float_values(prediction)
+            "prediction": None  # 预测值需要单独运行预测接口获取
         }
 
     except HTTPException:

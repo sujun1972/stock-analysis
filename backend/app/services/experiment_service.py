@@ -22,6 +22,7 @@ from src.database.db_manager import DatabaseManager
 from app.services.parameter_grid import ParameterGrid
 from app.services.ml_training_service import MLTrainingService
 from app.services.backtest_service import BacktestService
+from app.services.core_training import CoreTrainingService
 
 
 class ExperimentService:
@@ -138,17 +139,28 @@ class ExperimentService:
 
         logger.info(f"📝 创建 {len(configs)} 个实验记录...")
 
+        # 使用 ON CONFLICT DO NOTHING 来跳过重复的实验配置
+        # 但我们需要为每个批次生成新的实验，所以应该修改哈希生成逻辑
+        # 将 batch_id 也加入哈希计算，使同一配置在不同批次中可以重复
         insert_query = """
             INSERT INTO experiments (
                 batch_id, experiment_name, experiment_hash, config, status
             )
             VALUES (%s, %s, %s, %s::jsonb, 'pending')
+            ON CONFLICT (experiment_hash) DO NOTHING
         """
 
         values = []
+        skipped = 0
         for config in configs:
             exp_name = self._generate_experiment_name(config)
-            exp_hash = config.pop('experiment_hash', None)  # 移除哈希字段
+            original_hash = config.pop('experiment_hash', None)  # 移除原始哈希
+
+            # 重新生成哈希，加入batch_id使其在不同批次中唯一
+            import hashlib
+            config_with_batch = {**config, '_batch_id': batch_id}
+            config_str = json.dumps(config_with_batch, sort_keys=True)
+            exp_hash = hashlib.md5(config_str.encode()).hexdigest()
 
             values.append((
                 batch_id,
@@ -163,8 +175,13 @@ class ExperimentService:
 
         try:
             cursor.executemany(insert_query, values)
+            inserted = cursor.rowcount
             conn.commit()
-            logger.info(f"✅ 成功创建 {len(values)} 个实验记录")
+
+            skipped = len(values) - inserted
+            if skipped > 0:
+                logger.warning(f"⚠️ {skipped} 个实验因配置重复被跳过")
+            logger.info(f"✅ 成功创建 {inserted} 个实验记录")
         except Exception as e:
             conn.rollback()
             logger.error(f"❌ 批量插入失败: {e}")
@@ -372,91 +389,44 @@ class ExperimentService:
             raise
 
     async def _train_model_async(self, config: Dict) -> tuple:
-        """异步训练模型（包装同步代码）"""
+        """
+        异步训练模型
+        使用统一的CoreTrainingService
+        """
 
         def _train():
-            # 使用现有的训练服务
-            pipeline = DataPipeline()
-
-            # 使用统一的模型保存目录（与MLTrainingService一致）
+            """同步训练函数（在线程池中执行）"""
+            # 使用统一的核心训练服务
             models_dir = Path('/data/models/ml_models')
-            models_dir.mkdir(parents=True, exist_ok=True)
+            core_service = CoreTrainingService(models_dir=str(models_dir))
 
-            # 创建训练器（model_type在构造函数中传递）
-            trainer = ModelTrainer(
-                model_type=config['model_type'],
-                model_params=config.get('model_params', {}),
-                output_dir=str(models_dir)
-            )
-
-            # 准备训练数据
-            X, y = pipeline.get_training_data(
-                symbol=config['symbol'],
-                start_date=config['start_date'],
-                end_date=config['end_date'],
-                target_period=config['target_period']
-            )
-
-            # 准备模型训练数据（分割训练集/验证集/测试集，并缩放特征）
-            # 这一步会fit scaler
-            X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(
-                X, y,
-                train_ratio=config.get('train_ratio', 0.7),
-                valid_ratio=config.get('valid_ratio', 0.15),
-                scale_features=True,
-                balance_samples=config.get('balance_samples', False)
-            )
-
-            # 训练模型（直接调用对应的训练方法）
-            if config['model_type'] == 'lightgbm':
-                trainer.train_lightgbm(
-                    X_train=X_train,
-                    y_train=y_train,
-                    X_valid=X_valid,
-                    y_valid=y_valid
-                )
-            elif config['model_type'] == 'gru':
-                trainer.train_gru(
-                    X_train=X_train,
-                    y_train=y_train,
-                    X_valid=X_valid,
-                    y_valid=y_valid
-                )
-            else:
-                raise ValueError(f"不支持的模型类型: {config['model_type']}")
-
-            # 训练后，模型保存在trainer.model中
-            # 评估训练集性能
-            metrics = trainer.evaluate(X_train, y_train, dataset_name='train', verbose=False)
-
-            # 生成模型ID并保存模型
+            # 生成模型ID
             model_id = f"{config['symbol']}_{config['model_type']}_T{config['target_period']}_{config.get('scaler_type', 'robust')}"
-            trainer.save_model(model_name=model_id, save_metrics=True)
 
-            # 获取模型文件路径（必须在save_model之后，确保文件已保存）
-            model_path = models_dir / f"{model_id}.txt" if config['model_type'] == 'lightgbm' else models_dir / f"{model_id}.pth"
+            # 调用核心训练服务（同步模式）
+            # 注意：这里不能使用 await，因为 _train() 是同步函数
+            # CoreTrainingService.train_model 内部会根据 use_async=False 来决定是否异步
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    core_service.train_model(
+                        config=config,
+                        model_id=model_id,
+                        save_features=True,  # 保存特征用于特征快照
+                        save_training_history=False,  # 批量实验不需要保存训练历史
+                        evaluate_on='train',  # 在训练集上评估
+                        use_async=False  # 使用同步训练（避免嵌套异步）
+                    )
+                )
+            finally:
+                loop.close()
 
-            # 保存scaler（与手动训练保持一致）
-            import pickle
-            scaler_path = models_dir / f"{model_id}_scaler.pkl"
-            with open(scaler_path, 'wb') as f:
-                pickle.dump(pipeline.get_scaler(), f)
-            logger.info(f"✅ Scaler已保存: {scaler_path}")
-
-            # 获取特征重要性（LightGBM模型有这个方法）
-            # 使用字典格式 {feature: gain}，与手动训练保持一致
-            feature_importance = {}
-            if hasattr(trainer.model, 'get_feature_importance'):
-                try:
-                    fi_df = trainer.model.get_feature_importance(top_n=20)
-                    if fi_df is not None and not fi_df.empty:
-                        # 转换为字典格式：{feature: gain}
-                        feature_importance = dict(zip(
-                            fi_df['feature'].tolist(),
-                            fi_df['gain'].tolist()
-                        ))
-                except Exception as e:
-                    logger.warning(f"获取特征重要性失败: {e}")
+            # 提取返回值
+            metrics = result['metrics']
+            feature_importance = result['feature_importance']
+            model_path = result['model_path']
 
             # 注册模型到MLTrainingService，使回测能找到模型
             from app.services.ml_training_service import MLTrainingService
@@ -466,7 +436,7 @@ class ExperimentService:
             ml_service.tasks[model_id] = {
                 'task_id': model_id,
                 'status': 'completed',
-                'model_path': str(model_path),
+                'model_path': model_path,
                 'config': {
                     'model_type': config['model_type'],
                     'target_period': config['target_period'],
@@ -481,7 +451,7 @@ class ExperimentService:
             ml_service._save_metadata()
             logger.info(f"✅ 模型已注册到MLTrainingService: {model_id}")
 
-            return model_id, metrics, feature_importance, str(model_path)
+            return model_id, metrics, feature_importance, model_path
 
         # 在线程池中执行（避免阻塞事件循环）
         return await asyncio.to_thread(_train)

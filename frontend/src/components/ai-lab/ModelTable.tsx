@@ -18,6 +18,7 @@ import { MoreHorizontal, PlayCircle, TrendingUp, Trash2, RefreshCw, Search, Info
 import { useToast } from '@/hooks/use-toast';
 import TrainingConfigPanel from './TrainingConfigPanel';
 import TrainingMonitor from './TrainingMonitor';
+import ModelActionsMenu from './ModelActionsMenu';
 import {
   Select,
   SelectContent,
@@ -33,13 +34,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -57,7 +51,7 @@ interface ModelTableProps {
 }
 
 export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }: ModelTableProps) {
-  const { models, setModels, setSelectedModel, currentTask } = useMLStore();
+  const { models, setModels, setSelectedModel, currentTask, setCurrentTask } = useMLStore();
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -87,7 +81,23 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   const [showBatchDeleteDialog, setShowBatchDeleteDialog] = useState(false);
 
   // 跟踪上一次处理的任务ID，避免重复显示成功提示
-  const lastProcessedTaskId = useRef<string | null>(null);
+  // 使用 sessionStorage 持久化已处理的任务ID，避免页面导航时重复显示toast
+  const getLastProcessedTaskId = () => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('lastProcessedTaskId');
+    }
+    return null;
+  };
+
+  const setLastProcessedTaskId = (taskId: string | null) => {
+    if (typeof window !== 'undefined') {
+      if (taskId) {
+        sessionStorage.setItem('lastProcessedTaskId', taskId);
+      } else {
+        sessionStorage.removeItem('lastProcessedTaskId');
+      }
+    }
+  };
 
   // 加载模型列表
   const loadModels = async (page: number = 1) => {
@@ -149,19 +159,6 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery, modelTypeFilter, sourceFilter]);
 
-  // 运行预测
-  const handlePredict = (model: any) => {
-    setSelectedModel(model);
-    // 使用实验ID而不是model_id
-    router.push(`/ai-lab/prediction?experimentId=${model.id}`);
-  };
-
-  // 查看详情
-  const handleViewDetails = (model: any) => {
-    setSelectedModel(model);
-    // 使用实验ID而不是model_id
-    router.push(`/ai-lab/model-details?experimentId=${model.id}`);
-  };
 
   // 批量选择辅助函数
   const toggleSelectAll = () => {
@@ -216,34 +213,6 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     }
   };
 
-  /**
-   * 跳转到回测页面并预填参数
-   * 使用模型训练时的配置自动设置回测参数，并在页面加载后自动执行回测
-   */
-  const handleQuickBacktest = (model: any) => {
-    // 构建回测配置，使用模型训练时的日期范围
-    const config = {
-      strategyId: 'ml_model',
-      symbols: model.symbol,
-      startDate: model.config?.start_date || '2020-01-01',
-      endDate: model.config?.end_date || new Date().toISOString().split('T')[0],
-      initialCash: 100000,
-      strategyParams: {
-        model_id: model.model_id,
-        buy_threshold: 1.0,
-        sell_threshold: -1.0,
-        commission: 0.0003,
-        slippage: 0.001,
-        position_size: 1.0,
-        stop_loss: 0.05,
-        take_profit: 0.10,
-      }
-    };
-
-    // 通过 URL 参数传递配置，回测页面将自动执行
-    const configParam = encodeURIComponent(JSON.stringify(config));
-    router.push(`/backtest?config=${configParam}`);
-  };
 
   // 删除模型
   const handleDeleteClick = (model: any) => {
@@ -295,17 +264,27 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
         loadModels(currentPage);
 
         // 只在任务ID变化时显示成功提示（避免页面导航时重复显示）
-        if (currentTaskId && lastProcessedTaskId.current !== currentTaskId) {
-          lastProcessedTaskId.current = currentTaskId;
+        const lastProcessedId = getLastProcessedTaskId();
+        if (currentTaskId && lastProcessedId !== currentTaskId) {
+          setLastProcessedTaskId(currentTaskId);
           toast({
             title: '训练完成',
             description: `模型 ${currentTask.config?.symbol} - ${currentTask.config?.model_type?.toUpperCase()} 训练成功！`,
           });
+
+          // 显示 toast 后清除 currentTask，避免页面导航时重复触发
+          setTimeout(() => {
+            setCurrentTask(null);
+          }, 100);
         }
       }
-      // 如果训练失败，关闭监控窗口
+      // 如果训练失败，关闭监控窗口并清除任务
       else if (currentTask.status === 'failed') {
         setShowTrainingMonitor(false);
+        // 失败后也清除任务
+        setTimeout(() => {
+          setCurrentTask(null);
+        }, 100);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,11 +381,16 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                   <TableHead>股票代码</TableHead>
                   <TableHead>模型类型</TableHead>
                   <TableHead>来源</TableHead>
-                  <TableHead className="text-right">预测周期</TableHead>
+                  <TableHead className="text-right">周期</TableHead>
                   <TableHead className="text-right">RMSE</TableHead>
                   <TableHead className="text-right">R²</TableHead>
                   <TableHead className="text-right">IC</TableHead>
                   <TableHead className="text-right">Rank IC</TableHead>
+                  <TableHead className="text-right">评分</TableHead>
+                  <TableHead className="text-right">年化收益</TableHead>
+                  <TableHead className="text-right">夏普</TableHead>
+                  <TableHead className="text-right">回撤</TableHead>
+                  <TableHead className="text-right">胜率</TableHead>
                   <TableHead>训练时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
@@ -415,7 +399,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                 {loading ? (
                   // 加载中状态
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8">
+                    <TableCell colSpan={17} className="text-center py-8">
                       <div className="flex items-center justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                         <span className="ml-3 text-muted-foreground">加载模型列表...</span>
@@ -424,7 +408,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                   </TableRow>
                 ) : models.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12">
+                    <TableCell colSpan={17} className="text-center py-12">
                       {!hasAnyModels ? (
                         // 完全没有模型时显示引导内容
                         <div className="space-y-6">
@@ -532,60 +516,57 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">{model.target_period}天</TableCell>
+                      <TableCell className="text-right text-sm">{model.target_period}天</TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {model.metrics?.rmse?.toFixed(4) || 'N/A'}
+                        {model.metrics?.rmse?.toFixed(4) || '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {model.metrics?.r2?.toFixed(4) || 'N/A'}
+                        {model.metrics?.r2?.toFixed(4) || '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-blue-600 dark:text-blue-400">
-                        {model.metrics?.ic?.toFixed(4) || 'N/A'}
+                        {model.metrics?.ic?.toFixed(4) || '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-blue-600 dark:text-blue-400">
-                        {model.metrics?.rank_ic?.toFixed(4) || 'N/A'}
+                        {model.metrics?.rank_ic?.toFixed(4) || '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-purple-600 dark:text-purple-400">
+                        {model.rank_score?.toFixed(2) || '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {model.annual_return !== null && model.annual_return !== undefined ? (
+                          <span className={model.annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                            {model.annual_return.toFixed(2)}%
+                          </span>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {model.sharpe_ratio !== null && model.sharpe_ratio !== undefined ? model.sharpe_ratio.toFixed(2) : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
+                        {model.max_drawdown !== null && model.max_drawdown !== undefined ? `${model.max_drawdown.toFixed(2)}%` : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {model.win_rate !== null && model.win_rate !== undefined ? `${(model.win_rate * 100).toFixed(2)}%` : '-'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {model.trained_at ? new Date(model.trained_at).toLocaleString('zh-CN', {
-                          year: 'numeric',
                           month: '2-digit',
                           day: '2-digit',
                           hour: '2-digit',
                           minute: '2-digit',
-                          second: '2-digit',
-                          hour12: false
-                        }) : 'N/A'}
+                        }) : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewDetails(model)}>
-                              <Info className="mr-2 h-4 w-4" />
-                              查看详情
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handlePredict(model)}>
-                              <PlayCircle className="mr-2 h-4 w-4" />
-                              运行预测
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleQuickBacktest(model)}>
-                              <TrendingUp className="mr-2 h-4 w-4" />
-                              策略回测
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteClick(model)}
-                              className="text-red-600 dark:text-red-400"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              删除模型
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <ModelActionsMenu
+                          model={{
+                            id: model.id,
+                            experiment_id: model.id,
+                            model_id: model.model_id,
+                            symbol: model.symbol,
+                            config: model.config
+                          }}
+                          onDelete={handleDeleteClick}
+                        />
                       </TableCell>
                     </TableRow>
                   ))

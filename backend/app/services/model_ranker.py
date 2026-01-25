@@ -162,15 +162,34 @@ class ModelRanker:
 
         models = []
         for row in results:
+            # 提取回测指标（扁平化字段，便于前端直接使用）
+            backtest_metrics = row[5] or {}
+
+            # 转换为百分比（前端期望百分比格式，如 2.78 表示 2.78%）
+            annual_return_pct = None
+            if backtest_metrics.get('annualized_return') is not None:
+                annual_return_pct = backtest_metrics['annualized_return'] * 100
+
+            max_drawdown_pct = None
+            if backtest_metrics.get('max_drawdown') is not None:
+                max_drawdown_pct = backtest_metrics['max_drawdown'] * 100
+
             models.append({
-                'id': row[0],
+                'experiment_id': row[0],  # 使用 experiment_id 作为主键
                 'experiment_name': row[1],
                 'model_id': row[2],
                 'config': row[3],
                 'train_metrics': row[4],
-                'backtest_metrics': row[5],
+                'backtest_metrics': backtest_metrics,
                 'rank_score': float(row[6]) if row[6] else None,
-                'rank_position': row[7]
+                'rank_position': row[7],
+
+                # 扁平化回测指标（前端直接访问，百分比格式）
+                'annual_return': annual_return_pct,  # 百分比（如 2.78 表示 2.78%）
+                'sharpe_ratio': backtest_metrics.get('sharpe_ratio'),  # 比率（不需转换）
+                'max_drawdown': max_drawdown_pct,  # 百分比（如 -30.13 表示 -30.13%）
+                'win_rate': backtest_metrics.get('win_rate'),  # 小数（前端会自行转换）
+                'calmar_ratio': backtest_metrics.get('calmar_ratio')  # 比率（不需转换）
             })
 
         return models

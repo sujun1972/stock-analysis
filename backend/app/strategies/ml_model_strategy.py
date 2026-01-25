@@ -304,35 +304,43 @@ class MLModelStrategy(BaseStrategy):
         - GRU: .pth 文件
         """
         try:
-            # 获取训练任务信息以获取正确的模型路径和类型
-            from app.services.ml_training_service import MLTrainingService
-
-            ml_service = MLTrainingService()
-            task = ml_service.get_task(self.model_id)
-
-            if not task:
-                logger.error(f"找不到任务 {self.model_id}")
+            # 从model_id中解析模型类型（model_id格式：symbol_modeltype_xxx）
+            # 例如：000031_lightgbm_a4529cbd -> lightgbm
+            parts = self.model_id.split('_')
+            if len(parts) < 2:
+                logger.error(f"无效的model_id格式: {self.model_id}")
                 return None
 
-            # 从任务元数据中获取模型路径
-            model_path_str = task.get('model_path')
-            if not model_path_str:
-                logger.error(f"任务 {self.model_id} 缺少 model_path 信息")
+            actual_model_type = parts[1].lower()  # 'lightgbm' 或 'gru'
+
+            # 从model_id中解析目标周期（如果有T前缀）
+            # 例如：000031_lightgbm_T5_robust_xxx -> 5
+            actual_target_period = 5  # 默认值
+            for part in parts:
+                if part.startswith('T') and part[1:].isdigit():
+                    actual_target_period = int(part[1:])
+                    break
+
+            # 设置实例属性
+            self.model_type = actual_model_type
+            self.target_period = actual_target_period
+
+            # 构建模型文件路径（统一使用 /data/models/ml_models 目录）
+            models_dir = Path('/data/models/ml_models')
+
+            # 根据模型类型确定文件扩展名
+            if actual_model_type == 'lightgbm':
+                model_path = models_dir / f"{self.model_id}.txt"
+            elif actual_model_type == 'gru':
+                model_path = models_dir / f"{self.model_id}.pth"
+            else:
+                logger.error(f"不支持的模型类型: {actual_model_type}")
                 return None
 
-            model_path = Path(model_path_str)
+            # 检查文件是否存在
             if not model_path.exists():
                 logger.warning(f"模型文件不存在: {model_path}")
                 return None
-
-            # 从任务配置中获取模型的实际属性
-            config = task.get('config', {})
-            actual_model_type = config.get('model_type', 'lightgbm')
-            actual_target_period = config.get('target_period', 5)
-
-            # 设置实例属性（从模型元数据中获取，而不是从用户参数）
-            self.model_type = actual_model_type
-            self.target_period = actual_target_period
 
             # 根据实际模型类型加载
             if actual_model_type == 'lightgbm':
@@ -343,9 +351,6 @@ class MLModelStrategy(BaseStrategy):
                 import torch
                 model = torch.load(str(model_path))
                 logger.info(f"成功加载 GRU 模型: {model_path} (预测周期: {actual_target_period}日)")
-            else:
-                logger.error(f"不支持的模型类型: {actual_model_type}")
-                return None
 
             return model
 

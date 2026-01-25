@@ -257,7 +257,7 @@ export default function AutoExperimentPage() {
           <DialogHeader>
             <DialogTitle>确认删除批次</DialogTitle>
             <DialogDescription>
-              确定要删除批次 <strong>"{batchToDelete?.name}"</strong> (#{batchToDelete?.id}) 吗？
+              确定要删除批次 <strong>&quot;{batchToDelete?.name}&quot;</strong> (#{batchToDelete?.id}) 吗？
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, TrendingUp, BarChart3, Settings2, FileText } from 'lucide-react'
 import { useExperimentStore, TopModel } from '@/store/experimentStore'
 import { BatchMonitor } from '@/components/auto-experiment/BatchMonitor'
+import ModelActionsMenu from '@/components/ai-lab/ModelActionsMenu'
 
 export default function BatchDetailPage() {
   const params = useParams()
@@ -162,7 +163,7 @@ export default function BatchDetailPage() {
                         </Badge>
                       </div>
 
-                      <div className="grid grid-cols-4 gap-4 text-sm">
+                      <div className="grid grid-cols-5 gap-4 text-sm">
                         <div>
                           <div className="text-muted-foreground">年化收益</div>
                           <div className="font-bold text-green-600">
@@ -182,9 +183,26 @@ export default function BatchDetailPage() {
                           </div>
                         </div>
                         <div>
-                          <Button size="sm" variant="outline" className="w-full">
-                            查看详情
-                          </Button>
+                          <div className="text-muted-foreground">胜率</div>
+                          <div className="font-bold">
+                            {model.win_rate ? (model.win_rate * 100).toFixed(2) : '-'}%
+                          </div>
+                        </div>
+                        <div className="flex items-end justify-end">
+                          <ModelActionsMenu
+                            model={{
+                              id: model.experiment_id,
+                              experiment_id: model.experiment_id,
+                              model_id: model.model_id,
+                              symbol: model.config?.symbol || '',
+                              config: model.config
+                            }}
+                            triggerButton={
+                              <Button size="sm" variant="outline" className="w-full">
+                                操作
+                              </Button>
+                            }
+                          />
                         </div>
                       </div>
                     </div>
