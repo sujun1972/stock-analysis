@@ -1,11 +1,5 @@
-/**
- * 自动化实验Store
- * 使用Zustand管理实验状态
- */
-
 import { create } from 'zustand'
-
-// ==================== 类型定义 ====================
+import { devtools } from 'zustand/middleware'
 
 export interface ExperimentBatch {
   batch_id: number
@@ -106,7 +100,9 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // ==================== Store实现 ====================
 
-export const useExperimentStore = create<ExperimentStore>((set, get) => ({
+export const useExperimentStore = create<ExperimentStore>()(
+  devtools(
+    (set, get) => ({
   // 初始状态
   batches: [],
   currentBatch: null,
@@ -373,7 +369,10 @@ export const useExperimentStore = create<ExperimentStore>((set, get) => ({
       error: null,
     })
   },
-}))
+    }),
+    { name: 'ExperimentStore' }
+  )
+)
 
 // ==================== 导出辅助函数 ====================
 

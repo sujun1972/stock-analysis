@@ -1,18 +1,30 @@
+import bundleAnalyzer from '@next/bundle-analyzer'
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+})
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  reactStrictMode: false, // 禁用 Strict Mode 以避免开发模式下的双重请求
+  reactStrictMode: true,
+
   async rewrites() {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8000/api/:path*', // Docker内部使用backend服务名
+        destination: 'http://backend:8000/api/:path*',
       },
     ]
   },
+
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
   },
+
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+  },
 }
 
-export default nextConfig
+export default withBundleAnalyzer(nextConfig)

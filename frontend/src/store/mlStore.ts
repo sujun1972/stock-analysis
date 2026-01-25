@@ -1,9 +1,5 @@
-/**
- * 机器学习训练 Store
- * 使用 Zustand 管理状态
- */
-
 import { create } from 'zustand';
+import { devtools, persist } from 'zustand/middleware';
 import { format, subYears } from 'date-fns';
 
 export interface MLTrainingConfig {
@@ -126,11 +122,9 @@ interface MLStore {
   setShowPredictionChart: (show: boolean) => void;
 }
 
-// 计算默认日期：开始日期为5年前，结束日期为今天（与策略回测页面保持一致）
 const getDefaultDates = () => {
   const today = new Date();
   const fiveYearsAgo = subYears(today, 5);
-
   return {
     start_date: format(fiveYearsAgo, 'yyyyMMdd'),
     end_date: format(today, 'yyyyMMdd'),
@@ -159,43 +153,52 @@ const defaultConfig: MLTrainingConfig = {
   early_stopping_rounds: 50,
 };
 
-export const useMLStore = create<MLStore>((set) => ({
-  // 配置
-  config: defaultConfig,
-  setConfig: (newConfig) =>
-    set((state) => ({
-      config: { ...state.config, ...newConfig },
-    })),
-  resetConfig: () => set({ config: defaultConfig }),
+export const useMLStore = create<MLStore>()(
+  devtools(
+    persist(
+      (set) => ({
+        config: defaultConfig,
+        setConfig: (newConfig) =>
+          set((state) => ({
+            config: { ...state.config, ...newConfig },
+          }), false, 'mlStore/setConfig'),
+        resetConfig: () => set({ config: defaultConfig }, false, 'mlStore/resetConfig'),
 
-  // 训练任务
-  currentTask: null,
-  setCurrentTask: (task) => set({ currentTask: task }),
+        currentTask: null,
+        setCurrentTask: (task) => set({ currentTask: task }, false, 'mlStore/setCurrentTask'),
 
-  tasks: [],
-  setTasks: (tasks) => set({ tasks }),
+        tasks: [],
+        setTasks: (tasks) => set({ tasks }, false, 'mlStore/setTasks'),
 
-  // 模型
-  models: [],
-  setModels: (models) => set({ models }),
+        models: [],
+        setModels: (models) => set({ models }, false, 'mlStore/setModels'),
 
-  // 预测
-  predictions: [],
-  setPredictions: (predictions) => set({ predictions }),
+        predictions: [],
+        setPredictions: (predictions) => set({ predictions }, false, 'mlStore/setPredictions'),
 
-  selectedModel: null,
-  setSelectedModel: (model) => set({ selectedModel: model }),
+        selectedModel: null,
+        setSelectedModel: (model) => set({ selectedModel: model }, false, 'mlStore/setSelectedModel'),
 
-  // UI
-  showConfig: true,
-  setShowConfig: (show) => set({ showConfig: show }),
+        showConfig: true,
+        setShowConfig: (show) => set({ showConfig: show }, false, 'mlStore/setShowConfig'),
 
-  showTrainingMonitor: false,
-  setShowTrainingMonitor: (show) => set({ showTrainingMonitor: show }),
+        showTrainingMonitor: false,
+        setShowTrainingMonitor: (show) => set({ showTrainingMonitor: show }, false, 'mlStore/setShowTrainingMonitor'),
 
-  showFeatureImportance: false,
-  setShowFeatureImportance: (show) => set({ showFeatureImportance: show }),
+        showFeatureImportance: false,
+        setShowFeatureImportance: (show) => set({ showFeatureImportance: show }, false, 'mlStore/setShowFeatureImportance'),
 
-  showPredictionChart: false,
-  setShowPredictionChart: (show) => set({ showPredictionChart: show }),
-}));
+        showPredictionChart: false,
+        setShowPredictionChart: (show) => set({ showPredictionChart: show }, false, 'mlStore/setShowPredictionChart'),
+      }),
+      {
+        name: 'ml-storage',
+        partialize: (state) => ({
+          config: state.config,
+          selectedModel: state.selectedModel,
+        }),
+      }
+    ),
+    { name: 'MLStore' }
+  )
+);

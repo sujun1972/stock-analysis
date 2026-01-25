@@ -1,12 +1,21 @@
 'use client'
 
 import { useEffect, useState, Suspense, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import type { StockInfo, FeatureData, MinuteData } from '@/types'
 import { aggregateMinuteData, type MinutePeriod } from '@/lib/minute-data-aggregator'
-import EChartsStockChart from '@/components/EChartsStockChart'
-import MinuteChart from '@/components/MinuteChart'
+
+// 动态导入图表组件以减少初始加载体积
+const EChartsStockChart = dynamic(() => import('@/components/EChartsStockChart'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-[600px] bg-gray-50 dark:bg-gray-900 rounded-lg">加载图表中...</div>
+})
+const MinuteChart = dynamic(() => import('@/components/MinuteChart'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-[600px] bg-gray-50 dark:bg-gray-900 rounded-lg">加载图表中...</div>
+})
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'

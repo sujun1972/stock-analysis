@@ -629,23 +629,23 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                         {model.metrics?.rank_ic?.toFixed(4) || '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-purple-600 dark:text-purple-400">
-                        {model.rank_score?.toFixed(2) || '-'}
+                        {(model as any).rank_score?.toFixed(2) || '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {model.annual_return !== null && model.annual_return !== undefined ? (
-                          <span className={model.annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                            {model.annual_return.toFixed(2)}%
+                        {(model as any).annual_return !== null && (model as any).annual_return !== undefined ? (
+                          <span className={(model as any).annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                            {(model as any).annual_return.toFixed(2)}%
                           </span>
                         ) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {model.sharpe_ratio !== null && model.sharpe_ratio !== undefined ? model.sharpe_ratio.toFixed(2) : '-'}
+                        {(model as any).sharpe_ratio !== null && (model as any).sharpe_ratio !== undefined ? (model as any).sharpe_ratio.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
-                        {model.max_drawdown !== null && model.max_drawdown !== undefined ? `${model.max_drawdown.toFixed(2)}%` : '-'}
+                        {(model as any).max_drawdown !== null && (model as any).max_drawdown !== undefined ? `${(model as any).max_drawdown.toFixed(2)}%` : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {model.win_rate !== null && model.win_rate !== undefined ? `${(model.win_rate * 100).toFixed(2)}%` : '-'}
+                        {(model as any).win_rate !== null && (model as any).win_rate !== undefined ? `${((model as any).win_rate * 100).toFixed(2)}%` : '-'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {model.trained_at ? new Date(model.trained_at).toLocaleString('zh-CN', {

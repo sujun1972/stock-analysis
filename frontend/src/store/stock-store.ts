@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { devtools, persist } from 'zustand/middleware'
 import type { StockInfo, StockDaily } from '@/types'
 
 interface StockState {
@@ -21,16 +22,30 @@ interface StockState {
   setError: (error: string | null) => void
 }
 
-export const useStockStore = create<StockState>((set) => ({
-  stocks: [],
-  selectedStock: null,
-  dailyData: [],
-  isLoading: false,
-  error: null,
+export const useStockStore = create<StockState>()(
+  devtools(
+    persist(
+      (set) => ({
+        stocks: [],
+        selectedStock: null,
+        dailyData: [],
+        isLoading: false,
+        error: null,
 
-  setStocks: (stocks) => set({ stocks }),
-  setSelectedStock: (stock) => set({ selectedStock: stock }),
-  setDailyData: (data) => set({ dailyData: data }),
-  setLoading: (loading) => set({ isLoading: loading }),
-  setError: (error) => set({ error }),
-}))
+        setStocks: (stocks) => set({ stocks }, false, 'stockStore/setStocks'),
+        setSelectedStock: (stock) => set({ selectedStock: stock }, false, 'stockStore/setSelectedStock'),
+        setDailyData: (data) => set({ dailyData: data }, false, 'stockStore/setDailyData'),
+        setLoading: (loading) => set({ isLoading: loading }, false, 'stockStore/setLoading'),
+        setError: (error) => set({ error }, false, 'stockStore/setError'),
+      }),
+      {
+        name: 'stock-storage',
+        // 仅持久化选中的股票，不持久化列表和加载状态
+        partialize: (state) => ({
+          selectedStock: state.selectedStock,
+        }),
+      }
+    ),
+    { name: 'StockStore' }
+  )
+)

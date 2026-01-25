@@ -1,11 +1,22 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
-import BacktestPanel from '@/components/BacktestPanel'
-import BacktestKLineChart from '@/components/BacktestKLineChart'
-import EquityCurveChart from '@/components/EquityCurveChart'
-import PerformanceMetrics from '@/components/PerformanceMetrics'
+
+// 动态导入回测相关组件以优化加载性能
+const BacktestPanel = dynamic(() => import('@/components/BacktestPanel'), {
+  loading: () => <div className="h-[200px] bg-gray-50 dark:bg-gray-900 rounded-lg animate-pulse" />
+})
+const BacktestKLineChart = dynamic(() => import('@/components/BacktestKLineChart'), {
+  ssr: false,
+  loading: () => <div className="h-[400px] bg-gray-50 dark:bg-gray-900 rounded-lg flex items-center justify-center">加载图表中...</div>
+})
+const EquityCurveChart = dynamic(() => import('@/components/EquityCurveChart'), {
+  ssr: false,
+  loading: () => <div className="h-[400px] bg-gray-50 dark:bg-gray-900 rounded-lg flex items-center justify-center">加载图表中...</div>
+})
+const PerformanceMetrics = dynamic(() => import('@/components/PerformanceMetrics'))
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import axios from 'axios'
