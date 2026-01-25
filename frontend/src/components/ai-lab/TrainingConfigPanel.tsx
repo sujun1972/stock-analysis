@@ -91,19 +91,8 @@ export default function TrainingConfigPanel({ isInDialog = false, onTrainingStar
             // 显示特征重要性
             useMLStore.getState().setShowFeatureImportance(true);
 
-            // 显示训练完成提示
-            toast({
-              variant: 'success',
-              title: '训练完成',
-              description: `模型 ${task.config.model_type.toUpperCase()} 训练成功！`,
-            });
-          } else if (task.status === 'failed') {
-            // 显示训练失败提示
-            toast({
-              variant: 'destructive',
-              title: '训练失败',
-              description: task.error_message || '训练过程中发生错误',
-            });
+            // 注意：训练完成和失败的 toast 由 ModelTable.tsx 统一处理
+            // 通过监听 currentTask 状态变化显示，避免重复显示
           }
         }
       } catch (error) {
