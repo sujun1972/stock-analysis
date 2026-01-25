@@ -105,35 +105,77 @@ class MLTrainingService:
 
     async def predict(
         self,
-        model_id: str,
         symbol: str,
         start_date: str,
-        end_date: str
+        end_date: str,
+        model_id: Optional[str] = None,
+        experiment_id: Optional[int] = None,
+        model_source: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
-        使用训练好的模型进行预测
+        统一的预测接口
 
         Args:
-            model_id: 模型ID（即task_id）
             symbol: 股票代码
             start_date: 开始日期
             end_date: 结束日期
+            model_id: 模型ID（task_id，向后兼容）
+            experiment_id: 实验ID
+            model_source: 模型来源（优先使用）
 
         Returns:
             预测结果
         """
-        # 获取任务信息
-        task = self.get_task(model_id)
-        if not task or task['status'] != 'completed':
-            raise ValueError(f"模型不存在或未完成训练: {model_id}")
+        # 兼容旧的 model_id 参数
+        if model_id and not model_source:
+            model_source = model_id
 
-        # 使用预测服务
-        return await self.predictor.predict_from_task(
-            task_info=task,
+        return await self.predictor.predict(
             symbol=symbol,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            model_source=model_source,
+            task_id=model_id,
+            experiment_id=experiment_id
         )
+
+    async def batch_predict(
+        self,
+        symbols: list[str],
+        start_date: str,
+        end_date: str,
+        experiment_id: Optional[int] = None,
+        model_id: Optional[str] = None,
+        model_source: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """
+        批量预测多只股票
+
+        Args:
+            symbols: 股票代码列表
+            start_date: 开始日期
+            end_date: 结束日期
+            experiment_id: 实验ID
+            model_id: 模型ID（向后兼容）
+            model_source: 模型来源
+
+        Returns:
+            批量预测结果
+        """
+        # 兼容旧的参数
+        if model_id and not model_source:
+            model_source = model_id
+
+        return await self.predictor.batch_predict(
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date,
+            model_source=model_source,
+            task_id=model_id,
+            experiment_id=experiment_id
+        )
+
+    # ==================== 向后兼容方法 ====================
 
     async def predict_from_experiment(
         self,
@@ -143,7 +185,7 @@ class MLTrainingService:
         end_date: str
     ) -> Dict[str, Any]:
         """
-        使用实验表中的模型进行预测
+        向后兼容：使用实验表中的模型进行预测
 
         Args:
             experiment_id: 实验ID
@@ -154,35 +196,9 @@ class MLTrainingService:
         Returns:
             预测结果
         """
-        return await self.predictor.predict_from_experiment(
-            experiment_id=experiment_id,
+        return await self.predict(
             symbol=symbol,
             start_date=start_date,
-            end_date=end_date
-        )
-
-    async def batch_predict(
-        self,
-        experiment_id: int,
-        symbols: list[str],
-        start_date: str,
-        end_date: str
-    ) -> Dict[str, Any]:
-        """
-        批量预测多只股票
-
-        Args:
-            experiment_id: 实验ID
-            symbols: 股票代码列表
-            start_date: 开始日期
-            end_date: 结束日期
-
-        Returns:
-            批量预测结果
-        """
-        return await self.predictor.batch_predict(
-            experiment_id=experiment_id,
-            symbols=symbols,
-            start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            experiment_id=experiment_id
         )
