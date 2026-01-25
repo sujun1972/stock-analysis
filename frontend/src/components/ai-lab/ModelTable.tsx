@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -86,6 +86,9 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [showBatchDeleteDialog, setShowBatchDeleteDialog] = useState(false);
 
+  // 跟踪上一次处理的任务ID，避免重复显示成功提示
+  const lastProcessedTaskId = useRef<string | null>(null);
+
   // 加载模型列表
   const loadModels = async (page: number = 1) => {
     setLoading(true);
@@ -149,13 +152,15 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   // 运行预测
   const handlePredict = (model: any) => {
     setSelectedModel(model);
-    router.push(`/ai-lab/prediction?modelId=${model.model_id}`);
+    // 使用实验ID而不是model_id
+    router.push(`/ai-lab/prediction?experimentId=${model.id}`);
   };
 
   // 查看详情
   const handleViewDetails = (model: any) => {
     setSelectedModel(model);
-    router.push(`/ai-lab/model-details?modelId=${model.model_id}`);
+    // 使用实验ID而不是model_id
+    router.push(`/ai-lab/model-details?experimentId=${model.id}`);
   };
 
   // 批量选择辅助函数
@@ -163,16 +168,17 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     if (selectedModels.size === models.length && models.length > 0) {
       setSelectedModels(new Set());
     } else {
-      setSelectedModels(new Set(models.map(m => m.model_id)));
+      // 使用实验ID（唯一标识符）而不是model_id
+      setSelectedModels(new Set(models.map(m => String(m.id))));
     }
   };
 
-  const toggleSelectModel = (modelId: string) => {
+  const toggleSelectModel = (id: string) => {
     const newSelected = new Set(selectedModels);
-    if (newSelected.has(modelId)) {
-      newSelected.delete(modelId);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
     } else {
-      newSelected.add(modelId);
+      newSelected.add(id);
     }
     setSelectedModels(newSelected);
   };
@@ -180,10 +186,14 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   // 批量删除
   const handleBatchDelete = async () => {
     try {
-      // 批量删除所有选中的模型
+      // 将选中的实验ID转换为实验记录，以便删除
+      const selectedIds = Array.from(selectedModels);
+      const selectedExperiments = models.filter(m => selectedIds.includes(String(m.id)));
+
+      // 批量删除所有选中的实验（使用实验ID）
       await Promise.all(
-        Array.from(selectedModels).map(modelId =>
-          axios.delete(`${API_BASE}/ml/tasks/${modelId}`)
+        selectedExperiments.map(exp =>
+          axios.delete(`${API_BASE}/experiment/${exp.id}`)
         )
       );
 
@@ -267,6 +277,8 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
   // 监听训练任务状态变化
   useEffect(() => {
     if (currentTask) {
+      const currentTaskId = currentTask.task_id;
+
       // 如果有训练任务在运行，显示训练监控窗口
       if (currentTask.status === 'running') {
         setShowTrainingMonitor(true);
@@ -282,11 +294,14 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
         // 静默刷新模型列表
         loadModels(currentPage);
 
-        // 显示成功提示
-        toast({
-          title: '训练完成',
-          description: `模型 ${currentTask.config?.symbol} - ${currentTask.config?.model_type?.toUpperCase()} 训练成功！`,
-        });
+        // 只在任务ID变化时显示成功提示（避免页面导航时重复显示）
+        if (currentTaskId && lastProcessedTaskId.current !== currentTaskId) {
+          lastProcessedTaskId.current = currentTaskId;
+          toast({
+            title: '训练完成',
+            description: `模型 ${currentTask.config?.symbol} - ${currentTask.config?.model_type?.toUpperCase()} 训练成功！`,
+          });
+        }
       }
       // 如果训练失败，关闭监控窗口
       else if (currentTask.status === 'failed') {
@@ -484,11 +499,11 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
                   </TableRow>
                 ) : (
                   models.map((model) => (
-                    <TableRow key={model.model_id}>
+                    <TableRow key={model.id || model.model_id}>
                       <TableCell>
                         <Checkbox
-                          checked={selectedModels.has(model.model_id)}
-                          onCheckedChange={() => toggleSelectModel(model.model_id)}
+                          checked={selectedModels.has(String(model.id))}
+                          onCheckedChange={() => toggleSelectModel(String(model.id))}
                           aria-label={`选择模型 ${model.symbol}`}
                         />
                       </TableCell>

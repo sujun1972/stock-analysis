@@ -56,31 +56,42 @@ function PredictionPageContent() {
     }
   }, [models.length, setModels]);
 
-  // 初始化：从URL参数获取modelId（如果有）
+  // 初始化：从URL参数获取experimentId或modelId（兼容旧链接）
   useEffect(() => {
+    const experimentIdFromUrl = searchParams.get('experimentId');
     const modelIdFromUrl = searchParams.get('modelId');
-    if (modelIdFromUrl && models.length > 0) {
-      setSelectedModelId(modelIdFromUrl);
-      // 如果URL中有modelId，自动运行预测
-      const model = models.find(m => m.model_id === modelIdFromUrl);
+
+    if (experimentIdFromUrl && models.length > 0) {
+      // 优先使用experimentId（新格式）
+      setSelectedModelId(experimentIdFromUrl);
+      const model = models.find(m => String(m.id) === experimentIdFromUrl);
       if (model) {
         setSelectedModel(model);
-        runPrediction(modelIdFromUrl);
+        runPrediction(experimentIdFromUrl);
+      }
+    } else if (modelIdFromUrl && models.length > 0) {
+      // 向后兼容：使用model_id查找
+      const model = models.find(m => m.model_id === modelIdFromUrl);
+      if (model && model.id) {
+        const experimentId = String(model.id);
+        setSelectedModelId(experimentId);
+        setSelectedModel(model);
+        runPrediction(experimentId);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, models]);
 
   // 运行预测
-  const runPrediction = async (modelId?: string) => {
-    const targetModelId = modelId || selectedModelId;
+  const runPrediction = async (experimentId?: string) => {
+    const targetExperimentId = experimentId || selectedModelId;
 
-    if (!targetModelId) {
+    if (!targetExperimentId) {
       setError('请先选择一个模型');
       return;
     }
 
-    const model = models.find(m => m.model_id === targetModelId);
+    const model = models.find(m => String(m.id) === targetExperimentId);
     if (!model) {
       setError('找不到选中的模型');
       return;
@@ -93,7 +104,7 @@ function PredictionPageContent() {
       // 从模型的配置中获取日期范围，如果没有则使用默认值
       const config = model.config || {};
       const response = await axios.post(`${API_BASE}/ml/predict`, {
-        model_id: model.model_id,
+        experiment_id: model.id,  // 使用实验ID（新版）
         symbol: model.symbol,
         start_date: config.start_date || '2020-01-01',
         end_date: config.end_date || new Date().toISOString().split('T')[0],
@@ -129,8 +140,8 @@ function PredictionPageContent() {
   };
 
   // 处理模型选择变化
-  const handleModelChange = (modelId: string) => {
-    setSelectedModelId(modelId);
+  const handleModelChange = (experimentId: string) => {
+    setSelectedModelId(experimentId);
     setError('');
   };
 
@@ -200,7 +211,7 @@ function PredictionPageContent() {
                     </div>
                   ) : (
                     models.map(model => (
-                      <SelectItem key={model.model_id} value={model.model_id}>
+                      <SelectItem key={String(model.id)} value={String(model.id)}>
                         {model.symbol} - {model.model_type.toUpperCase()} - {model.target_period}日
                         {model.trained_at && ` (${model.trained_at.substring(0, 10)})`}
                       </SelectItem>

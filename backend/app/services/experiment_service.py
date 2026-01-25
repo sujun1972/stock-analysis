@@ -113,7 +113,12 @@ class ExperimentService:
                 logger.info(f"✅ 批次ID: {batch_id}")
             except Exception as e:
                 conn.rollback()
-                logger.error(f"❌ 创建批次记录失败: {e}")
+                error_msg = str(e)
+                logger.error(f"❌ 创建批次记录失败: {error_msg}")
+
+                # 检查是否是唯一性约束冲突
+                if 'experiment_batches_batch_name_key' in error_msg or 'duplicate key value' in error_msg:
+                    raise ValueError(f"批次名称 '{batch_name}' 已存在，请使用其他名称")
                 raise
             finally:
                 cursor.close()
@@ -313,7 +318,7 @@ class ExperimentService:
 
             # 2. 训练模型
             logger.info(f"[Worker-{worker_id}] 🏋️  训练模型...")
-            model_id, train_metrics, feature_importance = await self._train_model_async(config)
+            model_id, train_metrics, feature_importance, model_path = await self._train_model_async(config)
 
             train_end_time = datetime.now()
             train_duration = (train_end_time - start_time).total_seconds()
@@ -324,6 +329,7 @@ class ExperimentService:
                 model_id=model_id,
                 train_metrics=train_metrics,
                 feature_importance=feature_importance,
+                model_path=model_path,
                 train_completed_at=train_end_time,
                 train_duration=int(train_duration)
             )
@@ -372,30 +378,49 @@ class ExperimentService:
             # 使用现有的训练服务
             pipeline = DataPipeline()
 
+            # 使用统一的模型保存目录（与MLTrainingService一致）
+            models_dir = Path('/data/models/ml_models')
+            models_dir.mkdir(parents=True, exist_ok=True)
+
             # 创建训练器（model_type在构造函数中传递）
             trainer = ModelTrainer(
                 model_type=config['model_type'],
-                model_params=config.get('model_params', {})
+                model_params=config.get('model_params', {}),
+                output_dir=str(models_dir)
             )
 
             # 准备训练数据
-            X_train, y_train = pipeline.get_training_data(
+            X, y = pipeline.get_training_data(
                 symbol=config['symbol'],
                 start_date=config['start_date'],
                 end_date=config['end_date'],
                 target_period=config['target_period']
             )
 
+            # 准备模型训练数据（分割训练集/验证集/测试集，并缩放特征）
+            # 这一步会fit scaler
+            X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(
+                X, y,
+                train_ratio=config.get('train_ratio', 0.7),
+                valid_ratio=config.get('valid_ratio', 0.15),
+                scale_features=True,
+                balance_samples=config.get('balance_samples', False)
+            )
+
             # 训练模型（直接调用对应的训练方法）
             if config['model_type'] == 'lightgbm':
                 trainer.train_lightgbm(
                     X_train=X_train,
-                    y_train=y_train
+                    y_train=y_train,
+                    X_valid=X_valid,
+                    y_valid=y_valid
                 )
             elif config['model_type'] == 'gru':
                 trainer.train_gru(
                     X_train=X_train,
-                    y_train=y_train
+                    y_train=y_train,
+                    X_valid=X_valid,
+                    y_valid=y_valid
                 )
             else:
                 raise ValueError(f"不支持的模型类型: {config['model_type']}")
@@ -408,23 +433,34 @@ class ExperimentService:
             model_id = f"{config['symbol']}_{config['model_type']}_T{config['target_period']}_{config.get('scaler_type', 'robust')}"
             trainer.save_model(model_name=model_id, save_metrics=True)
 
+            # 获取模型文件路径（必须在save_model之后，确保文件已保存）
+            model_path = models_dir / f"{model_id}.txt" if config['model_type'] == 'lightgbm' else models_dir / f"{model_id}.pth"
+
+            # 保存scaler（与手动训练保持一致）
+            import pickle
+            scaler_path = models_dir / f"{model_id}_scaler.pkl"
+            with open(scaler_path, 'wb') as f:
+                pickle.dump(pipeline.get_scaler(), f)
+            logger.info(f"✅ Scaler已保存: {scaler_path}")
+
             # 获取特征重要性（LightGBM模型有这个方法）
+            # 使用字典格式 {feature: gain}，与手动训练保持一致
             feature_importance = {}
             if hasattr(trainer.model, 'get_feature_importance'):
                 try:
                     fi_df = trainer.model.get_feature_importance(top_n=20)
                     if fi_df is not None and not fi_df.empty:
-                        feature_importance = fi_df.to_dict('records')
+                        # 转换为字典格式：{feature: gain}
+                        feature_importance = dict(zip(
+                            fi_df['feature'].tolist(),
+                            fi_df['gain'].tolist()
+                        ))
                 except Exception as e:
                     logger.warning(f"获取特征重要性失败: {e}")
 
             # 注册模型到MLTrainingService，使回测能找到模型
             from app.services.ml_training_service import MLTrainingService
             ml_service = MLTrainingService()
-
-            # 获取模型文件路径
-            from pathlib import Path
-            model_path = Path('data/models/saved') / f"{model_id}.txt" if config['model_type'] == 'lightgbm' else Path('data/models/saved') / f"{model_id}.pth"
 
             # 创建任务元数据
             ml_service.tasks[model_id] = {
@@ -445,7 +481,7 @@ class ExperimentService:
             ml_service._save_metadata()
             logger.info(f"✅ 模型已注册到MLTrainingService: {model_id}")
 
-            return model_id, metrics, feature_importance
+            return model_id, metrics, feature_importance, str(model_path)
 
         # 在线程池中执行（避免阻塞事件循环）
         return await asyncio.to_thread(_train)
@@ -549,6 +585,7 @@ class ExperimentService:
         model_id: str,
         train_metrics: Dict,
         feature_importance: Dict,
+        model_path: str,
         train_completed_at: datetime,
         train_duration: int
     ):
@@ -559,6 +596,7 @@ class ExperimentService:
             SET model_id = %s,
                 train_metrics = %s::jsonb,
                 feature_importance = %s::jsonb,
+                model_path = %s,
                 train_completed_at = %s,
                 train_duration_seconds = %s
             WHERE id = %s
@@ -571,6 +609,7 @@ class ExperimentService:
                 model_id,
                 json.dumps(train_metrics),
                 json.dumps(feature_importance),
+                model_path,
                 train_completed_at,
                 train_duration,
                 exp_id
@@ -741,3 +780,106 @@ class ExperimentService:
             })
 
         return models
+
+    async def list_batches(self, limit: int = 100, status: Optional[str] = None) -> List[Dict]:
+        """
+        列出所有批次
+
+        Args:
+            limit: 返回数量限制
+            status: 状态过滤 (pending/running/completed/failed)
+
+        Returns:
+            批次列表
+        """
+        # 构建查询
+        conditions = []
+        params = []
+
+        if status:
+            conditions.append("status = %s")
+            params.append(status)
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        query = f"""
+            SELECT * FROM batch_statistics
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT %s
+        """
+        params.append(limit)
+
+        # 执行查询
+        results = await asyncio.to_thread(self.db._execute_query, query, tuple(params))
+
+        batches = []
+        for row in results:
+            batches.append({
+                'batch_id': row[0],
+                'batch_name': row[1],
+                'strategy': row[2],
+                'status': row[3],
+                'total_experiments': row[4],
+                'completed_experiments': row[5],
+                'failed_experiments': row[6],
+                'running_experiments': row[7],
+                'success_rate_pct': float(row[8]) if row[8] else 0,
+                'created_at': row[9].isoformat() if row[9] else None,
+                'started_at': row[10].isoformat() if row[10] else None,
+                'completed_at': row[11].isoformat() if row[11] else None,
+                'duration_hours': float(row[12]) if row[12] else None,
+                'avg_rank_score': float(row[13]) if row[13] else None,
+                'max_rank_score': float(row[14]) if row[14] else None,
+                'top_model_id': row[15]
+            })
+
+        return batches
+
+    async def get_batch_experiments(self, batch_id: int, status: Optional[str] = None, limit: int = 500) -> List[Dict]:
+        """
+        获取批次下的所有实验
+
+        Args:
+            batch_id: 批次ID
+            status: 状态过滤 (completed/failed/running/pending)
+            limit: 返回数量限制
+
+        Returns:
+            实验列表
+        """
+        conditions = ["batch_id = %s"]
+        params = [batch_id]
+
+        if status:
+            conditions.append("status = %s")
+            params.append(status)
+
+        query = f"""
+            SELECT id, experiment_name, model_id, config, train_metrics, backtest_metrics,
+                   rank_score, rank_position, status, error_message
+            FROM experiments
+            WHERE {' AND '.join(conditions)}
+            ORDER BY rank_score DESC NULLS LAST
+            LIMIT %s
+        """
+        params.append(limit)
+
+        results = await asyncio.to_thread(self.db._execute_query, query, tuple(params))
+
+        experiments = []
+        for row in results:
+            experiments.append({
+                'id': row[0],
+                'experiment_name': row[1],
+                'model_id': row[2],
+                'config': row[3],
+                'train_metrics': row[4],
+                'backtest_metrics': row[5],
+                'rank_score': float(row[6]) if row[6] else None,
+                'rank_position': row[7],
+                'status': row[8],
+                'error_message': row[9]
+            })
+
+        return experiments

@@ -485,6 +485,113 @@ async def get_templates():
     }
 
 
+@router.get("/{experiment_id}")
+async def get_experiment_detail(experiment_id: int):
+    """
+    获取单个实验的详细信息
+
+    - **experiment_id**: 实验ID
+    """
+    try:
+        import sys
+        sys.path.insert(0, '/app/src')
+        from database.db_manager import DatabaseManager
+        db = DatabaseManager()
+
+        # 查询实验详情
+        query = """
+            SELECT
+                id, batch_id, experiment_name, experiment_hash, model_id, config,
+                train_metrics, feature_importance, model_path,
+                backtest_status, backtest_metrics, backtest_trades,
+                rank_score, rank_position, status, error_message,
+                train_duration_seconds, backtest_duration_seconds, total_duration_seconds,
+                created_at, train_started_at, train_completed_at,
+                backtest_started_at, backtest_completed_at
+            FROM experiments
+            WHERE id = %s
+        """
+        result = await asyncio.to_thread(db._execute_query, query, (experiment_id,))
+
+        if not result:
+            raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
+
+        row = result[0]
+        experiment = {
+            'id': row[0],
+            'batch_id': row[1],
+            'experiment_name': row[2],
+            'experiment_hash': row[3],
+            'model_id': row[4],
+            'config': row[5],
+            'train_metrics': row[6],
+            'feature_importance': row[7],
+            'model_path': row[8],
+            'backtest_status': row[9],
+            'backtest_metrics': row[10],
+            'backtest_trades': row[11],
+            'rank_score': float(row[12]) if row[12] else None,
+            'rank_position': row[13],
+            'status': row[14],
+            'error_message': row[15],
+            'train_duration_seconds': row[16],
+            'backtest_duration_seconds': row[17],
+            'total_duration_seconds': row[18],
+            'created_at': row[19].isoformat() if row[19] else None,
+            'train_started_at': row[20].isoformat() if row[20] else None,
+            'train_completed_at': row[21].isoformat() if row[21] else None,
+            'backtest_started_at': row[22].isoformat() if row[22] else None,
+            'backtest_completed_at': row[23].isoformat() if row[23] else None,
+        }
+
+        return {
+            "status": "success",
+            "data": experiment
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取实验详情失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{experiment_id}")
+async def delete_experiment(experiment_id: int):
+    """
+    删除单个实验
+
+    - **experiment_id**: 实验ID
+    """
+    try:
+        import sys
+        sys.path.insert(0, '/app/src')
+        from database.db_manager import DatabaseManager
+        db = DatabaseManager()
+
+        # 检查实验是否存在
+        check_query = "SELECT id FROM experiments WHERE id = %s"
+        result = await asyncio.to_thread(db._execute_query, check_query, (experiment_id,))
+
+        if not result:
+            raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
+
+        # 删除实验
+        delete_query = "DELETE FROM experiments WHERE id = %s"
+        await asyncio.to_thread(db._execute_update, delete_query, (experiment_id,))
+
+        return {
+            "status": "success",
+            "message": f"实验 {experiment_id} 已删除"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除实验失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== 实验详情 ====================
 
 @router.get("/experiment/{exp_id}")

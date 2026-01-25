@@ -52,26 +52,50 @@ function ModelDetailsPageContent() {
     }
   }, [models.length, setModels]);
 
-  // 初始化：从URL参数获取modelId
+  // 初始化：从URL参数获取experimentId
   useEffect(() => {
-    const modelIdFromUrl = searchParams.get('modelId');
-    if (modelIdFromUrl && models.length > 0) {
-      setSelectedModelId(modelIdFromUrl);
-      loadModelDetails(modelIdFromUrl);
+    const experimentIdFromUrl = searchParams.get('experimentId');
+    const modelIdFromUrl = searchParams.get('modelId'); // 兼容旧URL
+
+    if (experimentIdFromUrl) {
+      setSelectedModelId(experimentIdFromUrl);
+      loadModelDetails(experimentIdFromUrl);
+    } else if (modelIdFromUrl && models.length > 0) {
+      // 兼容旧的modelId参数，通过models找到对应的experimentId
+      const model = models.find(m => m.model_id === modelIdFromUrl);
+      if (model && model.id) {
+        setSelectedModelId(String(model.id));
+        loadModelDetails(String(model.id));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, models]);
 
-  // 加载模型详细信息
-  const loadModelDetails = async (modelId: string) => {
-    if (!modelId) return;
+  // 加载模型详细信息（使用实验ID）
+  const loadModelDetails = async (experimentId: string) => {
+    if (!experimentId) return;
 
     setLoading(true);
     setError('');
 
     try {
-      const response = await axios.get(`${API_BASE}/ml/tasks/${modelId}`);
-      const task = response.data;
+      const response = await axios.get(`${API_BASE}/experiment/${experimentId}`);
+      const experiment = response.data.data;
+
+      // 转换为旧的task格式以兼容现有组件
+      const task = {
+        task_id: String(experiment.id),
+        model_id: experiment.model_id,
+        model_name: experiment.model_id,
+        status: experiment.status,
+        config: experiment.config,
+        metrics: experiment.train_metrics,
+        feature_importance: experiment.feature_importance,
+        model_path: experiment.model_path,
+        started_at: experiment.train_started_at,
+        completed_at: experiment.train_completed_at,
+        error_message: experiment.error_message,
+      };
 
       setTaskDetail(task);
 
@@ -79,7 +103,7 @@ function ModelDetailsPageContent() {
       setCurrentTask(task);
 
       // 更新selectedModel
-      const model = models.find(m => m.model_id === modelId);
+      const model = models.find(m => String(m.id) === experimentId);
       if (model) {
         setSelectedModel(model);
       }
@@ -92,10 +116,10 @@ function ModelDetailsPageContent() {
   };
 
   // 处理模型选择变化
-  const handleModelChange = (modelId: string) => {
-    setSelectedModelId(modelId);
-    router.push(`/ai-lab/model-details?modelId=${modelId}`);
-    loadModelDetails(modelId);
+  const handleModelChange = (experimentId: string) => {
+    setSelectedModelId(experimentId);
+    router.push(`/ai-lab/model-details?experimentId=${experimentId}`);
+    loadModelDetails(experimentId);
   };
 
   // 运行预测
@@ -184,7 +208,7 @@ function ModelDetailsPageContent() {
                 </div>
               ) : (
                 models.map(model => (
-                  <SelectItem key={model.model_id} value={model.model_id}>
+                  <SelectItem key={String(model.id)} value={String(model.id)}>
                     {model.symbol} - {model.model_type.toUpperCase()} - {model.target_period}日
                     {model.trained_at && ` (${model.trained_at.substring(0, 10)})`}
                   </SelectItem>

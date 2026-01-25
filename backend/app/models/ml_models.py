@@ -102,7 +102,8 @@ class MLModelMetadata(BaseModel):
 
 class MLPredictionRequest(BaseModel):
     """预测请求"""
-    model_id: str
+    model_id: Optional[str] = None  # 兼容旧版：模型名称
+    experiment_id: Optional[int] = None  # 新版：实验ID（experiments表主键）
     symbol: str
     start_date: str
     end_date: str

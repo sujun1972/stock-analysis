@@ -17,11 +17,13 @@ from app.models.ml_models import (
     MLPredictionResponse
 )
 from app.services.ml_training_service import MLTrainingService, sanitize_float_values
+from app.services.experiment_service import ExperimentService
 
 router = APIRouter()
 
 # 全局服务实例
 ml_service = MLTrainingService()
+experiment_service = ExperimentService()
 
 
 @router.post("/train", response_model=MLTrainingTaskResponse)
@@ -154,18 +156,31 @@ async def predict(request: MLPredictionRequest):
     """
     使用训练好的模型进行预测
 
-    - **model_id**: 模型ID（任务ID）
+    - **model_id**: 模型ID（任务ID，兼容旧版）
+    - **experiment_id**: 实验ID（新版，优先使用）
     - **symbol**: 股票代码
     - **start_date**: 开始日期
     - **end_date**: 结束日期
     """
     try:
-        result = await ml_service.predict(
-            model_id=request.model_id,
-            symbol=request.symbol,
-            start_date=request.start_date,
-            end_date=request.end_date
-        )
+        # 优先使用 experiment_id（新版）
+        if request.experiment_id:
+            result = await ml_service.predict_from_experiment(
+                experiment_id=request.experiment_id,
+                symbol=request.symbol,
+                start_date=request.start_date,
+                end_date=request.end_date
+            )
+        # 向后兼容：使用 model_id（旧版）
+        elif request.model_id:
+            result = await ml_service.predict(
+                model_id=request.model_id,
+                symbol=request.symbol,
+                start_date=request.start_date,
+                end_date=request.end_date
+            )
+        else:
+            raise HTTPException(status_code=400, detail="必须提供 experiment_id 或 model_id")
 
         return MLPredictionResponse(**result)
 
@@ -183,6 +198,7 @@ async def list_models(
 ):
     """
     列出可用的模型（支持分页）
+    统一从 experiments 表读取所有模型（手动训练和自动实验）
 
     - **symbol**: 股票代码过滤
     - **model_type**: 模型类型过滤 (lightgbm/gru)
@@ -190,59 +206,117 @@ async def list_models(
     - **page**: 页码（从1开始）
     - **page_size**: 每页数量
     """
-    # 获取所有已完成的任务（获取足够多的数据以支持过滤）
-    tasks = ml_service.list_tasks(status='completed', limit=1000)
-
-    # 转换为模型元数据并过滤
-    models = []
-    for task in tasks:
-        # 判断模型来源：有metrics字段说明是自动化实验训练的
-        has_metrics = bool(task.get('metrics'))
-        model_source = 'auto_experiment' if has_metrics else 'manual_training'
+    try:
+        # 构建查询条件
+        conditions = ["status = %s"]
+        params = ['completed']
 
         # 应用过滤条件
-        if symbol and task['config']['symbol'] != symbol:
-            continue
-        if model_type and task['config']['model_type'] != model_type:
-            continue
-        if source and model_source != source:
-            continue
+        if symbol:
+            conditions.append("config->>'symbol' = %s")
+            params.append(symbol)
 
-        model_data = {
-            'model_id': task['task_id'],
-            'symbol': task['config']['symbol'],
-            'model_type': task['config']['model_type'],
-            'target_period': task['config'].get('target_period', 5),
-            # 清理指标和特征重要性中的无效浮点数
-            'metrics': sanitize_float_values(task.get('metrics', {})) if has_metrics else None,
-            'feature_importance': sanitize_float_values(task.get('feature_importance', {})) if has_metrics else None,
-            'model_path': task['model_path'],
-            'trained_at': task['completed_at'],
-            'config': task['config'],
-            'source': model_source,  # 添加来源标识
-            'has_metrics': has_metrics  # 是否有详细指标
+        if model_type:
+            conditions.append("config->>'model_type' = %s")
+            params.append(model_type)
+
+        if source:
+            if source == 'manual_training':
+                conditions.append("batch_id IS NULL")
+            elif source == 'auto_experiment':
+                conditions.append("batch_id IS NOT NULL")
+
+        where_clause = " AND ".join(conditions)
+
+        # 计算总数
+        count_query = f"""
+            SELECT COUNT(*) FROM experiments
+            WHERE {where_clause}
+        """
+
+        import sys
+        sys.path.insert(0, '/app/src')
+        from database.db_manager import DatabaseManager
+        db = DatabaseManager()
+
+        count_result = await asyncio.to_thread(db._execute_query, count_query, tuple(params))
+        total = count_result[0][0] if count_result else 0
+
+        # 计算分页
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        page = max(1, min(page, total_pages))
+
+        # 查询数据（带分页）
+        offset = (page - 1) * page_size
+        data_query = f"""
+            SELECT
+                id, batch_id, experiment_name, model_id, config,
+                train_metrics, feature_importance, model_path,
+                train_completed_at, rank_score, created_at
+            FROM experiments
+            WHERE {where_clause}
+            ORDER BY train_completed_at DESC NULLS LAST
+            LIMIT %s OFFSET %s
+        """
+        params.extend([page_size, offset])
+
+        results = await asyncio.to_thread(db._execute_query, data_query, tuple(params))
+
+        models = []
+        for row in results:
+            exp_id, batch_id, exp_name, model_id, config, train_metrics, feature_importance, model_path, trained_at, rank_score, created_at = row
+
+            # 判断来源
+            is_manual = batch_id is None
+            source_type = 'manual_training' if is_manual else 'auto_experiment'
+
+            # 提取配置信息
+            symbol_code = config.get('symbol', 'Unknown')
+            model_type_str = config.get('model_type', 'lightgbm')
+            target_period = config.get('target_period', 5)
+
+            # 提取训练指标
+            metrics_data = None
+            has_metrics = False
+            if train_metrics:
+                metrics_data = sanitize_float_values({
+                    'rmse': train_metrics.get('rmse'),
+                    'r2': train_metrics.get('r2'),
+                    'ic': train_metrics.get('ic'),
+                    'rank_ic': train_metrics.get('rank_ic'),
+                })
+                has_metrics = True
+
+            model_data = {
+                'id': exp_id,  # 实验表主键，唯一标识
+                'model_id': model_id,  # 模型名称（可能重复）
+                'symbol': symbol_code,
+                'model_type': model_type_str,
+                'target_period': target_period,
+                'metrics': metrics_data,
+                'feature_importance': sanitize_float_values(feature_importance) if feature_importance else None,
+                'model_path': model_path,
+                'trained_at': trained_at.isoformat() if trained_at else (created_at.isoformat() if created_at else None),
+                'config': config,
+                'source': source_type,
+                'has_metrics': has_metrics,
+                'rank_score': float(rank_score) if rank_score else None,
+                'batch_id': batch_id
+            }
+            models.append(model_data)
+
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "models": models
         }
-        models.append(model_data)
 
-    # 计算分页
-    total = len(models)
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
-
-    # 确保页码在有效范围内
-    page = max(1, min(page, total_pages))
-
-    # 分页切片
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-    paginated_models = models[start_idx:end_idx]
-
-    return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": total_pages,
-        "models": paginated_models
-    }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
 
 
 @router.get("/features/available")
