@@ -390,8 +390,8 @@ class MLModelStrategy(BaseStrategy):
             # 步骤1: 使用DataPipeline准备特征（与训练时保持一致）
             pipeline = DataPipeline(
                 target_periods=self.target_period,
-                scaler_type='robust',  # 使用训练时的scaler类型
-                cache_features=False,
+                scaler_type='standard',
+                cache_features=False,  # 禁用缓存，确保使用最新特征工程逻辑
                 verbose=False
             )
 

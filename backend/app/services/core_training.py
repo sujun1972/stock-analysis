@@ -19,6 +19,7 @@ sys.path.insert(0, '/app/src')
 
 from src.data_pipeline import DataPipeline, get_full_training_data
 from src.models.model_trainer import ModelTrainer
+from app.utils.ic_validator import ICValidator
 
 
 class CoreTrainingService:
@@ -36,6 +37,7 @@ class CoreTrainingService:
     def __init__(self, models_dir: str = '/data/models/ml_models'):
         self.models_dir = Path(models_dir)
         self.models_dir.mkdir(parents=True, exist_ok=True)
+        self.ic_validator = ICValidator()
 
     async def train_model(
         self,
@@ -188,30 +190,70 @@ class CoreTrainingService:
                 else:
                     raise ValueError(f"不支持的模型类型: {config['model_type']}")
 
-            # ======== 步骤4: 评估模型 ========
-            logger.info(f"[CoreTraining] 评估模型（数据集: {evaluate_on}）...")
+            # ======== 步骤4: 评估模型（在所有三个数据集上） ========
+            logger.info(f"[CoreTraining] 评估模型（在Train/Valid/Test三个数据集上）...")
 
-            # 选择评估数据集
-            if evaluate_on == 'train':
-                X_eval, y_eval = X_train, y_train
-            elif evaluate_on == 'valid':
-                X_eval, y_eval = X_valid, y_valid
-            else:
-                X_eval, y_eval = X_test, y_test
-
+            # 在所有三个数据集上评估
             if use_async:
-                metrics = await asyncio.to_thread(
-                    trainer.evaluate,
-                    X_eval, y_eval,
-                    dataset_name=evaluate_on,
-                    verbose=False
+                train_metrics = await asyncio.to_thread(
+                    trainer.evaluate, X_train, y_train, dataset_name='train', verbose=False
+                )
+                valid_metrics = await asyncio.to_thread(
+                    trainer.evaluate, X_valid, y_valid, dataset_name='valid', verbose=False
+                )
+                test_metrics = await asyncio.to_thread(
+                    trainer.evaluate, X_test, y_test, dataset_name='test', verbose=False
                 )
             else:
-                metrics = trainer.evaluate(
-                    X_eval, y_eval,
-                    dataset_name=evaluate_on,
-                    verbose=False
-                )
+                train_metrics = trainer.evaluate(X_train, y_train, dataset_name='train', verbose=False)
+                valid_metrics = trainer.evaluate(X_valid, y_valid, dataset_name='valid', verbose=False)
+                test_metrics = trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False)
+
+            # 输出评估结果摘要
+            logger.info(f"\n{'='*80}")
+            logger.info(f"📊 模型评估结果")
+            logger.info(f"{'='*80}")
+            logger.info(f"Train  - IC: {train_metrics.get('ic', 0):>7.4f}, Rank IC: {train_metrics.get('rank_ic', 0):>7.4f}, R²: {train_metrics.get('r2', 0):>7.4f}")
+            logger.info(f"Valid  - IC: {valid_metrics.get('ic', 0):>7.4f}, Rank IC: {valid_metrics.get('rank_ic', 0):>7.4f}, R²: {valid_metrics.get('r2', 0):>7.4f}")
+            logger.info(f"Test   - IC: {test_metrics.get('ic', 0):>7.4f}, Rank IC: {test_metrics.get('rank_ic', 0):>7.4f}, R²: {test_metrics.get('r2', 0):>7.4f}")
+
+            # IC异常检测 - 防止数据泄露模型进入生产环境
+            is_valid, alerts = self.ic_validator.validate_all(
+                train_ic=train_metrics.get('ic', 0),
+                valid_ic=valid_metrics.get('ic', 0),
+                test_ic=test_metrics.get('ic', 0),
+                train_r2=train_metrics.get('r2'),
+                test_r2=test_metrics.get('r2'),
+                model_id=model_id,
+                symbol=config.get('symbol')
+            )
+
+            # 打印告警信息
+            self.ic_validator.print_alerts(alerts)
+
+            # 获取验证总结并记录
+            validation_summary = self.ic_validator.get_validation_summary(is_valid, alerts)
+            logger.info(f"{validation_summary}")
+            logger.info(f"{'='*80}\n")
+
+            # 如果有严重告警，标记验证失败
+            if not is_valid:
+                metrics['validation_failed'] = True
+                metrics['validation_summary'] = validation_summary
+                logger.warning(f"⚠️  模型IC验证失败: {model_id}")
+            else:
+                metrics['validation_failed'] = False
+
+            # 使用测试集指标作为主要指标（向后兼容）
+            metrics = test_metrics
+
+            # 添加分层指标到结果中
+            metrics['train_ic'] = train_metrics.get('ic', 0)
+            metrics['train_rank_ic'] = train_metrics.get('rank_ic', 0)
+            metrics['train_r2'] = train_metrics.get('r2', 0)
+            metrics['valid_ic'] = valid_metrics.get('ic', 0)
+            metrics['valid_rank_ic'] = valid_metrics.get('rank_ic', 0)
+            metrics['valid_r2'] = valid_metrics.get('r2', 0)
 
             # ======== 步骤5: 生成模型ID ========
             if model_id is None:

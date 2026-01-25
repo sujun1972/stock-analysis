@@ -12,6 +12,8 @@ from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from imblearn.over_sampling import SMOTE, RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from collections import Counter
+import hashlib
+import json
 
 warnings.filterwarnings('ignore')
 
@@ -73,10 +75,29 @@ class DataPipeline:
             'resampled': False
         }
 
+        # 特征工程版本号 - 用于缓存自动失效机制
+        self.FEATURE_VERSION = "v2.0"
+
     def log(self, message: str):
         """输出日志"""
         if self.verbose:
             print(message)
+
+    def _compute_feature_config_hash(self) -> str:
+        """
+        计算特征配置的哈希值，用于缓存自动失效
+        当特征工程逻辑变更时，哈希值改变，旧缓存自动失效
+        """
+        config = {
+            'version': self.FEATURE_VERSION,
+            'scaler_type': self.scaler_type,
+            'target_periods': self.target_periods,
+            'deprice_ma_periods': [5, 10, 20, 60, 120, 250],
+            'deprice_ema_periods': [12, 26, 50],
+            'deprice_atr_periods': [14, 28],
+        }
+        config_str = json.dumps(config, sort_keys=True)
+        return hashlib.md5(config_str.encode()).hexdigest()[:8]
 
     # ==================== 核心方法 ====================
 
@@ -114,8 +135,13 @@ class DataPipeline:
         # 1. 检查缓存
         cache_file = self._get_cache_path(symbol, start_date, end_date, target_period)
         if use_cache and not force_refresh and cache_file.exists():
-            self.log("\n✓ 从缓存加载数据...")
-            return self._load_from_cache(cache_file)
+            self.log("\n✓ 尝试从缓存加载数据...")
+            cached_data = self._load_from_cache(cache_file)
+            if cached_data is not None:
+                self.log("  ✓ 缓存验证通过，使用缓存数据")
+                return cached_data
+            else:
+                self.log("  ⚠️  缓存验证失败，重新计算特征")
 
         # 2. 从数据库读取原始数据
         self.log("\n[1/7] 从数据库读取原始数据...")
@@ -301,6 +327,54 @@ class DataPipeline:
         df = ft.get_dataframe()
 
         self.log(f"  转换特征: 添加时间尺度收益率、OHLC、时间特征")
+
+        # 特征去价格化 - 将绝对价格转换为相对比例，防止数据泄露
+        self.log("  应用特征去价格化...")
+        df = self._deprice_features(df)
+
+        return df
+
+    def _deprice_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        特征去价格化：将绝对价格特征转换为相对比例
+        防止数据泄露，确保模型学习的是价格关系而非绝对价格
+        """
+        current_close = df['close']
+        features_to_drop = []
+
+        # MA类指标 → 价格偏离度比例
+        for period in [5, 10, 20, 60, 120, 250]:
+            ma_col = f'MA{period}'
+            if ma_col in df.columns:
+                df[f'CLOSE_TO_MA{period}_RATIO'] = (current_close / df[ma_col] - 1) * 100
+                features_to_drop.append(ma_col)
+
+        # EMA类指标 → 价格偏离度比例
+        for period in [12, 26, 50]:
+            ema_col = f'EMA{period}'
+            if ema_col in df.columns:
+                df[f'CLOSE_TO_EMA{period}_RATIO'] = (current_close / df[ema_col] - 1) * 100
+                features_to_drop.append(ema_col)
+
+        # BOLL类指标 → 价格偏离度比例
+        for comp in ['UPPER', 'MIDDLE', 'LOWER']:
+            boll_col = f'BOLL_{comp}'
+            if boll_col in df.columns:
+                df[f'CLOSE_TO_BOLL_{comp}_RATIO'] = (current_close / df[boll_col] - 1) * 100
+                features_to_drop.append(boll_col)
+
+        # ATR类指标 → 相对波动率百分比
+        for period in [14, 28]:
+            atr_col = f'ATR{period}'
+            atr_pct_col = f'ATR{period}_PCT'
+            if atr_col in df.columns:
+                if atr_pct_col not in df.columns:
+                    df[atr_pct_col] = (df[atr_col] / current_close) * 100
+                features_to_drop.append(atr_col)
+
+        # 删除所有绝对价格特征
+        df = df.drop(columns=[col for col in features_to_drop if col in df.columns])
+        self.log(f"    去价格化: 转换 {len(features_to_drop)} 个特征")
 
         return df
 
@@ -567,12 +641,20 @@ class DataPipeline:
         end_date: str,
         target_period: int
     ) -> Path:
-        """生成缓存文件路径"""
-        filename = f"{symbol}_{start_date}_{end_date}_T{target_period}.parquet"
+        """
+        生成缓存文件路径
+        包含scaler_type和特征配置hash，确保配置变更时缓存失效
+        """
+        feature_hash = self._compute_feature_config_hash()
+        filename = f"{symbol}_{start_date}_{end_date}_T{target_period}_{self.scaler_type}_{feature_hash}.parquet"
         return self.cache_dir / filename
 
+    def _get_cache_metadata_path(self, cache_file: Path) -> Path:
+        """获取缓存元数据文件路径"""
+        return cache_file.with_suffix('.meta.json')
+
     def _save_to_cache(self, X: pd.DataFrame, y: pd.Series, cache_file: Path):
-        """保存到缓存"""
+        """保存到缓存，并保存元数据用于版本验证"""
         try:
             # 合并X和y
             df_cache = X.copy()
@@ -581,23 +663,91 @@ class DataPipeline:
             # 保存为Parquet格式（高效）
             df_cache.to_parquet(cache_file, compression='gzip')
 
-            self.log(f"\n✓ 缓存已保存: {cache_file.name}")
+            # 保存元数据
+            metadata = {
+                'version': self.FEATURE_VERSION,
+                'scaler_type': self.scaler_type,
+                'feature_hash': self._compute_feature_config_hash(),
+                'feature_count': len(X.columns),
+                'feature_names': X.columns.tolist(),
+                'sample_count': len(X),
+                'created_at': pd.Timestamp.now().isoformat()
+            }
+            metadata_file = self._get_cache_metadata_path(cache_file)
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            self.log(f"\n✓ 缓存已保存: {cache_file.name} (v{self.FEATURE_VERSION})")
         except Exception as e:
             self.log(f"\n✗ 缓存保存失败: {e}")
 
-    def _load_from_cache(self, cache_file: Path) -> Tuple[pd.DataFrame, pd.Series]:
-        """从缓存加载"""
-        df_cache = pd.read_parquet(cache_file)
+    def _validate_cache(self, cache_file: Path) -> bool:
+        """
+        验证缓存是否有效
+        检查版本号和特征配置是否匹配
+        """
+        metadata_file = self._get_cache_metadata_path(cache_file)
 
-        X = df_cache.drop(columns=[self.target_name])
-        y = df_cache[self.target_name]
+        if not metadata_file.exists():
+            self.log("  ⚠️  缓存元数据不存在，缓存失效")
+            return False
 
-        self.feature_names = X.columns.tolist()
+        try:
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
 
-        self.log(f"  数据形状: {X.shape}")
-        self.log(f"  特征数量: {len(self.feature_names)}")
+            # 检查版本号
+            if metadata.get('version') != self.FEATURE_VERSION:
+                self.log(f"  ⚠️  特征版本不匹配: 缓存={metadata.get('version')}, 当前={self.FEATURE_VERSION}")
+                return False
 
-        return X, y
+            # 检查scaler类型
+            if metadata.get('scaler_type') != self.scaler_type:
+                self.log(f"  ⚠️  Scaler类型不匹配: 缓存={metadata.get('scaler_type')}, 当前={self.scaler_type}")
+                return False
+
+            # 检查特征配置哈希
+            current_hash = self._compute_feature_config_hash()
+            if metadata.get('feature_hash') != current_hash:
+                self.log(f"  ⚠️  特征配置已变更: 缓存={metadata.get('feature_hash')}, 当前={current_hash}")
+                return False
+
+            return True
+
+        except Exception as e:
+            self.log(f"  ⚠️  缓存验证失败: {e}")
+            return False
+
+    def _load_from_cache(self, cache_file: Path) -> Optional[Tuple[pd.DataFrame, pd.Series]]:
+        """
+        从缓存加载，如果验证失败则返回None
+        """
+        # 验证缓存有效性
+        if not self._validate_cache(cache_file):
+            # 删除无效缓存
+            if cache_file.exists():
+                cache_file.unlink()
+            metadata_file = self._get_cache_metadata_path(cache_file)
+            if metadata_file.exists():
+                metadata_file.unlink()
+            return None
+
+        try:
+            df_cache = pd.read_parquet(cache_file)
+
+            X = df_cache.drop(columns=[self.target_name])
+            y = df_cache[self.target_name]
+
+            self.feature_names = X.columns.tolist()
+
+            self.log(f"  数据形状: {X.shape}")
+            self.log(f"  特征数量: {len(self.feature_names)}")
+
+            return X, y
+
+        except Exception as e:
+            self.log(f"  ⚠️  缓存加载失败: {e}")
+            return None
 
     def clear_cache(self, symbol: Optional[str] = None):
         """
