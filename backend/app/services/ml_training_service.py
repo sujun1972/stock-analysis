@@ -323,23 +323,32 @@ class MLTrainingService:
             # 构建backtest_metrics JSON（可选）
             backtest_metrics_json = json.dumps(sanitize_float_values(backtest_metrics)) if backtest_metrics else None
 
+            # 计算综合评分（与自动实验系统保持一致）
+            rank_score = None
+            if backtest_metrics:
+                from app.services.model_ranker import ModelRanker
+                ranker = ModelRanker(self.db)
+                rank_score = ranker.calculate_rank_score(metrics, backtest_metrics)
+                logger.info(f"✅ 模型评分: {rank_score:.2f}")
+
             model_path = task['model_path']
             started_at = datetime.fromisoformat(task['started_at'])
             train_duration = int((completed_at - started_at).total_seconds())
 
-            # 插入到数据库（包含回测指标）
+            # 插入到数据库（包含回测指标和评分）
             query = """
                 INSERT INTO experiments (
                     batch_id, experiment_name, experiment_hash, config,
-                    model_id, model_path, train_metrics, feature_importance, backtest_metrics,
+                    model_id, model_path, train_metrics, feature_importance, backtest_metrics, rank_score,
                     status, train_started_at, train_completed_at, train_duration_seconds,
                     created_at
                 )
-                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (experiment_hash) DO UPDATE SET
                     train_metrics = EXCLUDED.train_metrics,
                     feature_importance = EXCLUDED.feature_importance,
                     backtest_metrics = EXCLUDED.backtest_metrics,
+                    rank_score = EXCLUDED.rank_score,
                     train_completed_at = EXCLUDED.train_completed_at,
                     train_duration_seconds = EXCLUDED.train_duration_seconds,
                     status = EXCLUDED.status
@@ -354,7 +363,8 @@ class MLTrainingService:
                 model_path,
                 train_metrics_json,
                 feature_importance_json,
-                backtest_metrics_json,  # 新增回测指标
+                backtest_metrics_json,  # 回测指标
+                rank_score,  # 综合评分
                 'completed',
                 started_at,
                 completed_at,
