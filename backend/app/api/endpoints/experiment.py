@@ -13,9 +13,13 @@ from loguru import logger
 from app.services.experiment_service import ExperimentService
 from app.services.parameter_grid import ParameterSpaceTemplates
 from app.services.model_ranker import ModelRanker
+from app.repositories.batch_repository import BatchRepository
+from app.repositories.experiment_repository import ExperimentRepository
 
 router = APIRouter()
 experiment_service = ExperimentService()
+batch_repo = BatchRepository()
+experiment_repo = ExperimentRepository()
 
 
 # ==================== 请求模型 ====================
@@ -115,60 +119,16 @@ async def list_batches(
     try:
         offset = (page - 1) * limit
 
-        # 构建查询
-        conditions = []
-        params = []
-
-        if status:
-            conditions.append("status = %s")
-            params.append(status)
-
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
-        query = f"""
-            SELECT * FROM batch_statistics
-            {where_clause}
-            ORDER BY created_at DESC
-            LIMIT %s OFFSET %s
-        """
-        params.extend([limit, offset])
-
-        # 执行查询
-        import sys
-        from database.db_manager import DatabaseManager
-        db = DatabaseManager()
-
-        results = await asyncio.to_thread(db._execute_query, query, tuple(params))
-
-        batches = []
-        for row in results:
-            batches.append({
-                'batch_id': row[0],
-                'batch_name': row[1],
-                'strategy': row[2],
-                'status': row[3],
-                'total_experiments': row[4],
-                'completed_experiments': row[5],
-                'failed_experiments': row[6],
-                'running_experiments': row[7],
-                'success_rate_pct': float(row[8]) if row[8] else 0,
-                'created_at': row[9].isoformat() if row[9] else None,
-                'started_at': row[10].isoformat() if row[10] else None,
-                'completed_at': row[11].isoformat() if row[11] else None,
-                'duration_hours': float(row[12]) if row[12] else None,
-                'avg_rank_score': float(row[13]) if row[13] else None,
-                'max_rank_score': float(row[14]) if row[14] else None,
-                'top_model_id': row[15]
-            })
+        # 使用 Repository 查询批次
+        batches = await asyncio.to_thread(
+            batch_repo.find_batches_with_stats,
+            status=status,
+            limit=limit,
+            offset=offset
+        )
 
         # 获取总数
-        count_query = f"SELECT COUNT(*) FROM experiment_batches {where_clause}"
-        count_result = await asyncio.to_thread(
-            db._execute_query,
-            count_query,
-            tuple(params[:len(conditions)]) if conditions else ()
-        )
-        total = count_result[0][0] if count_result else 0
+        total = await asyncio.to_thread(batch_repo.count_batches, status=status)
 
         return {
             "status": "success",
@@ -192,16 +152,13 @@ async def list_batches(
 async def delete_batch(batch_id: int):
     """删除批次（级联删除所有实验）"""
     try:
-        import sys
-        from database.db_manager import DatabaseManager
-        db = DatabaseManager()
-
-        query = "DELETE FROM experiment_batches WHERE id = %s"
-        await asyncio.to_thread(db._execute_update, query, (batch_id,))
+        # 使用 Repository 删除批次
+        result = await asyncio.to_thread(batch_repo.delete_batch_cascade, batch_id)
 
         return {
             "status": "success",
-            "message": f"批次 {batch_id} 已删除"
+            "message": f"批次 {batch_id} 已删除",
+            "data": result
         }
 
     except Exception as e:
@@ -244,17 +201,12 @@ async def pause_batch(batch_id: int):
 async def cancel_batch(batch_id: int):
     """取消批次"""
     try:
-        import sys
-        from database.db_manager import DatabaseManager
-        db = DatabaseManager()
-
         # 更新批次状态
-        query = "UPDATE experiment_batches SET status = 'cancelled' WHERE id = %s"
-        await asyncio.to_thread(db._execute_update, query, (batch_id,))
+        await asyncio.to_thread(batch_repo.update_batch_status, batch_id, 'cancelled')
 
-        # 取消所有pending的实验
+        # 取消所有pending的实验 - 需要使用原生 SQL
         query = "UPDATE experiments SET status = 'cancelled' WHERE batch_id = %s AND status = 'pending'"
-        await asyncio.to_thread(db._execute_update, query, (batch_id,))
+        await asyncio.to_thread(experiment_repo.execute_update, query, (batch_id,))
 
         return {
             "status": "success",
@@ -276,43 +228,13 @@ async def list_experiments(
 ):
     """列出批次下的实验"""
     try:
-        import sys
-        from database.db_manager import DatabaseManager
-        db = DatabaseManager()
-
-        conditions = ["batch_id = %s"]
-        params = [batch_id]
-
-        if status:
-            conditions.append("status = %s")
-            params.append(status)
-
-        query = f"""
-            SELECT id, experiment_name, model_id, config, train_metrics, backtest_metrics,
-                   rank_score, rank_position, status, error_message
-            FROM experiments
-            WHERE {' AND '.join(conditions)}
-            ORDER BY rank_score DESC NULLS LAST
-            LIMIT %s
-        """
-        params.append(limit)
-
-        results = await asyncio.to_thread(db._execute_query, query, tuple(params))
-
-        experiments = []
-        for row in results:
-            experiments.append({
-                'id': row[0],
-                'experiment_name': row[1],
-                'model_id': row[2],
-                'config': row[3],
-                'train_metrics': row[4],
-                'backtest_metrics': row[5],
-                'rank_score': float(row[6]) if row[6] else None,
-                'rank_position': row[7],
-                'status': row[8],
-                'error_message': row[9]
-            })
+        # 使用 Repository 查询实验
+        experiments = await asyncio.to_thread(
+            experiment_repo.find_experiments_by_batch,
+            batch_id=batch_id,
+            status=status,
+            limit=limit
+        )
 
         return {
             "status": "success",
@@ -489,55 +411,11 @@ async def get_experiment_detail(experiment_id: int):
     - **experiment_id**: 实验ID
     """
     try:
-        import sys
-        from database.db_manager import DatabaseManager
-        db = DatabaseManager()
+        # 使用 Repository 查询实验详情
+        experiment = await asyncio.to_thread(experiment_repo.get_experiment_detail, experiment_id)
 
-        # 查询实验详情
-        query = """
-            SELECT
-                id, batch_id, experiment_name, experiment_hash, model_id, config,
-                train_metrics, feature_importance, model_path,
-                backtest_status, backtest_metrics, backtest_trades,
-                rank_score, rank_position, status, error_message,
-                train_duration_seconds, backtest_duration_seconds, total_duration_seconds,
-                created_at, train_started_at, train_completed_at,
-                backtest_started_at, backtest_completed_at
-            FROM experiments
-            WHERE id = %s
-        """
-        result = await asyncio.to_thread(db._execute_query, query, (experiment_id,))
-
-        if not result:
+        if not experiment:
             raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
-
-        row = result[0]
-        experiment = {
-            'id': row[0],
-            'batch_id': row[1],
-            'experiment_name': row[2],
-            'experiment_hash': row[3],
-            'model_id': row[4],
-            'config': row[5],
-            'train_metrics': row[6],
-            'feature_importance': row[7],
-            'model_path': row[8],
-            'backtest_status': row[9],
-            'backtest_metrics': row[10],
-            'backtest_trades': row[11],
-            'rank_score': float(row[12]) if row[12] else None,
-            'rank_position': row[13],
-            'status': row[14],
-            'error_message': row[15],
-            'train_duration_seconds': row[16],
-            'backtest_duration_seconds': row[17],
-            'total_duration_seconds': row[18],
-            'created_at': row[19].isoformat() if row[19] else None,
-            'train_started_at': row[20].isoformat() if row[20] else None,
-            'train_completed_at': row[21].isoformat() if row[21] else None,
-            'backtest_started_at': row[22].isoformat() if row[22] else None,
-            'backtest_completed_at': row[23].isoformat() if row[23] else None,
-        }
 
         return {
             "status": "success",
@@ -559,20 +437,14 @@ async def delete_experiment(experiment_id: int):
     - **experiment_id**: 实验ID
     """
     try:
-        import sys
-        from database.db_manager import DatabaseManager
-        db = DatabaseManager()
-
         # 检查实验是否存在
-        check_query = "SELECT id FROM experiments WHERE id = %s"
-        result = await asyncio.to_thread(db._execute_query, check_query, (experiment_id,))
+        experiment = await asyncio.to_thread(experiment_repo.get_experiment_detail, experiment_id)
 
-        if not result:
+        if not experiment:
             raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
 
         # 删除实验
-        delete_query = "DELETE FROM experiments WHERE id = %s"
-        await asyncio.to_thread(db._execute_update, delete_query, (experiment_id,))
+        await asyncio.to_thread(experiment_repo.delete_experiment, experiment_id)
 
         return {
             "status": "success",
