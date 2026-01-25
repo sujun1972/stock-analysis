@@ -27,6 +27,11 @@ RUN sed -i '/TA-Lib/d' requirements.txt
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 安装 core 模块为可导入包
+# 这样可以直接使用 "from data_pipeline import ..." 而无需 sys.path 操作
+COPY ../core /app/core
+RUN pip install -e /app/core
+
 # 复制应用代码
 COPY . .
 

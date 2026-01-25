@@ -15,46 +15,15 @@ import numpy as np
 
 from loguru import logger
 
-# 导入core模块
-import sys
-sys.path.insert(0, '/app/src')
-
-from src.data_pipeline import DataPipeline, get_full_training_data
-from src.models.model_trainer import ModelTrainer
+# 导入 core 模块（已通过 setup.py 安装为可导入包）
+from data_pipeline import DataPipeline, get_full_training_data
+from models.model_trainer import ModelTrainer
 
 # 导入核心训练模块
 from app.services.core_training import CoreTrainingService
 
-
-def sanitize_float_values(data: Any) -> Any:
-    """
-    递归清理数据中的无效浮点数值（NaN, Inf, -Inf）
-    将无效值转换为 None 以便 JSON 序列化
-
-    此函数用于处理机器学习模型输出中可能出现的特殊浮点值，
-    这些值无法被 JSON 序列化，会导致 API 响应失败。
-
-    参数:
-        data: 待清理的数据，支持 dict, list, float, int, numpy类型等
-
-    返回:
-        清理后的数据，无效浮点数被替换为 None
-    """
-    if isinstance(data, dict):
-        return {k: sanitize_float_values(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [sanitize_float_values(item) for item in data]
-    elif isinstance(data, float):
-        if np.isnan(data) or np.isinf(data):
-            return None
-        return data
-    elif isinstance(data, (np.floating, np.integer)):
-        value = float(data)
-        if np.isnan(value) or np.isinf(value):
-            return None
-        return value
-    else:
-        return data
+# 导入工具函数
+from app.utils.data_cleaning import sanitize_float_values
 
 
 class MLTrainingService:
@@ -607,7 +576,6 @@ class MLTrainingService:
             预测结果
         """
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
 
         # 查询实验信息

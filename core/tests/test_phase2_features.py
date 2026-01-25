@@ -10,12 +10,11 @@ from pathlib import Path
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
-from src.features.technical_indicators import TechnicalIndicators, calculate_all_indicators
-from src.features.alpha_factors import AlphaFactors, calculate_all_alpha_factors
-from src.features.feature_transformer import FeatureTransformer, prepare_ml_features
-from src.features.feature_storage import FeatureStorage
+from features.technical_indicators import TechnicalIndicators, calculate_all_indicators
+from features.alpha_factors import AlphaFactors, calculate_all_alpha_factors
+from features.feature_transformer import FeatureTransformer, prepare_ml_features
+from features.feature_storage import FeatureStorage
 
 import pandas as pd
 import numpy as np

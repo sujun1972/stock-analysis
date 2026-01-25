@@ -10,11 +10,10 @@ from pathlib import Path
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
-from src.models.lightgbm_model import LightGBMStockModel
-from src.models.model_evaluator import ModelEvaluator
-from src.models.model_trainer import ModelTrainer
+from models.lightgbm_model import LightGBMStockModel
+from models.model_evaluator import ModelEvaluator
+from models.model_trainer import ModelTrainer
 
 import pandas as pd
 import numpy as np
@@ -289,7 +288,7 @@ def test_integrated_workflow():
 
     # 使用便捷函数训练模型
     print("\n4.2 使用便捷函数训练模型")
-    from src.models.model_trainer import train_stock_model
+    from models.model_trainer import train_stock_model
 
     trainer, test_metrics = train_stock_model(
         df=df,

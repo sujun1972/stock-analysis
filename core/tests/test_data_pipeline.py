@@ -13,9 +13,8 @@ import numpy as np
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
-from src.data_pipeline import DataPipeline, create_pipeline, get_full_training_data
+from data_pipeline import DataPipeline, create_pipeline, get_full_training_data
 
 
 class TestDataPipeline(unittest.TestCase):

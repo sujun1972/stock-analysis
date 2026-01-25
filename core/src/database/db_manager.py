@@ -2,6 +2,9 @@
 """
 数据库管理模块
 负责数据库连接、表创建和数据存储
+
+使用单例模式确保全局只有一个数据库连接池实例，
+避免连接池泛滥导致数据库连接耗尽。
 """
 
 import psycopg2
@@ -11,30 +14,75 @@ import pandas as pd
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 import logging
+import threading
 
 # 尝试加载配置
 try:
     from ..config.config import DATABASE_CONFIG
 except ImportError:
-    from src.config.config import DATABASE_CONFIG
+    try:
+        from config.config import DATABASE_CONFIG
+    except ImportError:
+        # 默认配置（仅在无法导入时使用）
+        DATABASE_CONFIG = {
+            'host': 'localhost',
+            'port': 5432,
+            'database': 'stock_analysis',
+            'user': 'stock_user',
+            'password': 'stock_password_123'
+        }
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """数据库管理器"""
+    """
+    数据库管理器（单例模式）
+
+    全局只创建一个实例和一个连接池，避免连接资源浪费。
+    线程安全，支持多线程并发访问。
+    """
+
+    _instance = None
+    _lock = threading.Lock()
+    _initialized = False
+
+    def __new__(cls, config: Optional[Dict[str, Any]] = None):
+        """
+        单例模式实现
+
+        确保全局只有一个 DatabaseManager 实例
+        """
+        if cls._instance is None:
+            with cls._lock:
+                # 双重检查锁定模式
+                if cls._instance is None:
+                    cls._instance = super(DatabaseManager, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         初始化数据库管理器
 
+        注意：由于单例模式，此方法在全局只执行一次
+
         Args:
             config: 数据库配置字典，如果为None则使用默认配置
         """
-        self.config = config or DATABASE_CONFIG
-        self.connection_pool = None
-        self._init_connection_pool()
+        # 避免重复初始化
+        if self._initialized:
+            return
+
+        with self._lock:
+            if self._initialized:
+                return
+
+            self.config = config or DATABASE_CONFIG
+            self.connection_pool = None
+            self._init_connection_pool()
+            self._initialized = True
+            logger.info("DatabaseManager 单例已创建")
 
     def _init_connection_pool(self):
         """初始化连接池"""
@@ -1188,35 +1236,107 @@ class DatabaseManager:
                 self.release_connection(conn)
 
     def __del__(self):
-        """析构函数，确保连接池关闭"""
-        try:
-            self.close_all_connections()
-        except Exception:
-            # 忽略析构时的异常，避免日志污染
-            # 连接池可能已经被其他地方关闭
-            pass
+        """析构函数（单例模式下很少触发）"""
+        # 单例模式下不应频繁触发析构
+        # 连接池由单例实例管理，不在此处关闭
+        pass
+
+    @classmethod
+    def reset_instance(cls):
+        """
+        重置单例实例（仅用于测试）
+
+        警告：此方法仅应在测试环境中使用，
+        生产环境中调用可能导致连接泄漏
+        """
+        with cls._lock:
+            if cls._instance is not None:
+                # 关闭现有连接池
+                if hasattr(cls._instance, 'connection_pool') and cls._instance.connection_pool:
+                    try:
+                        cls._instance.connection_pool.closeall()
+                    except Exception as e:
+                        logger.warning(f"关闭连接池时出错: {e}")
+
+                cls._instance = None
+                cls._initialized = False
+                logger.info("DatabaseManager 单例已重置")
+
+    @classmethod
+    def get_instance(cls, config: Optional[Dict[str, Any]] = None) -> 'DatabaseManager':
+        """
+        获取 DatabaseManager 单例实例（推荐使用）
+
+        Args:
+            config: 数据库配置（仅在首次调用时生效）
+
+        Returns:
+            DatabaseManager 实例
+        """
+        return cls(config)
 
 
-# 便捷函数
+# ==================== 便捷函数 ====================
+
 def get_db_manager() -> DatabaseManager:
-    """获取数据库管理器实例"""
+    """
+    获取数据库管理器实例（已废弃，建议使用 get_database）
+
+    Returns:
+        DatabaseManager 单例实例
+    """
     return DatabaseManager()
 
+
+def get_database(config: Optional[Dict[str, Any]] = None) -> DatabaseManager:
+    """
+    获取数据库管理器单例实例（推荐使用）
+
+    Args:
+        config: 数据库配置（仅在首次调用时生效）
+
+    Returns:
+        DatabaseManager 实例
+
+    Example:
+        from database.db_manager import get_database
+
+        db = get_database()
+        stocks = db.load_daily_data('000001', '20200101', '20231231')
+    """
+    return DatabaseManager.get_instance(config)
+
+
+# ==================== 测试代码 ====================
 
 if __name__ == "__main__":
     # 测试数据库连接和初始化
     print("\n" + "="*60)
-    print("测试数据库管理模块")
+    print("测试数据库管理模块（单例模式）")
     print("="*60)
 
     try:
-        db = DatabaseManager()
-        print("\n✓ 数据库连接成功")
+        # 测试单例模式
+        print("\n1. 测试单例模式...")
+        db1 = DatabaseManager()
+        db2 = DatabaseManager()
+        db3 = get_database()
 
-        print("\n初始化数据库表结构...")
-        db.init_database()
+        assert db1 is db2, "DatabaseManager 应该是单例"
+        assert db2 is db3, "get_database() 应返回同一实例"
+        print("   ✓ 单例模式测试通过（db1 is db2 is db3）")
+
+        print("\n2. 测试数据库连接...")
+        print("   ✓ 数据库连接成功")
+
+        print("\n3. 初始化数据库表结构...")
+        db1.init_database()
+        print("   ✓ 表结构初始化成功")
 
         print("\n✅ 数据库管理模块测试通过")
+        print("   - 单例模式正常工作")
+        print("   - 全局只有一个连接池实例")
+        print("   - 避免了连接资源浪费")
 
     except Exception as e:
         print(f"\n❌ 测试失败: {e}")

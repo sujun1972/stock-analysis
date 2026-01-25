@@ -18,11 +18,11 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.data_fetcher import DataFetcher
-from src.a_stock_list_fetcher import fetch_akshare_stock_list
-from src.data.stock_filter import StockFilter, filter_stocks_by_market
-from src.data.data_cleaner import DataCleaner
-from src.config.trading_rules import AdjustType, DataQualityRules
+from data_fetcher import DataFetcher
+from a_stock_list_fetcher import fetch_akshare_stock_list
+from data.stock_filter import StockFilter, filter_stocks_by_market
+from data.data_cleaner import DataCleaner
+from config.trading_rules import AdjustType, DataQualityRules
 
 
 class DataDownloader:

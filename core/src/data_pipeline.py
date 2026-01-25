@@ -17,7 +17,7 @@ import json
 
 warnings.filterwarnings('ignore')
 
-from database.db_manager import DatabaseManager
+from database.db_manager import DatabaseManager, get_database
 from features.technical_indicators import TechnicalIndicators
 from features.alpha_factors import AlphaFactors
 from features.feature_transformer import FeatureTransformer
@@ -42,14 +42,15 @@ class DataPipeline:
         初始化数据流水线
 
         参数:
-            db_manager: 数据库管理器实例（None则自动创建）
+            db_manager: 数据库管理器实例（None则使用全局单例）
             target_periods: 预测周期（天数），支持单个或多个
             scaler_type: 特征缩放类型 ('standard', 'robust', 'minmax')
             cache_features: 是否缓存计算好的特征
             cache_dir: 缓存目录
             verbose: 是否输出详细日志
         """
-        self.db = db_manager if db_manager else DatabaseManager()
+        # 使用传入的实例或获取全局单例（避免创建多个连接池）
+        self.db = db_manager if db_manager else get_database()
         self.target_periods = [target_periods] if isinstance(target_periods, int) else target_periods
         self.scaler_type = scaler_type
         self.cache_features = cache_features
@@ -108,7 +109,12 @@ class DataPipeline:
         end_date: str,
         target_period: Optional[int] = None,
         use_cache: bool = True,
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        # 添加缓存键所需参数（仅用于缓存键生成）
+        _train_ratio: float = 0.7,
+        _valid_ratio: float = 0.15,
+        _balance_samples: bool = False,
+        _balance_method: str = 'none'
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         获取训练数据（自动化流转）
@@ -120,9 +126,16 @@ class DataPipeline:
             target_period: 预测周期（None则使用初始化时的第一个周期）
             use_cache: 是否使用缓存
             force_refresh: 强制刷新缓存
+            _train_ratio: 训练集比例（影响缓存键）
+            _valid_ratio: 验证集比例（影响缓存键）
+            _balance_samples: 是否平衡样本（影响缓存键）
+            _balance_method: 平衡方法（影响缓存键）
 
         返回:
             (特征DataFrame, 目标Series)
+
+        注意:
+            缓存键包含所有影响数据分布的参数，确保配置变更时缓存自动失效
         """
         self.log(f"\n{'='*60}")
         self.log(f"数据流水线: {symbol} ({start_date} ~ {end_date})")
@@ -132,8 +145,11 @@ class DataPipeline:
         target_period = target_period or self.target_periods[0]
         self.target_name = f'target_{target_period}d_return'
 
-        # 1. 检查缓存
-        cache_file = self._get_cache_path(symbol, start_date, end_date, target_period)
+        # 1. 检查缓存（使用完整参数生成缓存键）
+        cache_file = self._get_cache_path(
+            symbol, start_date, end_date, target_period,
+            _train_ratio, _valid_ratio, _balance_samples, _balance_method
+        )
         if use_cache and not force_refresh and cache_file.exists():
             self.log("\n✓ 尝试从缓存加载数据...")
             cached_data = self._load_from_cache(cache_file)
@@ -639,15 +655,77 @@ class DataPipeline:
         symbol: str,
         start_date: str,
         end_date: str,
-        target_period: int
+        target_period: int,
+        train_ratio: float = 0.7,
+        valid_ratio: float = 0.15,
+        balance_samples: bool = False,
+        balance_method: str = 'none'
     ) -> Path:
         """
         生成缓存文件路径
-        包含scaler_type和特征配置hash，确保配置变更时缓存失效
+
+        包含所有影响数据的参数，确保配置变更时缓存自动失效：
+        - 特征版本和配置
+        - 数据分割比例
+        - 样本平衡配置
+        - 特征缩放类型
+
+        Args:
+            symbol: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            target_period: 预测周期
+            train_ratio: 训练集比例
+            valid_ratio: 验证集比例
+            balance_samples: 是否平衡样本
+            balance_method: 平衡方法
+
+        Returns:
+            缓存文件路径
         """
-        feature_hash = self._compute_feature_config_hash()
-        filename = f"{symbol}_{start_date}_{end_date}_T{target_period}_{self.scaler_type}_{feature_hash}.parquet"
+        # 计算完整配置哈希
+        config_hash = self._compute_complete_cache_key(
+            symbol, start_date, end_date, target_period,
+            train_ratio, valid_ratio, balance_samples, balance_method
+        )
+
+        # 使用哈希作为文件名（简洁且唯一）
+        filename = f"{symbol}_{start_date}_{end_date}_T{target_period}_{config_hash[:12]}.parquet"
         return self.cache_dir / filename
+
+    def _compute_complete_cache_key(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        target_period: int,
+        train_ratio: float,
+        valid_ratio: float,
+        balance_samples: bool,
+        balance_method: str
+    ) -> str:
+        """
+        计算完整的缓存键哈希
+
+        包含所有影响最终数据的参数，确保配置变更时缓存失效
+
+        Returns:
+            MD5 哈希值（16进制字符串）
+        """
+        config = {
+            'version': self.FEATURE_VERSION,
+            'symbol': symbol,
+            'date_range': f"{start_date}_{end_date}",
+            'target_period': target_period,
+            'scaler_type': self.scaler_type,
+            'train_ratio': round(train_ratio, 3),  # 避免浮点数精度问题
+            'valid_ratio': round(valid_ratio, 3),
+            'balance_samples': balance_samples,
+            'balance_method': balance_method if balance_samples else 'none',
+            'feature_config_hash': self._compute_feature_config_hash()
+        }
+        config_str = json.dumps(config, sort_keys=True)
+        return hashlib.md5(config_str.encode()).hexdigest()
 
     def _get_cache_metadata_path(self, cache_file: Path) -> Path:
         """获取缓存元数据文件路径"""
@@ -830,6 +908,7 @@ def get_full_training_data(
     valid_ratio: float = 0.15,
     scale_features: bool = True,
     balance_samples: bool = False,
+    balance_method: str = 'undersample',
     scaler_type: str = 'robust'
 ) -> Tuple:
     """
@@ -844,6 +923,7 @@ def get_full_training_data(
         valid_ratio: 验证集比例
         scale_features: 是否缩放特征
         balance_samples: 是否平衡样本
+        balance_method: 平衡方法 ('oversample', 'undersample', 'smote')
         scaler_type: 缩放类型
 
     返回:
@@ -856,8 +936,14 @@ def get_full_training_data(
         verbose=True
     )
 
-    # 获取数据
-    X, y = pipeline.get_training_data(symbol, start_date, end_date, target_period)
+    # 获取数据（传递缓存键所需参数）
+    X, y = pipeline.get_training_data(
+        symbol, start_date, end_date, target_period,
+        _train_ratio=train_ratio,
+        _valid_ratio=valid_ratio,
+        _balance_samples=balance_samples,
+        _balance_method=balance_method if balance_samples else 'none'
+    )
 
     # 准备数据
     X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(
@@ -865,7 +951,8 @@ def get_full_training_data(
         train_ratio=train_ratio,
         valid_ratio=valid_ratio,
         scale_features=scale_features,
-        balance_samples=balance_samples
+        balance_samples=balance_samples,
+        balance_method=balance_method
     )
 
     return X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline

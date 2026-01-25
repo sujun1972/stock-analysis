@@ -186,9 +186,7 @@ class MLModelStrategy(BaseStrategy):
             模型选项列表，格式: [{"label": "股票代码 - 模型类型 (训练日期)", "value": "model_id"}, ...]
         """
         try:
-            # 从数据库读取已完成的实验
-            import sys
-            sys.path.insert(0, '/app/src')
+            # 从数据库读取已完成的实验（core 模块已作为包安装）
             from database.db_manager import DatabaseManager
 
             db = DatabaseManager()
@@ -380,9 +378,8 @@ class MLModelStrategy(BaseStrategy):
             预测的收益率序列 (%)
         """
         try:
-            import sys
-            sys.path.insert(0, '/app/src')
-            from src.data_pipeline import DataPipeline
+            # core 模块已作为包安装，无需 sys.path 操作
+            from data_pipeline import DataPipeline
             import pickle
 
             logger.info(f"开始生成真实预测: model_type={self.model_type}, 数据长度={len(data)}")

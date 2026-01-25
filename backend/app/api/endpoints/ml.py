@@ -238,10 +238,8 @@ async def list_models(
             WHERE {where_clause}
         """
 
-        import sys
-        sys.path.insert(0, '/app/src')
-        from database.db_manager import DatabaseManager
-        db = DatabaseManager()
+        from database.db_manager import get_database
+        db = get_database()
 
         count_result = await asyncio.to_thread(db._execute_query, count_query, tuple(params))
         total = count_result[0][0] if count_result else 0

@@ -2,6 +2,30 @@
 
 本目录包含项目的核心业务逻辑代码、脚本和测试。
 
+## 🚀 快速开始
+
+### 安装 Core 模块
+
+```bash
+# 进入 core 目录
+cd core
+
+# 以开发模式安装（推荐）
+pip install -e .
+
+# 或在虚拟环境中安装
+python -m venv ../stock_env
+source ../stock_env/bin/activate  # Linux/Mac
+pip install -e .
+```
+
+安装后可以直接导入：
+```python
+from data_pipeline import DataPipeline
+from database.db_manager import get_database
+from models.model_trainer import ModelTrainer
+```
+
 ## 📁 目录结构
 
 ```

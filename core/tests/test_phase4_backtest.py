@@ -12,11 +12,10 @@ from datetime import datetime
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
-from src.backtest.backtest_engine import BacktestEngine
-from src.backtest.performance_analyzer import PerformanceAnalyzer
-from src.backtest.position_manager import PositionManager, Position
+from backtest.backtest_engine import BacktestEngine
+from backtest.performance_analyzer import PerformanceAnalyzer
+from backtest.position_manager import PositionManager, Position
 
 import pandas as pd
 import numpy as np

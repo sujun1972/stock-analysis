@@ -16,8 +16,8 @@ import logging
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.database.db_manager import DatabaseManager
-from src.a_stock_list_fetcher import fetch_akshare_stock_list
+from database.db_manager import DatabaseManager
+from a_stock_list_fetcher import fetch_akshare_stock_list
 import akshare as ak
 import pandas as pd
 

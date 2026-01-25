@@ -11,13 +11,10 @@ from pathlib import Path
 
 from loguru import logger
 
-# 导入core模块
-import sys
-sys.path.insert(0, '/app/src')
-
-from src.data_pipeline import DataPipeline
-from src.models.model_trainer import ModelTrainer
-from src.database.db_manager import DatabaseManager
+# 导入 core 模块（已通过 setup.py 安装为可导入包）
+from data_pipeline import DataPipeline
+from models.model_trainer import ModelTrainer
+from database.db_manager import DatabaseManager
 
 from app.services.parameter_grid import ParameterGrid
 from app.services.ml_training_service import MLTrainingService
