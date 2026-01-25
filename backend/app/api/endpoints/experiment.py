@@ -135,7 +135,6 @@ async def list_batches(
 
         # 执行查询
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
         db = DatabaseManager()
 
@@ -194,7 +193,6 @@ async def delete_batch(batch_id: int):
     """删除批次（级联删除所有实验）"""
     try:
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
         db = DatabaseManager()
 
@@ -247,7 +245,6 @@ async def cancel_batch(batch_id: int):
     """取消批次"""
     try:
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
         db = DatabaseManager()
 
@@ -280,7 +277,6 @@ async def list_experiments(
     """列出批次下的实验"""
     try:
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
         db = DatabaseManager()
 
@@ -494,7 +490,6 @@ async def get_experiment_detail(experiment_id: int):
     """
     try:
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
         db = DatabaseManager()
 
@@ -565,7 +560,6 @@ async def delete_experiment(experiment_id: int):
     """
     try:
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
         db = DatabaseManager()
 
@@ -599,7 +593,6 @@ async def get_experiment_detail(exp_id: int):
     """获取单个实验详情"""
     try:
         import sys
-        sys.path.insert(0, '/app/src')
         from database.db_manager import DatabaseManager
         db = DatabaseManager()
 

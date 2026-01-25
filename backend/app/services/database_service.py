@@ -12,6 +12,9 @@ from loguru import logger
 # 使用docker-compose挂载的/app/src目录
 from src.database.db_manager import DatabaseManager
 
+# 导入工具函数
+from app.utils.data_cleaning import clean_value, clean_records
+
 
 class DatabaseService:
     """数据库服务类"""
@@ -125,21 +128,7 @@ class DatabaseService:
                 data = df.to_dict('records')
 
                 # 清理所有 NaN 和 Infinity 值，确保 JSON 可序列化
-                import math
-                def clean_value(val):
-                    """清理值，将 NaN/Infinity 替换为 None"""
-                    if val is None:
-                        return None
-                    if isinstance(val, float):
-                        if math.isnan(val) or math.isinf(val):
-                            return None
-                    return val
-
-                # 清理每条记录中的所有值
-                data = [
-                    {k: clean_value(v) for k, v in record.items()}
-                    for record in data
-                ]
+                data = clean_records(data)
 
                 return {
                     "total": total,

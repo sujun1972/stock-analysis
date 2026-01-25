@@ -13,6 +13,7 @@ import asyncio
 from app.services.config_service import ConfigService
 from app.services.data_service import DataDownloadService
 from src.providers import DataProviderFactory
+from app.utils.retry import retry_async
 
 router = APIRouter()
 
@@ -169,37 +170,24 @@ async def sync_stock_list():
         # 获取股票列表（带重试逻辑和状态更新）
         logger.info(f"使用 {config['data_source']} 获取股票列表...")
 
-        max_retries = 3
-        retry_count = 0
-        stock_list = None
-        last_error = None
+        # 定义重试回调函数，用于更新任务状态
+        async def on_retry_callback(retry_count: int, max_retries: int, error: Exception):
+            error_with_retry = f"重试 {retry_count}/{max_retries}: {str(error)}"
+            await config_service.update_sync_task(
+                task_id=task_id,
+                error_message=error_with_retry,
+                progress=int((retry_count / max_retries) * 50)  # 重试进度占 50%
+            )
 
-        while retry_count < max_retries:
-            try:
-                stock_list = await asyncio.to_thread(provider.get_stock_list)
-                break  # 成功则退出循环
-            except Exception as e:
-                retry_count += 1
-                last_error = str(e)
-
-                # 更新任务状态，记录重试信息
-                error_with_retry = f"重试 {retry_count}/{max_retries}: {last_error}"
-                await config_service.update_sync_task(
-                    task_id=task_id,
-                    error_message=error_with_retry,
-                    progress=int((retry_count / max_retries) * 50)  # 重试进度占 50%
-                )
-
-                logger.warning(f"获取股票列表失败 (尝试 {retry_count}/{max_retries}): {last_error}")
-
-                if retry_count >= max_retries:
-                    raise  # 重试次数用尽，抛出异常
-
-                # 等待后重试（线性增长，更均匀）
-                await asyncio.sleep(retry_count * 3)  # 3, 6, 9 秒
-
-        if stock_list is None:
-            raise Exception(last_error or "获取股票列表失败")
+        # 使用重试工具获取股票列表
+        stock_list = await retry_async(
+            asyncio.to_thread,
+            provider.get_stock_list,
+            max_retries=3,
+            delay_base=3.0,
+            delay_strategy='linear',
+            on_retry=on_retry_callback
+        )
 
         # 保存到数据库
         data_service = DataDownloadService()
@@ -293,35 +281,25 @@ async def sync_new_stocks(request: SyncNewStocksRequest):
         # 获取新股列表（带重试逻辑和状态更新）
         logger.info(f"使用 {config['data_source']} 获取最近 {request.days} 天的新股...")
 
-        max_retries = 3
-        retry_count = 0
-        new_stocks = None
-        last_error = None
+        # 定义重试回调函数
+        async def on_retry_callback(retry_count: int, max_retries: int, error: Exception):
+            error_with_retry = f"重试 {retry_count}/{max_retries}: {str(error)}"
+            await config_service.update_sync_task(
+                task_id=task_id,
+                error_message=error_with_retry,
+                progress=int((retry_count / max_retries) * 50)
+            )
 
-        while retry_count < max_retries:
-            try:
-                new_stocks = await asyncio.to_thread(provider.get_new_stocks, request.days)
-                break
-            except Exception as e:
-                retry_count += 1
-                last_error = str(e)
-
-                error_with_retry = f"重试 {retry_count}/{max_retries}: {last_error}"
-                await config_service.update_sync_task(
-                    task_id=task_id,
-                    error_message=error_with_retry,
-                    progress=int((retry_count / max_retries) * 50)
-                )
-
-                logger.warning(f"获取新股列表失败 (尝试 {retry_count}/{max_retries}): {last_error}")
-
-                if retry_count >= max_retries:
-                    raise
-
-                await asyncio.sleep(retry_count * 3)
-
-        if new_stocks is None:
-            raise Exception(last_error or "获取新股列表失败")
+        # 使用重试工具获取新股列表
+        new_stocks = await retry_async(
+            asyncio.to_thread,
+            provider.get_new_stocks,
+            request.days,
+            max_retries=3,
+            delay_base=3.0,
+            delay_strategy='linear',
+            on_retry=on_retry_callback
+        )
 
         # 保存到数据库（新股自动添加到股票基础表）
         data_service = DataDownloadService()
@@ -398,35 +376,24 @@ async def sync_delisted_stocks():
         # 获取退市股票列表（带重试逻辑和状态更新）
         logger.info(f"使用 {config['data_source']} 获取退市股票列表...")
 
-        max_retries = 3
-        retry_count = 0
-        delisted_stocks = None
-        last_error = None
+        # 定义重试回调函数
+        async def on_retry_callback(retry_count: int, max_retries: int, error: Exception):
+            error_with_retry = f"重试 {retry_count}/{max_retries}: {str(error)}"
+            await config_service.update_sync_task(
+                task_id=task_id,
+                error_message=error_with_retry,
+                progress=int((retry_count / max_retries) * 50)
+            )
 
-        while retry_count < max_retries:
-            try:
-                delisted_stocks = await asyncio.to_thread(provider.get_delisted_stocks)
-                break
-            except Exception as e:
-                retry_count += 1
-                last_error = str(e)
-
-                error_with_retry = f"重试 {retry_count}/{max_retries}: {last_error}"
-                await config_service.update_sync_task(
-                    task_id=task_id,
-                    error_message=error_with_retry,
-                    progress=int((retry_count / max_retries) * 50)
-                )
-
-                logger.warning(f"获取退市股票列表失败 (尝试 {retry_count}/{max_retries}): {last_error}")
-
-                if retry_count >= max_retries:
-                    raise
-
-                await asyncio.sleep(retry_count * 3)
-
-        if delisted_stocks is None:
-            raise Exception(last_error or "获取退市股票列表失败")
+        # 使用重试工具获取退市股票列表
+        delisted_stocks = await retry_async(
+            asyncio.to_thread,
+            provider.get_delisted_stocks,
+            max_retries=3,
+            delay_base=3.0,
+            delay_strategy='linear',
+            on_retry=on_retry_callback
+        )
 
         # 更新数据库中股票的状态为"退市"
         data_service = DataDownloadService()
