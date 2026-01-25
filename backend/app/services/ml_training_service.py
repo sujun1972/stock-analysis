@@ -215,16 +215,54 @@ class MLTrainingService:
 
             self._save_metadata()
 
-            # 将模型信息写入数据库的 experiments 表
+            logger.info(f"[{task_id}] ✅ 训练完成! IC={result['metrics'].get('ic', 0):.4f}")
+
+            # ======== 步骤5: 自动回测（与自动实验系统保持一致） ========
+            task['current_step'] = 'Running Backtest'
+            task['progress'] = 92.0
+            self._save_metadata()
+
+            logger.info(f"[{task_id}] 📊 开始自动回测...")
+
+            backtest_metrics = None
+            try:
+                # 使用回测服务运行回测
+                from app.services.backtest_service import BacktestService
+                backtest_service = BacktestService()
+
+                backtest_result = await backtest_service.run_backtest(
+                    symbols=config['symbol'],
+                    start_date=config['start_date'],
+                    end_date=config['end_date'],
+                    strategy_id='ml_model',
+                    strategy_params={'model_id': result['model_name']}
+                )
+
+                backtest_metrics = backtest_result.get('metrics', {})
+                task['backtest_metrics'] = sanitize_float_values(backtest_metrics)
+
+                logger.info(
+                    f"[{task_id}] ✅ 回测完成! "
+                    f"年化收益={backtest_metrics.get('annualized_return', 0) * 100:.2f}%, "
+                    f"夏普比率={backtest_metrics.get('sharpe_ratio', 0):.2f}"
+                )
+
+            except Exception as e:
+                logger.warning(f"[{task_id}] ⚠️ 回测失败（不影响训练）: {e}")
+                # 回测失败不影响训练结果，继续保存
+                backtest_metrics = None
+
+            self._save_metadata()
+
+            # 将模型信息写入数据库的 experiments 表（包含回测指标）
             await self._save_to_database(
                 task_id,
                 result['model_name'],
                 result['metrics'],
                 result['feature_importance'],
-                completed_at
+                completed_at,
+                backtest_metrics  # 新增回测指标参数
             )
-
-            logger.info(f"[{task_id}] ✅ 训练完成! IC={result['metrics'].get('ic', 0):.4f}")
 
         except Exception as e:
             logger.error(f"[{task_id}] ❌ 训练失败: {e}", exc_info=True)
@@ -242,7 +280,8 @@ class MLTrainingService:
         model_name: str,
         metrics: Dict,
         feature_importance: Dict,
-        completed_at: datetime
+        completed_at: datetime,
+        backtest_metrics: Optional[Dict] = None
     ):
         """
         将手动训练的模型保存到数据库的 experiments 表
@@ -253,6 +292,7 @@ class MLTrainingService:
             metrics: 训练指标
             feature_importance: 特征重要性
             completed_at: 完成时间
+            backtest_metrics: 回测指标（可选）
         """
         try:
             task = self.tasks[task_id]
@@ -280,22 +320,26 @@ class MLTrainingService:
             # 构建feature_importance JSON（可选）
             feature_importance_json = json.dumps(sanitize_float_values(feature_importance)) if feature_importance else None
 
+            # 构建backtest_metrics JSON（可选）
+            backtest_metrics_json = json.dumps(sanitize_float_values(backtest_metrics)) if backtest_metrics else None
+
             model_path = task['model_path']
             started_at = datetime.fromisoformat(task['started_at'])
             train_duration = int((completed_at - started_at).total_seconds())
 
-            # 插入到数据库
+            # 插入到数据库（包含回测指标）
             query = """
                 INSERT INTO experiments (
                     batch_id, experiment_name, experiment_hash, config,
-                    model_id, model_path, train_metrics, feature_importance,
+                    model_id, model_path, train_metrics, feature_importance, backtest_metrics,
                     status, train_started_at, train_completed_at, train_duration_seconds,
                     created_at
                 )
-                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s)
                 ON CONFLICT (experiment_hash) DO UPDATE SET
                     train_metrics = EXCLUDED.train_metrics,
                     feature_importance = EXCLUDED.feature_importance,
+                    backtest_metrics = EXCLUDED.backtest_metrics,
                     train_completed_at = EXCLUDED.train_completed_at,
                     train_duration_seconds = EXCLUDED.train_duration_seconds,
                     status = EXCLUDED.status
@@ -310,6 +354,7 @@ class MLTrainingService:
                 model_path,
                 train_metrics_json,
                 feature_importance_json,
+                backtest_metrics_json,  # 新增回测指标
                 'completed',
                 started_at,
                 completed_at,
