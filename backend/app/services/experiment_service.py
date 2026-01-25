@@ -425,12 +425,12 @@ class ExperimentService:
             feature_importance = result['feature_importance']
             model_path = result['model_path']
 
-            # 注册模型到MLTrainingService，使回测能找到模型
-            from app.services.ml_training_service import MLTrainingService
-            ml_service = MLTrainingService()
+            # 注册模型到TrainingTaskManager，使回测能找到模型
+            from app.services.training_task_manager import TrainingTaskManager
+            task_manager = TrainingTaskManager()
 
             # 创建任务元数据
-            ml_service.tasks[model_id] = {
+            task_manager.tasks[model_id] = {
                 'task_id': model_id,
                 'status': 'completed',
                 'model_path': model_path,
@@ -445,8 +445,8 @@ class ExperimentService:
                 'created_at': datetime.now().isoformat(),
                 'completed_at': datetime.now().isoformat(),
             }
-            ml_service._save_metadata()
-            logger.info(f"✅ 模型已注册到MLTrainingService: {model_id}")
+            task_manager._save_metadata()
+            logger.info(f"✅ 模型已注册到TrainingTaskManager: {model_id}")
 
             return model_id, metrics, feature_importance, model_path
 
