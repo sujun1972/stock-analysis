@@ -207,7 +207,11 @@ class MLTrainingService:
             task['completed_at'] = completed_at.isoformat()
 
             # 清理指标和特征重要性中的 NaN/Inf 值，避免 JSON 序列化错误
-            task['metrics'] = sanitize_float_values(result['metrics'])
+            # 添加样本数到 metrics 中（用于前端显示）
+            metrics_with_samples = result['metrics'].copy()
+            metrics_with_samples['samples'] = result.get('test_samples', 0)  # 使用测试集样本数
+
+            task['metrics'] = sanitize_float_values(metrics_with_samples)
             task['feature_importance'] = sanitize_float_values(result['feature_importance'])
             task['training_history'] = sanitize_float_values(result['training_history'])
             task['model_name'] = result['model_name']
@@ -258,7 +262,7 @@ class MLTrainingService:
             await self._save_to_database(
                 task_id,
                 result['model_name'],
-                result['metrics'],
+                metrics_with_samples,  # 使用包含 samples 的 metrics
                 result['feature_importance'],
                 completed_at,
                 backtest_metrics  # 新增回测指标参数

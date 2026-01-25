@@ -328,7 +328,9 @@ function ModelDetailsPageContent() {
                 <div className="flex justify-between items-center pb-2 border-b">
                   <span className="text-sm text-gray-600 dark:text-gray-400">样本数</span>
                   <span className="font-mono font-medium">
-                    {taskDetail.metrics?.samples || 'N/A'}
+                    {taskDetail.metrics?.samples !== undefined && taskDetail.metrics?.samples !== null
+                      ? taskDetail.metrics.samples.toLocaleString()
+                      : 'N/A'}
                   </span>
                 </div>
               </CardContent>

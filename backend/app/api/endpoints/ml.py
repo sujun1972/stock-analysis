@@ -284,6 +284,7 @@ async def list_models(
                     'r2': train_metrics.get('r2'),
                     'ic': train_metrics.get('ic'),
                     'rank_ic': train_metrics.get('rank_ic'),
+                    'samples': train_metrics.get('samples'),
                 })
                 has_metrics = True
 

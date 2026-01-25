@@ -9,7 +9,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -223,7 +223,8 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     if (!modelToDelete) return;
 
     try {
-      await axios.delete(`${API_BASE}/ml/tasks/${modelToDelete.model_id}`);
+      // 使用实验ID删除实验记录（与批量删除保持一致）
+      await axios.delete(`${API_BASE}/experiment/${modelToDelete.id}`);
 
       toast({
         title: '删除成功',
@@ -603,6 +604,137 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* 指标说明卡片 */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-lg">评估指标说明</CardTitle>
+          <CardDescription>了解各项模型评估指标的含义，帮助您更好地选择和使用模型</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* 训练指标 */}
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-2">
+                <span className="text-lg">📊</span>
+                训练指标
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="font-medium text-blue-800 dark:text-blue-200">RMSE</span>
+                  <span className="text-blue-700 dark:text-blue-300"> (均方根误差)</span>
+                  <p className="text-blue-600 dark:text-blue-400 mt-1">预测值与真实值的平均偏差，越小越好。衡量模型的基本预测准确性。</p>
+                </div>
+                <div className="pt-2 border-t border-blue-200 dark:border-blue-700">
+                  <span className="font-medium text-blue-800 dark:text-blue-200">R²</span>
+                  <span className="text-blue-700 dark:text-blue-300"> (决定系数)</span>
+                  <p className="text-blue-600 dark:text-blue-400 mt-1">模型对数据的拟合程度，范围 0-1，越接近 1 表示拟合越好。</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 信息系数指标 */}
+            <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+              <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2 flex items-center gap-2">
+                <span className="text-lg">🎯</span>
+                信息系数 (IC)
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="font-medium text-purple-800 dark:text-purple-200">IC</span>
+                  <span className="text-purple-700 dark:text-purple-300"> (信息系数)</span>
+                  <p className="text-purple-600 dark:text-purple-400 mt-1">预测值与实际收益的相关性，范围 -1 到 1。绝对值越大预测能力越强，通常 &gt;0.03 即可用。</p>
+                </div>
+                <div className="pt-2 border-t border-purple-200 dark:border-purple-700">
+                  <span className="font-medium text-purple-800 dark:text-purple-200">Rank IC</span>
+                  <span className="text-purple-700 dark:text-purple-300"> (排序相关性)</span>
+                  <p className="text-purple-600 dark:text-purple-400 mt-1">预测排序与实际排序的相关性，对异常值更稳健，是选股策略的核心指标。</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 综合评分 */}
+            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+              <h4 className="font-semibold text-indigo-900 dark:text-indigo-100 mb-2 flex items-center gap-2">
+                <span className="text-lg">⭐</span>
+                综合评分
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="font-medium text-indigo-800 dark:text-indigo-200">评分</span>
+                  <span className="text-indigo-700 dark:text-indigo-300"> (Rank Score)</span>
+                  <p className="text-indigo-600 dark:text-indigo-400 mt-1">综合训练指标和回测指标的加权评分。分数越高表示模型整体表现越好。正分表示模型总体可用，负分表示需要优化。</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 收益指标 */}
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <h4 className="font-semibold text-green-900 dark:text-green-100 mb-2 flex items-center gap-2">
+                <span className="text-lg">💰</span>
+                收益指标
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="font-medium text-green-800 dark:text-green-200">年化收益</span>
+                  <span className="text-green-700 dark:text-green-300"> (Annual Return)</span>
+                  <p className="text-green-600 dark:text-green-400 mt-1">策略的年化收益率，正值表示盈利，负值表示亏损。通常期望 &gt;15%。</p>
+                </div>
+                <div className="pt-2 border-t border-green-200 dark:border-green-700">
+                  <span className="font-medium text-green-800 dark:text-green-200">胜率</span>
+                  <span className="text-green-700 dark:text-green-300"> (Win Rate)</span>
+                  <p className="text-green-600 dark:text-green-400 mt-1">盈利交易占总交易的比例。高胜率 (&gt;50%) 意味着策略稳定性好。</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 风险指标 */}
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <h4 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
+                <span className="text-lg">⚠️</span>
+                风险指标
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="font-medium text-red-800 dark:text-red-200">最大回撤</span>
+                  <span className="text-red-700 dark:text-red-300"> (Max Drawdown)</span>
+                  <p className="text-red-600 dark:text-red-400 mt-1">账户从最高点到最低点的最大跌幅，越小越好。表示策略可能面临的最大亏损，通常期望 &lt;20%。</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 风险调整收益 */}
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <h4 className="font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+                <span className="text-lg">📈</span>
+                风险调整收益
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="font-medium text-amber-800 dark:text-amber-200">夏普比率</span>
+                  <span className="text-amber-700 dark:text-amber-300"> (Sharpe Ratio)</span>
+                  <p className="text-amber-600 dark:text-amber-400 mt-1">每承担一单位风险获得的超额收益。&gt;1 良好，&gt;2 优秀，&gt;3 卓越。是评估策略性价比的关键指标。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 使用建议 */}
+          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+              <span className="text-lg">💡</span>
+              选择建议
+            </h4>
+            <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
+              <p><strong>优先考虑：</strong>综合评分为正且较高、夏普比率 &gt;1.5、最大回撤 &lt;15% 的模型</p>
+              <p><strong>IC 指标：</strong>Rank IC &gt; 0.05 说明模型有较强的选股能力</p>
+              <p><strong>稳健性：</strong>胜率 &gt;50% 且回撤小的模型更适合长期使用</p>
+              <p><strong>激进型：</strong>可选择年化收益高但回撤稍大的模型，注意仓位管理</p>
+              <p><strong>负评分模型：</strong>评分为负表示模型整体表现较差，建议调整参数或重新训练</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
