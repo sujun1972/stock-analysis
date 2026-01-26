@@ -13,6 +13,7 @@ import json
 warnings.filterwarnings('ignore')
 
 from .lightgbm_model import LightGBMStockModel
+from .ridge_model import RidgeStockModel
 from .model_evaluator import ModelEvaluator
 
 
@@ -29,7 +30,7 @@ class ModelTrainer:
         初始化训练器
 
         参数:
-            model_type: 模型类型 ('lightgbm', 'gru')
+            model_type: 模型类型 ('lightgbm', 'ridge', 'gru')
             model_params: 模型参数字典
             output_dir: 模型保存目录
         """
@@ -193,6 +194,37 @@ class ModelTrainer:
         if 'seq_length' not in self.model_params:
             self.model_params['seq_length'] = seq_length
 
+    def train_ridge(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_valid: Optional[pd.DataFrame] = None,
+        y_valid: Optional[pd.Series] = None
+    ):
+        """训练Ridge模型"""
+        print(f"\n训练Ridge模型...")
+
+        # 默认参数
+        default_params = {
+            'alpha': 1.0,
+            'fit_intercept': True,
+            'random_state': 42
+        }
+
+        # 合并用户参数
+        params = {**default_params, **self.model_params}
+
+        # 创建模型
+        self.model = RidgeStockModel(**params)
+
+        # 训练
+        history = self.model.train(
+            X_train, y_train,
+            X_valid, y_valid
+        )
+
+        self.training_history = history
+
     def train(
         self,
         X_train: pd.DataFrame,
@@ -213,6 +245,8 @@ class ModelTrainer:
         """
         if self.model_type == 'lightgbm':
             self.train_lightgbm(X_train, y_train, X_valid, y_valid, **kwargs)
+        elif self.model_type == 'ridge':
+            self.train_ridge(X_train, y_train, X_valid, y_valid)
         elif self.model_type == 'gru':
             self.train_gru(X_train, y_train, X_valid, y_valid, **kwargs)
         else:
@@ -243,7 +277,7 @@ class ModelTrainer:
         print(f"\n评估 {dataset_name} 集...")
 
         # 预测并对齐标签
-        if self.model_type == 'lightgbm':
+        if self.model_type == 'lightgbm' or self.model_type == 'ridge':
             predictions = self.model.predict(X)
             y_actual = y.values
         elif self.model_type == 'gru':
