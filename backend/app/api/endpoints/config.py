@@ -10,6 +10,7 @@ from loguru import logger
 
 from app.services.config_service import ConfigService
 from app.api.error_handler import handle_api_errors
+from app.models.api_response import ApiResponse
 
 router = APIRouter()
 
@@ -34,11 +35,7 @@ async def get_data_source_config():
     config_service = ConfigService()
     config = await config_service.get_data_source_config()
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": config
-    }
+    return ApiResponse.success(data=config)
 
 
 @router.post("/source")
@@ -67,11 +64,10 @@ async def update_data_source_config(request: DataSourceConfigRequest):
         tushare_token=request.tushare_token
     )
 
-    return {
-        "code": 200,
-        "message": f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}",
-        "data": config
-    }
+    return ApiResponse.success(
+        data=config,
+        message=f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}"
+    )
 
 
 @router.get("/all")
@@ -86,11 +82,7 @@ async def get_all_configs():
     config_service = ConfigService()
     configs = await config_service.get_all_configs()
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": configs
-    }
+    return ApiResponse.success(data=configs)
 
 
 @router.get("/sync-status")
@@ -105,8 +97,4 @@ async def get_sync_status():
     config_service = ConfigService()
     status = await config_service.get_sync_status()
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": status
-    }
+    return ApiResponse.success(data=status)
