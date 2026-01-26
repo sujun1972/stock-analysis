@@ -5,14 +5,9 @@
 
 import pandas as pd
 import numpy as np
-from typing import Optional, List, Tuple
-import sys
-import os
+from typing import Tuple
 
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-from src.config.trading_rules import DataQualityRules, AdjustType
+from src.config.trading_rules import DataQualityRules
 
 
 class DataCleaner:
@@ -112,7 +107,7 @@ class DataCleaner:
         price_columns = ['open', 'high', 'low', 'close']
         for col in price_columns:
             if col in df.columns:
-                df[col] = df[col].fillna(method='ffill')
+                df[col] = df[col].ffill()
 
         # 成交量填充为0
         volume_columns = ['vol', 'volume', 'amount']
@@ -121,7 +116,7 @@ class DataCleaner:
                 df[col] = df[col].fillna(0)
 
         # 其他列前向填充后向填充
-        df = df.fillna(method='ffill').fillna(method='bfill')
+        df = df.ffill().bfill()
 
         # 如果还有缺失值，删除这些行
         df = df.dropna()

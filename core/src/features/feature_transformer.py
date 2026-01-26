@@ -384,9 +384,9 @@ class FeatureTransformer:
             处理缺失值后的DataFrame
         """
         if method == 'forward':
-            self.df = self.df.fillna(method='ffill')
+            self.df = self.df.ffill()
         elif method == 'backward':
-            self.df = self.df.fillna(method='bfill')
+            self.df = self.df.bfill()
         elif method == 'mean':
             self.df = self.df.fillna(self.df.mean())
         elif method == 'median':
