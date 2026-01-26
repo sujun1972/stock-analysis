@@ -335,7 +335,8 @@ if __name__ == "__main__":
     signal_data = {}
     for stock in stocks:
         # 信号与未来收益有一定相关性
-        future_returns = prices_df[stock].pct_change(5).shift(-5)
+        # 修复：使用正确的未来收益计算方法
+        future_returns = (prices_df[stock].shift(-5) / prices_df[stock] - 1) * 100
         signals = future_returns + np.random.normal(0, 0.01, len(dates))
         signal_data[stock] = signals
 

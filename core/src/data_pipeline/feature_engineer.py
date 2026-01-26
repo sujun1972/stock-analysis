@@ -209,9 +209,14 @@ class FeatureEngineer:
 
         Returns:
             包含目标标签的DataFrame
+
+        Note:
+            使用正确的前瞻计算避免数据泄露：
+            target[t] = (close[t+N] / close[t] - 1) * 100
+            其中 shift(-N) 获取未来N天的价格，确保时间对齐正确
         """
-        # 计算未来N日收益率
-        df[target_name] = df['close'].pct_change(target_period).shift(-target_period) * 100
+        # 计算未来N日收益率（正确的前瞻计算）
+        df[target_name] = (df['close'].shift(-target_period) / df['close'] - 1) * 100
 
         # 统计
         valid_targets = df[target_name].notna().sum()

@@ -73,8 +73,10 @@ class DataPipeline:
         self.cache_features = cache_features
         self.verbose = verbose
 
-        # 特征版本号
-        self.FEATURE_VERSION = "v2.1"
+        # 特征版本号（修改版本号以强制重新计算特征）
+        # v2.2: 修复目标变量计算公式，避免数据泄露
+        #       使用 (close.shift(-N) / close - 1) 替代错误的 pct_change(N).shift(-N)
+        self.FEATURE_VERSION = "v2.2"
 
         # 初始化各组件
         self.data_loader = DataLoader(db_manager or get_database())

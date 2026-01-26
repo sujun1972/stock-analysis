@@ -41,7 +41,8 @@ def create_test_market_data(n_days: int = 100, n_stocks: int = 10) -> Tuple:
         price_data[stock] = prices
 
         # 信号与未来5日收益有相关性（模拟预测能力）
-        future_returns = pd.Series(prices).pct_change(5).shift(-5)
+        # 修复：使用正确的未来收益计算方法
+        future_returns = (pd.Series(prices).shift(-5) / pd.Series(prices) - 1) * 100
         signals = future_returns + np.random.normal(0, 0.01, n_days)
         signal_data[stock] = signals.values
 
