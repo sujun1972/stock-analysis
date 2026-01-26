@@ -38,6 +38,7 @@ def run_all_tests(verbosity=2):
         'test_data_splitter',
         'test_feature_cache',
         'test_database_manager_refactored',
+        'test_pipeline_config',
         'test_performance_iterrows',
         'test_performance_sample_balancing',
     ]

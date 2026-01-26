@@ -15,6 +15,15 @@ from data_pipeline.feature_engineer import FeatureEngineer
 from data_pipeline.data_cleaner import DataCleaner
 from data_pipeline.data_splitter import DataSplitter
 from data_pipeline.feature_cache import FeatureCache
+from data_pipeline.pipeline_config import (
+    PipelineConfig,
+    DEFAULT_CONFIG,
+    BALANCED_TRAINING_CONFIG,
+    QUICK_TRAINING_CONFIG,
+    LONG_TERM_CONFIG,
+    PRODUCTION_CONFIG,
+    create_config
+)
 from utils.logger import get_logger
 from utils.decorators import timer, validate_args
 
@@ -92,14 +101,15 @@ class DataPipeline:
         symbol: str,
         start_date: str,
         end_date: str,
+        config: Optional[PipelineConfig] = None,
+        # 向后兼容的参数（已废弃，建议使用 config）
         target_period: Optional[int] = None,
-        use_cache: bool = True,
-        force_refresh: bool = False,
-        # 缓存键所需参数
-        _train_ratio: float = 0.7,
-        _valid_ratio: float = 0.15,
-        _balance_samples: bool = False,
-        _balance_method: str = 'none'
+        use_cache: Optional[bool] = None,
+        force_refresh: Optional[bool] = None,
+        _train_ratio: Optional[float] = None,
+        _valid_ratio: Optional[float] = None,
+        _balance_samples: Optional[bool] = None,
+        _balance_method: Optional[str] = None
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         获取训练数据（自动化流转）
@@ -108,32 +118,63 @@ class DataPipeline:
             symbol: 股票代码
             start_date: 开始日期 (YYYYMMDD)
             end_date: 结束日期 (YYYYMMDD)
-            target_period: 预测周期（None则使用初始化时的第一个周期）
-            use_cache: 是否使用缓存
-            force_refresh: 强制刷新缓存
-            _train_ratio: 训练集比例（影响缓存键）
-            _valid_ratio: 验证集比例（影响缓存键）
-            _balance_samples: 是否平衡样本（影响缓存键）
-            _balance_method: 平衡方法（影响缓存键）
+            config: 流水线配置对象（推荐使用）
+
+            # 以下参数已废弃，建议使用 config 对象
+            target_period: 预测周期（废弃，请使用 config.target_period）
+            use_cache: 是否使用缓存（废弃，请使用 config.use_cache）
+            force_refresh: 强制刷新缓存（废弃，请使用 config.force_refresh）
+            _train_ratio: 训练集比例（废弃，请使用 config.train_ratio）
+            _valid_ratio: 验证集比例（废弃，请使用 config.valid_ratio）
+            _balance_samples: 是否平衡样本（废弃，请使用 config.balance_samples）
+            _balance_method: 平衡方法（废弃，请使用 config.balance_method）
 
         Returns:
             (特征DataFrame, 目标Series)
+
+        Example:
+            >>> # 推荐用法
+            >>> config = PipelineConfig(target_period=5, balance_samples=True)
+            >>> X, y = pipeline.get_training_data('000001', '20200101', '20231231', config)
+            >>>
+            >>> # 或使用默认配置
+            >>> X, y = pipeline.get_training_data('000001', '20200101', '20231231')
         """
+        # 处理配置参数（支持向后兼容）
+        if config is None:
+            # 使用旧参数或默认值创建配置
+            config = PipelineConfig(
+                target_period=target_period or self.target_periods[0],
+                train_ratio=_train_ratio or 0.7,
+                valid_ratio=_valid_ratio or 0.15,
+                balance_samples=_balance_samples or False,
+                balance_method=_balance_method or 'none',
+                use_cache=use_cache if use_cache is not None else True,
+                force_refresh=force_refresh or False,
+                scaler_type=self.scaler_type
+            )
+        else:
+            # 如果同时提供了旧参数，优先使用旧参数（向后兼容）
+            if target_period is not None:
+                config = config.copy(target_period=target_period)
+            if use_cache is not None:
+                config = config.copy(use_cache=use_cache)
+            if force_refresh is not None:
+                config = config.copy(force_refresh=force_refresh)
+
         self.log(f"\n{'='*60}")
         self.log(f"数据流水线: {symbol} ({start_date} ~ {end_date})")
+        self.log(f"配置: target_period={config.target_period}, balance={config.balance_samples}")
         self.log(f"{'='*60}")
 
-        # 确定目标周期
-        target_period = target_period or self.target_periods[0]
-        self.target_name = f'target_{target_period}d_return'
+        # 确定目标名称
+        self.target_name = f'target_{config.target_period}d_return'
 
         # 1. 检查缓存
-        cache_config = self._build_cache_config(
-            target_period, _train_ratio, _valid_ratio, _balance_samples, _balance_method
-        )
+        cache_config = self._build_cache_config_from_obj(config)
         cache_file = self.feature_cache.get_cache_path(symbol, start_date, end_date, cache_config)
 
-        if use_cache and not force_refresh and self.cache_features:
+        if config.use_cache and not config.force_refresh and self.cache_features:
             self.log("\n✓ 尝试从缓存加载数据...")
             cached_data = self.feature_cache.load(cache_file, self.target_name, cache_config)
             if cached_data is not None:
@@ -150,7 +191,7 @@ class DataPipeline:
 
         # 3. 特征工程（技术指标、Alpha因子、特征转换、目标标签）
         self.log("\n[2/5] 特征工程...")
-        df = self.feature_engineer.compute_all_features(df, target_period)
+        df = self.feature_engineer.compute_all_features(df, config.target_period)
 
         # 4. 数据清洗
         self.log("\n[3/5] 数据清洗...")
@@ -178,13 +219,15 @@ class DataPipeline:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        train_ratio: float = 0.7,
-        valid_ratio: float = 0.15,
-        scale_features: bool = True,
-        balance_samples: bool = False,
-        balance_method: str = 'undersample',
-        balance_threshold: float = 0.0,
-        fit_scaler: bool = True
+        config: Optional[PipelineConfig] = None,
+        fit_scaler: bool = True,
+        # 向后兼容的参数（已废弃）
+        train_ratio: Optional[float] = None,
+        valid_ratio: Optional[float] = None,
+        scale_features: Optional[bool] = None,
+        balance_samples: Optional[bool] = None,
+        balance_method: Optional[str] = None,
+        balance_threshold: Optional[float] = None
     ) -> Tuple:
         """
         为模型准备数据（缩放、平衡、分割）
@@ -192,30 +235,65 @@ class DataPipeline:
         Args:
             X: 特征DataFrame
             y: 目标Series
-            train_ratio: 训练集比例
-            valid_ratio: 验证集比例
-            scale_features: 是否缩放特征
-            balance_samples: 是否平衡样本
-            balance_method: 平衡方法 ('oversample', 'undersample', 'smote')
-            balance_threshold: 分类阈值（收益率>threshold为涨）
+            config: 流水线配置对象（推荐使用）
             fit_scaler: 是否拟合scaler（True=训练模式，False=推理模式）
+
+            # 以下参数已废弃，建议使用 config 对象
+            train_ratio: 训练集比例（废弃）
+            valid_ratio: 验证集比例（废弃）
+            scale_features: 是否缩放特征（废弃）
+            balance_samples: 是否平衡样本（废弃）
+            balance_method: 平衡方法（废弃）
+            balance_threshold: 分类阈值（废弃）
 
         Returns:
             (X_train, y_train, X_valid, y_valid, X_test, y_test)
+
+        Example:
+            >>> # 推荐用法
+            >>> config = PipelineConfig(balance_samples=True, balance_method='smote')
+            >>> result = pipeline.prepare_for_model(X, y, config)
         """
+        # 处理配置参数（支持向后兼容）
+        if config is None:
+            config = PipelineConfig(
+                train_ratio=train_ratio or 0.7,
+                valid_ratio=valid_ratio or 0.15,
+                scale_features=scale_features if scale_features is not None else True,
+                balance_samples=balance_samples or False,
+                balance_method=balance_method or 'undersample',
+                balance_threshold=balance_threshold or 0.0,
+                scaler_type=self.scaler_type
+            )
+        else:
+            # 如果同时提供了旧参数，优先使用旧参数（向后兼容）
+            if train_ratio is not None:
+                config = config.copy(train_ratio=train_ratio)
+            if valid_ratio is not None:
+                config = config.copy(valid_ratio=valid_ratio)
+            if scale_features is not None:
+                config = config.copy(scale_features=scale_features)
+            if balance_samples is not None:
+                config = config.copy(balance_samples=balance_samples)
+            if balance_method is not None:
+                config = config.copy(balance_method=balance_method)
+            if balance_threshold is not None:
+                config = config.copy(balance_threshold=balance_threshold)
+
         self.log(f"\n{'='*60}")
         self.log("为模型准备数据...")
+        self.log(f"配置: scale={config.scale_features}, balance={config.balance_samples}")
         self.log(f"{'='*60}")
 
         # 使用 DataSplitter 完成所有预处理
         result = self.data_splitter.split_and_prepare(
             X, y,
-            train_ratio=train_ratio,
-            valid_ratio=valid_ratio,
-            scale_features=scale_features,
-            balance_samples=balance_samples,
-            balance_method=balance_method,
-            balance_threshold=balance_threshold,
+            train_ratio=config.train_ratio,
+            valid_ratio=config.valid_ratio,
+            scale_features=config.scale_features,
+            balance_samples=config.balance_samples,
+            balance_method=config.balance_method,
+            balance_threshold=config.balance_threshold,
             fit_scaler=fit_scaler
         )
 
@@ -243,6 +321,27 @@ class DataPipeline:
 
         return X, y
 
+    def _build_cache_config_from_obj(self, config: PipelineConfig) -> Dict:
+        """从配置对象构建缓存配置字典"""
+        feature_config = {
+            'version': self.FEATURE_VERSION,
+            'target_period': config.target_period,
+            'scaler_type': config.scaler_type,
+            'deprice_ma_periods': [5, 10, 20, 60, 120, 250],
+            'deprice_ema_periods': [12, 26, 50],
+            'deprice_atr_periods': [14, 28],
+        }
+
+        return {
+            'scaler_type': config.scaler_type,
+            'target_period': config.target_period,
+            'train_ratio': round(config.train_ratio, 3),
+            'valid_ratio': round(config.valid_ratio, 3),
+            'balance_samples': config.balance_samples,
+            'balance_method': config.balance_method if config.balance_samples else 'none',
+            'feature_config_hash': self.feature_cache.compute_feature_config_hash(feature_config)
+        }
+
     def _build_cache_config(
         self,
         target_period: int,
@@ -251,25 +350,19 @@ class DataPipeline:
         balance_samples: bool,
         balance_method: str
     ) -> Dict:
-        """构建缓存配置字典"""
-        feature_config = {
-            'version': self.FEATURE_VERSION,
-            'target_period': target_period,
-            'scaler_type': self.scaler_type,
-            'deprice_ma_periods': [5, 10, 20, 60, 120, 250],
-            'deprice_ema_periods': [12, 26, 50],
-            'deprice_atr_periods': [14, 28],
-        }
+        """
+        构建缓存配置字典（已废弃，建议使用 _build_cache_config_from_obj）
 
-        return {
-            'scaler_type': self.scaler_type,
-            'target_period': target_period,
-            'train_ratio': round(train_ratio, 3),
-            'valid_ratio': round(valid_ratio, 3),
-            'balance_samples': balance_samples,
-            'balance_method': balance_method if balance_samples else 'none',
-            'feature_config_hash': self.feature_cache.compute_feature_config_hash(feature_config)
-        }
+        保留此方法以实现向后兼容
+        """
+        config = PipelineConfig(
+            target_period=target_period,
+            train_ratio=train_ratio,
+            valid_ratio=valid_ratio,
+            balance_samples=balance_samples,
+            balance_method=balance_method
+        )
+        return self._build_cache_config_from_obj(config)
 
     # ==================== 工具方法 ====================
 
@@ -333,6 +426,8 @@ def get_full_training_data(
     symbol: str,
     start_date: str,
     end_date: str,
+    config: Optional[PipelineConfig] = None,
+    # 向后兼容的参数（已废弃）
     target_period: int = 5,
     train_ratio: float = 0.7,
     valid_ratio: float = 0.15,
@@ -348,42 +443,53 @@ def get_full_training_data(
         symbol: 股票代码
         start_date: 开始日期
         end_date: 结束日期
-        target_period: 预测周期
-        train_ratio: 训练集比例
-        valid_ratio: 验证集比例
-        scale_features: 是否缩放特征
-        balance_samples: 是否平衡样本
-        balance_method: 平衡方法 ('oversample', 'undersample', 'smote')
-        scaler_type: 缩放类型
+        config: 流水线配置对象（推荐使用）
+
+        # 以下参数已废弃，建议使用 config 对象
+        target_period: 预测周期（废弃）
+        train_ratio: 训练集比例（废弃）
+        valid_ratio: 验证集比例（废弃）
+        scale_features: 是否缩放特征（废弃）
+        balance_samples: 是否平衡样本（废弃）
+        balance_method: 平衡方法（废弃）
+        scaler_type: 缩放类型（废弃）
 
     Returns:
         (X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline)
+
+    Example:
+        >>> # 推荐用法
+        >>> from data_pipeline.pipeline_config import BALANCED_TRAINING_CONFIG
+        >>> result = get_full_training_data('000001', '20200101', '20231231', BALANCED_TRAINING_CONFIG)
+        >>>
+        >>> # 或自定义配置
+        >>> config = PipelineConfig(target_period=10, balance_samples=True)
+        >>> result = get_full_training_data('000001', '20200101', '20231231', config)
     """
+    # 处理配置参数（支持向后兼容）
+    if config is None:
+        config = PipelineConfig(
+            target_period=target_period,
+            train_ratio=train_ratio,
+            valid_ratio=valid_ratio,
+            scale_features=scale_features,
+            balance_samples=balance_samples,
+            balance_method=balance_method,
+            scaler_type=scaler_type
+        )
+
     # 创建流水线
     pipeline = DataPipeline(
-        target_periods=target_period,
-        scaler_type=scaler_type,
+        target_periods=config.target_period,
+        scaler_type=config.scaler_type,
         verbose=True
     )
 
     # 获取数据
-    X, y = pipeline.get_training_data(
-        symbol, start_date, end_date, target_period,
-        _train_ratio=train_ratio,
-        _valid_ratio=valid_ratio,
-        _balance_samples=balance_samples,
-        _balance_method=balance_method if balance_samples else 'none'
-    )
+    X, y = pipeline.get_training_data(symbol, start_date, end_date, config)
 
     # 准备数据
-    X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(
-        X, y,
-        train_ratio=train_ratio,
-        valid_ratio=valid_ratio,
-        scale_features=scale_features,
-        balance_samples=balance_samples,
-        balance_method=balance_method
-    )
+    X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(X, y, config)
 
     return X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline
 
@@ -392,6 +498,13 @@ def get_full_training_data(
 
 __all__ = [
     'DataPipeline',
+    'PipelineConfig',
+    'DEFAULT_CONFIG',
+    'BALANCED_TRAINING_CONFIG',
+    'QUICK_TRAINING_CONFIG',
+    'LONG_TERM_CONFIG',
+    'PRODUCTION_CONFIG',
     'create_pipeline',
-    'get_full_training_data'
+    'get_full_training_data',
+    'create_config'
 ]
