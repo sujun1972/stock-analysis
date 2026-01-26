@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.services.backtest_service import BacktestService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 backtest_service = BacktestService()
@@ -27,6 +28,7 @@ class BacktestRequest(BaseModel):
 
 
 @router.post("/run")
+@handle_api_errors
 async def run_backtest(request: BacktestRequest):
     """
     运行回测
@@ -67,6 +69,7 @@ async def run_backtest(request: BacktestRequest):
 
 
 @router.get("/result/{task_id}")
+@handle_api_errors
 async def get_backtest_result(task_id: str):
     """
     获取回测结果

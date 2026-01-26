@@ -18,6 +18,7 @@ from app.models.ml_models import (
 )
 from app.services.ml_training_service import MLTrainingService, sanitize_float_values
 from app.services.experiment_service import ExperimentService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ experiment_service = ExperimentService()
 
 
 @router.post("/train", response_model=MLTrainingTaskResponse)
+@handle_api_errors
 async def create_training_task(
     request: MLTrainingTaskCreate,
     background_tasks: BackgroundTasks
@@ -55,6 +57,7 @@ async def create_training_task(
 
 
 @router.get("/tasks/{task_id}", response_model=MLTrainingTaskResponse)
+@handle_api_errors
 async def get_task_status(task_id: str):
     """
     获取任务状态
@@ -70,6 +73,7 @@ async def get_task_status(task_id: str):
 
 
 @router.get("/tasks")
+@handle_api_errors
 async def list_tasks(
     status: Optional[str] = None,
     limit: int = 50
@@ -89,6 +93,7 @@ async def list_tasks(
 
 
 @router.delete("/tasks/{task_id}")
+@handle_api_errors
 async def delete_task(task_id: str):
     """
     删除任务
@@ -104,6 +109,7 @@ async def delete_task(task_id: str):
 
 
 @router.get("/tasks/{task_id}/stream")
+@handle_api_errors
 async def stream_task_progress(task_id: str):
     """
     流式推送训练进度（SSE）
@@ -152,6 +158,7 @@ async def stream_task_progress(task_id: str):
 
 
 @router.post("/predict", response_model=MLPredictionResponse)
+@handle_api_errors
 async def predict(request: MLPredictionRequest):
     """
     使用训练好的模型进行预测
@@ -189,6 +196,7 @@ async def predict(request: MLPredictionRequest):
 
 
 @router.get("/models")
+@handle_api_errors
 async def list_models(
     symbol: Optional[str] = None,
     model_type: Optional[str] = None,
@@ -368,6 +376,7 @@ async def list_models(
 
 
 @router.get("/features/available")
+@handle_api_errors
 async def get_available_features():
     """
     获取可用的特征列表
@@ -403,6 +412,7 @@ async def get_available_features():
 
 
 @router.get("/features/snapshot")
+@handle_api_errors
 async def get_feature_snapshot(
     symbol: str,
     date: str,

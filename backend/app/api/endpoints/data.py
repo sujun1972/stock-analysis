@@ -8,11 +8,13 @@ from datetime import date
 from loguru import logger
 
 from app.services import DatabaseService, DataDownloadService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
 
 @router.get("/daily/{code}")
+@handle_api_errors
 async def get_daily_data(
     code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
@@ -54,6 +56,7 @@ async def get_daily_data(
 
 
 @router.post("/download")
+@handle_api_errors
 async def download_data(
     codes: Optional[List[str]] = None,
     years: int = Query(5, ge=1, le=20, description="下载年数"),
@@ -95,6 +98,7 @@ async def download_data(
 
 
 @router.get("/download/status/{task_id}")
+@handle_api_errors
 async def get_download_status(task_id: str):
     """
     查询下载任务状态

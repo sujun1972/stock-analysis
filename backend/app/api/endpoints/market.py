@@ -11,6 +11,7 @@ from loguru import logger
 
 from src.utils.market_utils import MarketUtils
 from app.services.database_service import DatabaseService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
@@ -32,6 +33,7 @@ class DataFreshnessRequest(BaseModel):
 
 
 @router.get("/status")
+@handle_api_errors
 async def get_market_status():
     """
     获取当前市场状态
@@ -68,6 +70,7 @@ async def get_market_status():
 
 
 @router.post("/check-freshness")
+@handle_api_errors
 async def check_data_freshness(request: DataFreshnessRequest):
     """
     检查实时数据的新鲜度
@@ -120,6 +123,7 @@ async def check_data_freshness(request: DataFreshnessRequest):
 
 
 @router.get("/realtime-info/{code}")
+@handle_api_errors
 async def get_realtime_info(code: str):
     """
     获取单只股票的实时数据信息（包括数据新鲜度）

@@ -11,6 +11,7 @@ from loguru import logger
 import asyncio
 
 from app.services.config_service import ConfigService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
@@ -34,6 +35,7 @@ class ScheduledTaskUpdate(BaseModel):
 
 
 @router.get("/tasks")
+@handle_api_errors
 async def get_scheduled_tasks():
     """
     获取所有定时任务列表
@@ -99,6 +101,7 @@ async def get_scheduled_tasks():
 
 
 @router.get("/tasks/{task_id}")
+@handle_api_errors
 async def get_scheduled_task(task_id: int):
     """
     获取单个定时任务详情
@@ -172,6 +175,7 @@ async def get_scheduled_task(task_id: int):
 
 
 @router.post("/tasks")
+@handle_api_errors
 async def create_scheduled_task(request: ScheduledTaskCreate):
     """
     创建定时任务
@@ -244,6 +248,7 @@ async def create_scheduled_task(request: ScheduledTaskCreate):
 
 
 @router.put("/tasks/{task_id}")
+@handle_api_errors
 async def update_scheduled_task(task_id: int, request: ScheduledTaskUpdate):
     """
     更新定时任务
@@ -312,6 +317,7 @@ async def update_scheduled_task(task_id: int, request: ScheduledTaskUpdate):
 
 
 @router.delete("/tasks/{task_id}")
+@handle_api_errors
 async def delete_scheduled_task(task_id: int):
     """
     删除定时任务
@@ -348,6 +354,7 @@ async def delete_scheduled_task(task_id: int):
 
 
 @router.post("/tasks/{task_id}/toggle")
+@handle_api_errors
 async def toggle_scheduled_task(task_id: int):
     """
     切换定时任务启用状态
@@ -400,6 +407,7 @@ async def toggle_scheduled_task(task_id: int):
 
 
 @router.get("/tasks/{task_id}/history")
+@handle_api_errors
 async def get_task_execution_history(task_id: int, limit: int = 20):
     """
     获取任务执行历史
@@ -462,6 +470,7 @@ async def get_task_execution_history(task_id: int, limit: int = 20):
 
 
 @router.get("/history/recent")
+@handle_api_errors
 async def get_recent_execution_history(limit: int = 50):
     """
     获取最近的任务执行历史

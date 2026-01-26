@@ -8,11 +8,13 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from app.strategies.strategy_manager import strategy_manager
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
 
 @router.get("/list")
+@handle_api_errors
 async def list_strategies() -> Dict[str, Any]:
     """
     获取所有可用策略列表
@@ -43,6 +45,7 @@ async def list_strategies() -> Dict[str, Any]:
 
 
 @router.get("/metadata")
+@handle_api_errors
 async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[str, Any]:
     """
     获取策略完整元数据（包含参数定义）
@@ -89,6 +92,7 @@ async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[
 
 
 @router.post("/validate")
+@handle_api_errors
 async def validate_strategy_params(
     strategy_id: str,
     params: Dict[str, Any]

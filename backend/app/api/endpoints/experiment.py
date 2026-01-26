@@ -15,6 +15,7 @@ from app.services.parameter_grid import ParameterSpaceTemplates
 from app.services.model_ranker import ModelRanker
 from app.repositories.batch_repository import BatchRepository
 from app.repositories.experiment_repository import ExperimentRepository
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 experiment_service = ExperimentService()
@@ -44,6 +45,7 @@ class BatchStartRequest(BaseModel):
 # ==================== 批次管理 ====================
 
 @router.post("/batch")
+@handle_api_errors
 async def create_batch(request: BatchCreateRequest):
     """
     创建实验批次
@@ -90,6 +92,7 @@ async def create_batch(request: BatchCreateRequest):
 
 
 @router.get("/batch/{batch_id}")
+@handle_api_errors
 async def get_batch_info(batch_id: int):
     """获取批次详细信息"""
     try:
@@ -110,6 +113,7 @@ async def get_batch_info(batch_id: int):
 
 
 @router.get("/batches")
+@handle_api_errors
 async def list_batches(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -149,6 +153,7 @@ async def list_batches(
 
 
 @router.delete("/batch/{batch_id}")
+@handle_api_errors
 async def delete_batch(batch_id: int):
     """删除批次（级联删除所有实验）"""
     try:
@@ -169,6 +174,7 @@ async def delete_batch(batch_id: int):
 # ==================== 批次执行 ====================
 
 @router.post("/batch/{batch_id}/start")
+@handle_api_errors
 async def start_batch(batch_id: int, background_tasks: BackgroundTasks, request: Optional[BatchStartRequest] = None):
     """启动批次（后台任务）"""
     try:
@@ -192,12 +198,14 @@ async def start_batch(batch_id: int, background_tasks: BackgroundTasks, request:
 
 
 @router.post("/batch/{batch_id}/pause")
+@handle_api_errors
 async def pause_batch(batch_id: int):
     """暂停批次（暂未实现）"""
     raise HTTPException(status_code=501, detail="暂停功能尚未实现")
 
 
 @router.post("/batch/{batch_id}/cancel")
+@handle_api_errors
 async def cancel_batch(batch_id: int):
     """取消批次"""
     try:
@@ -221,6 +229,7 @@ async def cancel_batch(batch_id: int):
 # ==================== 实验查询 ====================
 
 @router.get("/batch/{batch_id}/experiments")
+@handle_api_errors
 async def list_experiments(
     batch_id: int,
     status: Optional[str] = None,
@@ -251,6 +260,7 @@ async def list_experiments(
 
 
 @router.get("/batch/{batch_id}/top-models")
+@handle_api_errors
 async def get_top_models(
     batch_id: int,
     top_n: int = Query(10, ge=1, le=100),
@@ -288,6 +298,7 @@ async def get_top_models(
 
 
 @router.get("/batch/{batch_id}/report")
+@handle_api_errors
 async def generate_report(batch_id: int):
     """生成实验报告"""
     try:
@@ -305,6 +316,7 @@ async def generate_report(batch_id: int):
 
 
 @router.get("/batch/{batch_id}/parameter-importance")
+@handle_api_errors
 async def get_parameter_importance(batch_id: int):
     """获取参数重要性分析"""
     try:
@@ -327,6 +339,7 @@ async def get_parameter_importance(batch_id: int):
 # ==================== 实时监控 ====================
 
 @router.get("/batch/{batch_id}/stream")
+@handle_api_errors
 async def stream_batch_progress(batch_id: int):
     """SSE流式推送批次进度"""
 
@@ -368,6 +381,7 @@ async def stream_batch_progress(batch_id: int):
 # ==================== 模板管理 ====================
 
 @router.get("/templates")
+@handle_api_errors
 async def get_templates():
     """获取参数空间模板"""
     templates = {
@@ -404,6 +418,7 @@ async def get_templates():
 
 
 @router.get("/{experiment_id}")
+@handle_api_errors
 async def get_experiment_detail(experiment_id: int):
     """
     获取单个实验的详细信息
@@ -430,6 +445,7 @@ async def get_experiment_detail(experiment_id: int):
 
 
 @router.delete("/{experiment_id}")
+@handle_api_errors
 async def delete_experiment(experiment_id: int):
     """
     删除单个实验
@@ -461,6 +477,7 @@ async def delete_experiment(experiment_id: int):
 # ==================== 实验详情 ====================
 
 @router.get("/experiment/{exp_id}")
+@handle_api_errors
 async def get_experiment_detail(exp_id: int):
     """获取单个实验详情"""
     try:

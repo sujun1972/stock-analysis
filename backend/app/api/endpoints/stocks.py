@@ -7,11 +7,13 @@ from typing import List, Optional
 from loguru import logger
 
 from app.services import DatabaseService, DataDownloadService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
 
 @router.get("/list")
+@handle_api_errors
 async def get_stock_list(
     market: Optional[str] = Query(None, description="市场类型"),
     status: str = Query("正常", description="股票状态"),
@@ -54,6 +56,7 @@ async def get_stock_list(
 
 
 @router.get("/{code}")
+@handle_api_errors
 async def get_stock_info(code: str):
     """
     获取单只股票信息
@@ -80,6 +83,7 @@ async def get_stock_info(code: str):
 
 
 @router.post("/update")
+@handle_api_errors
 async def update_stock_list():
     """
     更新股票列表（从数据源获取最新列表）
@@ -97,6 +101,7 @@ async def update_stock_list():
 
 
 @router.get("/{code}/minute")
+@handle_api_errors
 async def get_minute_data(
     code: str,
     date: Optional[str] = Query(None, description="交易日期 (YYYY-MM-DD)，默认今天"),
@@ -244,6 +249,7 @@ async def get_minute_data(
 
 
 @router.get("/{code}/minute/range")
+@handle_api_errors
 async def get_minute_data_range(
     code: str,
     period: str = Query('5', description="分时周期 (1/5/15/30/60)"),

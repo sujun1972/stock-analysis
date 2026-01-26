@@ -6,10 +6,13 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 from loguru import logger
 
+from app.api.error_handler import handle_api_errors
+
 router = APIRouter()
 
 
 @router.post("/train")
+@handle_api_errors
 async def train_model(
     model_type: str = "lightgbm",
     codes: Optional[list[str]] = None,
@@ -40,6 +43,7 @@ async def train_model(
 
 
 @router.get("/predict/{code}")
+@handle_api_errors
 async def predict(
     code: str,
     model_name: Optional[str] = None
@@ -69,6 +73,7 @@ async def predict(
 
 
 @router.get("/evaluation/{model_name}")
+@handle_api_errors
 async def get_model_evaluation(model_name: str):
     """
     获取模型评估指标

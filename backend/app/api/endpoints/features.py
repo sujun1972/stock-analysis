@@ -10,11 +10,13 @@ import pandas as pd
 import numpy as np
 
 from app.services import FeatureService
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
 
 @router.get("/{code}")
+@handle_api_errors
 async def get_features(
     code: str,
     end_date: Optional[date] = None,
@@ -82,6 +84,7 @@ async def get_features(
 
 
 @router.post("/calculate/{code}")
+@handle_api_errors
 async def calculate_features(
     code: str,
     feature_types: List[str] = ["technical", "alpha"]
