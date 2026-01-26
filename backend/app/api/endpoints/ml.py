@@ -130,13 +130,19 @@ async def stream_task_progress(task_id: str):
             if not task:
                 break
 
-            # 发送进度数据
+            # 发送进度数据（包含Ridge基准对比信息）
             data = {
                 'status': task['status'],
                 'progress': task['progress'],
-                'current_step': task['current_step'],
-                'metrics': task['metrics'],
-                'error_message': task['error_message']
+                'current_step': task.get('current_step', ''),
+                'metrics': task.get('metrics', {}),
+                'error_message': task.get('error_message'),
+                'has_baseline': task.get('has_baseline', False),
+                'baseline_metrics': task.get('baseline_metrics'),
+                'comparison_result': task.get('comparison_result'),
+                'recommendation': task.get('recommendation'),
+                'total_samples': task.get('total_samples'),
+                'successful_symbols': task.get('successful_symbols')
             }
 
             yield f"data: {json.dumps(data)}\n\n"

@@ -82,8 +82,16 @@ class TrainingTaskManager:
             'created_at': datetime.now().isoformat(),
             'config': config,
             'progress': 0,
+            'current_step': '准备训练...',
             'metrics': {},
-            'error': None
+            'error': None,
+            'error_message': None,
+            'has_baseline': False,
+            'baseline_metrics': None,
+            'comparison_result': None,
+            'recommendation': None,
+            'total_samples': None,
+            'successful_symbols': None
         }
 
         self.tasks[task_id] = task
@@ -125,6 +133,7 @@ class TrainingTaskManager:
             # 训练失败
             task['status'] = 'failed'
             task['error'] = str(e)
+            task['error_message'] = str(e)
             task['failed_at'] = datetime.now().isoformat()
 
             logger.error(f"✗ 训练任务失败: {task_id} - {e}")
@@ -143,12 +152,33 @@ class TrainingTaskManager:
         task = self.tasks[task_id]
         config = task['config']
 
+        # 检测是否启用池化训练
+        enable_pooled = config.get('enable_pooled_training', False)
+        symbols = config.get('symbols', [])
+
+        if enable_pooled and len(symbols) > 1:
+            # 使用池化训练Pipeline
+            await self._run_pooled_training(task_id)
+        else:
+            # 使用单股票训练
+            await self._run_single_stock_training(task_id)
+
+    async def _run_single_stock_training(self, task_id: str):
+        """
+        执行单股票训练（原有逻辑）
+
+        Args:
+            task_id: 任务ID
+        """
+        task = self.tasks[task_id]
+        config = task['config']
+
         # 使用 CoreTrainingService 统一训练流程
         core_service = CoreTrainingService()
 
         # 准备训练配置
         training_config = {
-            'symbol': config.get('symbol'),
+            'symbol': config.get('symbol') or (config.get('symbols', [None])[0]),
             'start_date': config.get('start_date'),
             'end_date': config.get('end_date'),
             'model_type': config.get('model_type', 'lightgbm'),
@@ -165,7 +195,7 @@ class TrainingTaskManager:
         if 'epochs' in config:
             training_config['epochs'] = config['epochs']
 
-        logger.info(f"训练配置: {training_config}")
+        logger.info(f"[单股票训练] 配置: {training_config}")
 
         # 执行训练
         result = await asyncio.to_thread(
@@ -177,11 +207,102 @@ class TrainingTaskManager:
         task['metrics'] = result.get('metrics', {})
         task['model_path'] = str(result.get('model_path', ''))
         task['feature_importance'] = result.get('feature_importance', {})
+        task['has_baseline'] = False
 
         # 更新进度
         task['progress'] = 100
 
-        logger.info(f"✓ 训练完成，模型路径: {task['model_path']}")
+        logger.info(f"✓ 单股票训练完成，模型路径: {task['model_path']}")
+
+        self._save_metadata()
+
+    async def _run_pooled_training(self, task_id: str):
+        """
+        执行池化训练（多股票 + Ridge基准对比）
+
+        Args:
+            task_id: 任务ID
+        """
+        task = self.tasks[task_id]
+        config = task['config']
+
+        logger.info(f"[池化训练] 开始多股票池化训练")
+
+        # 导入池化训练Pipeline
+        from src.data_pipeline.pooled_training_pipeline import PooledTrainingPipeline
+
+        # 准备参数
+        symbol_list = config.get('symbols', [])
+        start_date = config.get('start_date')
+        end_date = config.get('end_date')
+        target_period = config.get('target_period', 10)
+        model_type = config.get('model_type', 'lightgbm')
+        enable_ridge_baseline = config.get('enable_ridge_baseline', True)
+
+        # 模型参数
+        lightgbm_params = config.get('model_params', {
+            'max_depth': 3,
+            'num_leaves': 7,
+            'n_estimators': 200,
+            'learning_rate': 0.03,
+            'min_child_samples': 100,
+            'reg_alpha': 2.0,
+            'reg_lambda': 2.0
+        })
+
+        ridge_params = config.get('ridge_params', {'alpha': 1.0})
+
+        logger.info(f"[池化训练] 股票数: {len(symbol_list)}, Ridge基准: {enable_ridge_baseline}")
+
+        # 更新进度
+        task['progress'] = 10
+        task['current_step'] = f"加载 {len(symbol_list)} 只股票数据..."
+        self._save_metadata()
+
+        # 创建Pipeline
+        pipeline = PooledTrainingPipeline(
+            scaler_type=config.get('scaler_type', 'robust'),
+            verbose=True
+        )
+
+        # 执行完整Pipeline
+        result = await asyncio.to_thread(
+            pipeline.run_full_pipeline,
+            symbol_list=symbol_list,
+            start_date=start_date,
+            end_date=end_date,
+            target_period=target_period,
+            lightgbm_params=lightgbm_params,
+            ridge_params=ridge_params,
+            enable_ridge_baseline=enable_ridge_baseline
+        )
+
+        # 保存结果
+        task['metrics'] = {
+            'ic': result['lgb_metrics']['test_ic'],
+            'rank_ic': result['lgb_metrics']['test_rank_ic'],
+            'mae': result['lgb_metrics']['test_mae'],
+            'r2': result['lgb_metrics']['test_r2'],
+            'train_ic': result['lgb_metrics']['train_ic'],
+            'valid_ic': result['lgb_metrics']['valid_ic']
+        }
+
+        task['has_baseline'] = result.get('has_baseline', False)
+        task['baseline_metrics'] = result.get('ridge_metrics', {})
+        task['comparison_result'] = result.get('comparison_result', {})
+        task['recommendation'] = result.get('recommendation', '')
+        task['total_samples'] = result.get('total_samples', 0)
+        task['successful_symbols'] = result.get('successful_symbols', [])
+        task['feature_importance'] = result.get('feature_importance', {})
+
+        # 模型路径（取LightGBM的路径）
+        task['model_path'] = str(result.get('lgb_model_path', ''))
+
+        # 更新进度
+        task['progress'] = 100
+        task['current_step'] = "训练完成"
+
+        logger.info(f"✓ 池化训练完成，推荐: {task['recommendation']}")
 
         self._save_metadata()
 

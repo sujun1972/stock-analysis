@@ -226,6 +226,49 @@ class PooledTrainingPipeline:
         result_dict['feature_count'] = len(self.feature_cols)
         result_dict['has_baseline'] = enable_ridge_baseline
 
+        # 提取LightGBM和Ridge的具体指标（用于Backend API）
+        comparison_list = result_dict.get('comparison', [])
+
+        lgb_metrics = {}
+        ridge_metrics = {}
+
+        for model_result in comparison_list:
+            if model_result['model'] == 'LightGBM':
+                lgb_metrics = {
+                    'train_ic': model_result['train_ic'],
+                    'train_rank_ic': model_result['train_rank_ic'],
+                    'train_mae': model_result['train_mae'],
+                    'valid_ic': model_result['valid_ic'],
+                    'valid_rank_ic': model_result['valid_rank_ic'],
+                    'valid_mae': model_result['valid_mae'],
+                    'test_ic': model_result['test_ic'],
+                    'test_rank_ic': model_result['test_rank_ic'],
+                    'test_mae': model_result['test_mae'],
+                    'test_r2': model_result['test_r2'],
+                    'overfit_ic': model_result['overfit_ic']
+                }
+            elif model_result['model'] == 'Ridge':
+                ridge_metrics = {
+                    'train_ic': model_result['train_ic'],
+                    'train_rank_ic': model_result['train_rank_ic'],
+                    'train_mae': model_result['train_mae'],
+                    'valid_ic': model_result['valid_ic'],
+                    'valid_rank_ic': model_result['valid_rank_ic'],
+                    'valid_mae': model_result['valid_mae'],
+                    'test_ic': model_result['test_ic'],
+                    'test_rank_ic': model_result['test_rank_ic'],
+                    'test_mae': model_result['test_mae'],
+                    'test_r2': model_result['test_r2'],
+                    'overfit_ic': model_result['overfit_ic']
+                }
+
+        result_dict['lgb_metrics'] = lgb_metrics
+        result_dict['ridge_metrics'] = ridge_metrics
+
+        # 对比结果
+        if 'ridge_vs_lgb' in result_dict:
+            result_dict['comparison_result'] = result_dict['ridge_vs_lgb']
+
         return result_dict
 
     def run_full_pipeline(

@@ -159,8 +159,13 @@ class PooledDataLoader:
 
         if self.verbose:
             logger.info(f"数据分割:")
-            logger.info(f"  训练集: {len(X_train)} 样本 ({len(X_train)/n*100:.1f}%)")
-            logger.info(f"  验证集: {len(X_valid)} 样本 ({len(X_valid)/n*100:.1f}%)")
-            logger.info(f"  测试集: {len(X_test)} 样本 ({len(X_test)/n*100:.1f}%)")
+            if n > 0:
+                logger.info(f"  训练集: {len(X_train)} 样本 ({len(X_train)/n*100:.1f}%)")
+                logger.info(f"  验证集: {len(X_valid)} 样本 ({len(X_valid)/n*100:.1f}%)")
+                logger.info(f"  测试集: {len(X_test)} 样本 ({len(X_test)/n*100:.1f}%)")
+            else:
+                logger.info(f"  训练集: {len(X_train)} 样本")
+                logger.info(f"  验证集: {len(X_valid)} 样本")
+                logger.info(f"  测试集: {len(X_test)} 样本")
 
         return X_train, y_train, X_valid, y_valid, X_test, y_test, feature_cols
