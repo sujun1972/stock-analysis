@@ -22,6 +22,7 @@
 | 测试模块 | 测试文件 | 说明 |
 |---------|---------|------|
 | DataFrame iterrows 性能 | `test_performance_iterrows.py` | DataFrame向量化性能验证 |
+| 样本平衡算法性能 | `test_performance_sample_balancing.py` | 样本映射算法O(n²)→O(n log n)优化验证 |
 
 ### 集成测试
 

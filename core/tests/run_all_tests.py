@@ -39,6 +39,7 @@ def run_all_tests(verbosity=2):
         'test_feature_cache',
         'test_database_manager_refactored',
         'test_performance_iterrows',
+        'test_performance_sample_balancing',
     ]
 
     # 测试结果统计
