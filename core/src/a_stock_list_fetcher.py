@@ -6,13 +6,22 @@ from typing import Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-# 导入配置
+# 导入新配置系统
 try:
-    # 优先使用相对导入（当作为模块导入时）
-    from .config.config import TUSHARE_TOKEN, DATABASE_CONFIG
+    from .config.settings import get_settings
 except ImportError:
-    # 如果相对导入失败，使用绝对导入（当从项目根目录运行时）
-    from src.config.config import TUSHARE_TOKEN, DATABASE_CONFIG
+    from src.config.settings import get_settings
+
+# 获取配置实例
+settings = get_settings()
+TUSHARE_TOKEN = settings.TUSHARE_TOKEN or ""
+DATABASE_CONFIG = {
+    'host': settings.DATABASE_HOST,
+    'port': settings.DATABASE_PORT,
+    'database': settings.DATABASE_NAME,
+    'user': settings.DATABASE_USER,
+    'password': settings.DATABASE_PASSWORD
+}
 
 def fetch_akshare_stock_list(save_path: str = "./a_stock_list.csv",
                              save_to_db: bool = False) -> bool:
