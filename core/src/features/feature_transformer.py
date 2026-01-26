@@ -5,7 +5,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Union, Any
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 import warnings
 
@@ -15,15 +15,15 @@ warnings.filterwarnings('ignore')
 class FeatureTransformer:
     """特征转换器"""
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame) -> None:
         """
         初始化特征转换器
 
         参数:
             df: 包含价格和特征的DataFrame
         """
-        self.df = df.copy()
-        self.scalers = {}  # 存储各列的scaler
+        self.df: pd.DataFrame = df.copy()
+        self.scalers: Dict[str, Union[StandardScaler, RobustScaler, MinMaxScaler]] = {}  # 存储各列的scaler
 
     # ==================== 价格变动率矩阵 ====================
 
@@ -54,7 +54,7 @@ class FeatureTransformer:
 
     def create_multi_timeframe_returns(
         self,
-        periods: list = [1, 3, 5, 10, 20],
+        periods: List[int] = [1, 3, 5, 10, 20],
         price_col: str = 'close'
     ) -> pd.DataFrame:
         """
@@ -121,7 +121,7 @@ class FeatureTransformer:
 
     def normalize_features(
         self,
-        feature_cols: list,
+        feature_cols: List[str],
         method: str = 'standard',
         fit: bool = True
     ) -> pd.DataFrame:
@@ -179,8 +179,8 @@ class FeatureTransformer:
 
     def rank_transform(
         self,
-        feature_cols: list,
-        window: int = None,
+        feature_cols: List[str],
+        window: Optional[int] = None,
         pct: bool = True
     ) -> pd.DataFrame:
         """
@@ -218,8 +218,8 @@ class FeatureTransformer:
 
     def create_ratio_features(
         self,
-        numerator_cols: list,
-        denominator_cols: list
+        numerator_cols: List[str],
+        denominator_cols: List[str]
     ) -> pd.DataFrame:
         """
         创建比率特征（特征间的比值）
@@ -242,7 +242,7 @@ class FeatureTransformer:
 
     def create_diff_features(
         self,
-        col_pairs: list
+        col_pairs: List[Tuple[str, str]]
     ) -> pd.DataFrame:
         """
         创建差值特征（特征间的差值）
@@ -300,8 +300,8 @@ class FeatureTransformer:
 
     def create_lag_features(
         self,
-        feature_cols: list,
-        lags: list = [1, 2, 3, 5, 10]
+        feature_cols: List[str],
+        lags: List[int] = [1, 2, 3, 5, 10]
     ) -> pd.DataFrame:
         """
         创建滞后特征（用于时间序列模型）
@@ -325,9 +325,9 @@ class FeatureTransformer:
 
     def create_rolling_features(
         self,
-        feature_cols: list,
-        windows: list = [5, 10, 20],
-        funcs: list = ['mean', 'std', 'max', 'min']
+        feature_cols: List[str],
+        windows: List[int] = [5, 10, 20],
+        funcs: List[str] = ['mean', 'std', 'max', 'min']
     ) -> pd.DataFrame:
         """
         创建滚动统计特征
@@ -416,11 +416,11 @@ class FeatureTransformer:
         """获取转换后的DataFrame"""
         return self.df
 
-    def get_scalers(self) -> dict:
+    def get_scalers(self) -> Dict[str, Union[StandardScaler, RobustScaler, MinMaxScaler]]:
         """获取所有scaler（用于保存和加载）"""
         return self.scalers
 
-    def set_scalers(self, scalers: dict):
+    def set_scalers(self, scalers: Dict[str, Union[StandardScaler, RobustScaler, MinMaxScaler]]) -> None:
         """设置scaler（从保存的模型加载）"""
         self.scalers = scalers
 
