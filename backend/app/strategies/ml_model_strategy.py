@@ -317,17 +317,12 @@ class MLModelStrategy(BaseStrategy):
         需要从数据库查询模型路径，因为 model_id 和实际文件名可能不一致
         - LightGBM: .txt 文件
         - GRU: .pth 文件
+
+        支持两种model_id格式：
+        1. 传统格式：600519_lightgbm_20260126_095641
+        2. UUID格式：7c81a48a-fbdb-4d68-baae-b359d3246b5c（池化训练）
         """
         try:
-            # 从model_id中解析模型类型（model_id格式：symbol_modeltype_xxx）
-            # 例如：600519_lightgbm_20260126_095641 -> lightgbm
-            parts = self.model_id.split('_')
-            if len(parts) < 2:
-                logger.error(f"无效的model_id格式: {self.model_id}")
-                return None
-
-            actual_model_type = parts[1].lower()  # 'lightgbm' 或 'gru'
-
             # 从数据库查询模型的实际文件路径
             from src.database.db_manager import DatabaseManager
             db = DatabaseManager()
@@ -341,28 +336,28 @@ class MLModelStrategy(BaseStrategy):
             result = db._execute_query(query, (self.model_id,))
 
             if not result or not result[0][0]:
-                logger.warning(f"未在数据库中找到模型 {self.model_id} 的路径信息")
-                # 尝试使用旧的直接路径方式作为回退
-                models_dir = Path('/data/models/ml_models')
-                if actual_model_type == 'lightgbm':
-                    model_path = models_dir / f"{self.model_id}.txt"
-                elif actual_model_type == 'gru':
-                    model_path = models_dir / f"{self.model_id}.pth"
-                else:
-                    logger.error(f"不支持的模型类型: {actual_model_type}")
-                    return None
+                logger.error(f"未在数据库中找到模型 {self.model_id} 的路径信息")
+                return None
+
+            # 使用数据库中存储的路径
+            model_path = Path(result[0][0])
+            config = result[0][1] if len(result[0]) > 1 else {}
+
+            # 从配置中提取目标周期和其他信息
+            if config and isinstance(config, dict):
+                actual_target_period = config.get('target_period', 5)
+                # 从配置中提取模型类型
+                actual_model_type = config.get('model_type', 'lightgbm').lower()
+                # 提取特征列表和scaler路径（池化训练模型才有）
+                self.trained_feature_cols = config.get('feature_cols', None)
+                self.scaler_path_from_config = config.get('scaler_path', None)
             else:
-                # 使用数据库中存储的路径
-                model_path = Path(result[0][0])
-                config = result[0][1] if len(result[0]) > 1 else {}
+                actual_target_period = 5
+                actual_model_type = 'lightgbm'
+                self.trained_feature_cols = None
+                self.scaler_path_from_config = None
 
-                # 从配置中提取目标周期
-                if config and isinstance(config, dict):
-                    actual_target_period = config.get('target_period', 5)
-                else:
-                    actual_target_period = 5
-
-                self.target_period = actual_target_period
+            self.target_period = actual_target_period
 
             # 设置实例属性
             self.model_type = actual_model_type
@@ -415,8 +410,27 @@ class MLModelStrategy(BaseStrategy):
                 verbose=False
             )
 
-            # 提取股票代码（从model_id解析: 000001_lightgbm_xxx -> 000001）
-            symbol = self.model_id.split('_')[0]
+            # 提取股票代码
+            # 如果是UUID格式，从config中获取；否则从model_id解析
+            if hasattr(self, 'model_path') and self.model_path:
+                # 从数据库config中获取股票代码
+                from src.database.db_manager import DatabaseManager
+                db = DatabaseManager()
+                query = "SELECT config FROM experiments WHERE model_id = %s LIMIT 1"
+                result = db._execute_query(query, (self.model_id,))
+                if result and result[0]:
+                    config = result[0][0]
+                    # 池化训练config中是'symbols'列表，单股票是'symbol'字符串
+                    if isinstance(config.get('symbols'), list) and len(config['symbols']) > 0:
+                        symbol = config['symbols'][0]  # 使用第一只股票
+                    else:
+                        symbol = config.get('symbol', self.model_id.split('_')[0])
+                else:
+                    # 回退：尝试从model_id解析
+                    symbol = self.model_id.split('_')[0] if '_' in self.model_id else '000001'
+            else:
+                # 传统格式：000001_lightgbm_xxx -> 000001
+                symbol = self.model_id.split('_')[0]
 
             # 准备特征数据（不需要目标变量）
             # 为了获取特征,我们需要提供日期范围
@@ -425,19 +439,54 @@ class MLModelStrategy(BaseStrategy):
 
             logger.info(f"准备特征: symbol={symbol}, 日期={start_date}~{end_date}")
 
-            # 获取特征（会自动计算技术指标和Alpha因子）
-            X, _ = pipeline.get_training_data(
-                symbol=symbol,
-                start_date=start_date,
-                end_date=end_date,
-                use_cache=False
-            )
+            # 步骤1.5: 如果模型是池化训练的，需要包含OHLCV+Amount列
+            if hasattr(self, 'trained_feature_cols') and self.trained_feature_cols:
+                # 池化训练模型：直接计算特征，不排除OHLCV+Amount列
+                logger.info(f"检测到池化训练模型，使用保存的特征列表({len(self.trained_feature_cols)}列)")
+                logger.info("加载原始数据并计算完整特征（包含OHLCV+Amount）...")
 
-            logger.info(f"特征准备完成: shape={X.shape}, features={len(X.columns)}")
+                # 加载原始数据
+                from src.data_pipeline.feature_engineer import FeatureEngineer
+
+                # 使用pipeline的data_loader
+                df_raw = pipeline.data_loader.load_data(symbol, start_date, end_date)
+
+                # 计算特征（包含所有列）
+                fe = FeatureEngineer(verbose=False)
+                df_features = fe.compute_all_features(df_raw, target_period=self.target_period)
+
+                # 删除缺失值
+                df_clean = df_features.dropna()
+
+                # 选择训练时使用的特征列
+                missing_cols = set(self.trained_feature_cols) - set(df_clean.columns)
+                if missing_cols:
+                    logger.error(f"缺少训练时的特征列: {missing_cols}")
+                    raise ValueError(f"特征不匹配：缺少 {len(missing_cols)} 列")
+
+                # 选择并重新排序特征，确保与训练时一致
+                X = df_clean[self.trained_feature_cols]
+                logger.info(f"✅ 特征列已匹配训练时的顺序: {len(X.columns)}列")
+            else:
+                # 传统单股票模型：使用DataPipeline默认特征（排除OHLCV+Amount）
+                logger.info("传统单股票模型，使用DataPipeline默认特征...")
+
+                # 获取特征（会自动计算技术指标和Alpha因子）
+                X, _ = pipeline.get_training_data(
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    use_cache=False
+                )
+
+                logger.info(f"特征准备完成: shape={X.shape}, features={len(X.columns)}")
 
             # 步骤2: 加载保存的scaler进行特征缩放
-            # 使用 model_path 派生 scaler 路径，而不是 model_id
-            if hasattr(self, 'model_path') and self.model_path:
+            # 优先使用config中的scaler_path，否则使用model_path派生
+            if hasattr(self, 'scaler_path_from_config') and self.scaler_path_from_config:
+                scaler_path = Path(self.scaler_path_from_config)
+                logger.info(f"使用config中的scaler路径: {scaler_path}")
+            elif hasattr(self, 'model_path') and self.model_path:
                 # 从实际模型文件路径派生scaler路径
                 scaler_path = self.model_path.with_name(self.model_path.stem + '_scaler.pkl')
             else:

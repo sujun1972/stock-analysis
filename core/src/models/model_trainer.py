@@ -312,13 +312,16 @@ class ModelTrainer:
         self,
         model_name: str,
         save_metrics: bool = True
-    ):
+    ) -> str:
         """
         保存模型
 
         参数:
             model_name: 模型名称
             save_metrics: 是否保存评估指标
+
+        返回:
+            模型文件路径（字符串）
         """
         if self.model is None:
             raise ValueError("模型未训练")
@@ -348,6 +351,8 @@ class ModelTrainer:
                 json.dump(meta_data, f, indent=2, ensure_ascii=False)
 
             print(f"✓ 元数据已保存至: {meta_path}")
+
+        return str(model_path)
 
     def load_model(
         self,

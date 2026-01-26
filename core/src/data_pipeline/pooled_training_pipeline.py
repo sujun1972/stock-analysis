@@ -196,6 +196,21 @@ class PooledTrainingPipeline:
 
         self.comparison_evaluator.add_model('LightGBM', trainer_lgb)
 
+        # 保存LightGBM模型并获取路径
+        import time
+        import pickle
+        from pathlib import Path
+        lgb_model_name = f"pooled_lgb_{int(time.time())}"
+        lgb_model_path = trainer_lgb.save_model(model_name=lgb_model_name, save_metrics=True)
+        logger.info(f"[LightGBM] 模型已保存: {lgb_model_path}")
+
+        # 保存scaler到同目录
+        if self.scaler is not None:
+            scaler_path = Path(lgb_model_path).parent / f"{lgb_model_name}_scaler.pkl"
+            with open(scaler_path, 'wb') as f:
+                pickle.dump(self.scaler, f)
+            logger.info(f"[LightGBM] Scaler已保存: {scaler_path}")
+
         # 2. 训练Ridge（如果启用）
         if enable_ridge_baseline:
             logger.info("\n[Ridge] 训练基准模型...")
@@ -238,12 +253,15 @@ class PooledTrainingPipeline:
                     'train_ic': model_result['train_ic'],
                     'train_rank_ic': model_result['train_rank_ic'],
                     'train_mae': model_result['train_mae'],
+                    'train_rmse': model_result['train_rmse'],
                     'valid_ic': model_result['valid_ic'],
                     'valid_rank_ic': model_result['valid_rank_ic'],
                     'valid_mae': model_result['valid_mae'],
+                    'valid_rmse': model_result['valid_rmse'],
                     'test_ic': model_result['test_ic'],
                     'test_rank_ic': model_result['test_rank_ic'],
                     'test_mae': model_result['test_mae'],
+                    'test_rmse': model_result['test_rmse'],
                     'test_r2': model_result['test_r2'],
                     'overfit_ic': model_result['overfit_ic']
                 }
@@ -252,18 +270,28 @@ class PooledTrainingPipeline:
                     'train_ic': model_result['train_ic'],
                     'train_rank_ic': model_result['train_rank_ic'],
                     'train_mae': model_result['train_mae'],
+                    'train_rmse': model_result['train_rmse'],
                     'valid_ic': model_result['valid_ic'],
                     'valid_rank_ic': model_result['valid_rank_ic'],
                     'valid_mae': model_result['valid_mae'],
+                    'valid_rmse': model_result['valid_rmse'],
                     'test_ic': model_result['test_ic'],
                     'test_rank_ic': model_result['test_rank_ic'],
                     'test_mae': model_result['test_mae'],
+                    'test_rmse': model_result['test_rmse'],
                     'test_r2': model_result['test_r2'],
                     'overfit_ic': model_result['overfit_ic']
                 }
 
         result_dict['lgb_metrics'] = lgb_metrics
         result_dict['ridge_metrics'] = ridge_metrics
+
+        # 添加模型路径（用于回测）
+        result_dict['lgb_model_path'] = lgb_model_path
+        result_dict['lgb_model_id'] = lgb_model_name
+        result_dict['scaler_path'] = str(scaler_path) if self.scaler is not None else ''
+        result_dict['feature_count'] = len(self.feature_cols)
+        result_dict['feature_cols'] = self.feature_cols  # 保存特征列表
 
         # 对比结果
         if 'ridge_vs_lgb' in result_dict:

@@ -306,6 +306,69 @@ class TrainingTaskManager:
 
         self._save_metadata()
 
+        # 保存到数据库的 experiments 表（先保存训练结果，再更新回测结果）
+        experiment_id = await self._save_pooled_experiment_to_db(task_id, result, config)
+
+        # 执行回测（与单股票训练一致）
+        if experiment_id:
+            logger.info(f"[池化训练] 开始回测...")
+            task['current_step'] = "回测中..."
+            task['progress'] = 95
+            self._save_metadata()
+
+            try:
+                from app.services.backtest_service import BacktestService
+                backtest_service = BacktestService(self.db)
+
+                # 使用第一个成功的股票代码进行回测（池化模型可以用于任意股票）
+                symbol_for_backtest = task['successful_symbols'][0] if task['successful_symbols'] else config.get('symbols', [])[0]
+
+                # 执行回测（注意：BacktestService.run_backtest是async方法）
+                # 使用ML模型策略进行回测，而不是默认的技术指标策略
+                backtest_result_full = await backtest_service.run_backtest(
+                    symbols=symbol_for_backtest,  # 参数名是 symbols
+                    start_date=config.get('start_date'),
+                    end_date=config.get('end_date'),
+                    strategy_id='ml_model',  # ✅ 使用ML模型策略
+                    strategy_params={
+                        'model_id': task_id,  # 传入训练生成的model_id
+                        'buy_threshold': 0.15,  # 预测收益率超过0.15%时买入
+                        'sell_threshold': -0.3,  # 预测收益率低于-0.3%时卖出
+                    }
+                )
+
+                # 提取 metrics 部分作为回测指标
+                backtest_result = backtest_result_full.get('metrics', {})
+
+                # 更新数据库中的回测结果
+                await self._update_pooled_backtest_result(experiment_id, backtest_result)
+
+                # 计算并更新综合评分
+                from app.services.model_ranker import ModelRanker
+                ranker = ModelRanker(self.db)
+                rank_score = ranker.calculate_rank_score(
+                    train_metrics=task.get('metrics', {}),
+                    backtest_metrics=backtest_result
+                )
+                await self._update_rank_score(experiment_id, rank_score)
+
+                # 更新任务状态
+                task['backtest_metrics'] = backtest_result
+                task['rank_score'] = rank_score
+                task['current_step'] = "回测完成"
+                task['progress'] = 100
+
+                logger.info(f"✓ 池化训练回测完成，年化收益: {backtest_result.get('annualized_return', 0):.2%}, 评分: {rank_score:.2f}")
+
+            except Exception as e:
+                logger.error(f"✗ 池化训练回测失败: {e}")
+                # 回测失败不影响训练结果
+                task['backtest_error'] = str(e)
+                task['current_step'] = "训练完成（回测失败）"
+                task['progress'] = 100
+
+        self._save_metadata()
+
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         """获取任务信息"""
         return self.tasks.get(task_id)
@@ -385,3 +448,183 @@ class TrainingTaskManager:
         self._save_metadata()
 
         logger.info(f"✓ 任务已删除: {task_id}")
+
+    async def _save_pooled_experiment_to_db(
+        self,
+        task_id: str,
+        result: Dict[str, Any],
+        config: Dict[str, Any]
+    ) -> Optional[int]:
+        """
+        保存池化训练结果到数据库的 experiments 表
+
+        Args:
+            task_id: 任务ID
+            result: 训练结果
+            config: 训练配置
+
+        Returns:
+            实验ID (experiment.id)，如果保存失败则返回None
+        """
+        from psycopg2.extras import Json
+
+        try:
+            # 生成模型名称：POOLED_symbols_modeltype_period
+            symbols = config.get('symbols', [])
+            symbols_str = '_'.join(symbols[:3]) + (f'_plus{len(symbols)-3}' if len(symbols) > 3 else '')
+            model_type = config.get('model_type', 'lightgbm')
+            target_period = config.get('target_period', 10)
+            experiment_name = f"POOLED_{symbols_str}_{model_type}_{target_period}d"
+
+            # 准备插入数据
+            # 扩展config，添加训练结果中的关键信息
+            extended_config = config.copy()
+            extended_config['feature_cols'] = result.get('feature_cols', [])
+            extended_config['scaler_path'] = result.get('scaler_path', '')
+            extended_config['feature_count'] = result.get('feature_count', 0)
+
+            insert_data = {
+                'batch_id': None,  # 手动训练不属于批次
+                'experiment_name': experiment_name,
+                'model_id': task_id,  # 使用task_id作为model_id
+                'model_path': result.get('lgb_model_path', ''),
+                'config': Json(extended_config),
+                'train_metrics': Json({
+                    'ic': result['lgb_metrics']['test_ic'],
+                    'rank_ic': result['lgb_metrics']['test_rank_ic'],
+                    'mae': result['lgb_metrics']['test_mae'],
+                    'r2': result['lgb_metrics']['test_r2'],
+                    'rmse': result['lgb_metrics'].get('test_rmse', 0),
+                    'train_ic': result['lgb_metrics']['train_ic'],
+                    'valid_ic': result['lgb_metrics']['valid_ic'],
+                    'test_ic': result['lgb_metrics']['test_ic']
+                }),
+                'status': 'completed',
+                'has_baseline': result.get('has_baseline', False),
+                'baseline_metrics': Json(result.get('ridge_metrics', {})),
+                'comparison_result': Json(result.get('comparison_result', {})),
+                'recommendation': result.get('recommendation', ''),
+                'total_samples': result.get('total_samples', 0),
+                'successful_symbols': result.get('successful_symbols', [])
+            }
+
+            # 执行插入
+            query = """
+                INSERT INTO experiments (
+                    batch_id, experiment_name, model_id, model_path,
+                    config, train_metrics, status,
+                    has_baseline, baseline_metrics, comparison_result,
+                    recommendation, total_samples, successful_symbols,
+                    created_at, train_completed_at
+                )
+                VALUES (
+                    %(batch_id)s, %(experiment_name)s, %(model_id)s, %(model_path)s,
+                    %(config)s, %(train_metrics)s, %(status)s,
+                    %(has_baseline)s, %(baseline_metrics)s, %(comparison_result)s,
+                    %(recommendation)s, %(total_samples)s, %(successful_symbols)s,
+                    NOW(), NOW()
+                )
+                RETURNING id
+            """
+
+            # 使用连接池直接执行SQL
+            conn = self.db.get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(query, insert_data)
+                    result = cur.fetchone()
+                    conn.commit()
+
+                    if result:
+                        exp_id = result[0]
+                        logger.info(f"✓ 池化训练结果已保存到数据库，实验ID: {exp_id}")
+                        return exp_id
+                    else:
+                        logger.warning(f"⚠️  池化训练结果保存到数据库失败")
+                        return None
+            finally:
+                self.db.release_connection(conn)
+
+        except Exception as e:
+            logger.error(f"✗ 保存池化训练结果到数据库时出错: {e}")
+            # 不抛出异常，避免影响训练流程
+            return None
+
+    async def _update_pooled_backtest_result(
+        self,
+        exp_id: int,
+        backtest_metrics: Dict[str, Any]
+    ):
+        """
+        更新池化训练实验的回测结果
+
+        Args:
+            exp_id: 实验ID
+            backtest_metrics: 回测指标
+        """
+        from psycopg2.extras import Json
+        from datetime import datetime
+
+        try:
+            query = """
+                UPDATE experiments
+                SET backtest_status = 'completed',
+                    backtest_metrics = %s,
+                    backtest_completed_at = %s
+                WHERE id = %s
+            """
+
+            params = (
+                Json(backtest_metrics) if backtest_metrics else None,
+                datetime.now(),
+                exp_id
+            )
+
+            # 使用连接池执行更新
+            conn = self.db.get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(query, params)
+                    conn.commit()
+                    logger.info(f"✓ 池化训练回测结果已更新到数据库，实验ID: {exp_id}")
+            finally:
+                self.db.release_connection(conn)
+
+        except Exception as e:
+            logger.error(f"✗ 更新池化训练回测结果时出错: {e}")
+            # 不抛出异常，避免影响训练流程
+
+    async def _update_rank_score(
+        self,
+        exp_id: int,
+        rank_score: float
+    ):
+        """
+        更新实验的综合评分
+
+        Args:
+            exp_id: 实验ID
+            rank_score: 综合评分
+        """
+        try:
+            query = """
+                UPDATE experiments
+                SET rank_score = %s
+                WHERE id = %s
+            """
+
+            params = (rank_score, exp_id)
+
+            # 使用连接池执行更新
+            conn = self.db.get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(query, params)
+                    conn.commit()
+                    logger.info(f"✓ 综合评分已更新到数据库，实验ID: {exp_id}, 评分: {rank_score:.2f}")
+            finally:
+                self.db.release_connection(conn)
+
+        except Exception as e:
+            logger.error(f"✗ 更新综合评分时出错: {e}")
+            # 不抛出异常，避免影响训练流程
