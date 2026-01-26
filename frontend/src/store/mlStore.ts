@@ -4,6 +4,7 @@ import { format, subYears } from 'date-fns';
 
 export interface MLTrainingConfig {
   symbol: string;
+  symbols?: string[]; // 多股票池化训练
   start_date: string;
   end_date: string;
   model_type: 'lightgbm' | 'gru';
@@ -20,6 +21,14 @@ export interface MLTrainingConfig {
   scaler_type: 'standard' | 'robust' | 'minmax';
   balance_samples: boolean;
   balance_method: 'oversample' | 'undersample' | 'smote';
+
+  // 池化训练和Ridge基准对比
+  enable_pooled_training?: boolean;
+  enable_ridge_baseline?: boolean;
+  ridge_params?: {
+    alpha?: number;
+    fit_intercept?: boolean;
+  };
 
   // 模型参数
   model_params?: Record<string, any>;
@@ -60,6 +69,26 @@ export interface MLTrainingTask {
     valid_loss: number[];
   };
   error_message?: string;
+
+  // 池化训练结果
+  has_baseline?: boolean;
+  baseline_metrics?: {
+    test_ic: number;
+    test_rank_ic: number;
+    test_mae: number;
+    test_r2: number;
+    overfit_ic: number;
+    [key: string]: number;
+  };
+  comparison_result?: {
+    test_ic_diff: number;
+    overfit_diff: number;
+    ridge_better_pct: number;
+    [key: string]: number;
+  };
+  recommendation?: 'ridge' | 'lightgbm';
+  total_samples?: number;
+  successful_symbols?: string[];
 }
 
 export interface MLModel {
@@ -142,6 +171,7 @@ const getDefaultDates = () => {
 
 const defaultConfig: MLTrainingConfig = {
   symbol: '000001',
+  symbols: [],
   ...getDefaultDates(),
   model_type: 'lightgbm',
   target_period: 5,
@@ -154,6 +184,14 @@ const defaultConfig: MLTrainingConfig = {
   scaler_type: 'robust',
   balance_samples: false,
   balance_method: 'undersample',
+
+  // 池化训练和Ridge基准对比
+  enable_pooled_training: false,
+  enable_ridge_baseline: true,
+  ridge_params: {
+    alpha: 1.0,
+    fit_intercept: true,
+  },
 
   seq_length: 20,
   batch_size: 64,
