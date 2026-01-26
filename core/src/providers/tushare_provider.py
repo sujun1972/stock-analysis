@@ -3,7 +3,7 @@ Tushare 数据提供者实现
 封装 Tushare Pro API，提供统一的数据接口
 """
 
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Callable, Any
 from datetime import datetime, date, timedelta
 import time
 import pandas as pd
@@ -38,7 +38,7 @@ class TushareProvider(BaseDataProvider):
     - 超出限制会返回错误
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """
         初始化 Tushare 提供者
 
@@ -54,18 +54,18 @@ class TushareProvider(BaseDataProvider):
             raise ImportError("Tushare 未安装，请运行: pip install tushare")
 
         # 先设置属性，再调用父类初始化（因为父类会调用 _validate_config）
-        self.token = kwargs.get('token', '')
-        self.timeout = kwargs.get('timeout', 30)
-        self.retry_count = kwargs.get('retry_count', 3)
-        self.retry_delay = kwargs.get('retry_delay', 1)
-        self.request_delay = kwargs.get('request_delay', 0.2)
+        self.token: str = kwargs.get('token', '')
+        self.timeout: int = kwargs.get('timeout', 30)
+        self.retry_count: int = kwargs.get('retry_count', 3)
+        self.retry_delay: int = kwargs.get('retry_delay', 1)
+        self.request_delay: float = kwargs.get('request_delay', 0.2)
 
         # 初始化 Tushare Pro API
         if self.token:
             ts.set_token(self.token)
-            self.pro = ts.pro_api(self.token)
+            self.pro: Any = ts.pro_api(self.token)
         else:
-            self.pro = None
+            self.pro: Any = None
 
         # 最后调用父类初始化（会调用 _validate_config）
         super().__init__(**kwargs)
@@ -78,7 +78,7 @@ class TushareProvider(BaseDataProvider):
         if self.pro is None:
             raise ValueError("Tushare Pro API 初始化失败")
 
-    def _retry_request(self, func, *args, **kwargs):
+    def _retry_request(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """
         带重试机制的请求包装器
 
@@ -521,7 +521,15 @@ class TushareProvider(BaseDataProvider):
             return f"{code}.SH"  # 默认上海
 
     def get_new_stocks(self, days: int = 30) -> pd.DataFrame:
-        """获取最近 N 天上市的新股"""
+        """
+        获取最近 N 天上市的新股
+
+        Args:
+            days: 最近天数
+
+        Returns:
+            pd.DataFrame: 标准化的新股列表
+        """
         try:
             logger.info(f"正在从 Tushare 获取最近 {days} 天的新股...")
 
@@ -590,7 +598,12 @@ class TushareProvider(BaseDataProvider):
             raise
 
     def get_delisted_stocks(self) -> pd.DataFrame:
-        """获取退市股票列表"""
+        """
+        获取退市股票列表
+
+        Returns:
+            pd.DataFrame: 标准化的退市股票列表
+        """
         try:
             logger.info("正在从 Tushare 获取退市股票列表...")
 

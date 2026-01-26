@@ -3,7 +3,7 @@ AkShare 数据提供者实现
 封装 AkShare API，提供统一的数据接口
 """
 
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Callable, Any
 from datetime import datetime, date, timedelta
 import time
 import pandas as pd
@@ -33,7 +33,7 @@ class AkShareProvider(BaseDataProvider):
     - 实时行情获取较慢（需要爬取多个页面）
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """
         初始化 AkShare 提供者
 
@@ -45,16 +45,16 @@ class AkShareProvider(BaseDataProvider):
                 - request_delay: 请求间隔（秒，默认 0.3）
         """
         super().__init__(**kwargs)
-        self.timeout = kwargs.get('timeout', 30)
-        self.retry_count = kwargs.get('retry_count', 3)
-        self.retry_delay = kwargs.get('retry_delay', 1)
-        self.request_delay = kwargs.get('request_delay', 0.3)
+        self.timeout: int = kwargs.get('timeout', 30)
+        self.retry_count: int = kwargs.get('retry_count', 3)
+        self.retry_delay: int = kwargs.get('retry_delay', 1)
+        self.request_delay: float = kwargs.get('request_delay', 0.3)
 
     def _validate_config(self) -> None:
         """验证配置（AkShare 无需特殊配置）"""
         pass
 
-    def _retry_request(self, func, *args, **kwargs):
+    def _retry_request(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """
         带重试机制的请求包装器
 
@@ -352,7 +352,7 @@ class AkShareProvider(BaseDataProvider):
     def get_realtime_quotes(
         self,
         codes: Optional[List[str]] = None,
-        save_callback=None
+        save_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> pd.DataFrame:
         """
         获取实时行情数据
@@ -427,7 +427,11 @@ class AkShareProvider(BaseDataProvider):
             logger.error(f"获取实时行情失败: {e}")
             raise
 
-    def _get_realtime_quotes_batch(self, codes: List[str], save_callback=None) -> pd.DataFrame:
+    def _get_realtime_quotes_batch(
+        self,
+        codes: List[str],
+        save_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> pd.DataFrame:
         """
         批量获取指定股票的实时行情（使用单个股票接口）
 
@@ -530,7 +534,7 @@ class AkShareProvider(BaseDataProvider):
             logger.error(f"批量获取实时行情失败: {e}")
             raise
 
-    def _safe_float(self, value, default=0.0):
+    def _safe_float(self, value: Any, default: float = 0.0) -> float:
         """安全转换为float"""
         try:
             if value is None or value == '' or value == '-':
@@ -539,7 +543,7 @@ class AkShareProvider(BaseDataProvider):
         except (ValueError, TypeError):
             return default
 
-    def _safe_int(self, value, default=0):
+    def _safe_int(self, value: Any, default: int = 0) -> int:
         """安全转换为int"""
         try:
             if value is None or value == '' or value == '-':
