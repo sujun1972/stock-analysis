@@ -8,7 +8,14 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 from pathlib import Path
+import sys
 
+# 添加 core 模块路径
+core_path = Path(__file__).parent.parent.parent.parent / 'core' / 'src'
+if str(core_path) not in sys.path:
+    sys.path.insert(0, str(core_path))
+
+from config.trading_rules import TradingCosts
 from .base_strategy import BaseStrategy, StrategyParameter, ParameterType
 
 
@@ -69,11 +76,11 @@ class MLModelStrategy(BaseStrategy):
                 name="commission",
                 label="交易佣金率",
                 type=ParameterType.FLOAT,
-                default=0.0003,
-                min_value=0.0,
-                max_value=0.01,
-                step=0.0001,
-                description="交易佣金费率",
+                default=TradingCosts.CommissionRates.STANDARD_RATE,  # 使用配置类的标准费率
+                min_value=TradingCosts.CommissionRates.LOW_RATE,  # 最低万1.8
+                max_value=TradingCosts.CommissionRates.HIGH_RATE,  # 最高万3
+                step=0.00001,
+                description="交易佣金费率（标准万2.5，低佣万1.8，高佣万3）",
                 category="cost"
             ),
             StrategyParameter(
@@ -138,8 +145,8 @@ class MLModelStrategy(BaseStrategy):
         self.buy_threshold = self.params.get('buy_threshold', 1.0)
         self.sell_threshold = self.params.get('sell_threshold', -1.0)
 
-        # 成本参数
-        self.commission = self.params.get('commission', 0.0003)
+        # 成本参数（使用配置类的默认值）
+        self.commission = self.params.get('commission', TradingCosts.CommissionRates.DEFAULT)
         self.slippage = self.params.get('slippage', 0.001)
 
         # 风控参数

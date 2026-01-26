@@ -80,66 +80,202 @@ class PriceLimitRules:
 # ==================== 交易成本 ====================
 
 class TradingCosts:
-    """交易成本计算规则"""
+    """
+    交易成本计算规则
 
-    # 印花税（仅卖出时收取）
-    STAMP_TAX_RATE = 0.001  # 0.1%
+    包含印花税、佣金、过户费等所有交易成本的详细配置
+    """
 
-    # 佣金（买入和卖出都收取）
-    COMMISSION_RATE = 0.00025  # 0.025%（万2.5）
-    MIN_COMMISSION = 5.0  # 最低佣金5元
+    # ========== 印花税 ==========
+    # 仅卖出时收取，买入不收
+    STAMP_TAX_RATE = 0.001  # 0.1% (国家规定，2023年8月28日起调整为0.1%)
 
-    # 过户费（上海交易所股票，买入和卖出都收取）
+    # ========== 佣金费率 ==========
+    # 买入和卖出都收取，不同券商费率可能不同
+
+    # 标准佣金费率配置
+    class CommissionRates:
+        """券商佣金费率"""
+        LOW_RATE = 0.00018       # 万1.8（低佣金账户）
+        STANDARD_RATE = 0.00025  # 万2.5（标准账户）
+        HIGH_RATE = 0.0003       # 万3（高佣金账户）
+
+        # 默认使用标准费率
+        DEFAULT = STANDARD_RATE
+
+    # 最低佣金限制（单笔交易）
+    MIN_COMMISSION = 5.0  # 5元（不同券商可能不同，部分互联网券商无最低限制）
+
+    # ========== 过户费 ==========
+    # 上海交易所股票，买入和卖出都收取
+    # 深圳交易所不收过户费
     TRANSFER_FEE_RATE = 0.00002  # 0.002%（万0.2）
 
+    # ========== 其他费用 ==========
+    # 这些费用通常较小，一般可以忽略
+    REGULATORY_FEE_RATE = 0.000002  # 证管费（万0.02）
+    EXCHANGE_FEE_RATE = 0.00000687  # 经手费（万0.0687）
+
+    # ========== 市场特定配置 ==========
+    class MarketSpecificCosts:
+        """不同市场的特定成本配置"""
+
+        # 上海交易所（主板、科创板）
+        SH_COMMISSION_RATE = TradingCosts.CommissionRates.STANDARD_RATE
+        SH_HAS_TRANSFER_FEE = True  # 有过户费
+
+        # 深圳交易所（主板、中小板、创业板）
+        SZ_COMMISSION_RATE = TradingCosts.CommissionRates.STANDARD_RATE
+        SZ_HAS_TRANSFER_FEE = False  # 无过户费
+
+        # 北交所
+        BSE_COMMISSION_RATE = TradingCosts.CommissionRates.STANDARD_RATE
+        BSE_HAS_TRANSFER_FEE = True  # 有过户费
+        BSE_STAMP_TAX_RATE = 0.0005  # 北交所印花税为0.05%（双向收取）
+
     @staticmethod
-    def calculate_buy_cost(amount: float, is_sh: bool = True) -> Dict[str, float]:
+    def calculate_buy_cost(
+        amount: float,
+        stock_code: str = None,
+        commission_rate: float = None,
+        min_commission: float = None
+    ) -> Dict[str, float]:
         """
         计算买入成本
 
         参数:
             amount: 买入金额
-            is_sh: 是否为上海交易所股票
+            stock_code: 股票代码（用于判断交易所）
+            commission_rate: 自定义佣金费率（None则使用默认值）
+            min_commission: 自定义最低佣金（None则使用默认值）
 
         返回:
             成本明细字典
         """
-        commission = max(amount * TradingCosts.COMMISSION_RATE, TradingCosts.MIN_COMMISSION)
+        # 使用自定义费率或默认费率
+        commission_rate = commission_rate or TradingCosts.CommissionRates.DEFAULT
+        min_commission = min_commission if min_commission is not None else TradingCosts.MIN_COMMISSION
+
+        # 计算佣金
+        commission = max(amount * commission_rate, min_commission)
+
+        # 判断是否为上海交易所股票（需要过户费）
+        is_sh = False
+        if stock_code:
+            is_sh = MarketType.is_sh_stock(stock_code)
+
+        # 计算过户费
         transfer_fee = amount * TradingCosts.TRANSFER_FEE_RATE if is_sh else 0
 
-        total_cost = commission + transfer_fee
+        # 计算其他费用（通常可忽略）
+        regulatory_fee = amount * TradingCosts.REGULATORY_FEE_RATE
+        exchange_fee = amount * TradingCosts.EXCHANGE_FEE_RATE
+
+        total_cost = commission + transfer_fee + regulatory_fee + exchange_fee
 
         return {
             'commission': commission,
             'transfer_fee': transfer_fee,
+            'regulatory_fee': regulatory_fee,
+            'exchange_fee': exchange_fee,
             'stamp_tax': 0,  # 买入不收印花税
             'total_cost': total_cost
         }
 
     @staticmethod
-    def calculate_sell_cost(amount: float, is_sh: bool = True) -> Dict[str, float]:
+    def calculate_sell_cost(
+        amount: float,
+        stock_code: str = None,
+        commission_rate: float = None,
+        min_commission: float = None,
+        stamp_tax_rate: float = None
+    ) -> Dict[str, float]:
         """
         计算卖出成本
 
         参数:
             amount: 卖出金额
-            is_sh: 是否为上海交易所股票
+            stock_code: 股票代码（用于判断交易所）
+            commission_rate: 自定义佣金费率（None则使用默认值）
+            min_commission: 自定义最低佣金（None则使用默认值）
+            stamp_tax_rate: 自定义印花税率（None则使用默认值）
 
         返回:
             成本明细字典
         """
-        commission = max(amount * TradingCosts.COMMISSION_RATE, TradingCosts.MIN_COMMISSION)
-        transfer_fee = amount * TradingCosts.TRANSFER_FEE_RATE if is_sh else 0
-        stamp_tax = amount * TradingCosts.STAMP_TAX_RATE
+        # 使用自定义费率或默认费率
+        commission_rate = commission_rate or TradingCosts.CommissionRates.DEFAULT
+        min_commission = min_commission if min_commission is not None else TradingCosts.MIN_COMMISSION
+        stamp_tax_rate = stamp_tax_rate or TradingCosts.STAMP_TAX_RATE
 
-        total_cost = commission + transfer_fee + stamp_tax
+        # 计算佣金
+        commission = max(amount * commission_rate, min_commission)
+
+        # 判断是否为上海交易所股票（需要过户费）
+        is_sh = False
+        if stock_code:
+            is_sh = MarketType.is_sh_stock(stock_code)
+
+        # 计算过户费
+        transfer_fee = amount * TradingCosts.TRANSFER_FEE_RATE if is_sh else 0
+
+        # 计算印花税（仅卖出时收取）
+        stamp_tax = amount * stamp_tax_rate
+
+        # 计算其他费用（通常可忽略）
+        regulatory_fee = amount * TradingCosts.REGULATORY_FEE_RATE
+        exchange_fee = amount * TradingCosts.EXCHANGE_FEE_RATE
+
+        total_cost = commission + transfer_fee + stamp_tax + regulatory_fee + exchange_fee
 
         return {
             'commission': commission,
             'transfer_fee': transfer_fee,
             'stamp_tax': stamp_tax,
+            'regulatory_fee': regulatory_fee,
+            'exchange_fee': exchange_fee,
             'total_cost': total_cost
         }
+
+    @staticmethod
+    def get_total_cost_rate(
+        is_buy: bool = True,
+        stock_code: str = None,
+        commission_rate: float = None
+    ) -> float:
+        """
+        获取总成本费率（简化计算，忽略最低佣金限制）
+
+        参数:
+            is_buy: 是否为买入操作
+            stock_code: 股票代码
+            commission_rate: 佣金费率
+
+        返回:
+            总成本费率
+        """
+        commission_rate = commission_rate or TradingCosts.CommissionRates.DEFAULT
+
+        # 判断是否为上海交易所股票
+        is_sh = False
+        if stock_code:
+            is_sh = MarketType.is_sh_stock(stock_code)
+
+        # 基础成本 = 佣金
+        total_rate = commission_rate
+
+        # 过户费
+        if is_sh:
+            total_rate += TradingCosts.TRANSFER_FEE_RATE
+
+        # 印花税（仅卖出）
+        if not is_buy:
+            total_rate += TradingCosts.STAMP_TAX_RATE
+
+        # 其他费用（通常很小）
+        total_rate += TradingCosts.REGULATORY_FEE_RATE + TradingCosts.EXCHANGE_FEE_RATE
+
+        return total_rate
 
 
 # ==================== 交易单位 ====================
