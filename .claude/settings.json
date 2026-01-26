@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "name": "protect-sensitive-files",
+        "matcher": "Edit|Write",
+        "type": "command",
+        "command": "FILE=$(jq -r '.tool_input.file_path // empty'); if [[ \"$FILE\" =~ \\.(env|db)$ ]]; then echo '{\"allow\": false, \"message\": \"❌ 禁止修改 .env 和 .db 文件（包含敏感 API Keys）\"}' >&2 && exit 2; else echo '{\"allow\": true}'; fi"
+      },
+      {
+        "name": "prevent-data-loss",
+        "matcher": "Bash",
+        "type": "command",
+        "command": "CMD=$(jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '(docker-compose.*down.*-v|docker.*volume.*rm|DROP DATABASE|TRUNCATE.*stock_)'; then echo '{\"allow\": false, \"message\": \"⚠️ 危险操作：会删除数据库数据（5,800,778 条记录）。如需重启开发环境，使用不带 -v 的命令\"}' >&2 && exit 2; else echo '{\"allow\": true}'; fi"
+      },
+      {
+        "name": "suggest-dev-command",
+        "matcher": "Bash",
+        "type": "command",
+        "command": "CMD=$(jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '^docker-compose (up|restart|down)' && ! echo \"$CMD\" | grep -q -- '-f'; then echo 'ℹ️ 提示：开发环境建议使用: docker-compose -f docker-compose.yml -f docker-compose.dev.yml [命令]' >&2; fi; echo '{\"allow\": true}'"
+      }
+    ],
+    "SessionStart": [
+      {
+        "name": "docker-dev-health-check",
+        "type": "command",
+        "command": "cd /Volumes/MacDriver/stock-analysis && COMPOSE_CMD='docker-compose -f docker-compose.yml -f docker-compose.dev.yml'; if $COMPOSE_CMD ps 2>/dev/null | grep -q 'timescaledb.*healthy'; then echo '✅ 开发环境运行正常 (Backend, Frontend, TimescaleDB)'; else echo 'ℹ️ 提示：开发环境未运行，建议执行: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d'; fi"
+      }
+    ]
+  }
+}
