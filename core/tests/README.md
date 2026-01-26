@@ -15,8 +15,9 @@
 | FeatureCache | `test_feature_cache.py` | 缓存管理器 | 10 |
 | DatabaseManager (重构) | `test_database_manager_refactored.py` | 重构后的数据库管理器 | 10 |
 | PipelineConfig | `test_pipeline_config.py` | 流水线配置类 | 10 |
+| TypeUtils | `test_type_utils.py` | 类型转换工具 | 13 |
 
-**总计**: 70+ 单元测试用例
+**总计**: 83+ 单元测试用例
 
 ### 性能测试
 
@@ -168,6 +169,24 @@ python3 run_all_tests.py --verbosity 2
 - ✅ 复制配置
 - ✅ 预定义配置
 - ✅ create_config 便捷函数
+
+### test_type_utils.py
+
+测试类型转换工具的所有功能：
+
+- ✅ safe_float 正常值转换
+- ✅ safe_float 特殊值处理 (NaN, None, Inf)
+- ✅ safe_int 正常值转换
+- ✅ safe_int 特殊值处理
+- ✅ safe_str 正常值转换
+- ✅ safe_str 特殊值处理
+- ✅ safe_float_series 向量化转换
+- ✅ safe_int_series 向量化转换
+- ✅ safe_float_or_none (保留 NULL)
+- ✅ safe_float_or_zero
+- ✅ safe_int_or_zero
+- ✅ is_numeric 类型检查
+- ✅ is_valid_string 类型检查
 
 ## 🔧 测试环境
 

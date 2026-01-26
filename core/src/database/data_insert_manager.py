@@ -11,6 +11,17 @@ from psycopg2 import extras
 import logging
 from typing import TYPE_CHECKING, Dict, Any
 
+# 导入类型转换工具
+from utils.type_utils import (
+    safe_float,
+    safe_int,
+    safe_float_series,
+    safe_int_series,
+    safe_float_or_none,
+    safe_float_or_zero,
+    safe_int_or_zero
+)
+
 if TYPE_CHECKING:
     from .connection_pool_manager import ConnectionPoolManager
 
@@ -215,26 +226,7 @@ class DataInsertManager:
             conn = self.pool_manager.get_connection()
             cursor = conn.cursor()
 
-            # 辅助函数：安全地转换值，处理 NaN 和 None
-            def safe_float(val, default=0.0):
-                """安全转换为 float，处理 NaN"""
-                if pd.isna(val) or val is None:
-                    return default
-                try:
-                    return float(val)
-                except (ValueError, TypeError):
-                    return default
-
-            def safe_int(val, default=0):
-                """安全转换为 int，处理 NaN"""
-                if pd.isna(val) or val is None:
-                    return default
-                try:
-                    return int(val)
-                except (ValueError, TypeError):
-                    return default
-
-            # 准备数据
+            # 准备数据（使用 type_utils 中的转换函数）
             record = (
                 quote.get('code'),
                 quote.get('name', ''),
@@ -324,15 +316,7 @@ class DataInsertManager:
             turnover_col = 'turnover' if 'turnover' in df.columns else '换手率'
             amplitude_col = 'amplitude' if 'amplitude' in df.columns else '振幅'
 
-            # 向量化构建记录（使用 safe_float/safe_int 的向量化版本）
-            def safe_float_series(series):
-                """向量化的 safe_float"""
-                return series.fillna(0.0).replace([np.inf, -np.inf], 0.0).astype(float).values
-
-            def safe_int_series(series):
-                """向量化的 safe_int"""
-                return series.fillna(0).replace([np.inf, -np.inf], 0).astype(int).values
-
+            # 向量化构建记录（使用 type_utils 中的转换函数）
             records = list(zip(
                 df[code_col].fillna('').values,
                 df[name_col].fillna('').values,
@@ -411,19 +395,7 @@ class DataInsertManager:
             cursor = conn.cursor()
 
             # 准备数据（向量化优化 - 避免 iterrows）
-            def safe_float_or_none(series):
-                """将 NaN 转为 None，其他转为 float"""
-                return series.replace({pd.NA: None, np.nan: None}).astype(object).where(pd.notna(series), None).tolist()
-
-            def safe_float_or_zero(series):
-                """将 NaN 转为 0.0"""
-                return series.fillna(0.0).astype(float).values
-
-            def safe_int_or_zero(series):
-                """将 NaN 转为 0"""
-                return series.fillna(0).astype(int).values
-
-            # 向量化构建记录
+            # 使用 type_utils 中的转换函数
             records = list(zip(
                 [code] * len(df),
                 df['trade_time'].values,

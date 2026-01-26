@@ -16,6 +16,14 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
+# 导入类型转换工具
+from utils.type_utils import (
+    safe_float,
+    safe_int,
+    safe_float_series,
+    safe_int_series
+)
+
 
 class TestIterrowsPerformance(unittest.TestCase):
     """测试 iterrows 性能优化"""
@@ -166,17 +174,7 @@ class TestIterrowsPerformance(unittest.TestCase):
 
         df = self.df_medium
 
-        def safe_float(val, default=0.0):
-            if pd.isna(val) or val is None:
-                return default
-            return float(val)
-
-        def safe_int(val, default=0):
-            if pd.isna(val) or val is None:
-                return default
-            return int(val)
-
-        # 方法1：iterrows（旧方法）
+        # 方法1：iterrows（旧方法，使用 type_utils）
         start = time.time()
         records_old = []
         for _, row in df.iterrows():
@@ -198,13 +196,7 @@ class TestIterrowsPerformance(unittest.TestCase):
             ))
         time_old = time.time() - start
 
-        # 方法2：向量化（新方法）
-        def safe_float_series(series):
-            return series.fillna(0.0).astype(float).values
-
-        def safe_int_series(series):
-            return series.fillna(0).astype(int).values
-
+        # 方法2：向量化（新方法，使用 type_utils）
         start = time.time()
         records_new = list(zip(
             df['code'].values,
