@@ -8,11 +8,17 @@
 - 新增 provider_registry.py：注册中心实现
 - 优化 provider_factory.py：外观模式入口
 - 统一使用项目 logger
+
+重构说明（2026-01-27）：
+- Tushare Provider 模块化重构
+- 拆分为独立的 tushare 子包
+- 保持向后兼容的导入路径
 """
 
 from .base_provider import BaseDataProvider
 from .akshare_provider import AkShareProvider
-from .tushare_provider import TushareProvider
+# 从新的模块化结构中导入 TushareProvider（保持向后兼容）
+from .tushare import TushareProvider
 from .provider_metadata import ProviderMetadata
 from .provider_registry import ProviderRegistry
 from .provider_factory import (
