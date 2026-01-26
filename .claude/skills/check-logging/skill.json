@@ -1,0 +1,6 @@
+{
+  "name": "check-logging",
+  "description": "检查代码是否正确使用项目的统一日志系统（基于 loguru）",
+  "user-invocable": true,
+  "disable-model-invocation": false
+}
