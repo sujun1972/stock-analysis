@@ -314,4 +314,4 @@ class DataSplitter:
     def _log(self, message: str):
         """输出日志"""
         if self.verbose:
-            print(message)
+            logger.info(message)
