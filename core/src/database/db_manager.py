@@ -114,6 +114,59 @@ class DatabaseManager:
         """获取连接池状态信息"""
         return self.pool_manager.get_pool_status()
 
+    # ==================== 通用查询方法 ====================
+
+    def _execute_query(self, query: str, params: tuple = ()) -> List[tuple]:
+        """
+        执行查询并返回结果
+
+        Args:
+            query: SQL查询语句
+            params: 查询参数
+
+        Returns:
+            查询结果列表（tuple列表）
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(query, params)
+                return cursor.fetchall()
+        except Exception as e:
+            logger.error(f"查询执行失败: {query[:100]}... - {e}")
+            raise
+        finally:
+            if conn:
+                self.release_connection(conn)
+
+    def _execute_update(self, query: str, params: tuple = ()) -> int:
+        """
+        执行更新操作（INSERT, UPDATE, DELETE）
+
+        Args:
+            query: SQL语句
+            params: 参数
+
+        Returns:
+            受影响的行数
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(query, params)
+                conn.commit()
+                return cursor.rowcount
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"更新执行失败: {query[:100]}... - {e}")
+            raise
+        finally:
+            if conn:
+                self.release_connection(conn)
+
     # ==================== 表结构管理（委托给 TableManager） ====================
 
     def init_database(self):

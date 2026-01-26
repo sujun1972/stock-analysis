@@ -9,8 +9,8 @@ import json
 import hashlib
 from pathlib import Path
 from typing import Optional, Tuple, Dict
-from exceptions import FeatureCacheError
-from utils.logger import get_logger
+from src.exceptions import FeatureCacheError
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

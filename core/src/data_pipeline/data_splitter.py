@@ -11,8 +11,8 @@ from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from imblearn.over_sampling import SMOTE, RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from collections import Counter
-from utils.logger import get_logger
-from utils.decorators import timer
+from src.utils.logger import get_logger
+from src.utils.decorators import timer
 
 logger = get_logger(__name__)
 

@@ -15,8 +15,8 @@ import pandas as pd
 from loguru import logger
 
 # 导入 core 模块（已通过 setup.py 安装为可导入包）
-from data_pipeline import DataPipeline, get_full_training_data
-from models.model_trainer import ModelTrainer
+from src.data_pipeline import DataPipeline, get_full_training_data
+from src.models.model_trainer import ModelTrainer
 from app.utils.ic_validator import ICValidator
 
 

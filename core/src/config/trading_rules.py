@@ -121,15 +121,15 @@ class TradingCosts:
         """不同市场的特定成本配置"""
 
         # 上海交易所（主板、科创板）
-        SH_COMMISSION_RATE = TradingCosts.CommissionRates.STANDARD_RATE
+        SH_COMMISSION_RATE = 0.00025  # 使用标准佣金率（避免循环引用外部类）
         SH_HAS_TRANSFER_FEE = True  # 有过户费
 
         # 深圳交易所（主板、中小板、创业板）
-        SZ_COMMISSION_RATE = TradingCosts.CommissionRates.STANDARD_RATE
+        SZ_COMMISSION_RATE = 0.00025  # 使用标准佣金率
         SZ_HAS_TRANSFER_FEE = False  # 无过户费
 
         # 北交所
-        BSE_COMMISSION_RATE = TradingCosts.CommissionRates.STANDARD_RATE
+        BSE_COMMISSION_RATE = 0.00025  # 使用标准佣金率
         BSE_HAS_TRANSFER_FEE = True  # 有过户费
         BSE_STAMP_TAX_RATE = 0.0005  # 北交所印花税为0.05%（双向收取）
 

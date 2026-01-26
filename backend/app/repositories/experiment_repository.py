@@ -79,7 +79,8 @@ class ExperimentRepository(BaseRepository):
                 id, batch_id, experiment_name, model_id, model_path,
                 config, train_metrics, backtest_metrics,
                 rank_score, rank_position, status, error_message,
-                created_at, started_at, completed_at
+                created_at, train_started_at, train_completed_at,
+                backtest_started_at, backtest_completed_at
             FROM experiments
             WHERE id = %s
         """
@@ -103,8 +104,10 @@ class ExperimentRepository(BaseRepository):
             'status': row[10],
             'error_message': row[11],
             'created_at': row[12].isoformat() if row[12] else None,
-            'started_at': row[13].isoformat() if row[13] else None,
-            'completed_at': row[14].isoformat() if row[14] else None
+            'train_started_at': row[13].isoformat() if row[13] else None,
+            'train_completed_at': row[14].isoformat() if row[14] else None,
+            'backtest_started_at': row[15].isoformat() if row[15] else None,
+            'backtest_completed_at': row[16].isoformat() if row[16] else None
         }
 
     def delete_experiment(self, experiment_id: int) -> int:

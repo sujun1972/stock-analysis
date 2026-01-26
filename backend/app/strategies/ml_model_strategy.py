@@ -15,7 +15,7 @@ core_path = Path(__file__).parent.parent.parent.parent / 'core' / 'src'
 if str(core_path) not in sys.path:
     sys.path.insert(0, str(core_path))
 
-from config.trading_rules import TradingCosts
+from src.config.trading_rules import TradingCosts
 from .base_strategy import BaseStrategy, StrategyParameter, ParameterType
 
 
@@ -194,7 +194,7 @@ class MLModelStrategy(BaseStrategy):
         """
         try:
             # 从数据库读取已完成的实验（core 模块已作为包安装）
-            from database.db_manager import DatabaseManager
+            from src.database.db_manager import DatabaseManager
 
             db = DatabaseManager()
 
@@ -314,13 +314,13 @@ class MLModelStrategy(BaseStrategy):
         """
         从磁盘加载模型
 
-        需要从训练任务元数据中获取模型路径和类型，因为不同类型的模型使用不同的文件格式：
+        需要从数据库查询模型路径，因为 model_id 和实际文件名可能不一致
         - LightGBM: .txt 文件
         - GRU: .pth 文件
         """
         try:
             # 从model_id中解析模型类型（model_id格式：symbol_modeltype_xxx）
-            # 例如：000031_lightgbm_a4529cbd -> lightgbm
+            # 例如：600519_lightgbm_20260126_095641 -> lightgbm
             parts = self.model_id.split('_')
             if len(parts) < 2:
                 logger.error(f"无效的model_id格式: {self.model_id}")
@@ -328,29 +328,45 @@ class MLModelStrategy(BaseStrategy):
 
             actual_model_type = parts[1].lower()  # 'lightgbm' 或 'gru'
 
-            # 从model_id中解析目标周期（如果有T前缀）
-            # 例如：000031_lightgbm_T5_robust_xxx -> 5
-            actual_target_period = 5  # 默认值
-            for part in parts:
-                if part.startswith('T') and part[1:].isdigit():
-                    actual_target_period = int(part[1:])
-                    break
+            # 从数据库查询模型的实际文件路径
+            from src.database.db_manager import DatabaseManager
+            db = DatabaseManager()
+
+            query = """
+                SELECT model_path, config
+                FROM experiments
+                WHERE model_id = %s AND status = 'completed'
+                LIMIT 1
+            """
+            result = db._execute_query(query, (self.model_id,))
+
+            if not result or not result[0][0]:
+                logger.warning(f"未在数据库中找到模型 {self.model_id} 的路径信息")
+                # 尝试使用旧的直接路径方式作为回退
+                models_dir = Path('/data/models/ml_models')
+                if actual_model_type == 'lightgbm':
+                    model_path = models_dir / f"{self.model_id}.txt"
+                elif actual_model_type == 'gru':
+                    model_path = models_dir / f"{self.model_id}.pth"
+                else:
+                    logger.error(f"不支持的模型类型: {actual_model_type}")
+                    return None
+            else:
+                # 使用数据库中存储的路径
+                model_path = Path(result[0][0])
+                config = result[0][1] if len(result[0]) > 1 else {}
+
+                # 从配置中提取目标周期
+                if config and isinstance(config, dict):
+                    actual_target_period = config.get('target_period', 5)
+                else:
+                    actual_target_period = 5
+
+                self.target_period = actual_target_period
 
             # 设置实例属性
             self.model_type = actual_model_type
-            self.target_period = actual_target_period
-
-            # 构建模型文件路径（统一使用 /data/models/ml_models 目录）
-            models_dir = Path('/data/models/ml_models')
-
-            # 根据模型类型确定文件扩展名
-            if actual_model_type == 'lightgbm':
-                model_path = models_dir / f"{self.model_id}.txt"
-            elif actual_model_type == 'gru':
-                model_path = models_dir / f"{self.model_id}.pth"
-            else:
-                logger.error(f"不支持的模型类型: {actual_model_type}")
-                return None
+            self.model_path = model_path  # 保存model_path供scaler使用
 
             # 检查文件是否存在
             if not model_path.exists():
@@ -361,11 +377,11 @@ class MLModelStrategy(BaseStrategy):
             if actual_model_type == 'lightgbm':
                 import lightgbm as lgb
                 model = lgb.Booster(model_file=str(model_path))
-                logger.info(f"成功加载 LightGBM 模型: {model_path} (预测周期: {actual_target_period}日)")
+                logger.info(f"成功加载 LightGBM 模型: {model_path} (预测周期: {self.target_period}日)")
             elif actual_model_type == 'gru':
                 import torch
                 model = torch.load(str(model_path))
-                logger.info(f"成功加载 GRU 模型: {model_path} (预测周期: {actual_target_period}日)")
+                logger.info(f"成功加载 GRU 模型: {model_path} (预测周期: {self.target_period}日)")
 
             return model
 
@@ -386,7 +402,7 @@ class MLModelStrategy(BaseStrategy):
         """
         try:
             # core 模块已作为包安装，无需 sys.path 操作
-            from data_pipeline import DataPipeline
+            from src.data_pipeline import DataPipeline
             import pickle
 
             logger.info(f"开始生成真实预测: model_type={self.model_type}, 数据长度={len(data)}")
@@ -420,7 +436,13 @@ class MLModelStrategy(BaseStrategy):
             logger.info(f"特征准备完成: shape={X.shape}, features={len(X.columns)}")
 
             # 步骤2: 加载保存的scaler进行特征缩放
-            scaler_path = Path(f'/data/models/ml_models/{self.model_id}_scaler.pkl')
+            # 使用 model_path 派生 scaler 路径，而不是 model_id
+            if hasattr(self, 'model_path') and self.model_path:
+                # 从实际模型文件路径派生scaler路径
+                scaler_path = self.model_path.with_name(self.model_path.stem + '_scaler.pkl')
+            else:
+                # 回退到使用 model_id（向后兼容）
+                scaler_path = Path(f'/data/models/ml_models/{self.model_id}_scaler.pkl')
 
             if scaler_path.exists():
                 with open(scaler_path, 'rb') as f:

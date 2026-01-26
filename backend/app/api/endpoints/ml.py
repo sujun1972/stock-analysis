@@ -16,7 +16,8 @@ from app.models.ml_models import (
     MLPredictionRequest,
     MLPredictionResponse
 )
-from app.services.ml_training_service import MLTrainingService, sanitize_float_values
+from app.services.ml_training_service import MLTrainingService
+from app.utils.data_cleaning import sanitize_float_values
 from app.services.experiment_service import ExperimentService
 from app.api.error_handler import handle_api_errors
 
@@ -246,7 +247,7 @@ async def list_models(
             WHERE {where_clause}
         """
 
-        from database.db_manager import get_database
+        from src.database.db_manager import get_database
         db = get_database()
 
         count_result = await asyncio.to_thread(db._execute_query, count_query, tuple(params))

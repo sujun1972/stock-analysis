@@ -53,6 +53,15 @@ class MLTrainingService:
         """
         await self.task_manager.run_training(task_id)
 
+    async def start_training(self, task_id: str):
+        """
+        启动训练任务（别名方法，用于向后兼容）
+
+        Args:
+            task_id: 任务ID
+        """
+        await self.run_training(task_id)
+
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         """
         获取任务信息

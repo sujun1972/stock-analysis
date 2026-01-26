@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from loguru import logger
 
-from database.db_manager import DatabaseManager
+from src.database.db_manager import DatabaseManager
 from app.services.core_training import CoreTrainingService
 
 

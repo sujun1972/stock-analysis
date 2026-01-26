@@ -7,8 +7,9 @@ import asyncio
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from loguru import logger
+from psycopg2.extras import Json
 
-from database.db_manager import DatabaseManager
+from src.database.db_manager import DatabaseManager
 from app.services.parameter_grid import ParameterGrid
 from app.repositories.batch_repository import BatchRepository
 
@@ -40,7 +41,9 @@ class BatchManager:
         param_space: Dict[str, Any],
         strategy: str = 'grid',
         max_experiments: Optional[int] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+        tags: Optional[list] = None
     ) -> int:
         """
         创建实验批次
@@ -51,6 +54,8 @@ class BatchManager:
             strategy: 参数生成策略 ('grid', 'random', 'bayesian')
             max_experiments: 最大实验数
             description: 批次描述
+            config: 批次配置（如 max_workers, auto_backtest 等）
+            tags: 标签列表
 
         Returns:
             batch_id: 批次ID
@@ -71,8 +76,11 @@ class BatchManager:
         batch_id = await self._create_batch_record(
             batch_name=batch_name,
             strategy=strategy,
+            param_space=param_space,
             total_experiments=total_experiments,
-            description=description
+            description=description,
+            config=config,
+            tags=tags
         )
 
         # 创建实验记录
@@ -86,8 +94,11 @@ class BatchManager:
         self,
         batch_name: str,
         strategy: str,
+        param_space: Dict[str, Any],
         total_experiments: int,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+        tags: Optional[list] = None
     ) -> int:
         """
         创建批次记录
@@ -95,39 +106,62 @@ class BatchManager:
         Args:
             batch_name: 批次名称
             strategy: 策略
+            param_space: 参数空间定义
             total_experiments: 总实验数
             description: 描述
+            config: 批次配置
+            tags: 标签列表
 
         Returns:
-            batch_id: 批次ID
+            batch_id: 批次ID（对应 experiment_batches.id）
         """
+        # 注意：experiment_batches 表的主键是 id，会自动生成
+        # RETURNING 子句应该返回 id，而不是 batch_id
         query = """
             INSERT INTO experiment_batches (
-                batch_name, strategy, status, total_experiments,
+                batch_name, description, strategy, param_space, status, total_experiments,
                 completed_experiments, failed_experiments, running_experiments,
-                created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING batch_id
+                config, tags, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
         """
 
         params = (
             batch_name,
+            description,
             strategy,
+            Json(param_space if param_space else {}),  # param_space (JSONB, NOT NULL) - wrap with Json()
             'pending',
             total_experiments,
             0,  # completed_experiments
             0,  # failed_experiments
             0,  # running_experiments
+            Json(config if config else {}),  # config (JSONB) - wrap with Json()
+            tags if tags else [],  # tags (VARCHAR[])
             datetime.now()
         )
 
-        result = await asyncio.to_thread(
-            self.db._execute_query,
-            query,
-            params
-        )
+        # 使用单独的连接来执行 INSERT ... RETURNING 并提交事务
+        def _execute_insert_with_returning():
+            conn = self.db.get_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                result = cursor.fetchone()
+                conn.commit()  # 必须提交事务！
+                cursor.close()
+                return result[0]  # 返回 id
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"创建批次记录失败: {e}")
+                raise
+            finally:
+                self.db.release_connection(conn)
 
-        return result[0][0]
+        batch_id = await asyncio.to_thread(_execute_insert_with_returning)
+        logger.info(f"✓ 批次记录已创建: batch_id={batch_id}")
+
+        return batch_id
 
     async def _create_experiments(self, batch_id: int, configs: List[Dict]):
         """
@@ -156,7 +190,7 @@ class BatchManager:
                 batch_id,
                 experiment_name,
                 experiment_hash,
-                config,
+                Json(config),  # config (JSONB) - wrap with Json()
                 'pending',
                 datetime.now()
             ))
@@ -222,10 +256,11 @@ class BatchManager:
         if not field:
             raise ValueError(f"未知的计数器类型: {counter_type}")
 
+        # 注意：experiment_batches 表的主键是 id，不是 batch_id
         query = f"""
             UPDATE experiment_batches
             SET {field} = {field} + 1
-            WHERE batch_id = %s
+            WHERE id = %s
         """
 
         await asyncio.to_thread(self.db._execute_update, query, (batch_id,))

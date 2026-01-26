@@ -436,7 +436,11 @@ class DatabaseService:
         """释放数据库连接"""
         return self.db.release_connection(conn)
 
-    def __del__(self):
-        """析构函数"""
-        if hasattr(self, 'db'):
-            self.db.close_all_connections()
+    # 注意：不应该在 __del__ 中关闭连接池
+    # DatabaseManager 是单例，每个请求创建 DatabaseService 实例时共享同一连接池。
+    # 如果在 __del__ 中关闭连接池，会导致后续请求无法使用数据库连接。
+    # 连接池应该在整个应用生命周期中保持打开，由应用关闭时统一清理。
+    # def __del__(self):
+    #     """析构函数"""
+    #     if hasattr(self, 'db'):
+    #         self.db.close_all_connections()

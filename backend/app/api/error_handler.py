@@ -8,6 +8,7 @@ from typing import Callable, Any
 from fastapi import HTTPException
 from loguru import logger
 import traceback
+import re
 
 
 class APIError(Exception):
@@ -86,9 +87,13 @@ def handle_api_errors(func: Callable) -> Callable:
             raise HTTPException(
                 status_code=e.status_code,
                 detail={
+                    "success": False,
                     "message": e.message,
                     "details": e.details
-                } if e.details else e.message
+                } if e.details else {
+                    "success": False,
+                    "message": e.message
+                }
             )
 
         except ValueError as e:
@@ -96,7 +101,10 @@ def handle_api_errors(func: Callable) -> Callable:
             logger.warning(f"参数错误: {str(e)}")
             raise HTTPException(
                 status_code=400,
-                detail=f"参数错误: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"参数错误: {str(e)}"
+                }
             )
 
         except (FileNotFoundError, KeyError) as e:
@@ -105,7 +113,10 @@ def handle_api_errors(func: Callable) -> Callable:
             logger.warning(f"{error_type}不存在: {str(e)}")
             raise HTTPException(
                 status_code=404,
-                detail=f"{error_type}不存在: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"{error_type}不存在: {str(e)}"
+                }
             )
 
         except TypeError as e:
@@ -113,7 +124,10 @@ def handle_api_errors(func: Callable) -> Callable:
             logger.warning(f"类型错误: {str(e)}")
             raise HTTPException(
                 status_code=400,
-                detail=f"类型错误: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"类型错误: {str(e)}"
+                }
             )
 
         except PermissionError as e:
@@ -121,20 +135,34 @@ def handle_api_errors(func: Callable) -> Callable:
             logger.warning(f"权限不足: {str(e)}")
             raise HTTPException(
                 status_code=403,
-                detail=f"权限不足: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"权限不足: {str(e)}"
+                }
             )
 
         except Exception as e:
             # 未预期的服务器错误
             error_id = id(e)
+            raw_error = str(e)
+
+            # 记录完整错误到日志（包含敏感信息，仅用于调试）
             logger.error(
-                f"服务器错误 [ID:{error_id}]: {str(e)}",
+                f"服务器错误 [ID:{error_id}]: {raw_error}",
                 exc_info=True
             )
-            # 在开发环境可以返回详细错误，生产环境隐藏细节
+
+            # 清理错误消息，移除敏感信息
+            safe_message = _sanitize_error_message(raw_error)
+
+            # 返回安全的错误响应
             raise HTTPException(
                 status_code=500,
-                detail=f"服务器内部错误 (错误ID: {error_id})"
+                detail={
+                    "success": False,
+                    "message": safe_message,
+                    "error_id": error_id
+                }
             )
 
     return wrapper
@@ -170,16 +198,23 @@ def handle_api_errors_sync(func: Callable) -> Callable:
             raise HTTPException(
                 status_code=e.status_code,
                 detail={
+                    "success": False,
                     "message": e.message,
                     "details": e.details
-                } if e.details else e.message
+                } if e.details else {
+                    "success": False,
+                    "message": e.message
+                }
             )
 
         except ValueError as e:
             logger.warning(f"参数错误: {str(e)}")
             raise HTTPException(
                 status_code=400,
-                detail=f"参数错误: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"参数错误: {str(e)}"
+                }
             )
 
         except (FileNotFoundError, KeyError) as e:
@@ -187,32 +222,52 @@ def handle_api_errors_sync(func: Callable) -> Callable:
             logger.warning(f"{error_type}不存在: {str(e)}")
             raise HTTPException(
                 status_code=404,
-                detail=f"{error_type}不存在: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"{error_type}不存在: {str(e)}"
+                }
             )
 
         except TypeError as e:
             logger.warning(f"类型错误: {str(e)}")
             raise HTTPException(
                 status_code=400,
-                detail=f"类型错误: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"类型错误: {str(e)}"
+                }
             )
 
         except PermissionError as e:
             logger.warning(f"权限不足: {str(e)}")
             raise HTTPException(
                 status_code=403,
-                detail=f"权限不足: {str(e)}"
+                detail={
+                    "success": False,
+                    "message": f"权限不足: {str(e)}"
+                }
             )
 
         except Exception as e:
             error_id = id(e)
+            raw_error = str(e)
+
+            # 记录完整错误到日志
             logger.error(
-                f"服务器错误 [ID:{error_id}]: {str(e)}",
+                f"服务器错误 [ID:{error_id}]: {raw_error}",
                 exc_info=True
             )
+
+            # 清理错误消息
+            safe_message = _sanitize_error_message(raw_error)
+
             raise HTTPException(
                 status_code=500,
-                detail=f"服务器内部错误 (错误ID: {error_id})"
+                detail={
+                    "success": False,
+                    "message": safe_message,
+                    "error_id": error_id
+                }
             )
 
     return wrapper
@@ -237,3 +292,50 @@ def raise_conflict(message: str, details: Any = None) -> None:
 def raise_internal_error(message: str, details: Any = None) -> None:
     """抛出 500 错误"""
     raise InternalServerError(message, details)
+
+
+def _is_database_error(error_msg: str) -> bool:
+    """
+    检测是否为数据库相关错误
+
+    Args:
+        error_msg: 错误消息
+
+    Returns:
+        True 如果是数据库错误
+    """
+    db_indicators = [
+        'column', 'table', 'database', 'sql', 'query',
+        'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM', 'WHERE',
+        'constraint', 'foreign key', 'primary key', 'index',
+        'LINE', 'HINT', 'relation', 'schema'
+    ]
+    error_lower = error_msg.lower()
+    return any(indicator.lower() in error_lower for indicator in db_indicators)
+
+
+def _sanitize_error_message(error_msg: str) -> str:
+    """
+    清理错误消息，移除敏感信息
+
+    Args:
+        error_msg: 原始错误消息
+
+    Returns:
+        清理后的错误消息
+    """
+    # 如果是数据库错误，返回通用消息
+    if _is_database_error(error_msg):
+        return "数据查询失败，请稍后重试"
+
+    # 移除可能的文件路径
+    error_msg = re.sub(r'/[^\s]+\.py', '[file]', error_msg)
+
+    # 移除可能的 SQL 语句
+    error_msg = re.sub(r'(SELECT|INSERT|UPDATE|DELETE)[\s\S]*?(FROM|INTO|SET|WHERE)', '[SQL]', error_msg, flags=re.IGNORECASE)
+
+    # 截断过长的错误消息
+    if len(error_msg) > 200:
+        error_msg = error_msg[:200] + "..."
+
+    return error_msg

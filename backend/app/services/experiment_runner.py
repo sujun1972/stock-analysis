@@ -8,8 +8,9 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 from loguru import logger
+from psycopg2.extras import Json
 
-from database.db_manager import DatabaseManager
+from src.database.db_manager import DatabaseManager
 from app.services.core_training import CoreTrainingService
 from app.services.backtest_service import BacktestService
 from app.services.training_task_manager import TrainingTaskManager
@@ -229,7 +230,6 @@ class ExperimentRunner:
             await self._update_experiment_status(
                 exp_id,
                 'completed',
-                completed_at=datetime.now(),
                 total_duration_seconds=int(total_duration)
             )
 
@@ -248,22 +248,16 @@ class ExperimentRunner:
         Returns:
             (model_id, metrics, feature_importance, model_path)
         """
-        def _train():
+        async def _train():
             # 使用 CoreTrainingService 统一训练流程
             core_service = CoreTrainingService()
 
-            result = core_service.train_model(
-                symbol=config['symbol'],
-                start_date=config['start_date'],
-                end_date=config['end_date'],
-                model_type=config.get('model_type', 'lightgbm'),
-                target_period=config.get('target_period', 5),
-                scaler_type=config.get('scaler_type', 'robust'),
-                balance_samples=config.get('balance_samples', False),
-                model_params=config.get('model_params', {}),
-                seq_length=config.get('seq_length'),
-                epochs=config.get('epochs'),
-                use_async=False
+            # CoreTrainingService.train_model() 是异步方法，接受 config 字典作为第一个参数
+            result = await core_service.train_model(
+                config=config,
+                save_features=True,
+                save_training_history=True,
+                use_async=False  # 在 worker 线程中运行，不需要再次异步
             )
 
             model_id = f"{config['symbol']}_{config.get('model_type')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -293,7 +287,8 @@ class ExperimentRunner:
 
             return model_id, metrics, feature_importance, model_path
 
-        return await asyncio.to_thread(_train)
+        # _train 是异步函数，直接 await 执行
+        return await _train()
 
     async def _run_backtest_async(self, model_id: str, config: Dict) -> Dict:
         """
@@ -306,13 +301,14 @@ class ExperimentRunner:
         Returns:
             回测结果
         """
-        result = await self.backtest_service.run_backtest_async(
-            model_id=model_id,
-            symbol=config['symbol'],
+        result = await self.backtest_service.run_backtest(
+            symbols=config['symbol'],
             start_date=config['start_date'],
             end_date=config['end_date']
         )
-        return result
+        # 提取 metrics 部分作为回测指标
+        return result.get('metrics', {})
+
 
     # ==================== 数据库操作 ====================
 
@@ -358,10 +354,11 @@ class ExperimentRunner:
                 model_path = %s, train_completed_at = %s, train_duration_seconds = %s
             WHERE id = %s
         """
+        # 注意：train_metrics 和 feature_importance 是 JSONB 字段，需要用 Json() 包装
         params = (
             model_id,
-            train_metrics,
-            feature_importance,
+            Json(train_metrics) if train_metrics else None,
+            Json(feature_importance) if feature_importance else None,
             str(model_path),
             train_completed_at,
             train_duration,
@@ -385,8 +382,9 @@ class ExperimentRunner:
                 backtest_duration_seconds = %s
             WHERE id = %s
         """
+        # 注意：backtest_metrics 是 JSONB 字段，需要用 Json() 包装
         params = (
-            backtest_metrics,
+            Json(backtest_metrics) if backtest_metrics else None,
             backtest_completed_at,
             backtest_duration,
             exp_id

@@ -22,7 +22,7 @@ class ExperimentService:
     """
 
     def __init__(self, db: Optional[DatabaseManager] = None):
-                """
+        """
         初始化服务
 
         Args:
@@ -41,7 +41,9 @@ class ExperimentService:
         param_space: Dict[str, Any],
         strategy: str = 'grid',
         max_experiments: Optional[int] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+        tags: Optional[list] = None
     ) -> int:
         """
         创建实验批次
@@ -52,6 +54,8 @@ class ExperimentService:
             strategy: 参数生成策略
             max_experiments: 最大实验数
             description: 批次描述
+            config: 批次配置（如 max_workers, auto_backtest 等）
+            tags: 标签列表
 
         Returns:
             batch_id: 批次ID
@@ -61,7 +65,9 @@ class ExperimentService:
             param_space=param_space,
             strategy=strategy,
             max_experiments=max_experiments,
-            description=description
+            description=description,
+            config=config,
+            tags=tags
         )
 
     async def run_batch(

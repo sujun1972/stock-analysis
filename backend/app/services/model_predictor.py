@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from loguru import logger
 import pandas as pd
+import numpy as np
 
-from data_pipeline import DataPipeline
-from models.model_trainer import ModelTrainer
-from database.db_manager import DatabaseManager
+from src.data_pipeline import DataPipeline
+from src.models.model_trainer import ModelTrainer
+from src.database.db_manager import DatabaseManager
 from app.utils.data_cleaning import sanitize_float_values
 
 
@@ -268,26 +269,74 @@ class ModelPredictor:
             X_scaled = scaler.transform(X)
         else:
             logger.warning("⚠️ Scaler 不存在，使用原始特征")
-            X_scaled = X
+            X_scaled = X.values if hasattr(X, 'values') else X
 
-        # 执行预测
+        # 确保 X_scaled 是 numpy array（LightGBM Booster 要求）
+        # scaler.transform() 通常返回 numpy array，但为了兼容性统一处理
+        if hasattr(X_scaled, 'values'):
+            X_scaled = X_scaled.values
+
+        # 执行预测（使用 asyncio.to_thread 避免阻塞事件循环）
         predictions = await asyncio.to_thread(model.predict, X_scaled)
+
+        # 将预测值转换为列表
+        pred_list = predictions.tolist() if hasattr(predictions, 'tolist') else predictions
+
+        # 将真实值转换为列表
+        y_list = y.tolist() if hasattr(y, 'tolist') else (y if isinstance(y, list) else [])
+
+        # 构建预测结果列表（每个元素包含日期、预测值、真实值）
+        predictions_formatted = []
+        for i, date in enumerate(dates):
+            date_str = date.strftime('%Y-%m-%d') if hasattr(date, 'strftime') else str(date)
+            pred_value = float(pred_list[i]) if i < len(pred_list) else None
+            actual_value = float(y_list[i]) if i < len(y_list) else None
+
+            predictions_formatted.append({
+                'date': date_str,
+                'prediction': pred_value,
+                'actual': actual_value
+            })
+
+        # 计算简单指标（如果有真实值）
+        metrics = {}
+        if len(y_list) > 0:
+            try:
+                # 过滤掉None值
+                valid_pairs = [(p['prediction'], p['actual'])
+                              for p in predictions_formatted
+                              if p['prediction'] is not None and p['actual'] is not None]
+
+                if valid_pairs:
+                    preds = np.array([p[0] for p in valid_pairs])
+                    actuals = np.array([p[1] for p in valid_pairs])
+
+                    # RMSE
+                    rmse = float(np.sqrt(np.mean((preds - actuals) ** 2)))
+                    metrics['rmse'] = rmse
+
+                    # R²
+                    ss_res = np.sum((actuals - preds) ** 2)
+                    ss_tot = np.sum((actuals - np.mean(actuals)) ** 2)
+                    r2 = float(1 - (ss_res / ss_tot)) if ss_tot != 0 else 0.0
+                    metrics['r2'] = r2
+
+                    # 样本数
+                    metrics['samples'] = len(valid_pairs)
+            except Exception as e:
+                logger.warning(f"计算指标失败: {e}")
+                metrics = {'samples': len(pred_list)}
 
         # 构建预测结果
         result = {
-            'symbol': symbol,
-            'start_date': start_date,
-            'end_date': end_date,
-            'predictions': predictions.tolist() if hasattr(predictions, 'tolist') else predictions,
-            'dates': dates,
-            'total_samples': len(predictions),
-            'config': config
+            'predictions': predictions_formatted,
+            'metrics': metrics
         }
 
         # 清理无效值
         result = sanitize_float_values(result)
 
-        logger.info(f"✓ 预测完成: {len(predictions)} 个样本")
+        logger.info(f"✓ 预测完成: {len(predictions_formatted)} 个样本")
 
         return result
 
@@ -348,10 +397,27 @@ class ModelPredictor:
         if not model_path.exists():
             raise FileNotFoundError(f"模型文件不存在: {model_path}")
 
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
-
-        logger.info(f"✓ 已加载模型: {model_path}")
+        # 根据文件扩展名判断模型类型并加载
+        # LightGBM: 使用 booster.save_model() 保存为文本格式 (.txt)
+        # GRU/其他: 使用 pickle 保存为二进制格式 (.pkl)
+        if model_path.suffix == '.txt':
+            # LightGBM 模型（需要使用 lgb.Booster 加载）
+            import lightgbm as lgb
+            model = lgb.Booster(model_file=str(model_path))
+            logger.info(f"✓ 已加载 LightGBM 模型: {model_path}")
+        elif model_path.suffix in ['.pkl', '.pickle']:
+            # Pickle 序列化模型（GRU 或其他深度学习模型）
+            with open(model_path, 'rb') as f:
+                model = pickle.load(f)
+            logger.info(f"✓ 已加载 Pickle 模型: {model_path}")
+        else:
+            # 向后兼容：尝试 pickle 加载未知扩展名
+            try:
+                with open(model_path, 'rb') as f:
+                    model = pickle.load(f)
+                logger.info(f"✓ 已加载模型: {model_path}")
+            except Exception as e:
+                raise ValueError(f"不支持的模型文件格式: {model_path.suffix}，错误: {e}")
 
         # 加载scaler
         scaler_path = model_path.with_name(model_path.stem + '_scaler.pkl')

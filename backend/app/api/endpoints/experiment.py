@@ -209,11 +209,11 @@ async def pause_batch(batch_id: int):
 async def cancel_batch(batch_id: int):
     """取消批次"""
     try:
-        # 更新批次状态
+        # 更新批次状态为 'cancelled'
         await asyncio.to_thread(batch_repo.update_batch_status, batch_id, 'cancelled')
 
-        # 取消所有pending的实验 - 需要使用原生 SQL
-        query = "UPDATE experiments SET status = 'cancelled' WHERE batch_id = %s AND status = 'pending'"
+        # 取消所有pending的实验 - 使用 'skipped' 状态（experiments 表的约束只允许 skipped，不允许 cancelled）
+        query = "UPDATE experiments SET status = 'skipped' WHERE batch_id = %s AND status = 'pending'"
         await asyncio.to_thread(experiment_repo.execute_update, query, (batch_id,))
 
         return {
@@ -482,7 +482,7 @@ async def get_experiment_detail(exp_id: int):
     """获取单个实验详情"""
     try:
         import sys
-        from database.db_manager import DatabaseManager
+        from src.database.db_manager import DatabaseManager
         db = DatabaseManager()
 
         query = """

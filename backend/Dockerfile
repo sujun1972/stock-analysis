@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
-COPY requirements.txt .
+COPY backend/requirements.txt .
 
 # 临时移除TA-Lib依赖（Docker环境下编译困难，使用时再添加）
 RUN sed -i '/TA-Lib/d' requirements.txt
@@ -29,11 +29,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 安装 core 模块为可导入包
 # 这样可以直接使用 "from data_pipeline import ..." 而无需 sys.path 操作
-COPY ../core /app/core
+COPY core /app/core
 RUN pip install -e /app/core
 
 # 复制应用代码
-COPY . .
+COPY backend .
 
 # 暴露端口
 EXPOSE 8000

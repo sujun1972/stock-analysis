@@ -49,10 +49,10 @@ class BatchRepository(BaseRepository):
         if conditions:
             where_clause = "WHERE " + " AND ".join(conditions)
 
-        # 主查询
+        # 主查询（注意：experiment_batches 表的主键是 id，不是 batch_id）
         query = f"""
             SELECT
-                eb.batch_id,
+                eb.id as batch_id,
                 eb.batch_name,
                 eb.strategy,
                 eb.status,
@@ -70,16 +70,16 @@ class BatchRepository(BaseRepository):
                 (
                     SELECT e2.id
                     FROM experiments e2
-                    WHERE e2.batch_id = eb.batch_id
+                    WHERE e2.batch_id = eb.id
                       AND e2.status = 'completed'
                       AND e2.rank_score IS NOT NULL
                     ORDER BY e2.rank_score DESC
                     LIMIT 1
                 ) as top_model_id
             FROM experiment_batches eb
-            LEFT JOIN experiments e ON eb.batch_id = e.batch_id
+            LEFT JOIN experiments e ON eb.id = e.batch_id
             {where_clause}
-            GROUP BY eb.batch_id, eb.batch_name, eb.strategy, eb.status,
+            GROUP BY eb.id, eb.batch_name, eb.strategy, eb.status,
                      eb.total_experiments, eb.completed_experiments,
                      eb.failed_experiments, eb.running_experiments,
                      eb.created_at, eb.started_at, eb.completed_at
@@ -148,7 +148,7 @@ class BatchRepository(BaseRepository):
         级联删除批次及其所有实验
 
         Args:
-            batch_id: 批次 ID
+            batch_id: 批次 ID（对应 experiment_batches.id）
 
         Returns:
             删除统计信息
@@ -158,8 +158,8 @@ class BatchRepository(BaseRepository):
             delete_experiments_query = "DELETE FROM experiments WHERE batch_id = %s"
             experiments_deleted = self.execute_update(delete_experiments_query, (batch_id,))
 
-            # 再删除批次
-            delete_batch_query = "DELETE FROM experiment_batches WHERE batch_id = %s"
+            # 再删除批次（experiment_batches 表的主键是 id）
+            delete_batch_query = "DELETE FROM experiment_batches WHERE id = %s"
             batches_deleted = self.execute_update(delete_batch_query, (batch_id,))
 
             logger.info(f"✓ 删除批次 {batch_id}: 批次 {batches_deleted} 个, 实验 {experiments_deleted} 个")
@@ -177,7 +177,7 @@ class BatchRepository(BaseRepository):
         更新批次状态
 
         Args:
-            batch_id: 批次 ID
+            batch_id: 批次 ID（对应 experiment_batches.id）
             status: 新状态
             **kwargs: 其他要更新的字段（如 started_at, completed_at）
 
@@ -196,35 +196,87 @@ class BatchRepository(BaseRepository):
         query = f"""
             UPDATE experiment_batches
             SET {', '.join(set_clauses)}
-            WHERE batch_id = %s
+            WHERE id = %s
         """
 
         return self.execute_update(query, tuple(params))
 
     def get_batch_by_id(self, batch_id: int) -> Optional[Dict[str, Any]]:
         """
-        根据 ID 获取批次信息
+        根据 ID 获取批次信息（包含计算字段和统计信息）
 
         Args:
-            batch_id: 批次 ID
+            batch_id: 批次 ID（对应 experiment_batches.id）
 
         Returns:
             批次信息字典
         """
-        result = self.find_by_id("experiment_batches", batch_id, "batch_id")
-        if not result:
+        # 使用与 find_batches_with_stats 类似的查询，确保包含所有计算字段
+        query = """
+            SELECT
+                eb.id as batch_id,
+                eb.batch_name,
+                eb.description,
+                eb.strategy,
+                eb.param_space,
+                eb.status,
+                eb.total_experiments,
+                eb.completed_experiments,
+                eb.failed_experiments,
+                eb.running_experiments,
+                ROUND((eb.completed_experiments::DECIMAL / NULLIF(eb.total_experiments, 0)) * 100, 2) as success_rate_pct,
+                eb.config,
+                eb.created_at,
+                eb.started_at,
+                eb.completed_at,
+                eb.created_by,
+                eb.tags,
+                EXTRACT(EPOCH FROM (COALESCE(eb.completed_at, NOW()) - eb.started_at)) / 3600 as duration_hours,
+                AVG(e.rank_score) as avg_rank_score,
+                MAX(e.rank_score) as max_rank_score,
+                (
+                    SELECT e2.id
+                    FROM experiments e2
+                    WHERE e2.batch_id = eb.id
+                      AND e2.status = 'completed'
+                      AND e2.rank_score IS NOT NULL
+                    ORDER BY e2.rank_score DESC
+                    LIMIT 1
+                ) as top_model_id
+            FROM experiment_batches eb
+            LEFT JOIN experiments e ON eb.id = e.batch_id
+            WHERE eb.id = %s
+            GROUP BY eb.id, eb.batch_name, eb.description, eb.strategy, eb.param_space,
+                     eb.status, eb.total_experiments, eb.completed_experiments,
+                     eb.failed_experiments, eb.running_experiments, eb.config,
+                     eb.created_at, eb.started_at, eb.completed_at, eb.created_by, eb.tags
+        """
+
+        results = self.execute_query(query, (batch_id,))
+        if not results:
             return None
 
+        row = results[0]
         return {
-            'batch_id': result[0],
-            'batch_name': result[1],
-            'strategy': result[2],
-            'status': result[3],
-            'total_experiments': result[4],
-            'completed_experiments': result[5],
-            'failed_experiments': result[6],
-            'running_experiments': result[7],
-            'created_at': result[8].isoformat() if result[8] else None,
-            'started_at': result[9].isoformat() if result[9] else None,
-            'completed_at': result[10].isoformat() if result[10] else None
+            'batch_id': row[0],
+            'batch_name': row[1],
+            'description': row[2],
+            'strategy': row[3],
+            'param_space': row[4],  # JSONB
+            'status': row[5],
+            'total_experiments': row[6],
+            'completed_experiments': row[7],
+            'failed_experiments': row[8],
+            'running_experiments': row[9],
+            'success_rate_pct': float(row[10]) if row[10] else 0.0,
+            'config': row[11],  # JSONB
+            'created_at': row[12].isoformat() if row[12] else None,
+            'started_at': row[13].isoformat() if row[13] else None,
+            'completed_at': row[14].isoformat() if row[14] else None,
+            'created_by': row[15],
+            'tags': row[16] if row[16] else [],
+            'duration_hours': float(row[17]) if row[17] else None,
+            'avg_rank_score': float(row[18]) if row[18] else None,
+            'max_rank_score': float(row[19]) if row[19] else None,
+            'top_model_id': row[20]
         }

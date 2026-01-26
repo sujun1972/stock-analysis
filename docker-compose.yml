@@ -36,8 +36,8 @@ services:
   # Backend API 服务
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: stock_backend
     restart: unless-stopped
     environment:

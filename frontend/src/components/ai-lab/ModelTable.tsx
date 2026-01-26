@@ -110,23 +110,23 @@ const ModelRow = memo(function ModelRow({
         {model.metrics?.rank_ic?.toFixed(4) || '-'}
       </TableCell>
       <TableCell className="text-right font-mono text-sm text-purple-600 dark:text-purple-400">
-        {model.backtest_metrics?.rank_score?.toFixed(2) || '-'}
+        {model.rank_score !== null && model.rank_score !== undefined ? model.rank_score.toFixed(2) : '-'}
       </TableCell>
       <TableCell className="text-right font-mono text-sm">
-        {model.backtest_metrics?.annual_return !== null && model.backtest_metrics?.annual_return !== undefined ? (
-          <span className={model.backtest_metrics.annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-            {model.backtest_metrics.annual_return.toFixed(2)}%
+        {model.annual_return !== null && model.annual_return !== undefined ? (
+          <span className={model.annual_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+            {model.annual_return.toFixed(2)}%
           </span>
         ) : '-'}
       </TableCell>
       <TableCell className="text-right font-mono text-sm">
-        {model.backtest_metrics?.sharpe_ratio !== null && model.backtest_metrics?.sharpe_ratio !== undefined ? model.backtest_metrics.sharpe_ratio.toFixed(2) : '-'}
+        {model.sharpe_ratio !== null && model.sharpe_ratio !== undefined ? model.sharpe_ratio.toFixed(2) : '-'}
       </TableCell>
       <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
-        {model.backtest_metrics?.max_drawdown !== null && model.backtest_metrics?.max_drawdown !== undefined ? `${model.backtest_metrics.max_drawdown.toFixed(2)}%` : '-'}
+        {model.max_drawdown !== null && model.max_drawdown !== undefined ? `${model.max_drawdown.toFixed(2)}%` : '-'}
       </TableCell>
       <TableCell className="text-right font-mono text-sm">
-        {model.backtest_metrics?.win_rate !== null && model.backtest_metrics?.win_rate !== undefined ? `${(model.backtest_metrics.win_rate * 100).toFixed(2)}%` : '-'}
+        {model.win_rate !== null && model.win_rate !== undefined ? `${(model.win_rate * 100).toFixed(2)}%` : '-'}
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">
         {model.trained_at ? new Date(model.trained_at).toLocaleString('zh-CN', {

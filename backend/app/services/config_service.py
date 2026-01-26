@@ -22,8 +22,11 @@ class ConfigService:
     """
 
     def __init__(self, db: Optional[DatabaseManager] = None):
-        """初始化服务"""
-n        Args:n            db: DatabaseManager 实例（可选，用于依赖注入）
+        """初始化服务
+
+        Args:
+            db: DatabaseManager 实例（可选，用于依赖注入）
+        """
         # 委托给专门的服务
         self.config_repo = ConfigRepository(db)
         self.data_source_manager = DataSourceManager(db)

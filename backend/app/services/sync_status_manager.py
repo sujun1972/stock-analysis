@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from datetime import datetime
 from loguru import logger
 
-from database.db_manager import DatabaseManager
+from src.database.db_manager import DatabaseManager
 from app.repositories.config_repository import ConfigRepository
 
 
