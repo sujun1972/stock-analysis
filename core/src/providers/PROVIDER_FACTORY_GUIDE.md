@@ -4,6 +4,12 @@
 
 数据提供者工厂通过工厂模式和注册机制，实现可插拔的数据源架构，支持动态注册、运行时切换和插件化扩展。
 
+**最新重构（2026-01-26）**：
+- ✅ 模块化拆分：元数据管理、注册中心、工厂入口
+- ✅ 线程安全：使用 RLock 确保并发安全
+- ✅ 统一日志：使用项目标准 logger
+- ✅ 向后兼容：保持原有 API 接口不变
+
 ## 问题：硬编码的数据源创建
 
 ### ❌ 之前的做法
@@ -47,11 +53,11 @@ provider = DataProviderFactory.create_provider('yahoo')
 
 ## 核心概念
 
-### 1. 工厂类
+### 1. 工厂类（外观模式）
 
 ```python
 class DataProviderFactory:
-    """数据提供者工厂"""
+    """数据提供者工厂（外观模式）"""
 
     @classmethod
     def create_provider(cls, source: str, **kwargs) -> BaseDataProvider:
@@ -66,16 +72,42 @@ class DataProviderFactory:
         """获取可用提供者列表"""
 ```
 
-### 2. 元数据管理
+### 2. 元数据管理（provider_metadata.py）
 
 ```python
+@dataclass
 class ProviderMetadata:
-    """提供者元数据"""
+    """提供者元数据（使用 dataclass）"""
     provider_class: Type[BaseDataProvider]
-    description: str
-    requires_token: bool
-    features: List[str]
-    priority: int
+    description: str = ""
+    requires_token: bool = False
+    features: List[str] = field(default_factory=list)
+    priority: int = 0
+
+    def has_feature(self, feature: str) -> bool:
+        """检查是否支持指定特性"""
+
+    def to_dict(self) -> dict:
+        """转换为字典格式"""
+```
+
+### 3. 注册中心（provider_registry.py）
+
+```python
+class ProviderRegistry:
+    """数据提供者注册中心（单例 + 线程安全）"""
+
+    @classmethod
+    def register(cls, name: str, provider_class: Type, **metadata):
+        """注册提供者（线程安全）"""
+
+    @classmethod
+    def get(cls, name: str) -> Optional[ProviderMetadata]:
+        """获取提供者元数据"""
+
+    @classmethod
+    def filter_by_feature(cls, feature: str) -> List[str]:
+        """根据特性筛选提供者"""
 ```
 
 ## 使用示例
@@ -417,30 +449,44 @@ class TestCustomProvider(unittest.TestCase):
 
 ## 架构优势
 
-| 特性 | 改进前 | 改进后 |
-|------|--------|--------|
+| 特性 | 改进前 | 重构后（2026-01） |
+|------|--------|------------------|
 | **扩展性** | 修改条件分支 | 动态注册 |
-| **解耦** | 紧耦合 | 松耦合 |
+| **解耦** | 紧耦合 | 松耦合 + 模块化 |
 | **发现性** | 无 | 列出所有提供者 |
-| **元数据** | 无 | 完整元数据 |
+| **元数据** | 无 | 完整元数据（dataclass） |
 | **插件化** | 不支持 | 支持第三方插件 |
 | **测试性** | 难以mock | 易于测试 |
+| **线程安全** | 不支持 | RLock 并发安全 |
+| **代码量** | 505 行 | 388 行（工厂）+ 模块化 |
 
 ## 设计模式收益
 
-1. **工厂模式** ✅
+1. **工厂模式（Factory Pattern）** ✅
    - 封装对象创建逻辑
    - 客户端无需知道具体类
 
-2. **注册机制** ✅
+2. **外观模式（Facade Pattern）** ✅
+   - DataProviderFactory 作为统一入口
+   - 简化复杂的子系统调用
+
+3. **单例模式（Singleton Pattern）** ✅
+   - ProviderRegistry 类级别共享
+   - 全局唯一注册表
+
+4. **注册机制（Registry Pattern）** ✅
    - 动态添加新提供者
    - 插件化扩展
 
-3. **元数据管理** ✅
-   - 提供者特性描述
-   - 优先级排序
+5. **元数据管理** ✅
+   - 使用 dataclass 简化定义
+   - 提供者特性描述和优先级排序
 
-4. **开闭原则** ✅
+6. **线程安全** ✅
+   - RLock 可重入锁
+   - 双重检查锁定模式
+
+7. **开闭原则（Open-Closed Principle）** ✅
    - 对扩展开放
    - 对修改关闭
 

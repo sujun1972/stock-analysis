@@ -7,7 +7,10 @@ from typing import Optional, List, Dict, Callable, Any
 from datetime import datetime, date, timedelta
 import time
 import pandas as pd
-from loguru import logger
+from src.utils.logger import get_logger
+
+# 获取模块专用 logger
+logger = get_logger(__name__)
 
 try:
     import akshare as ak
