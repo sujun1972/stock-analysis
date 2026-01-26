@@ -13,8 +13,15 @@
 | DataCleaner | `test_data_cleaner.py` | 数据清洗器 | 10 |
 | DataSplitter | `test_data_splitter.py` | 数据分割器 | 11 |
 | FeatureCache | `test_feature_cache.py` | 缓存管理器 | 10 |
+| DatabaseManager (重构) | `test_database_manager_refactored.py` | 重构后的数据库管理器 | 10 |
 
-**总计**: 50+ 单元测试用例
+**总计**: 60+ 单元测试用例
+
+### 性能测试
+
+| 测试模块 | 测试文件 | 说明 |
+|---------|---------|------|
+| DataFrame iterrows 性能 | `test_performance_iterrows.py` | DataFrame向量化性能验证 |
 
 ### 集成测试
 

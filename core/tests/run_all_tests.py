@@ -37,6 +37,8 @@ def run_all_tests(verbosity=2):
         'test_data_cleaner',
         'test_data_splitter',
         'test_feature_cache',
+        'test_database_manager_refactored',
+        'test_performance_iterrows',
     ]
 
     # 测试结果统计
