@@ -1,6 +1,18 @@
 """
 特征存储管理器（Feature Storage Manager）
-管理特征的保存、加载、更新和版本控制
+
+提供特征数据的持久化存储功能：
+- 多格式支持：Parquet（推荐）、HDF5、CSV
+- 版本管理：支持特征版本控制
+- 元数据管理：JSON格式的元数据跟踪
+- Scaler管理：保存和加载数据标准化器
+- 批量操作：支持批量加载多只股票特征
+
+使用场景：
+- 离线特征计算和存储
+- 模型训练数据准备
+- 特征版本管理和回溯
+- 生产环境特征读取
 """
 
 import pandas as pd
@@ -11,6 +23,21 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 import warnings
+
+# 尝试导入 loguru，如果不存在则使用简单的后备方案
+try:
+    from loguru import logger
+except ImportError:
+    class SimpleLogger:
+        @staticmethod
+        def debug(msg): pass
+        @staticmethod
+        def info(msg): print(msg)
+        @staticmethod
+        def warning(msg): print(f"WARNING: {msg}")
+        @staticmethod
+        def error(msg): print(f"ERROR: {msg}")
+    logger = SimpleLogger()
 
 warnings.filterwarnings('ignore')
 
@@ -134,14 +161,13 @@ class FeatureStorage:
 
             self._save_metadata()
 
-            print(f"✓ 已保存 {stock_code} 的 {feature_type} 特征 (版本: {version})")
-            print(f"  文件: {file_path}")
-            print(f"  大小: {len(df)} 行 × {len(df.columns)} 列")
+            logger.info(f"已保存 {stock_code} 的 {feature_type} 特征 (版本: {version})")
+            logger.debug(f"文件: {file_path}, 大小: {len(df)} 行 × {len(df.columns)} 列")
 
             return True
 
         except Exception as e:
-            print(f"✗ 保存特征失败: {e}")
+            logger.error(f"保存特征失败: {e}")
             return False
 
     def _get_file_extension(self) -> str:
@@ -180,7 +206,7 @@ class FeatureStorage:
                     feature_type in self.metadata['stocks'][stock_code]):
                     version = self.metadata['stocks'][stock_code][feature_type]['version']
                 else:
-                    print(f"✗ 找不到 {stock_code} 的 {feature_type} 特征")
+                    logger.warning(f"找不到 {stock_code} 的 {feature_type} 特征")
                     return None
 
             # 构建文件路径
@@ -189,7 +215,7 @@ class FeatureStorage:
             file_path = subdir / filename
 
             if not file_path.exists():
-                print(f"✗ 文件不存在: {file_path}")
+                logger.warning(f"文件不存在: {file_path}")
                 return None
 
             # 加载数据
@@ -202,13 +228,13 @@ class FeatureStorage:
             else:
                 raise ValueError(f"不支持的格式: {self.format}")
 
-            print(f"✓ 已加载 {stock_code} 的 {feature_type} 特征 (版本: {version})")
-            print(f"  大小: {len(df)} 行 × {len(df.columns)} 列")
+            logger.info(f"已加载 {stock_code} 的 {feature_type} 特征 (版本: {version})")
+            logger.debug(f"大小: {len(df)} 行 × {len(df.columns)} 列")
 
             return df
 
         except Exception as e:
-            print(f"✗ 加载特征失败: {e}")
+            logger.error(f"加载特征失败: {e}")
             return None
 
     def load_multiple_stocks(
@@ -235,7 +261,7 @@ class FeatureStorage:
             if df is not None:
                 features_dict[stock_code] = df
 
-        print(f"\n✓ 批量加载完成: {len(features_dict)}/{len(stock_codes)} 只股票")
+        logger.info(f"批量加载完成: {len(features_dict)}/{len(stock_codes)} 只股票")
 
         return features_dict
 
@@ -267,12 +293,12 @@ class FeatureStorage:
             with open(file_path, 'wb') as f:
                 pickle.dump(scaler, f)
 
-            print(f"✓ 已保存 Scaler: {scaler_name} (版本: {version})")
+            logger.info(f"已保存 Scaler: {scaler_name} (版本: {version})")
 
             return True
 
         except Exception as e:
-            print(f"✗ 保存 Scaler 失败: {e}")
+            logger.error(f"保存 Scaler 失败: {e}")
             return False
 
     def load_scaler(
@@ -295,18 +321,18 @@ class FeatureStorage:
             file_path = scaler_dir / f"{scaler_name}_{version}.pkl"
 
             if not file_path.exists():
-                print(f"✗ Scaler文件不存在: {file_path}")
+                logger.warning(f"Scaler文件不存在: {file_path}")
                 return None
 
             with open(file_path, 'rb') as f:
                 scaler = pickle.load(f)
 
-            print(f"✓ 已加载 Scaler: {scaler_name} (版本: {version})")
+            logger.info(f"已加载 Scaler: {scaler_name} (版本: {version})")
 
             return scaler
 
         except Exception as e:
-            print(f"✗ 加载 Scaler 失败: {e}")
+            logger.error(f"加载 Scaler 失败: {e}")
             return None
 
     # ==================== 特征列表管理 ====================
@@ -412,7 +438,7 @@ class FeatureStorage:
                 raise ValueError(f"不支持的更新模式: {mode}")
 
         except Exception as e:
-            print(f"✗ 更新特征失败: {e}")
+            logger.error(f"更新特征失败: {e}")
             return False
 
     def _get_next_version(self, stock_code: str, feature_type: str) -> str:
@@ -447,7 +473,7 @@ class FeatureStorage:
         """
         try:
             if stock_code not in self.metadata['stocks']:
-                print(f"✗ 股票 {stock_code} 不存在")
+                logger.warning(f"股票 {stock_code} 不存在")
                 return False
 
             if feature_type is None:
@@ -459,19 +485,19 @@ class FeatureStorage:
             else:
                 # 删除指定类型
                 if feature_type not in self.metadata['stocks'][stock_code]:
-                    print(f"✗ 特征类型 {feature_type} 不存在")
+                    logger.warning(f"特征类型 {feature_type} 不存在")
                     return False
 
                 self._delete_feature_file(stock_code, feature_type, version)
                 del self.metadata['stocks'][stock_code][feature_type]
 
             self._save_metadata()
-            print(f"✓ 已删除 {stock_code} 的特征")
+            logger.info(f"已删除 {stock_code} 的特征")
 
             return True
 
         except Exception as e:
-            print(f"✗ 删除特征失败: {e}")
+            logger.error(f"删除特征失败: {e}")
             return False
 
     def _delete_feature_file(
@@ -523,20 +549,20 @@ class FeatureStorage:
         """打印存储统计信息"""
         stats = self.get_statistics()
 
-        print("\n" + "="*60)
-        print("特征存储统计信息")
-        print("="*60)
-        print(f"存储目录:       {self.storage_dir}")
-        print(f"存储格式:       {self.format}")
-        print(f"股票总数:       {stats['total_stocks']}")
-        print(f"存储大小:       {stats['storage_size_mb']:.2f} MB")
+        logger.info("=" * 60)
+        logger.info("特征存储统计信息")
+        logger.info("=" * 60)
+        logger.info(f"存储目录:       {self.storage_dir}")
+        logger.info(f"存储格式:       {self.format}")
+        logger.info(f"股票总数:       {stats['total_stocks']}")
+        logger.info(f"存储大小:       {stats['storage_size_mb']:.2f} MB")
 
         if stats['feature_types']:
-            print("\n特征类型分布:")
+            logger.info("\n特征类型分布:")
             for ftype, count in stats['feature_types'].items():
-                print(f"  {ftype:15s}: {count:4d} 只股票")
+                logger.info(f"  {ftype:15s}: {count:4d} 只股票")
 
-        print("="*60 + "\n")
+        logger.info("=" * 60)
 
 
 # ==================== 使用示例 ====================
