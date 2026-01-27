@@ -97,6 +97,7 @@ class TushareErrorMessages:
     # 权限相关错误
     INSUFFICIENT_POINTS = '积分不足'
     INSUFFICIENT_PERMISSION = '权限不足'
+    DAILY_LIMIT = '每天最多访问'  # 每日访问次数限制
 
     # 频率限制错误
     RATE_LIMIT_PER_MINUTE = '抱歉，您每分钟最多访问'
@@ -105,7 +106,9 @@ class TushareErrorMessages:
     @classmethod
     def is_permission_error(cls, error_msg: str) -> bool:
         """判断是否为权限错误"""
-        return cls.INSUFFICIENT_POINTS in error_msg or cls.INSUFFICIENT_PERMISSION in error_msg
+        return (cls.INSUFFICIENT_POINTS in error_msg or
+                cls.INSUFFICIENT_PERMISSION in error_msg or
+                cls.DAILY_LIMIT in error_msg)
 
     @classmethod
     def is_rate_limit_error(cls, error_msg: str) -> bool:
