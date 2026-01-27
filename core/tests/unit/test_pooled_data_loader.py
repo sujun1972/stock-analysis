@@ -378,6 +378,103 @@ class TestPooledDataLoader(unittest.TestCase):
 
         print(f"  ✓ Verbose模式正常")
 
+    @patch('src.data_pipeline.pooled_data_loader.FeatureEngineer')
+    def test_11_verbose_logging_coverage(self, mock_fe_class):
+        """测试11: 覆盖verbose日志路径"""
+        print("\n[测试11] Verbose日志覆盖...")
+
+        # 创建 verbose=True 的加载器
+        verbose_loader = PooledDataLoader(db_manager=self.mock_db, verbose=True)
+
+        symbols = ['000001', '000002', '600000', '600001', '600002', '600003']
+
+        # 配置 Mock - 部分股票失败，以触发失败日志
+        def mock_load_daily_data(symbol, start_date, end_date):
+            if symbol in ['000002', '600001']:
+                raise Exception("连接失败")
+            return self._create_mock_daily_data(symbol, rows=150)
+
+        self.mock_db.load_daily_data.side_effect = mock_load_daily_data
+
+        mock_fe_instance = Mock()
+        mock_fe_instance.compute_all_features.side_effect = lambda *args, **kwargs: self._create_mock_feature_data(rows=150)
+        mock_fe_class.return_value = mock_fe_instance
+
+        # 执行加载 - 应该触发verbose日志输出
+        pooled_df, total_samples, successful_symbols = verbose_loader.load_pooled_data(
+            symbol_list=symbols,
+            start_date='20230101',
+            end_date='20231231',
+            target_period=10
+        )
+
+        # 验证结果
+        self.assertEqual(len(successful_symbols), 4)
+        self.assertGreater(total_samples, 0)
+
+        print(f"  ✓ Verbose日志覆盖完成")
+
+    def test_12_prepare_data_with_all_zero_samples(self):
+        """测试12: 边界情况 - 处理空值导致样本数为0"""
+        print("\n[测试12] 所有样本都有缺失值...")
+
+        # 创建全是NaN的数据
+        n_samples = 100
+        pooled_df = pd.DataFrame({
+            'close': [np.nan] * n_samples,
+            'volume': [np.nan] * n_samples,
+            'MOM5': [np.nan] * n_samples,
+            'target_return_10d': [np.nan] * n_samples,
+            'stock_code': ['000001'] * n_samples
+        })
+
+        # 执行数据分割 - 应该返回空的数据集
+        X_train, y_train, X_valid, y_valid, X_test, y_test, feature_cols = \
+            self.loader.prepare_pooled_training_data(
+                pooled_df=pooled_df,
+                target_col='target_return_10d',
+                train_ratio=0.7,
+                valid_ratio=0.15
+            )
+
+        # 验证所有集合都是空的
+        self.assertEqual(len(X_train), 0)
+        self.assertEqual(len(y_train), 0)
+        self.assertEqual(len(X_valid), 0)
+        self.assertEqual(len(y_valid), 0)
+        self.assertEqual(len(X_test), 0)
+        self.assertEqual(len(y_test), 0)
+
+        print(f"  ✓ 正确处理全空数据集")
+
+    def test_13_prepare_data_verbose_with_zero_samples(self):
+        """测试13: verbose模式下处理零样本的日志路径"""
+        print("\n[测试13] Verbose模式下的零样本日志...")
+
+        verbose_loader = PooledDataLoader(db_manager=self.mock_db, verbose=True)
+
+        # 创建空数据
+        pooled_df = pd.DataFrame({
+            'close': [np.nan] * 10,
+            'volume': [np.nan] * 10,
+            'target_return_10d': [np.nan] * 10,
+            'stock_code': ['000001'] * 10
+        })
+
+        # 执行数据分割 - 应该触发n==0的日志路径
+        X_train, y_train, X_valid, y_valid, X_test, y_test, feature_cols = \
+            verbose_loader.prepare_pooled_training_data(
+                pooled_df=pooled_df,
+                target_col='target_return_10d',
+                train_ratio=0.7,
+                valid_ratio=0.15
+            )
+
+        # 验证结果
+        self.assertEqual(len(X_train), 0)
+
+        print(f"  ✓ Verbose零样本日志覆盖完成")
+
 
 def run_tests():
     """运行所有测试"""
