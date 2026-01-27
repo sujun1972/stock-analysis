@@ -159,8 +159,10 @@ class TestDataSplitter(unittest.TestCase):
         """测试6: 欠采样平衡"""
         print("\n[测试6] 欠采样平衡...")
 
-        # 创建不平衡数据
-        y_imbalanced = pd.Series([1] * 70 + [-1] * 30)
+        # 创建不平衡数据（交错分布，确保train/valid/test都有两个类别）
+        # 7:3比例，交错排列
+        y_pattern = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0]
+        y_imbalanced = pd.Series(y_pattern * 10)  # 100个样本
         X_imbalanced = pd.DataFrame(np.random.randn(100, 3), columns=['f1', 'f2', 'f3'])
 
         splitter = DataSplitter(verbose=False)
@@ -271,8 +273,9 @@ class TestDataSplitter(unittest.TestCase):
         """测试10: 平衡数据跳过重采样"""
         print("\n[测试10] 平衡数据跳过重采样...")
 
-        # 创建已平衡的数据
-        y_balanced = pd.Series([1] * 50 + [-1] * 50)
+        # 创建已平衡的数据（交错分布，imbalance_ratio = 1.4 < 1.5会跳过重采样）
+        y_pattern = [1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0]  # 5:5
+        y_balanced = pd.Series(y_pattern * 10)  # 100个样本
         X_balanced = pd.DataFrame(np.random.randn(100, 3), columns=['f1', 'f2', 'f3'])
 
         splitter = DataSplitter(verbose=True)
@@ -285,7 +288,7 @@ class TestDataSplitter(unittest.TestCase):
 
         X_train, y_train, _, _, _, _ = result
 
-        # 已平衡数据不应该被改变太多
+        # 平衡数据应该跳过重采样（imbalance_ratio < 1.5），保留所有训练样本
         self.assertGreaterEqual(len(X_train), 70 * 0.95)  # 至少保留95%
 
         print(f"  ✓ 平衡数据跳过重采样")

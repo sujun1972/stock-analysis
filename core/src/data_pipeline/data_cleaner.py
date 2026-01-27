@@ -79,7 +79,12 @@ class DataCleaner:
 
         self.stats['final_samples'] = len(df)
 
-        self._log(f"  最终样本: {len(df)} 条 (保留 {len(df)/self.stats['raw_samples']*100:.1f}%)")
+        # 处理空数据的情况，避免除以零
+        if self.stats['raw_samples'] > 0:
+            retention_pct = len(df) / self.stats['raw_samples'] * 100
+            self._log(f"  最终样本: {len(df)} 条 (保留 {retention_pct:.1f}%)")
+        else:
+            self._log(f"  最终样本: {len(df)} 条 (空数据)")
 
         logger.info(f"数据清洗完成: {self.stats['raw_samples']} → {self.stats['final_samples']} 样本")
 
@@ -116,6 +121,14 @@ class DataCleaner:
     def _remove_target_nan(self, df: pd.DataFrame, target_name: str) -> pd.DataFrame:
         """移除目标标签为NaN的行（最后N天无未来数据）"""
         before = len(df)
+
+        # 处理空DataFrame或target列不存在的情况
+        if len(df) == 0 or target_name not in df.columns:
+            self.stats['after_target_removal'] = 0
+            self.stats['removed_target_nan'] = 0
+            self._log(f"  移除目标NaN: {self.stats['removed_target_nan']} 条")
+            return df
+
         df = df.dropna(subset=[target_name])
         after = len(df)
 

@@ -216,10 +216,7 @@ class TestDataPipelineCore(unittest.TestCase):
         self.assertIsInstance(retrieved_scaler, RobustScaler)
         print("  ✓ Scaler 管理正确")
 
-    @patch('pipeline.DataPipeline.data_loader')
-    @patch('pipeline.DataPipeline.feature_engineer')
-    @patch('pipeline.DataPipeline.data_cleaner')
-    def test_10_get_training_data_with_config(self, mock_cleaner, mock_engineer, mock_loader):
+    def test_10_get_training_data_with_config(self):
         """测试10: 使用配置获取训练数据"""
         print("\n[测试10] 使用配置获取训练数据...")
 
@@ -228,9 +225,10 @@ class TestDataPipelineCore(unittest.TestCase):
         df_loaded['feature1'] = np.random.randn(100)
         df_loaded['target_5d_return'] = np.random.randn(100)
 
-        mock_loader.load_data.return_value = df_loaded
-        mock_engineer.compute_all_features.return_value = df_loaded
-        mock_cleaner.clean.return_value = df_loaded
+        # Mock实例属性
+        self.pipeline.data_loader.load_data = Mock(return_value=df_loaded)
+        self.pipeline.feature_engineer.compute_all_features = Mock(return_value=df_loaded)
+        self.pipeline.data_cleaner.clean = Mock(return_value=df_loaded)
 
         # Mock 缓存
         with patch.object(self.pipeline.feature_cache, 'load', return_value=None):
