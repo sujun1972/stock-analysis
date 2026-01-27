@@ -1,14 +1,25 @@
 # 开发环境 Docker Compose 配置
 # 使用方式: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# 运行测试: 使用 ./scripts/run_tests.sh 或参考 docs/TESTING_GUIDE.md
 
 services:
-  # Backend 开发模式配置（已经支持热重载）
+  # Backend 开发模式配置（支持热重载和测试环境）
   backend:
     environment:
       - ENVIRONMENT=development
       - DEBUG=true
+      - PYTHONPATH=/app:/app/core  # 支持 core 模块导入
+    volumes:
+      # 核心代码和数据
+      - ./backend:/app
+      - ./data:/data
+      - ./core/src:/app/core/src
+      # 测试相关
+      - ./core/tests:/app/core/tests
+      - ./core/pyproject.toml:/app/core/pyproject.toml
+      - ./core/setup.py:/app/core/setup.py
+      - ./core/.pytest_cache:/app/core/.pytest_cache
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    # 已经挂载了代码卷，无需额外配置
 
   # Frontend 开发模式配置
   frontend:
