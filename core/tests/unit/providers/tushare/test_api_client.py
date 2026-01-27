@@ -246,7 +246,9 @@ class TestTushareAPIClient(unittest.TestCase):
 
         # Mock tushare
         mock_ts.set_token = Mock()
-        mock_ts.pro_api = Mock(return_value=Mock())
+        # Create a mock pro object that doesn't have non_existent_api attribute
+        mock_pro = Mock(spec=['stock_basic', 'daily'])  # Only has these APIs
+        mock_ts.pro_api = Mock(return_value=mock_pro)
 
         client = TushareAPIClient(token='test_token')
 

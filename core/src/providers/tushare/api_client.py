@@ -6,6 +6,12 @@ Tushare API 客户端封装
 
 import time
 from typing import Any, Callable, Optional
+
+try:
+    import tushare
+except ImportError:
+    tushare = None
+
 from src.utils.logger import get_logger
 from .config import TushareConfig, TushareErrorMessages
 from .exceptions import (
@@ -61,14 +67,14 @@ class TushareAPIClient:
 
     def _init_tushare_api(self) -> None:
         """初始化 Tushare Pro API"""
-        try:
-            import tushare as ts
-            ts.set_token(self.token)
-            self.pro = ts.pro_api(self.token)
-            logger.info("Tushare API 客户端初始化成功")
-        except ImportError:
+        if tushare is None:
             logger.error("Tushare 未安装，请运行: pip install tushare")
             raise ImportError("Tushare 未安装")
+
+        try:
+            tushare.set_token(self.token)
+            self.pro = tushare.pro_api(self.token)
+            logger.info("Tushare API 客户端初始化成功")
         except Exception as e:
             logger.error(f"Tushare API 初始化失败: {e}")
             raise TushareAPIError(f"Tushare API 初始化失败: {e}")

@@ -44,7 +44,7 @@ class TestTushareProvider(unittest.TestCase):
     def setUp(self):
         """每个测试前的准备"""
         # Mock TushareAPIClient
-        self.mock_api_client_class = patch('providers.tushare.provider.TushareAPIClient')
+        self.mock_api_client_class = patch('src.providers.tushare.provider.TushareAPIClient')
         self.mock_api_client = self.mock_api_client_class.start()
 
     def tearDown(self):
@@ -472,7 +472,7 @@ class TestTushareProvider(unittest.TestCase):
         repr_str = repr(provider)
 
         self.assertIn('TushareProvider', repr_str)
-        self.assertIn('test_toke', repr_str)  # 应该只显示前8位
+        self.assertIn('test_tok', repr_str)  # 应该只显示前8位
         self.assertNotIn('123456', repr_str)  # 不应显示后面的字符
 
         print(f"  ✓ 对象表示: {repr_str}")
