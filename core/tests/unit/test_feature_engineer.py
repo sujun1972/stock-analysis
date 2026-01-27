@@ -15,8 +15,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
-from data_pipeline.feature_engineer import FeatureEngineer
-from exceptions import FeatureComputationError
+from src.data_pipeline.feature_engineer import FeatureEngineer
+from src.exceptions import FeatureComputationError
 
 
 class TestFeatureEngineer(unittest.TestCase):

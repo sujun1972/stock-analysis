@@ -12,7 +12,7 @@ from typing import Optional, Any
 import pandas as pd
 from .base_storage import BaseStorage
 
-from utils.logger import logger
+from src.utils.logger import logger
 
 
 class ParquetStorage(BaseStorage):

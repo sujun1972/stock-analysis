@@ -26,8 +26,8 @@ import pandas as pd
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root / 'core' / 'src'))
 
-from providers.tushare.provider import TushareProvider
-from providers.tushare.exceptions import (
+from src.providers.tushare.provider import TushareProvider
+from src.providers.tushare.exceptions import (
     TusharePermissionError,
     TushareRateLimitError,
     TushareDataError

@@ -10,7 +10,7 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from core.src.models.model_trainer import (
+from src.models.model_trainer import (
     TrainingConfig,
     DataSplitConfig,
     ModelTrainer,

@@ -32,7 +32,7 @@ from .parquet_storage import ParquetStorage
 from .hdf5_storage import HDF5Storage
 from .csv_storage import CSVStorage
 
-from utils.logger import logger
+from src.utils.logger import logger
 
 warnings.filterwarnings('ignore')
 

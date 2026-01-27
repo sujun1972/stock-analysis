@@ -15,7 +15,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
-from data_pipeline.data_splitter import DataSplitter
+from src.data_pipeline.data_splitter import DataSplitter
 
 
 class TestDataSplitter(unittest.TestCase):

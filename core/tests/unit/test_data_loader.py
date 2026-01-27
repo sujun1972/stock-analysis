@@ -15,8 +15,8 @@ from unittest.mock import Mock, patch, MagicMock
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
-from data_pipeline.data_loader import DataLoader
-from exceptions import DataNotFoundError, DataError
+from src.data_pipeline.data_loader import DataLoader
+from src.exceptions import DataNotFoundError, DataError
 
 
 class TestDataLoader(unittest.TestCase):

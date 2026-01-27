@@ -53,6 +53,11 @@ test_results/
 **/test_results/
 junit_*.xml
 
+# Test temporary data
+core/tests/data/
+**/tests/data/features_test/
+**/tests/data/test_models/
+
 # Frontend (Next.js)
 frontend/node_modules/
 frontend/.next/

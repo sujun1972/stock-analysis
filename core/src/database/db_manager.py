@@ -7,6 +7,7 @@
 """
 
 import logging
+import os
 import threading
 from typing import Optional, List, Dict, Any
 import pandas as pd
@@ -24,13 +25,13 @@ except ImportError:
     try:
         from config.config import DATABASE_CONFIG
     except ImportError:
-        # 默认配置（仅在无法导入时使用）
+        # 默认配置（从环境变量读取，支持 Docker 环境）
         DATABASE_CONFIG = {
-            'host': 'localhost',
-            'port': 5432,
-            'database': 'stock_analysis',
-            'user': 'stock_user',
-            'password': 'stock_password_123'
+            'host': os.getenv('DATABASE_HOST', 'localhost'),
+            'port': int(os.getenv('DATABASE_PORT', '5432')),
+            'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
+            'user': os.getenv('DATABASE_USER', 'stock_user'),
+            'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
         }
 
 logging.basicConfig(level=logging.INFO)
