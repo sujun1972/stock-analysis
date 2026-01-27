@@ -6,8 +6,7 @@
 """
 
 import pandas as pd
-from typing import Optional, Tuple, List, Union, Dict, Any
-from pathlib import Path
+from typing import Optional, Tuple, List, Union, Dict
 
 from src.database.db_manager import DatabaseManager, get_database
 from src.data_pipeline.data_loader import DataLoader
@@ -92,60 +91,6 @@ class DataPipeline:
         self.feature_names = []
         self.target_name = None
 
-    def _resolve_config(
-        self,
-        config: Optional[PipelineConfig],
-        **legacy_params
-    ) -> PipelineConfig:
-        """
-        解析配置参数（支持向后兼容）
-
-        Args:
-            config: 新式配置对象
-            **legacy_params: 旧式参数（向后兼容）
-
-        Returns:
-            解析后的配置对象
-        """
-        # 如果没有提供配置，从旧参数创建
-        if config is None:
-            # 提取旧参数并设置默认值
-            return PipelineConfig(
-                target_period=legacy_params.get('target_period', self.target_periods[0]),
-                train_ratio=legacy_params.get('train_ratio', 0.7),
-                valid_ratio=legacy_params.get('valid_ratio', 0.15),
-                balance_samples=legacy_params.get('balance_samples', False),
-                balance_method=legacy_params.get('balance_method', 'none'),
-                balance_threshold=legacy_params.get('balance_threshold', 0.0),
-                scale_features=legacy_params.get('scale_features', True),
-                use_cache=legacy_params.get('use_cache', True),
-                force_refresh=legacy_params.get('force_refresh', False),
-                scaler_type=legacy_params.get('scaler_type', self.scaler_type)
-            )
-
-        # 如果提供了配置，检查是否有旧参数覆盖
-        overrides = {}
-        param_mapping = {
-            'target_period': 'target_period',
-            'train_ratio': 'train_ratio',
-            'valid_ratio': 'valid_ratio',
-            'use_cache': 'use_cache',
-            'force_refresh': 'force_refresh',
-            'scale_features': 'scale_features',
-            'balance_samples': 'balance_samples',
-            'balance_method': 'balance_method',
-            'balance_threshold': 'balance_threshold'
-        }
-
-        for legacy_key, config_key in param_mapping.items():
-            if legacy_key in legacy_params and legacy_params[legacy_key] is not None:
-                overrides[config_key] = legacy_params[legacy_key]
-
-        # 如果有覆盖参数，创建新配置
-        if overrides:
-            return config.copy(**overrides)
-
-        return config
 
     @timer
     @validate_args(
@@ -158,15 +103,7 @@ class DataPipeline:
         symbol: str,
         start_date: str,
         end_date: str,
-        config: Optional[PipelineConfig] = None,
-        # 向后兼容的参数（已废弃，建议使用 config）
-        target_period: Optional[int] = None,
-        use_cache: Optional[bool] = None,
-        force_refresh: Optional[bool] = None,
-        _train_ratio: Optional[float] = None,
-        _valid_ratio: Optional[float] = None,
-        _balance_samples: Optional[bool] = None,
-        _balance_method: Optional[str] = None
+        config: Optional[PipelineConfig] = None
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         获取训练数据（自动化流转）
@@ -175,49 +112,22 @@ class DataPipeline:
             symbol: 股票代码
             start_date: 开始日期 (YYYYMMDD)
             end_date: 结束日期 (YYYYMMDD)
-            config: 流水线配置对象（推荐使用）
-
-            # 以下参数已废弃，建议使用 config 对象
-            target_period: 预测周期（废弃，请使用 config.target_period）
-            use_cache: 是否使用缓存（废弃，请使用 config.use_cache）
-            force_refresh: 强制刷新缓存（废弃，请使用 config.force_refresh）
-            _train_ratio: 训练集比例（废弃，请使用 config.train_ratio）
-            _valid_ratio: 验证集比例（废弃，请使用 config.valid_ratio）
-            _balance_samples: 是否平衡样本（废弃，请使用 config.balance_samples）
-            _balance_method: 平衡方法（废弃，请使用 config.balance_method）
+            config: 流水线配置对象（None则使用默认配置）
 
         Returns:
             (特征DataFrame, 目标Series)
 
         Example:
-            >>> # 推荐用法
+            >>> # 使用自定义配置
             >>> config = PipelineConfig(target_period=5, balance_samples=True)
             >>> X, y = pipeline.get_training_data('000001', '20200101', '20231231', config)
             >>>
-            >>> # 或使用默认配置
+            >>> # 使用默认配置
             >>> X, y = pipeline.get_training_data('000001', '20200101', '20231231')
         """
-        # 处理配置参数（支持向后兼容）
+        # 使用默认配置或用户提供的配置
         if config is None:
-            # 使用旧参数或默认值创建配置
-            config = PipelineConfig(
-                target_period=target_period or self.target_periods[0],
-                train_ratio=_train_ratio or 0.7,
-                valid_ratio=_valid_ratio or 0.15,
-                balance_samples=_balance_samples or False,
-                balance_method=_balance_method or 'none',
-                use_cache=use_cache if use_cache is not None else True,
-                force_refresh=force_refresh or False,
-                scaler_type=self.scaler_type
-            )
-        else:
-            # 如果同时提供了旧参数，优先使用旧参数（向后兼容）
-            if target_period is not None:
-                config = config.copy(target_period=target_period)
-            if use_cache is not None:
-                config = config.copy(use_cache=use_cache)
-            if force_refresh is not None:
-                config = config.copy(force_refresh=force_refresh)
+            config = DEFAULT_CONFIG
 
         self.log(f"\n{'='*60}")
         self.log(f"数据流水线: {symbol} ({start_date} ~ {end_date})")
@@ -277,14 +187,7 @@ class DataPipeline:
         X: pd.DataFrame,
         y: pd.Series,
         config: Optional[PipelineConfig] = None,
-        fit_scaler: bool = True,
-        # 向后兼容的参数（已废弃）
-        train_ratio: Optional[float] = None,
-        valid_ratio: Optional[float] = None,
-        scale_features: Optional[bool] = None,
-        balance_samples: Optional[bool] = None,
-        balance_method: Optional[str] = None,
-        balance_threshold: Optional[float] = None
+        fit_scaler: bool = True
     ) -> Tuple:
         """
         为模型准备数据（缩放、平衡、分割）
@@ -292,50 +195,23 @@ class DataPipeline:
         Args:
             X: 特征DataFrame
             y: 目标Series
-            config: 流水线配置对象（推荐使用）
+            config: 流水线配置对象（None则使用默认配置）
             fit_scaler: 是否拟合scaler（True=训练模式，False=推理模式）
-
-            # 以下参数已废弃，建议使用 config 对象
-            train_ratio: 训练集比例（废弃）
-            valid_ratio: 验证集比例（废弃）
-            scale_features: 是否缩放特征（废弃）
-            balance_samples: 是否平衡样本（废弃）
-            balance_method: 平衡方法（废弃）
-            balance_threshold: 分类阈值（废弃）
 
         Returns:
             (X_train, y_train, X_valid, y_valid, X_test, y_test)
 
         Example:
-            >>> # 推荐用法
+            >>> # 使用自定义配置
             >>> config = PipelineConfig(balance_samples=True, balance_method='smote')
             >>> result = pipeline.prepare_for_model(X, y, config)
+            >>>
+            >>> # 使用默认配置
+            >>> result = pipeline.prepare_for_model(X, y)
         """
-        # 处理配置参数（支持向后兼容）
+        # 使用默认配置或用户提供的配置
         if config is None:
-            config = PipelineConfig(
-                train_ratio=train_ratio or 0.7,
-                valid_ratio=valid_ratio or 0.15,
-                scale_features=scale_features if scale_features is not None else True,
-                balance_samples=balance_samples or False,
-                balance_method=balance_method or 'undersample',
-                balance_threshold=balance_threshold or 0.0,
-                scaler_type=self.scaler_type
-            )
-        else:
-            # 如果同时提供了旧参数，优先使用旧参数（向后兼容）
-            if train_ratio is not None:
-                config = config.copy(train_ratio=train_ratio)
-            if valid_ratio is not None:
-                config = config.copy(valid_ratio=valid_ratio)
-            if scale_features is not None:
-                config = config.copy(scale_features=scale_features)
-            if balance_samples is not None:
-                config = config.copy(balance_samples=balance_samples)
-            if balance_method is not None:
-                config = config.copy(balance_method=balance_method)
-            if balance_threshold is not None:
-                config = config.copy(balance_threshold=balance_threshold)
+            config = DEFAULT_CONFIG
 
         self.log(f"\n{'='*60}")
         self.log("为模型准备数据...")
@@ -399,27 +275,6 @@ class DataPipeline:
             'feature_config_hash': self.feature_cache.compute_feature_config_hash(feature_config)
         }
 
-    def _build_cache_config(
-        self,
-        target_period: int,
-        train_ratio: float,
-        valid_ratio: float,
-        balance_samples: bool,
-        balance_method: str
-    ) -> Dict:
-        """
-        构建缓存配置字典（已废弃，建议使用 _build_cache_config_from_obj）
-
-        保留此方法以实现向后兼容
-        """
-        config = PipelineConfig(
-            target_period=target_period,
-            train_ratio=train_ratio,
-            valid_ratio=valid_ratio,
-            balance_samples=balance_samples,
-            balance_method=balance_method
-        )
-        return self._build_cache_config_from_obj(config)
 
     # ==================== 工具方法 ====================
 
@@ -483,15 +338,7 @@ def get_full_training_data(
     symbol: str,
     start_date: str,
     end_date: str,
-    config: Optional[PipelineConfig] = None,
-    # 向后兼容的参数（已废弃）
-    target_period: int = 5,
-    train_ratio: float = 0.7,
-    valid_ratio: float = 0.15,
-    scale_features: bool = True,
-    balance_samples: bool = False,
-    balance_method: str = 'undersample',
-    scaler_type: str = 'robust'
+    config: Optional[PipelineConfig] = None
 ) -> Tuple:
     """
     便捷函数：一键获取完整训练数据（从数据库到模型就绪）
@@ -500,40 +347,26 @@ def get_full_training_data(
         symbol: 股票代码
         start_date: 开始日期
         end_date: 结束日期
-        config: 流水线配置对象（推荐使用）
-
-        # 以下参数已废弃，建议使用 config 对象
-        target_period: 预测周期（废弃）
-        train_ratio: 训练集比例（废弃）
-        valid_ratio: 验证集比例（废弃）
-        scale_features: 是否缩放特征（废弃）
-        balance_samples: 是否平衡样本（废弃）
-        balance_method: 平衡方法（废弃）
-        scaler_type: 缩放类型（废弃）
+        config: 流水线配置对象（None则使用默认配置）
 
     Returns:
         (X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline)
 
     Example:
-        >>> # 推荐用法
+        >>> # 使用预定义配置
         >>> from data_pipeline.pipeline_config import BALANCED_TRAINING_CONFIG
         >>> result = get_full_training_data('000001', '20200101', '20231231', BALANCED_TRAINING_CONFIG)
         >>>
-        >>> # 或自定义配置
+        >>> # 使用自定义配置
         >>> config = PipelineConfig(target_period=10, balance_samples=True)
         >>> result = get_full_training_data('000001', '20200101', '20231231', config)
+        >>>
+        >>> # 使用默认配置
+        >>> result = get_full_training_data('000001', '20200101', '20231231')
     """
-    # 处理配置参数（支持向后兼容）
+    # 使用默认配置或用户提供的配置
     if config is None:
-        config = PipelineConfig(
-            target_period=target_period,
-            train_ratio=train_ratio,
-            valid_ratio=valid_ratio,
-            scale_features=scale_features,
-            balance_samples=balance_samples,
-            balance_method=balance_method,
-            scaler_type=scaler_type
-        )
+        config = DEFAULT_CONFIG
 
     # 创建流水线
     pipeline = DataPipeline(

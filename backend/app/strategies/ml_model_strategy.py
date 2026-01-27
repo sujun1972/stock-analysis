@@ -471,12 +471,22 @@ class MLModelStrategy(BaseStrategy):
                 # 传统单股票模型：使用DataPipeline默认特征（排除OHLCV+Amount）
                 logger.info("传统单股票模型，使用DataPipeline默认特征...")
 
+                # 导入配置类
+                from src.data_pipeline.pipeline_config import PipelineConfig
+
+                # 创建配置（禁用缓存，不刷新）
+                config = PipelineConfig(
+                    target_period=self.target_period,
+                    use_cache=False,
+                    force_refresh=False
+                )
+
                 # 获取特征（会自动计算技术指标和Alpha因子）
                 X, _ = pipeline.get_training_data(
                     symbol=symbol,
                     start_date=start_date,
                     end_date=end_date,
-                    use_cache=False
+                    config=config
                 )
 
                 logger.info(f"特征准备完成: shape={X.shape}, features={len(X.columns)}")

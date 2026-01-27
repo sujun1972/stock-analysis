@@ -11,7 +11,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from data_pipeline import DataPipeline, get_full_training_data
+from data_pipeline import DataPipeline, get_full_training_data, PipelineConfig, DEFAULT_CONFIG
 from models.model_trainer import ModelTrainer
 import warnings
 
@@ -34,22 +34,28 @@ def train_lightgbm_example():
 
     # 2. 获取训练数据
     print("\n[阶段1] 获取训练数据...")
+    config = PipelineConfig(
+        target_period=5,
+        train_ratio=0.7,
+        valid_ratio=0.15,
+        scale_features=True,
+        balance_samples=False,     # LightGBM对不平衡样本较鲁棒，可不平衡
+        use_cache=True,
+        force_refresh=False,       # 使用缓存（第二次运行会很快）
+        scaler_type='robust'
+    )
     X, y = pipeline.get_training_data(
         symbol='000001',           # 平安银行
         start_date='20200101',
         end_date='20231231',
-        use_cache=True,
-        force_refresh=False        # 使用缓存（第二次运行会很快）
+        config=config
     )
 
     # 3. 准备模型数据
     print("\n[阶段2] 准备模型数据...")
     X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(
         X, y,
-        train_ratio=0.7,
-        valid_ratio=0.15,
-        scale_features=True,       # 特征缩放
-        balance_samples=False,     # LightGBM对不平衡样本较鲁棒，可不平衡
+        config=config,
         fit_scaler=True
     )
 
@@ -131,16 +137,19 @@ def train_gru_example():
 
     # 1. 一键获取数据（使用便捷函数）
     print("\n[阶段1] 一键获取训练数据...")
-    X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline = get_full_training_data(
-        symbol='600519',           # 贵州茅台
-        start_date='20200101',
-        end_date='20231231',
+    config = PipelineConfig(
         target_period=10,          # 预测未来10日收益率
         train_ratio=0.7,
         valid_ratio=0.15,
         scale_features=True,       # GRU必须缩放特征！
         balance_samples=True,      # 样本平衡
         scaler_type='standard'     # GRU通常用标准化
+    )
+    X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline = get_full_training_data(
+        symbol='600519',           # 贵州茅台
+        start_date='20200101',
+        end_date='20231231',
+        config=config
     )
 
     # 2. 创建GRU训练器
@@ -215,13 +224,17 @@ def compare_models():
             verbose=False  # 减少输出
         )
 
-        X, y = pipeline.get_training_data(symbol, start_date, end_date, target_period)
-
-        X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(
-            X, y,
+        config = PipelineConfig(
+            target_period=target_period,
             train_ratio=0.7,
             valid_ratio=0.15,
             scale_features=True
+        )
+        X, y = pipeline.get_training_data(symbol, start_date, end_date, config)
+
+        X_train, y_train, X_valid, y_valid, X_test, y_test = pipeline.prepare_for_model(
+            X, y,
+            config=config
         )
 
         # 训练LightGBM
@@ -273,13 +286,16 @@ def batch_train_stocks():
             print(f"{'='*60}")
 
             # 获取数据
+            config = PipelineConfig(
+                target_period=target_period,
+                scale_features=True,
+                balance_samples=False
+            )
             X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline = get_full_training_data(
                 symbol=symbol,
                 start_date='20210101',
                 end_date='20231231',
-                target_period=target_period,
-                scale_features=True,
-                balance_samples=False
+                config=config
             )
 
             # 训练模型

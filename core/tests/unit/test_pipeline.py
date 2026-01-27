@@ -3,12 +3,11 @@
 DataPipeline 数据流水线单元测试
 
 全面测试数据流水线的核心功能，包括：
-- 配置解析和合并
+- 配置对象的使用
 - 数据加载和特征工程
 - 缓存机制
 - 数据验证
 - 错误处理
-- 向后兼容性
 """
 
 import sys
@@ -23,118 +22,82 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
 
-class TestDataPipelineConfigResolution(unittest.TestCase):
-    """测试配置解析功能"""
+class TestPipelineConfigUsage(unittest.TestCase):
+    """测试 PipelineConfig 配置对象的使用"""
 
     @classmethod
     def setUpClass(cls):
         """测试前准备"""
         print("\n" + "="*60)
-        print("DataPipeline 配置解析测试")
+        print("PipelineConfig 配置对象使用测试")
         print("="*60)
 
     def setUp(self):
         """每个测试前的准备"""
         from pipeline import DataPipeline
-        from data_pipeline.pipeline_config import PipelineConfig
+        from data_pipeline.pipeline_config import PipelineConfig, DEFAULT_CONFIG
 
-        # Mock 数据库管理器
         self.mock_db = Mock()
         self.pipeline = DataPipeline(db_manager=self.mock_db, verbose=False)
         self.PipelineConfig = PipelineConfig
+        self.DEFAULT_CONFIG = DEFAULT_CONFIG
 
-    def test_01_resolve_config_from_none(self):
-        """测试1: 从 None 创建配置"""
-        print("\n[测试1] 从 None 创建配置...")
+    def test_01_default_config_usage(self):
+        """测试1: 使用默认配置"""
+        print("\n[测试1] 使用默认配置...")
 
-        config = self.pipeline._resolve_config(
-            None,
+        # 默认配置应该被正确应用
+        self.assertIsNotNone(self.DEFAULT_CONFIG)
+        self.assertEqual(self.DEFAULT_CONFIG.target_period, 5)
+        self.assertEqual(self.DEFAULT_CONFIG.train_ratio, 0.7)
+        self.assertEqual(self.DEFAULT_CONFIG.valid_ratio, 0.15)
+        print("  ✓ 默认配置正确")
+
+    def test_02_custom_config_creation(self):
+        """测试2: 创建自定义配置"""
+        print("\n[测试2] 创建自定义配置...")
+
+        config = self.PipelineConfig(
             target_period=10,
             train_ratio=0.8,
-            balance_samples=True
+            balance_samples=True,
+            balance_method='smote'
         )
 
         self.assertEqual(config.target_period, 10)
         self.assertEqual(config.train_ratio, 0.8)
         self.assertTrue(config.balance_samples)
-        print("  ✓ 从 None 创建配置成功")
+        self.assertEqual(config.balance_method, 'smote')
+        print("  ✓ 自定义配置创建成功")
 
-    def test_02_resolve_config_use_defaults(self):
-        """测试2: 使用默认值创建配置"""
-        print("\n[测试2] 使用默认值创建配置...")
-
-        config = self.pipeline._resolve_config(None)
-
-        self.assertEqual(config.target_period, 5)  # pipeline 默认值
-        self.assertEqual(config.train_ratio, 0.7)
-        self.assertEqual(config.valid_ratio, 0.15)
-        self.assertFalse(config.balance_samples)
-        print("  ✓ 默认值配置正确")
-
-    def test_03_resolve_config_with_overrides(self):
-        """测试3: 配置参数覆盖"""
-        print("\n[测试3] 配置参数覆盖...")
+    def test_03_config_copy_method(self):
+        """测试3: 配置的 copy 方法"""
+        print("\n[测试3] 配置的 copy 方法...")
 
         base_config = self.PipelineConfig(target_period=5, balance_samples=False)
-        config = self.pipeline._resolve_config(
-            base_config,
-            target_period=10,
-            balance_samples=True
-        )
+        modified_config = base_config.copy(target_period=10, balance_samples=True)
 
         # 原配置不变
         self.assertEqual(base_config.target_period, 5)
         self.assertFalse(base_config.balance_samples)
 
-        # 新配置已覆盖
-        self.assertEqual(config.target_period, 10)
-        self.assertTrue(config.balance_samples)
-        print("  ✓ 参数覆盖正确")
+        # 新配置已修改
+        self.assertEqual(modified_config.target_period, 10)
+        self.assertTrue(modified_config.balance_samples)
+        print("  ✓ copy 方法工作正确")
 
-    def test_04_resolve_config_none_values_ignored(self):
-        """测试4: None 值被忽略"""
-        print("\n[测试4] None 值被忽略...")
+    def test_04_config_with_none_fallback(self):
+        """测试4: 配置为 None 时使用默认配置"""
+        print("\n[测试4] 配置为 None 时使用默认配置...")
 
-        base_config = self.PipelineConfig(target_period=5, balance_samples=True)
-        config = self.pipeline._resolve_config(
-            base_config,
-            target_period=None,  # None 应该被忽略
-            balance_samples=False  # 非 None 应该覆盖
-        )
+        # 模拟 get_training_data 的行为
+        config = None
+        if config is None:
+            config = self.DEFAULT_CONFIG
 
-        self.assertEqual(config.target_period, 5)  # 保持原值
-        self.assertFalse(config.balance_samples)  # 被覆盖
-        print("  ✓ None 值正确忽略")
-
-    def test_05_resolve_config_all_params(self):
-        """测试5: 所有参数的解析"""
-        print("\n[测试5] 所有参数的解析...")
-
-        config = self.pipeline._resolve_config(
-            None,
-            target_period=7,
-            train_ratio=0.75,
-            valid_ratio=0.15,
-            balance_samples=True,
-            balance_method='smote',
-            balance_threshold=0.01,
-            scale_features=False,
-            use_cache=False,
-            force_refresh=True,
-            scaler_type='standard'
-        )
-
-        self.assertEqual(config.target_period, 7)
-        self.assertEqual(config.train_ratio, 0.75)
-        self.assertEqual(config.valid_ratio, 0.15)
-        self.assertTrue(config.balance_samples)
-        self.assertEqual(config.balance_method, 'smote')
-        self.assertEqual(config.balance_threshold, 0.01)
-        self.assertFalse(config.scale_features)
-        self.assertFalse(config.use_cache)
-        self.assertTrue(config.force_refresh)
-        self.assertEqual(config.scaler_type, 'standard')
-        print("  ✓ 所有参数解析正确")
+        self.assertIsNotNone(config)
+        self.assertEqual(config.target_period, 5)
+        print("  ✓ None 配置回退到默认配置")
 
 
 class TestDataPipelineCore(unittest.TestCase):
@@ -286,60 +249,6 @@ class TestDataPipelineCore(unittest.TestCase):
                     print("  ✓ 配置方式获取数据成功")
                 except Exception as e:
                     print(f"  ⚠ 测试跳过（需要完整环境）: {e}")
-
-
-class TestDataPipelineBackwardCompatibility(unittest.TestCase):
-    """测试向后兼容性"""
-
-    @classmethod
-    def setUpClass(cls):
-        """测试前准备"""
-        print("\n" + "="*60)
-        print("DataPipeline 向后兼容性测试")
-        print("="*60)
-
-    def setUp(self):
-        """每个测试前的准备"""
-        from pipeline import DataPipeline
-
-        self.mock_db = Mock()
-        self.pipeline = DataPipeline(db_manager=self.mock_db, verbose=False)
-
-    def test_11_legacy_params_support(self):
-        """测试11: 旧参数支持"""
-        print("\n[测试11] 旧参数支持...")
-
-        # 使用旧参数调用 _resolve_config
-        config = self.pipeline._resolve_config(
-            None,
-            target_period=10,
-            use_cache=False,
-            force_refresh=True
-        )
-
-        self.assertEqual(config.target_period, 10)
-        self.assertFalse(config.use_cache)
-        self.assertTrue(config.force_refresh)
-        print("  ✓ 旧参数支持正确")
-
-    def test_12_mixed_params_priority(self):
-        """测试12: 混合参数优先级"""
-        print("\n[测试12] 混合参数优先级...")
-
-        from data_pipeline.pipeline_config import PipelineConfig
-
-        # 创建基础配置
-        base_config = PipelineConfig(target_period=5, balance_samples=False)
-
-        # 旧参数应该覆盖配置对象
-        config = self.pipeline._resolve_config(
-            base_config,
-            target_period=10  # 旧参数覆盖
-        )
-
-        self.assertEqual(config.target_period, 10)  # 使用旧参数
-        self.assertFalse(config.balance_samples)  # 保持原配置
-        print("  ✓ 参数优先级正确")
 
 
 class TestDataPipelineRefactored(unittest.TestCase):

@@ -359,6 +359,9 @@ class ModelPredictor:
         Returns:
             (X, y, dates): 特征、标签、日期
         """
+        # 导入配置类
+        from src.data_pipeline.pipeline_config import PipelineConfig
+
         # 创建数据管道
         pipeline = DataPipeline(
             target_periods=config.get('target_period', 5),
@@ -367,13 +370,21 @@ class ModelPredictor:
             verbose=False
         )
 
+        # 创建管道配置
+        pipeline_config = PipelineConfig(
+            target_period=config.get('target_period', 5),
+            use_cache=False,
+            force_refresh=False,
+            scaler_type=config.get('scaler_type', 'robust')
+        )
+
         # 获取训练数据
         X, y = await asyncio.to_thread(
             pipeline.get_training_data,
             symbol=symbol,
             start_date=start_date,
             end_date=end_date,
-            use_cache=False
+            config=pipeline_config
         )
 
         # 获取日期索引

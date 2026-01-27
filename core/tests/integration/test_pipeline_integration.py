@@ -141,11 +141,10 @@ class TestPipelineIntegrationBasic(unittest.TestCase):
         for name, config in configs:
             pipeline = self.DataPipeline(db_manager=mock_db, verbose=False)
 
-            # 验证配置被正确解析
-            resolved = pipeline._resolve_config(config)
-            self.assertIsNotNone(resolved)
-            self.assertIsInstance(resolved, self.PipelineConfig)
-            print(f"  ✓ {name}: target_period={resolved.target_period}, balance={resolved.balance_samples}")
+            # 验证配置对象有效
+            self.assertIsNotNone(config)
+            self.assertIsInstance(config, self.PipelineConfig)
+            print(f"  ✓ {name}: target_period={config.target_period}, balance={config.balance_samples}")
 
     def test_03_prepare_for_model_flow(self):
         """测试3: 模型数据准备流程"""
