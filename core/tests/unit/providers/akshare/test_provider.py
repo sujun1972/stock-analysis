@@ -31,7 +31,7 @@ class TestAkShareProvider(unittest.TestCase):
     def setUp(self):
         """每个测试前的准备"""
         # Mock AkShareAPIClient
-        self.mock_api_client_class = patch('providers.akshare.provider.AkShareAPIClient')
+        self.mock_api_client_class = patch('src.providers.akshare.provider.AkShareAPIClient')
         self.mock_api_client = self.mock_api_client_class.start()
 
     def tearDown(self):

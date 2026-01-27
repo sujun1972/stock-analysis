@@ -323,7 +323,7 @@ class TestPipelineErrorHandling(unittest.TestCase):
         """每个测试前的准备"""
         try:
             from pipeline_refactored import DataPipeline
-            from exceptions import PipelineError, DataValidationError
+            from src.exceptions import PipelineError, DataValidationError
             self.DataPipeline = DataPipeline
             self.PipelineError = PipelineError
             self.DataValidationError = DataValidationError

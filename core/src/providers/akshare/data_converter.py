@@ -25,16 +25,16 @@ class AkShareDataConverter:
     """
 
     @staticmethod
-    def safe_float(value: Any, default: float = 0.0) -> float:
+    def safe_float(value: Any, default: float = None) -> float:
         """
         安全转换为 float
 
         Args:
             value: 原始值
-            default: 默认值
+            default: 默认值 (None表示空值返回None)
 
         Returns:
-            float: 转换后的值
+            float: 转换后的值，或None
         """
         try:
             if value is None or value == '' or value == '-':
@@ -44,16 +44,16 @@ class AkShareDataConverter:
             return default
 
     @staticmethod
-    def safe_int(value: Any, default: int = 0) -> int:
+    def safe_int(value: Any, default: int = None) -> int:
         """
         安全转换为 int
 
         Args:
             value: 原始值
-            default: 默认值
+            default: 默认值 (None表示空值返回None)
 
         Returns:
-            int: 转换后的值
+            int: 转换后的值，或None
         """
         try:
             if value is None or value == '' or value == '-':
@@ -105,6 +105,13 @@ class AkShareDataConverter:
 
         # 转换日期类型
         df['trade_date'] = pd.to_datetime(df['trade_date']).dt.date
+
+        # 转换数值类型（AkShare返回的数据可能是字符串）
+        numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'amount',
+                          'amplitude', 'pct_change', 'change_amount', 'turnover']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
         # 选择标准字段（保留存在的字段）
         available_columns = [col for col in AkShareFields.DAILY_DATA_OUTPUT if col in df.columns]

@@ -54,6 +54,8 @@ class AkShareConfig:
 
         if code.startswith('60'):
             return '上海主板'
+        elif code.startswith('688'):  # 科创板 (must check before '68')
+            return '科创板'
         elif code.startswith('68'):
             return '上海主板'
         elif code.startswith('000'):
@@ -64,8 +66,6 @@ class AkShareConfig:
             return '深圳主板'
         elif code.startswith('300'):
             return '创业板'
-        elif code.startswith('688'):
-            return '科创板'
         elif code.startswith(('8', '4')):
             return '北交所'
         else:

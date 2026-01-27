@@ -42,6 +42,11 @@ class DataSourceError(DataError):
     pass
 
 
+class PipelineError(DataError):
+    """数据流水线错误"""
+    pass
+
+
 # ==================== 数据库相关异常 ====================
 
 class DatabaseError(StockAnalysisError):

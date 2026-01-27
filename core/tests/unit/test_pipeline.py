@@ -290,7 +290,7 @@ class TestDataPipelineRefactored(unittest.TestCase):
 
         print("\n[测试14] 数据验证 - 空数据...")
 
-        from exceptions import DataValidationError
+        from src.exceptions import DataValidationError
 
         mock_db = Mock()
         pipeline = self.DataPipeline(db_manager=mock_db, verbose=False)
@@ -309,7 +309,7 @@ class TestDataPipelineRefactored(unittest.TestCase):
 
         print("\n[测试15] 数据验证 - 长度不匹配...")
 
-        from exceptions import DataValidationError
+        from src.exceptions import DataValidationError
 
         mock_db = Mock()
         pipeline = self.DataPipeline(db_manager=mock_db, verbose=False)
@@ -328,7 +328,7 @@ class TestDataPipelineRefactored(unittest.TestCase):
 
         print("\n[测试16] 数据验证 - 空值检查...")
 
-        from exceptions import DataValidationError
+        from src.exceptions import DataValidationError
 
         mock_db = Mock()
         pipeline = self.DataPipeline(db_manager=mock_db, verbose=False)
