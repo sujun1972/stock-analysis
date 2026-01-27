@@ -71,3 +71,4 @@ frontend/next-env.d.ts
 /node_modules/
 /package-lock.json
 /package.json
+backend/core/
