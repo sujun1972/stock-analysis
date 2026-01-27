@@ -1,29 +1,79 @@
 """
-特征转换器（Feature Transformer）
-用于AI模型的特征变换，包括价格变动率矩阵、标准化等
+特征转换器（Feature Transformer）- 向后兼容包装器
+
+这是一个向后兼容的包装器，内部使用策略模式实现。
+保持原有 API 不变，同时享受策略模式的优势。
+
+## 迁移指南
+
+推荐使用新的策略模式 API（在 transform_strategy.py 中）：
+
+```python
+# 旧方式（仍然支持）
+from features.feature_transformer import FeatureTransformer
+ft = FeatureTransformer(df)
+ft.create_price_change_matrix()
+result = ft.get_dataframe()
+
+# 新方式（推荐）
+from features.transform_strategy import create_default_transform_pipeline
+pipeline = create_default_transform_pipeline()
+result = pipeline.transform(df)
+```
+
+作者: Stock Analysis Team
+更新: 2026-01-27
+版本: v3.0 (策略模式重构)
 """
 
 import pandas as pd
 import numpy as np
-from typing import Optional, Tuple, List, Dict, Union, Any
+from typing import Optional, List, Dict, Union
+from pathlib import Path
+
+# 导入新的策略模式类
+from .transform_strategy import (
+    PriceChangeTransformStrategy,
+    NormalizationStrategy,
+    TimeFeatureStrategy,
+    StatisticalFeatureStrategy,
+    CompositeTransformStrategy,
+    TransformError,
+    InvalidDataError,
+    ScalerNotFoundError,
+)
+
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
-import warnings
+from loguru import logger
 
-warnings.filterwarnings('ignore')
 
+# ==================== 向后兼容的 FeatureTransformer 类 ====================
 
 class FeatureTransformer:
-    """特征转换器"""
+    """
+    特征转换器（向后兼容包装器）
+
+    这个类保持原有 API 不变，内部使用策略模式实现。
+    所有方法都委托给相应的策略类。
+
+    推荐使用新的策略模式 API (见 transform_strategy.py)
+    """
 
     def __init__(self, df: pd.DataFrame) -> None:
         """
         初始化特征转换器
 
-        参数:
+        Args:
             df: 包含价格和特征的DataFrame
         """
         self.df: pd.DataFrame = df.copy()
-        self.scalers: Dict[str, Union[StandardScaler, RobustScaler, MinMaxScaler]] = {}  # 存储各列的scaler
+        self.scalers: Dict[str, Union[StandardScaler, RobustScaler, MinMaxScaler]] = {}
+
+        # 内部策略实例（懒加载）
+        self._price_strategy: Optional[PriceChangeTransformStrategy] = None
+        self._norm_strategy: Optional[NormalizationStrategy] = None
+        self._time_strategy: Optional[TimeFeatureStrategy] = None
+        self._stat_strategy: Optional[StatisticalFeatureStrategy] = None
 
     # ==================== 价格变动率矩阵 ====================
 
@@ -34,22 +84,23 @@ class FeatureTransformer:
     ) -> pd.DataFrame:
         """
         创建价格变动率矩阵（用于GRU/LSTM输入）
-        ΔP_t = (P_t - P_{t-1}) / P_{t-1}
 
-        参数:
+        Args:
             lookback_days: 回看天数
             price_col: 价格列名
 
-        返回:
+        Returns:
             包含价格变动率矩阵的DataFrame
         """
-        # 计算每日价格变动率
-        price_changes = self.df[price_col].pct_change()
+        strategy = PriceChangeTransformStrategy(config={
+            'lookback_days': lookback_days,
+            'price_col': price_col,
+            'return_periods': [],  # 不生成收益率
+            'include_log_returns': False,
+            'include_ohlc_features': False,
+        })
 
-        # 创建回看窗口特征
-        for i in range(1, lookback_days + 1):
-            self.df[f'PRICE_CHG_T-{i}'] = price_changes.shift(i) * 100
-
+        self.df = strategy.transform(self.df)
         return self.df
 
     def create_multi_timeframe_returns(
@@ -60,61 +111,38 @@ class FeatureTransformer:
         """
         创建多时间尺度收益率特征
 
-        参数:
+        Args:
             periods: 周期列表
             price_col: 价格列名
 
-        返回:
+        Returns:
             包含多时间尺度收益率的DataFrame
         """
-        for period in periods:
-            # 简单收益率
-            self.df[f'RET_{period}D'] = (
-                self.df[price_col].pct_change(period) * 100
-            )
+        strategy = PriceChangeTransformStrategy(config={
+            'lookback_days': 0,  # 不生成价格变动率矩阵
+            'price_col': price_col,
+            'return_periods': periods,
+            'include_log_returns': True,
+            'include_ohlc_features': False,
+        })
 
-            # 对数收益率
-            self.df[f'LOG_RET_{period}D'] = (
-                np.log(self.df[price_col] / self.df[price_col].shift(period)) * 100
-            )
-
+        self.df = strategy.transform(self.df)
         return self.df
 
     def create_ohlc_features(self) -> pd.DataFrame:
         """
         创建OHLC衍生特征
 
-        返回:
+        Returns:
             包含OHLC特征的DataFrame
         """
-        if not all(col in self.df.columns for col in ['open', 'high', 'low', 'close']):
-            print("警告: 缺少OHLC列，跳过OHLC特征创建")
-            return self.df
+        strategy = PriceChangeTransformStrategy(config={
+            'lookback_days': 0,
+            'return_periods': [],
+            'include_ohlc_features': True,
+        })
 
-        # 价格位置（在当日振幅中的位置）
-        self.df['PRICE_POSITION_DAILY'] = (
-            (self.df['close'] - self.df['low']) /
-            (self.df['high'] - self.df['low'] + 1e-8) * 100
-        )
-
-        # 实体强度（收盘相对开盘）
-        self.df['BODY_STRENGTH'] = (
-            (self.df['close'] - self.df['open']) /
-            (self.df['high'] - self.df['low'] + 1e-8) * 100
-        )
-
-        # 上影线比例
-        upper_shadow = self.df['high'] - self.df[['open', 'close']].max(axis=1)
-        self.df['UPPER_SHADOW_RATIO'] = (
-            upper_shadow / (self.df['high'] - self.df['low'] + 1e-8) * 100
-        )
-
-        # 下影线比例
-        lower_shadow = self.df[['open', 'close']].min(axis=1) - self.df['low']
-        self.df['LOWER_SHADOW_RATIO'] = (
-            lower_shadow / (self.df['high'] - self.df['low'] + 1e-8) * 100
-        )
-
+        self.df = strategy.transform(self.df)
         return self.df
 
     # ==================== 特征标准化 ====================
@@ -128,52 +156,29 @@ class FeatureTransformer:
         """
         标准化特征（用于机器学习模型）
 
-        参数:
+        Args:
             feature_cols: 需要标准化的特征列列表
             method: 标准化方法 ('standard', 'robust', 'minmax')
             fit: 是否拟合scaler（训练时True，测试时False）
 
-        返回:
+        Returns:
             包含标准化特征的DataFrame
         """
-        # 选择scaler
-        if method == 'standard':
-            scaler_class = StandardScaler
-        elif method == 'robust':
-            scaler_class = RobustScaler
-        elif method == 'minmax':
-            scaler_class = MinMaxScaler
+        if self._norm_strategy is None or self._norm_strategy.config['method'] != method:
+            self._norm_strategy = NormalizationStrategy(config={
+                'method': method,
+                'feature_cols': feature_cols,
+                'fit': fit,
+            })
         else:
-            raise ValueError(f"不支持的标准化方法: {method}")
+            # 更新配置
+            self._norm_strategy.config['feature_cols'] = feature_cols
+            self._norm_strategy.config['fit'] = fit
 
-        for col in feature_cols:
-            if col not in self.df.columns:
-                print(f"警告: 列 '{col}' 不存在，跳过")
-                continue
+        self.df = self._norm_strategy.transform(self.df)
 
-            # 处理缺失值和无穷值
-            valid_mask = np.isfinite(self.df[col])
-            if not valid_mask.all():
-                self.df.loc[~valid_mask, col] = np.nan
-
-            # 创建或使用已有的scaler
-            scaler_key = f"{col}_{method}"
-            if fit:
-                scaler = scaler_class()
-                valid_data = self.df.loc[valid_mask, [col]]
-                if len(valid_data) > 0:
-                    scaler.fit(valid_data)
-                    self.scalers[scaler_key] = scaler
-            else:
-                if scaler_key not in self.scalers:
-                    print(f"警告: 找不到列 '{col}' 的scaler，跳过")
-                    continue
-                scaler = self.scalers[scaler_key]
-
-            # 转换数据
-            if valid_mask.sum() > 0:
-                transformed = scaler.transform(self.df.loc[valid_mask, [col]])
-                self.df.loc[valid_mask, f'{col}_NORM'] = transformed.flatten()
+        # 同步 scalers
+        self.scalers = self._norm_strategy.scalers
 
         return self.df
 
@@ -186,78 +191,22 @@ class FeatureTransformer:
         """
         排名转换（截面排名或滚动排名）
 
-        参数:
+        Args:
             feature_cols: 需要排名的特征列列表
             window: 滚动窗口大小（None表示全局排名）
             pct: 是否转为百分位排名（0-1之间）
 
-        返回:
+        Returns:
             包含排名特征的DataFrame
         """
-        for col in feature_cols:
-            if col not in self.df.columns:
-                print(f"警告: 列 '{col}' 不存在，跳过")
-                continue
+        strategy = NormalizationStrategy(config={
+            'method': 'robust',  # method参数在rank_transform时不使用
+            'feature_cols': feature_cols,
+            'rank_transform': True,
+            'rank_window': window,
+        })
 
-            if window is None:
-                # 全局排名
-                ranked = self.df[col].rank(pct=pct)
-            else:
-                # 滚动排名
-                ranked = self.df[col].rolling(window=window).apply(
-                    lambda x: pd.Series(x).rank(pct=pct).iloc[-1] if len(x) == window else np.nan,
-                    raw=False
-                )
-
-            suffix = '_PCT_RANK' if pct else '_RANK'
-            self.df[f'{col}{suffix}'] = ranked
-
-        return self.df
-
-    # ==================== 特征交互 ====================
-
-    def create_ratio_features(
-        self,
-        numerator_cols: List[str],
-        denominator_cols: List[str]
-    ) -> pd.DataFrame:
-        """
-        创建比率特征（特征间的比值）
-
-        参数:
-            numerator_cols: 分子列列表
-            denominator_cols: 分母列列表
-
-        返回:
-            包含比率特征的DataFrame
-        """
-        for num_col in numerator_cols:
-            for den_col in denominator_cols:
-                if num_col in self.df.columns and den_col in self.df.columns:
-                    # 避免除零
-                    ratio = self.df[num_col] / (self.df[den_col] + 1e-8)
-                    self.df[f'{num_col}_DIV_{den_col}'] = ratio
-
-        return self.df
-
-    def create_diff_features(
-        self,
-        col_pairs: List[Tuple[str, str]]
-    ) -> pd.DataFrame:
-        """
-        创建差值特征（特征间的差值）
-
-        参数:
-            col_pairs: 列对列表 [(col1, col2), ...]
-
-        返回:
-            包含差值特征的DataFrame
-        """
-        for col1, col2 in col_pairs:
-            if col1 in self.df.columns and col2 in self.df.columns:
-                diff = self.df[col1] - self.df[col2]
-                self.df[f'{col1}_MINUS_{col2}'] = diff
-
+        self.df = strategy.transform(self.df)
         return self.df
 
     # ==================== 时间特征 ====================
@@ -266,34 +215,13 @@ class FeatureTransformer:
         """
         添加时间相关特征（星期几、月份、季度等）
 
-        返回:
+        Returns:
             包含时间特征的DataFrame
         """
-        if not isinstance(self.df.index, pd.DatetimeIndex):
-            print("警告: DataFrame索引不是DatetimeIndex，跳过时间特征")
-            return self.df
+        if self._time_strategy is None:
+            self._time_strategy = TimeFeatureStrategy()
 
-        # 星期几（0=周一, 4=周五）
-        self.df['DAY_OF_WEEK'] = self.df.index.dayofweek
-
-        # 月份
-        self.df['MONTH'] = self.df.index.month
-
-        # 季度
-        self.df['QUARTER'] = self.df.index.quarter
-
-        # 月初/月末标志
-        self.df['IS_MONTH_START'] = self.df.index.is_month_start.astype(int)
-        self.df['IS_MONTH_END'] = self.df.index.is_month_end.astype(int)
-
-        # 季度初/季度末标志
-        self.df['IS_QUARTER_START'] = self.df.index.is_quarter_start.astype(int)
-        self.df['IS_QUARTER_END'] = self.df.index.is_quarter_end.astype(int)
-
-        # 年初/年末标志
-        self.df['IS_YEAR_START'] = self.df.index.is_year_start.astype(int)
-        self.df['IS_YEAR_END'] = self.df.index.is_year_end.astype(int)
-
+        self.df = self._time_strategy.transform(self.df)
         return self.df
 
     # ==================== 滞后特征 ====================
@@ -306,64 +234,52 @@ class FeatureTransformer:
         """
         创建滞后特征（用于时间序列模型）
 
-        参数:
+        Args:
             feature_cols: 需要创建滞后的特征列列表
             lags: 滞后期数列表
 
-        返回:
+        Returns:
             包含滞后特征的DataFrame
         """
-        for col in feature_cols:
-            if col not in self.df.columns:
-                print(f"警告: 列 '{col}' 不存在，跳过")
-                continue
+        strategy = StatisticalFeatureStrategy(config={
+            'feature_cols': feature_cols,
+            'lag_periods': lags,
+            'rolling_windows': [],  # 不生成滚动特征
+        })
 
-            for lag in lags:
-                self.df[f'{col}_LAG{lag}'] = self.df[col].shift(lag)
-
+        self.df = strategy.transform(self.df)
         return self.df
 
     def create_rolling_features(
         self,
         feature_cols: List[str],
-        windows: List[int] = [5, 10, 20],
-        funcs: List[str] = ['mean', 'std', 'max', 'min']
+        windows: Optional[List[int]] = None,
+        funcs: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
         创建滚动统计特征
 
-        参数:
+        Args:
             feature_cols: 需要计算滚动统计的特征列列表
-            windows: 窗口大小列表
+            windows: 窗口大小列表（默认 [5, 10, 20]）
             funcs: 统计函数列表
 
-        返回:
+        Returns:
             包含滚动统计特征的DataFrame
         """
-        for col in feature_cols:
-            if col not in self.df.columns:
-                print(f"警告: 列 '{col}' 不存在，跳过")
-                continue
+        if windows is None:
+            windows = [5, 10, 20]
+        if funcs is None:
+            funcs = ['mean', 'std', 'max', 'min']
 
-            for window in windows:
-                rolling = self.df[col].rolling(window=window)
+        strategy = StatisticalFeatureStrategy(config={
+            'feature_cols': feature_cols,
+            'lag_periods': [],  # 不生成滞后特征
+            'rolling_windows': windows,
+            'rolling_funcs': funcs,
+        })
 
-                for func in funcs:
-                    if func == 'mean':
-                        self.df[f'{col}_ROLL{window}_MEAN'] = rolling.mean()
-                    elif func == 'std':
-                        self.df[f'{col}_ROLL{window}_STD'] = rolling.std()
-                    elif func == 'max':
-                        self.df[f'{col}_ROLL{window}_MAX'] = rolling.max()
-                    elif func == 'min':
-                        self.df[f'{col}_ROLL{window}_MIN'] = rolling.min()
-                    elif func == 'median':
-                        self.df[f'{col}_ROLL{window}_MEDIAN'] = rolling.median()
-                    elif func == 'skew':
-                        self.df[f'{col}_ROLL{window}_SKEW'] = rolling.skew()
-                    elif func == 'kurt':
-                        self.df[f'{col}_ROLL{window}_KURT'] = rolling.kurt()
-
+        self.df = strategy.transform(self.df)
         return self.df
 
     # ==================== 缺失值处理 ====================
@@ -376,11 +292,11 @@ class FeatureTransformer:
         """
         处理缺失值
 
-        参数:
+        Args:
             method: 填充方法 ('forward', 'backward', 'mean', 'median', 'zero', 'value')
             fill_value: 当method='value'时使用的填充值
 
-        返回:
+        Returns:
             处理缺失值后的DataFrame
         """
         if method == 'forward':
@@ -404,7 +320,7 @@ class FeatureTransformer:
         """
         处理无穷值（替换为NaN）
 
-        返回:
+        Returns:
             处理无穷值后的DataFrame
         """
         self.df = self.df.replace([np.inf, -np.inf], np.nan)
@@ -423,6 +339,43 @@ class FeatureTransformer:
     def set_scalers(self, scalers: Dict[str, Union[StandardScaler, RobustScaler, MinMaxScaler]]) -> None:
         """设置scaler（从保存的模型加载）"""
         self.scalers = scalers
+        if self._norm_strategy is not None:
+            self._norm_strategy.scalers = scalers
+
+    def save_scalers(self, file_path: Union[str, Path]) -> bool:
+        """
+        保存scalers到文件
+
+        Args:
+            file_path: 保存路径
+
+        Returns:
+            是否保存成功
+        """
+        if self._norm_strategy is None:
+            self._norm_strategy = NormalizationStrategy()
+            self._norm_strategy.scalers = self.scalers
+
+        return self._norm_strategy.save_scalers(file_path)
+
+    def load_scalers(self, file_path: Union[str, Path]) -> bool:
+        """
+        从文件加载scalers
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            是否加载成功
+        """
+        if self._norm_strategy is None:
+            self._norm_strategy = NormalizationStrategy()
+
+        success = self._norm_strategy.load_scalers(file_path)
+        if success:
+            self.scalers = self._norm_strategy.scalers
+
+        return success
 
 
 # ==================== 便捷函数 ====================
@@ -435,12 +388,12 @@ def prepare_ml_features(
     """
     便捷函数：准备机器学习特征（一站式）
 
-    参数:
+    Args:
         df: 原始DataFrame
         lookback_days: 价格变动率矩阵回看天数
         normalize: 是否标准化
 
-    返回:
+    Returns:
         准备好的特征DataFrame
     """
     ft = FeatureTransformer(df)
@@ -478,59 +431,15 @@ def prepare_ml_features(
     return result_df
 
 
-# ==================== 使用示例 ====================
+# ==================== 导出 ====================
 
-if __name__ == "__main__":
-    print("特征转换器模块测试\n")
-
-    # 创建测试数据
-    dates = pd.date_range('2023-01-01', periods=300, freq='D')
-
-    np.random.seed(42)
-    base_price = 100
-    returns = np.random.normal(0.001, 0.02, 300)
-    prices = base_price * (1 + returns).cumprod()
-
-    test_df = pd.DataFrame({
-        'open': prices * (1 + np.random.uniform(-0.01, 0.01, 300)),
-        'high': prices * (1 + np.random.uniform(0, 0.03, 300)),
-        'low': prices * (1 + np.random.uniform(-0.03, 0, 300)),
-        'close': prices,
-        'vol': np.random.uniform(1000000, 10000000, 300)
-    }, index=dates)
-
-    print("原始数据:")
-    print(test_df.head())
-    print(f"\n原始列数: {len(test_df.columns)}")
-
-    # 特征转换
-    ft = FeatureTransformer(test_df)
-
-    print("\n1. 创建价格变动率矩阵（20天回看）")
-    ft.create_price_change_matrix(lookback_days=20)
-
-    print("\n2. 创建多时间尺度收益率")
-    ft.create_multi_timeframe_returns([1, 3, 5, 10, 20])
-
-    print("\n3. 创建OHLC特征")
-    ft.create_ohlc_features()
-
-    print("\n4. 添加时间特征")
-    ft.add_time_features()
-
-    print("\n5. 处理缺失值和无穷值")
-    ft.handle_infinite_values()
-    ft.handle_missing_values(method='forward')
-
-    result_df = ft.get_dataframe()
-
-    print(f"\n转换后总列数: {len(result_df.columns)}")
-    print("\n部分特征列表:")
-    print(result_df.columns.tolist()[:30])
-
-    print("\n最近5天数据示例:")
-    sample_cols = ['close', 'RET_1D', 'RET_5D', 'PRICE_POSITION_DAILY',
-                   'DAY_OF_WEEK', 'MONTH']
-    print(result_df[sample_cols].tail())
-
-    print("\n✓ 特征转换器测试完成")
+__all__ = [
+    # 主类（向后兼容）
+    'FeatureTransformer',
+    # 便捷函数
+    'prepare_ml_features',
+    # 异常类（从 transform_strategy 导入）
+    'TransformError',
+    'InvalidDataError',
+    'ScalerNotFoundError',
+]
