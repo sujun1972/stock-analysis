@@ -14,6 +14,7 @@ except ImportError:
     from config.config import DATA_PATH
 
 from openai import OpenAI  # 确保已安装 openai 库
+from loguru import logger
 
 technical_analysis_system_prompt = """
 你是一个专业的股票分析师。你的任务是根据用户提供的股票数据和技术指标，进行综合分析。
@@ -60,7 +61,7 @@ def get_ai_analysis(symbol, df, trading_signal):
     """
 
     if deepseek_client is None:
-        print("未配置 DEEPSEEK_API_KEY，跳过 AI 分析。")
+        logger.info("未配置 DEEPSEEK_API_KEY，跳过 AI 分析。")
         return None
 
     try:
@@ -75,7 +76,7 @@ def get_ai_analysis(symbol, df, trading_signal):
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"调用 DeepSeek API 时出错: {e}")
+        logger.info(f"调用 DeepSeek API 时出错: {e}")
         return None
 
 # 安全获取值的辅助函数
@@ -133,7 +134,7 @@ def analyze_symbol(
     use_tushare: bool = False  # 新增参数，控制使用哪个数据源
 ) -> Optional[Dict[str, Any]]:
     """针对单个股票执行完整的数据获取、技术分析、图表和报告生成流程。"""
-    print(f"\n开始分析 {symbol}...")
+    logger.info(f"\n开始分析 {symbol}...")
 
     # 获取数据 - 根据 use_tushare 参数选择数据源
     if use_tushare:
@@ -153,13 +154,13 @@ def analyze_symbol(
         data = fetcher.fetch_yfinance_data(symbol, period=period)
 
     if data is None or data.empty:
-        print(f"无法获取 {symbol} 的数据")
+        logger.info(f"无法获取 {symbol} 的数据")
         return None
 
     # 技术分析
     analysis_result = analyzer.comprehensive_analysis(data)
     if analysis_result is None or analysis_result.empty:
-        print(f"{symbol} 的技术分析结果为空")
+        logger.info(f"{symbol} 的技术分析结果为空")
         return None
 
     # 保存结果
@@ -167,7 +168,7 @@ def analyze_symbol(
     csv_path = fetcher.save_data_to_csv(analysis_result, csv_filename)
 
     if not csv_path:
-        print(f"保存 {symbol} 分析结果 CSV 文件失败")
+        logger.error(f"保存 {symbol} 分析结果 CSV 文件失败")
         return None
 
     # 生成图表
@@ -199,19 +200,19 @@ def load_stock_symbols() -> list[str]:
     try:
         stock_df = pd.read_csv(csv_path)
     except Exception as e:
-        print(f"从 {csv_path} 读取 a_stock_list.csv 失败: {e}")
+        logger.error(f"从 {csv_path} 读取 a_stock_list.csv 失败: {e}")
         return []
 
     symbols = stock_df.iloc[:, 0].dropna().astype(str).tolist()
     if not symbols:
-        print("从 a_stock_list.csv 读取到的股票代码列表为空，程序结束。")
+        logger.info("从 a_stock_list.csv 读取到的股票代码列表为空，程序结束。")
         return []
 
     return symbols
 
 
 def main() -> None:
-    print("=== 股票技术分析系统启动 ===")
+    logger.info("=== 股票技术分析系统启动 ===")
 
     # 初始化组件（可以在多个股票之间复用）
     fetcher = DataFetcher()
@@ -220,7 +221,7 @@ def main() -> None:
     # 从 data/a_stock_list.csv 读取股票代码列表（第一列为股票代码，包含表头）
     symbols = load_stock_symbols()
     if not symbols:
-        print("未获取到任何股票代码，程序结束。")
+        logger.info("未获取到任何股票代码，程序结束。")
         return
 
     for symbol in symbols:
@@ -236,24 +237,24 @@ def main() -> None:
 
         # # 3. 调用 AI 进行分析（保持与原先逻辑一致）
         # if trading_signal and analysis_result is not None:
-        #     print(f"\n=== 正在请求 DeepSeek AI 进行综合分析 ===")
+        #     logger.info(f"\n=== 正在请求 DeepSeek AI 进行综合分析 ===")
         #     ai_report = get_ai_analysis(symbol, analysis_result, trading_signal)
 
         #     if ai_report:
-        #         print("\n🤖 **DeepSeek AI 分析报告:**")
-        #         print(ai_report)
+        #         logger.info("\n🤖 **DeepSeek AI 分析报告:**")
+        #         logger.info(f"{ai_report}")
         #         # 你也可以选择将AI报告保存到文件
         #         # with open(f"{DATA_PATH}/{symbol}_ai_report.txt", "w") as f:
         #         #     f.write(ai_report)
         #     else:
-        #         print("AI 分析报告生成失败。")
+        #         logger.error("AI 分析报告生成失败。")
         # else:
-        #     print("由于未生成有效的数据或交易信号，跳过AI分析步骤。")
+        #     logger.info("由于未生成有效的数据或交易信号，跳过AI分析步骤。")
 
 
 def generate_trading_signal(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, Any]]:
     """生成交易信号并以人类可读的形式打印。"""
-    print(f"\n=== {symbol} 交易信号分析 ===")
+    logger.info(f"\n=== {symbol} 交易信号分析 ===")
 
     # 初始化信号计数器
     buy_signals = 0
@@ -265,23 +266,23 @@ def generate_trading_signal(df: pd.DataFrame, symbol: str) -> Optional[Dict[str,
     sma_50 = get_safe_value(df, "SMA_50")
     if sma_20 is not None and sma_50 is not None:
         if sma_20 > sma_50:
-            print("✅ 趋势信号: 上涨趋势 (SMA20 > SMA50)")
+            logger.success("✅ 趋势信号: 上涨趋势 (SMA20 > SMA50)")
             buy_signals += 1
         else:
-            print("❌ 趋势信号: 下跌趋势 (SMA20 < SMA50)")
+            logger.error("❌ 趋势信号: 下跌趋势 (SMA20 < SMA50)")
             sell_signals += 1
 
     # 2. RSI 分析
     rsi = get_safe_value(df, "RSI_14")
     if rsi is not None:
         if rsi < 30:
-            print("✅ RSI信号: 超卖区域，可能反弹")
+            logger.success("✅ RSI信号: 超卖区域，可能反弹")
             buy_signals += 1
         elif rsi > 70:
-            print("❌ RSI信号: 超买区域，可能回调")
+            logger.error("❌ RSI信号: 超买区域，可能回调")
             sell_signals += 1
         else:
-            print("➡️ RSI信号: 正常区域")
+            logger.info("➡️ RSI信号: 正常区域")
             neutral_signals += 1
 
     # 3. MACD 分析
@@ -289,10 +290,10 @@ def generate_trading_signal(df: pd.DataFrame, symbol: str) -> Optional[Dict[str,
     macd_signal = get_safe_value(df, "MACD_signal")
     if macd is not None and macd_signal is not None:
         if macd > macd_signal:
-            print("✅ MACD信号: 金叉买入信号")
+            logger.success("✅ MACD信号: 金叉买入信号")
             buy_signals += 1
         else:
-            print("❌ MACD信号: 死叉卖出信号")
+            logger.error("❌ MACD信号: 死叉卖出信号")
             sell_signals += 1
 
     # 4. 布林带分析
@@ -301,13 +302,13 @@ def generate_trading_signal(df: pd.DataFrame, symbol: str) -> Optional[Dict[str,
     close_price = get_safe_value(df, "Close")
     if bb_upper is not None and bb_lower is not None and close_price is not None:
         if close_price <= bb_lower:
-            print("✅ 布林带信号: 价格触及下轨，可能反弹")
+            logger.success("✅ 布林带信号: 价格触及下轨，可能反弹")
             buy_signals += 1
         elif close_price >= bb_upper:
-            print("❌ 布林带信号: 价格触及上轨，可能回调")
+            logger.error("❌ 布林带信号: 价格触及上轨，可能回调")
             sell_signals += 1
         else:
-            print("➡️ 布林带信号: 价格在轨道内运行")
+            logger.info("➡️ 布林带信号: 价格在轨道内运行")
             neutral_signals += 1
 
     # 综合决策
@@ -316,10 +317,10 @@ def generate_trading_signal(df: pd.DataFrame, symbol: str) -> Optional[Dict[str,
         buy_ratio = buy_signals / total_signals
         sell_ratio = sell_signals / total_signals
 
-        print("\n📊 信号统计:")
-        print(f"买入信号: {buy_signals} 个")
-        print(f"卖出信号: {sell_signals} 个")
-        print(f"中性信号: {neutral_signals} 个")
+        logger.info("\n📊 信号统计:")
+        logger.info(f"买入信号: {buy_signals} 个")
+        logger.info(f"卖出信号: {sell_signals} 个")
+        logger.info(f"中性信号: {neutral_signals} 个")
 
         if buy_ratio >= 0.6:
             recommendation = "🟢 STRONG BUY - 强烈买入"
@@ -337,8 +338,8 @@ def generate_trading_signal(df: pd.DataFrame, symbol: str) -> Optional[Dict[str,
             recommendation = "⚪ HOLD - 持有观望"
             confidence = "低"
 
-        print(f"\n🎯 交易建议: {recommendation}")
-        print(f"📈 置信度: {confidence}")
+        logger.info(f"\n🎯 交易建议: {recommendation}")
+        logger.info(f"📈 置信度: {confidence}")
 
         return {
             "recommendation": recommendation,
@@ -354,10 +355,10 @@ def generate_trading_signal(df: pd.DataFrame, symbol: str) -> Optional[Dict[str,
 def generate_report(df: pd.DataFrame, symbol: str) -> None:
     """生成分析报告并打印关键信息。"""
     if df.empty:
-        print("No data to generate report")
+        logger.info("No data to generate report")
         return
 
-    print(f"\n=== {symbol} Technical Analysis Report ===")
+    logger.info(f"\n=== {symbol} Technical Analysis Report ===")
 
     # 获取最新数据
     latest = df.iloc[-1]
@@ -369,14 +370,14 @@ def generate_report(df: pd.DataFrame, symbol: str) -> None:
         close_price = latest["close"]
     else:
         close_price = "N/A"
-    print(f"Latest Close Price: {close_price}")
+    logger.info(f"Latest Close Price: {close_price}")
 
     # 趋势判断
     sma_20 = get_safe_value(df, "SMA_20")
     sma_50 = get_safe_value(df, "SMA_50")
     if sma_20 is not None and sma_50 is not None:
         trend = "Uptrend" if sma_20 > sma_50 else "Downtrend"
-        print(f"Trend: {trend} (SMA20: {sma_20:.2f} vs SMA50: {sma_50:.2f})")
+        logger.info(f"Trend: {trend} (SMA20: {sma_20:.2f} vs SMA50: {sma_50:.2f})")
 
     # RSI状态
     rsi = get_safe_value(df, "RSI_14")
@@ -387,7 +388,7 @@ def generate_report(df: pd.DataFrame, symbol: str) -> None:
             status = "Oversold 🟢"
         else:
             status = "Neutral ⚪"
-        print(f"RSI(14): {rsi:.1f} - {status}")
+        logger.info(f"RSI(14): {rsi:.1f} - {status}")
 
     # MACD信号
     macd = get_safe_value(df, "MACD")
@@ -397,7 +398,7 @@ def generate_report(df: pd.DataFrame, symbol: str) -> None:
             signal = "Buy Signal 🟢"
         else:
             signal = "Sell Signal 🔴"
-        print(f"MACD Signal: {signal} (MACD: {macd:.4f}, Signal: {macd_signal:.4f})")
+        logger.info(f"MACD Signal: {signal} (MACD: {macd:.4f}, Signal: {macd_signal:.4f})")
 
     # 综合信号
     composite = get_safe_value(df, "composite_signal")
@@ -408,9 +409,9 @@ def generate_report(df: pd.DataFrame, symbol: str) -> None:
             overall = "Bearish 📉"
         else:
             overall = "Neutral ➡️"
-        print(f"Overall Signal: {overall} (Score: {composite})")
+        logger.info(f"Overall Signal: {overall} (Score: {composite})")
 
-    print("=" * 50)
+    logger.info("=" * 50)
 
 
 if __name__ == "__main__":

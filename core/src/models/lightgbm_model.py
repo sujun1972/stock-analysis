@@ -10,6 +10,7 @@ from typing import Optional, Dict, List, Tuple
 import warnings
 import pickle
 from pathlib import Path
+from loguru import logger
 
 warnings.filterwarnings('ignore')
 
@@ -96,8 +97,8 @@ class LightGBMStockModel:
         返回:
             训练历史字典
         """
-        print(f"\n开始训练LightGBM模型...")
-        print(f"训练集: {len(X_train)} 样本 × {len(X_train.columns)} 特征")
+        logger.info(f"\n开始训练LightGBM模型...")
+        logger.info(f"训练集: {len(X_train)} 样本 × {len(X_train.columns)} 特征")
 
         # 保存特征名
         self.feature_names = list(X_train.columns)
@@ -113,7 +114,7 @@ class LightGBMStockModel:
             valid_data = lgb.Dataset(X_valid, label=y_valid, reference=train_data)
             valid_sets.append(valid_data)
             valid_names.append('valid')
-            print(f"验证集: {len(X_valid)} 样本")
+            logger.info(f"验证集: {len(X_valid)} 样本")
 
         # 训练模型
         callbacks = []
@@ -133,7 +134,7 @@ class LightGBMStockModel:
         # 计算特征重要性
         self._compute_feature_importance()
 
-        print(f"✓ 训练完成，最佳迭代: {self.model.best_iteration}")
+        logger.success(f"✓ 训练完成，最佳迭代: {self.model.best_iteration}")
 
         # 返回训练历史
         history = {
@@ -163,7 +164,7 @@ class LightGBMStockModel:
 
         # 检查特征名是否匹配
         if list(X.columns) != self.feature_names:
-            print("警告: 特征名不匹配，尝试重新排序...")
+            logger.warning("警告: 特征名不匹配，尝试重新排序...")
             X = X[self.feature_names]
 
         predictions = self.model.predict(
@@ -251,7 +252,7 @@ class LightGBMStockModel:
         try:
             import matplotlib.pyplot as plt
         except ImportError:
-            print("需要安装matplotlib: pip install matplotlib")
+            logger.info("需要安装matplotlib: pip install matplotlib")
             return
 
         importance_df = self.get_feature_importance(importance_type, top_n)
@@ -297,8 +298,8 @@ class LightGBMStockModel:
         with open(meta_path, 'wb') as f:
             pickle.dump(meta_data, f)
 
-        print(f"✓ 模型已保存至: {model_path}")
-        print(f"✓ 元数据已保存至: {meta_path}")
+        logger.success(f"✓ 模型已保存至: {model_path}")
+        logger.success(f"✓ 元数据已保存至: {meta_path}")
 
     def load_model(
         self,
@@ -328,7 +329,7 @@ class LightGBMStockModel:
             self.feature_names = meta_data.get('feature_names')
             self.feature_importance = meta_data.get('feature_importance')
 
-        print(f"✓ 模型已加载: {model_path}")
+        logger.success(f"✓ 模型已加载: {model_path}")
 
     def get_params(self) -> dict:
         """获取模型参数"""
@@ -390,7 +391,7 @@ def train_lightgbm_model(
 # ==================== 使用示例 ====================
 
 if __name__ == "__main__":
-    print("LightGBM模型测试\n")
+    logger.info("LightGBM模型测试\n")
 
     # 创建测试数据
     np.random.seed(42)
@@ -415,13 +416,13 @@ if __name__ == "__main__":
     X_train, X_valid = X[:split_idx], X[split_idx:]
     y_train, y_valid = y[:split_idx], y[split_idx:]
 
-    print("数据准备:")
-    print(f"  训练集: {len(X_train)} 样本")
-    print(f"  验证集: {len(X_valid)} 样本")
-    print(f"  特征数: {len(X.columns)}")
+    logger.info("数据准备:")
+    logger.info(f"  训练集: {len(X_train)} 样本")
+    logger.info(f"  验证集: {len(X_valid)} 样本")
+    logger.info(f"  特征数: {len(X.columns)}")
 
     # 训练模型
-    print("\n训练LightGBM模型:")
+    logger.info("\n训练LightGBM模型:")
     model = LightGBMStockModel(
         objective='regression',
         learning_rate=0.1,
@@ -438,7 +439,7 @@ if __name__ == "__main__":
     )
 
     # 预测
-    print("\n预测:")
+    logger.info("\n预测:")
     y_pred_train = model.predict(X_train)
     y_pred_valid = model.predict(X_valid)
 
@@ -450,23 +451,23 @@ if __name__ == "__main__":
     train_r2 = r2_score(y_train, y_pred_train)
     valid_r2 = r2_score(y_valid, y_pred_valid)
 
-    print(f"\n训练集 RMSE: {train_rmse:.4f}, R²: {train_r2:.4f}")
-    print(f"验证集 RMSE: {valid_rmse:.4f}, R²: {valid_r2:.4f}")
+    logger.info(f"\n训练集 RMSE: {train_rmse:.4f}, R²: {train_r2:.4f}")
+    logger.info(f"验证集 RMSE: {valid_rmse:.4f}, R²: {valid_r2:.4f}")
 
     # 特征重要性
-    print("\n特征重要性 (Top 10):")
+    logger.info("\n特征重要性 (Top 10):")
     importance_df = model.get_feature_importance('gain', top_n=10)
-    print(importance_df)
+    logger.info(f"{importance_df}")
 
     # 保存和加载模型
-    print("\n保存模型:")
+    logger.info("\n保存模型:")
     model.save_model('test_lgb_model.txt')
 
-    print("\n加载模型:")
+    logger.info("\n加载模型:")
     new_model = LightGBMStockModel()
     new_model.load_model('test_lgb_model.txt')
 
     y_pred_new = new_model.predict(X_valid)
-    print(f"加载后预测一致性: {np.allclose(y_pred_valid, y_pred_new)}")
+    logger.info(f"加载后预测一致性: {np.allclose(y_pred_valid, y_pred_new)}")
 
-    print("\n✓ LightGBM模型测试完成")
+    logger.success("\n✓ LightGBM模型测试完成")

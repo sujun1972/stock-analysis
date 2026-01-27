@@ -22,7 +22,7 @@ try:
 except ImportError:
     class SimpleLogger:
         @staticmethod
-        def warning(msg): print(f"WARNING: {msg}")
+        def warning(msg): logger.warning(f"WARNING: {msg}")
     logger = SimpleLogger()
 
 

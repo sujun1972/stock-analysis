@@ -8,6 +8,7 @@ import numpy as np
 from typing import Tuple
 
 from src.config.trading_rules import DataQualityRules
+from loguru import logger
 
 
 class DataCleaner:
@@ -72,7 +73,7 @@ class DataCleaner:
         if self.verbose:
             removed_rows = self.cleaning_stats['total_rows'] - self.cleaning_stats['final_rows']
             if removed_rows > 0:
-                print(f"[{stock_code}] 清洗完成: 原始{self.cleaning_stats['total_rows']}行 -> "
+                logger.info(f"[{stock_code}] 清洗完成: 原始{self.cleaning_stats['total_rows']}行 -> "
                       f"清洗后{self.cleaning_stats['final_rows']}行 "
                       f"(移除{removed_rows}行, {removed_rows/self.cleaning_stats['total_rows']*100:.2f}%)")
 
@@ -213,7 +214,7 @@ class DataCleaner:
 
         if invalid_high.any() or invalid_low.any():
             if self.verbose:
-                print(f"警告: {invalid_high.sum() + invalid_low.sum()} 行OHLC数据仍然不一致")
+                logger.warning(f"警告: {invalid_high.sum() + invalid_low.sum()} 行OHLC数据仍然不一致")
 
             # 移除不一致的行
             df = df[~(invalid_high | invalid_low)]
@@ -308,7 +309,7 @@ def batch_clean_data(
     total = len(data_dict)
     for i, (stock_code, df) in enumerate(data_dict.items(), 1):
         if verbose and i % 100 == 0:
-            print(f"清洗进度: {i}/{total} ({i/total*100:.1f}%)")
+            logger.info(f"清洗进度: {i}/{total} ({i/total*100:.1f}%)")
 
         cleaned_df = cleaner.clean_price_data(df, stock_code)
         cleaned_dict[stock_code] = cleaned_df
@@ -321,7 +322,7 @@ def batch_clean_data(
 # ==================== 使用示例 ====================
 
 if __name__ == "__main__":
-    print("数据清洗模块测试\n")
+    logger.info("数据清洗模块测试\n")
 
     # 创建测试数据（包含各种问题）
     dates = pd.date_range('2023-01-01', periods=100, freq='D')
@@ -339,23 +340,23 @@ if __name__ == "__main__":
     test_df.loc[dates[20], 'high'] = 5  # OHLC逻辑错误
     test_df.loc[dates[30], 'close'] = 1000  # 异常涨幅
 
-    print("原始数据:")
-    print(test_df.head(10))
-    print(f"\n原始数据行数: {len(test_df)}")
-    print(f"缺失值数量: {test_df.isnull().sum().sum()}")
+    logger.info("原始数据:")
+    logger.info(test_df.head(10))
+    logger.info(f"\n原始数据行数: {len(test_df)}")
+    logger.info(f"缺失值数量: {test_df.isnull().sum().sum()}")
 
     # 清洗数据
     cleaner = DataCleaner(verbose=True)
     cleaned_df = cleaner.clean_price_data(test_df, '000001')
 
-    print("\n清洗后数据:")
-    print(cleaned_df.head(10))
-    print(f"\n清洗后数据行数: {len(cleaned_df)}")
-    print(f"缺失值数量: {cleaned_df.isnull().sum().sum()}")
+    logger.info("\n清洗后数据:")
+    logger.info(cleaned_df.head(10))
+    logger.info(f"\n清洗后数据行数: {len(cleaned_df)}")
+    logger.info(f"缺失值数量: {cleaned_df.isnull().sum().sum()}")
 
     # 验证OHLC
     validated_df = cleaner.validate_ohlc(cleaned_df, fix=True)
-    print(f"\nOHLC验证后数据行数: {len(validated_df)}")
+    logger.info(f"\nOHLC验证后数据行数: {len(validated_df)}")
 
-    print("\n统计信息:")
-    print(cleaner.get_stats())
+    logger.info("\n统计信息:")
+    logger.info(cleaner.get_stats())

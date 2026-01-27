@@ -1039,7 +1039,7 @@ if __name__ == "__main__":
     # 配置日志
     logger.remove()
     logger.add(
-        lambda msg: print(msg, end=""),
+        lambda msg: logger.info(msg, end=""),
         format="<green>{time:HH:mm:ss}</green> | <level>{level:8}</level> | {message}",
         level="INFO"
     )

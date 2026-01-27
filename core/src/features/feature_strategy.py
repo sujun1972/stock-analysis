@@ -210,7 +210,7 @@ def merge_configs(default_config: ConfigDict, user_config: Optional[ConfigDict])
         >>> default = {'ma': [5, 10], 'rsi': [14]}
         >>> user = {'ma': [20, 60]}
         >>> merged = merge_configs(default, user)
-        >>> print(merged)
+        >>> logger.info(f"{merged}")
         {'ma': [20, 60], 'rsi': [14]}
     """
     if user_config is None:
@@ -383,7 +383,7 @@ class TechnicalIndicatorStrategy(FeatureStrategy):
     Example:
         >>> strategy = TechnicalIndicatorStrategy(config={'ma': [5, 10], 'rsi': [14]})
         >>> result_df = strategy.compute(df)
-        >>> print(strategy.feature_names)
+        >>> logger.info(f"{strategy.feature_names}")
         ['MA_5', 'MA_10', 'RSI_14']
     """
 
@@ -965,7 +965,7 @@ def create_default_feature_pipeline(inplace: bool = False) -> CompositeFeatureSt
     Example:
         >>> pipeline = create_default_feature_pipeline()
         >>> result_df = pipeline.compute(df)
-        >>> print(f"生成 {len(pipeline.feature_names)} 个特征")
+        >>> logger.info(f"生成 {len(pipeline.feature_names)} 个特征")
     """
     return CompositeFeatureStrategy(
         strategies=[

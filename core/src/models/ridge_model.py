@@ -10,6 +10,7 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from typing import Optional, Dict, Tuple
 import pickle
 from pathlib import Path
+from loguru import logger
 
 
 class RidgeStockModel:
@@ -58,8 +59,8 @@ class RidgeStockModel:
         返回:
             训练历史字典
         """
-        print(f"\n开始训练Ridge模型...")
-        print(f"训练集: {len(X_train)} 样本 × {len(X_train.columns)} 特征")
+        logger.info(f"\n开始训练Ridge模型...")
+        logger.info(f"训练集: {len(X_train)} 样本 × {len(X_train.columns)} 特征")
 
         # 保存特征名
         self.feature_names = X_train.columns.tolist()
@@ -80,10 +81,10 @@ class RidgeStockModel:
         train_mae = mean_absolute_error(y_train, y_train_pred)
         train_r2 = r2_score(y_train, y_train_pred)
 
-        print(f"✓ 训练完成")
-        print(f"  Train IC: {train_ic:.6f}")
-        print(f"  Train MAE: {train_mae:.6f}")
-        print(f"  Train R²: {train_r2:.6f}")
+        logger.success(f"✓ 训练完成")
+        logger.info(f"  Train IC: {train_ic:.6f}")
+        logger.info(f"  Train MAE: {train_mae:.6f}")
+        logger.info(f"  Train R²: {train_r2:.6f}")
 
         history = {
             'train_ic': train_ic,
@@ -98,9 +99,9 @@ class RidgeStockModel:
             valid_mae = mean_absolute_error(y_valid, y_valid_pred)
             valid_r2 = r2_score(y_valid, y_valid_pred)
 
-            print(f"  Valid IC: {valid_ic:.6f}")
-            print(f"  Valid MAE: {valid_mae:.6f}")
-            print(f"  Valid R²: {valid_r2:.6f}")
+            logger.info(f"  Valid IC: {valid_ic:.6f}")
+            logger.info(f"  Valid MAE: {valid_mae:.6f}")
+            logger.info(f"  Valid R²: {valid_r2:.6f}")
 
             history.update({
                 'valid_ic': valid_ic,
@@ -205,7 +206,7 @@ class RidgeStockModel:
         with open(filepath, 'wb') as f:
             pickle.dump(model_data, f)
 
-        print(f"✓ Ridge模型已保存到: {filepath}")
+        logger.success(f"✓ Ridge模型已保存到: {filepath}")
 
     def load(self, filepath: str):
         """
@@ -225,4 +226,4 @@ class RidgeStockModel:
         self.feature_names = model_data['feature_names']
         self.feature_importance = model_data['feature_importance']
 
-        print(f"✓ Ridge模型已加载: {filepath}")
+        logger.success(f"✓ Ridge模型已加载: {filepath}")

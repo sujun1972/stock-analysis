@@ -10,6 +10,7 @@ try:
 except ImportError:
     # Fallback for direct script execution
     from config.config import DATA_PATH
+from loguru import logger
 
 class TechnicalAnalyzer:
     """技术指标分析器"""
@@ -111,7 +112,7 @@ class TechnicalAnalyzer:
     
     def comprehensive_analysis(self, df):
         """综合技术分析"""
-        print("开始技术指标计算...")
+        logger.info("开始技术指标计算...")
         
         trend_indicators = self.calculate_trend_indicators(df)
         momentum_indicators = self.calculate_momentum_indicators(df)
@@ -130,13 +131,13 @@ class TechnicalAnalyzer:
         
         result_df = pd.concat([result_df, signals], axis=1)
         
-        print("技术指标计算完成!")
+        logger.info("技术指标计算完成!")
         return result_df
     
     def plot_analysis(self, df, symbol, save_path=None):
         """绘制分析图表"""
         if 'Close' not in df.columns and 'close' not in df.columns:
-            print("无法绘制图表：缺少价格数据")
+            logger.info("无法绘制图表：缺少价格数据")
             return
         
         plt.style.use('seaborn-v0_8')
@@ -177,7 +178,7 @@ class TechnicalAnalyzer:
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"图表已保存到: {save_path}")
+            logger.info(f"图表已保存到: {save_path}")
         
         # 在批量运行场景下不弹出图表窗口，只保存到文件
         # plt.show()

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from .model_trainer import ModelTrainer
+from loguru import logger
 
 
 class ComparisonEvaluator:
@@ -54,7 +55,7 @@ class ComparisonEvaluator:
         results = []
 
         for name, trainer in self.models.items():
-            print(f"\n评估 [{name}] 模型...")
+            logger.info(f"\n评估 [{name}] 模型...")
 
             # 评估训练集
             train_metrics = trainer.evaluate(X_train, y_train, dataset_name='train', verbose=False)
@@ -90,8 +91,8 @@ class ComparisonEvaluator:
 
             results.append(result)
 
-            print(f"  Train IC: {train_metrics['ic']:.6f}, Valid IC: {valid_metrics['ic']:.6f}, Test IC: {test_metrics['ic']:.6f}")
-            print(f"  Overfit (IC): {overfit_ic:.6f}")
+            logger.info(f"  Train IC: {train_metrics['ic']:.6f}, Valid IC: {valid_metrics['ic']:.6f}, Test IC: {test_metrics['ic']:.6f}")
+            logger.info(f"  Overfit (IC): {overfit_ic:.6f}")
 
         # 转换为DataFrame
         results_df = pd.DataFrame(results)
@@ -103,70 +104,70 @@ class ComparisonEvaluator:
     def print_comparison(self):
         """打印格式化的对比表格"""
         if len(self.results) == 0:
-            print("⚠️  尚未进行评估，请先调用evaluate_all方法")
+            logger.warning("⚠️  尚未进行评估，请先调用evaluate_all方法")
             return
 
-        print("\n" + "=" * 100)
-        print("【模型对比报告】")
-        print("=" * 100)
+        logger.info("\n" + "=" * 100)
+        logger.info("【模型对比报告】")
+        logger.info("=" * 100)
 
         # IC对比
-        print("\n【IC (Information Coefficient)】")
-        print(f"{'模型':<15} {'Train IC':<12} {'Valid IC':<12} {'Test IC':<12} {'过拟合':<12}")
-        print("-" * 70)
+        logger.info("\n【IC (Information Coefficient)】")
+        logger.info(f"{'模型':<15} {'Train IC':<12} {'Valid IC':<12} {'Test IC':<12} {'过拟合':<12}")
+        logger.info("-" * 70)
         for _, row in self.results.iterrows():
-            print(f"{row['model']:<15} {row['train_ic']:>10.6f}  {row['valid_ic']:>10.6f}  {row['test_ic']:>10.6f}  {row['overfit_ic']:>10.6f}")
+            logger.info(f"{row['model']:<15} {row['train_ic']:>10.6f}  {row['valid_ic']:>10.6f}  {row['test_ic']:>10.6f}  {row['overfit_ic']:>10.6f}")
 
         # Rank IC对比
-        print("\n【Rank IC (Spearman Correlation)】")
-        print(f"{'模型':<15} {'Train RIC':<12} {'Valid RIC':<12} {'Test RIC':<12} {'过拟合':<12}")
-        print("-" * 70)
+        logger.info("\n【Rank IC (Spearman Correlation)】")
+        logger.info(f"{'模型':<15} {'Train RIC':<12} {'Valid RIC':<12} {'Test RIC':<12} {'过拟合':<12}")
+        logger.info("-" * 70)
         for _, row in self.results.iterrows():
-            print(f"{row['model']:<15} {row['train_rank_ic']:>10.6f}  {row['valid_rank_ic']:>10.6f}  {row['test_rank_ic']:>10.6f}  {row['overfit_rank_ic']:>10.6f}")
+            logger.info(f"{row['model']:<15} {row['train_rank_ic']:>10.6f}  {row['valid_rank_ic']:>10.6f}  {row['test_rank_ic']:>10.6f}  {row['overfit_rank_ic']:>10.6f}")
 
         # MAE对比
-        print("\n【MAE (Mean Absolute Error)】")
-        print(f"{'模型':<15} {'Train MAE':<12} {'Valid MAE':<12} {'Test MAE':<12}")
-        print("-" * 70)
+        logger.error("\n【MAE (Mean Absolute Error)】")
+        logger.info(f"{'模型':<15} {'Train MAE':<12} {'Valid MAE':<12} {'Test MAE':<12}")
+        logger.info("-" * 70)
         for _, row in self.results.iterrows():
-            print(f"{row['model']:<15} {row['train_mae']:>10.6f}  {row['valid_mae']:>10.6f}  {row['test_mae']:>10.6f}")
+            logger.info(f"{row['model']:<15} {row['train_mae']:>10.6f}  {row['valid_mae']:>10.6f}  {row['test_mae']:>10.6f}")
 
         # 判定
-        print("\n" + "=" * 100)
-        print("【判定】")
-        print("=" * 100)
+        logger.info("\n" + "=" * 100)
+        logger.info("【判定】")
+        logger.info("=" * 100)
 
         # 找出最佳模型
         best_test_ic = self.results.loc[self.results['test_ic'].idxmax()]
         best_overfit = self.results.loc[self.results['overfit_ic'].idxmin()]
 
-        print(f"\n✓ Test IC 最优: {best_test_ic['model']} (IC={best_test_ic['test_ic']:.6f})")
-        print(f"✓ 过拟合最小: {best_overfit['model']} (Overfit={best_overfit['overfit_ic']:.6f})")
+        logger.success(f"\n✓ Test IC 最优: {best_test_ic['model']} (IC={best_test_ic['test_ic']:.6f})")
+        logger.success(f"✓ 过拟合最小: {best_overfit['model']} (Overfit={best_overfit['overfit_ic']:.6f})")
 
         # 判定Ridge是否可以替代LightGBM
         if 'Ridge' in self.results['model'].values and 'LightGBM' in self.results['model'].values:
             ridge_row = self.results[self.results['model'] == 'Ridge'].iloc[0]
             lgb_row = self.results[self.results['model'] == 'LightGBM'].iloc[0]
 
-            print(f"\n【Ridge vs LightGBM】")
-            print(f"  Ridge Test IC:     {ridge_row['test_ic']:.6f}")
-            print(f"  LightGBM Test IC:  {lgb_row['test_ic']:.6f}")
-            print(f"  Ridge 过拟合:      {ridge_row['overfit_ic']:.6f}")
-            print(f"  LightGBM 过拟合:   {lgb_row['overfit_ic']:.6f}")
+            logger.info(f"\n【Ridge vs LightGBM】")
+            logger.info(f"  Ridge Test IC:     {ridge_row['test_ic']:.6f}")
+            logger.info(f"  LightGBM Test IC:  {lgb_row['test_ic']:.6f}")
+            logger.info(f"  Ridge 过拟合:      {ridge_row['overfit_ic']:.6f}")
+            logger.info(f"  LightGBM 过拟合:   {lgb_row['overfit_ic']:.6f}")
 
             if ridge_row['test_ic'] > lgb_row['test_ic'] * 0.8 and ridge_row['overfit_ic'] < lgb_row['overfit_ic']:
-                print(f"\n✓✓✓ 建议: 使用 Ridge 模型")
-                print(f"  - Ridge Test IC 接近LightGBM (≥80%)")
-                print(f"  - Ridge 过拟合更小")
+                logger.success(f"\n✓✓✓ 建议: 使用 Ridge 模型")
+                logger.info(f"  - Ridge Test IC 接近LightGBM (≥80%)")
+                logger.info(f"  - Ridge 过拟合更小")
             elif ridge_row['test_ic'] > lgb_row['test_ic']:
-                print(f"\n✓✓ 建议: 使用 Ridge 模型")
-                print(f"  - Ridge Test IC 优于 LightGBM")
+                logger.success(f"\n✓✓ 建议: 使用 Ridge 模型")
+                logger.info(f"  - Ridge Test IC 优于 LightGBM")
             elif lgb_row['test_ic'] > 0 and lgb_row['overfit_ic'] < 0.3:
-                print(f"\n✓ 建议: 使用 LightGBM")
-                print(f"  - LightGBM Test IC 更优且过拟合可控")
+                logger.success(f"\n✓ 建议: 使用 LightGBM")
+                logger.info(f"  - LightGBM Test IC 更优且过拟合可控")
             else:
-                print(f"\n⚠️  警告: LightGBM 过拟合严重")
-                print(f"  - 建议优先使用 Ridge 或增强正则化")
+                logger.warning(f"\n⚠️  警告: LightGBM 过拟合严重")
+                logger.info(f"  - 建议优先使用 Ridge 或增强正则化")
 
     def get_comparison_dict(self) -> Dict:
         """

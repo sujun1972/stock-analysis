@@ -11,6 +11,7 @@ import os
 import threading
 from typing import Optional, List, Dict, Any
 import pandas as pd
+from loguru import logger
 
 # 导入专门的管理器
 from .connection_pool_manager import ConnectionPoolManager
@@ -305,36 +306,36 @@ def get_database(config: Optional[Dict[str, Any]] = None) -> DatabaseManager:
 
 if __name__ == "__main__":
     # 测试数据库连接和初始化
-    print("\n" + "="*60)
-    print("测试数据库管理模块（重构版本 - 单例模式）")
-    print("="*60)
+    logger.info("\n" + "="*60)
+    logger.info("测试数据库管理模块（重构版本 - 单例模式）")
+    logger.info("="*60)
 
     try:
         # 测试单例模式
-        print("\n1. 测试单例模式...")
+        logger.info("\n1. 测试单例模式...")
         db1 = DatabaseManager()
         db2 = DatabaseManager()
         db3 = get_database()
 
         assert db1 is db2, "DatabaseManager 应该是单例"
         assert db2 is db3, "get_database() 应返回同一实例"
-        print("   ✓ 单例模式测试通过（db1 is db2 is db3）")
+        logger.success("   ✓ 单例模式测试通过（db1 is db2 is db3）")
 
-        print("\n2. 测试连接池状态...")
+        logger.info("\n2. 测试连接池状态...")
         status = db1.get_pool_status()
-        print(f"   ✓ 连接池状态: {status}")
+        logger.success(f"   ✓ 连接池状态: {status}")
 
-        print("\n3. 初始化数据库表结构...")
+        logger.info("\n3. 初始化数据库表结构...")
         db1.init_database()
-        print("   ✓ 表结构初始化成功")
+        logger.success("   ✓ 表结构初始化成功")
 
-        print("\n✅ 数据库管理模块测试通过（重构版本）")
-        print("   - 单例模式正常工作")
-        print("   - 全局只有一个连接池实例")
-        print("   - 功能已拆分为4个专门的管理器")
-        print("   - 避免了连接资源浪费")
+        logger.success("\n✅ 数据库管理模块测试通过（重构版本）")
+        logger.info("   - 单例模式正常工作")
+        logger.info("   - 全局只有一个连接池实例")
+        logger.info("   - 功能已拆分为4个专门的管理器")
+        logger.info("   - 避免了连接资源浪费")
 
     except Exception as e:
-        print(f"\n❌ 测试失败: {e}")
+        logger.error(f"\n❌ 测试失败: {e}")
         import traceback
         traceback.print_exc()

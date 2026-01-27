@@ -9,6 +9,7 @@ from typing import Optional, Dict, List, Tuple
 import warnings
 import pickle
 from pathlib import Path
+from loguru import logger
 
 warnings.filterwarnings('ignore')
 
@@ -20,7 +21,7 @@ try:
     PYTORCH_AVAILABLE = True
 except ImportError:
     PYTORCH_AVAILABLE = False
-    print("警告: PyTorch未安装，GRU模型不可用")
+    logger.warning("警告: PyTorch未安装，GRU模型不可用")
 
 
 if PYTORCH_AVAILABLE:
@@ -162,7 +163,7 @@ class GRUStockTrainer:
                 device = 'cpu'
 
         self.device = torch.device(device)
-        print(f"使用设备: {self.device}")
+        logger.info(f"使用设备: {self.device}")
 
         # 创建模型
         self.model = GRUStockModel(
@@ -289,13 +290,13 @@ class GRUStockTrainer:
         返回:
             训练历史
         """
-        print(f"\n开始训练GRU模型...")
-        print(f"序列长度: {seq_length}, 批次大小: {batch_size}, 训练轮数: {epochs}")
+        logger.info(f"\n开始训练GRU模型...")
+        logger.info(f"序列长度: {seq_length}, 批次大小: {batch_size}, 训练轮数: {epochs}")
 
         # 创建序列
-        print("\n创建训练序列...")
+        logger.info("\n创建训练序列...")
         X_train_seq, y_train_seq = self.create_sequences(X_train, y_train, seq_length)
-        print(f"训练序列: {X_train_seq.shape}")
+        logger.info(f"训练序列: {X_train_seq.shape}")
 
         # 创建数据加载器
         train_dataset = StockSequenceDataset(X_train_seq, y_train_seq)
@@ -308,9 +309,9 @@ class GRUStockTrainer:
         # 验证集
         valid_loader = None
         if X_valid is not None and y_valid is not None:
-            print("创建验证序列...")
+            logger.info("创建验证序列...")
             X_valid_seq, y_valid_seq = self.create_sequences(X_valid, y_valid, seq_length)
-            print(f"验证序列: {X_valid_seq.shape}")
+            logger.info(f"验证序列: {X_valid_seq.shape}")
 
             valid_dataset = StockSequenceDataset(X_valid_seq, y_valid_seq)
             valid_loader = DataLoader(
@@ -340,19 +341,19 @@ class GRUStockTrainer:
                     patience_counter += 1
 
                 if patience_counter >= early_stopping_patience:
-                    print(f"\nEarly stopping at epoch {epoch + 1}")
+                    logger.info(f"\nEarly stopping at epoch {epoch + 1}")
                     break
 
                 # 输出
                 if (epoch + 1) % verbose == 0:
-                    print(f"Epoch {epoch + 1}/{epochs} - "
+                    logger.info(f"Epoch {epoch + 1}/{epochs} - "
                           f"Train Loss: {train_loss:.6f}, "
                           f"Valid Loss: {valid_loss:.6f}")
             else:
                 if (epoch + 1) % verbose == 0:
-                    print(f"Epoch {epoch + 1}/{epochs} - Train Loss: {train_loss:.6f}")
+                    logger.info(f"Epoch {epoch + 1}/{epochs} - Train Loss: {train_loss:.6f}")
 
-        print(f"\n✓ 训练完成")
+        logger.success(f"\n✓ 训练完成")
 
         return self.history
 
@@ -417,7 +418,7 @@ class GRUStockTrainer:
             'history': self.history
         }, model_path)
 
-        print(f"✓ 模型已保存至: {model_path}")
+        logger.success(f"✓ 模型已保存至: {model_path}")
 
     def load_model(
         self,
@@ -440,17 +441,17 @@ class GRUStockTrainer:
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.history = checkpoint.get('history', {'train_loss': [], 'valid_loss': []})
 
-        print(f"✓ 模型已加载: {model_path}")
+        logger.success(f"✓ 模型已加载: {model_path}")
 
 
 # ==================== 使用示例 ====================
 
 if __name__ == "__main__":
     if not PYTORCH_AVAILABLE:
-        print("PyTorch未安装，无法运行测试")
+        logger.info("PyTorch未安装，无法运行测试")
         exit(1)
 
-    print("GRU模型测试\n")
+    logger.info("GRU模型测试\n")
 
     # 创建测试数据
     np.random.seed(42)
@@ -471,13 +472,13 @@ if __name__ == "__main__":
     X_train, X_valid = X[:split_idx], X[split_idx:]
     y_train, y_valid = y[:split_idx], y[split_idx:]
 
-    print("数据准备:")
-    print(f"  训练集: {len(X_train)} 样本")
-    print(f"  验证集: {len(X_valid)} 样本")
-    print(f"  特征数: {len(X.columns)}")
+    logger.info("数据准备:")
+    logger.info(f"  训练集: {len(X_train)} 样本")
+    logger.info(f"  验证集: {len(X_valid)} 样本")
+    logger.info(f"  特征数: {len(X.columns)}")
 
     # 训练模型
-    print("\n训练GRU模型:")
+    logger.info("\n训练GRU模型:")
     trainer = GRUStockTrainer(
         input_size=n_features,
         hidden_size=32,
@@ -497,15 +498,15 @@ if __name__ == "__main__":
     )
 
     # 预测
-    print("\n预测:")
+    logger.info("\n预测:")
     y_pred_train = trainer.predict(X_train, seq_length=20)
     y_pred_valid = trainer.predict(X_valid, seq_length=20)
 
-    print(f"训练集预测数量: {len(y_pred_train)}")
-    print(f"验证集预测数量: {len(y_pred_valid)}")
+    logger.info(f"训练集预测数量: {len(y_pred_train)}")
+    logger.info(f"验证集预测数量: {len(y_pred_valid)}")
 
     # 保存和加载
-    print("\n保存模型:")
+    logger.info("\n保存模型:")
     trainer.save_model('test_gru_model.pth')
 
-    print("\n✓ GRU模型测试完成")
+    logger.success("\n✓ GRU模型测试完成")

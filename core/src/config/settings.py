@@ -192,6 +192,7 @@ def get_settings() -> Settings:
 
     Example:
         from config.settings import get_settings
+from loguru import logger
 
         settings = get_settings()
         db_config = settings.get_database_config()
@@ -241,20 +242,20 @@ DEFAULT_DATA_SOURCE = get_data_source()
 # ==================== 测试代码 ====================
 
 if __name__ == "__main__":
-    print("\n测试配置管理模块\n")
+    logger.info("\n测试配置管理模块\n")
 
     settings = get_settings()
-    print(settings.display_config())
+    logger.info(settings.display_config())
 
-    print("\n测试配置访问:")
-    print(f"  数据库主机: {settings.database.host}")
-    print(f"  数据源: {settings.data_source.provider}")
-    print(f"  模型目录: {settings.paths.models_dir}")
-    print(f"  是否生产环境: {settings.app.is_production}")
+    logger.info("\n测试配置访问:")
+    logger.info(f"  数据库主机: {settings.database.host}")
+    logger.info(f"  数据源: {settings.data_source.provider}")
+    logger.info(f"  模型目录: {settings.paths.models_dir}")
+    logger.info(f"  是否生产环境: {settings.app.is_production}")
 
-    print("\n测试单例模式:")
+    logger.info("\n测试单例模式:")
     settings2 = get_settings()
     assert settings is settings2, "应该返回同一实例"
-    print("  ✓ 单例模式正常工作")
+    logger.success("  ✓ 单例模式正常工作")
 
-    print("\n✅ 配置管理模块测试通过")
+    logger.success("\n✅ 配置管理模块测试通过")

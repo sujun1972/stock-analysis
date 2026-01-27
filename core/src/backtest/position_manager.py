@@ -8,6 +8,7 @@ import numpy as np
 from typing import Dict, List, Optional
 from datetime import datetime
 import warnings
+from loguru import logger
 
 warnings.filterwarnings('ignore')
 
@@ -353,7 +354,7 @@ class PositionManager:
 # ==================== 使用示例 ====================
 
 if __name__ == "__main__":
-    print("持仓管理器测试\n")
+    logger.info("持仓管理器测试\n")
 
     # 创建持仓管理器
     manager = PositionManager(
@@ -362,15 +363,15 @@ if __name__ == "__main__":
         max_single_loss_pct=0.05
     )
 
-    print("初始状态:")
-    print(f"  初始资金: {manager.cash:,.0f}")
+    logger.info("初始状态:")
+    logger.info(f"  初始资金: {manager.cash:,.0f}")
 
     # 买入股票
-    print("\n买入股票:")
+    logger.info("\n买入股票:")
     manager.add_position('600000', 1000, 10.0, datetime(2023, 1, 1), 50)
     manager.add_position('000001', 2000, 15.0, datetime(2023, 1, 2), 75)
-    print(f"  持仓数量: {len(manager.positions)}")
-    print(f"  剩余现金: {manager.cash:,.0f}")
+    logger.info(f"  持仓数量: {len(manager.positions)}")
+    logger.info(f"  剩余现金: {manager.cash:,.0f}")
 
     # 当前价格
     current_prices = {
@@ -380,27 +381,27 @@ if __name__ == "__main__":
 
     # 计算总资产
     total_value = manager.calculate_total_value(current_prices)
-    print(f"\n总资产: {total_value:,.0f}")
+    logger.info(f"\n总资产: {total_value:,.0f}")
 
     # 持仓权重
     weights = manager.calculate_position_weights(current_prices)
-    print("\n持仓权重:")
+    logger.info("\n持仓权重:")
     for stock, weight in weights.items():
-        print(f"  {stock}: {weight*100:.2f}%")
+        logger.info(f"  {stock}: {weight*100:.2f}%")
 
     # 持仓摘要
     summary = manager.get_summary(current_prices)
-    print("\n持仓摘要:")
-    print(f"  现金: {summary['cash']:,.0f}")
-    print(f"  持仓市值: {summary['holdings_value']:,.0f}")
-    print(f"  总资产: {summary['total_value']:,.0f}")
-    print(f"  总盈亏: {summary['total_pnl']:,.0f}")
-    print(f"  总收益率: {summary['total_return']*100:.2f}%")
+    logger.info("\n持仓摘要:")
+    logger.info(f"  现金: {summary['cash']:,.0f}")
+    logger.info(f"  持仓市值: {summary['holdings_value']:,.0f}")
+    logger.info(f"  总资产: {summary['total_value']:,.0f}")
+    logger.info(f"  总盈亏: {summary['total_pnl']:,.0f}")
+    logger.info(f"  总收益率: {summary['total_return']*100:.2f}%")
 
     # 卖出股票
-    print("\n卖出股票:")
+    logger.info("\n卖出股票:")
     pnl = manager.remove_position('600000', 500, 11.0, 25)
-    print(f"  实现盈亏: {pnl:,.0f}")
-    print(f"  剩余现金: {manager.cash:,.0f}")
+    logger.info(f"  实现盈亏: {pnl:,.0f}")
+    logger.info(f"  剩余现金: {manager.cash:,.0f}")
 
-    print("\n✓ 持仓管理器测试完成")
+    logger.success("\n✓ 持仓管理器测试完成")

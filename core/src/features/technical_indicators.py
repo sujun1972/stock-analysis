@@ -28,11 +28,11 @@ except ImportError:
         @staticmethod
         def debug(msg): pass  # 在生产环境中使用 debug 级别，不输出
         @staticmethod
-        def info(msg): print(msg)
+        def info(msg): logger.info(f"{msg}")
         @staticmethod
-        def warning(msg): print(f"WARNING: {msg}")
+        def warning(msg): logger.warning(f"WARNING: {msg}")
         @staticmethod
-        def error(msg): print(f"ERROR: {msg}")
+        def error(msg): logger.error(f"ERROR: {msg}")
     logger = SimpleLogger()
 
 # 导入各个指标模块
@@ -330,7 +330,7 @@ def calculate_basic_indicators(df: pd.DataFrame) -> pd.DataFrame:
 # ==================== 使用示例 ====================
 
 if __name__ == "__main__":
-    print("技术指标模块测试\n")
+    logger.info("技术指标模块测试\n")
 
     # 创建测试数据
     dates = pd.date_range('2023-01-01', periods=300, freq='D')
@@ -349,22 +349,22 @@ if __name__ == "__main__":
         'vol': np.random.uniform(1000000, 10000000, 300)
     }, index=dates)
 
-    print("原始数据:")
-    print(test_df.head())
-    print(f"\n原始列数: {len(test_df.columns)}")
+    logger.info("原始数据:")
+    logger.info(test_df.head())
+    logger.info(f"\n原始列数: {len(test_df.columns)}")
 
     # 计算技术指标
     ti = TechnicalIndicators(test_df)
     result_df = ti.add_all_indicators()
 
-    print("\n添加技术指标后:")
-    print(result_df.head())
-    print(f"\n总列数: {len(result_df.columns)}")
-    print(f"特征列数: {len(ti.get_feature_names())}")
+    logger.info("\n添加技术指标后:")
+    logger.info(result_df.head())
+    logger.info(f"\n总列数: {len(result_df.columns)}")
+    logger.info(f"特征列数: {len(ti.get_feature_names())}")
 
-    print("\n特征列表:")
+    logger.info("\n特征列表:")
     for i, col in enumerate(ti.get_feature_names(), 1):
-        print(f"  {i:2d}. {col}")
+        logger.info(f"  {i:2d}. {col}")
 
-    print("\n最近5天数据示例:")
-    print(result_df[['close', 'MA5', 'MA20', 'RSI6', 'MACD', 'ATR14']].tail())
+    logger.info("\n最近5天数据示例:")
+    logger.info(result_df[['close', 'MA5', 'MA20', 'RSI6', 'MACD', 'ATR14']].tail())

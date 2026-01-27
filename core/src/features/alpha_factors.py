@@ -907,10 +907,10 @@ if __name__ == "__main__":
 
     # 配置日志
     logger.remove()
-    logger.add(lambda msg: print(msg, end=''), level="INFO")
+    logger.add(lambda msg: logger.info(msg, end=''), level="INFO")
 
-    print("Alpha因子模块测试\n")
-    print("=" * 60)
+    logger.info("Alpha因子模块测试\n")
+    logger.info("=" * 60)
 
     # 创建测试数据
     dates = pd.date_range('2023-01-01', periods=300, freq='D')
@@ -929,34 +929,34 @@ if __name__ == "__main__":
         'vol': np.random.uniform(1000000, 10000000, 300)
     }, index=dates)
 
-    print("\n原始数据:")
-    print(test_df.head())
-    print(f"\n原始列数: {len(test_df.columns)}")
+    logger.info("\n原始数据:")
+    logger.info(test_df.head())
+    logger.info(f"\n原始列数: {len(test_df.columns)}")
 
     # 计算Alpha因子
-    print("\n" + "=" * 60)
+    logger.info("\n" + "=" * 60)
     af = AlphaFactors(test_df)
     result_df = af.add_all_alpha_factors()
 
-    print("\n添加Alpha因子后:")
-    print(result_df.head())
-    print(f"\n总列数: {len(result_df.columns)}")
-    print(f"因子列数: {len(af.get_factor_names())}")
+    logger.info("\n添加Alpha因子后:")
+    logger.info(result_df.head())
+    logger.info(f"\n总列数: {len(result_df.columns)}")
+    logger.info(f"因子列数: {len(af.get_factor_names())}")
 
     # 显示因子分类统计
-    print("\n因子分类统计:")
+    logger.info("\n因子分类统计:")
     summary = af.get_factor_summary()
     for category, count in summary.items():
-        print(f"  {category}: {count}")
+        logger.info(f"  {category}: {count}")
 
-    print("\n所有因子列表:")
+    logger.info("\n所有因子列表:")
     for i, col in enumerate(af.get_factor_names(), 1):
-        print(f"  {i:2d}. {col}")
+        logger.info(f"  {i:2d}. {col}")
 
-    print("\n最近5天数据示例:")
+    logger.info("\n最近5天数据示例:")
     sample_cols = ['close', 'MOM20', 'REV5', 'VOLATILITY20', 'VOLUME_RATIO5', 'TREND20']
     available_cols = [col for col in sample_cols if col in result_df.columns]
-    print(result_df[available_cols].tail())
+    logger.info(result_df[available_cols].tail())
 
-    print("\n" + "=" * 60)
-    print("测试完成！")
+    logger.info("\n" + "=" * 60)
+    logger.info("测试完成！")

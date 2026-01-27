@@ -11,6 +11,7 @@ try:
 except ImportError:
     # Fallback for direct script execution (if src is not treated as a package)
     from config.config import DATA_PATH, TUSHARE_TOKEN
+from loguru import logger
 
 class DataFetcher:
     def __init__(self, tushare_token=TUSHARE_TOKEN, data_source='akshare'):
@@ -29,18 +30,18 @@ class DataFetcher:
             self.pro = ts.pro_api()
         else:
             self.pro = None
-        print(f"数据获取器初始化完成，当前数据源: {data_source}")
+        logger.info(f"数据获取器初始化完成，当前数据源: {data_source}")
     
     def fetch_yfinance_data(self, symbol, period="1y", interval="1d"):
         """使用 yfinance 获取股票数据"""
         try:
-            print(f"正在获取 {symbol} 的数据...")
+            logger.info(f"正在获取 {symbol} 的数据...")
             ticker = yf.Ticker(symbol)
             data = ticker.history(period=period, interval=interval)
-            print(f"成功获取 {symbol} 的 {len(data)} 条数据")
+            logger.success(f"成功获取 {symbol} 的 {len(data)} 条数据")
             return data
         except Exception as e:
-            print(f"获取 {symbol} 数据时出错: {e}")
+            logger.info(f"获取 {symbol} 数据时出错: {e}")
             return None
     
     def fetch_akshare_data(self, symbol, start_date=None, end_date=None, period="daily", adjust="qfq"):
@@ -72,7 +73,7 @@ class DataFetcher:
             if '.' in symbol:
                 symbol = symbol.split('.')[0]
 
-            print(f"正在使用AkShare获取 {symbol} 的数据 ({start_date} 至 {end_date})...")
+            logger.info(f"正在使用AkShare获取 {symbol} 的数据 ({start_date} 至 {end_date})...")
 
             # 使用AkShare的东方财富数据接口获取历史行情
             df = ak.stock_zh_a_hist(
@@ -105,21 +106,21 @@ class DataFetcher:
                 df.set_index('trade_date', inplace=True)
                 df = df.sort_index()
 
-                print(f"成功获取 {symbol} 的 {len(df)} 条AkShare数据")
+                logger.success(f"成功获取 {symbol} 的 {len(df)} 条AkShare数据")
                 return df
             else:
-                print(f"未获取到 {symbol} 的数据")
+                logger.info(f"未获取到 {symbol} 的数据")
                 return None
 
         except Exception as e:
-            print(f"获取AkShare数据时出错: {e}")
+            logger.info(f"获取AkShare数据时出错: {e}")
             return None
 
     def fetch_tushare_data(self, symbol, start_date=None, end_date=None):
         """使用 Tushare 获取A股数据（备用方法，需要Token）"""
-        print(f"使用 Tushare token: {self.tushare_token}")
+        logger.info(f"使用 Tushare token: {self.tushare_token}")
         if not self.pro:
-            print("未提供 Tushare token，无法获取数据")
+            logger.info("未提供 Tushare token，无法获取数据")
             return None
 
         try:
@@ -128,15 +129,15 @@ class DataFetcher:
             if not end_date:
                 end_date = datetime.now().strftime('%Y%m%d')
 
-            print(f"正在获取 {symbol} 的Tushare数据...")
+            logger.info(f"正在获取 {symbol} 的Tushare数据...")
             df = self.pro.daily(ts_code=symbol, start_date=start_date, end_date=end_date)
             df = df.sort_values('trade_date')
             df['trade_date'] = pd.to_datetime(df['trade_date'])
             df.set_index('trade_date', inplace=True)
-            print(f"成功获取 {symbol} 的 {len(df)} 条Tushare数据")
+            logger.success(f"成功获取 {symbol} 的 {len(df)} 条Tushare数据")
             return df
         except Exception as e:
-            print(f"获取Tushare数据时出错: {e}")
+            logger.info(f"获取Tushare数据时出错: {e}")
             return None
 
     def fetch_data(self, symbol, start_date=None, end_date=None, **kwargs):
@@ -154,31 +155,31 @@ class DataFetcher:
         """
         # 优先使用配置的数据源
         if self.data_source == 'akshare':
-            print(f"使用主要数据源: AkShare")
+            logger.info(f"使用主要数据源: AkShare")
             data = self.fetch_akshare_data(symbol, start_date, end_date, **kwargs)
             # 如果AkShare失败，尝试Tushare作为备用
             if data is None and self.pro:
-                print("AkShare获取失败，尝试使用Tushare作为备用数据源...")
+                logger.error("AkShare获取失败，尝试使用Tushare作为备用数据源...")
                 data = self.fetch_tushare_data(symbol, start_date, end_date)
             return data
 
         elif self.data_source == 'tushare':
-            print(f"使用主要数据源: Tushare")
+            logger.info(f"使用主要数据源: Tushare")
             data = self.fetch_tushare_data(symbol, start_date, end_date)
             # 如果Tushare失败，尝试AkShare作为备用
             if data is None:
-                print("Tushare获取失败，尝试使用AkShare作为备用数据源...")
+                logger.error("Tushare获取失败，尝试使用AkShare作为备用数据源...")
                 data = self.fetch_akshare_data(symbol, start_date, end_date, **kwargs)
             return data
 
         elif self.data_source == 'yfinance':
-            print(f"使用主要数据源: yfinance")
+            logger.info(f"使用主要数据源: yfinance")
             period = kwargs.get('period', '1y')
             interval = kwargs.get('interval', '1d')
             return self.fetch_yfinance_data(symbol, period, interval)
 
         else:
-            print(f"未知的数据源: {self.data_source}，默认使用AkShare")
+            logger.info(f"未知的数据源: {self.data_source}，默认使用AkShare")
             return self.fetch_akshare_data(symbol, start_date, end_date, **kwargs)
 
     def save_data_to_csv(self, data, filename):
@@ -186,7 +187,7 @@ class DataFetcher:
         if data is not None:
             filepath = os.path.join(DATA_PATH, filename)
             data.to_csv(filepath)
-            print(f"数据已保存到: {filepath}")
+            logger.info(f"数据已保存到: {filepath}")
             return filepath
         return None
     
@@ -195,8 +196,8 @@ class DataFetcher:
         filepath = os.path.join(DATA_PATH, filename)
         if os.path.exists(filepath):
             data = pd.read_csv(filepath, index_col=0, parse_dates=True)
-            print(f"从 {filepath} 加载了 {len(data)} 条数据")
+            logger.info(f"从 {filepath} 加载了 {len(data)} 条数据")
             return data
         else:
-            print(f"文件不存在: {filepath}")
+            logger.info(f"文件不存在: {filepath}")
             return None

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Dict, List
 import warnings
+from loguru import logger
 
 warnings.filterwarnings('ignore')
 
@@ -277,39 +278,39 @@ class PerformanceAnalyzer:
         if not self.metrics:
             self.calculate_all_metrics(verbose=False)
 
-        print("\n" + "="*60)
-        print("策略绩效分析")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("策略绩效分析")
+        logger.info("="*60)
 
-        print("\n收益指标:")
-        print(f"  总收益率:           {self.metrics['total_return']*100:>10.2f}%")
-        print(f"  年化收益率:         {self.metrics['annualized_return']*100:>10.2f}%")
+        logger.info("\n收益指标:")
+        logger.info(f"  总收益率:           {self.metrics['total_return']*100:>10.2f}%")
+        logger.info(f"  年化收益率:         {self.metrics['annualized_return']*100:>10.2f}%")
 
-        print("\n风险指标:")
-        print(f"  年化波动率:         {self.metrics['volatility']*100:>10.2f}%")
-        print(f"  下行偏差:           {self.metrics['downside_deviation']*100:>10.2f}%")
-        print(f"  最大回撤:           {self.metrics['max_drawdown']*100:>10.2f}%")
-        print(f"  最大回撤持续期:     {self.metrics['max_drawdown_duration']:>10.0f} 天")
+        logger.info("\n风险指标:")
+        logger.info(f"  年化波动率:         {self.metrics['volatility']*100:>10.2f}%")
+        logger.info(f"  下行偏差:           {self.metrics['downside_deviation']*100:>10.2f}%")
+        logger.info(f"  最大回撤:           {self.metrics['max_drawdown']*100:>10.2f}%")
+        logger.info(f"  最大回撤持续期:     {self.metrics['max_drawdown_duration']:>10.0f} 天")
 
-        print("\n风险调整收益:")
-        print(f"  夏普比率:           {self.metrics['sharpe_ratio']:>10.4f}")
-        print(f"  索提诺比率:         {self.metrics['sortino_ratio']:>10.4f}")
-        print(f"  卡玛比率:           {self.metrics['calmar_ratio']:>10.4f}")
+        logger.info("\n风险调整收益:")
+        logger.info(f"  夏普比率:           {self.metrics['sharpe_ratio']:>10.4f}")
+        logger.info(f"  索提诺比率:         {self.metrics['sortino_ratio']:>10.4f}")
+        logger.info(f"  卡玛比率:           {self.metrics['calmar_ratio']:>10.4f}")
 
-        print("\n交易统计:")
-        print(f"  胜率:               {self.metrics['win_rate']*100:>10.2f}%")
-        print(f"  盈亏比:             {self.metrics['profit_factor']:>10.4f}")
-        print(f"  平均盈利:           {self.metrics['average_win']*100:>10.4f}%")
-        print(f"  平均亏损:           {self.metrics['average_loss']*100:>10.4f}%")
-        print(f"  盈亏比率:           {self.metrics['win_loss_ratio']:>10.4f}")
+        logger.info("\n交易统计:")
+        logger.info(f"  胜率:               {self.metrics['win_rate']*100:>10.2f}%")
+        logger.info(f"  盈亏比:             {self.metrics['profit_factor']:>10.4f}")
+        logger.info(f"  平均盈利:           {self.metrics['average_win']*100:>10.4f}%")
+        logger.info(f"  平均亏损:           {self.metrics['average_loss']*100:>10.4f}%")
+        logger.info(f"  盈亏比率:           {self.metrics['win_loss_ratio']:>10.4f}")
 
         if 'alpha' in self.metrics:
-            print("\n相对基准:")
-            print(f"  Alpha:              {self.metrics['alpha']*100:>10.2f}%")
-            print(f"  Beta:               {self.metrics['beta']:>10.4f}")
-            print(f"  信息比率:           {self.metrics['information_ratio']:>10.4f}")
+            logger.info("\n相对基准:")
+            logger.info(f"  Alpha:              {self.metrics['alpha']*100:>10.2f}%")
+            logger.info(f"  Beta:               {self.metrics['beta']:>10.4f}")
+            logger.info(f"  信息比率:           {self.metrics['information_ratio']:>10.4f}")
 
-        print("="*60 + "\n")
+        logger.info("="*60 + "\n")
 
     def get_metrics(self) -> Dict[str, float]:
         """获取所有指标"""
@@ -321,7 +322,7 @@ class PerformanceAnalyzer:
 # ==================== 使用示例 ====================
 
 if __name__ == "__main__":
-    print("绩效分析器测试\n")
+    logger.info("绩效分析器测试\n")
 
     # 创建测试数据
     np.random.seed(42)
@@ -339,13 +340,13 @@ if __name__ == "__main__":
         index=pd.date_range('2023-01-01', periods=n_days, freq='D')
     )
 
-    print("测试数据:")
-    print(f"  交易日数: {n_days}")
-    print(f"  策略平均日收益: {strategy_returns.mean()*100:.4f}%")
-    print(f"  基准平均日收益: {benchmark_returns.mean()*100:.4f}%")
+    logger.info("测试数据:")
+    logger.info(f"  交易日数: {n_days}")
+    logger.info(f"  策略平均日收益: {strategy_returns.mean()*100:.4f}%")
+    logger.info(f"  基准平均日收益: {benchmark_returns.mean()*100:.4f}%")
 
     # 创建分析器
-    print("\n初始化绩效分析器:")
+    logger.info("\n初始化绩效分析器:")
     analyzer = PerformanceAnalyzer(
         returns=strategy_returns,
         benchmark_returns=benchmark_returns,
@@ -354,13 +355,13 @@ if __name__ == "__main__":
     )
 
     # 计算所有指标
-    print("\n计算绩效指标:")
+    logger.info("\n计算绩效指标:")
     metrics = analyzer.calculate_all_metrics(verbose=True)
 
     # 测试单项指标
-    print("\n测试单项指标:")
-    print(f"总收益率: {analyzer.total_return()*100:.2f}%")
-    print(f"夏普比率: {analyzer.sharpe_ratio():.4f}")
-    print(f"最大回撤: {analyzer.max_drawdown()*100:.2f}%")
+    logger.info("\n测试单项指标:")
+    logger.info(f"总收益率: {analyzer.total_return()*100:.2f}%")
+    logger.info(f"夏普比率: {analyzer.sharpe_ratio():.4f}")
+    logger.info(f"最大回撤: {analyzer.max_drawdown()*100:.2f}%")
 
-    print("\n✓ 绩效分析器测试完成")
+    logger.success("\n✓ 绩效分析器测试完成")

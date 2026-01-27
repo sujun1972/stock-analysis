@@ -8,6 +8,7 @@ import numpy as np
 from typing import Optional, Dict, List, Tuple, Callable
 from datetime import datetime
 import warnings
+from loguru import logger
 
 warnings.filterwarnings('ignore')
 
@@ -103,11 +104,11 @@ class BacktestEngine:
         返回:
             回测结果字典
         """
-        print(f"\n开始回测...")
-        print(f"初始资金: {self.initial_capital:,.0f}")
-        print(f"选股数量: {top_n}")
-        print(f"调仓频率: {rebalance_freq}")
-        print(f"持仓期: {holding_period}天")
+        logger.info(f"\n开始回测...")
+        logger.info(f"初始资金: {self.initial_capital:,.0f}")
+        logger.info(f"选股数量: {top_n}")
+        logger.info(f"调仓频率: {rebalance_freq}")
+        logger.info(f"持仓期: {holding_period}天")
 
         # 对齐数据
         common_dates = signals.index.intersection(prices.index)
@@ -116,9 +117,9 @@ class BacktestEngine:
         signals = signals.loc[common_dates, common_stocks]
         prices = prices.loc[common_dates, common_stocks]
 
-        print(f"\n数据范围:")
-        print(f"  交易日期: {len(common_dates)} 天 ({common_dates[0]} ~ {common_dates[-1]})")
-        print(f"  股票数量: {len(common_stocks)} 只")
+        logger.info(f"\n数据范围:")
+        logger.info(f"  交易日期: {len(common_dates)} 天 ({common_dates[0]} ~ {common_dates[-1]})")
+        logger.info(f"  股票数量: {len(common_stocks)} 只")
 
         # 初始化
         dates = signals.index
@@ -140,7 +141,7 @@ class BacktestEngine:
         else:
             raise ValueError(f"不支持的调仓频率: {rebalance_freq}")
 
-        print(f"\n调仓次数: {len(rebalance_dates)} 次")
+        logger.info(f"\n调仓次数: {len(rebalance_dates)} 次")
 
         # 回测主循环
         for i, date in enumerate(dates):
@@ -259,9 +260,9 @@ class BacktestEngine:
         # 计算收益率
         self.daily_returns = self.portfolio_value['total'].pct_change()
 
-        print(f"\n回测完成")
-        print(f"最终资产: {self.portfolio_value['total'].iloc[-1]:,.0f}")
-        print(f"总收益率: {(self.portfolio_value['total'].iloc[-1] / self.initial_capital - 1) * 100:.2f}%")
+        logger.info(f"\n回测完成")
+        logger.info(f"最终资产: {self.portfolio_value['total'].iloc[-1]:,.0f}")
+        logger.info(f"总收益率: {(self.portfolio_value['total'].iloc[-1] / self.initial_capital - 1) * 100:.2f}%")
 
         return {
             'portfolio_value': self.portfolio_value,
@@ -314,7 +315,7 @@ class BacktestEngine:
 # ==================== 使用示例 ====================
 
 if __name__ == "__main__":
-    print("回测引擎测试\n")
+    logger.info("回测引擎测试\n")
 
     # 创建测试数据
     np.random.seed(42)
@@ -342,20 +343,20 @@ if __name__ == "__main__":
 
     signals_df = pd.DataFrame(signal_data, index=dates)
 
-    print("测试数据:")
-    print(f"  日期范围: {dates[0]} ~ {dates[-1]}")
-    print(f"  股票数量: {len(stocks)}")
-    print(f"  交易日数: {len(dates)}")
+    logger.info("测试数据:")
+    logger.info(f"  日期范围: {dates[0]} ~ {dates[-1]}")
+    logger.info(f"  股票数量: {len(stocks)}")
+    logger.info(f"  交易日数: {len(dates)}")
 
     # 创建回测引擎
-    print("\n初始化回测引擎:")
+    logger.info("\n初始化回测引擎:")
     engine = BacktestEngine(
         initial_capital=1000000,
         verbose=True
     )
 
     # 运行回测
-    print("\n运行回测:")
+    logger.info("\n运行回测:")
     results = engine.backtest_long_only(
         signals=signals_df,
         prices=prices_df,
@@ -365,7 +366,7 @@ if __name__ == "__main__":
     )
 
     # 查看结果
-    print("\n组合净值:")
-    print(results['portfolio_value'].tail())
+    logger.info("\n组合净值:")
+    logger.info(results['portfolio_value'].tail())
 
-    print("\n✓ 回测引擎测试完成")
+    logger.success("\n✓ 回测引擎测试完成")

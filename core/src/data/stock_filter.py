@@ -8,6 +8,7 @@ import numpy as np
 from typing import List, Tuple, Optional
 
 from src.config.trading_rules import (
+from loguru import logger
     StockFilterRules,
     DataQualityRules,
     MarketType
@@ -188,28 +189,28 @@ class StockFilter:
         self.filter_stats['passed'] = len(passed_stocks)
 
         if self.verbose:
-            print(f"\n批量过滤完成:")
-            print(f"总数: {len(stock_list)}")
-            print(f"通过: {len(passed_stocks)}")
-            print(f"过滤: {len(filter_reasons)}")
+            logger.info(f"\n批量过滤完成:")
+            logger.info(f"总数: {len(stock_list)}")
+            logger.info(f"通过: {len(passed_stocks)}")
+            logger.info(f"过滤: {len(filter_reasons)}")
 
         return passed_stocks, filter_reasons
 
     def _print_filter_report(self):
         """打印过滤报告"""
-        print("\n" + "="*60)
-        print("股票过滤报告")
-        print("="*60)
-        print(f"总股票数:           {self.filter_stats['total']:>6}")
-        print(f"ST股票过滤:         {self.filter_stats['st_filtered']:>6}")
-        print(f"退市股票过滤:       {self.filter_stats['delisting_filtered']:>6}")
-        print(f"停牌股票过滤:       {self.filter_stats['suspended_filtered']:>6}")
-        print(f"数据不足过滤:       {self.filter_stats['insufficient_data_filtered']:>6}")
-        print(f"价格异常过滤:       {self.filter_stats['abnormal_price_filtered']:>6}")
-        print("-"*60)
-        print(f"通过股票数:         {self.filter_stats['passed']:>6}")
-        print(f"过滤率:             {(1 - self.filter_stats['passed'] / max(self.filter_stats['total'], 1)) * 100:.2f}%")
-        print("="*60 + "\n")
+        logger.info("\n" + "="*60)
+        logger.info("股票过滤报告")
+        logger.info("="*60)
+        logger.info(f"总股票数:           {self.filter_stats['total']:>6}")
+        logger.info(f"ST股票过滤:         {self.filter_stats['st_filtered']:>6}")
+        logger.info(f"退市股票过滤:       {self.filter_stats['delisting_filtered']:>6}")
+        logger.info(f"停牌股票过滤:       {self.filter_stats['suspended_filtered']:>6}")
+        logger.info(f"数据不足过滤:       {self.filter_stats['insufficient_data_filtered']:>6}")
+        logger.info(f"价格异常过滤:       {self.filter_stats['abnormal_price_filtered']:>6}")
+        logger.info("-"*60)
+        logger.info(f"通过股票数:         {self.filter_stats['passed']:>6}")
+        logger.info(f"过滤率:             {(1 - self.filter_stats['passed'] / max(self.filter_stats['total'], 1)) * 100:.2f}%")
+        logger.info("="*60 + "\n")
 
     def get_stats(self) -> dict:
         """获取过滤统计信息"""
@@ -251,7 +252,7 @@ def filter_stocks_by_market(
 
         return filtered_df
     else:
-        print("警告: stock_df中没有'market'列，无法按市场过滤")
+        logger.warning("警告: stock_df中没有'market'列，无法按市场过滤")
         return stock_df
 
 
@@ -259,7 +260,7 @@ def filter_stocks_by_market(
 
 if __name__ == "__main__":
     # 示例1: 过滤股票列表
-    print("示例1: 过滤股票列表")
+    logger.info("示例1: 过滤股票列表")
 
     # 创建测试数据
     test_stocks = pd.DataFrame({
@@ -271,13 +272,13 @@ if __name__ == "__main__":
     filter = StockFilter(verbose=True)
     filtered_stocks = filter.filter_stock_list(test_stocks)
 
-    print("\n原始股票列表:")
-    print(test_stocks)
-    print("\n过滤后股票列表:")
-    print(filtered_stocks)
+    logger.info("\n原始股票列表:")
+    logger.info(f"{test_stocks}")
+    logger.info("\n过滤后股票列表:")
+    logger.info(f"{filtered_stocks}")
 
     # 示例2: 过滤价格数据
-    print("\n\n示例2: 过滤价格数据")
+    logger.info("\n\n示例2: 过滤价格数据")
 
     # 创建测试价格数据（不足250天）
     test_price_df = pd.DataFrame({
@@ -291,5 +292,5 @@ if __name__ == "__main__":
         min_trading_days=250
     )
 
-    print(f"过滤结果: {'通过' if passed else '不通过'}")
-    print(f"原因: {reason}")
+    logger.info(f"过滤结果: {'通过' if passed else '不通过'}")
+    logger.info(f"原因: {reason}")
