@@ -1,6 +1,12 @@
 """
 模型评估器单元测试
 测试量化交易专用评估指标：IC, RankIC, Sharpe, 分组收益等
+
+测试重构后的模块化架构：
+- 异常处理和数据验证
+- MetricsCalculator 指标计算器
+- ResultFormatter 结果格式化器
+- ModelEvaluator 主评估器
 """
 
 import unittest
@@ -10,9 +16,19 @@ from pathlib import Path
 
 # 添加src目录到路径
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'core' / 'src'))
 
-from models.model_evaluator import ModelEvaluator, evaluate_model
+from src.models.model_evaluator import (
+    ModelEvaluator,
+    MetricsCalculator,
+    ResultFormatter,
+    EvaluationConfig,
+    evaluate_model,
+    EvaluationError,
+    InvalidInputError,
+    InsufficientDataError,
+    filter_valid_pairs
+)
 
 
 class TestModelEvaluatorBasicMetrics(unittest.TestCase):
@@ -441,7 +457,8 @@ class TestModelEvaluatorConvenienceFunctions(unittest.TestCase):
         metrics = evaluate_model(
             predictions,
             actual_returns,
-            evaluation_type='regression'
+            evaluation_type='regression',
+            verbose=False
         )
 
         self.assertIn('ic', metrics)
@@ -456,7 +473,8 @@ class TestModelEvaluatorConvenienceFunctions(unittest.TestCase):
         metrics = evaluate_model(
             predictions,
             actual_returns,
-            evaluation_type='ranking'
+            evaluation_type='ranking',
+            verbose=False
         )
 
         # 排名评估只包含IC和多空收益
@@ -472,7 +490,174 @@ class TestModelEvaluatorConvenienceFunctions(unittest.TestCase):
         actual_returns = np.random.randn(100)
 
         with self.assertRaises(ValueError):
-            evaluate_model(predictions, actual_returns, evaluation_type='invalid')
+            evaluate_model(predictions, actual_returns, evaluation_type='invalid', verbose=False)
+
+    def test_04_evaluate_model_with_custom_config(self):
+        """测试使用自定义配置"""
+        np.random.seed(42)
+        predictions = np.random.randn(200)
+        actual_returns = predictions * 0.02 + np.random.randn(200) * 0.01
+
+        config = EvaluationConfig(
+            n_groups=10,
+            top_pct=0.1,
+            bottom_pct=0.1
+        )
+
+        metrics = evaluate_model(
+            predictions,
+            actual_returns,
+            evaluation_type='regression',
+            config=config,
+            verbose=False
+        )
+
+        # 验证使用了10个分组
+        group_count = sum(1 for k in metrics.keys() if k.startswith('group_'))
+        self.assertGreater(group_count, 5)  # 应该有更多分组
+
+
+class TestExceptionHandling(unittest.TestCase):
+    """异常处理测试"""
+
+    def test_01_invalid_input_none(self):
+        """测试 None 输入"""
+        evaluator = ModelEvaluator()
+
+        with self.assertRaises(InvalidInputError):
+            evaluator.evaluate_regression(None, np.array([1, 2, 3]))
+
+    def test_02_invalid_input_empty(self):
+        """测试空数组输入"""
+        evaluator = ModelEvaluator()
+
+        with self.assertRaises(InsufficientDataError):
+            evaluator.evaluate_regression(np.array([]), np.array([]))
+
+    def test_03_invalid_input_mismatched_length(self):
+        """测试长度不匹配的输入"""
+        evaluator = ModelEvaluator()
+
+        with self.assertRaises(InvalidInputError):
+            evaluator.evaluate_regression(
+                np.array([1, 2, 3]),
+                np.array([1, 2])
+            )
+
+    def test_04_insufficient_data_filter(self):
+        """测试数据不足过滤"""
+        with self.assertRaises(InsufficientDataError):
+            filter_valid_pairs(
+                np.array([1.0]),
+                np.array([2.0]),
+                min_samples=2
+            )
+
+    def test_05_nan_handling(self):
+        """测试 NaN 处理"""
+        predictions = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
+        actual_returns = np.array([0.01, 0.02, 0.03, np.nan, 0.05])
+
+        valid_preds, valid_returns = filter_valid_pairs(predictions, actual_returns)
+
+        # 应该过滤掉 NaN
+        self.assertEqual(len(valid_preds), 3)
+        self.assertEqual(len(valid_returns), 3)
+
+
+class TestMetricsCalculatorDirect(unittest.TestCase):
+    """直接测试 MetricsCalculator 类"""
+
+    def test_01_calculator_ic(self):
+        """测试 MetricsCalculator 的 IC 计算"""
+        np.random.seed(42)
+        predictions = np.random.randn(100)
+        actual_returns = predictions * 0.02 + np.random.randn(100) * 0.01
+
+        calc = MetricsCalculator()
+        ic = calc.calculate_ic(predictions, actual_returns)
+
+        self.assertIsInstance(ic, float)
+        self.assertFalse(np.isnan(ic))
+
+    def test_02_calculator_group_returns(self):
+        """测试 MetricsCalculator 的分组收益"""
+        np.random.seed(42)
+        predictions = np.random.randn(200)
+        actual_returns = predictions * 0.02
+
+        calc = MetricsCalculator()
+        group_returns = calc.calculate_group_returns(predictions, actual_returns, n_groups=5)
+
+        self.assertIsInstance(group_returns, dict)
+        self.assertEqual(len(group_returns), 5)
+
+
+class TestEvaluationConfig(unittest.TestCase):
+    """评估配置测试"""
+
+    def test_01_default_config(self):
+        """测试默认配置"""
+        config = EvaluationConfig()
+
+        self.assertEqual(config.n_groups, 5)
+        self.assertEqual(config.top_pct, 0.2)
+        self.assertEqual(config.bottom_pct, 0.2)
+        self.assertEqual(config.periods_per_year, 252)
+
+    def test_02_custom_config(self):
+        """测试自定义配置"""
+        config = EvaluationConfig(
+            n_groups=10,
+            top_pct=0.1,
+            bottom_pct=0.1,
+            periods_per_year=250
+        )
+
+        self.assertEqual(config.n_groups, 10)
+        self.assertEqual(config.top_pct, 0.1)
+        self.assertEqual(config.periods_per_year, 250)
+
+    def test_03_evaluator_with_config(self):
+        """测试评估器使用配置"""
+        config = EvaluationConfig(n_groups=8)
+        evaluator = ModelEvaluator(config=config)
+
+        self.assertEqual(evaluator.config.n_groups, 8)
+
+
+class TestResultFormatter(unittest.TestCase):
+    """结果格式化器测试"""
+
+    def test_01_print_empty_metrics(self):
+        """测试打印空指标"""
+        formatter = ResultFormatter()
+
+        # 不应抛出异常
+        try:
+            formatter.print_metrics({})
+        except Exception as e:
+            self.fail(f"print_metrics() raised exception: {e}")
+
+    def test_02_print_full_metrics(self):
+        """测试打印完整指标"""
+        formatter = ResultFormatter()
+
+        metrics = {
+            'ic': 0.5,
+            'rank_ic': 0.48,
+            'mse': 0.01,
+            'rmse': 0.1,
+            'long_return': 0.02,
+            'short_return': -0.01,
+            'long_short_return': 0.03
+        }
+
+        # 不应抛出异常
+        try:
+            formatter.print_metrics(metrics)
+        except Exception as e:
+            self.fail(f"print_metrics() raised exception: {e}")
 
 
 def run_tests():
