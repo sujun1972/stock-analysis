@@ -10,14 +10,14 @@
 - 统一使用项目 logger
 
 重构说明（2026-01-27）：
-- Tushare Provider 模块化重构
-- 拆分为独立的 tushare 子包
+- Tushare Provider 模块化重构：拆分为独立的 tushare 子包
+- AkShare Provider 模块化重构：拆分为独立的 akshare 子包
 - 保持向后兼容的导入路径
 """
 
 from .base_provider import BaseDataProvider
-from .akshare_provider import AkShareProvider
-# 从新的模块化结构中导入 TushareProvider（保持向后兼容）
+# 从新的模块化结构中导入（保持向后兼容）
+from .akshare import AkShareProvider
 from .tushare import TushareProvider
 from .provider_metadata import ProviderMetadata
 from .provider_registry import ProviderRegistry

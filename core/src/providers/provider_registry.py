@@ -53,7 +53,7 @@ class ProviderRegistry:
                 return
 
             # 延迟导入，避免循环依赖
-            from .akshare_provider import AkShareProvider
+            from .akshare import AkShareProvider  # 从新的模块化结构导入
             from .tushare import TushareProvider  # 从新的模块化结构导入
 
             # 注册 AkShare
