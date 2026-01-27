@@ -9,6 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from psycopg2.extensions import cursor as Cursor
     from .connection_pool_manager import ConnectionPoolManager
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class TableManager:
         """
         self.pool_manager = pool_manager
 
-    def init_all_tables(self):
+    def init_all_tables(self) -> None:
         """初始化所有数据库表结构"""
         conn = None
         try:
@@ -89,7 +90,7 @@ class TableManager:
                 cursor.close()
                 self.pool_manager.release_connection(conn)
 
-    def _create_stock_info_table(self, cursor):
+    def _create_stock_info_table(self, cursor: 'Cursor') -> None:
         """创建股票基本信息表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_info (
@@ -106,7 +107,7 @@ class TableManager:
         """)
         logger.info("✓ 股票基本信息表创建/验证完成")
 
-    def _create_stock_daily_table(self, cursor):
+    def _create_stock_daily_table(self, cursor: 'Cursor') -> None:
         """创建股票日线数据表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_daily (
@@ -128,7 +129,7 @@ class TableManager:
         """)
         logger.info("✓ 股票日线数据表创建/验证完成")
 
-    def _create_stock_features_table(self, cursor):
+    def _create_stock_features_table(self, cursor: 'Cursor') -> None:
         """创建股票特征表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_features (
@@ -142,7 +143,7 @@ class TableManager:
         """)
         logger.info("✓ 股票特征表创建/验证完成")
 
-    def _create_stock_predictions_table(self, cursor):
+    def _create_stock_predictions_table(self, cursor: 'Cursor') -> None:
         """创建模型预测表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_predictions (
@@ -160,7 +161,7 @@ class TableManager:
         """)
         logger.info("✓ 模型预测表创建/验证完成")
 
-    def _create_backtest_results_table(self, cursor):
+    def _create_backtest_results_table(self, cursor: 'Cursor') -> None:
         """创建回测结果表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS backtest_results (
@@ -180,7 +181,7 @@ class TableManager:
         """)
         logger.info("✓ 回测结果表创建/验证完成")
 
-    def _create_stock_minute_table(self, cursor):
+    def _create_stock_minute_table(self, cursor: 'Cursor') -> None:
         """创建分时数据表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_minute (
@@ -203,7 +204,7 @@ class TableManager:
         """)
         logger.info("✓ 分时数据表创建/验证完成")
 
-    def _create_stock_minute_meta_table(self, cursor):
+    def _create_stock_minute_meta_table(self, cursor: 'Cursor') -> None:
         """创建分时数据元数据表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_minute_meta (
@@ -223,7 +224,7 @@ class TableManager:
         """)
         logger.info("✓ 分时数据元数据表创建/验证完成")
 
-    def _create_trading_calendar_table(self, cursor):
+    def _create_trading_calendar_table(self, cursor: 'Cursor') -> None:
         """创建交易日历表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS trading_calendar (
@@ -236,7 +237,7 @@ class TableManager:
         """)
         logger.info("✓ 交易日历表创建/验证完成")
 
-    def _create_stock_realtime_table(self, cursor):
+    def _create_stock_realtime_table(self, cursor: 'Cursor') -> None:
         """创建实时行情表"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_realtime (
@@ -261,7 +262,7 @@ class TableManager:
         """)
         logger.info("✓ 实时行情表创建/验证完成")
 
-    def _create_all_indexes(self, cursor):
+    def _create_all_indexes(self, cursor: 'Cursor') -> None:
         """创建所有索引"""
         # 日线数据索引
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_daily_code ON stock_daily(code);")
@@ -288,7 +289,7 @@ class TableManager:
 
         logger.info("✓ 索引创建完成")
 
-    def _optimize_with_timescaledb(self, cursor, table_name: str, time_column: str):
+    def _optimize_with_timescaledb(self, cursor: 'Cursor', table_name: str, time_column: str) -> None:
         """使用TimescaleDB优化时序表"""
         try:
             # 检查是否支持TimescaleDB
@@ -305,7 +306,7 @@ class TableManager:
         except Exception as e:
             logger.warning(f"TimescaleDB优化跳过 ({table_name}): {e}")
 
-    def _optimize_minute_data_with_timescaledb(self, cursor):
+    def _optimize_minute_data_with_timescaledb(self, cursor: 'Cursor') -> None:
         """TimescaleDB优化分时数据表"""
         try:
             cursor.execute("SELECT extname FROM pg_extension WHERE extname = 'timescaledb';")

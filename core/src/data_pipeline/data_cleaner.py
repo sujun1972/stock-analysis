@@ -163,11 +163,11 @@ class DataCleaner:
 
         return df
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> Dict[str, int]:
         """获取统计信息"""
         return self.stats.copy()
 
-    def print_stats(self):
+    def print_stats(self) -> None:
         """打印统计信息"""
         self._log("\n清洗统计:")
         self._log(f"  原始样本: {self.stats['raw_samples']}")
@@ -177,7 +177,7 @@ class DataCleaner:
         self._log(f"  最终样本: {self.stats['final_samples']}")
         self._log(f"  数据保留率: {self.stats['final_samples']/self.stats['raw_samples']*100:.1f}%")
 
-    def _log(self, message: str):
+    def _log(self, message: str) -> None:
         """输出日志"""
         if self.verbose:
             logger.info(message)

@@ -431,7 +431,7 @@ class DataPipeline:
         """获取scaler对象（用于保存和加载）"""
         return self.data_splitter.get_scaler()
 
-    def set_scaler(self, scaler: object):
+    def set_scaler(self, scaler: object) -> None:
         """设置scaler对象（从保存的模型加载）"""
         self.data_splitter.set_scaler(scaler)
 
@@ -439,7 +439,7 @@ class DataPipeline:
         """获取统计信息"""
         return self.data_cleaner.get_stats()
 
-    def clear_cache(self, symbol: Optional[str] = None):
+    def clear_cache(self, symbol: Optional[str] = None) -> None:
         """
         清除缓存
 
@@ -448,7 +448,7 @@ class DataPipeline:
         """
         self.feature_cache.clear(symbol)
 
-    def log(self, message: str):
+    def log(self, message: str) -> None:
         """输出日志"""
         if self.verbose:
             logger.info(message)

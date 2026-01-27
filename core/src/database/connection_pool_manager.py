@@ -7,6 +7,7 @@
 
 import psycopg2
 from psycopg2 import pool
+from psycopg2.extensions import connection
 import logging
 from typing import Dict, Any, Optional
 
@@ -38,7 +39,7 @@ class ConnectionPoolManager:
         self.connection_pool: Optional[psycopg2.pool.SimpleConnectionPool] = None
         self._init_connection_pool()
 
-    def _init_connection_pool(self):
+    def _init_connection_pool(self) -> None:
         """初始化连接池"""
         try:
             self.connection_pool = psycopg2.pool.SimpleConnectionPool(
@@ -55,7 +56,7 @@ class ConnectionPoolManager:
             logger.error(f"数据库连接池创建失败: {e}")
             raise
 
-    def get_connection(self):
+    def get_connection(self) -> connection:
         """
         从连接池获取连接
 
@@ -66,7 +67,7 @@ class ConnectionPoolManager:
             raise RuntimeError("连接池未初始化")
         return self.connection_pool.getconn()
 
-    def release_connection(self, conn):
+    def release_connection(self, conn: connection) -> None:
         """
         释放连接回连接池
 
@@ -78,7 +79,7 @@ class ConnectionPoolManager:
             return
         self.connection_pool.putconn(conn)
 
-    def close_all_connections(self):
+    def close_all_connections(self) -> None:
         """关闭所有连接"""
         if self.connection_pool:
             try:

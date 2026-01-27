@@ -201,7 +201,7 @@ class FeatureCache:
             logger.error(f"缓存验证失败: {e}")
             return False
 
-    def clear(self, symbol: Optional[str] = None):
+    def clear(self, symbol: Optional[str] = None) -> None:
         """
         清除缓存
 
@@ -225,7 +225,7 @@ class FeatureCache:
         """获取缓存元数据文件路径"""
         return cache_file.with_suffix('.meta.json')
 
-    def _delete_cache_files(self, cache_file: Path):
+    def _delete_cache_files(self, cache_file: Path) -> None:
         """删除缓存文件和元数据"""
         if cache_file.exists():
             cache_file.unlink()

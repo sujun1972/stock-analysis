@@ -9,12 +9,15 @@
 import logging
 import os
 import threading
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 import pandas as pd
 from loguru import logger
 
 # 导入专门的管理器
 from .connection_pool_manager import ConnectionPoolManager
+
+if TYPE_CHECKING:
+    from psycopg2.extensions import connection
 from .table_manager import TableManager
 from .data_insert_manager import DataInsertManager
 from .data_query_manager import DataQueryManager
@@ -57,7 +60,7 @@ class DatabaseManager:
     _lock = threading.Lock()
     _initialized = False
 
-    def __new__(cls, config: Optional[Dict[str, Any]] = None):
+    def __new__(cls, config: Optional[Dict[str, Any]] = None) -> 'DatabaseManager':
         """
         单例模式实现
 
@@ -100,15 +103,15 @@ class DatabaseManager:
 
     # ==================== 连接池管理（委托给 ConnectionPoolManager） ====================
 
-    def get_connection(self):
+    def get_connection(self) -> 'connection':
         """从连接池获取连接"""
         return self.pool_manager.get_connection()
 
-    def release_connection(self, conn):
+    def release_connection(self, conn: 'connection') -> None:
         """释放连接回连接池"""
         self.pool_manager.release_connection(conn)
 
-    def close_all_connections(self):
+    def close_all_connections(self) -> None:
         """关闭所有连接"""
         self.pool_manager.close_all_connections()
 
@@ -171,7 +174,7 @@ class DatabaseManager:
 
     # ==================== 表结构管理（委托给 TableManager） ====================
 
-    def init_database(self):
+    def init_database(self) -> None:
         """初始化数据库表结构"""
         self.table_manager.init_all_tables()
 
@@ -240,7 +243,7 @@ class DatabaseManager:
         pass
 
     @classmethod
-    def reset_instance(cls):
+    def reset_instance(cls) -> None:
         """
         重置单例实例（仅用于测试）
 

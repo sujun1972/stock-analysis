@@ -6,7 +6,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Tuple, Optional, Dict
+from typing import Tuple, Optional, Dict, Union
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from imblearn.over_sampling import SMOTE, RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
@@ -234,7 +234,7 @@ class DataSplitter:
             self._log(f"  重采样失败: {e}，返回原始数据")
             return X, y
 
-    def _get_sampler(self, method: str, class_counts: Dict, minority_class: int):
+    def _get_sampler(self, method: str, class_counts: Dict, minority_class: int) -> Union[SMOTE, RandomOverSampler, RandomUnderSampler]:
         """获取采样器"""
         if method == 'oversample':
             return RandomOverSampler(random_state=42)
@@ -307,11 +307,11 @@ class DataSplitter:
         """获取scaler对象（用于保存和加载）"""
         return self.scaler
 
-    def set_scaler(self, scaler: object):
+    def set_scaler(self, scaler: object) -> None:
         """设置scaler对象（从保存的模型加载）"""
         self.scaler = scaler
 
-    def _log(self, message: str):
+    def _log(self, message: str) -> None:
         """输出日志"""
         if self.verbose:
             logger.info(message)
