@@ -13,7 +13,7 @@ import pandas as pd
 project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root / 'core' / 'src'))
 
-from providers.akshare.data_converter import AkShareDataConverter
+from src.providers.akshare.data_converter import AkShareDataConverter
 
 
 class TestAkShareDataConverter(unittest.TestCase):

@@ -23,7 +23,7 @@ import numpy as np
 project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root / 'core' / 'src'))
 
-from providers.tushare.data_converter import TushareDataConverter
+from src.providers.tushare.data_converter import TushareDataConverter
 
 
 class TestTushareDataConverter(unittest.TestCase):

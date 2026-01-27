@@ -28,7 +28,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试1: 默认配置"""
         print("\n[测试1] 默认配置...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         config = PipelineConfig()
 
@@ -46,7 +46,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试2: 自定义配置"""
         print("\n[测试2] 自定义配置...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         config = PipelineConfig(
             target_period=10,
@@ -68,7 +68,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试3: 训练集比例验证"""
         print("\n[测试3] 训练集比例验证...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         # 无效比例应该抛出异常
         with self.assertRaises(ValueError):
@@ -86,7 +86,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试4: 比例总和验证"""
         print("\n[测试4] 比例总和验证...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         # train_ratio + valid_ratio 必须 < 1
         with self.assertRaises(ValueError):
@@ -105,7 +105,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试5: 自动设置平衡方法"""
         print("\n[测试5] 自动设置平衡方法...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         # 当 balance_samples=True 但 balance_method='none'时，自动设置
         config = PipelineConfig(balance_samples=True, balance_method='none')
@@ -119,7 +119,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试6: 转换为字典"""
         print("\n[测试6] 转换为字典...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         config = PipelineConfig(
             target_period=5,
@@ -145,7 +145,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试7: 从字典创建"""
         print("\n[测试7] 从字典创建...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         config_dict = {
             'target_period': 10,
@@ -171,7 +171,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试8: 复制配置"""
         print("\n[测试8] 复制配置...")
 
-        from pipeline_config import PipelineConfig
+        from src.data_pipeline.pipeline_config import PipelineConfig
 
         config1 = PipelineConfig(target_period=5, balance_samples=False)
         config2 = config1.copy(target_period=10, balance_samples=True)
@@ -190,7 +190,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试9: 预定义配置"""
         print("\n[测试9] 预定义配置...")
 
-        from pipeline_config import (
+        from src.data_pipeline.pipeline_config import (
             DEFAULT_CONFIG,
             QUICK_TRAINING_CONFIG,
             BALANCED_TRAINING_CONFIG,
@@ -223,7 +223,7 @@ class TestPipelineConfig(unittest.TestCase):
         """测试10: create_config 便捷函数"""
         print("\n[测试10] create_config 便捷函数...")
 
-        from pipeline_config import create_config
+        from src.data_pipeline.pipeline_config import create_config
 
         config = create_config(
             target_period=7,

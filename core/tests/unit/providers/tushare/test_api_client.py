@@ -19,8 +19,8 @@ from unittest.mock import Mock, patch, MagicMock
 project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root / 'core' / 'src'))
 
-from providers.tushare.api_client import TushareAPIClient
-from providers.tushare.exceptions import (
+from src.providers.tushare.api_client import TushareAPIClient
+from src.providers.tushare.exceptions import (
     TushareTokenError,
     TusharePermissionError,
     TushareRateLimitError,
@@ -47,7 +47,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 正确抛出 TushareTokenError")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_02_init_with_token(self, mock_ts):
         """测试2: 有 Token 初始化成功"""
         print("\n[测试2] 有 Token 初始化成功...")
@@ -72,7 +72,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 初始化成功，参数正确")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_03_execute_success(self, mock_ts):
         """测试3: 成功执行 API 调用"""
         print("\n[测试3] 成功执行 API 调用...")
@@ -97,7 +97,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ API 调用成功")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_04_execute_with_retry(self, mock_ts):
         """测试4: 失败后重试机制"""
         print("\n[测试4] 失败后重试机制...")
@@ -128,7 +128,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 重试机制工作正常")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_05_execute_permission_error_no_retry(self, mock_ts):
         """测试5: 权限错误不重试"""
         print("\n[测试5] 权限错误不重试...")
@@ -156,7 +156,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 权限错误不重试，正确抛出异常")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_06_execute_rate_limit_error_no_retry(self, mock_ts):
         """测试6: 频率限制错误不重试"""
         print("\n[测试6] 频率限制错误不重试...")
@@ -184,7 +184,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 频率限制错误不重试，正确抛出异常")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_07_execute_max_retries_exceeded(self, mock_ts):
         """测试7: 重试次数用尽后抛出异常"""
         print("\n[测试7] 重试次数用尽后抛出异常...")
@@ -212,7 +212,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 重试次数用尽，正确抛出异常")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_08_query_method(self, mock_ts):
         """测试8: 通用查询方法"""
         print("\n[测试8] 通用查询方法...")
@@ -239,7 +239,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 通用查询方法工作正常")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_09_query_invalid_api(self, mock_ts):
         """测试9: 查询不存在的 API"""
         print("\n[测试9] 查询不存在的 API...")
@@ -256,7 +256,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 不存在的 API 正确抛出异常")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_10_api_properties(self, mock_ts):
         """测试10: API 属性访问器"""
         print("\n[测试10] API 属性访问器...")
@@ -277,7 +277,7 @@ class TestTushareAPIClient(unittest.TestCase):
 
         print("  ✓ 所有 API 属性访问正常")
 
-    @patch('providers.tushare.api_client.ts')
+    @patch('src.providers.tushare.api_client.tushare')
     def test_11_request_delay(self, mock_ts):
         """测试11: 请求间隔控制"""
         print("\n[测试11] 请求间隔控制...")

@@ -19,8 +19,8 @@ from unittest.mock import Mock, patch, MagicMock
 project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root / 'core' / 'src'))
 
-from providers.akshare.api_client import AkShareAPIClient
-from providers.akshare.exceptions import (
+from src.providers.akshare.api_client import AkShareAPIClient
+from src.providers.akshare.exceptions import (
     AkShareImportError,
     AkShareDataError,
     AkShareRateLimitError,
@@ -39,8 +39,7 @@ class TestAkShareAPIClient(unittest.TestCase):
         print("AkShareAPIClient 单元测试")
         print("="*60)
 
-    @patch('providers.akshare.api_client.ak')
-    def test_01_init_success(self, mock_ak):
+    def test_01_init_success(self):
         """测试1: 成功初始化"""
         print("\n[测试1] 成功初始化...")
 
@@ -58,8 +57,7 @@ class TestAkShareAPIClient(unittest.TestCase):
 
         print("  ✓ 初始化成功，参数正确")
 
-    @patch('providers.akshare.api_client.ak')
-    def test_02_execute_success(self, mock_ak):
+    def test_02_execute_success(self):
         """测试2: 成功执行 API 调用"""
         print("\n[测试2] 成功执行 API 调用...")
 
@@ -76,8 +74,7 @@ class TestAkShareAPIClient(unittest.TestCase):
 
         print("  ✓ API 调用成功")
 
-    @patch('providers.akshare.api_client.ak')
-    def test_03_execute_with_retry(self, mock_ak):
+    def test_03_execute_with_retry(self):
         """测试3: 失败后重试机制"""
         print("\n[测试3] 失败后重试机制...")
 
@@ -102,8 +99,7 @@ class TestAkShareAPIClient(unittest.TestCase):
 
         print("  ✓ 重试机制工作正常")
 
-    @patch('providers.akshare.api_client.ak')
-    def test_04_rate_limit_error_no_retry(self, mock_ak):
+    def test_04_rate_limit_error_no_retry(self):
         """测试4: IP限流错误不重试"""
         print("\n[测试4] IP限流错误不重试...")
 
