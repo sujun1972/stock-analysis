@@ -63,6 +63,22 @@ from .pipeline import (
     create_config,
 )
 
+# ==================== 特征工程配置 ====================
+from .features import (
+    FeatureEngineerConfig,
+    TradingDaysConfig,
+    TechnicalIndicatorConfig,
+    AlphaFactorConfig,
+    FeatureTransformConfig,
+    DEFAULT_FEATURE_CONFIG,
+    QUICK_FEATURE_CONFIG,
+    FULL_FEATURE_CONFIG,
+    DEBUG_FEATURE_CONFIG,
+    get_feature_config,
+    set_feature_config,
+    reset_feature_config,
+)
+
 # ==================== 向后兼容导出 ====================
 
 # 获取全局设置实例
@@ -80,6 +96,7 @@ def get_config_summary() -> str:
     """获取配置摘要信息"""
     settings = get_settings()
     provider_manager = get_provider_config_manager()
+    feature_config = get_feature_config()
 
     lines = [
         "=" * 70,
@@ -111,6 +128,13 @@ def get_config_summary() -> str:
         f"  默认预测周期: {settings.ml.default_target_period}天",
         f"  默认缩放类型: {settings.ml.default_scaler_type}",
         f"  特征缓存: {'启用' if settings.ml.cache_features else '禁用'}",
+        "",
+        "【特征工程配置】",
+        f"  年交易日数: {feature_config.trading_days.annual_trading_days}",
+        f"  MA周期: {feature_config.technical_indicators.ma_periods}",
+        f"  动量因子周期: {feature_config.alpha_factors.momentum_periods}",
+        f"  数据泄漏检测: {'启用' if feature_config.enable_leak_detection else '禁用'}",
+        f"  缓存统计: {'启用' if feature_config.show_cache_stats else '禁用'}",
         "",
         "=" * 70,
     ]
@@ -194,6 +218,20 @@ __all__ = [
     'LONG_TERM_CONFIG',
     'PRODUCTION_CONFIG',
     'create_config',
+
+    # 特征工程配置
+    'FeatureEngineerConfig',
+    'TradingDaysConfig',
+    'TechnicalIndicatorConfig',
+    'AlphaFactorConfig',
+    'FeatureTransformConfig',
+    'DEFAULT_FEATURE_CONFIG',
+    'QUICK_FEATURE_CONFIG',
+    'FULL_FEATURE_CONFIG',
+    'DEBUG_FEATURE_CONFIG',
+    'get_feature_config',
+    'set_feature_config',
+    'reset_feature_config',
 
     # 向后兼容
     'DATA_PATH',

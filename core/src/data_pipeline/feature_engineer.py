@@ -28,15 +28,27 @@ class FeatureEngineer:
     - 创建目标标签
     """
 
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool = True, config=None):
         """
         初始化特征工程器
 
         Args:
             verbose: 是否输出详细日志
+            config: FeatureEngineerConfig实例（可选，None则使用全局配置）
         """
         self.verbose = verbose
         self.feature_names = []
+
+        # 加载配置
+        if config is None:
+            try:
+                from config.features import get_feature_config
+                self.config = get_feature_config()
+            except ImportError:
+                logger.warning("无法导入配置系统，使用默认硬编码值")
+                self.config = None
+        else:
+            self.config = config
 
     def compute_all_features(
         self,
@@ -90,16 +102,32 @@ class FeatureEngineer:
         """计算技术指标"""
         ti = TechnicalIndicators(df)
 
+        # 从配置获取参数（如果有配置）
+        if self.config:
+            ti_config = self.config.technical_indicators
+            ma_periods = ti_config.ma_periods
+            ema_periods = ti_config.ema_periods
+            rsi_periods = ti_config.rsi_periods
+            atr_periods = ti_config.atr_periods
+            cci_periods = ti_config.cci_periods
+        else:
+            # 使用默认硬编码值（向后兼容）
+            ma_periods = [5, 10, 20, 60, 120, 250]
+            ema_periods = [12, 26, 50]
+            rsi_periods = [6, 12, 24]
+            atr_periods = [14, 28]
+            cci_periods = [14, 28]
+
         # 添加常用技术指标
-        ti.add_ma([5, 10, 20, 60, 120, 250])
-        ti.add_ema([12, 26, 50])
-        ti.add_rsi([6, 12, 24])
+        ti.add_ma(ma_periods)
+        ti.add_ema(ema_periods)
+        ti.add_rsi(rsi_periods)
         ti.add_macd()
         ti.add_kdj()
         ti.add_bollinger_bands()
-        ti.add_atr([14, 28])
+        ti.add_atr(atr_periods)
         ti.add_obv()
-        ti.add_cci([14, 28])
+        ti.add_cci(cci_periods)
 
         df = ti.get_dataframe()
 
@@ -114,14 +142,33 @@ class FeatureEngineer:
 
     def _compute_alpha_factors(self, df: pd.DataFrame) -> pd.DataFrame:
         """计算Alpha因子"""
-        af = AlphaFactors(df)
+        # 传递配置给 AlphaFactors
+        af = AlphaFactors(df, config=self.config)
+
+        # 从配置获取参数（如果有配置）
+        if self.config:
+            alpha_config = self.config.alpha_factors
+            momentum_periods = alpha_config.momentum_periods
+            reversal_short = alpha_config.reversal_short_periods
+            reversal_long = alpha_config.reversal_long_periods
+            volatility_periods = alpha_config.volatility_periods
+            volume_periods = alpha_config.volume_periods
+            trend_periods = alpha_config.trend_periods
+        else:
+            # 使用默认硬编码值（向后兼容）
+            momentum_periods = [5, 10, 20, 60, 120]
+            reversal_short = [1, 3, 5]
+            reversal_long = [20, 60]
+            volatility_periods = [5, 10, 20, 60]
+            volume_periods = [5, 10, 20]
+            trend_periods = [20, 60]
 
         # 添加常用Alpha因子
-        af.add_momentum_factors([5, 10, 20, 60, 120])
-        af.add_reversal_factors([1, 3, 5], [20, 60])
-        af.add_volatility_factors([5, 10, 20, 60])
-        af.add_volume_factors([5, 10, 20])
-        af.add_trend_strength([20, 60])
+        af.add_momentum_factors(momentum_periods)
+        af.add_reversal_factors(reversal_short, reversal_long)
+        af.add_volatility_factors(volatility_periods)
+        af.add_volume_factors(volume_periods)
+        af.add_trend_strength(trend_periods)
 
         df = af.get_dataframe()
 
@@ -134,8 +181,15 @@ class FeatureEngineer:
         """应用特征转换"""
         ft = FeatureTransformer(df)
 
+        # 从配置获取参数（如果有配置）
+        if self.config:
+            return_periods = self.config.feature_transform.return_periods
+        else:
+            # 使用默认硬编码值（向后兼容）
+            return_periods = [1, 3, 5, 10, 20]
+
         # 多时间尺度收益率
-        ft.create_multi_timeframe_returns([1, 3, 5, 10, 20])
+        ft.create_multi_timeframe_returns(return_periods)
 
         # OHLC特征
         ft.create_ohlc_features()
@@ -157,15 +211,26 @@ class FeatureEngineer:
         current_close = df['close']
         features_to_drop = []
 
+        # 从配置获取参数（如果有配置）
+        if self.config:
+            ma_periods = self.config.feature_transform.deprice_ma_periods
+            ema_periods = self.config.feature_transform.deprice_ema_periods
+            atr_periods = self.config.feature_transform.deprice_atr_periods
+        else:
+            # 使用默认硬编码值（向后兼容）
+            ma_periods = [5, 10, 20, 60, 120, 250]
+            ema_periods = [12, 26, 50]
+            atr_periods = [14, 28]
+
         # MA类指标 → 价格偏离度比例
-        for period in [5, 10, 20, 60, 120, 250]:
+        for period in ma_periods:
             ma_col = f'MA{period}'
             if ma_col in df.columns:
                 df[f'CLOSE_TO_MA{period}_RATIO'] = (current_close / df[ma_col] - 1) * 100
                 features_to_drop.append(ma_col)
 
         # EMA类指标 → 价格偏离度比例
-        for period in [12, 26, 50]:
+        for period in ema_periods:
             ema_col = f'EMA{period}'
             if ema_col in df.columns:
                 df[f'CLOSE_TO_EMA{period}_RATIO'] = (current_close / df[ema_col] - 1) * 100
@@ -179,7 +244,7 @@ class FeatureEngineer:
                 features_to_drop.append(boll_col)
 
         # ATR类指标 → 相对波动率百分比
-        for period in [14, 28]:
+        for period in atr_periods:
             atr_col = f'ATR{period}'
             atr_pct_col = f'ATR{period}_PCT'
             if atr_col in df.columns:
@@ -227,7 +292,7 @@ class FeatureEngineer:
 
         return df
 
-    def _log(self, message: str):
+    def _log(self, message: str) -> None:
         """输出日志"""
         if self.verbose:
             logger.info(message)

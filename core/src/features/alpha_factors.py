@@ -151,9 +151,15 @@ class FactorCache:
 
 
 class FactorConfig:
-    """因子计算配置类"""
+    """
+    因子计算配置类（已弃用，使用 config.features 代替）
 
-    # 默认周期配置
+    警告: 此类保留仅用于向后兼容，新代码应使用:
+        from config.features import get_feature_config
+        config = get_feature_config()
+    """
+
+    # 默认周期配置（向后兼容）
     DEFAULT_SHORT_PERIODS = [5, 10, 20]
     DEFAULT_MEDIUM_PERIODS = [20, 60]
     DEFAULT_LONG_PERIODS = [60, 120]
@@ -165,6 +171,39 @@ class FactorConfig:
     # 计算参数
     ANNUAL_TRADING_DAYS = 252
     EPSILON = 1e-8  # 防止除零
+
+    @classmethod
+    def from_config(cls, feature_config=None):
+        """
+        从新配置系统加载参数
+
+        Args:
+            feature_config: FeatureEngineerConfig实例（可选）
+
+        Returns:
+            更新后的配置类
+        """
+        if feature_config is None:
+            try:
+                from config.features import get_feature_config
+                feature_config = get_feature_config()
+            except ImportError:
+                logger.warning("无法导入新配置系统，使用默认值")
+                return cls
+
+        # 更新类属性
+        alpha_config = feature_config.alpha_factors
+        trading_config = feature_config.trading_days
+
+        cls.DEFAULT_SHORT_PERIODS = alpha_config.default_short_periods
+        cls.DEFAULT_MEDIUM_PERIODS = alpha_config.default_medium_periods
+        cls.DEFAULT_LONG_PERIODS = alpha_config.default_long_periods
+        cls.PRICE_COLUMNS = alpha_config.price_columns
+        cls.VOLUME_COLUMNS = alpha_config.volume_columns
+        cls.ANNUAL_TRADING_DAYS = trading_config.annual_trading_days
+        cls.EPSILON = trading_config.epsilon
+
+        return cls
 
 
 class BaseFactorCalculator(ABC):
@@ -1027,7 +1066,8 @@ class AlphaFactors:
         df: pd.DataFrame,
         inplace: bool = False,
         enable_leak_detection: bool = False,
-        enable_copy_on_write: bool = True
+        enable_copy_on_write: bool = True,
+        config=None
     ):
         """
         初始化Alpha因子计算器
@@ -1037,40 +1077,57 @@ class AlphaFactors:
             inplace: 是否直接修改原DataFrame
             enable_leak_detection: 是否启用数据泄漏检测（会降低性能）
             enable_copy_on_write: 是否启用写时复制（推荐开启以节省内存）
+            config: FeatureEngineerConfig实例（可选，None则使用全局配置）
 
         内存优化说明:
             - inplace=False + enable_copy_on_write=True: 安全且内存高效（推荐）
             - inplace=True: 直接修改原数据，最省内存但有风险
             - enable_copy_on_write=False: 传统模式，兼容旧代码
         """
+        # 加载配置
+        if config is None:
+            try:
+                from config.features import get_feature_config
+                config = get_feature_config()
+            except ImportError:
+                logger.warning("无法导入配置系统，使用默认硬编码值")
+                config = None
+
+        # 从配置更新 FactorConfig（向后兼容）
+        if config is not None:
+            FactorConfig.from_config(config)
+
         # 启用 Pandas Copy-on-Write 模式（Pandas 2.0+）
-        if enable_copy_on_write and hasattr(pd, 'options') and hasattr(pd.options, 'mode'):
+        enable_cow = config.enable_copy_on_write if config else enable_copy_on_write
+        if enable_cow and hasattr(pd, 'options') and hasattr(pd.options, 'mode'):
             pd.options.mode.copy_on_write = True
             logger.debug("已启用 Copy-on-Write 模式")
 
         self.df = df if inplace else df.copy()
         self._validate_dataframe()
-        self._enable_leak_detection = enable_leak_detection
+        self._enable_leak_detection = config.enable_leak_detection if config else enable_leak_detection
+        self._config = config
 
         # 初始化各类因子计算器
         # 注意：现在所有计算器都使用 inplace=True，但由于 CoW，实际上是安全的视图
+        leak_detection = self._enable_leak_detection
         self.momentum = MomentumFactorCalculator(
-            self.df, inplace=True, enable_leak_detection=enable_leak_detection
+            self.df, inplace=True, enable_leak_detection=leak_detection
         )
         self.reversal = ReversalFactorCalculator(
-            self.df, inplace=True, enable_leak_detection=enable_leak_detection
+            self.df, inplace=True, enable_leak_detection=leak_detection
         )
         self.volatility = VolatilityFactorCalculator(
-            self.df, inplace=True, enable_leak_detection=enable_leak_detection
+            self.df, inplace=True, enable_leak_detection=leak_detection
         )
         self.volume = VolumeFactorCalculator(
-            self.df, inplace=True, enable_leak_detection=enable_leak_detection
+            self.df, inplace=True, enable_leak_detection=leak_detection
         )
         self.trend = TrendFactorCalculator(
-            self.df, inplace=True, enable_leak_detection=enable_leak_detection
+            self.df, inplace=True, enable_leak_detection=leak_detection
         )
         self.liquidity = LiquidityFactorCalculator(
-            self.df, inplace=True, enable_leak_detection=enable_leak_detection
+            self.df, inplace=True, enable_leak_detection=leak_detection
         )
 
     def _validate_dataframe(self):
@@ -1286,7 +1343,8 @@ def calculate_all_alpha_factors(
     df: pd.DataFrame,
     inplace: bool = False,
     enable_leak_detection: bool = False,
-    show_cache_stats: bool = False
+    show_cache_stats: bool = False,
+    config=None
 ) -> pd.DataFrame:
     """
     便捷函数：一键计算所有Alpha因子（优化版本）
@@ -1296,6 +1354,7 @@ def calculate_all_alpha_factors(
         inplace: 是否直接修改原DataFrame
         enable_leak_detection: 是否启用数据泄漏检测
         show_cache_stats: 是否显示缓存统计
+        config: FeatureEngineerConfig实例（可选）
 
     返回:
         包含所有Alpha因子的DataFrame
@@ -1305,42 +1364,46 @@ def calculate_all_alpha_factors(
         - 共享缓存（30-50% 计算减少）
         - Copy-on-Write（50% 内存节省）
         - 数据泄漏检测（可选）
+        - 可配置的周期参数（消除硬编码）
     """
     af = AlphaFactors(
         df,
         inplace=inplace,
-        enable_leak_detection=enable_leak_detection
+        enable_leak_detection=enable_leak_detection,
+        config=config
     )
     return af.add_all_alpha_factors(show_cache_stats=show_cache_stats)
 
 
-def calculate_momentum_factors(df: pd.DataFrame, inplace: bool = False) -> pd.DataFrame:
+def calculate_momentum_factors(df: pd.DataFrame, inplace: bool = False, config=None) -> pd.DataFrame:
     """
     便捷函数：仅计算动量相关因子
 
     参数:
         df: 价格DataFrame
         inplace: 是否直接修改原DataFrame
+        config: FeatureEngineerConfig实例（可选）
 
     返回:
         包含动量因子的DataFrame
     """
-    af = AlphaFactors(df, inplace=inplace)
+    af = AlphaFactors(df, inplace=inplace, config=config)
     return af.momentum.calculate_all()
 
 
-def calculate_reversal_factors(df: pd.DataFrame, inplace: bool = False) -> pd.DataFrame:
+def calculate_reversal_factors(df: pd.DataFrame, inplace: bool = False, config=None) -> pd.DataFrame:
     """
     便捷函数：仅计算反转相关因子
 
     参数:
         df: 价格DataFrame
         inplace: 是否直接修改原DataFrame
+        config: FeatureEngineerConfig实例（可选）
 
     返回:
         包含反转因子的DataFrame
     """
-    af = AlphaFactors(df, inplace=inplace)
+    af = AlphaFactors(df, inplace=inplace, config=config)
     return af.reversal.calculate_all()
 
 
