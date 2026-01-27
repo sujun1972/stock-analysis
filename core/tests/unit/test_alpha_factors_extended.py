@@ -400,27 +400,42 @@ class TestEdgeCasesDeep:
 
     def test_extreme_volatility(self):
         """测试极端波动情况"""
+        # 清空共享缓存，避免测试间污染
+        BaseFactorCalculator._shared_cache.clear()
+
         dates = pd.date_range('2023-01-01', periods=100, freq='D')
 
-        # 创建极端波动数据
-        prices = [100]
+        # 创建极端波动数据（交替+50%/-50%）
+        prices = [100.0]  # 明确使用 float
         for i in range(99):
             # 每天涨跌50%
             prices.append(prices[-1] * (1.5 if i % 2 == 0 else 0.5))
 
+        # 创建全新的 DataFrame，避免共享引用
         df = pd.DataFrame({
-            'close': prices,
+            'close': prices.copy(),  # 明确复制数据
             'vol': [1e6] * 100
-        }, index=dates)
+        }, index=dates).copy()  # 完整复制 DataFrame
 
-        af = AlphaFactors(df)
+        # 使用 inplace=False 确保不修改原始数据
+        af = AlphaFactors(df.copy(), inplace=False)
         result = af.add_volatility_factors(periods=[20])
 
         # 波动率应该非常高
         vol20 = result['VOLATILITY20'].dropna()
+
+        # 详细的断言和错误信息
         assert len(vol20) > 0, "波动率计算结果为空"
-        # 使用更宽松的阈值来避免浮点数精度问题
-        assert vol20.mean() > 50, f"未能捕捉极端波动: mean={vol20.mean():.2f}"
+        mean_vol = float(vol20.mean())  # 确保是 Python float
+
+        # 极端波动（+50%/-50%）应该产生非常高的波动率
+        # 实际计算结果约为 814，使用 50 作为保守阈值
+        assert mean_vol > 50, (
+            f"未能捕捉极端波动: mean={mean_vol:.2f}, "
+            f"median={vol20.median():.2f}, "
+            f"min={vol20.min():.2f}, "
+            f"max={vol20.max():.2f}"
+        )
 
     def test_price_gaps(self):
         """测试价格跳空情况"""
