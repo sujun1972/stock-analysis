@@ -1,8 +1,10 @@
-# 日志使用规范检查 Skill
+# 日志使用规范检查 Skill (Core 子项目)
 
 ## 概述
 
-这个 skill 用于检查项目中所有 Python 代码是否正确使用统一的日志系统。项目使用基于 `loguru` 的统一日志系统，位于 [core/src/utils/logger.py](../../../core/src/utils/logger.py)。
+这个 skill 用于检查 **core 子项目**中所有 Python 代码是否正确使用统一的日志系统。项目使用基于 `loguru` 的统一日志系统，位于 [core/src/utils/logger.py](../../../core/src/utils/logger.py)。
+
+**检查范围：仅 `core/` 子项目，不包括 backend、frontend 等其他子项目。**
 
 ## 功能
 

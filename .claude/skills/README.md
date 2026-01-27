@@ -11,9 +11,11 @@
 | 股票数据下载 | `/download-stock-data` | 从 AkShare 下载股票数据到数据库 | ⭐⭐⭐⭐ |
 | 特征工程 | `/calculate-features` | 计算技术指标和 Alpha 因子（125+特征） | ⭐⭐⭐⭐ |
 | 代码规范检查 | `/code-review` | 检查 Python 和 TypeScript 代码质量 | ⭐⭐⭐ |
+| 日志规范检查 | `/check-logging` | 检查 core 子项目的日志系统使用规范 | ⭐⭐⭐ |
 | 快速回测 | `/quick-backtest` | 运行策略回测并分析绩效 | ⭐⭐⭐⭐ |
 | API 端点测试 | `/test-api` | 测试所有 FastAPI 后端端点 | ⭐⭐⭐ |
 | 项目架构解释 | `/explain-architecture` | 解释项目架构和设计（新人入职） | ⭐⭐⭐⭐⭐ |
+| 智能提交 | `/smart-commit` | 只提交对话中修改的文件，排除其他改动 | ⭐⭐⭐⭐⭐ |
 
 ## 🚀 快速开始
 
@@ -55,4 +57,4 @@
 
 ---
 
-**最后更新**: 2026-01-26
+**最后更新**: 2026-01-27

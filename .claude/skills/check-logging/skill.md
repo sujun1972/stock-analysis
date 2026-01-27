@@ -1,13 +1,15 @@
 ---
 name: check-logging
-description: 检查代码是否正确使用项目的统一日志系统（基于 loguru）
+description: 检查 core 子项目的代码是否正确使用统一日志系统（基于 loguru）
 user-invocable: true
 disable-model-invocation: false
 ---
 
-# 统一日志系统使用规范检查
+# 统一日志系统使用规范检查 (Core 子项目)
 
-你是一个日志规范专家，负责确保项目中所有代码都正确使用统一的日志系统。
+你是一个日志规范专家，负责确保 **core 子项目**中所有代码都正确使用统一的日志系统。
+
+**重要：此 skill 仅检查 `core/` 子项目，不检查 backend、frontend 等其他子项目。**
 
 ## 项目日志系统规范
 
@@ -62,7 +64,9 @@ logger.info("message")
 
 ## 任务目标
 
-检查所有 Python 文件（除测试文件外），确保：
+**检查范围：仅 `core/` 子项目**
+
+检查 core 子项目中所有 Python 文件（除测试文件外），确保：
 
 1. 没有使用 `print()` 代替日志记录
 2. 使用统一的 `get_logger(__name__)` 方式获取 logger
@@ -78,18 +82,15 @@ cd /Volumes/MacDriver/stock-analysis
 
 echo "=== 检查 Core 模块中的 print() 使用 ==="
 grep -rn "print(" core/src --include="*.py" | grep -v "test_" | grep -v "_test.py" | grep -v "# noqa: T201" | grep -v "# TODO: remove debug print" || echo "✅ 未发现非规范的 print() 使用"
-
-echo -e "\n=== 检查 Backend 模块中的 print() 使用 ==="
-grep -rn "print(" backend/app --include="*.py" | grep -v "test_" | grep -v "_test.py" | grep -v "# noqa: T201" || echo "✅ 未发现非规范的 print() 使用"
 ```
 
 ### 第二步：检查标准库 logging 的使用
 
 ```bash
 echo -e "\n=== 检查是否使用了标准库 logging ==="
-grep -rn "import logging" core/src backend/app --include="*.py" | grep -v "test_" | grep -v "_test.py" || echo "✅ 未使用标准库 logging"
+grep -rn "import logging" core/src --include="*.py" | grep -v "test_" | grep -v "_test.py" || echo "✅ 未使用标准库 logging"
 
-grep -rn "from logging import" core/src backend/app --include="*.py" | grep -v "test_" | grep -v "_test.py" || echo "✅ 未使用标准库 logging"
+grep -rn "from logging import" core/src --include="*.py" | grep -v "test_" | grep -v "_test.py" || echo "✅ 未使用标准库 logging"
 ```
 
 ### 第三步：检查是否正确导入 logger
@@ -103,7 +104,7 @@ grep -rn "from src.utils.logger import get_logger" core/src --include="*.py" | w
 
 # 错误的导入方式（直接从 loguru 导入）
 echo -e "\n❌ 错误的导入（不应该使用）："
-grep -rn "from loguru import logger" core/src backend/app --include="*.py" | grep -v "test_" | grep -v "logger.py" || echo "  - 未发现"
+grep -rn "from loguru import logger" core/src --include="*.py" | grep -v "test_" | grep -v "logger.py" || echo "  - 未发现"
 ```
 
 ### 第四步：检查 logger 初始化方式
@@ -113,7 +114,7 @@ echo -e "\n=== 检查 logger 初始化 ==="
 
 # 正确：logger = get_logger(__name__)
 echo "✅ 正确的初始化方式："
-grep -rn "logger = get_logger(__name__)" core/src backend/app --include="*.py" | wc -l | xargs echo "  - 找到"
+grep -rn "logger = get_logger(__name__)" core/src --include="*.py" | wc -l | xargs echo "  - 找到"
 
 # 检查是否有文件导入了 get_logger 但没有初始化
 echo -e "\n⚠️  导入了 get_logger 但可能未使用："
@@ -129,11 +130,11 @@ done
 ```bash
 echo -e "\n=== 日志级别使用统计 ==="
 
-echo "logger.debug() 使用次数: $(grep -r "logger\.debug(" core/src backend/app --include="*.py" | wc -l)"
-echo "logger.info() 使用次数: $(grep -r "logger\.info(" core/src backend/app --include="*.py" | wc -l)"
-echo "logger.warning() 使用次数: $(grep -r "logger\.warning(" core/src backend/app --include="*.py" | wc -l)"
-echo "logger.error() 使用次数: $(grep -r "logger\.error(" core/src backend/app --include="*.py" | wc -l)"
-echo "logger.critical() 使用次数: $(grep -r "logger\.critical(" core/src backend/app --include="*.py" | wc -l)"
+echo "logger.debug() 使用次数: $(grep -r "logger\.debug(" core/src --include="*.py" | wc -l)"
+echo "logger.info() 使用次数: $(grep -r "logger\.info(" core/src --include="*.py" | wc -l)"
+echo "logger.warning() 使用次数: $(grep -r "logger\.warning(" core/src --include="*.py" | wc -l)"
+echo "logger.error() 使用次数: $(grep -r "logger\.error(" core/src --include="*.py" | wc -l)"
+echo "logger.critical() 使用次数: $(grep -r "logger\.critical(" core/src --include="*.py" | wc -l)"
 ```
 
 ### 第六步：检查异常处理中的日志记录
@@ -143,7 +144,7 @@ echo -e "\n=== 检查异常处理中的日志使用 ==="
 
 # 查找 except 块中没有日志记录的情况
 echo "⚠️  可能缺少日志记录的 except 块："
-grep -B2 -A5 "except.*:" core/src backend/app --include="*.py" | grep -A5 "except" | grep -v "logger\." | grep -v "test_" | head -30
+grep -B2 -A5 "except.*:" core/src --include="*.py" | grep -A5 "except" | grep -v "logger\." | grep -v "test_" | head -30
 ```
 
 ### 第七步：生成详细报告
@@ -153,13 +154,13 @@ echo -e "\n=====================================================================
 echo "                         日志系统使用规范检查报告"
 echo "================================================================================"
 echo "检查时间: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "检查范围: core/src, backend/app"
+echo "检查范围: core/src (仅检查 core 子项目)"
 echo ""
 
 # 统计信息
-total_py_files=$(find core/src backend/app -name "*.py" ! -path "*/test_*" ! -path "*/*_test.py" | wc -l)
-files_with_logger=$(grep -rl "get_logger(__name__)" core/src backend/app --include="*.py" | wc -l)
-files_with_print=$(grep -rl "print(" core/src backend/app --include="*.py" | grep -v "test_" | wc -l)
+total_py_files=$(find core/src -name "*.py" ! -path "*/test_*" ! -path "*/*_test.py" | wc -l)
+files_with_logger=$(grep -rl "get_logger(__name__)" core/src --include="*.py" | wc -l)
+files_with_print=$(grep -rl "print(" core/src --include="*.py" | grep -v "test_" | wc -l)
 
 echo "Python 文件总数: $total_py_files"
 echo "使用统一 logger 的文件: $files_with_logger"
@@ -176,11 +177,11 @@ echo ""
                         日志系统使用规范检查报告
 ================================================================================
 检查时间: 2026-01-26 12:00:00
-检查范围: core/src, backend/app
+检查范围: core/src (仅检查 core 子项目)
 
-Python 文件总数: 87
-使用统一 logger 的文件: 72
-包含 print() 的文件: 5
+Python 文件总数: 65
+使用统一 logger 的文件: 58
+包含 print() 的文件: 3
 
 === 问题清单 ===
 
@@ -281,41 +282,41 @@ echo "检查完成！"
 
 ## 集成到 CI/CD
 
-在 GitHub Actions 或 GitLab CI 中添加日志规范检查：
+在 GitHub Actions 或 GitLab CI 中添加日志规范检查（仅针对 core 子项目）：
 
 ```yaml
 # .github/workflows/logging-check.yml
-name: Logging Standards Check
+name: Logging Standards Check (Core)
 
 on: [push, pull_request]
 
 jobs:
-  check-logging:
+  check-logging-core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Check for print() usage
+      - name: Check for print() usage in core
         run: |
-          if grep -rn "print(" core/src backend/app --include="*.py" | grep -v "test_" | grep -v "# noqa: T201"; then
+          if grep -rn "print(" core/src --include="*.py" | grep -v "test_" | grep -v "# noqa: T201"; then
             echo "❌ 发现非规范的 print() 使用"
             exit 1
           fi
 
-      - name: Check for standard logging usage
+      - name: Check for standard logging usage in core
         run: |
-          if grep -rn "import logging" core/src backend/app --include="*.py" | grep -v "test_"; then
+          if grep -rn "import logging" core/src --include="*.py" | grep -v "test_"; then
             echo "❌ 发现标准库 logging 的使用，应使用项目统一的 logger"
             exit 1
           fi
 
       - name: Summary
-        run: echo "✅ 日志使用规范检查通过"
+        run: echo "✅ Core 子项目日志使用规范检查通过"
 ```
 
 ## Pre-commit Hook 配置
 
-在 `.pre-commit-config.yaml` 中添加：
+在 `.pre-commit-config.yaml` 中添加（仅针对 core 子项目）：
 
 ```yaml
 repos:
@@ -323,15 +324,15 @@ repos:
 
   - repo: local
     hooks:
-      - id: check-print-usage
-        name: Check for print() usage in non-test files
-        entry: bash -c 'grep -rn "print(" core/src backend/app --include="*.py" | grep -v "test_" | grep -v "# noqa: T201" && exit 1 || exit 0'
+      - id: check-print-usage-core
+        name: Check for print() usage in core subproject
+        entry: bash -c 'grep -rn "print(" core/src --include="*.py" | grep -v "test_" | grep -v "# noqa: T201" && exit 1 || exit 0'
         language: system
         pass_filenames: false
 
-      - id: check-logging-import
-        name: Check for standard logging import
-        entry: bash -c 'grep -rn "import logging" core/src backend/app --include="*.py" | grep -v "test_" && exit 1 || exit 0'
+      - id: check-logging-import-core
+        name: Check for standard logging import in core
+        entry: bash -c 'grep -rn "import logging" core/src --include="*.py" | grep -v "test_" && exit 1 || exit 0'
         language: system
         pass_filenames: false
 ```
