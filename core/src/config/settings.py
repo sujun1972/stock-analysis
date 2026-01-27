@@ -12,10 +12,14 @@ import os
 
 try:
     from pydantic_settings import BaseSettings
-    from pydantic import Field
+    from pydantic import Field, ConfigDict
 except ImportError:
     # 降级到传统方式
     from pydantic import BaseSettings, Field
+    try:
+        from pydantic import ConfigDict
+    except ImportError:
+        ConfigDict = None
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -31,9 +35,10 @@ class DatabaseSettings(BaseSettings):
     user: str = Field(default="stock_user", description="数据库用户名")
     password: str = Field(default="stock_password_123", description="数据库密码")
 
-    class Config:
-        env_prefix = "DATABASE_"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_prefix="DATABASE_",
+        case_sensitive=False
+    )
 
 
 class DataSourceSettings(BaseSettings):
@@ -43,9 +48,10 @@ class DataSourceSettings(BaseSettings):
     tushare_token: str = Field(default="", description="Tushare API Token")
     deepseek_api_key: str = Field(default="", description="DeepSeek API Key")
 
-    class Config:
-        env_prefix = "DATA_"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_prefix="DATA_",
+        case_sensitive=False
+    )
 
     @property
     def has_tushare(self) -> bool:
@@ -61,9 +67,10 @@ class PathSettings(BaseSettings):
     cache_dir: str = Field(default="/data/pipeline_cache", description="缓存目录")
     results_dir: str = Field(default="/data/backtest_results", description="回测结果目录")
 
-    class Config:
-        env_prefix = "PATH_"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_prefix="PATH_",
+        case_sensitive=False
+    )
 
     def get_data_path(self) -> Path:
         """获取数据目录路径"""
@@ -104,9 +111,10 @@ class MLSettings(BaseSettings):
     cache_features: bool = Field(default=True, description="是否缓存特征")
     feature_version: str = Field(default="v2.0", description="特征版本号")
 
-    class Config:
-        env_prefix = "ML_"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_prefix="ML_",
+        case_sensitive=False
+    )
 
 
 class AppSettings(BaseSettings):
@@ -118,9 +126,10 @@ class AppSettings(BaseSettings):
     api_host: str = Field(default="0.0.0.0", description="API 服务器地址")
     api_port: int = Field(default=8000, description="API 服务器端口")
 
-    class Config:
-        env_prefix = "APP_"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_prefix="APP_",
+        case_sensitive=False
+    )
 
     @property
     def is_production(self) -> bool:
@@ -148,12 +157,12 @@ class Settings(BaseSettings):
     ml: MLSettings = MLSettings()
     app: AppSettings = AppSettings()
 
-    class Config:
-        env_file = str(ENV_FILE) if ENV_FILE.exists() else None
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        # 允许子配置从环境变量加载但不在父类验证
-        extra = "ignore"
+    model_config = ConfigDict(
+        env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"  # 允许子配置从环境变量加载但不在父类验证
+    )
 
     def get_database_config(self) -> dict:
         """
@@ -206,7 +215,7 @@ def get_settings() -> Settings:
 
     Example:
         from config.settings import get_settings
-from loguru import logger
+        from loguru import logger
 
         settings = get_settings()
         db_config = settings.get_database_config()
@@ -256,6 +265,8 @@ DEFAULT_DATA_SOURCE = get_data_source()
 # ==================== 测试代码 ====================
 
 if __name__ == "__main__":
+    from loguru import logger
+
     logger.info("\n测试配置管理模块\n")
 
     settings = get_settings()

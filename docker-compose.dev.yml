@@ -5,6 +5,12 @@
 services:
   # Backend 开发模式配置（支持热重载和测试环境）
   backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      # 添加开发/测试依赖的构建参数
+      args:
+        - INSTALL_DEV=true
     environment:
       - ENVIRONMENT=development
       - DEBUG=true
@@ -19,7 +25,9 @@ services:
       - ./core/pyproject.toml:/app/core/pyproject.toml
       - ./core/setup.py:/app/core/setup.py
       - ./core/.pytest_cache:/app/core/.pytest_cache
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      sh -c "pip install -q pytest pytest-asyncio pytest-cov 2>/dev/null &&
+             python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   # Frontend 开发模式配置
   frontend:

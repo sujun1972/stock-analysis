@@ -47,7 +47,7 @@ class BacktestEngine:
         self.verbose = verbose
 
         # 交易成本
-        self.commission_rate = commission_rate or TradingCosts.COMMISSION_RATE
+        self.commission_rate = commission_rate or TradingCosts.CommissionRates.DEFAULT
         self.stamp_tax_rate = stamp_tax_rate or TradingCosts.STAMP_TAX_RATE
         self.min_commission = min_commission or TradingCosts.MIN_COMMISSION
         self.slippage = slippage
@@ -63,7 +63,7 @@ class BacktestEngine:
         self,
         amount: float,
         is_buy: bool,
-        is_sh: bool = True
+        stock_code: str = None
     ) -> float:
         """
         计算交易成本
@@ -71,15 +71,26 @@ class BacktestEngine:
         参数:
             amount: 交易金额
             is_buy: 是否买入
-            is_sh: 是否上交所股票
+            stock_code: 股票代码（用于判断交易所）
 
         返回:
             交易成本
         """
         if is_buy:
-            costs = TradingCosts.calculate_buy_cost(amount, is_sh)
+            costs = TradingCosts.calculate_buy_cost(
+                amount,
+                stock_code=stock_code,
+                commission_rate=self.commission_rate,
+                min_commission=self.min_commission
+            )
         else:
-            costs = TradingCosts.calculate_sell_cost(amount, is_sh)
+            costs = TradingCosts.calculate_sell_cost(
+                amount,
+                stock_code=stock_code,
+                commission_rate=self.commission_rate,
+                min_commission=self.min_commission,
+                stamp_tax_rate=self.stamp_tax_rate
+            )
 
         return costs['total_cost']
 
@@ -201,9 +212,8 @@ class BacktestEngine:
                                 # 卖出金额
                                 sell_amount = pos['shares'] * actual_price
 
-                                # 交易成本
-                                is_sh = MarketType.is_sh_stock(stock)
-                                cost = self.calculate_trading_cost(sell_amount, is_buy=False, is_sh=is_sh)
+                                # 计算卖出交易成本
+                                cost = self.calculate_trading_cost(sell_amount, is_buy=False, stock_code=stock)
 
                                 # 更新现金
                                 cash += (sell_amount - cost)
@@ -237,9 +247,8 @@ class BacktestEngine:
                                         # 买入金额
                                         buy_amount = max_shares * actual_price
 
-                                        # 交易成本
-                                        is_sh = MarketType.is_sh_stock(stock)
-                                        cost = self.calculate_trading_cost(buy_amount, is_buy=True, is_sh=is_sh)
+                                        # 计算买入交易成本
+                                        cost = self.calculate_trading_cost(buy_amount, is_buy=True, stock_code=stock)
 
                                         # 检查资金是否充足
                                         if cash >= (buy_amount + cost):

@@ -45,8 +45,9 @@ def test_trading_rules():
     buy_amount = 10000  # 买入1万元
     sell_amount = 11000  # 卖出1.1万元
 
-    buy_cost = TradingCosts.calculate_buy_cost(buy_amount, is_sh=True)
-    sell_cost = TradingCosts.calculate_sell_cost(sell_amount, is_sh=True)
+    # 使用上海股票代码测试（600000 浦发银行）
+    buy_cost = TradingCosts.calculate_buy_cost(buy_amount, stock_code='600000')
+    sell_cost = TradingCosts.calculate_sell_cost(sell_amount, stock_code='600000')
 
     print(f"  买入{buy_amount}元:")
     print(f"    佣金: {buy_cost['commission']:.2f}元")

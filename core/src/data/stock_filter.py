@@ -7,8 +7,8 @@ import pandas as pd
 import numpy as np
 from typing import List, Tuple, Optional
 
-from src.config.trading_rules import (
 from loguru import logger
+from src.config.trading_rules import (
     StockFilterRules,
     DataQualityRules,
     MarketType

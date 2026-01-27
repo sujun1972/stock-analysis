@@ -11,10 +11,10 @@ from pathlib import Path
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
 
-from features.technical_indicators import TechnicalIndicators, calculate_all_indicators
-from features.alpha_factors import AlphaFactors, calculate_all_alpha_factors
-from features.feature_transformer import FeatureTransformer, prepare_ml_features
-from features.feature_storage import FeatureStorage
+from src.features.technical_indicators import TechnicalIndicators, calculate_all_indicators
+from src.features.alpha_factors import AlphaFactors, calculate_all_alpha_factors
+from src.features.feature_transformer import FeatureTransformer, prepare_ml_features
+from src.features.feature_storage import FeatureStorage
 
 import pandas as pd
 import numpy as np
@@ -111,28 +111,28 @@ def test_alpha_factors():
 
     # 测试各类因子
     print("\n2.2 添加动量因子")
-    af.add_momentum_factors([5, 10, 20, 60])
-    af.add_relative_strength([20, 60])
-    af.add_acceleration([5, 10, 20])
+    af.add_momentum_factors(periods=[5, 10, 20, 60])
+    af.add_relative_strength(periods=[20, 60])
+    af.add_acceleration(periods=[5, 10, 20])
 
     print("\n2.3 添加反转因子")
-    af.add_reversal_factors([1, 3, 5], [20, 60])
+    af.add_reversal_factors(short_periods=[1, 3, 5], long_periods=[20, 60])
     af.add_overnight_reversal()
 
     print("\n2.4 添加波动率因子")
-    af.add_volatility_factors([5, 10, 20])
-    af.add_high_low_volatility([10, 20])
+    af.add_volatility_factors(periods=[5, 10, 20])
+    af.add_high_low_volatility(periods=[10, 20])
 
     print("\n2.5 添加成交量因子")
-    af.add_volume_factors([5, 10, 20])
-    af.add_price_volume_correlation([20, 60])
+    af.add_volume_factors(periods=[5, 10, 20])
+    af.add_price_volume_correlation(periods=[20, 60])
 
     print("\n2.6 添加趋势强度因子")
-    af.add_trend_strength([20, 60])
-    af.add_breakout_factors([20, 60])
+    af.add_trend_strength(periods=[20, 60])
+    af.add_breakout_factors(periods=[20, 60])
 
     print("\n2.7 添加流动性因子")
-    af.add_liquidity_factors([20])
+    af.add_liquidity_factors(periods=[20])
 
     result_df = af.get_dataframe()
     factor_names = af.get_factor_names()

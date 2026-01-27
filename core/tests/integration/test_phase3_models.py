@@ -11,9 +11,9 @@ from pathlib import Path
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
 
-from models.lightgbm_model import LightGBMStockModel
-from models.model_evaluator import ModelEvaluator
-from models.model_trainer import ModelTrainer
+from src.models.lightgbm_model import LightGBMStockModel
+from src.models.model_evaluator import ModelEvaluator
+from src.models.model_trainer import ModelTrainer, TrainingConfig, DataSplitConfig
 
 import pandas as pd
 import numpy as np
@@ -218,7 +218,7 @@ def test_model_trainer():
 
     # 创建训练器
     print("\n3.2 创建LightGBM训练器")
-    trainer = ModelTrainer(
+    config = TrainingConfig(
         model_type='lightgbm',
         model_params={
             'learning_rate': 0.1,
@@ -227,18 +227,19 @@ def test_model_trainer():
         },
         output_dir=str(project_root / 'data' / 'test_models')
     )
+    trainer = ModelTrainer(config=config)
 
     # 准备数据
     print("\n3.3 数据分割")
+    split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
     X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
         df, feature_cols, 'target',
-        train_ratio=0.7,
-        valid_ratio=0.15
+        split_config=split_config
     )
 
     # 训练
     print("\n3.4 训练模型")
-    trainer.train(X_train, y_train, X_valid, y_valid, verbose_eval=0)
+    trainer.train(X_train, y_train, X_valid, y_valid)
     print("  ✓ 训练完成")
 
     # 评估
@@ -259,9 +260,10 @@ def test_model_trainer():
 
     # 加载模型
     print("\n3.7 加载模型")
-    new_trainer = ModelTrainer(
+    new_config = TrainingConfig(
         output_dir=str(project_root / 'data' / 'test_models')
     )
+    new_trainer = ModelTrainer(config=new_config)
     new_trainer.load_model('trainer_test_model')
     print("  ✓ 模型已加载")
 
