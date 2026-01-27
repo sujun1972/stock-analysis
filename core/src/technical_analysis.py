@@ -6,10 +6,10 @@ import seaborn as sns
 
 try:
     # Prefer package-relative import when used as part of the src package
-    from .config.config import DATA_PATH
+    from .config import DATA_PATH
 except ImportError:
     # Fallback for direct script execution
-    from config.config import DATA_PATH
+    from config import DATA_PATH
 from loguru import logger
 
 class TechnicalAnalyzer:

@@ -7,26 +7,31 @@ import os
 
 try:
     # Prefer package-relative import when used as part of the src package
-    from .config.config import DATA_PATH, TUSHARE_TOKEN
+    from .config import DATA_PATH, TUSHARE_TOKEN, get_settings
 except ImportError:
     # Fallback for direct script execution (if src is not treated as a package)
-    from config.config import DATA_PATH, TUSHARE_TOKEN
+    from config import DATA_PATH, TUSHARE_TOKEN, get_settings
 from loguru import logger
 
+# 获取全局配置
+settings = get_settings()
+
 class DataFetcher:
-    def __init__(self, tushare_token=TUSHARE_TOKEN, data_source='akshare'):
+    def __init__(self, tushare_token=None, data_source=None):
         """
         初始化数据获取器
 
         参数:
-            tushare_token: Tushare Pro的Token（可选）
+            tushare_token: Tushare Pro的Token（可选,默认从配置读取）
             data_source: 数据源选择，可选 'akshare', 'tushare', 'yfinance'
-                        默认使用 'akshare' 作为主要数据源
+                        默认从配置读取
         """
-        self.data_source = data_source
-        self.tushare_token = tushare_token
-        if tushare_token:
-            ts.set_token(tushare_token)
+        # 从配置获取默认值
+        self.data_source = data_source or settings.data_source.provider
+        self.tushare_token = tushare_token or settings.data_source.tushare_token
+
+        if self.tushare_token:
+            ts.set_token(self.tushare_token)
             self.pro = ts.pro_api()
         else:
             self.pro = None

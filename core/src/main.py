@@ -6,15 +6,18 @@ try:
     # Prefer package-relative imports when running as a module (python -m src.main)
     from .data_fetcher import DataFetcher
     from .technical_analysis import TechnicalAnalyzer
-    from .config.config import DATA_PATH
+    from .config import DATA_PATH, get_settings
 except ImportError:
     # Fallback for running as a script from project root
     from data_fetcher import DataFetcher
     from technical_analysis import TechnicalAnalyzer
-    from config.config import DATA_PATH
+    from config import DATA_PATH, get_settings
 
 from openai import OpenAI  # 确保已安装 openai 库
 from loguru import logger
+
+# 获取配置
+settings = get_settings()
 
 technical_analysis_system_prompt = """
 你是一个专业的股票分析师。你的任务是根据用户提供的股票数据和技术指标，进行综合分析。
@@ -28,8 +31,8 @@ technical_analysis_system_prompt = """
 请以专业、客观且简洁的口吻进行回复，避免使用过于绝对的预测性词汇。
 """
  
-# 初始化 DeepSeek 客户端（从环境变量加载 API Key，例如通过 .env）
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+# 初始化 DeepSeek 客户端（从统一配置加载 API Key）
+DEEPSEEK_API_KEY = settings.data_source.deepseek_api_key
 
 deepseek_client: Optional[OpenAI]
 if DEEPSEEK_API_KEY:

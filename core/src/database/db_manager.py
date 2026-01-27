@@ -21,10 +21,10 @@ from .data_query_manager import DataQueryManager
 
 # 尝试加载配置
 try:
-    from ..config.config import DATABASE_CONFIG
+    from ..config import DATABASE_CONFIG
 except ImportError:
     try:
-        from config.config import DATABASE_CONFIG
+        from config import DATABASE_CONFIG
     except ImportError:
         # 默认配置（从环境变量读取，支持 Docker 环境）
         DATABASE_CONFIG = {

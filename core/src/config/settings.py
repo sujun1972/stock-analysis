@@ -81,6 +81,18 @@ class PathSettings(BaseSettings):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def get_results_path(self) -> Path:
+        """获取回测结果目录路径"""
+        path = Path(self.results_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    # 向后兼容属性
+    @property
+    def data_path(self) -> Path:
+        """兼容旧的 DATA_PATH (字符串形式)"""
+        return self.get_data_path()
+
 
 class MLSettings(BaseSettings):
     """机器学习配置"""
@@ -140,6 +152,8 @@ class Settings(BaseSettings):
         env_file = str(ENV_FILE) if ENV_FILE.exists() else None
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # 允许子配置从环境变量加载但不在父类验证
+        extra = "ignore"
 
     def get_database_config(self) -> dict:
         """
