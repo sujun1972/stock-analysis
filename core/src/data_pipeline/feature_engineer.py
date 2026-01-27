@@ -163,12 +163,12 @@ class FeatureEngineer:
             volume_periods = [5, 10, 20]
             trend_periods = [20, 60]
 
-        # 添加常用Alpha因子
-        af.add_momentum_factors(momentum_periods)
-        af.add_reversal_factors(reversal_short, reversal_long)
-        af.add_volatility_factors(volatility_periods)
-        af.add_volume_factors(volume_periods)
-        af.add_trend_strength(trend_periods)
+        # 添加常用Alpha因子（使用关键字参数）
+        af.add_momentum_factors(periods=momentum_periods)
+        af.add_reversal_factors(short_periods=reversal_short, long_periods=reversal_long)
+        af.add_volatility_factors(periods=volatility_periods)
+        af.add_volume_factors(periods=volume_periods)
+        af.add_trend_strength(periods=trend_periods)
 
         df = af.get_dataframe()
 

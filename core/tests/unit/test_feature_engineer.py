@@ -103,10 +103,10 @@ class TestFeatureEngineer(unittest.TestCase):
         self.assertIn('MACD_SIGNAL', result.columns)
         self.assertIn('MACD_HIST', result.columns)
 
-        # 验证 KDJ 指标
-        self.assertIn('K', result.columns)
-        self.assertIn('D', result.columns)
-        self.assertIn('J', result.columns)
+        # 验证 KDJ 指标（正确的列名格式）
+        self.assertIn('KDJ_K', result.columns)
+        self.assertIn('KDJ_D', result.columns)
+        self.assertIn('KDJ_J', result.columns)
 
         # 验证布林带
         self.assertIn('BOLL_UPPER', result.columns)
@@ -123,13 +123,13 @@ class TestFeatureEngineer(unittest.TestCase):
         df = self.engineer._compute_technical_indicators(self.test_data.copy())
         result = self.engineer._compute_alpha_factors(df)
 
-        # 验证动量因子
-        momentum_cols = [col for col in result.columns if 'MOMENTUM' in col]
-        self.assertGreater(len(momentum_cols), 0)
+        # 验证动量因子（正确的列名格式：MOM5, MOM10等）
+        momentum_cols = [col for col in result.columns if col.startswith('MOM')]
+        self.assertGreater(len(momentum_cols), 0, f"没有找到动量因子，当前列: {result.columns.tolist()}")
 
-        # 验证波动率因子
-        vol_cols = [col for col in result.columns if 'VOLATILITY' in col or 'VOL_' in col]
-        self.assertGreater(len(vol_cols), 0)
+        # 验证波动率因子（正确的列名格式：VOLATILITY5等）
+        vol_cols = [col for col in result.columns if 'VOLATILITY' in col]
+        self.assertGreater(len(vol_cols), 0, f"没有找到波动率因子，当前列: {result.columns.tolist()}")
 
         print(f"  ✓ Alpha因子计算成功")
 
@@ -144,9 +144,9 @@ class TestFeatureEngineer(unittest.TestCase):
         self.assertIn('RETURN_3D', result.columns)
         self.assertIn('RETURN_5D', result.columns)
 
-        # 验证 OHLC 特征
-        ohlc_cols = [col for col in result.columns if any(x in col for x in ['HIGH_LOW', 'CLOSE_OPEN'])]
-        self.assertGreater(len(ohlc_cols), 0)
+        # 验证 OHLC 特征（实际列名：BODY_STRENGTH, LOWER_SHADOW_RATIO等）
+        ohlc_cols = [col for col in result.columns if any(x in col for x in ['BODY', 'SHADOW', 'RANGE'])]
+        self.assertGreater(len(ohlc_cols), 0, f"没有找到OHLC特征，当前列: {result.columns.tolist()}")
 
         # 验证时间特征
         self.assertIn('DAY_OF_WEEK', result.columns)
