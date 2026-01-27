@@ -292,6 +292,10 @@ class DataSplitter:
             how='left'
         )
 
+        # 3.5. 处理重复匹配：如果原始数据有重复行，merge会产生多个匹配
+        # 对每个_order保留第一个匹配即可
+        merged = merged.drop_duplicates(subset=['_order'], keep='first')
+
         # 4. 按原始顺序排序并提取目标值
         merged = merged.sort_values('_order')
         y_resampled = merged['_target'].values
