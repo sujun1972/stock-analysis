@@ -20,8 +20,11 @@ import numpy as np
 from pathlib import Path
 import pickle
 import json
+import re
+import threading
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any, Type
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import warnings
 
 from .base_storage import BaseStorage
@@ -29,23 +32,7 @@ from .parquet_storage import ParquetStorage
 from .hdf5_storage import HDF5Storage
 from .csv_storage import CSVStorage
 
-# 尝试导入 loguru，如果不存在则使用简单的后备方案
-try:
-    from utils.logger import logger
-except ImportError:
-    try:
-        from loguru import logger
-    except ImportError:
-        class SimpleLogger:
-            @staticmethod
-            def debug(msg): pass
-            @staticmethod
-            def info(msg): print(msg)
-            @staticmethod
-            def warning(msg): print(f"WARNING: {msg}")
-            @staticmethod
-            def error(msg): print(f"ERROR: {msg}")
-        logger = SimpleLogger()
+from utils.logger import logger
 
 warnings.filterwarnings('ignore')
 
@@ -54,7 +41,7 @@ class FeatureStorage:
     """特征存储管理器（主接口类）"""
 
     # 存储后端映射
-    STORAGE_BACKENDS = {
+    STORAGE_BACKENDS: Dict[str, Type[BaseStorage]] = {
         'parquet': ParquetStorage,
         'hdf5': HDF5Storage,
         'csv': CSVStorage
@@ -75,6 +62,9 @@ class FeatureStorage:
         self.storage_dir = Path(storage_dir)
         self.format = format
         self.metadata_file = self.storage_dir / 'metadata.json'
+
+        # 元数据线程锁（保证并发安全）
+        self._metadata_lock = threading.RLock()
 
         # 创建目录结构
         self._init_storage_structure()
@@ -123,20 +113,29 @@ class FeatureStorage:
 
         logger.debug(f"存储目录结构初始化完成: {self.storage_dir}")
 
-    def _load_metadata(self) -> dict:
-        """加载元数据"""
-        if self.metadata_file.exists():
-            try:
-                with open(self.metadata_file, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-                logger.debug(f"元数据加载成功: {len(metadata.get('stocks', {}))} 只股票")
-                return metadata
-            except Exception as e:
-                logger.error(f"元数据加载失败: {e}")
+    def _load_metadata(self) -> Dict[str, Any]:
+        """
+        加载元数据（线程安全）
+
+        Returns:
+            元数据字典
+        """
+        with self._metadata_lock:
+            if self.metadata_file.exists():
+                try:
+                    with open(self.metadata_file, 'r', encoding='utf-8') as f:
+                        metadata = json.load(f)
+                    logger.debug(f"元数据加载成功: {len(metadata.get('stocks', {}))} 只股票")
+                    return metadata
+                except json.JSONDecodeError as e:
+                    logger.error(f"元数据 JSON 解析失败: {e}")
+                    return self._create_empty_metadata()
+                except Exception as e:
+                    logger.error(f"元数据加载失败: {e}")
+                    return self._create_empty_metadata()
+            else:
+                logger.debug("元数据文件不存在，创建新的元数据")
                 return self._create_empty_metadata()
-        else:
-            logger.debug("元数据文件不存在，创建新的元数据")
-            return self._create_empty_metadata()
 
     def _create_empty_metadata(self) -> dict:
         """创建空元数据结构"""
@@ -147,15 +146,30 @@ class FeatureStorage:
             'feature_versions': {}
         }
 
-    def _save_metadata(self):
-        """保存元数据"""
-        try:
-            self.metadata['updated_at'] = datetime.now().isoformat()
-            with open(self.metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(self.metadata, indent=2, ensure_ascii=False, fp=f)
-            logger.debug("元数据保存成功")
-        except Exception as e:
-            logger.error(f"元数据保存失败: {e}")
+    def _save_metadata(self) -> bool:
+        """
+        保存元数据（线程安全）
+
+        Returns:
+            是否保存成功
+        """
+        with self._metadata_lock:
+            try:
+                self.metadata['updated_at'] = datetime.now().isoformat()
+
+                # 先写入临时文件，然后原子性重命名（避免写入过程中崩溃导致文件损坏）
+                temp_file = self.metadata_file.with_suffix('.json.tmp')
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    json.dump(self.metadata, indent=2, ensure_ascii=False, fp=f)
+
+                # 原子性重命名
+                temp_file.replace(self.metadata_file)
+
+                logger.debug("元数据保存成功")
+                return True
+            except Exception as e:
+                logger.error(f"元数据保存失败: {e}")
+                return False
 
     # ==================== 特征保存 ====================
 
@@ -165,7 +179,7 @@ class FeatureStorage:
         stock_code: str,
         feature_type: str = 'transformed',
         version: str = 'v1',
-        metadata: dict = None
+        metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         保存特征数据
@@ -181,6 +195,11 @@ class FeatureStorage:
             是否保存成功
         """
         try:
+            # 验证输入
+            if df.empty:
+                logger.warning(f"保存失败: DataFrame 为空 (股票={stock_code}, 类型={feature_type})")
+                return False
+
             # 构建文件路径
             file_path = self.backend.build_file_path(stock_code, feature_type, version)
 
@@ -188,6 +207,7 @@ class FeatureStorage:
             success = self.backend.save(df, file_path)
 
             if not success:
+                logger.error(f"后端保存失败: 股票={stock_code}, 类型={feature_type}")
                 return False
 
             # 更新元数据
@@ -208,7 +228,11 @@ class FeatureStorage:
                 'metadata': metadata or {}
             }
 
-            self._save_metadata()
+            if not self._save_metadata():
+                logger.warning(
+                    f"元数据保存失败，但特征文件已保存: "
+                    f"股票={stock_code}, 类型={feature_type}"
+                )
 
             logger.info(
                 f"特征保存成功: 股票={stock_code}, 类型={feature_type}, "
@@ -217,8 +241,14 @@ class FeatureStorage:
 
             return True
 
+        except (IOError, OSError) as e:
+            logger.error(f"文件系统错误: {e} (股票={stock_code}, 类型={feature_type})")
+            return False
         except Exception as e:
-            logger.error(f"保存特征失败: {e}")
+            logger.error(
+                f"保存特征失败: {e} (股票={stock_code}, 类型={feature_type})",
+                exc_info=True
+            )
             return False
 
     # ==================== 特征加载 ====================
@@ -265,15 +295,31 @@ class FeatureStorage:
 
             return df
 
+        except FileNotFoundError as e:
+            logger.warning(
+                f"特征文件不存在: 股票={stock_code}, 类型={feature_type}, "
+                f"版本={version}"
+            )
+            return None
+        except (IOError, OSError) as e:
+            logger.error(
+                f"文件系统错误: {e} (股票={stock_code}, 类型={feature_type})"
+            )
+            return None
         except Exception as e:
-            logger.error(f"加载特征失败: {e}")
+            logger.error(
+                f"加载特征失败: {e} (股票={stock_code}, 类型={feature_type})",
+                exc_info=True
+            )
             return None
 
     def load_multiple_stocks(
         self,
-        stock_codes: list,
+        stock_codes: List[str],
         feature_type: str = 'transformed',
-        version: str = None
+        version: Optional[str] = None,
+        parallel: bool = True,
+        max_workers: int = 4
     ) -> Dict[str, pd.DataFrame]:
         """
         批量加载多只股票的特征
@@ -282,18 +328,43 @@ class FeatureStorage:
             stock_codes: 股票代码列表
             feature_type: 特征类型
             version: 版本号
+            parallel: 是否使用并发加载（默认开启）
+            max_workers: 最大并发线程数
 
         返回:
             {股票代码: 特征DataFrame} 字典
         """
         features_dict = {}
 
-        logger.info(f"批量加载开始: {len(stock_codes)} 只股票, 类型={feature_type}")
+        logger.info(
+            f"批量加载开始: {len(stock_codes)} 只股票, 类型={feature_type}, "
+            f"并发={parallel}"
+        )
 
-        for stock_code in stock_codes:
-            df = self.load_features(stock_code, feature_type, version)
-            if df is not None:
-                features_dict[stock_code] = df
+        if parallel and len(stock_codes) > 1:
+            # 并发加载
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_stock = {
+                    executor.submit(
+                        self.load_features, stock_code, feature_type, version
+                    ): stock_code
+                    for stock_code in stock_codes
+                }
+
+                for future in as_completed(future_to_stock):
+                    stock_code = future_to_stock[future]
+                    try:
+                        df = future.result()
+                        if df is not None:
+                            features_dict[stock_code] = df
+                    except Exception as e:
+                        logger.error(f"并发加载失败: 股票={stock_code}, 错误={e}")
+        else:
+            # 串行加载
+            for stock_code in stock_codes:
+                df = self.load_features(stock_code, feature_type, version)
+                if df is not None:
+                    features_dict[stock_code] = df
 
         logger.info(
             f"批量加载完成: 成功 {len(features_dict)}/{len(stock_codes)} 只股票"
@@ -305,7 +376,7 @@ class FeatureStorage:
 
     def save_scaler(
         self,
-        scaler: object,
+        scaler: Any,
         scaler_name: str,
         version: str = 'v1'
     ) -> bool:
@@ -341,7 +412,7 @@ class FeatureStorage:
         self,
         scaler_name: str,
         version: str = 'v1'
-    ) -> Optional[object]:
+    ) -> Optional[Any]:
         """
         加载Scaler对象
 
@@ -393,7 +464,7 @@ class FeatureStorage:
 
         return sorted(stock_codes)
 
-    def get_stock_info(self, stock_code: str) -> Optional[dict]:
+    def get_stock_info(self, stock_code: str) -> Optional[Dict[str, Any]]:
         """
         获取股票的特征信息
 
@@ -478,13 +549,34 @@ class FeatureStorage:
             return False
 
     def _get_next_version(self, stock_code: str, feature_type: str) -> str:
-        """获取下一个版本号"""
+        """
+        获取下一个版本号
+
+        支持的版本格式: v1, v2, v3, ... 或 1, 2, 3, ...
+        如果版本格式不规范，默认返回 v1
+
+        Args:
+            stock_code: 股票代码
+            feature_type: 特征类型
+
+        Returns:
+            下一个版本号字符串
+        """
         if (stock_code in self.metadata['stocks'] and
             feature_type in self.metadata['stocks'][stock_code]):
             current_version = self.metadata['stocks'][stock_code][feature_type]['version']
-            # 提取版本号数字
-            version_num = int(current_version.replace('v', ''))
-            return f"v{version_num + 1}"
+
+            # 使用正则表达式提取版本号
+            match = re.match(r'v?(\d+)', current_version)
+            if match:
+                version_num = int(match.group(1))
+                return f"v{version_num + 1}"
+            else:
+                logger.warning(
+                    f"版本格式不规范: {current_version}, 重置为 v1 "
+                    f"(股票={stock_code}, 类型={feature_type})"
+                )
+                return 'v1'
         else:
             return 'v1'
 
@@ -552,9 +644,18 @@ class FeatureStorage:
 
     # ==================== 统计信息 ====================
 
-    def get_statistics(self) -> dict:
-        """获取存储统计信息"""
-        stats = {
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        获取存储统计信息
+
+        Returns:
+            包含统计信息的字典:
+            - total_stocks: 股票总数
+            - feature_types: 各类型特征数量
+            - storage_size: 存储大小（字节）
+            - storage_size_mb: 存储大小（MB）
+        """
+        stats: Dict[str, Any] = {
             'total_stocks': len(self.metadata['stocks']),
             'feature_types': {},
             'storage_size': 0
@@ -567,14 +668,20 @@ class FeatureStorage:
                     stats['feature_types'][feature_type] = 0
                 stats['feature_types'][feature_type] += 1
 
-        # 计算存储大小
-        for subdir in self.storage_dir.iterdir():
-            if subdir.is_dir():
-                for file in subdir.glob('*'):
-                    if file.is_file():
-                        stats['storage_size'] += file.stat().st_size
+        # 计算存储大小（安全处理文件访问错误）
+        try:
+            for subdir in self.storage_dir.iterdir():
+                if subdir.is_dir():
+                    for file in subdir.glob('*'):
+                        if file.is_file():
+                            try:
+                                stats['storage_size'] += file.stat().st_size
+                            except (OSError, IOError) as e:
+                                logger.warning(f"无法获取文件大小: {file}, 错误: {e}")
+        except Exception as e:
+            logger.error(f"计算存储大小失败: {e}")
 
-        stats['storage_size_mb'] = stats['storage_size'] / (1024 * 1024)
+        stats['storage_size_mb'] = round(stats['storage_size'] / (1024 * 1024), 2)
 
         return stats
 

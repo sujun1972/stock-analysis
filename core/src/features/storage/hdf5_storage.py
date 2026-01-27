@@ -8,27 +8,11 @@ HDF5 格式存储后端
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 import pandas as pd
 from .base_storage import BaseStorage
 
-# 尝试导入 loguru，如果不存在则使用简单的后备方案
-try:
-    from utils.logger import logger
-except ImportError:
-    try:
-        from loguru import logger
-    except ImportError:
-        class SimpleLogger:
-            @staticmethod
-            def debug(msg): pass
-            @staticmethod
-            def info(msg): print(msg)
-            @staticmethod
-            def warning(msg): print(f"WARNING: {msg}")
-            @staticmethod
-            def error(msg): print(f"ERROR: {msg}")
-        logger = SimpleLogger()
+from utils.logger import logger
 
 
 class HDF5Storage(BaseStorage):
@@ -50,7 +34,7 @@ class HDF5Storage(BaseStorage):
         self,
         df: pd.DataFrame,
         file_path: Path,
-        **kwargs
+        **kwargs: Any
     ) -> bool:
         """
         保存 DataFrame 为 HDF5 格式
@@ -91,7 +75,7 @@ class HDF5Storage(BaseStorage):
     def load(
         self,
         file_path: Path,
-        **kwargs
+        **kwargs: Any
     ) -> Optional[pd.DataFrame]:
         """
         从 HDF5 文件加载 DataFrame

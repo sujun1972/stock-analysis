@@ -9,23 +9,7 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 
-# 尝试导入 loguru，如果不存在则使用简单的后备方案
-try:
-    from utils.logger import logger
-except ImportError:
-    try:
-        from loguru import logger
-    except ImportError:
-        class SimpleLogger:
-            @staticmethod
-            def debug(msg): pass
-            @staticmethod
-            def info(msg): print(msg)
-            @staticmethod
-            def warning(msg): print(f"WARNING: {msg}")
-            @staticmethod
-            def error(msg): print(f"ERROR: {msg}")
-        logger = SimpleLogger()
+from utils.logger import logger
 
 
 class BaseStorage(ABC):
