@@ -17,7 +17,7 @@ sys.path.insert(0, str(project_root / 'core' / 'src'))
 
 from src.providers.provider_factory import (
     DataProviderFactory,
-    provider,
+    provider as provider_decorator,
     get_provider,
     register_provider,
     list_providers
@@ -42,6 +42,21 @@ class TestProvider(BaseDataProvider):
     def get_daily_data(self, code, start_date=None, end_date=None, adjust='qfq'):
         pass
 
+    def get_new_stocks(self, days=30):
+        pass
+
+    def get_delisted_stocks(self):
+        pass
+
+    def get_daily_batch(self, codes, start_date=None, end_date=None, adjust='qfq'):
+        pass
+
+    def get_minute_data(self, code, period='5', start_date=None, end_date=None, adjust=''):
+        pass
+
+    def get_realtime_quotes(self, codes=None):
+        pass
+
 
 class TestProviderWithToken(BaseDataProvider):
     """需要 Token 的测试提供者"""
@@ -57,6 +72,21 @@ class TestProviderWithToken(BaseDataProvider):
         pass
 
     def get_daily_data(self, code, start_date=None, end_date=None, adjust='qfq'):
+        pass
+
+    def get_new_stocks(self, days=30):
+        pass
+
+    def get_delisted_stocks(self):
+        pass
+
+    def get_daily_batch(self, codes, start_date=None, end_date=None, adjust='qfq'):
+        pass
+
+    def get_minute_data(self, code, period='5', start_date=None, end_date=None, adjust=''):
+        pass
+
+    def get_realtime_quotes(self, codes=None):
         pass
 
 
@@ -347,14 +377,16 @@ class TestProviderQuery(unittest.TestCase):
         """测试按特性查找提供者"""
         print("\n[测试] 按特性查找提供者...")
 
-        # 查找支持 stock_list 的提供者
+        # 查找支持 stock_list 的提供者 (包括builtin providers: akshare, tushare)
         providers = DataProviderFactory.get_provider_by_feature('stock_list')
-        self.assertEqual(len(providers), 2)
+        self.assertGreaterEqual(len(providers), 2)  # 至少有2个测试provider
+        self.assertIn('provider_a', providers)
+        self.assertIn('provider_b', providers)
 
         # 查找支持 realtime_quotes 的提供者
         providers = DataProviderFactory.get_provider_by_feature('realtime_quotes')
-        self.assertEqual(len(providers), 1)
-        self.assertEqual(providers[0], 'provider_b')
+        self.assertGreaterEqual(len(providers), 1)  # 至少有provider_b
+        self.assertIn('provider_b', providers)
 
         # 查找不存在的特性
         providers = DataProviderFactory.get_provider_by_feature('nonexistent')
@@ -420,7 +452,7 @@ class TestDecorator(unittest.TestCase):
         """测试 @provider 装饰器"""
         print("\n[测试] @provider 装饰器...")
 
-        @provider(
+        @provider_decorator(
             name='decorated',
             description="装饰器注册的提供者",
             features=['stock_list'],
@@ -434,6 +466,21 @@ class TestDecorator(unittest.TestCase):
                 pass
 
             def get_daily_data(self, code, start_date=None, end_date=None, adjust='qfq'):
+                pass
+
+            def get_new_stocks(self, days=30):
+                pass
+
+            def get_delisted_stocks(self):
+                pass
+
+            def get_daily_batch(self, codes, start_date=None, end_date=None, adjust='qfq'):
+                pass
+
+            def get_minute_data(self, code, period='5', start_date=None, end_date=None, adjust=''):
+                pass
+
+            def get_realtime_quotes(self, codes=None):
                 pass
 
         # 验证已注册

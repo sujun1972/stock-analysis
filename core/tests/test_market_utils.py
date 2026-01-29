@@ -399,6 +399,7 @@ class TestGetNextTradingSession:
     def test_before_call_auction(self, mock_datetime):
         """测试集合竞价前"""
         mock_datetime.now.return_value = datetime(2024, 1, 1, 8, 0)  # Monday 8:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time == datetime(2024, 1, 1, 9, 15)
@@ -408,6 +409,7 @@ class TestGetNextTradingSession:
     def test_during_call_auction(self, mock_datetime):
         """测试集合竞价时段"""
         mock_datetime.now.return_value = datetime(2024, 1, 1, 9, 20)  # Monday 9:20
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time == datetime(2024, 1, 1, 9, 30)
@@ -417,6 +419,7 @@ class TestGetNextTradingSession:
     def test_morning_session(self, mock_datetime):
         """测试早盘时段"""
         mock_datetime.now.return_value = datetime(2024, 1, 1, 10, 0)  # Monday 10:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time == datetime(2024, 1, 1, 13, 0)
@@ -426,6 +429,7 @@ class TestGetNextTradingSession:
     def test_lunch_break(self, mock_datetime):
         """测试午间休市"""
         mock_datetime.now.return_value = datetime(2024, 1, 1, 12, 0)  # Monday 12:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time == datetime(2024, 1, 1, 13, 0)
@@ -435,6 +439,7 @@ class TestGetNextTradingSession:
     def test_afternoon_session(self, mock_datetime):
         """测试午盘时段"""
         mock_datetime.now.return_value = datetime(2024, 1, 1, 14, 0)  # Monday 14:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         # 应该返回下一交易日
@@ -446,6 +451,7 @@ class TestGetNextTradingSession:
     def test_after_hours(self, mock_datetime):
         """测试盘后时间"""
         mock_datetime.now.return_value = datetime(2024, 1, 1, 16, 0)  # Monday 16:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time.date() == datetime(2024, 1, 2).date()  # Tuesday
@@ -456,6 +462,7 @@ class TestGetNextTradingSession:
     def test_saturday_to_monday(self, mock_datetime):
         """测试周六到下周一"""
         mock_datetime.now.return_value = datetime(2024, 1, 6, 10, 0)  # Saturday 10:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time.date() == datetime(2024, 1, 8).date()  # Monday
@@ -466,6 +473,7 @@ class TestGetNextTradingSession:
     def test_sunday_to_monday(self, mock_datetime):
         """测试周日到下周一"""
         mock_datetime.now.return_value = datetime(2024, 1, 7, 10, 0)  # Sunday 10:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time.date() == datetime(2024, 1, 8).date()  # Monday
@@ -476,6 +484,7 @@ class TestGetNextTradingSession:
     def test_friday_afternoon_to_monday(self, mock_datetime):
         """测试周五下午到下周一"""
         mock_datetime.now.return_value = datetime(2024, 1, 5, 16, 0)  # Friday 16:00
+        mock_datetime.combine = datetime.combine  # Use real datetime.combine
         next_time, desc = MarketUtils.get_next_trading_session()
 
         assert next_time.date() == datetime(2024, 1, 8).date()  # Monday
