@@ -97,10 +97,11 @@ class TestStockListMethods(unittest.TestCase):
         """测试成功获取股票列表"""
         print("\n[测试] 成功获取股票列表...")
 
-        # Mock 返回数据
+        # Mock 返回数据 - 使用正确的列名
         mock_df = pd.DataFrame({
-            '代码': ['000001', '600000', '000002'],
-            '名称': ['平安银行', '浦发银行', '万科A']
+            'code': ['000001', '600000', '000002'],
+            'name': ['平安银行', '浦发银行', '万科A'],
+            'market': ['深圳主板', '上海主板', '深圳主板']
         })
         self.mock_client_instance.execute.return_value = mock_df
 
@@ -196,20 +197,22 @@ class TestStockListMethods(unittest.TestCase):
         """测试成功获取退市股票"""
         print("\n[测试] 成功获取退市股票...")
 
-        # Mock 上交所数据
+        # Mock 上交所数据 - 使用正确的列名
         mock_df_sh = pd.DataFrame({
-            '证券代码': ['600001', '600002'],
-            '证券简称': ['退市股A', '退市股B'],
-            '上市日期': ['2010-01-01', '2012-01-01'],
-            '暂停上市日期': ['2023-12-31', '2023-11-30']
+            'code': ['600001', '600002'],
+            'name': ['退市股A', '退市股B'],
+            'list_date': ['2010-01-01', '2012-01-01'],
+            'delist_date': ['2023-12-31', '2023-11-30'],
+            'market': ['上海主板', '上海主板']
         })
 
-        # Mock 深交所数据
+        # Mock 深交所数据 - 使用正确的列名
         mock_df_sz = pd.DataFrame({
-            '证券代码': ['000001'],
-            '证券简称': ['退市股C'],
-            '上市日期': ['2011-01-01'],
-            '终止上市日期': ['2023-10-31']
+            'code': ['000001'],
+            'name': ['退市股C'],
+            'list_date': ['2011-01-01'],
+            'delist_date': ['2023-10-31'],
+            'market': ['深圳主板']
         })
 
         self.mock_client_instance.execute.side_effect = [mock_df_sh, mock_df_sz]

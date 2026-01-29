@@ -243,13 +243,17 @@ def save_stock_list_to_database(stock_df: pd.DataFrame) -> bool:
         # 保存到数据库
         # 使用 if_exists='replace' 会先清空表再插入，适合全量更新
         # 使用 if_exists='append' 会追加数据，但可能导致重复
-        stock_df.to_sql(
-            'stocks', 
-            engine, 
-            if_exists='replace',  # 替换原有数据
-            index=False,
-            method='multi'  # 批量插入
-        )
+        # 抑制 pandas 关于 DBAPI2 连接的警告
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='pandas only supports SQLAlchemy')
+            stock_df.to_sql(
+                'stocks',
+                engine,
+                if_exists='replace',  # 替换原有数据
+                index=False,
+                method='multi'  # 批量插入
+            )
         
         logger.success(f"✅ 成功保存 {len(stock_df)} 只股票到数据库")
         return True

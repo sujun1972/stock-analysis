@@ -93,7 +93,6 @@ def test_technical_indicators():
             print(f"  {indicator:12s}: {valid_pct:.1f}% 有效数据")
 
     print("\n✅ 测试1通过")
-    return result_df
 
 
 def test_alpha_factors():
@@ -153,7 +152,6 @@ def test_alpha_factors():
             print(f"  {factor:20s}: {valid_pct:.1f}% 有效, 均值={mean_val:.2f}, 标准差={std_val:.2f}")
 
     print("\n✅ 测试2通过")
-    return result_df
 
 
 def test_feature_transformer():
@@ -216,7 +214,6 @@ def test_feature_transformer():
     print(f"  无穷值数: {np.isinf(result_df.select_dtypes(include=[np.number])).sum().sum()}")
 
     print("\n✅ 测试3通过")
-    return result_df
 
 
 def test_feature_storage():

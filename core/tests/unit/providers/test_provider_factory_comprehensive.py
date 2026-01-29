@@ -271,11 +271,30 @@ class TestProviderCreation(unittest.TestCase):
         """测试创建默认提供者"""
         print("\n[测试] 创建默认提供者...")
 
-        provider = DataProviderFactory.create_default_provider()
+        # 模拟Tushare token以避免配置错误
+        import os
+        old_token = os.environ.get('DATA_TUSHARE_TOKEN')
+        os.environ['DATA_TUSHARE_TOKEN'] = 'test_token_for_default_provider'
 
-        self.assertIsInstance(provider, BaseDataProvider)
+        try:
+            # 清除配置缓存，确保新的环境变量生效
+            from src.config import get_settings
+            get_settings.cache_clear()
 
-        print("  ✓ 默认提供者创建成功")
+            # 直接传递token作为参数，确保创建成功
+            provider = DataProviderFactory.create_default_provider(token='test_token_for_default_provider')
+            self.assertIsInstance(provider, BaseDataProvider)
+            print("  ✓ 默认提供者创建成功")
+        finally:
+            # 恢复环境变量
+            if old_token:
+                os.environ['DATA_TUSHARE_TOKEN'] = old_token
+            else:
+                os.environ.pop('DATA_TUSHARE_TOKEN', None)
+
+            # 清除缓存
+            from src.config import get_settings
+            get_settings.cache_clear()
 
 
 class TestProviderQuery(unittest.TestCase):

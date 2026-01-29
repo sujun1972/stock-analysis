@@ -81,12 +81,24 @@ class TestDataSourceSettings:
     def test_data_source_settings_defaults(self):
         """测试数据源设置默认值"""
         from src.config.settings import DataSourceSettings
+        import os
 
-        settings = DataSourceSettings()
+        # 暂时清除环境变量以测试默认值
+        old_token = os.environ.pop('DATA_TUSHARE_TOKEN', None)
+        old_api_key = os.environ.pop('DATA_DEEPSEEK_API_KEY', None)
 
-        assert settings.provider == "akshare"
-        assert settings.tushare_token == ""
-        assert settings.deepseek_api_key == ""
+        try:
+            settings = DataSourceSettings()
+
+            assert settings.provider == "akshare"
+            assert settings.tushare_token == ""
+            assert settings.deepseek_api_key == ""
+        finally:
+            # 恢复环境变量
+            if old_token:
+                os.environ['DATA_TUSHARE_TOKEN'] = old_token
+            if old_api_key:
+                os.environ['DATA_DEEPSEEK_API_KEY'] = old_api_key
 
     def test_data_source_settings_custom_values(self):
         """测试数据源设置自定义值"""
@@ -131,13 +143,26 @@ class TestPathSettings:
     def test_path_settings_defaults(self):
         """测试路径设置默认值"""
         from src.config.settings import PathSettings
+        import os
 
-        settings = PathSettings()
+        # 暂时清除路径相关环境变量以测试默认值
+        env_vars_to_clear = ['PATH_DATA_DIR', 'PATH_MODELS_DIR', 'PATH_CACHE_DIR', 'PATH_RESULTS_DIR']
+        old_values = {}
+        for var in env_vars_to_clear:
+            old_values[var] = os.environ.pop(var, None)
 
-        assert settings.data_dir == "/data"
-        assert settings.models_dir == "/data/models/ml_models"
-        assert settings.cache_dir == "/data/pipeline_cache"
-        assert settings.results_dir == "/data/backtest_results"
+        try:
+            settings = PathSettings()
+
+            assert settings.data_dir == "/data"
+            assert settings.models_dir == "/data/models/ml_models"
+            assert settings.cache_dir == "/data/pipeline_cache"
+            assert settings.results_dir == "/data/backtest_results"
+        finally:
+            # 恢复环境变量
+            for var, value in old_values.items():
+                if value:
+                    os.environ[var] = value
 
     def test_path_settings_custom_values(self):
         """测试路径设置自定义值"""
@@ -530,11 +555,37 @@ class TestConvenienceFunctions:
 
     def test_get_models_dir_function(self):
         """测试 get_models_dir 便捷函数"""
-        from src.config.settings import get_models_dir
+        import tempfile
+        import os
+        from unittest.mock import patch
 
-        models_dir = get_models_dir()
+        # 必须在导入前设置环境变量
+        tmpdir = tempfile.mkdtemp()
+        os.environ['PATH_DATA_DIR'] = tmpdir
+        os.environ['PATH_MODELS_DIR'] = os.path.join(tmpdir, 'models')
 
-        assert isinstance(models_dir, Path)
+        try:
+            from src.config.settings import get_models_dir, get_settings
+
+            # 清除缓存
+            get_settings.cache_clear()
+
+            # Mock Path.mkdir 以避免只读文件系统问题
+            with patch('pathlib.Path.mkdir'):
+                models_dir = get_models_dir()
+                assert isinstance(models_dir, Path)
+        finally:
+            # 清理
+            os.environ.pop('PATH_DATA_DIR', None)
+            os.environ.pop('PATH_MODELS_DIR', None)
+
+            from src.config.settings import get_settings
+            get_settings.cache_clear()
+
+            # 清理临时目录
+            import shutil
+            if os.path.exists(tmpdir):
+                shutil.rmtree(tmpdir)
 
 
 class TestBackwardCompatibility:
@@ -683,18 +734,27 @@ class TestMainBlock:
         """测试 __main__ 块可以执行"""
         import subprocess
         import sys
+        import tempfile
+        import os
 
-        # 运行 settings.py 作为主程序
-        result = subprocess.run(
-            [sys.executable, '-m', 'src.config.settings'],
-            capture_output=True,
-            text=True,
-            cwd='/app/core'
-        )
+        # 使用临时目录避免只读文件系统问题
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env['PATH_DATA_DIR'] = tmpdir
+            env['PATH_MODELS_DIR'] = os.path.join(tmpdir, 'models')
 
-        # 验证输出包含预期内容
-        output = result.stdout + result.stderr
-        assert '测试配置管理模块' in output or '配置摘要' in output or result.returncode == 0
+            # 运行 settings.py 作为主程序
+            result = subprocess.run(
+                [sys.executable, '-m', 'src.config.settings'],
+                capture_output=True,
+                text=True,
+                cwd=os.getcwd(),
+                env=env
+            )
+
+            # 验证输出包含预期内容
+            output = result.stdout + result.stderr
+            assert '测试配置管理模块' in output or '配置摘要' in output or result.returncode == 0
 
 
 class TestImportCompatibility:

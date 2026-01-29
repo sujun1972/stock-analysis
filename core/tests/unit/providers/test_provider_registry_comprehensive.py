@@ -211,10 +211,12 @@ class TestProviderRegistration(unittest.TestCase):
 
         print("  ✓ 覆盖注册成功")
 
-    @patch.object(ProviderRegistry, 'initialize_builtin_providers')
-    def test_register_name_normalization(self, mock_init):
+    def test_register_name_normalization(self):
         """测试名称规范化"""
         print("\n[测试] 名称规范化...")
+
+        # 清理注册表
+        ProviderRegistry.clear()
 
         # 注册时使用大写和空格
         ProviderRegistry.register(
@@ -226,6 +228,7 @@ class TestProviderRegistration(unittest.TestCase):
         # 使用小写查询应该能找到
         self.assertTrue(ProviderRegistry.exists('mock_a'))
         self.assertTrue(ProviderRegistry.exists('  MOCK_A  '))
+        self.assertTrue(ProviderRegistry.exists('MOCK_A'))
 
         print("  ✓ 名称规范化正确")
 

@@ -437,7 +437,7 @@ class MomentumFactorCalculator(BaseFactorCalculator):
         for period in periods:
             try:
                 # 简单收益率动量
-                self.df[f'MOM{period}'] = self.df[price_col].pct_change(period) * 100
+                self.df[f'MOM{period}'] = self.df[price_col].pct_change(period, fill_method=None) * 100
 
                 # 对数收益率动量
                 self.df[f'MOM_LOG{period}'] = (
@@ -559,7 +559,7 @@ class ReversalFactorCalculator(BaseFactorCalculator):
         # 短期反转（负向动量）
         for period in short_periods:
             try:
-                self.df[f'REV{period}'] = -self.df[price_col].pct_change(period) * 100
+                self.df[f'REV{period}'] = -self.df[price_col].pct_change(period, fill_method=None) * 100
             except Exception as e:
                 logger.error(f"计算短期反转因子 REV{period} 失败: {e}")
 

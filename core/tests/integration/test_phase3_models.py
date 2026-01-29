@@ -127,7 +127,6 @@ def test_lightgbm_model():
     print("  ✓ 模型保存和加载成功")
 
     print("\n✅ 测试1通过")
-    return model, X_test, y_test
 
 
 def test_model_evaluator():
@@ -200,7 +199,6 @@ def test_model_evaluator():
     assert 'long_short_return' in metrics, "缺少多空收益指标"
 
     print("\n✅ 测试2通过")
-    return evaluator
 
 
 def test_model_trainer():
@@ -273,7 +271,6 @@ def test_model_trainer():
     print("  ✓ 加载后模型预测一致")
 
     print("\n✅ 测试3通过")
-    return trainer
 
 
 def test_integrated_workflow():
@@ -290,7 +287,7 @@ def test_integrated_workflow():
 
     # 使用便捷函数训练模型
     print("\n4.2 使用便捷函数训练模型")
-    from models.model_trainer import train_stock_model
+    from src.models.model_trainer import train_stock_model
 
     trainer, test_metrics = train_stock_model(
         df=df,

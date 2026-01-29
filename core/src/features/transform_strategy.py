@@ -274,7 +274,7 @@ class PriceChangeTransformStrategy(TransformStrategy):
         lookback_days = self.config['lookback_days']
         price_col = self.config['price_col']
 
-        price_changes = df[price_col].pct_change()
+        price_changes = df[price_col].pct_change(fill_method=None)
 
         for i in range(1, lookback_days + 1):
             df[f'PRICE_CHG_T-{i}'] = price_changes.shift(i) * 100
@@ -288,7 +288,7 @@ class PriceChangeTransformStrategy(TransformStrategy):
 
         for period in periods:
             # 简单收益率
-            df[f'RETURN_{period}D'] = df[price_col].pct_change(period) * 100
+            df[f'RETURN_{period}D'] = df[price_col].pct_change(period, fill_method=None) * 100
 
             # 对数收益率
             if self.config.get('include_log_returns', False):

@@ -75,14 +75,17 @@ class DataInsertManager:
             status_col = 'status' if 'status' in df.columns else None
 
             # 向量化构建记录
+            # 使用 where() 替代 fillna(None) 以兼容 pandas 2.x
+            import numpy as np
+
             records = list(zip(
                 df[code_col].fillna('').values,
                 df[name_col].fillna('').values,
                 df[market_col].fillna('').values if market_col in df.columns else [''] * len(df),
                 df[industry_col].fillna('').values if industry_col in df.columns else [''] * len(df),
                 df[area_col].fillna('').values if area_col in df.columns else [''] * len(df),
-                df[list_date_col].fillna(None).values if list_date_col in df.columns else [None] * len(df),
-                df[delist_date_col].fillna(None).values if delist_date_col in df.columns else [None] * len(df),
+                df[list_date_col].where(df[list_date_col].notna(), None).values if list_date_col in df.columns else [None] * len(df),
+                df[delist_date_col].where(df[delist_date_col].notna(), None).values if delist_date_col in df.columns else [None] * len(df),
                 df[status_col].fillna('正常').values if status_col in df.columns else ['正常'] * len(df),
                 [data_source] * len(df)
             ))

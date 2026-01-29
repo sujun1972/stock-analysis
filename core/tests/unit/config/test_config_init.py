@@ -468,28 +468,56 @@ class TestConfigIntegration:
 
     def test_config_types(self):
         """测试配置类型正确性"""
-        from src.config import (
-            get_settings,
-            get_database_config,
-            get_data_source,
-            get_models_dir,
-        )
+        import tempfile
+        import os
+        from unittest.mock import patch, MagicMock
 
-        settings = get_settings()
-        assert hasattr(settings, 'database')
-        assert hasattr(settings, 'data_source')
-        assert hasattr(settings, 'paths')
-        assert hasattr(settings, 'ml')
-        assert hasattr(settings, 'app')
+        # 必须在导入前设置环境变量
+        tmpdir = tempfile.mkdtemp()
+        os.environ['PATH_DATA_DIR'] = tmpdir
+        os.environ['PATH_MODELS_DIR'] = os.path.join(tmpdir, 'models')
 
-        db_config = get_database_config()
-        assert isinstance(db_config, dict)
+        try:
+            from src.config import (
+                get_settings,
+                get_database_config,
+                get_data_source,
+                get_models_dir,
+            )
 
-        data_source = get_data_source()
-        assert isinstance(data_source, str)
+            # 清除缓存，强制重新加载
+            get_settings.cache_clear()
 
-        models_dir = get_models_dir()
-        assert isinstance(models_dir, Path)
+            settings = get_settings()
+            assert hasattr(settings, 'database')
+            assert hasattr(settings, 'data_source')
+            assert hasattr(settings, 'paths')
+            assert hasattr(settings, 'ml')
+            assert hasattr(settings, 'app')
+
+            db_config = get_database_config()
+            assert isinstance(db_config, dict)
+
+            data_source = get_data_source()
+            assert isinstance(data_source, str)
+
+            # Mock Path.mkdir 以避免只读文件系统问题
+            with patch('pathlib.Path.mkdir'):
+                models_dir = get_models_dir()
+                assert isinstance(models_dir, Path)
+        finally:
+            # 清理环境变量和临时目录
+            os.environ.pop('PATH_DATA_DIR', None)
+            os.environ.pop('PATH_MODELS_DIR', None)
+
+            # 清除缓存
+            from src.config import get_settings
+            get_settings.cache_clear()
+
+            # 清理临时目录
+            import shutil
+            if os.path.exists(tmpdir):
+                shutil.rmtree(tmpdir)
 
 
 class TestConfigModuleCoverage:

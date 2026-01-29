@@ -238,7 +238,7 @@ class ProviderRegistry:
         cls.initialize_builtin_providers()
 
         with cls._lock:
-            return name.lower() in cls._providers
+            return name.lower().strip() in cls._providers
 
     @classmethod
     def get_all(cls) -> Dict[str, ProviderMetadata]:

@@ -71,7 +71,11 @@ class DataQueryManager:
 
             query += " ORDER BY date ASC"
 
-            df = pd.read_sql_query(query, conn, params=params, index_col='date', parse_dates=['date'])
+            # 抑制 pandas 关于 DBAPI2 连接的警告（我们知道使用 psycopg2）
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', message='pandas only supports SQLAlchemy')
+                df = pd.read_sql_query(query, conn, params=params, index_col='date', parse_dates=['date'])
 
             # 确保数值列是正确的类型
             numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'amount',
