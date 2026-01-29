@@ -43,7 +43,7 @@ python3 run_tests.py
 # 运行所有测试（带覆盖率报告）
 python3 run_tests.py --all
 
-# 快速测试（排除慢速的GRU模型测试）
+# 快速测试（排除慢速的GRU模型测试和外部API测试）
 python3 run_tests.py --fast
 
 # 只运行单元测试
@@ -120,9 +120,13 @@ start htmlcov/index.html
 
 ## ⚡ 性能优化建议
 
-**GRU模型测试很慢？**
+**GRU模型测试很慢？需要跳过外部API测试？**
 
-GRU深度学习模型的测试需要较长时间（每个测试约30-60秒）。推荐使用快速模式：
+快速模式会自动排除：
+- GRU深度学习模型测试（每个测试约30-60秒）
+- 外部API集成测试（AkShare、Tushare，需要网络连接和API token）
+
+推荐使用快速模式：
 
 ```bash
 python3 run_tests.py --fast
@@ -131,7 +135,9 @@ python3 run_tests.py --fast
 或手动排除：
 ```bash
 pytest tests/ --cov=src --cov-report=html \
-  --ignore=tests/unit/models/test_gru_model.py -v
+  --ignore=tests/unit/models/test_gru_model.py \
+  --ignore=tests/integration/providers/akshare/ \
+  --ignore=tests/integration/providers/test_tushare_provider.py -v
 ```
 
 ## 📈 测试统计
@@ -142,7 +148,7 @@ pytest tests/ --cov=src --cov-report=html \
 - **性能测试**: ~100个
 - **预计运行时间**:
   - 所有测试: ~60分钟
-  - 快速模式（排除GRU）: ~30分钟
+  - 快速模式（排除GRU和外部API）: ~15分钟
   - 只运行单元测试: ~20分钟
 
 ## 🔧 常见问题

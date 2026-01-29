@@ -126,7 +126,12 @@ def build_pytest_cmd(
     if exclude_slow:
         # 排除GRU模型测试（最慢的测试）
         cmd.append('--ignore=tests/unit/models/test_gru_model.py')
-        print_warning("已排除慢速GRU模型测试")
+        # 排除外部API集成测试（需要网络连接和API token）
+        cmd.append('--ignore=tests/integration/providers/akshare/')
+        cmd.append('--ignore=tests/integration/providers/test_tushare_provider.py')
+        # 排除根目录下的旧外部API测试
+        cmd.append('--ignore=tests/test_data_fetcher.py')
+        print_warning("已排除慢速GRU模型测试和外部API集成测试（AkShare, Tushare）")
 
     # 标记过滤
     if markers:
@@ -155,7 +160,7 @@ def show_menu():
     print("请选择要运行的测试:")
     print()
     print(f"{Colors.BOLD}[1]{Colors.ENDC} 运行所有测试 (带覆盖率报告)")
-    print(f"{Colors.BOLD}[2]{Colors.ENDC} 运行所有测试 (快速模式，排除慢速测试)")
+    print(f"{Colors.BOLD}[2]{Colors.ENDC} 运行所有测试 (快速模式，排除慢速测试和外部API测试)")
     print(f"{Colors.BOLD}[3]{Colors.ENDC} 只运行单元测试")
     print(f"{Colors.BOLD}[4]{Colors.ENDC} 只运行集成测试")
     print(f"{Colors.BOLD}[5]{Colors.ENDC} 只运行性能测试")
@@ -290,7 +295,7 @@ def main():
   %(prog)s                           # 交互式菜单
   %(prog)s --all                     # 运行所有测试
   %(prog)s --all --coverage          # 运行所有测试并生成覆盖率
-  %(prog)s --fast                    # 快速测试（排除慢速测试）
+  %(prog)s --fast                    # 快速测试（排除慢速测试和外部API测试）
   %(prog)s --unit                    # 只运行单元测试
   %(prog)s --integration             # 只运行集成测试
   %(prog)s --performance             # 只运行性能测试
@@ -302,7 +307,7 @@ def main():
     )
 
     parser.add_argument('--all', action='store_true', help='运行所有测试')
-    parser.add_argument('--fast', action='store_true', help='快速模式（排除慢速测试）')
+    parser.add_argument('--fast', action='store_true', help='快速模式（排除慢速测试和外部API测试）')
     parser.add_argument('--unit', action='store_true', help='运行单元测试')
     parser.add_argument('--integration', action='store_true', help='运行集成测试')
     parser.add_argument('--performance', action='store_true', help='运行性能测试')

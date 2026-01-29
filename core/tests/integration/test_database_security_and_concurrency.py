@@ -323,6 +323,7 @@ class TestDatabaseSecurityAndConcurrency(unittest.TestCase):
         mock_conn.cursor.return_value = mock_cursor
         mock_pool_instance = Mock()
         mock_pool_instance.getconn.return_value = mock_conn
+        mock_pool_instance.putconn = Mock()  # 添加 putconn mock
         mock_pool.return_value = mock_pool_instance
 
         db = DatabaseManager()
