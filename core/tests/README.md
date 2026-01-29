@@ -23,14 +23,13 @@ tests/
 │   ├── test_performance_iterrows.py
 │   └── test_performance_sample_balancing.py
 │
-├── run_tests.py        # 🆕 统一测试运行器（推荐）
-├── run_all_tests.py    # 原有的测试运行器（保留）
+├── run_tests.py        # 统一测试运行器
 └── README.md           # 本文件
 ```
 
 ## 🚀 快速开始
 
-### 方法1: 使用新的统一测试运行器 ⭐ 推荐
+### 方法1: 使用统一测试运行器 ⭐ 推荐
 
 **交互式菜单模式**（最简单）：
 ```bash
@@ -71,22 +70,7 @@ python3 run_tests.py --module unit/test_data_loader.py
 python3 run_tests.py --help
 ```
 
-### 方法2: 使用原有的测试运行器
-
-```bash
-# 运行所有测试
-python3 run_all_tests.py
-
-# 按类型运行
-python3 run_all_tests.py --type unit
-python3 run_all_tests.py --type integration
-python3 run_all_tests.py --type performance
-
-# 运行特定模块
-python3 run_all_tests.py --module unit.test_data_loader
-```
-
-### 方法3: 直接使用pytest
+### 方法2: 直接使用pytest
 
 ```bash
 # 运行所有测试并生成覆盖率报告
