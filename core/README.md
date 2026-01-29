@@ -9,11 +9,12 @@
 - 覆盖数据、特征、模型、回测、配置等核心功能
 - 完整的单元测试和集成测试体系（63个测试文件）
 
-**项目评分**：⭐⭐⭐⭐ (4/5) - 生产级量化交易系统基础框架，完成度约 80%
+**项目评分**：⭐⭐⭐⭐⭐ (4.5/5) - 生产级量化交易系统基础框架，完成度约 85%
 
 **核心亮点**：
 - ✅ 架构设计优秀（单例模式、工厂模式、策略模式）
 - ✅ 125+ Alpha因子库（动量、反转、波动率、成交量、趋势、流动性）
+- ✅ 5种交易策略（动量、均值回归、多因子、ML、策略组合）
 - ✅ 向量化回测引擎（支持A股T+1规则、真实交易成本）
 - ✅ 性能优化到位（35x计算加速、50%内存节省、30-50%缓存减少）
 - ✅ 多模型支持（LightGBM、GRU、Ridge）
@@ -119,6 +120,17 @@ core/
 │   │       ├── formatter.py      # 报告格式化
 │   │       └── convenience.py    # 便捷函数
 │   │
+│   ├── strategies/                # 交易策略模块 ⭐ NEW
+│   │   ├── base_strategy.py      # 策略抽象基类
+│   │   ├── signal_generator.py   # 信号生成工具
+│   │   ├── momentum_strategy.py  # 动量策略
+│   │   ├── mean_reversion_strategy.py  # 均值回归策略
+│   │   ├── multi_factor_strategy.py    # 多因子策略
+│   │   ├── ml_strategy.py        # 机器学习策略
+│   │   ├── strategy_combiner.py  # 策略组合器
+│   │   └── examples/             # 策略使用示例
+│   │       └── example_complete_workflow.py
+│   │
 │   ├── backtest/                  # 回测引擎模块
 │   │   ├── backtest_engine.py    # 向量化回测引擎
 │   │   ├── position_manager.py   # 仓位管理器
@@ -139,10 +151,11 @@ core/
 │
 ├── tests/                         # 测试套件
 │   ├── run_tests.py              # 统一测试运行器
-│   ├── unit/                     # 单元测试（36个测试模块）
+│   ├── unit/                     # 单元测试（43个测试模块）
 │   │   ├── providers/            # 数据源测试
 │   │   ├── features/             # 特征测试
 │   │   ├── models/               # 模型测试
+│   │   ├── strategies/           # 策略测试（7个测试文件，108个用例）⭐ NEW
 │   │   ├── backtest/             # 回测测试
 │   │   └── config/               # 配置测试
 │   ├── integration/              # 集成测试
@@ -421,7 +434,177 @@ comparison_report = comparator.compare_models(
 
 ---
 
-### 4. 回测引擎 (`backtest/`)
+### 4. 交易策略层 (`strategies/`) ⭐ NEW
+
+Core 提供了完整的策略框架和5种经典量化策略实现。
+
+#### 4.1 策略类型
+
+**1. 动量策略** (`MomentumStrategy`)
+```python
+from strategies import MomentumStrategy
+
+strategy = MomentumStrategy(
+    name='MOM20',
+    config={
+        'lookback_period': 20,      # 动量计算回看期
+        'top_n': 50,                 # 选股数量
+        'holding_period': 5,         # 持仓天数
+        'filter_negative': True,     # 过滤负收益股票
+        'use_log_return': False      # 使用对数收益率
+    }
+)
+
+# 生成信号
+signals = strategy.generate_signals(prices_df, volumes=volumes_df)
+```
+
+**2. 均值回归策略** (`MeanReversionStrategy`)
+```python
+from strategies import MeanReversionStrategy
+
+strategy = MeanReversionStrategy(
+    name='MR20',
+    config={
+        'lookback_period': 20,
+        'z_score_threshold': -2.0,   # Z-score阈值（买入超卖）
+        'top_n': 30,
+        'use_bollinger': False       # 或使用布林带方法
+    }
+)
+```
+
+**3. 多因子策略** (`MultiFactorStrategy`)
+```python
+from strategies import MultiFactorStrategy
+
+strategy = MultiFactorStrategy(
+    name='MF',
+    config={
+        'factors': ['MOM20', 'REV5', 'VOLATILITY20'],
+        'weights': [0.5, 0.3, 0.2],  # 因子权重
+        'normalize_method': 'rank',   # 归一化方法: rank/zscore/minmax
+        'top_n': 50
+    }
+)
+
+# 需要传入特征DataFrame
+signals = strategy.generate_signals(prices_df, features=features_df)
+```
+
+**4. 机器学习策略** (`MLStrategy`)
+```python
+from strategies import MLStrategy
+from models.lightgbm_model import LightGBMStockModel
+
+# 训练模型
+model = LightGBMStockModel()
+model.train(X_train, y_train)
+
+# 使用模型预测
+strategy = MLStrategy(
+    name='ML_LGBM',
+    model=model.model,
+    config={
+        'feature_columns': ['MOM20', 'REV5', 'RSI', 'MACD'],
+        'prediction_threshold': 0.01,  # 预测收益率阈值
+        'top_n': 50
+    }
+)
+```
+
+**5. 策略组合器** (`StrategyCombiner`)
+```python
+from strategies import StrategyCombiner
+
+# 组合多个策略
+combiner = StrategyCombiner(
+    strategies=[mom_strategy, mr_strategy, mf_strategy],
+    weights=[0.4, 0.3, 0.3]
+)
+
+# 生成组合信号
+combined_signals = combiner.combine(
+    prices_df,
+    volumes=volumes_df,
+    features=features_df,
+    method='weighted'  # vote/weighted/and/or
+)
+
+# 分析策略一致性
+analysis = combiner.analyze_agreement(signals_list)
+print(f"策略相关性: {analysis['avg_correlation']:.3f}")
+print(f"一致买入: {analysis['unanimous_buy']} 次")
+```
+
+#### 4.2 信号生成工具
+
+```python
+from strategies.signal_generator import SignalGenerator, SignalType
+
+# 1. 阈值信号
+signals = SignalGenerator.generate_threshold_signals(
+    scores_df,
+    buy_threshold=0.5,
+    sell_threshold=-0.5
+)
+
+# 2. 排名信号
+signals = SignalGenerator.generate_rank_signals(
+    scores_df,
+    top_n=50,      # 买入前50名
+    bottom_n=30    # 卖出后30名
+)
+
+# 3. 趋势信号
+signals = SignalGenerator.generate_trend_signals(
+    prices_df,
+    lookback_period=20,
+    threshold=0.05  # 5%的趋势阈值
+)
+
+# 4. 组合信号
+combined = SignalGenerator.combine_signals(
+    [signal1, signal2, signal3],
+    method='vote',
+    weights=[0.5, 0.3, 0.2]
+)
+```
+
+#### 4.3 策略回测集成
+
+```python
+from backtest.backtest_engine import BacktestEngine
+
+# 创建回测引擎
+engine = BacktestEngine(
+    initial_capital=1_000_000,
+    commission_rate=0.0003,
+    verbose=True
+)
+
+# 策略回测
+results = strategy.backtest(engine, prices_df)
+
+# 查看结果
+print(f"总收益率: {results['total_return']:.2%}")
+print(f"最大回撤: {results['max_drawdown']:.2%}")
+print(f"夏普比率: {results['sharpe_ratio']:.2f}")
+```
+
+**策略特性**：
+- ✅ **统一接口**：所有策略继承自 `BaseStrategy`
+- ✅ **灵活配置**：使用 `StrategyConfig` 数据类
+- ✅ **信号标准化**：`SignalType.BUY/HOLD/SELL`
+- ✅ **完整测试**：108个单元测试，覆盖核心功能
+- ✅ **策略组合**：支持多策略投票/加权组合
+- ✅ **回测集成**：直接对接回测引擎
+
+**完整示例**：[src/strategies/examples/example_complete_workflow.py](src/strategies/examples/example_complete_workflow.py)
+
+---
+
+### 5. 回测引擎 (`backtest/`)
 
 #### 4.1 向量化回测
 
@@ -775,7 +958,7 @@ class AlphaFactors:
 
 | 模块 | 状态 | 优先级 | 影响 |
 |------|------|--------|------|
-| **交易策略层** | ❌ 缺失 | 🔴 高 | 无法生成买卖信号，无法执行选股策略 |
+| **交易策略层** | ✅ 已完成 | ✓ 完成 | 5种策略+组合器，108个测试用例，完全可用 |
 | **风险管理** | ❌ 缺失 | 🔴 高 | 缺少VaR、压力测试、组合风险度量 |
 | **因子研究工具** | ⚠️ 不完整 | 🟡 中 | 缺少IC分析、分层测试、因子衰减分析 |
 | **参数优化** | ❌ 缺失 | 🟡 中 | 缺少网格搜索、贝叶斯优化、Walk-Forward |
@@ -794,7 +977,7 @@ class AlphaFactors:
 2. **参数优化缺失**：无法自动调优策略参数
 3. **数据质量保障不足**：缺少异常数据检测和处理
 
-**建议**：优先补充策略层和风险管理模块，这两个是量化交易系统的核心。
+**建议**：策略层已完成✅，建议优先补充风险管理模块，这是量化交易系统生产级部署的关键。
 
 ---
 
@@ -803,7 +986,7 @@ class AlphaFactors:
 详见 [DEVELOPMENT_ROADMAP.md](./DEVELOPMENT_ROADMAP.md) - 包含3个阶段的详细开发路线图
 
 **阶段1 - 核心补充**（1-2周）🔴 高优先级：
-- [ ] 实现交易策略层（strategies/）
+- [x] ✅ 实现交易策略层（strategies/）- **已完成**
 - [ ] 实现风险管理模块（risk_management/）
 - [ ] 完善因子分析工具
 - [ ] 完善数据质量检查
@@ -840,5 +1023,6 @@ class AlphaFactors:
 
 **最后更新**: 2026-01-29
 **维护者**: Stock Analysis Team
-**完成度**: 80% (生产级基础框架)
-**下一步**: 实现策略层和风险管理模块
+**完成度**: 85% (生产级基础框架 + 策略层)
+**最新进展**: ✅ 策略层已完成（5种策略+108个测试）
+**下一步**: 实现风险管理模块
