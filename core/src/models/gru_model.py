@@ -438,7 +438,11 @@ class GRUStockTrainer:
 
         # 加载权重
         self.model.load_state_dict(checkpoint['model_state_dict'])
+
+        # 重新创建optimizer以匹配新模型
+        self.optimizer = optim.Adam(self.model.parameters())
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
         self.history = checkpoint.get('history', {'train_loss': [], 'valid_loss': []})
 
         logger.success(f"✓ 模型已加载: {model_path}")
