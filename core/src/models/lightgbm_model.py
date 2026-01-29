@@ -335,6 +335,111 @@ class LightGBMStockModel:
         """获取模型参数"""
         return self.params.copy()
 
+    def auto_tune(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_valid: pd.DataFrame,
+        y_valid: pd.Series,
+        param_grid: Optional[Dict] = None,
+        metric: str = 'ic',
+        n_trials: int = 20,
+        method: str = 'grid'
+    ) -> Tuple['LightGBMStockModel', Dict]:
+        """
+        自动调优超参数
+
+        参数:
+            X_train: 训练特征
+            y_train: 训练标签
+            X_valid: 验证特征
+            y_valid: 验证标签
+            param_grid: 参数搜索空间（None=使用默认）
+            metric: 优化指标 ('ic', 'rank_ic', 'mse')
+            n_trials: 搜索次数
+            method: 搜索方法 ('grid', 'random')
+
+        返回:
+            (best_model, results): 最佳模型和调优结果
+        """
+        from itertools import product
+        import random
+
+        logger.info(f"开始自动调优 (方法={method}, 指标={metric})...")
+
+        # 默认搜索空间
+        if param_grid is None:
+            param_grid = {
+                'learning_rate': [0.03, 0.05, 0.1],
+                'num_leaves': [15, 31, 63],
+                'max_depth': [3, 5, 7],
+                'n_estimators': [100, 200],
+                'min_child_samples': [20, 30]
+            }
+
+        # 生成参数组合
+        keys = list(param_grid.keys())
+        values = list(param_grid.values())
+
+        if method == 'grid':
+            # 网格搜索：所有组合
+            param_combinations = [dict(zip(keys, v)) for v in product(*values)]
+            logger.info(f"网格搜索: {len(param_combinations)} 种组合")
+        else:
+            # 随机搜索：随机采样
+            all_combinations = [dict(zip(keys, v)) for v in product(*values)]
+            param_combinations = random.sample(
+                all_combinations,
+                min(n_trials, len(all_combinations))
+            )
+            logger.info(f"随机搜索: {len(param_combinations)} 种组合")
+
+        best_score = -float('inf') if metric != 'mse' else float('inf')
+        best_params = None
+        best_model = None
+        all_results = []
+
+        for i, params in enumerate(param_combinations, 1):
+            # 创建并训练模型
+            model = LightGBMStockModel(**params, random_state=42, verbose=-1)
+            model.train(X_train, y_train, X_valid, y_valid, verbose_eval=0)
+
+            # 评估
+            y_pred = model.predict(X_valid)
+            score = self._calculate_metric(y_valid, y_pred, metric)
+
+            all_results.append({'params': params, 'score': score})
+
+            # 更新最佳
+            is_better = (score > best_score) if metric != 'mse' else (score < best_score)
+            if is_better:
+                best_score = score
+                best_params = params
+                best_model = model
+
+            if i % 5 == 0:
+                logger.info(f"进度: {i}/{len(param_combinations)}, 最佳{metric}={best_score:.6f}")
+
+        logger.info(f"✓ 调优完成！最佳{metric}={best_score:.6f}")
+        logger.info(f"最佳参数: {best_params}")
+
+        return best_model, {
+            'best_params': best_params,
+            'best_score': best_score,
+            'all_results': all_results
+        }
+
+    def _calculate_metric(self, y_true: pd.Series, y_pred: np.ndarray, metric: str) -> float:
+        """计算评估指标"""
+        if metric == 'ic':
+            return np.corrcoef(y_true, y_pred)[0, 1]
+        elif metric == 'rank_ic':
+            return pd.Series(y_true.values).corr(pd.Series(y_pred), method='spearman')
+        elif metric == 'mse':
+            return np.mean((y_true - y_pred) ** 2)
+        else:
+            raise ValueError(f"未知指标: {metric}")
+
 
 # ==================== 便捷函数 ====================
 

@@ -16,6 +16,9 @@ from .ensemble import (
     create_ensemble
 )
 
+# 模型注册表
+from .model_registry import ModelRegistry, ModelMetadata
+
 try:
     from .gru_model import GRUStockModel, GRUStockTrainer
     GRU_AVAILABLE = True
@@ -42,6 +45,10 @@ __all__ = [
     'VotingEnsemble',
     'StackingEnsemble',
     'create_ensemble',
+
+    # 模型注册表
+    'ModelRegistry',
+    'ModelMetadata',
 ]
 
 if GRU_AVAILABLE:
