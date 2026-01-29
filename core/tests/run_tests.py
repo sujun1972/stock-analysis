@@ -126,12 +126,11 @@ def build_pytest_cmd(
     if exclude_slow:
         # 排除GRU模型测试（最慢的测试）
         cmd.append('--ignore=tests/unit/models/test_gru_model.py')
+        cmd.append('--ignore=tests/unit/test_gru_model_comprehensive.py')
         # 排除外部API集成测试（需要网络连接和API token）
         cmd.append('--ignore=tests/integration/providers/akshare/')
         cmd.append('--ignore=tests/integration/providers/test_tushare_provider.py')
-        # 排除根目录下的旧外部API测试
-        cmd.append('--ignore=tests/test_data_fetcher.py')
-        print_warning("已排除慢速GRU模型测试和外部API集成测试（AkShare, Tushare）")
+        print_warning("已排除慢速GRU模型测试（2个文件）和外部API集成测试（AkShare, Tushare）")
 
     # 标记过滤
     if markers:

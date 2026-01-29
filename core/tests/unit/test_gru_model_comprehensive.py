@@ -15,7 +15,8 @@ import warnings
 import sys
 
 # 添加src目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+# 从 tests/unit/ 向上两级到达 core/ 根目录
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
 # 尝试导入PyTorch
 try:

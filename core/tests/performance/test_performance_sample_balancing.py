@@ -13,7 +13,8 @@ import numpy as np
 from pathlib import Path
 
 # 添加项目路径
-project_root = Path(__file__).parent.parent
+# 从 tests/performance/ 向上两级到达 core/ 根目录
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
 
