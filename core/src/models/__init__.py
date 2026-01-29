@@ -3,8 +3,18 @@ Models module
 """
 
 from .lightgbm_model import LightGBMStockModel, train_lightgbm_model
+from .ridge_model import RidgeStockModel
 from .model_evaluator import ModelEvaluator, evaluate_model
 from .model_trainer import ModelTrainer, train_stock_model
+from .comparison_evaluator import ComparisonEvaluator
+
+# 集成模块
+from .ensemble import (
+    WeightedAverageEnsemble,
+    VotingEnsemble,
+    StackingEnsemble,
+    create_ensemble
+)
 
 try:
     from .gru_model import GRUStockModel, GRUStockTrainer
@@ -13,12 +23,25 @@ except ImportError:
     GRU_AVAILABLE = False
 
 __all__ = [
+    # 基础模型
     'LightGBMStockModel',
     'train_lightgbm_model',
+    'RidgeStockModel',
+
+    # 评估
     'ModelEvaluator',
     'evaluate_model',
+    'ComparisonEvaluator',
+
+    # 训练
     'ModelTrainer',
     'train_stock_model',
+
+    # 集成
+    'WeightedAverageEnsemble',
+    'VotingEnsemble',
+    'StackingEnsemble',
+    'create_ensemble',
 ]
 
 if GRU_AVAILABLE:

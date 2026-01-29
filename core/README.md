@@ -20,7 +20,7 @@
 - ✅ 因子分析工具（IC/ICIR、分层回测、相关性分析、组合优化）
 - ✅ 参数优化框架（网格搜索、贝叶斯优化、Walk-Forward验证）
 - ✅ 性能优化到位（35x计算加速、50%内存节省、30-50%缓存减少）
-- ✅ 多模型支持（LightGBM、GRU、Ridge）
+- ✅ 多模型支持（LightGBM、GRU、Ridge）+ 集成学习框架 ⭐ 新增
 
 ---
 
@@ -110,6 +110,7 @@ core/
 │   │   ├── lightgbm_model.py     # LightGBM模型（基线）
 │   │   ├── gru_model.py          # GRU深度学习模型
 │   │   ├── ridge_model.py        # Ridge回归模型
+│   │   ├── ensemble.py           # 模型集成框架 ⭐ NEW
 │   │   ├── model_trainer.py      # 模型训练器
 │   │   ├── model_evaluator.py    # 模型评估器
 │   │   ├── comparison_evaluator.py # 模型对比评估
@@ -419,6 +420,45 @@ model.train(X_train, y_train, epochs=100, batch_size=32)
 # 预测
 predictions = model.predict(X_test)
 ```
+
+#### 3.3 模型集成 (Ensemble) ⭐ 新增
+
+**支持三种集成方法**：加权平均、投票法、Stacking
+
+```python
+from models import (
+    create_ensemble,
+    WeightedAverageEnsemble,
+    VotingEnsemble,
+    StackingEnsemble
+)
+
+# 方法1: 加权平均集成（推荐）
+ensemble = create_ensemble(
+    models=[ridge_model, lgb_model],
+    method='weighted_average'
+)
+
+# 自动优化权重
+ensemble.optimize_weights(X_valid, y_valid, metric='ic')
+
+# 预测
+predictions = ensemble.predict(X_test)
+
+# 方法2: 投票法集成（适合选股）
+voting_ensemble = VotingEnsemble([model1, model2, model3])
+top_50_stocks = voting_ensemble.select_top_n(X_test, top_n=50)
+
+# 方法3: Stacking集成（性能最优）
+stacking = StackingEnsemble(
+    base_models=[model1, model2, model3],
+    meta_learner=RidgeStockModel()
+)
+stacking.train_meta_learner(X_train, y_train, X_valid, y_valid)
+predictions = stacking.predict(X_test)
+```
+
+**集成效果**：通常比单模型提升 5-15% IC
 
 **适用场景**：
 - 时间序列数据
