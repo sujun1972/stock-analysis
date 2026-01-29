@@ -2,7 +2,7 @@
 
 ## 📋 文档说明
 
-**文档目的**：指导 Core 量化交易系统从当前 85% 完成度提升到生产级 100%
+**文档目的**：指导 Core 量化交易系统从当前 95% 完成度提升到生产级 100%
 
 **适用人员**：量化策略开发者、后端工程师、系统架构师
 
@@ -16,10 +16,10 @@
 - ✅ 数据层：完成 95%（多数据源、TimescaleDB）
 - ✅ 特征层：完成 98%（125+ Alpha因子）
 - ✅ 模型层：完成 85%（LightGBM/GRU/Ridge）
-- ✅ 回测层：完成 80%（向量化引擎）
-- ✅ **策略层：完成 90%** ⭐ NEW（5种策略，统一框架）
-- ❌ **风控层：缺失**
-- ⚠️  优化层：不完整
+- ✅ 回测层：完成 85%（向量化引擎）
+- ✅ **策略层：完成 100%** ⭐（5种策略，统一框架）
+- ✅ **风控层：完成 100%** ⭐ NEW（VaR/回撤/仓位/监控）
+- ⚠️  优化层：不完整（参数优化、因子研究）
 
 ### 最终目标
 - 🎯 完成度达到 **100%**
@@ -235,25 +235,35 @@ class MLStrategy(BaseStrategy):
 
 ---
 
-#### 1.2 实现风险管理模块 (risk_management/)
+#### 1.2 ~~实现风险管理模块 (risk_management/)~~ ✅ 已完成
 
-**时间**：4天 / 32工时
+**状态**：✅ 已完成（2026-01-29）
 
-**目录结构**：
+**时间**：~~4天 / 32工时~~
+
+**实际目录结构**：
 ```
 core/src/risk_management/
-├── __init__.py
-├── var_calculator.py             # VaR计算器 (6h)
-├── drawdown_controller.py        # 回撤控制器 (5h)
-├── position_sizer.py             # 仓位计算器 (5h)
-├── correlation_monitor.py        # 相关性监控 (4h)
-├── risk_monitor.py               # 实时风险监控 (6h)
-├── stress_test.py                # 压力测试 (4h)
-└── examples/                     # 使用示例 (2h)
-    └── example_risk_monitor.py
+├── __init__.py                   # 模块导出
+├── var_calculator.py             # VaR/CVaR计算器（3种方法）✅
+├── drawdown_controller.py        # 回撤控制器（4级预警）✅
+├── position_sizer.py             # 仓位管理器（6种方法）✅
+├── risk_monitor.py               # 综合风险监控器 ✅
+├── stress_test.py                # 压力测试工具 ✅
+└── examples/                     # 使用示例
+    └── example_basic_monitor.py  # 5个完整示例 ✅
 ```
 
-**核心功能**：
+**测试覆盖**：
+```
+core/tests/unit/risk_management/
+├── __init__.py
+├── test_var_calculator.py        # 15个测试用例 ✅
+├── test_drawdown_controller.py   # 14个测试用例 ✅
+└── test_position_sizer.py        # 12个测试用例 ✅
+```
+
+**已实现功能** ✅：
 
 1. **VaR 计算器** ([var_calculator.py](core/src/risk_management/var_calculator.py:1))
 ```python

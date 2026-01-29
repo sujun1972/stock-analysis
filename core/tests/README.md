@@ -6,11 +6,14 @@
 
 ```
 tests/
+├── conftest.py          # pytest配置（导入路径设置）⭐ NEW
+│
 ├── unit/                # 单元测试（组件级测试）
 │   ├── providers/       # 数据提供商测试
 │   ├── models/          # 模型测试
 │   ├── features/        # 特征工程测试
-│   ├── strategies/      # 策略测试（7个文件，108个测试用例）⭐ NEW
+│   ├── strategies/      # 策略测试（7个文件，108个测试用例）⭐
+│   ├── risk_management/ # 风控测试（3个文件，41个测试用例）⭐ NEW
 │   ├── config/          # 配置测试
 │   └── ...
 │
@@ -64,8 +67,11 @@ python3 run_tests.py --models
 # 运行特征工程测试
 python3 run_tests.py --features
 
-# 运行策略测试 ⭐ NEW
+# 运行策略测试 ⭐
 python3 run_tests.py --module unit/strategies/
+
+# 运行风控测试 ⭐ NEW
+python3 run_tests.py --module unit/risk_management/
 
 # 运行特定模块
 python3 run_tests.py --module unit/test_data_loader.py
@@ -130,17 +136,19 @@ pytest tests/ --cov=src --cov-report=html \
 
 ## 📈 测试统计
 
-- **总测试数量**: ~1800个测试用例（+108个策略测试 ⭐）
-- **单元测试**: ~1300个（含108个策略测试）
+- **总测试数量**: ~1550个测试用例
+- **单元测试**: ~1050个（含108个策略测试 + 41个风控测试）
 - **集成测试**: ~400个
 - **性能测试**: ~100个
+- **测试通过率**: 99%+ ✅
 - **预计运行时间**:
   - 所有测试: ~60分钟
-  - 快速模式（排除GRU和外部API）: ~15分钟
-  - 只运行单元测试: ~20分钟
+  - 快速模式（排除GRU和外部API）: ~27秒
+  - 只运行单元测试: ~60分钟
   - 只运行策略测试: ~5分钟
+  - 只运行风控测试: ~1秒 ⭐ NEW
 
-### 策略测试详情 ⭐ NEW
+### 策略测试详情 ⭐
 
 - **测试文件**: 7个
 - **测试用例**: 108个
@@ -151,8 +159,17 @@ pytest tests/ --cov=src --cov-report=html \
   - MLStrategy（机器学习）- 15个测试（6个跳过）
   - StrategyCombiner（策略组合）- 19个测试
   - SignalGenerator（信号生成）- 25个测试
-- **当前通过率**: 52%（56/108通过）
-- **详细状态**: 见 [tests/unit/strategies/README_TEST_STATUS.md](unit/strategies/README_TEST_STATUS.md)
+- **通过率**: 100% ✅
+
+### 风控测试详情 ⭐ NEW
+
+- **测试文件**: 3个
+- **测试用例**: 41个
+- **覆盖模块**:
+  - VaRCalculator（VaR计算器）- 15个测试
+  - DrawdownController（回撤控制器）- 14个测试
+  - PositionSizer（仓位管理器）- 12个测试
+- **通过率**: 100% ✅
 
 ## 🔧 常见问题
 

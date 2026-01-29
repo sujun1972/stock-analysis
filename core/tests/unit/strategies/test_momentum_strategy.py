@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 
 # 添加src目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
+# Path already configured in conftest.py
 
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.signal_generator import SignalType
@@ -222,10 +222,7 @@ class TestMomentumStrategy(unittest.TestCase):
 
     def test_backtest_integration(self):
         """测试回测集成"""
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
-        from backtest.backtest_engine import BacktestEngine  # noqa: F401
+        from backtest.backtest_engine import BacktestEngine
 
         strategy = MomentumStrategy('MOM20', {
             'lookback_period': 20,

@@ -12,7 +12,7 @@ from loguru import logger
 
 warnings.filterwarnings('ignore')
 
-from ..config.trading_rules import (
+from config.trading_rules import (
     TradingCosts,
     PriceLimitRules,
     T_PLUS_N,

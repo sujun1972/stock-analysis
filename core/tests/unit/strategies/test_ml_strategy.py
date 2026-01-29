@@ -11,7 +11,7 @@ import sys
 from unittest.mock import Mock, MagicMock
 
 # 添加src目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
+# Path already configured in conftest.py
 
 from strategies.ml_strategy import MLStrategy
 from strategies.signal_generator import SignalType

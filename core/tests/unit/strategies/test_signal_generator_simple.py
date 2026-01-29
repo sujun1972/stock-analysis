@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 
 # 添加src目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
+# Path already configured in conftest.py
 
 from strategies.signal_generator import SignalType, SignalGenerator
 

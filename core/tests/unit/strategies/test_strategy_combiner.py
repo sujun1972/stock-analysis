@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 
 # 添加src目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
+# Path already configured in conftest.py
 
 from strategies.strategy_combiner import StrategyCombiner
 from strategies.momentum_strategy import MomentumStrategy
@@ -330,7 +330,7 @@ class TestStrategyCombiner(unittest.TestCase):
         """测试回测集成"""
         import sys
         from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
+        # Path already configured in conftest.py
         from backtest.backtest_engine import BacktestEngine
 
         combiner = StrategyCombiner(
@@ -494,7 +494,7 @@ class TestStrategyCombiner(unittest.TestCase):
         """测试组合策略与单一策略的性能对比"""
         import sys
         from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
+        # Path already configured in conftest.py
         from backtest.backtest_engine import BacktestEngine
 
         engine = BacktestEngine(
