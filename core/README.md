@@ -16,9 +16,9 @@
 - ✅ 125+ Alpha因子库（动量、反转、波动率、成交量、趋势、流动性）
 - ✅ 5种交易策略（动量、均值回归、多因子、ML、策略组合）
 - ✅ 完整风控体系（VaR/CVaR、回撤控制、仓位管理、压力测试）
-- ✅ 向量化回测引擎（支持A股T+1规则、真实交易成本）
-- ✅ 因子分析工具（IC/ICIR、分层回测、相关性分析、组合优化） ⭐ NEW
-- ✅ 参数优化框架（网格搜索、贝叶斯优化、Walk-Forward验证） ⭐ NEW
+- ✅ 向量化回测引擎（支持A股T+1规则、自动成本分析） ⭐ 增强
+- ✅ 因子分析工具（IC/ICIR、分层回测、相关性分析、组合优化）
+- ✅ 参数优化框架（网格搜索、贝叶斯优化、Walk-Forward验证）
 - ✅ 性能优化到位（35x计算加速、50%内存节省、30-50%缓存减少）
 - ✅ 多模型支持（LightGBM、GRU、Ridge）
 
@@ -136,8 +136,9 @@ core/
 │   │
 │   ├── backtest/                  # 回测引擎模块
 │   │   ├── backtest_engine.py    # 向量化回测引擎
+│   │   ├── performance_analyzer.py # 绩效分析器（15+指标）
 │   │   ├── position_manager.py   # 仓位管理器
-│   │   └── performance_analyzer.py # 绩效分析器
+│   │   └── cost_analyzer.py      # 交易成本分析器 ⭐ NEW
 │   │
 │   ├── risk_management/           # 风险管理模块
 │   │   ├── var_calculator.py     # VaR/CVaR计算器（3种方法）

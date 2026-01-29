@@ -12,12 +12,14 @@ from loguru import logger
 
 warnings.filterwarnings('ignore')
 
-from config.trading_rules import (
+from src.config.trading_rules import (
     TradingCosts,
     PriceLimitRules,
     T_PLUS_N,
     MarketType
 )
+
+from .cost_analyzer import TradingCostAnalyzer, Trade
 
 
 class BacktestEngine:
@@ -58,6 +60,9 @@ class BacktestEngine:
         self.trades = None
         self.daily_returns = None
         self.metrics = {}
+
+        # 成本分析器
+        self.cost_analyzer = TradingCostAnalyzer()
 
     def calculate_trading_cost(
         self,
@@ -215,6 +220,18 @@ class BacktestEngine:
                                 # 计算卖出交易成本
                                 cost = self.calculate_trading_cost(sell_amount, is_buy=False, stock_code=stock)
 
+                                # 记录交易到成本分析器
+                                self.cost_analyzer.add_trade_from_dict(
+                                    date=next_date,
+                                    stock_code=stock,
+                                    action='sell',
+                                    shares=pos['shares'],
+                                    price=actual_price,
+                                    commission=cost * 0.5,  # 估算佣金占50%
+                                    stamp_tax=sell_amount * self.stamp_tax_rate,  # 印花税
+                                    slippage=pos['shares'] * sell_price * self.slippage  # 滑点成本
+                                )
+
                                 # 更新现金
                                 cash += (sell_amount - cost)
 
@@ -252,6 +269,18 @@ class BacktestEngine:
 
                                         # 检查资金是否充足
                                         if cash >= (buy_amount + cost):
+                                            # 记录交易到成本分析器
+                                            self.cost_analyzer.add_trade_from_dict(
+                                                date=next_date,
+                                                stock_code=stock,
+                                                action='buy',
+                                                shares=max_shares,
+                                                price=actual_price,
+                                                commission=cost,  # 买入只有佣金
+                                                stamp_tax=0.0,
+                                                slippage=max_shares * buy_price * self.slippage  # 滑点成本
+                                            )
+
                                             # 更新现金
                                             cash -= (buy_amount + cost)
 
@@ -273,10 +302,19 @@ class BacktestEngine:
         logger.info(f"最终资产: {self.portfolio_value['total'].iloc[-1]:,.0f}")
         logger.info(f"总收益率: {(self.portfolio_value['total'].iloc[-1] / self.initial_capital - 1) * 100:.2f}%")
 
+        # 运行成本分析
+        cost_metrics = self.cost_analyzer.analyze_all(
+            portfolio_returns=self.daily_returns,
+            portfolio_values=self.portfolio_value['total'],
+            verbose=False
+        )
+
         return {
             'portfolio_value': self.portfolio_value,
             'positions': self.positions,
-            'daily_returns': self.daily_returns
+            'daily_returns': self.daily_returns,
+            'cost_analysis': cost_metrics,
+            'cost_analyzer': self.cost_analyzer
         }
 
     def backtest_market_neutral(
