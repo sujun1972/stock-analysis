@@ -111,9 +111,9 @@ def build_pytest_cmd(
     if coverage:
         cmd.extend([
             '--cov=src',
-            '--cov-report=html',
+            '--cov-report=html:tests/reports/htmlcov',
             '--cov-report=term',
-            '--cov-report=xml'
+            '--cov-report=xml:tests/reports/coverage.xml'
         ])
 
     # 详细输出

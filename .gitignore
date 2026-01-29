@@ -52,6 +52,12 @@ logs/
 test_results/
 **/test_results/
 junit_*.xml
+core/tests/reports/
+**/tests/reports/
+.coverage
+*.coverage
+coverage.xml
+htmlcov/
 
 # Test temporary data
 core/tests/data/
