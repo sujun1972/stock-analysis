@@ -5,9 +5,9 @@
 **Core** 是A股AI量化交易系统的核心业务逻辑库，提供从数据获取、特征工程、模型训练到回测评估的完整量化交易工具链。
 
 **项目规模**：
-- 123个Python模块，约32,200行代码
+- 129个Python模块，约36,200行代码
 - 覆盖数据、特征、模型、策略、回测、风控、因子分析、参数优化等核心功能
-- 完整的单元测试和集成测试体系（84个测试文件，1700+测试用例）
+- 完整的单元测试和集成测试体系（112个测试文件，1970+测试用例）
 
 **项目评分**：⭐⭐⭐⭐⭐ (4.9/5) - 生产级量化交易系统完整框架，完成度约 100%
 
@@ -73,7 +73,11 @@ core/
 │   │
 │   ├── data/                      # 数据处理模块
 │   │   ├── data_cleaner.py       # 数据清洗
-│   │   └── stock_filter.py       # 股票筛选
+│   │   ├── stock_filter.py       # 股票筛选
+│   │   ├── data_validator.py     # 数据验证器（7种验证规则）⭐ 新增
+│   │   ├── missing_handler.py    # 缺失值处理（7种填充方法）⭐ 新增
+│   │   ├── outlier_detector.py   # 异常值检测（IQR/Z-score/价格跳变）⭐ 新增
+│   │   └── suspend_filter.py     # 停牌股票过滤 ⭐ 新增
 │   │
 │   ├── data_pipeline/             # 数据管道模块
 │   │   ├── data_loader.py        # 单股票数据加载
@@ -261,7 +265,160 @@ data = db.query_stock_data(
 
 ---
 
-### 2. 特征工程 (`features/`)
+### 2. 数据质量检查 (`data/`) ⭐ 新增
+
+完整的数据清洗和质量保障工具链，确保数据可靠性。
+
+#### 2.1 数据验证器（DataValidator）
+
+**7种验证规则**：
+```python
+from data.data_validator import DataValidator
+
+validator = DataValidator(df, required_fields=['close', 'volume'])
+
+# 全面验证
+results = validator.validate_all(strict_mode=False)
+print(validator.get_validation_report())
+```
+
+**验证内容**：
+- ✅ 必需字段完整性
+- ✅ 数据类型正确性
+- ✅ 价格逻辑（high ≥ close ≥ low）
+- ✅ 日期连续性
+- ✅ 数值范围合理性
+- ✅ 缺失值比例
+- ✅ 重复记录检测
+
+#### 2.2 缺失值处理（MissingHandler）
+
+**7种填充方法**：
+```python
+from data.missing_handler import MissingHandler
+
+handler = MissingHandler(df)
+
+# 智能填充（自动选择最佳策略）
+df_filled = handler.smart_fill(
+    leading_method='bfill',    # 前导缺失：后向填充
+    trailing_method='ffill',   # 尾部缺失：前向填充
+    middle_method='interpolate' # 中间缺失：插值
+)
+
+# 或使用统一接口
+df_filled = handler.handle_missing(method='smart', max_gap=10)
+```
+
+**支持方法**：
+- 前向/后向填充（ffill/bfill）
+- 线性/时间/样条插值
+- 均值填充（全局/滚动窗口）
+- 指定值填充
+- 删除缺失行
+- 智能填充（位置感知策略）
+
+#### 2.3 异常值检测（OutlierDetector）
+
+**多种检测算法**：
+```python
+from data.outlier_detector import OutlierDetector
+
+detector = OutlierDetector(df)
+
+# IQR方法检测
+outliers = detector.detect_by_iqr(columns=['close'], multiplier=1.5)
+
+# Z-score方法
+outliers = detector.detect_by_zscore(threshold=3.0, use_modified=True)
+
+# 价格跳变检测（单日涨跌>20%）
+outliers = detector.detect_price_jumps(threshold=0.20)
+
+# 统一处理接口
+df_clean = detector.handle_outliers(
+    method='winsorize',  # 或 'remove', 'interpolate'
+    columns=['close']
+)
+```
+
+**检测维度**：
+- IQR（四分位距）
+- Z-score（标准分数）
+- Modified Z-score（MAD改进版）
+- 价格跳变（>20%涨跌）
+- 成交量异常
+
+**处理策略**：
+- 删除异常值
+- Winsorize缩尾处理
+- 插值填充
+
+#### 2.4 停牌股票过滤（SuspendFilter）
+
+**支持单股票和多股票面板数据**：
+```python
+from data.suspend_filter import SuspendFilter
+
+# 单股票模式
+filter_single = SuspendFilter(df, mode='single')
+suspended = filter_single.detect_all_suspended()
+
+# 获取停牌期间
+periods = filter_single.get_suspension_periods()
+# [(datetime(2024,1,10), datetime(2024,1,15), 5), ...]
+
+# 过滤停牌数据
+df_clean = filter_single.filter_suspended(action='mask')  # 或 'remove'
+
+# 多股票模式（Panel Data）
+filter_multi = SuspendFilter(df, mode='multi', stock_col='symbol')
+summary = filter_multi.get_suspension_summary()
+```
+
+**检测方法**：
+- 零成交量检测
+- 价格连续不变
+- 涨跌停板检测（A股±10%）
+- 综合判断
+
+**过滤策略**：
+- mask：标记为NaN
+- remove：删除行
+
+**完整示例**：
+```python
+from data import (
+    DataValidator, MissingHandler,
+    OutlierDetector, SuspendFilter
+)
+
+# 完整数据清洗流程
+def clean_stock_data(df):
+    # 1. 数据验证
+    validator = DataValidator(df)
+    if not validator.validate_all()['passed']:
+        print(validator.get_validation_report())
+        return None
+
+    # 2. 过滤停牌数据
+    sf = SuspendFilter(df, mode='single')
+    df = sf.filter_suspended(action='mask')
+
+    # 3. 异常值处理
+    detector = OutlierDetector(df)
+    df = detector.handle_outliers(method='winsorize')
+
+    # 4. 缺失值填充
+    handler = MissingHandler(df)
+    df = handler.smart_fill(max_gap=5)
+
+    return df
+```
+
+---
+
+### 3. 特征工程 (`features/`)
 
 #### 2.1 技术指标计算（60+指标）
 
