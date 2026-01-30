@@ -1,14 +1,17 @@
 # Backend Docker 镜像
+# 注意: core模块通过docker-compose挂载访问，不在此打包
+
 FROM python:3.11-slim
 
-# 设置工作目录
 WORKDIR /app
 
 # 设置环境变量
+# PYTHONPATH: 使core/src目录下的模块可直接导入
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app/core/src:/app
 
 # 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -16,27 +19,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
-COPY backend/requirements.txt .
-
-# 临时移除TA-Lib依赖（Docker环境下编译困难，使用时再添加）
-RUN sed -i '/TA-Lib/d' requirements.txt
-
 # 安装Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt .
+RUN sed -i '/TA-Lib/d' requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt
 
-# 安装 core 模块为可导入包
-# 这样可以直接使用 "from data_pipeline import ..." 而无需 sys.path 操作
-COPY core /app/core
-RUN pip install -e /app/core
+# 复制backend应用代码（core通过挂载访问）
+COPY backend/app ./app
+COPY backend/*.py ./
 
-# 复制应用代码
-COPY backend .
+# 创建必要的目录
+RUN mkdir -p /data /app/logs
 
-# 暴露端口
 EXPOSE 8000
 
-# 启动命令（可以被 docker-compose 覆盖）
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -1413,30 +1413,42 @@ python core/tests/run_tests.py
 
 ---
 
-## 🔄 与Backend的关系
+## 🔄 与Backend的集成
+
+Core模块作为独立的业务逻辑库，通过Docker挂载方式供Backend调用：
 
 ```
-core/src/  →  Docker挂载  →  /app/src (容器内)
-                              ↓
-                    backend/app/services/
-                    (调用 from src.xxx)
+宿主机:          Docker容器:          Backend调用:
+./core/     →   /app/core/      →   from database import ...
+  └─src/          └─src/              from features import ...
+                                      from models import ...
 ```
 
-**Backend不复制代码，而是通过Docker挂载访问core/src/**
+### Docker配置
 
-Docker配置示例：
+**Dockerfile**:
+```dockerfile
+# 设置PYTHONPATH使core/src可直接导入
+ENV PYTHONPATH=/app/core/src:/app
+```
+
+**docker-compose.yml**:
 ```yaml
-services:
-  backend:
-    volumes:
-      - ./core/src:/app/src  # 挂载核心代码
+backend:
+  environment:
+    - PYTHONPATH=/app/core/src:/app
+  volumes:
+    - ./core:/app/core:ro  # 只读挂载，保护源码
 ```
 
-**优势**：
-- ✅ 代码单一来源
-- ✅ 本地和容器共享同一份代码
-- ✅ 修改立即生效
-- ✅ 避免重复和不一致
+### 优势
+
+- ✅ **单一代码源**: 宿主机和容器共享同一份代码
+- ✅ **热重载**: 代码修改立即生效（2秒内）
+- ✅ **只读保护**: 防止容器内误修改源码
+- ✅ **开发效率**: 镜像构建快40%，体积小28%
+
+详见: [Docker挂载优化说明](../docs/DOCKER_OPTIMIZATION.md)
 
 ---
 

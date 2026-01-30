@@ -1,0 +1,88 @@
+# ============================================
+# Docker构建忽略文件
+# 减少构建上下文大小，加速构建
+# ============================================
+
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+venv/
+env/
+ENV/
+stock_env/
+.venv/
+
+# IDE配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 数据文件（太大，不应进入镜像）
+data/
+*.csv
+*.parquet
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# 日志文件
+logs/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# 前端
+node_modules/
+.next/
+out/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# 文档
+docs/
+README.md
+*.md
+
+# Core源码（重要：core将通过挂载访问，不应复制到镜像）
+core/
+
+# 环境变量
+.env
+.env.*
+
+# 临时文件
+tmp/
+temp/
+*.tmp

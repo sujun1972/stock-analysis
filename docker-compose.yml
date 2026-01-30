@@ -48,15 +48,18 @@ services:
       - DATABASE_USER=stock_user
       - DATABASE_PASSWORD=stock_password_123
       - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
+      # Python路径配置：使core/src可直接导入
+      - PYTHONPATH=/app/core/src:/app
     ports:
       - "8000:8000"
     volumes:
-      # 代码热重载
-      - ./backend:/app
-      # 共享数据目录
-      - ./data:/data
-      # 挂载核心代码目录
-      - ./core/src:/app/src
+      # Backend代码热重载
+      - ./backend/app:/app/app:rw
+      # Core模块挂载（只读保护）
+      - ./core:/app/core:ro
+      # 数据和日志目录
+      - ./data:/data:rw
+      - ./logs:/app/logs:rw
     networks:
       - stock_network
     depends_on:
