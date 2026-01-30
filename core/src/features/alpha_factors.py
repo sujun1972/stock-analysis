@@ -88,13 +88,14 @@ class FactorCache:
                 return
 
             # LRU 淘汰：缓存满时删除最久未使用的条目
-            if len(self._cache) >= self.max_size:
+            if len(self._cache) >= self.max_size and self.max_size > 0:
                 oldest_key = self._access_order.pop(0)
                 del self._cache[oldest_key]
 
-            # 添加新条目
-            self._cache[key] = value
-            self._access_order.append(key)
+            # 添加新条目（max_size > 0时）
+            if self.max_size > 0:
+                self._cache[key] = value
+                self._access_order.append(key)
 
     def get_or_compute(self, key: str, compute_fn: Callable[[], Any]) -> Any:
         """
@@ -479,6 +480,48 @@ class MomentumFactorCalculator(BaseFactorCalculator):
 
             except Exception as e:
                 logger.error(f"计算相对强度因子 RS{period} 失败: {e}")
+
+        return self.df
+
+    def add_rsi(
+        self,
+        periods: List[int] = None,
+        price_col: str = 'close'
+    ) -> pd.DataFrame:
+        """
+        添加RSI相对强弱指标
+
+        参数:
+            periods: 周期列表，默认[14, 28]
+            price_col: 价格列名
+
+        返回:
+            添加RSI列的DataFrame
+        """
+        if periods is None:
+            periods = [14, 28]
+
+        logger.debug(f"计算RSI因子，周期: {periods}")
+
+        for period in periods:
+            try:
+                # 计算价格变化
+                delta = self.df[price_col].diff()
+
+                # 分离涨跌
+                gain = delta.clip(lower=0)
+                loss = -delta.clip(upper=0)
+
+                # 计算平均涨跌幅
+                avg_gain = gain.rolling(window=period, min_periods=period).mean()
+                avg_loss = loss.rolling(window=period, min_periods=period).mean()
+
+                # 计算RS和RSI
+                rs = self._safe_divide(avg_gain, avg_loss)
+                self.df[f'RSI{period}'] = 100 - (100 / (1 + rs))
+
+            except Exception as e:
+                logger.error(f"计算RSI{period}因子失败: {e}")
 
         return self.df
 
