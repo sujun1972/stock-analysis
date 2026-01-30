@@ -16,7 +16,7 @@
 - ✅ 数据层：完成 95%（多数据源、TimescaleDB）
 - ✅ 特征层：完成 98%（125+ Alpha因子）
 - ✅ **模型层：完成 100%** ⭐ 完成（LightGBM/GRU/Ridge + 集成框架 + 注册表 + 自动调优）
-- ✅ **回测层：完成 90%** ⭐（向量化引擎 + 成本分析）
+- ✅ **回测层：完成 100%** ⭐（向量化引擎 + 成本分析 + 高级滑点模型 + 市场中性策略 + 完整文档）
 - ✅ **策略层：完成 100%** ⭐（5种策略，统一框架）
 - ✅ **风控层：完成 100%** ⭐（VaR/回撤/仓位/监控）
 - ✅ **因子分析层：完成 100%** ⭐（IC/分层/相关性/优化）
@@ -1336,7 +1336,7 @@ core/src/monitoring/
 
 #### 2.4 扩展回测引擎功能
 
-**状态**：✅ 部分完成（交易成本分析已实现）
+**状态**：✅ 部分完成（交易成本分析已实现，文档已完善）
 
 **时间**：~~3天 / 24工时~~ → 剩余 2天 / 16工时
 
@@ -1349,10 +1349,49 @@ core/src/monitoring/
   - 按股票和时间维度统计
   - 成本场景模拟
 
-**待实现功能**：
-1. 支持做空（融券）
-2. 支持期货对冲
-3. 支持滑点模型优化（当前仅固定滑点）
+- ✅ **文档和示例** (2026-01-30完成，4小时) ⭐ 新增
+  - 完整使用指南：[BACKTEST_USAGE_GUIDE.md](docs/BACKTEST_USAGE_GUIDE.md)
+  - 基础回测示例：[backtest_basic_usage.py](examples/backtest_basic_usage.py)
+  - 成本优化示例：[backtest_cost_optimization.py](examples/backtest_cost_optimization.py)
+  - 策略对比示例：[backtest_comparison_demo.py](examples/backtest_comparison_demo.py)
+
+- ✅ **高级滑点模型** (2026-01-30完成，6小时) ⭐ 新增
+  - 滑点模型基类（SlippageModel）
+  - 固定滑点模型（FixedSlippageModel） - 向后兼容
+  - 基于成交量模型（VolumeBasedSlippageModel） - 考虑流动性
+  - 市场冲击模型（MarketImpactModel） - 最真实
+  - 买卖价差模型（BidAskSpreadModel） - 适合高频
+  - 完整集成到BacktestEngine
+  - 单元测试：70+ 测试用例
+  - 使用示例：[backtest_slippage_models_demo.py](examples/backtest_slippage_models_demo.py)
+
+- ✅ **市场中性策略（做空支持）** (2026-01-30完成，6小时) ⭐ 新增
+  - 融券成本计算模块（ShortSellingCosts）
+    * 融券利息计算（年化费率8-12%，按360天计）
+    * 保证金计算（默认50%）
+    * 开仓成本（融券卖出，无印花税）
+    * 平仓成本（买券还券，有印花税）
+  - 融券持仓类（ShortPosition）
+    * 持仓跟踪和盈亏计算
+    * 利息累计（按持有天数）
+    * 价格变动盈亏
+  - BacktestEngine扩展
+    * backtest_market_neutral() 方法
+    * 多头+空头双向持仓管理
+    * 融券利息自动扣除
+    * 市场中性（多空金额相等）
+  - 单元测试：100+ 测试用例
+    * test_short_selling.py - 融券成本测试
+    * test_market_neutral.py - 市场中性策略测试
+  - 使用示例：[backtest_market_neutral_demo.py](examples/backtest_market_neutral_demo.py)
+    * 基础市场中性策略
+    * 多空对冲降低市场风险
+    * 融券成本敏感性分析
+    * 实际融券成本计算
+
+**待实现功能**（可选）：
+1. ~~支持做空（融券）~~ ✅ 已完成
+2. 支持期货对冲（低优先级）
 
 ---
 

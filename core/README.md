@@ -16,7 +16,7 @@
 - ✅ 125+ Alpha因子库（动量、反转、波动率、成交量、趋势、流动性）
 - ✅ 5种交易策略（动量、均值回归、多因子、ML、策略组合）
 - ✅ 完整风控体系（VaR/CVaR、回撤控制、仓位管理、压力测试）
-- ✅ 向量化回测引擎（支持A股T+1规则、自动成本分析） ⭐ 增强
+- ✅ 向量化回测引擎（T+1规则、市场中性策略、4种滑点模型、融券成本）⭐ 增强
 - ✅ 因子分析工具（IC/ICIR、分层回测、相关性分析、组合优化）
 - ✅ 参数优化框架（网格搜索、贝叶斯优化、Walk-Forward验证）
 - ✅ 性能优化到位（35x计算加速、50%内存节省、30-50%缓存减少）
@@ -137,10 +137,12 @@ core/
 │   │       └── example_complete_workflow.py
 │   │
 │   ├── backtest/                  # 回测引擎模块
-│   │   ├── backtest_engine.py    # 向量化回测引擎
+│   │   ├── backtest_engine.py    # 向量化回测引擎（支持市场中性策略）⭐ 增强
 │   │   ├── performance_analyzer.py # 绩效分析器（15+指标）
 │   │   ├── position_manager.py   # 仓位管理器
-│   │   └── cost_analyzer.py      # 交易成本分析器 ⭐ NEW
+│   │   ├── cost_analyzer.py      # 交易成本分析器 ⭐ NEW
+│   │   ├── short_selling.py      # 融券（做空）成本计算 ⭐ NEW
+│   │   └── slippage_models.py    # 滑点模型（4种：固定/成交量/市场冲击/价差）⭐ NEW
 │   │
 │   ├── risk_management/           # 风险管理模块
 │   │   ├── var_calculator.py     # VaR/CVaR计算器（3种方法）
@@ -958,23 +960,32 @@ print(f"最大损失: {result_mc['max_loss']:.2%}")
 
 ### 6. 回测引擎 (`backtest/`)
 
-#### 4.1 向量化回测
+#### 6.1 向量化回测
 
 ```python
 from backtest.backtest_engine import BacktestEngine
+from backtest.slippage_models import VolumeBasedSlippageModel
+
+# 创建滑点模型
+slippage_model = VolumeBasedSlippageModel(
+    base_slippage=0.0005,
+    impact_coefficient=0.01
+)
 
 engine = BacktestEngine(
     initial_capital=1_000_000,
     commission_rate=0.0003,
     stamp_tax_rate=0.001,
-    slippage=0.001
+    slippage_model=slippage_model  # 支持4种滑点模型
 )
 
-# 执行回测
+# 执行纯多头回测
 result = engine.backtest_long_only(
     signals=signals_df,
     prices=prices_df,
-    position_size=0.1  # 每次交易占总资金10%
+    top_n=50,
+    holding_period=5,
+    rebalance_freq='W'
 )
 
 # 获取回测指标
@@ -983,9 +994,74 @@ metrics = engine.get_performance_metrics()
 
 **回测特性**：
 - **A股交易规则**：T+1交易、涨跌停限制
-- **真实交易成本**：佣金、印花税、滑点
+- **真实交易成本**：佣金、印花税、多种滑点模型
 - **仓位管理**：最大持仓、分批建仓
 - **风险控制**：止损、止盈、最大回撤限制
+- **市场中性策略**：支持多空对冲、融券成本计算 ⭐ NEW
+
+#### 6.2 市场中性策略（多空对冲）⭐ NEW
+
+```python
+# 市场中性回测：做多前20名，做空后20名
+result = engine.backtest_market_neutral(
+    signals=signals_df,
+    prices=prices_df,
+    top_n=20,         # 做多前20只
+    bottom_n=20,      # 做空后20只
+    holding_period=5,
+    margin_rate=0.10  # 融券年化费率10%
+)
+
+# 查看多空组合表现
+print(f"做多收益: {result['long_return']:.2%}")
+print(f"做空收益: {result['short_return']:.2%}")
+print(f"总收益: {result['total_return']:.2%}")
+print(f"融券利息: {result['margin_interest']:.2f}")
+```
+
+**市场中性特性**：
+- ✅ 严格计算融券成本（A股标准：年化8-12%）
+- ✅ 360天计息（符合A股规则）
+- ✅ 做空成本分离计算（开仓佣金、平仓印花税+佣金）
+- ✅ 自动追踪融券利息累计
+
+#### 6.3 滑点模型（4种）⭐ NEW
+
+```python
+from backtest.slippage_models import (
+    FixedSlippageModel,           # 固定滑点
+    VolumeBasedSlippageModel,     # 基于成交量
+    MarketImpactModel,            # 市场冲击模型
+    BidAskSpreadModel             # 买卖价差模型
+)
+
+# 1. 固定滑点（最简单）
+model = FixedSlippageModel(slippage_pct=0.001)
+
+# 2. 基于成交量（考虑流动性）
+model = VolumeBasedSlippageModel(
+    base_slippage=0.0005,
+    impact_coefficient=0.01
+)
+
+# 3. 市场冲击模型（最真实）
+model = MarketImpactModel(
+    volatility_weight=0.5,
+    volume_impact_alpha=0.5
+)
+
+# 4. 买卖价差模型（高频交易）
+model = BidAskSpreadModel(base_spread=0.0002)
+
+# 在回测中使用
+engine = BacktestEngine(slippage_model=model)
+```
+
+**滑点模型特性**：
+- **FixedSlippageModel**: 简单固定比例，适合快速回测
+- **VolumeBasedSlippageModel**: 考虑订单规模与成交量比例
+- **MarketImpactModel**: Almgren-Chriss模型，考虑波动率
+- **BidAskSpreadModel**: 基于盘口价差，适合高频策略
 
 #### 4.2 绩效分析
 
