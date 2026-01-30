@@ -18,6 +18,9 @@
     python run_tests.py --integration      # 只运行集成测试
     python run_tests.py --coverage         # 运行测试并生成覆盖率报告
     python run_tests.py --fast             # 快速测试（排除慢速测试）
+    python run_tests.py --layer strategies # 运行策略层测试
+    python run_tests.py --layer data       # 运行数据层测试
+    python run_tests.py --list-modules     # 列出所有测试模块
     python run_tests.py --module xxx       # 运行指定模块测试
     python run_tests.py --parallel         # 并行运行测试
     python run_tests.py --failed-first     # 优先运行上次失败的测试
@@ -25,7 +28,7 @@
 
 作者: Stock Analysis Team
 创建: 2026-01-29
-更新: 2026-01-29
+更新: 2026-01-30
 """
 
 import sys
@@ -293,27 +296,38 @@ def show_menu():
         '6': '变化',
         '7': '~5秒',
         '8': '~20秒',
-        '9': '~15秒'
+        '9': '~15秒',
+        'L': '~2秒'
     }
 
     print("请选择要运行的测试:")
     print()
-    print(f"{Colors.BOLD}[1]{Colors.ENDC} 运行所有测试 (带覆盖率报告) {Colors.OKCYAN}[{estimated_times['1']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[2]{Colors.ENDC} 运行所有测试 (快速模式，排除慢速测试和外部API测试) {Colors.OKCYAN}[{estimated_times['2']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[3]{Colors.ENDC} 只运行单元测试 {Colors.OKCYAN}[{estimated_times['3']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[4]{Colors.ENDC} 只运行集成测试 {Colors.OKCYAN}[{estimated_times['4']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[5]{Colors.ENDC} 只运行性能测试 {Colors.OKCYAN}[{estimated_times['5']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[6]{Colors.ENDC} 运行特定模块测试 {Colors.OKCYAN}[{estimated_times['6']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[7]{Colors.ENDC} 运行Provider测试 (AkShare + Tushare) {Colors.OKCYAN}[{estimated_times['7']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[8]{Colors.ENDC} 运行模型测试 (排除GRU) {Colors.OKCYAN}[{estimated_times['8']}]{Colors.ENDC}")
-    print(f"{Colors.BOLD}[9]{Colors.ENDC} 运行特征工程测试 {Colors.OKCYAN}[{estimated_times['9']}]{Colors.ENDC}")
+    print(f"{Colors.BOLD}[综合测试]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[1]{Colors.ENDC} 运行所有测试 (带覆盖率报告) {Colors.OKCYAN}[{estimated_times['1']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[2]{Colors.ENDC} 运行所有测试 (快速模式) {Colors.OKCYAN}[{estimated_times['2']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[3]{Colors.ENDC} 只运行单元测试 {Colors.OKCYAN}[{estimated_times['3']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[4]{Colors.ENDC} 只运行集成测试 {Colors.OKCYAN}[{estimated_times['4']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[5]{Colors.ENDC} 只运行性能测试 {Colors.OKCYAN}[{estimated_times['5']}]{Colors.ENDC}")
     print()
-    print(f"{Colors.BOLD}[F]{Colors.ENDC} 快速诊断 (只运行失败过的测试)")
-    print(f"{Colors.BOLD}[P]{Colors.ENDC} 并行模式 (加速测试执行)")
-    print(f"{Colors.BOLD}[0]{Colors.ENDC} 退出")
+    print(f"{Colors.BOLD}[核心层测试]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[D]{Colors.ENDC} 数据层测试 (data + providers) {Colors.OKCYAN}[~8秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[F]{Colors.ENDC} 特征层测试 (features) {Colors.OKCYAN}[{estimated_times['9']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[M]{Colors.ENDC} 模型层测试 (models, 排除GRU) {Colors.OKCYAN}[{estimated_times['8']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[B]{Colors.ENDC} 回测层测试 (backtest) {Colors.OKCYAN}[~8秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[S]{Colors.ENDC} 策略层测试 (strategies) {Colors.OKCYAN}[~5秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[R]{Colors.ENDC} 风控层测试 (risk_management) {Colors.OKCYAN}[~2秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[A]{Colors.ENDC} 因子分析层测试 (analysis) {Colors.OKCYAN}[~4秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[O]{Colors.ENDC} 参数优化层测试 (optimization) {Colors.OKCYAN}[~3秒]{Colors.ENDC}")
+    print()
+    print(f"{Colors.BOLD}[其他选项]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[6]{Colors.ENDC} 运行特定模块测试 {Colors.OKCYAN}[{estimated_times['6']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[L]{Colors.ENDC} 按层级查看所有可用测试模块 {Colors.OKCYAN}[{estimated_times['L']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[X]{Colors.ENDC} 快速诊断 (只运行失败过的测试)")
+    print(f"  {Colors.BOLD}[P]{Colors.ENDC} 切换并行模式 (加速测试执行)")
+    print(f"  {Colors.BOLD}[0]{Colors.ENDC} 退出")
     print()
 
-    choice = input(f"{Colors.OKBLUE}请输入选项 [0-9/F/P]: {Colors.ENDC}")
+    choice = input(f"{Colors.OKBLUE}请输入选项 [0-6/D/F/M/B/S/R/A/O/L/X/P]: {Colors.ENDC}")
     return choice.strip().upper()
 
 def run_all_tests(coverage: bool = True, fast: bool = False, parallel: bool = False, failed_first: bool = False):
@@ -378,6 +392,128 @@ def run_feature_tests(coverage: bool = True):
     returncode, output = run_command(cmd, "运行特征工程测试", capture_output=True)
     return returncode
 
+def run_layer_tests(layer: str, coverage: bool = True, parallel: bool = False):
+    """
+    按核心层运行测试
+
+    Args:
+        layer: 层级名称 ('data', 'features', 'models', 'backtest', 'strategies',
+                        'risk_management', 'analysis', 'optimization')
+        coverage: 是否生成覆盖率
+        parallel: 是否并行运行
+    """
+    layer_config = {
+        'data': {
+            'name': '数据层',
+            'paths': ['tests/unit/data/', 'tests/unit/providers/'],
+            'src': ['src/data/', 'src/providers/']
+        },
+        'features': {
+            'name': '特征层',
+            'paths': ['tests/unit/features/'],
+            'src': ['src/features/']
+        },
+        'models': {
+            'name': '模型层',
+            'paths': ['tests/unit/models/'],
+            'src': ['src/models/'],
+            'exclude': ['tests/unit/models/test_gru_model.py', 'tests/unit/test_gru_model_comprehensive.py']
+        },
+        'backtest': {
+            'name': '回测层',
+            'paths': ['tests/unit/backtest/', 'tests/integration/test_backtest_with_cost_analysis.py'],
+            'src': ['src/backtest/']
+        },
+        'strategies': {
+            'name': '策略层',
+            'paths': ['tests/unit/strategies/'],
+            'src': ['src/strategies/']
+        },
+        'risk_management': {
+            'name': '风控层',
+            'paths': ['tests/unit/risk_management/'],
+            'src': ['src/risk_management/']
+        },
+        'analysis': {
+            'name': '因子分析层',
+            'paths': ['tests/unit/analysis/'],
+            'src': ['src/analysis/']
+        },
+        'optimization': {
+            'name': '参数优化层',
+            'paths': ['tests/unit/optimization/'],
+            'src': ['src/optimization/']
+        }
+    }
+
+    if layer not in layer_config:
+        print_error(f"未知的层级: {layer}")
+        return 1
+
+    config = layer_config[layer]
+    print_header(f"运行{config['name']}测试")
+
+    # 构建测试路径
+    test_paths = ' '.join(config['paths'])
+
+    # 构建pytest命令
+    python_cmd = get_python_cmd()
+    cmd = [python_cmd, '-m', 'pytest'] + config['paths']
+
+    # 添加覆盖率选项
+    if coverage:
+        # 为每个源码路径单独添加 --cov 参数
+        for src_path in config['src']:
+            cmd.append(f'--cov={src_path}')
+        cmd.extend([
+            '--cov-report=html:tests/reports/htmlcov',
+            '--cov-report=term',
+        ])
+
+    # 添加排除项
+    if 'exclude' in config:
+        for exclude_path in config['exclude']:
+            cmd.extend(['--ignore', exclude_path])
+
+    # 添加其他选项
+    cmd.extend(['-v', '--tb=short'])
+
+    if parallel:
+        cmd.extend(['-n', '4'])
+
+    returncode, output = run_command(cmd, f"运行{config['name']}测试", capture_output=True)
+    return returncode
+
+def list_all_test_modules():
+    """列出所有可用的测试模块（按层级）"""
+    print_header("可用的测试模块")
+
+    layers = {
+        '数据层': 'tests/unit/data tests/unit/providers',
+        '特征层': 'tests/unit/features',
+        '模型层': 'tests/unit/models',
+        '回测层': 'tests/unit/backtest',
+        '策略层': 'tests/unit/strategies',
+        '风控层': 'tests/unit/risk_management',
+        '因子分析层': 'tests/unit/analysis',
+        '参数优化层': 'tests/unit/optimization',
+        '配置层': 'tests/unit/config',
+        '工具层': 'tests/unit/utils',
+    }
+
+    for layer_name, path in layers.items():
+        print(f"\n{Colors.BOLD}{layer_name}:{Colors.ENDC}")
+        paths = path.split()
+        for p in paths:
+            full_path = get_project_root() / p
+            if full_path.exists():
+                files = sorted(full_path.glob('test_*.py'))
+                for f in files:
+                    print(f"  - {f.relative_to(get_project_root())}")
+
+    print()
+    return 0
+
 def run_specific_module():
     """运行特定模块测试"""
     print_header("运行特定模块测试")
@@ -422,6 +558,7 @@ def interactive_mode():
         if choice == '0':
             print_info("退出测试运行器")
             return 0
+        # 综合测试
         elif choice == '1':
             return run_all_tests(coverage=True, fast=False, parallel=parallel_mode)
         elif choice == '2':
@@ -434,18 +571,33 @@ def interactive_mode():
             return run_performance_tests()
         elif choice == '6':
             return run_specific_module()
-        elif choice == '7':
-            return run_provider_tests(coverage=True)
-        elif choice == '8':
-            return run_model_tests(coverage=True, exclude_gru=True)
-        elif choice == '9':
-            return run_feature_tests(coverage=True)
+        # 核心层测试
+        elif choice == 'D':
+            return run_layer_tests('data', coverage=True, parallel=parallel_mode)
         elif choice == 'F':
+            return run_layer_tests('features', coverage=True, parallel=parallel_mode)
+        elif choice == 'M':
+            return run_layer_tests('models', coverage=True, parallel=parallel_mode)
+        elif choice == 'B':
+            return run_layer_tests('backtest', coverage=True, parallel=parallel_mode)
+        elif choice == 'S':
+            return run_layer_tests('strategies', coverage=True, parallel=parallel_mode)
+        elif choice == 'R':
+            return run_layer_tests('risk_management', coverage=True, parallel=parallel_mode)
+        elif choice == 'A':
+            return run_layer_tests('analysis', coverage=True, parallel=parallel_mode)
+        elif choice == 'O':
+            return run_layer_tests('optimization', coverage=True, parallel=parallel_mode)
+        # 其他选项
+        elif choice == 'L':
+            list_all_test_modules()
+            continue
+        elif choice == 'X':
             return run_failed_first()
         elif choice == 'P':
             parallel_mode = not parallel_mode
             if parallel_mode:
-                print_success("已启用并行模式")
+                print_success("✓ 已启用并行模式 (使用4个工作进程)")
             else:
                 print_info("已禁用并行模式")
             continue
@@ -468,6 +620,20 @@ def main():
   %(prog)s --unit                    # 只运行单元测试
   %(prog)s --integration             # 只运行集成测试
   %(prog)s --performance             # 只运行性能测试
+
+  # 核心层测试（推荐）
+  %(prog)s --layer strategies        # 运行策略层测试
+  %(prog)s --layer data              # 运行数据层测试（含providers）
+  %(prog)s --layer features          # 运行特征层测试
+  %(prog)s --layer models            # 运行模型层测试
+  %(prog)s --layer backtest          # 运行回测层测试
+  %(prog)s --layer risk_management   # 运行风控层测试
+  %(prog)s --layer analysis          # 运行因子分析层测试
+  %(prog)s --layer optimization      # 运行参数优化层测试
+  %(prog)s --layer data --parallel   # 并行运行数据层测试
+  %(prog)s --list-modules            # 列出所有可用测试模块
+
+  # 传统模块测试（兼容旧版）
   %(prog)s --providers               # 运行Provider测试
   %(prog)s --models                  # 运行模型测试
   %(prog)s --features                # 运行特征工程测试
@@ -477,15 +643,27 @@ def main():
         """
     )
 
+    # 综合测试选项
     parser.add_argument('--all', action='store_true', help='运行所有测试')
     parser.add_argument('--fast', action='store_true', help='快速模式（排除慢速测试和外部API测试）')
     parser.add_argument('--unit', action='store_true', help='运行单元测试')
     parser.add_argument('--integration', action='store_true', help='运行集成测试')
     parser.add_argument('--performance', action='store_true', help='运行性能测试')
+
+    # 核心层测试选项
+    parser.add_argument('--layer', type=str, choices=[
+        'data', 'features', 'models', 'backtest', 'strategies',
+        'risk_management', 'analysis', 'optimization'
+    ], help='运行指定核心层的测试')
+
+    # 传统模块测试选项（保持向后兼容）
     parser.add_argument('--providers', action='store_true', help='运行Provider测试')
     parser.add_argument('--models', action='store_true', help='运行模型测试')
     parser.add_argument('--features', action='store_true', help='运行特征工程测试')
     parser.add_argument('--module', type=str, help='运行特定模块测试')
+
+    # 其他选项
+    parser.add_argument('--list-modules', action='store_true', help='列出所有可用的测试模块')
     parser.add_argument('--coverage', action='store_true', default=True, help='生成覆盖率报告（默认开启）')
     parser.add_argument('--no-coverage', action='store_true', help='不生成覆盖率报告')
     parser.add_argument('--parallel', action='store_true', help='并行运行测试')
@@ -510,7 +688,15 @@ def main():
     returncode = 0
     output = ""
 
-    if args.all or args.fast:
+    # 列出模块
+    if args.list_modules:
+        return list_all_test_modules()
+
+    # 核心层测试
+    if args.layer:
+        returncode = run_layer_tests(args.layer, coverage=coverage, parallel=args.parallel)
+    # 综合测试
+    elif args.all or args.fast:
         returncode = run_all_tests(coverage=coverage, fast=args.fast,
                                    parallel=args.parallel, failed_first=args.failed_first)
     elif args.unit:
@@ -519,6 +705,7 @@ def main():
         returncode = run_integration_tests(coverage=coverage, parallel=args.parallel)
     elif args.performance:
         returncode = run_performance_tests()
+    # 传统模块测试（保持向后兼容）
     elif args.providers:
         returncode = run_provider_tests(coverage=coverage)
     elif args.models:
