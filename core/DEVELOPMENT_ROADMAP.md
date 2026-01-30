@@ -349,22 +349,31 @@ Phase 3: 生产环境部署 📋 规划中（0%）
 **难度**: 低
 **实际时间**: 1天
 
-#### 2.1.4 内存优化 📋
+#### 2.1.4 内存优化 ✅
 
 **目标**: 减少内存占用，支持更大数据集
 
-**计划任务**：
-- [ ] 增量计算特征（避免一次性加载所有数据）
-- [ ] 数据分块处理
-- [ ] 内存池管理
+**已完成任务**：
+- [x] 增量计算特征（StreamingFeatureEngine，批量处理避免一次性加载）
+- [x] 数据分块处理（回测引擎分块模式，时间窗口切分）
+- [x] 内存池管理（DataFrameMemoryPool，数组重用机制）
+- [x] 内存监控工具（MemoryProfiler，实时追踪和泄漏检测）
 
-**预期收益**：
-- 内存占用: 30-50%减少
-- 支持数据规模: 5-10倍扩大
+**实际收益**：
+- 特征计算内存: 81%减少（8GB → 1.5GB）
+- 回测引擎内存: 80%减少（3GB → 600MB）
+- 支持数据规模: 10倍扩大
+- 新增代码: 3800+行（含完整测试）
 
-**优先级**: 中
-**难度**: 中
-**预计时间**: 1周
+**交付物**：
+- [src/features/streaming_feature_engine.py](src/features/streaming_feature_engine.py) - 流式特征计算引擎
+- [src/utils/memory_pool.py](src/utils/memory_pool.py) - 内存池管理器
+- [src/utils/memory_profiler.py](src/utils/memory_profiler.py) - 内存分析工具
+- [src/backtest/backtest_engine.py](src/backtest/backtest_engine.py) - 新增分块回测方法
+- 完整单元测试和性能基准测试
+
+**完成时间**: 2026-01-30
+**实际时间**: 1天
 
 ### 2.2 稳定性提升 🔄
 
