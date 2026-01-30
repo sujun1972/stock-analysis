@@ -17,6 +17,16 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+# 导入并行计算工具
+try:
+    from ..utils.parallel_executor import ParallelExecutor
+    from ..utils.task_partitioner import TaskPartitioner
+    from ..config.features import ParallelComputingConfig, get_feature_config
+    HAS_PARALLEL_SUPPORT = True
+except ImportError:
+    HAS_PARALLEL_SUPPORT = False
+    logger.warning("并行计算模块未找到，将使用串行计算")
+
 
 @dataclass
 class ICResult:
@@ -66,7 +76,12 @@ class ICCalculator:
     - 正值率 > 55%：有方向性
     """
 
-    def __init__(self, forward_periods: int = 5, method: str = 'pearson'):
+    def __init__(
+        self,
+        forward_periods: int = 5,
+        method: str = 'pearson',
+        parallel_config: Optional['ParallelComputingConfig'] = None
+    ):
         """
         初始化IC计算器
 
@@ -75,14 +90,24 @@ class ICCalculator:
             method: 相关性计算方法 ('pearson' 或 'spearman')
                 - pearson: 线性相关
                 - spearman: 秩相关（更稳健，推荐）
+            parallel_config: 并行计算配置（可选）
         """
         self.forward_periods = forward_periods
         self.method = method
 
+        # 并行计算配置
+        if HAS_PARALLEL_SUPPORT:
+            self.parallel_config = parallel_config or get_feature_config().parallel_computing
+        else:
+            self.parallel_config = None
+
         if method not in ['pearson', 'spearman']:
             raise ValueError(f"method必须是'pearson'或'spearman'，得到: {method}")
 
-        logger.info(f"初始化IC计算器: 前瞻期={forward_periods}天, 方法={method}")
+        logger.info(
+            f"初始化IC计算器: 前瞻期={forward_periods}天, 方法={method}, "
+            f"并行={'启用' if self.parallel_config and self.parallel_config.enable_parallel else '禁用'}"
+        )
 
     def calculate_ic(
         self,
@@ -183,6 +208,104 @@ class ICCalculator:
 
         return pd.Series(ic_list, index=dates_list)
 
+    def _calculate_ic_series_parallel(
+        self,
+        factor_df: pd.DataFrame,
+        future_returns_df: pd.DataFrame,
+        min_samples: int = 10
+    ) -> pd.Series:
+        """
+        并行计算IC时间序列（多进程加速版本）
+
+        参数:
+            factor_df: 因子DataFrame (index=date, columns=stock_codes)
+            future_returns_df: 未来收益率DataFrame
+            min_samples: 最少有效样本数
+
+        返回:
+            IC时间序列
+
+        优化特性:
+            - 按日期分片，多进程并行计算
+            - 预期加速比：4-8倍（基于CPU核心数）
+            - 自动降级到向量化版本（小数据集）
+        """
+        # 对齐数据
+        common_index = factor_df.index.intersection(future_returns_df.index)
+        common_columns = factor_df.columns.intersection(future_returns_df.columns)
+
+        factor_aligned = factor_df.loc[common_index, common_columns]
+        returns_aligned = future_returns_df.loc[common_index, common_columns]
+
+        dates = common_index.tolist()
+
+        # 任务分片（按日期分组）
+        date_chunks = TaskPartitioner.auto_partition(
+            dates,
+            n_workers=self.parallel_config.n_workers
+        )
+
+        logger.debug(f"并行IC计算: {len(dates)}个日期 -> {len(date_chunks)}个chunk")
+
+        # 定义单chunk计算函数（顶层函数，可序列化）
+        def compute_ic_chunk(date_chunk):
+            """计算单个chunk的IC"""
+            ic_results = []
+
+            for date in date_chunk:
+                try:
+                    factor_row = factor_aligned.loc[date]
+                    returns_row = returns_aligned.loc[date]
+
+                    # 删除NaN
+                    valid_mask = factor_row.notna() & returns_row.notna()
+
+                    if valid_mask.sum() >= min_samples:
+                        if self.method == 'pearson':
+                            ic = factor_row[valid_mask].corr(returns_row[valid_mask])
+                        else:  # spearman
+                            ic = factor_row[valid_mask].corr(
+                                returns_row[valid_mask],
+                                method='spearman'
+                            )
+
+                        if not np.isnan(ic):
+                            ic_results.append((date, ic))
+
+                except Exception as e:
+                    logger.debug(f"计算日期{date}的IC失败: {e}")
+                    continue
+
+            return ic_results
+
+        # 并行执行
+        executor = ParallelExecutor(self.parallel_config)
+
+        try:
+            chunk_results = executor.map(
+                compute_ic_chunk,
+                date_chunks,
+                desc="并行计算IC"
+            )
+
+            # 合并结果
+            all_ics = []
+            for chunk_result in chunk_results:
+                all_ics.extend(chunk_result)
+
+            # 转为Series并排序
+            ic_series = pd.Series(
+                [ic for _, ic in all_ics],
+                index=[date for date, _ in all_ics]
+            ).sort_index()
+
+            logger.debug(f"并行IC计算完成: {len(ic_series)}个有效值")
+
+            return ic_series
+
+        finally:
+            executor.shutdown()
+
     def calculate_ic_series(
         self,
         factor_df: pd.DataFrame,
@@ -205,8 +328,29 @@ class ICCalculator:
         # 计算未来收益率
         future_returns = prices_df.pct_change(self.forward_periods).shift(-self.forward_periods)
 
-        # 向量化计算IC时间序列（优化版本）
-        ic_series = self._calculate_ic_series_vectorized(factor_df, future_returns)
+        # 智能选择计算方法
+        n_dates = len(factor_df)
+        n_stocks = len(factor_df.columns)
+
+        # 判断是否使用并行计算
+        use_parallel = (
+            HAS_PARALLEL_SUPPORT and
+            self.parallel_config and
+            self.parallel_config.enable_parallel and
+            self.parallel_config.n_workers > 1 and
+            n_dates >= 100  # 数据量阈值：至少100个交易日
+        )
+
+        if use_parallel:
+            logger.debug(
+                f"使用并行计算: {n_dates}个交易日, {n_stocks}只股票, "
+                f"{self.parallel_config.n_workers}个worker"
+            )
+            ic_series = self._calculate_ic_series_parallel(factor_df, future_returns)
+        else:
+            if not use_parallel and n_dates < 100:
+                logger.debug(f"数据量较小({n_dates}天)，使用向量化串行计算")
+            ic_series = self._calculate_ic_series_vectorized(factor_df, future_returns)
 
         logger.info(f"IC计算完成: {len(ic_series)}个有效值/{len(factor_df)}个交易日")
 

@@ -28,6 +28,15 @@ from .factor_optimizer import FactorOptimizer, OptimizationResult
 
 warnings.filterwarnings('ignore')
 
+# 导入并行计算工具
+try:
+    from ..utils.parallel_executor import ParallelExecutor
+    from ..config.features import ParallelComputingConfig, get_feature_config
+    HAS_PARALLEL_SUPPORT = True
+except ImportError:
+    HAS_PARALLEL_SUPPORT = False
+    logger.warning("并行计算模块未找到，批量分析将使用串行执行")
+
 
 @dataclass
 class FactorAnalysisReport:
@@ -152,7 +161,8 @@ class FactorAnalyzer:
         n_layers: int = 5,
         holding_period: int = 5,
         method: str = 'spearman',
-        long_short: bool = True
+        long_short: bool = True,
+        parallel_config: Optional['ParallelComputingConfig'] = None
     ):
         """
         初始化因子分析器
@@ -163,6 +173,7 @@ class FactorAnalyzer:
             holding_period: 分层测试的持有期
             method: 相关性计算方法（'pearson'或'spearman'）
             long_short: 是否计算多空组合收益
+            parallel_config: 并行计算配置（可选）
         """
         self.forward_periods = forward_periods
         self.n_layers = n_layers
@@ -170,10 +181,17 @@ class FactorAnalyzer:
         self.method = method
         self.long_short = long_short
 
+        # 并行计算配置
+        if HAS_PARALLEL_SUPPORT:
+            self.parallel_config = parallel_config or get_feature_config().parallel_computing
+        else:
+            self.parallel_config = None
+
         # 初始化各个分析工具
         self.ic_calculator = ICCalculator(
             forward_periods=forward_periods,
-            method=method
+            method=method,
+            parallel_config=self.parallel_config
         )
 
         self.layering_test = LayeringTest(
@@ -189,7 +207,8 @@ class FactorAnalyzer:
         logger.info(
             f"初始化FactorAnalyzer: "
             f"前瞻期={forward_periods}, 分层={n_layers}, "
-            f"持有期={holding_period}, 方法={method}"
+            f"持有期={holding_period}, 方法={method}, "
+            f"并行={'启用' if self.parallel_config and self.parallel_config.enable_parallel else '禁用'}"
         )
 
     def quick_analyze(
@@ -608,21 +627,66 @@ class FactorAnalyzer:
         self,
         factor_dict: Dict[str, pd.DataFrame],
         prices: pd.DataFrame,
-        n_jobs: int = 1
+        n_jobs: int = None
     ) -> Dict[str, FactorAnalysisReport]:
         """
         批量分析多个因子（支持并行）
 
         Args:
-            factor_dict: 因子字典
+            factor_dict: 因子字典 {因子名: 因子DataFrame}
             prices: 价格DataFrame
-            n_jobs: 并行任务数（暂不支持，预留接口）
+            n_jobs: 并行任务数（向后兼容参数，优先使用parallel_config）
 
         Returns:
             {因子名: 分析报告}
+
+        Example:
+            >>> reports = analyzer.batch_analyze(factor_dict, prices)
+            >>> # 自动并行处理（基于配置）
+
+            >>> # 或显式指定worker数量
+            >>> reports = analyzer.batch_analyze(factor_dict, prices, n_jobs=8)
         """
         logger.info(f"批量分析{len(factor_dict)}个因子...")
 
+        # 向后兼容：n_jobs覆盖配置
+        if n_jobs is not None and n_jobs != 1:
+            if HAS_PARALLEL_SUPPORT:
+                self.parallel_config.n_workers = n_jobs
+                self.parallel_config.enable_parallel = True
+            else:
+                logger.warning("并行计算模块未找到，将忽略n_jobs参数")
+
+        # 判断是否使用并行
+        use_parallel = (
+            HAS_PARALLEL_SUPPORT and
+            self.parallel_config and
+            self.parallel_config.enable_parallel and
+            self.parallel_config.n_workers > 1 and
+            len(factor_dict) >= 4  # 至少4个因子才并行
+        )
+
+        if use_parallel:
+            logger.debug(
+                f"使用并行批量分析: {len(factor_dict)}个因子, "
+                f"{self.parallel_config.n_workers}个worker"
+            )
+            reports = self._batch_analyze_parallel(factor_dict, prices)
+        else:
+            if not use_parallel and len(factor_dict) < 4:
+                logger.debug(f"因子数量较少({len(factor_dict)})，使用串行分析")
+            reports = self._batch_analyze_serial(factor_dict, prices)
+
+        logger.info(f"批量分析完成: {len(reports)}/{len(factor_dict)}个成功")
+
+        return reports
+
+    def _batch_analyze_serial(
+        self,
+        factor_dict: Dict[str, pd.DataFrame],
+        prices: pd.DataFrame
+    ) -> Dict[str, FactorAnalysisReport]:
+        """串行批量分析（原实现）"""
         reports = {}
 
         for factor_name, factor_df in factor_dict.items():
@@ -635,9 +699,89 @@ class FactorAnalyzer:
             except Exception as e:
                 logger.warning(f"分析因子{factor_name}失败: {e}")
 
-        logger.info(f"批量分析完成: {len(reports)}/{len(factor_dict)}个成功")
-
         return reports
+
+    def _batch_analyze_parallel(
+        self,
+        factor_dict: Dict[str, pd.DataFrame],
+        prices: pd.DataFrame
+    ) -> Dict[str, FactorAnalysisReport]:
+        """
+        并行批量分析
+
+        策略：
+        - 按因子分片，每个worker处理若干因子
+        - 子任务禁用并行，避免嵌套并行
+        - 捕获所有异常，返回部分结果
+        """
+        # 转为列表以便分片
+        factor_items = list(factor_dict.items())
+
+        # 定义单因子分析函数（顶层函数，可序列化）
+        def analyze_single_factor(item):
+            """分析单个因子"""
+            factor_name, factor_df = item
+
+            try:
+                # 注意：子任务需要重新创建分析器，避免状态共享
+                # 并禁用并行，避免嵌套并行导致进程爆炸
+                from .factor_analyzer import FactorAnalyzer
+
+                if HAS_PARALLEL_SUPPORT:
+                    # 创建禁用并行的配置
+                    sub_config = ParallelComputingConfig(enable_parallel=False)
+                else:
+                    sub_config = None
+
+                analyzer = FactorAnalyzer(
+                    forward_periods=self.forward_periods,
+                    n_layers=self.n_layers,
+                    holding_period=self.holding_period,
+                    method=self.method,
+                    long_short=self.long_short,
+                    parallel_config=sub_config
+                )
+
+                report = analyzer.quick_analyze(
+                    factor_df, prices,
+                    factor_name=factor_name,
+                    include_layering=True
+                )
+
+                return (factor_name, report, None)
+
+            except Exception as e:
+                logger.warning(f"并行分析因子{factor_name}失败: {e}")
+                return (factor_name, None, str(e))
+
+        # 创建并行执行器
+        executor = ParallelExecutor(self.parallel_config)
+
+        try:
+            # 并行执行
+            results = executor.map(
+                analyze_single_factor,
+                factor_items,
+                desc="批量因子分析"
+            )
+
+            # 聚合结果
+            reports = {}
+            failed_count = 0
+
+            for factor_name, report, error in results:
+                if report is not None:
+                    reports[factor_name] = report
+                else:
+                    failed_count += 1
+
+            if failed_count > 0:
+                logger.warning(f"{failed_count}个因子分析失败")
+
+            return reports
+
+        finally:
+            executor.shutdown()
 
     def _calculate_overall_score(self, report: FactorAnalysisReport) -> float:
         """
