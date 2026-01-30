@@ -301,6 +301,10 @@ class ParallelExecutor:
         except Exception as e:
             logger.error(f"并行执行失败: {e}")
             if not ignore_errors:
+                # 如果是用户函数的错误，直接传播原始异常
+                if isinstance(e, (ValueError, TypeError, KeyError, AttributeError, IndexError)):
+                    raise
+                # 其他异常包装为ParallelExecutionError
                 raise ParallelExecutionError(f"执行失败: {e}") from e
             return []
 

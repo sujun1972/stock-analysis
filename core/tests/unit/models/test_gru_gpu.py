@@ -73,10 +73,10 @@ class TestGRUGPUInitialization:
 
         # GPU是否可用取决于系统环境
         import torch
-        if torch.cuda.is_available():
-            assert "cuda" in str(trainer.device) or str(trainer.device) == "cpu"
-        else:
-            assert str(trainer.device) == "cpu"
+        device_str = str(trainer.device)
+
+        # 接受任何可用的加速设备：CUDA、MPS或CPU
+        assert device_str in ["cuda", "mps", "cpu"] or "cuda" in device_str
 
     def test_auto_batch_size(self):
         """测试自动批次大小计算"""

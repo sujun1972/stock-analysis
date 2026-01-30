@@ -63,6 +63,83 @@ class ICResult:
         )
 
 
+# ==================== 模块级辅助函数（用于并行计算） ====================
+
+def _compute_ic_chunk_worker(args):
+    """
+    计算单个chunk的IC（模块级函数，可序列化）
+
+    Args:
+        args: (date_chunk, factor_aligned, returns_aligned, method, min_samples)
+
+    Returns:
+        [(date, ic), ...]
+    """
+    date_chunk, factor_data_dict, returns_data_dict, method, min_samples = args
+
+    # 重建DataFrame（from_dict with orient='index'保持原始结构）
+    factor_aligned = pd.DataFrame.from_dict(factor_data_dict, orient='index')
+    returns_aligned = pd.DataFrame.from_dict(returns_data_dict, orient='index')
+
+    ic_results = []
+
+    for date in date_chunk:
+        try:
+            factor_row = factor_aligned.loc[date]
+            returns_row = returns_aligned.loc[date]
+
+            # 删除NaN
+            valid_mask = factor_row.notna() & returns_row.notna()
+
+            if valid_mask.sum() >= min_samples:
+                if method == 'pearson':
+                    ic = factor_row[valid_mask].corr(returns_row[valid_mask])
+                else:  # spearman
+                    ic = factor_row[valid_mask].corr(
+                        returns_row[valid_mask],
+                        method='spearman'
+                    )
+
+                if not np.isnan(ic):
+                    ic_results.append((date, ic))
+
+        except Exception as e:
+            logger.debug(f"计算日期{date}的IC失败: {e}")
+            continue
+
+    return ic_results
+
+
+def _analyze_single_factor_worker(args):
+    """
+    分析单个因子（模块级函数，用于批量分析）
+
+    Args:
+        args: (factor_name, factor_df, prices_df, forward_periods, method, min_periods)
+
+    Returns:
+        (factor_name, ic_result)
+    """
+    factor_name, factor_df, prices_df, forward_periods, method, min_periods = args
+
+    try:
+        # 创建临时计算器
+        calc = ICCalculator(forward_periods=forward_periods, method=method, parallel_config=None)
+
+        # 计算IC序列（串行）
+        future_returns = prices_df.pct_change(forward_periods).shift(-forward_periods)
+        ic_series = calc._calculate_ic_series_vectorized(factor_df, future_returns)
+
+        # 计算统计指标
+        ic_result = calc.calculate_ic_stats(ic_series)
+
+        return (factor_name, ic_result)
+
+    except Exception as e:
+        logger.error(f"分析因子{factor_name}失败: {e}")
+        return (factor_name, None)
+
+
 class ICCalculator:
     """
     IC计算器 - 评估因子的预测能力
@@ -247,44 +324,23 @@ class ICCalculator:
 
         logger.debug(f"并行IC计算: {len(dates)}个日期 -> {len(date_chunks)}个chunk")
 
-        # 定义单chunk计算函数（顶层函数，可序列化）
-        def compute_ic_chunk(date_chunk):
-            """计算单个chunk的IC"""
-            ic_results = []
+        # 准备数据（转为dict以便序列化）
+        factor_data_dict = factor_aligned.to_dict('index')
+        returns_data_dict = returns_aligned.to_dict('index')
 
-            for date in date_chunk:
-                try:
-                    factor_row = factor_aligned.loc[date]
-                    returns_row = returns_aligned.loc[date]
-
-                    # 删除NaN
-                    valid_mask = factor_row.notna() & returns_row.notna()
-
-                    if valid_mask.sum() >= min_samples:
-                        if self.method == 'pearson':
-                            ic = factor_row[valid_mask].corr(returns_row[valid_mask])
-                        else:  # spearman
-                            ic = factor_row[valid_mask].corr(
-                                returns_row[valid_mask],
-                                method='spearman'
-                            )
-
-                        if not np.isnan(ic):
-                            ic_results.append((date, ic))
-
-                except Exception as e:
-                    logger.debug(f"计算日期{date}的IC失败: {e}")
-                    continue
-
-            return ic_results
+        # 准备任务参数
+        tasks = [
+            (chunk, factor_data_dict, returns_data_dict, self.method, min_samples)
+            for chunk in date_chunks
+        ]
 
         # 并行执行
         executor = ParallelExecutor(self.parallel_config)
 
         try:
             chunk_results = executor.map(
-                compute_ic_chunk,
-                date_chunks,
+                _compute_ic_chunk_worker,
+                tasks,
                 desc="并行计算IC"
             )
 

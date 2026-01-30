@@ -127,10 +127,10 @@ class TestDataFrameMemoryPool:
 
         arr1 = pool.acquire(shape=(100, 10))
         arr2 = pool.acquire(shape=(50, 5))
-        arr3 = pool.acquire(shape=(100, 10))  # 与arr1相同
+        arr3 = pool.acquire(shape=(100, 10))  # 与arr1相同，但arr1还未释放，需要再分配
 
-        # 应该有2次新分配
-        assert pool.stats.total_alloc_count == 2
+        # 应该有3次新分配（两个不同形状各一次，相同形状因未释放再分配一次）
+        assert pool.stats.total_alloc_count == 3
 
         pool.release(arr1)
         pool.release(arr2)
@@ -139,7 +139,7 @@ class TestDataFrameMemoryPool:
         arr4 = pool.acquire(shape=(100, 10))  # 重用arr1
         arr5 = pool.acquire(shape=(50, 5))  # 重用arr2
 
-        assert pool.stats.total_alloc_count == 2  # 没有新分配
+        assert pool.stats.total_alloc_count == 3  # 没有新分配
         assert pool.stats.total_reuse_count == 2
 
     def test_pool_size_limit(self):
@@ -153,7 +153,7 @@ class TestDataFrameMemoryPool:
             pool.release(arr)
 
         # 池中只应保留3个（max_pools_per_shape=3）
-        key = (10, 5, np.float64)
+        key = (10, 5, np.dtype('float64'))
         assert len(pool.pools[key]) == 3
 
     def test_acquire_like(self):
@@ -196,8 +196,8 @@ class TestDataFrameMemoryPool:
         # 清空(100, 10)形状的池
         pool.clear(shape=(100, 10))
 
-        key1 = (100, 10, np.float64)
-        key2 = (50, 5, np.float64)
+        key1 = (100, 10, np.dtype('float64'))
+        key2 = (50, 5, np.dtype('float64'))
 
         assert key1 not in pool.pools or len(pool.pools[key1]) == 0
         assert key2 in pool.pools and len(pool.pools[key2]) > 0

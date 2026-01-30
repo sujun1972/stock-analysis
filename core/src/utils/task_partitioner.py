@@ -178,16 +178,21 @@ class TaskPartitioner:
 
         # 策略2: 基于worker数量均匀分片
         # 目标：chunk数量 = worker数量 * 2（更好的负载均衡）
-        target_chunks = n_workers * 2
-        target_chunks = max(target_chunks, n_workers)  # 至少等于worker数
-        target_chunks = min(target_chunks, n_items)    # 不超过项目数
+        target_chunk_size = n_items // (n_workers * 2)
+        target_chunk_size = max(target_chunk_size, 1)  # 至少为1
+
+        # 应用min/max限制
+        if min_chunk_size and target_chunk_size < min_chunk_size:
+            target_chunk_size = min_chunk_size
+        if max_chunk_size and target_chunk_size > max_chunk_size:
+            target_chunk_size = max_chunk_size
 
         logger.debug(
             f"自适应分片（基于worker）: {n_items}个项目, "
-            f"{n_workers}个worker -> {target_chunks}个chunk"
+            f"{n_workers}个worker -> chunk_size={target_chunk_size}"
         )
 
-        return TaskPartitioner.partition_by_count(items, target_chunks)
+        return TaskPartitioner.partition_by_size(items, target_chunk_size)
 
     @staticmethod
     def partition_dataframe(

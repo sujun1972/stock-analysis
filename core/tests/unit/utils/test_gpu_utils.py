@@ -91,8 +91,11 @@ class TestGPUManager:
 
         device = manager.get_device(prefer_gpu=True)
 
+        # 接受CUDA、MPS或CPU
         if torch.cuda.is_available() and manager.config.enabled:
             assert "cuda" in device
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            assert device in ["mps", "cpu"]  # MPS或CPU都是合理的
         else:
             assert device == "cpu"
 
@@ -292,6 +295,8 @@ class TestGPUIntegration:
         device_gpu = manager.get_device(prefer_gpu=True)
         if torch.cuda.is_available() and manager.config.enabled:
             assert "cuda" in device_gpu
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            assert device_gpu in ["mps", "cpu"]  # MPS或CPU都是合理的
         else:
             assert device_gpu == "cpu"
 

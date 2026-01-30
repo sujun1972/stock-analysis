@@ -274,6 +274,7 @@ class GRUStockTrainer:
         """训练一个epoch（GPU优化版）"""
         self.model.train()
         total_loss = 0
+        num_batches = 0
 
         for sequences, targets in train_loader:
             sequences = sequences.to(self.device, non_blocking=True)
@@ -298,8 +299,10 @@ class GRUStockTrainer:
                 self.optimizer.step()
 
             total_loss += loss.item()
+            num_batches += 1
 
-        return total_loss / len(train_loader)
+        # 防止除零错误
+        return total_loss / num_batches if num_batches > 0 else 0.0
 
     def validate(
         self,
@@ -308,6 +311,7 @@ class GRUStockTrainer:
         """验证（GPU优化版）"""
         self.model.eval()
         total_loss = 0
+        num_batches = 0
 
         with torch.no_grad():
             for sequences, targets in valid_loader:
@@ -318,8 +322,10 @@ class GRUStockTrainer:
                 loss = self.criterion(predictions, targets)
 
                 total_loss += loss.item()
+                num_batches += 1
 
-        return total_loss / len(valid_loader)
+        # 防止除零错误
+        return total_loss / num_batches if num_batches > 0 else 0.0
 
     def train(
         self,
@@ -416,12 +422,12 @@ class GRUStockTrainer:
                     break
 
                 # 输出
-                if (epoch + 1) % verbose == 0:
+                if verbose > 0 and (epoch + 1) % verbose == 0:
                     logger.info(f"Epoch {epoch + 1}/{epochs} - "
                           f"Train Loss: {train_loss:.6f}, "
                           f"Valid Loss: {valid_loss:.6f}")
             else:
-                if (epoch + 1) % verbose == 0:
+                if verbose > 0 and (epoch + 1) % verbose == 0:
                     logger.info(f"Epoch {epoch + 1}/{epochs} - Train Loss: {train_loss:.6f}")
 
             # 定期清理GPU缓存

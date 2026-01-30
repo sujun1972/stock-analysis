@@ -38,6 +38,52 @@ except ImportError:
     logger.warning("并行计算模块未找到，批量分析将使用串行执行")
 
 
+# ==================== 模块级辅助函数（用于并行计算） ====================
+
+def _analyze_single_factor_worker_v2(args):
+    """
+    分析单个因子（模块级函数，用于批量并行分析）
+
+    Args:
+        args: (factor_name, factor_df, prices, forward_periods, n_layers, holding_period, method, long_short)
+
+    Returns:
+        (factor_name, report, error)
+    """
+    factor_name, factor_df, prices, forward_periods, n_layers, holding_period, method, long_short = args
+
+    try:
+        # 创建禁用并行的分析器（避免嵌套并行）
+        if HAS_PARALLEL_SUPPORT:
+            sub_config = ParallelComputingConfig(enable_parallel=False)
+        else:
+            sub_config = None
+
+        # 必须在这里导入，避免循环导入
+        from .factor_analyzer import FactorAnalyzer
+
+        analyzer = FactorAnalyzer(
+            forward_periods=forward_periods,
+            n_layers=n_layers,
+            holding_period=holding_period,
+            method=method,
+            long_short=long_short,
+            parallel_config=sub_config
+        )
+
+        report = analyzer.quick_analyze(
+            factor_df, prices,
+            factor_name=factor_name,
+            include_layering=True
+        )
+
+        return (factor_name, report, None)
+
+    except Exception as e:
+        logger.warning(f"并行分析因子{factor_name}失败: {e}")
+        return (factor_name, None, str(e))
+
+
 @dataclass
 class FactorAnalysisReport:
     """因子分析完整报告"""
@@ -717,51 +763,29 @@ class FactorAnalyzer:
         # 转为列表以便分片
         factor_items = list(factor_dict.items())
 
-        # 定义单因子分析函数（顶层函数，可序列化）
-        def analyze_single_factor(item):
-            """分析单个因子"""
-            factor_name, factor_df = item
-
-            try:
-                # 注意：子任务需要重新创建分析器，避免状态共享
-                # 并禁用并行，避免嵌套并行导致进程爆炸
-                from .factor_analyzer import FactorAnalyzer
-
-                if HAS_PARALLEL_SUPPORT:
-                    # 创建禁用并行的配置
-                    sub_config = ParallelComputingConfig(enable_parallel=False)
-                else:
-                    sub_config = None
-
-                analyzer = FactorAnalyzer(
-                    forward_periods=self.forward_periods,
-                    n_layers=self.n_layers,
-                    holding_period=self.holding_period,
-                    method=self.method,
-                    long_short=self.long_short,
-                    parallel_config=sub_config
-                )
-
-                report = analyzer.quick_analyze(
-                    factor_df, prices,
-                    factor_name=factor_name,
-                    include_layering=True
-                )
-
-                return (factor_name, report, None)
-
-            except Exception as e:
-                logger.warning(f"并行分析因子{factor_name}失败: {e}")
-                return (factor_name, None, str(e))
+        # 准备任务参数（包含所有需要的配置）
+        tasks = [
+            (
+                factor_name,
+                factor_df,
+                prices,
+                self.forward_periods,
+                self.n_layers,
+                self.holding_period,
+                self.method,
+                self.long_short
+            )
+            for factor_name, factor_df in factor_items
+        ]
 
         # 创建并行执行器
         executor = ParallelExecutor(self.parallel_config)
 
         try:
-            # 并行执行
+            # 并行执行（使用模块级函数）
             results = executor.map(
-                analyze_single_factor,
-                factor_items,
+                _analyze_single_factor_worker_v2,
+                tasks,
                 desc="批量因子分析"
             )
 

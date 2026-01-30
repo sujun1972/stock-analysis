@@ -133,6 +133,8 @@ class DataFrameMemoryPool:
         if shape[0] <= 0 or shape[1] <= 0:
             raise ValueError(f"shape维度必须大于0，得到: {shape}")
 
+        # 规范化dtype为numpy dtype对象，确保键一致性
+        dtype = np.dtype(dtype)
         key = (shape[0], shape[1], dtype)
 
         with self.lock:
@@ -142,6 +144,7 @@ class DataFrameMemoryPool:
 
                 if self.enable_stats:
                     self.stats.total_reuse_count += 1
+                    self._update_memory_stats()
 
                 logger.debug(f"从内存池获取: shape={shape}, dtype={dtype} (重用)")
 
@@ -176,17 +179,20 @@ class DataFrameMemoryPool:
             logger.warning(f"仅支持二维数组，得到: {arr.ndim}维")
             return
 
-        key = (arr.shape[0], arr.shape[1], arr.dtype)
+        # 规范化dtype，确保与acquire中的键一致
+        key = (arr.shape[0], arr.shape[1], np.dtype(arr.dtype))
 
         with self.lock:
-            # 限制每个池的大小
-            if len(self.pools[key]) < self.max_pools_per_shape:
+            # 限制每个池的大小（避免defaultdict自动创建）
+            current_pool_size = len(self.pools[key]) if key in self.pools else 0
+
+            if current_pool_size < self.max_pools_per_shape:
                 self.pools[key].append(arr)
+                self._update_memory_stats()
                 logger.debug(f"内存块已归还: shape={arr.shape}, pool_size={len(self.pools[key])}")
             else:
                 # 池已满，丢弃该数组（让GC回收）
                 logger.debug(f"内存池已满，丢弃数组: shape={arr.shape}")
-                del arr
 
     def acquire_like(
         self,
