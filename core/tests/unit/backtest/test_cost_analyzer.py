@@ -475,3 +475,288 @@ class TestCostAnalyzerIntegration:
         # 所有成本应该为0
         assert metrics['total_cost'] == 0.0
         assert metrics['cost_drag'] == 0.0
+
+
+class TestTradeToDict:
+    """测试Trade的to_dict方法"""
+
+    def test_trade_to_dict_complete(self):
+        """测试完整的交易转字典"""
+        date = datetime(2023, 1, 1)
+        trade = Trade(
+            date=date,
+            stock_code='600000',
+            action='buy',
+            shares=1000,
+            price=10.0,
+            commission=30.0,
+            stamp_tax=0.0,
+            slippage=10.0,
+            total_cost=40.0
+        )
+
+        trade_dict = trade.to_dict()
+
+        assert trade_dict['date'] == date
+        assert trade_dict['stock_code'] == '600000'
+        assert trade_dict['action'] == 'buy'
+        assert trade_dict['shares'] == 1000
+        assert trade_dict['price'] == 10.0
+        assert trade_dict['trade_value'] == 10000.0
+        assert trade_dict['commission'] == 30.0
+        assert trade_dict['stamp_tax'] == 0.0
+        assert trade_dict['slippage'] == 10.0
+        assert trade_dict['total_cost'] == 40.0
+        assert abs(trade_dict['cost_ratio'] - 0.004) < 0.0001
+
+    def test_trade_to_dict_zero_trade_value(self):
+        """测试零交易金额的成本比率"""
+        trade = Trade(
+            date=datetime(2023, 1, 1),
+            stock_code='600000',
+            action='buy',
+            shares=0,
+            price=10.0,
+            commission=5.0,
+            stamp_tax=0.0,
+            slippage=0.0,
+            total_cost=5.0
+        )
+
+        trade_dict = trade.to_dict()
+        assert trade_dict['cost_ratio'] == 0  # 零交易额时比率为0
+
+
+class TestAnalyzerEdgeCases:
+    """测试分析器的边界情况"""
+
+    def test_no_trades_total_costs(self):
+        """测试无交易时的成本汇总"""
+        analyzer = TradingCostAnalyzer()
+
+        costs = analyzer.calculate_total_costs()
+
+        assert costs['total_commission'] == 0.0
+        assert costs['total_stamp_tax'] == 0.0
+        assert costs['total_slippage'] == 0.0
+        assert costs['total_cost'] == 0.0
+
+    def test_single_trade_analysis(self):
+        """测试单笔交易的分析"""
+        analyzer = TradingCostAnalyzer()
+
+        analyzer.add_trade_from_dict(
+            date=datetime(2023, 1, 1),
+            stock_code='600000',
+            action='buy',
+            shares=1000,
+            price=10.0,
+            commission=30.0,
+            stamp_tax=0.0,
+            slippage=10.0
+        )
+
+        costs = analyzer.calculate_total_costs()
+
+        assert costs['total_cost'] == 40.0
+        assert costs['total_commission'] == 30.0
+        assert costs['total_slippage'] == 10.0
+
+    def test_calculate_cost_by_stock_empty(self):
+        """测试无交易时按股票统计"""
+        analyzer = TradingCostAnalyzer()
+
+        costs_by_stock = analyzer.calculate_cost_by_stock()
+
+        assert len(costs_by_stock) == 0
+
+    def test_calculate_cost_over_time_empty(self):
+        """测试无交易时按日期统计"""
+        analyzer = TradingCostAnalyzer()
+
+        costs_by_date = analyzer.calculate_cost_over_time()
+
+        assert len(costs_by_date) == 0
+
+    def test_analyze_all_with_zero_returns(self):
+        """测试零收益情况下的分析"""
+        analyzer = TradingCostAnalyzer()
+
+        dates = pd.date_range('2023-01-01', periods=5, freq='D')
+
+        for date in dates:
+            analyzer.add_trade_from_dict(
+                date=date,
+                stock_code='600000',
+                action='buy',
+                shares=1000,
+                price=10.0,
+                commission=30.0,
+                stamp_tax=0.0,
+                slippage=10.0
+            )
+
+        # 零收益
+        portfolio_returns = pd.Series([0.0] * 5, index=dates)
+        portfolio_values = pd.Series([1000000] * 5, index=dates)
+
+        metrics = analyzer.analyze_all(
+            portfolio_returns=portfolio_returns,
+            portfolio_values=portfolio_values,
+            verbose=False
+        )
+
+        # 应该有成本
+        assert metrics['total_cost'] > 0
+        # 零收益时成本拖累很小但不为0（因为有交易成本）
+        assert metrics['cost_drag'] >= 0
+
+    def test_simulate_cost_scenarios_edge_cases(self):
+        """测试成本场景模拟的边界情况"""
+        analyzer = TradingCostAnalyzer()
+
+        # 添加一些交易
+        dates = pd.date_range('2023-01-01', periods=3, freq='D')
+        for date in dates:
+            analyzer.add_trade_from_dict(
+                date=date,
+                stock_code='600000',
+                action='buy',
+                shares=1000,
+                price=10.0,
+                commission=30.0,
+                stamp_tax=0.0,
+                slippage=10.0
+            )
+
+        portfolio_values = pd.Series([1000000, 1010000, 1030000], index=dates)
+
+        # 测试不同乘数（只传portfolio_values）
+        scenarios = analyzer.simulate_cost_scenarios(
+            portfolio_values=portfolio_values,
+            cost_multipliers=[0.5, 1.0, 2.0]
+        )
+
+        assert len(scenarios) == 3
+        # 成本乘数越大，总成本应该越大
+        assert scenarios.iloc[0]['total_cost'] < scenarios.iloc[2]['total_cost']
+
+    def test_calculate_turnover_with_constant_portfolio(self):
+        """测试恒定组合价值的换手率"""
+        analyzer = TradingCostAnalyzer()
+
+        dates = pd.date_range('2023-01-01', periods=10, freq='D')
+
+        # 添加一些交易
+        for date in dates:
+            analyzer.add_trade_from_dict(
+                date=date,
+                stock_code='600000',
+                action='buy',
+                shares=100,
+                price=10.0,
+                commission=5.0,
+                stamp_tax=0.0,
+                slippage=2.0
+            )
+
+        # 恒定组合价值
+        portfolio_values = pd.Series([100000] * 10, index=dates)
+
+        turnover = analyzer.calculate_turnover_rate(portfolio_values, period='annual')
+
+        # 应该有正的换手率
+        assert turnover > 0
+
+    def test_multiple_stocks_cost_breakdown(self):
+        """测试多股票的成本分解"""
+        analyzer = TradingCostAnalyzer()
+
+        # 为多个股票添加交易
+        date = datetime(2023, 1, 1)
+        stocks = ['600000', '000001', '000002']
+
+        for stock in stocks:
+            analyzer.add_trade_from_dict(
+                date=date,
+                stock_code=stock,
+                action='buy',
+                shares=1000,
+                price=10.0,
+                commission=30.0,
+                stamp_tax=0.0,
+                slippage=10.0
+            )
+
+        costs_by_stock = analyzer.calculate_cost_by_stock()
+
+        # 应该有3只股票的成本记录
+        assert len(costs_by_stock) == 3
+
+        for stock in stocks:
+            assert stock in costs_by_stock.index
+            # 每只股票的成本应该相同
+            assert costs_by_stock.loc[stock, 'total_cost'] == 40.0
+
+
+class TestVerboseOutput:
+    """测试verbose参数"""
+
+    def test_analyze_all_verbose_false(self):
+        """测试verbose=False不输出"""
+        analyzer = TradingCostAnalyzer()
+
+        dates = pd.date_range('2023-01-01', periods=5, freq='D')
+
+        for date in dates:
+            analyzer.add_trade_from_dict(
+                date=date,
+                stock_code='600000',
+                action='buy',
+                shares=1000,
+                price=10.0,
+                commission=30.0,
+                stamp_tax=0.0,
+                slippage=10.0
+            )
+
+        portfolio_returns = pd.Series([0.01] * 5, index=dates)
+        portfolio_values = pd.Series(np.linspace(1000000, 1050000, 5), index=dates)
+
+        # verbose=False 应该不输出（这里只是确保不报错）
+        metrics = analyzer.analyze_all(
+            portfolio_returns=portfolio_returns,
+            portfolio_values=portfolio_values,
+            verbose=False
+        )
+
+        assert 'total_cost' in metrics
+
+    def test_simulate_cost_scenarios_returns_dataframe(self):
+        """测试场景模拟返回DataFrame"""
+        analyzer = TradingCostAnalyzer()
+
+        dates = pd.date_range('2023-01-01', periods=3, freq='D')
+        for date in dates:
+            analyzer.add_trade_from_dict(
+                date=date,
+                stock_code='600000',
+                action='buy',
+                shares=1000,
+                price=10.0,
+                commission=30.0,
+                stamp_tax=0.0,
+                slippage=10.0
+            )
+
+        portfolio_values = pd.Series([1000000, 1010000, 1030000], index=dates)
+
+        scenarios = analyzer.simulate_cost_scenarios(
+            portfolio_values=portfolio_values,
+            cost_multipliers=[0.5, 1.0, 1.5]
+        )
+
+        assert len(scenarios) == 3
+        assert isinstance(scenarios, pd.DataFrame)
+        assert 'cost_multiplier' in scenarios.columns
+        assert 'total_cost' in scenarios.columns

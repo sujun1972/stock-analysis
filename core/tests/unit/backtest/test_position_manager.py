@@ -652,3 +652,126 @@ class TestEdgeCases:
 
         # 应剩余 500 + 300 - 200 = 600 股
         assert manager.positions['600000'].shares == 600
+
+
+class TestPositionToDict:
+    """测试Position的to_dict方法"""
+
+    def test_position_to_dict(self):
+        """测试转换为字典"""
+        entry_date = datetime(2023, 1, 1)
+        pos = Position(
+            stock_code='600000',
+            shares=1000,
+            entry_price=10.0,
+            entry_date=entry_date,
+            entry_cost=50.0
+        )
+
+        pos_dict = pos.to_dict()
+
+        assert pos_dict['stock_code'] == '600000'
+        assert pos_dict['shares'] == 1000
+        assert pos_dict['entry_price'] == 10.0
+        assert pos_dict['entry_date'] == entry_date
+        assert pos_dict['entry_cost'] == 50.0
+
+
+class TestPositionManagerGetPosition:
+    """测试PositionManager的get_position方法"""
+
+    def test_get_existing_position(self):
+        """测试获取存在的持仓"""
+        manager = PositionManager(initial_capital=100000)
+        manager.add_position('600000', 1000, 10.0, datetime(2023, 1, 1), 50)
+
+        pos = manager.get_position('600000')
+        assert pos is not None
+        assert pos.stock_code == '600000'
+        assert pos.shares == 1000
+
+    def test_get_nonexistent_position(self):
+        """测试获取不存在的持仓"""
+        manager = PositionManager(initial_capital=100000)
+
+        pos = manager.get_position('600000')
+        assert pos is None
+
+
+class TestManagerCashEdgeCases:
+    """测试现金相关的边界情况"""
+
+    def test_zero_initial_capital(self):
+        """测试零初始资金"""
+        manager = PositionManager(initial_capital=0)
+
+        assert manager.cash == 0
+        assert manager.initial_capital == 0
+
+        # 零初始资金时，无法买入（现金不足，但不会抛出异常，只是现金变负）
+        # 注意：实际实现中add_position不会检查现金是否足够
+        manager.add_position('600000', 100, 10.0, datetime(2023, 1, 1), 50)
+        assert manager.cash < 0  # 现金会变负
+
+    def test_cash_recovery_from_sales(self):
+        """测试卖出后现金恢复"""
+        manager = PositionManager(initial_capital=100000)
+
+        # 买入消耗现金
+        manager.add_position('600000', 1000, 10.0, datetime(2023, 1, 1), 50)
+        cash_after_buy = manager.cash
+        assert cash_after_buy == 100000 - 10000 - 50
+
+        # 卖出恢复现金（假设价格上涨到11元）
+        manager.remove_position('600000', 1000, 11.0, 30)
+        cash_after_sell = manager.cash
+        assert cash_after_sell == cash_after_buy + 11000 - 30
+
+    def test_multiple_positions_cash_tracking(self):
+        """测试多个持仓的现金跟踪"""
+        manager = PositionManager(initial_capital=100000)
+
+        # 买入多个股票
+        manager.add_position('600000', 1000, 10.0, datetime(2023, 1, 1), 50)
+        manager.add_position('000001', 500, 15.0, datetime(2023, 1, 2), 40)
+        manager.add_position('000002', 800, 12.5, datetime(2023, 1, 3), 60)
+
+        # 计算总投入
+        total_invested = (1000*10 + 50) + (500*15 + 40) + (800*12.5 + 60)
+        expected_cash = 100000 - total_invested
+
+        assert abs(manager.cash - expected_cash) < 0.01
+
+
+class TestCalculateWeightEdgeCases:
+    """测试权重计算的边界情况"""
+
+    def test_weight_with_zero_total_value(self):
+        """测试总价值为零时的权重计算"""
+        manager = PositionManager(initial_capital=100000)
+
+        # 添加持仓并全部卖出，假设价格跌到0（理论情况）
+        manager.add_position('600000', 1000, 10.0, datetime(2023, 1, 1), 50)
+
+        # 强制设置为零价格
+        prices = {'600000': 0}
+        weights = manager.calculate_position_weights(prices)
+
+        # 零价格情况下，权重应该为0或非常小
+        assert weights.get('600000', 0) == 0
+
+    def test_single_stock_100_percent_weight(self):
+        """测试单一股票占比100%的情况"""
+        manager = PositionManager(initial_capital=100000)
+
+        # 全仓买入一只股票
+        manager.add_position('600000', 10000, 10.0, datetime(2023, 1, 1), 100)
+
+        prices = {'600000': 10.0}
+        weights = manager.calculate_position_weights(prices)
+
+        # 权重应该接近100%（略小于100%因为有交易成本）
+        total_value = manager.calculate_total_value(prices)
+        expected_weight = (10000 * 10.0) / total_value
+
+        assert abs(weights['600000'] - expected_weight) < 0.01

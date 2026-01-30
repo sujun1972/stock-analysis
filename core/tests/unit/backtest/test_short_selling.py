@@ -474,6 +474,138 @@ class TestEdgeCases:
         expected_interest = 100000 * 0.20 * (actual_days / 360)
         assert abs(pnl['interest_cost'] - expected_interest) < 0.01
 
+    def test_zero_initial_amount_edge_case(self):
+        """测试初始金额为零的边界情况"""
+        pos = ShortPosition(
+            stock_code='600000',
+            shares=0,  # 零股
+            entry_price=10.0,
+            entry_date=datetime(2023, 1, 1),
+            margin_rate=0.10
+        )
+
+        pnl = pos.calculate_profit_loss(10.0, datetime(2023, 1, 31))
+
+        # 零股情况下，收益率应该为0
+        assert pnl['return_pct'] == 0
+        assert pnl['price_pnl'] == 0
+        assert pnl['net_pnl'] == 0
+
+    def test_price_unchanged(self):
+        """测试价格不变的情况"""
+        entry_date = datetime(2023, 1, 1)
+        current_date = datetime(2023, 1, 31)
+
+        pos = ShortPosition(
+            stock_code='600000',
+            shares=10000,
+            entry_price=10.0,
+            entry_date=entry_date,
+            margin_rate=0.10
+        )
+
+        # 价格不变
+        pnl = pos.calculate_profit_loss(10.0, current_date)
+
+        # 价格差收益应该为0
+        assert pnl['price_pnl'] == 0
+
+        # 但有利息成本，所以净亏损
+        assert pnl['interest_cost'] > 0
+        assert pnl['net_pnl'] < 0
+
+    def test_extreme_price_movements(self):
+        """测试极端价格波动"""
+        entry_date = datetime(2023, 1, 1)
+        current_date = datetime(2023, 1, 15)  # 持有15天
+
+        pos = ShortPosition(
+            stock_code='600000',
+            shares=10000,
+            entry_price=10.0,
+            entry_date=entry_date,
+            margin_rate=0.10
+        )
+
+        # 价格暴跌50%
+        pnl_crash = pos.calculate_profit_loss(5.0, current_date)
+        assert pnl_crash['price_pnl'] == 50000  # (10-5)*10000
+        assert pnl_crash['net_pnl'] > 40000  # 大幅盈利
+
+        # 价格暴涨50%
+        pnl_surge = pos.calculate_profit_loss(15.0, current_date)
+        assert pnl_surge['price_pnl'] == -50000  # (10-15)*10000
+        assert pnl_surge['net_pnl'] < -50000  # 大幅亏损（含利息）
+
+
+class TestMarginRateConstantsAndDefaults:
+    """测试费率常量和默认值"""
+
+    def test_margin_rate_constants(self):
+        """测试融券费率常量"""
+        assert ShortSellingCosts.MARGIN_RATE_LOW == 0.08
+        assert ShortSellingCosts.MARGIN_RATE_MEDIUM == 0.10
+        assert ShortSellingCosts.MARGIN_RATE_HIGH == 0.12
+        assert ShortSellingCosts.MARGIN_RATE_DEFAULT == 0.10
+
+    def test_margin_ratio_constant(self):
+        """测试保证金比例常量"""
+        assert ShortSellingCosts.MARGIN_RATIO == 0.5
+
+    def test_using_predefined_rates(self):
+        """测试使用预定义费率"""
+        amount = 100000
+        days = 30
+
+        # 使用低费率常量
+        interest_low = ShortSellingCosts.calculate_margin_interest(
+            amount, days, ShortSellingCosts.MARGIN_RATE_LOW
+        )
+
+        # 使用中等费率常量
+        interest_medium = ShortSellingCosts.calculate_margin_interest(
+            amount, days, ShortSellingCosts.MARGIN_RATE_MEDIUM
+        )
+
+        # 使用高费率常量
+        interest_high = ShortSellingCosts.calculate_margin_interest(
+            amount, days, ShortSellingCosts.MARGIN_RATE_HIGH
+        )
+
+        # 验证费率顺序
+        assert interest_low < interest_medium < interest_high
+
+
+class TestStockCodeParameter:
+    """测试股票代码参数（虽然当前未使用，但测试接口）"""
+
+    def test_short_sell_cost_with_stock_code(self):
+        """测试传入股票代码参数"""
+        # 股票代码参数当前未使用，但接口应该支持
+        costs = ShortSellingCosts.calculate_short_sell_cost(
+            amount=100000,
+            stock_code='600000',
+            commission_rate=0.0003,
+            min_commission=5.0
+        )
+
+        assert costs['commission'] > 0
+        assert costs['total_cost'] > 0
+
+    def test_buy_to_cover_cost_with_stock_code(self):
+        """测试买券还券时传入股票代码"""
+        costs = ShortSellingCosts.calculate_buy_to_cover_cost(
+            amount=100000,
+            stock_code='600000',
+            commission_rate=0.0003,
+            min_commission=5.0,
+            stamp_tax_rate=0.001
+        )
+
+        assert costs['commission'] > 0
+        assert costs['stamp_tax'] > 0
+        assert costs['total_cost'] > 0
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '--tb=short'])

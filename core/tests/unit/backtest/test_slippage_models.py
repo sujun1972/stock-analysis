@@ -451,6 +451,304 @@ class TestEdgeCases:
         expected = 10000 * model.base_slippage
         assert slippage == expected
 
+    def test_zero_price(self):
+        """测试零价格边界情况"""
+        model = FixedSlippageModel(0.001)
+
+        # 零价格
+        actual_price = model.get_actual_price(
+            order_size=10000,
+            reference_price=0,
+            is_buy=True
+        )
+        assert actual_price == 0
+
+    def test_zero_avg_volume_in_volume_model(self):
+        """测试零成交量"""
+        model = VolumeBasedSlippageModel(base_slippage=0.001)
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=10.0,
+            is_buy=True,
+            avg_volume=0
+        )
+
+        # 应该回退到基础滑点
+        assert slippage == 10000 * 0.001
+
+    def test_zero_volatility_in_market_impact(self):
+        """测试零波动率"""
+        model = MarketImpactModel()
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=10.0,
+            is_buy=True,
+            avg_volume=1000000,
+            volatility=0
+        )
+
+        # 应该使用默认波动率
+        assert slippage > 0
+
+    def test_negative_volatility(self):
+        """测试负波动率（异常数据）"""
+        model = MarketImpactModel()
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=10.0,
+            is_buy=True,
+            avg_volume=1000000,
+            volatility=-0.02
+        )
+
+        # 应该使用默认值
+        assert slippage > 0
+
+
+class TestReprMethods:
+    """测试__repr__方法"""
+
+    def test_fixed_slippage_repr(self):
+        """测试FixedSlippageModel的__repr__"""
+        model = FixedSlippageModel(slippage_pct=0.001)
+        repr_str = repr(model)
+        assert 'FixedSlippageModel' in repr_str
+        assert '0.001' in repr_str
+
+    def test_volume_based_repr(self):
+        """测试VolumeBasedSlippageModel的__repr__"""
+        model = VolumeBasedSlippageModel(
+            base_slippage=0.0005,
+            impact_coefficient=0.01,
+            max_slippage=0.05
+        )
+        repr_str = repr(model)
+        assert 'VolumeBasedSlippageModel' in repr_str
+        assert '0.0005' in repr_str
+        assert '0.01' in repr_str
+        assert '0.05' in repr_str
+
+    def test_market_impact_repr(self):
+        """测试MarketImpactModel的__repr__"""
+        model = MarketImpactModel(
+            volatility_weight=0.5,
+            volume_impact_alpha=0.6,
+            urgency_factor=1.5
+        )
+        repr_str = repr(model)
+        assert 'MarketImpactModel' in repr_str
+        assert '0.5' in repr_str
+        assert '0.6' in repr_str
+        assert '1.5' in repr_str
+
+    def test_bid_ask_spread_repr(self):
+        """测试BidAskSpreadModel的__repr__"""
+        model = BidAskSpreadModel(base_spread=0.0003)
+        repr_str = repr(model)
+        assert 'BidAskSpreadModel' in repr_str
+        assert '0.0003' in repr_str
+
+
+class TestDefaultParameters:
+    """测试默认参数"""
+
+    def test_fixed_slippage_default(self):
+        """测试FixedSlippageModel默认参数"""
+        model = FixedSlippageModel()
+        assert model.slippage_pct == 0.001
+
+    def test_volume_based_defaults(self):
+        """测试VolumeBasedSlippageModel默认参数"""
+        model = VolumeBasedSlippageModel()
+        assert model.base_slippage == 0.0005
+        assert model.impact_coefficient == 0.01
+        assert model.max_slippage == 0.05
+
+    def test_market_impact_defaults(self):
+        """测试MarketImpactModel默认参数"""
+        model = MarketImpactModel()
+        assert model.volatility_weight == 0.5
+        assert model.volume_impact_alpha == 0.5
+        assert model.urgency_factor == 1.0
+        assert model.max_slippage == 0.1
+
+    def test_bid_ask_spread_defaults(self):
+        """测试BidAskSpreadModel默认参数"""
+        model = BidAskSpreadModel()
+        assert model.base_spread == 0.0002
+        assert model.spread_volatility_factor == 0.1
+
+
+class TestCalculateSlippageWithKwargs:
+    """测试使用**kwargs传递参数"""
+
+    def test_volume_model_with_extra_kwargs(self):
+        """测试VolumeBasedSlippageModel忽略额外参数"""
+        model = VolumeBasedSlippageModel()
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=10.0,
+            is_buy=True,
+            avg_volume=1000000,
+            extra_param='should_be_ignored'  # 额外参数
+        )
+
+        assert slippage > 0
+
+    def test_market_impact_with_extra_kwargs(self):
+        """测试MarketImpactModel忽略额外参数"""
+        model = MarketImpactModel()
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=10.0,
+            is_buy=True,
+            avg_volume=1000000,
+            volatility=0.02,
+            extra_param='should_be_ignored'
+        )
+
+        assert slippage > 0
+
+    def test_bid_ask_with_extra_kwargs(self):
+        """测试BidAskSpreadModel忽略额外参数"""
+        model = BidAskSpreadModel()
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=10.0,
+            is_buy=True,
+            bid_price=9.99,
+            ask_price=10.01,
+            extra_param='should_be_ignored'
+        )
+
+        assert slippage > 0
+
+
+class TestMarketImpactModelDefaults:
+    """测试MarketImpactModel的默认值处理"""
+
+    def test_no_volume_no_volatility(self):
+        """测试无成交量和波动率数据时使用默认值"""
+        model = MarketImpactModel()
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=10.0,
+            is_buy=True,
+            avg_volume=None,
+            volatility=None
+        )
+
+        # 应该使用默认值并返回合理滑点
+        assert slippage > 0
+        assert slippage < 10000  # 应该小于订单金额
+
+    def test_actual_price_calculation(self):
+        """测试实际价格计算"""
+        model = MarketImpactModel()
+
+        buy_price = model.get_actual_price(
+            order_size=10000,
+            reference_price=10.0,
+            is_buy=True,
+            avg_volume=1000000,
+            volatility=0.02
+        )
+
+        sell_price = model.get_actual_price(
+            order_size=10000,
+            reference_price=10.0,
+            is_buy=False,
+            avg_volume=1000000,
+            volatility=0.02
+        )
+
+        # 买入价应该高于参考价
+        assert buy_price > 10.0
+        # 卖出价应该低于参考价
+        assert sell_price < 10.0
+
+    def test_zero_order_size_in_market_impact(self):
+        """测试零订单金额"""
+        model = MarketImpactModel()
+
+        actual_price = model.get_actual_price(
+            order_size=0,
+            reference_price=10.0,
+            is_buy=True,
+            avg_volume=1000000,
+            volatility=0.02
+        )
+
+        # 零订单应该返回参考价
+        assert actual_price == 10.0
+
+
+class TestBidAskSpreadModelEdgeCases:
+    """测试BidAskSpreadModel边界情况"""
+
+    def test_zero_price_in_slippage_calculation(self):
+        """测试价格为零时的滑点计算"""
+        model = BidAskSpreadModel()
+
+        slippage = model.calculate_slippage(
+            order_size=10000,
+            price=0,  # 零价格
+            is_buy=True,
+            bid_price=9.99,
+            ask_price=10.01
+        )
+
+        # 价格为零时，股数计算为0，滑点应该为0
+        assert slippage == 0
+
+    def test_wide_spread(self):
+        """测试宽价差"""
+        model = BidAskSpreadModel()
+
+        bid_price = 9.0
+        ask_price = 11.0  # 20%的价差
+
+        buy_price = model.get_actual_price(
+            order_size=10000,
+            reference_price=10.0,
+            is_buy=True,
+            bid_price=bid_price,
+            ask_price=ask_price
+        )
+
+        sell_price = model.get_actual_price(
+            order_size=10000,
+            reference_price=10.0,
+            is_buy=False,
+            bid_price=bid_price,
+            ask_price=ask_price
+        )
+
+        assert buy_price == 11.0
+        assert sell_price == 9.0
+
+    def test_default_volatility_in_estimation(self):
+        """测试估算时使用默认波动率"""
+        model = BidAskSpreadModel(base_spread=0.0002)
+
+        # 不提供波动率
+        price1 = model.get_actual_price(
+            order_size=10000,
+            reference_price=10.0,
+            is_buy=True,
+            volatility=None
+        )
+
+        # 应该使用默认2%波动率
+        assert price1 > 10.0
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '--tb=short'])
