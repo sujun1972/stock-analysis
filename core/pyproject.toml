@@ -28,9 +28,5 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
+# Note: pytest配置已迁移到pytest.ini文件
+# 不要在这里重复定义pytest配置，否则会产生警告

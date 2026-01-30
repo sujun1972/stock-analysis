@@ -206,6 +206,11 @@ class FactorOptimizer:
             x0 = np.array([1/n_factors] * n_factors)
 
             # 执行优化
+            # 注意：L-BFGS-B方法不支持等式约束，自动切换到SLSQP
+            if method == 'L-BFGS-B':
+                logger.warning(f"优化方法 '{method}' 不支持等式约束，自动切换到 'SLSQP'")
+                method = 'SLSQP'
+
             result = minimize(
                 objective,
                 x0,

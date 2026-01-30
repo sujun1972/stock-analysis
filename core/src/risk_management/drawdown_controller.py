@@ -245,7 +245,9 @@ class DrawdownController:
         trough_value = dd_series.loc[max_dd_date, 'portfolio_value']
 
         # 找到恢复日期（最大回撤之后第一次回到峰值）
-        recovery_dates = dd_series.loc[max_dd_date:][dd_series['drawdown'] <= 0]
+        after_max_dd = dd_series.loc[max_dd_date:]
+        recovery_mask = after_max_dd['drawdown'] <= 0
+        recovery_dates = after_max_dd[recovery_mask]
         recovery_date = recovery_dates.index[0] if len(recovery_dates) > 0 else None
 
         # 计算持续天数
