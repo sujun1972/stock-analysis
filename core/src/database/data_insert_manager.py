@@ -160,20 +160,20 @@ class DataInsertManager:
             change_col = 'change' if 'change' in df.columns else ('涨跌额' if '涨跌额' in df.columns else 'change_amount')
             turnover_col = 'turnover' if 'turnover' in df.columns else '换手率'
 
-            # 向量化构建记录
+            # 向量化构建记录 (注意: 转换为Python原生类型,避免numpy类型导致psycopg2错误)
             records = list(zip(
                 [stock_code] * len(df),
                 dates,
-                df[open_col].fillna(0).astype(float).values,
-                df[high_col].fillna(0).astype(float).values,
-                df[low_col].fillna(0).astype(float).values,
-                df[close_col].fillna(0).astype(float).values,
-                df[volume_col].fillna(0).astype(int).values,
-                df[amount_col].fillna(0).astype(float).values,
-                df[amplitude_col].fillna(0).astype(float).values if amplitude_col in df.columns else [0.0] * len(df),
-                df[pct_change_col].fillna(0).astype(float).values if pct_change_col in df.columns else [0.0] * len(df),
-                df[change_col].fillna(0).astype(float).values if change_col in df.columns else [0.0] * len(df),
-                df[turnover_col].fillna(0).astype(float).values if turnover_col in df.columns else [0.0] * len(df)
+                df[open_col].fillna(0).astype(float).tolist(),
+                df[high_col].fillna(0).astype(float).tolist(),
+                df[low_col].fillna(0).astype(float).tolist(),
+                df[close_col].fillna(0).astype(float).tolist(),
+                df[volume_col].fillna(0).astype(int).tolist(),
+                df[amount_col].fillna(0).astype(float).tolist(),
+                df[amplitude_col].fillna(0).astype(float).tolist() if amplitude_col in df.columns else [0.0] * len(df),
+                df[pct_change_col].fillna(0).astype(float).tolist() if pct_change_col in df.columns else [0.0] * len(df),
+                df[change_col].fillna(0).astype(float).tolist() if change_col in df.columns else [0.0] * len(df),
+                df[turnover_col].fillna(0).astype(float).tolist() if turnover_col in df.columns else [0.0] * len(df)
             ))
 
             # 批量插入（冲突时更新）
