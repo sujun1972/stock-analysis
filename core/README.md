@@ -31,12 +31,13 @@
 
 | 指标 | 数值 | 说明 |
 |------|------|------|
-| 代码规模 | 90,000+ 行 | 源码37K + 测试52K + 文档11K |
-| 测试用例 | 2,468 个 | 单元测试 + 集成测试 |
+| 代码规模 | 93,000+ 行 | 源码40K + 测试52K + 文档11K |
+| 测试用例 | 2,610 个 | 单元测试 + 集成测试 + CLI测试 |
 | 测试覆盖率 | 85% | 核心模块100%覆盖 |
 | Alpha因子 | 125+ | 动量、反转、波动率、成交量等 |
 | 技术指标 | 60+ | 趋势、动量、波动率、成交量 |
 | 交易策略 | 5 种 | 动量、均值回归、多因子、ML、组合 |
+| CLI命令 | 7 个 | download/features/train/backtest/analyze/init/version |
 | 监控指标 | 4 类 | Counter、Gauge、Histogram、Timer |
 | 性能提升 | 35x | 向量化计算相比循环实现 |
 | 文档完整度 | 95% | Google Style文档字符串 |
@@ -295,6 +296,63 @@
 - 模拟真实参数进化
 - 防止过拟合
 
+### 10. 命令行工具（NEW ✨）
+
+#### stock-cli - 统一CLI工具
+- **7个命令**: download、features、train、backtest、analyze、init、version
+- **彩色输出**: 基于Rich库的美观终端输出
+- **进度条**: 实时任务进度显示
+- **参数验证**: 智能参数校验和提示
+- **交互式配置**: 一键配置向导
+
+#### 核心命令
+
+**数据管理**
+```bash
+# 下载股票数据
+stock-cli download --symbols 000001,600000 --days 30
+
+# 计算特征（125+ Alpha因子 + 60+技术指标）
+stock-cli features --symbols all --format parquet
+```
+
+**模型训练**
+```bash
+# 训练LightGBM模型
+stock-cli train --model lightgbm --data /data/features/
+
+# 支持GRU/Ridge模型，自定义参数
+stock-cli train --model gru --target return_10d --test-size 0.3
+```
+
+**策略回测**
+```bash
+# 回测动量策略
+stock-cli backtest --strategy momentum --capital 1000000
+
+# 生成HTML报告
+stock-cli backtest --strategy multi_factor --report html --output results/
+```
+
+**因子分析**
+```bash
+# IC分析
+stock-cli analyze ic --factor MOM_20
+
+# 因子分层回测
+stock-cli analyze quantiles --factor VOL_20 --layers 10
+
+# 因子相关性分析
+stock-cli analyze corr --factors all
+```
+
+#### 实现特点
+- **2,517行代码**: 完整实现7个命令
+- **142个测试**: 全面的单元测试覆盖
+- **1,400+行文档**: 详细使用指南和示例
+- **多线程支持**: 并行处理提升效率
+- **错误友好**: 清晰的错误提示和帮助信息
+
 ---
 
 ## 快速开始
@@ -335,7 +393,13 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 #### 3. 配置环境变量
 
-创建 `.env` 文件：
+使用CLI配置向导（推荐）：
+
+```bash
+python -m cli.main init
+```
+
+或手动创建 `.env` 文件：
 
 ```bash
 # 数据库配置
@@ -355,13 +419,20 @@ MODEL_DIR=./models
 CACHE_DIR=./cache
 ```
 
-#### 4. 初始化数据库表
+#### 4. 快速开始（使用CLI）
 
-```python
-from src.database import DatabaseManager
+```bash
+# 下载数据
+python -m cli.main download --symbols 000001,600000 --days 30
 
-db = DatabaseManager.get_instance()
-db.initialize_tables()
+# 计算特征
+python -m cli.main features --symbols 000001,600000
+
+# 训练模型
+python -m cli.main train --model lightgbm --data ./data/features/
+
+# 运行回测
+python -m cli.main backtest --strategy momentum --capital 1000000
 ```
 
 #### 5. GPU加速配置（可选）

@@ -232,6 +232,10 @@ def build_pytest_cmd(
     else:
         cmd.append('tests/')
 
+    # 总是排除CLI测试（使用专门的run_cli_tests.py运行）
+    cmd.append('--ignore=tests/cli/')
+    print_info("已排除CLI测试（请使用 python run_cli_tests.py 运行CLI测试）")
+
     # 覆盖率选项
     if coverage:
         cmd.extend([

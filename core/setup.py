@@ -30,6 +30,8 @@ else:
         'python-dotenv>=1.0.0',
         'loguru>=0.7.0',
         'pyarrow>=14.0.0',
+        'click>=8.1.0',
+        'rich>=13.7.0',
     ]
 
 setup(
@@ -84,4 +86,11 @@ setup(
     # 包含数据文件
     include_package_data=True,
     zip_safe=False,
+
+    # CLI入口点
+    entry_points={
+        'console_scripts': [
+            'stock-cli=cli.main:cli',
+        ],
+    },
 )
