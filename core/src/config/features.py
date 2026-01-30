@@ -149,6 +149,46 @@ class FeatureTransformConfig:
 
 
 @dataclass
+class ParallelComputingConfig:
+    """并行计算配置"""
+
+    enable_parallel: bool = True
+    """是否启用并行计算"""
+
+    n_workers: int = -1
+    """
+    工作进程数:
+    - -1: 自动检测（CPU核心数 - 1）
+    - 1: 禁用并行（串行执行）
+    - >1: 指定进程数
+    """
+
+    parallel_backend: str = 'multiprocessing'
+    """
+    并行后端:
+    - 'multiprocessing': 标准多进程（推荐）
+    - 'threading': 多线程（适用于I/O密集型）
+    - 'ray': Ray分布式框架（需安装ray）
+    - 'dask': Dask框架（需安装dask）
+    """
+
+    chunk_size: int = 100
+    """批量任务的分块大小（每个进程处理的任务数）"""
+
+    use_shared_memory: bool = False
+    """是否使用共享内存（减少数据复制，Python 3.8+）"""
+
+    ray_address: str = None
+    """Ray集群地址（None表示本地模式，'auto'表示自动检测）"""
+
+    show_progress: bool = True
+    """是否显示并行任务进度条"""
+
+    timeout: int = 300
+    """单个任务超时时间（秒），0表示不超时"""
+
+
+@dataclass
 class FeatureEngineerConfig:
     """特征工程器总配置"""
 
@@ -163,6 +203,9 @@ class FeatureEngineerConfig:
 
     feature_transform: FeatureTransformConfig = field(default_factory=FeatureTransformConfig)
     """特征转换配置"""
+
+    parallel_computing: ParallelComputingConfig = field(default_factory=ParallelComputingConfig)
+    """并行计算配置"""
 
     # 全局开关
     enable_copy_on_write: bool = True
