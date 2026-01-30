@@ -126,7 +126,7 @@ if PYTORCH_AVAILABLE:
 
 
 class GRUStockTrainer:
-    """GRU模型训练器"""
+    """GRU模型训练器（支持GPU加速）"""
 
     def __init__(
         self,
@@ -136,10 +136,13 @@ class GRUStockTrainer:
         dropout: float = 0.2,
         bidirectional: bool = False,
         learning_rate: float = 0.001,
-        device: str = None
+        device: str = None,
+        use_gpu: bool = True,
+        batch_size: int = None,
+        num_workers: int = 4
     ):
         """
-        初始化训练器
+        初始化训练器（支持GPU加速）
 
         参数:
             input_size: 输入特征维度
@@ -148,14 +151,27 @@ class GRUStockTrainer:
             dropout: Dropout比例
             bidirectional: 是否双向
             learning_rate: 学习率
-            device: 设备 ('cpu', 'cuda', 'mps')
+            device: 设备 ('cpu', 'cuda', 'mps'，None表示自动选择)
+            use_gpu: 是否优先使用GPU（默认True）
+            batch_size: 批次大小（None表示自动计算）
+            num_workers: DataLoader工作进程数（默认4）
         """
         if not PYTORCH_AVAILABLE:
             raise ImportError("需要安装PyTorch: pip install torch")
 
-        # 设备选择
+        # 尝试导入GPU管理器
+        try:
+            from src.utils.gpu_utils import gpu_manager
+            self.gpu_manager = gpu_manager
+        except ImportError:
+            self.gpu_manager = None
+            logger.warning("GPU管理器未安装")
+
+        # 设备选择（优先使用GPU管理器）
         if device is None:
-            if torch.cuda.is_available():
+            if self.gpu_manager is not None:
+                device = self.gpu_manager.get_device(prefer_gpu=use_gpu)
+            elif use_gpu and torch.cuda.is_available():
                 device = 'cuda'
             elif torch.backends.mps.is_available():
                 device = 'mps'
@@ -163,9 +179,9 @@ class GRUStockTrainer:
                 device = 'cpu'
 
         self.device = torch.device(device)
-        logger.info(f"使用设备: {self.device}")
+        logger.info(f"🚀 GRU模型使用设备: {self.device}")
 
-        # 创建模型
+        # 创建模型并移到设备
         self.model = GRUStockModel(
             input_size=input_size,
             hidden_size=hidden_size,
@@ -174,9 +190,44 @@ class GRUStockTrainer:
             bidirectional=bidirectional
         ).to(self.device)
 
+        # 自动计算批次大小
+        if batch_size is None and 'cuda' in str(self.device) and self.gpu_manager is not None:
+            # 估算模型大小
+            model_size_mb = sum(
+                p.numel() * p.element_size()
+                for p in self.model.parameters()
+            ) / (1024 ** 2)
+
+            # 估算样本大小（假设序列长度20）
+            sample_size_mb = (input_size * 20 * 4) / (1024 ** 2)
+
+            self.batch_size = self.gpu_manager.get_optimal_batch_size(
+                model_size_mb, sample_size_mb
+            )
+            logger.info(f"自动设置批次大小: {self.batch_size}")
+        else:
+            self.batch_size = batch_size or 64
+
+        self.num_workers = num_workers
+
         # 优化器和损失函数
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.criterion = nn.MSELoss()
+
+        # 学习率调度器
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='min',
+            factor=0.5,
+            patience=5
+        )
+
+        # 混合精度训练（针对较新的GPU）
+        self.use_amp = 'cuda' in str(self.device) and torch.cuda.get_device_capability()[0] >= 7
+        self.scaler = torch.cuda.amp.GradScaler() if self.use_amp else None
+
+        if self.use_amp:
+            logger.info("✨ 启用混合精度训练（AMP）")
 
         # 训练历史
         self.history = {
@@ -220,22 +271,31 @@ class GRUStockTrainer:
         self,
         train_loader: 'DataLoader'
     ) -> float:
-        """训练一个epoch"""
+        """训练一个epoch（GPU优化版）"""
         self.model.train()
         total_loss = 0
 
         for sequences, targets in train_loader:
-            sequences = sequences.to(self.device)
-            targets = targets.to(self.device)
+            sequences = sequences.to(self.device, non_blocking=True)
+            targets = targets.to(self.device, non_blocking=True)
 
-            # 前向传播
-            predictions = self.model(sequences)
-            loss = self.criterion(predictions, targets)
+            self.optimizer.zero_grad(set_to_none=True)  # 更高效的梯度清零
 
-            # 反向传播
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+            if self.use_amp:
+                # 混合精度训练
+                with torch.cuda.amp.autocast():
+                    predictions = self.model(sequences)
+                    loss = self.criterion(predictions, targets)
+
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                # 标准训练
+                predictions = self.model(sequences)
+                loss = self.criterion(predictions, targets)
+                loss.backward()
+                self.optimizer.step()
 
             total_loss += loss.item()
 
@@ -245,14 +305,14 @@ class GRUStockTrainer:
         self,
         valid_loader: 'DataLoader'
     ) -> float:
-        """验证"""
+        """验证（GPU优化版）"""
         self.model.eval()
         total_loss = 0
 
         with torch.no_grad():
             for sequences, targets in valid_loader:
-                sequences = sequences.to(self.device)
-                targets = targets.to(self.device)
+                sequences = sequences.to(self.device, non_blocking=True)
+                targets = targets.to(self.device, non_blocking=True)
 
                 predictions = self.model(sequences)
                 loss = self.criterion(predictions, targets)
@@ -268,13 +328,13 @@ class GRUStockTrainer:
         X_valid: Optional[pd.DataFrame] = None,
         y_valid: Optional[pd.Series] = None,
         seq_length: int = 20,
-        batch_size: int = 64,
+        batch_size: int = None,
         epochs: int = 100,
         early_stopping_patience: int = 10,
         verbose: int = 10
     ) -> Dict:
         """
-        训练模型
+        训练模型（GPU优化版）
 
         参数:
             X_train: 训练特征
@@ -282,7 +342,7 @@ class GRUStockTrainer:
             X_valid: 验证特征
             y_valid: 验证标签
             seq_length: 序列长度
-            batch_size: 批次大小
+            batch_size: 批次大小（None表示使用初始化时的自动批次）
             epochs: 训练轮数
             early_stopping_patience: 早停耐心值
             verbose: 输出间隔
@@ -290,6 +350,9 @@ class GRUStockTrainer:
         返回:
             训练历史
         """
+        # 使用自动批次大小或指定批次
+        batch_size = batch_size or self.batch_size
+
         logger.info(f"\n开始训练GRU模型...")
         logger.info(f"序列长度: {seq_length}, 批次大小: {batch_size}, 训练轮数: {epochs}")
 
@@ -298,12 +361,15 @@ class GRUStockTrainer:
         X_train_seq, y_train_seq = self.create_sequences(X_train, y_train, seq_length)
         logger.info(f"训练序列: {X_train_seq.shape}")
 
-        # 创建数据加载器
+        # 创建数据加载器（GPU优化）
         train_dataset = StockSequenceDataset(X_train_seq, y_train_seq)
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
-            shuffle=True
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=('cuda' in str(self.device)),  # 启用内存固定
+            persistent_workers=(self.num_workers > 0)
         )
 
         # 验证集
@@ -317,7 +383,9 @@ class GRUStockTrainer:
             valid_loader = DataLoader(
                 valid_dataset,
                 batch_size=batch_size,
-                shuffle=False
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=('cuda' in str(self.device))
             )
 
         # 训练循环
@@ -332,6 +400,9 @@ class GRUStockTrainer:
             if valid_loader is not None:
                 valid_loss = self.validate(valid_loader)
                 self.history['valid_loss'].append(valid_loss)
+
+                # 学习率调整
+                self.scheduler.step(valid_loss)
 
                 # 早停
                 if valid_loss < best_valid_loss:
@@ -353,6 +424,10 @@ class GRUStockTrainer:
                 if (epoch + 1) % verbose == 0:
                     logger.info(f"Epoch {epoch + 1}/{epochs} - Train Loss: {train_loss:.6f}")
 
+            # 定期清理GPU缓存
+            if 'cuda' in str(self.device) and (epoch + 1) % 20 == 0 and self.gpu_manager is not None:
+                self.gpu_manager.clear_cache()
+
         logger.success(f"\n✓ 训练完成")
 
         return self.history
@@ -361,20 +436,23 @@ class GRUStockTrainer:
         self,
         X: pd.DataFrame,
         seq_length: int = 20,
-        batch_size: int = 64
+        batch_size: int = None
     ) -> np.ndarray:
         """
-        预测
+        预测（GPU优化版）
 
         参数:
             X: 特征DataFrame
             seq_length: 序列长度
-            batch_size: 批次大小
+            batch_size: 批次大小（None表示使用自动批次的2倍）
 
         返回:
             预测值数组
         """
         self.model.eval()
+
+        # 推理可用更大批次
+        batch_size = batch_size or (self.batch_size * 2)
 
         # 创建序列（使用0作为占位符目标）
         sequences, _ = self.create_sequences(
@@ -383,15 +461,21 @@ class GRUStockTrainer:
             seq_length
         )
 
-        # 创建数据加载器
+        # 创建数据加载器（GPU优化）
         dataset = StockSequenceDataset(sequences, np.zeros(len(sequences)))
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=('cuda' in str(self.device))
+        )
 
         # 预测
         predictions = []
         with torch.no_grad():
             for sequences, _ in loader:
-                sequences = sequences.to(self.device)
+                sequences = sequences.to(self.device, non_blocking=True)
                 preds = self.model(sequences)
                 predictions.extend(preds.cpu().numpy())
 

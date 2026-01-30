@@ -32,10 +32,13 @@ class LightGBMStockModel:
         reg_alpha: float = 0.1,
         reg_lambda: float = 0.1,
         random_state: int = 42,
-        verbose: int = -1
+        verbose: int = -1,
+        use_gpu: bool = True,
+        gpu_platform_id: int = 0,
+        gpu_device_id: int = 0
     ):
         """
-        初始化LightGBM模型
+        初始化LightGBM模型（支持GPU加速）
 
         参数:
             objective: 目标函数 ('regression', 'lambdarank')
@@ -51,7 +54,19 @@ class LightGBMStockModel:
             reg_lambda: L2正则化系数
             random_state: 随机种子
             verbose: 训练输出详细程度
+            use_gpu: 是否使用GPU加速（默认True）
+            gpu_platform_id: GPU平台ID（默认0）
+            gpu_device_id: GPU设备ID（默认0）
         """
+        # 尝试导入GPU管理器
+        try:
+            from src.utils.gpu_utils import gpu_manager
+            gpu_available = gpu_manager.cuda_available
+        except ImportError:
+            gpu_available = False
+            logger.warning("GPU管理器未安装，将使用CPU模式")
+
+        # 基础参数
         self.params = {
             'objective': objective,
             'metric': metric,
@@ -67,8 +82,32 @@ class LightGBMStockModel:
             'reg_lambda': reg_lambda,
             'random_state': random_state,
             'verbose': verbose,
-            'force_col_wise': True  # 避免警告
         }
+
+        # GPU配置
+        self.use_gpu = use_gpu and gpu_available
+        if self.use_gpu:
+            try:
+                # 检查LightGBM GPU支持
+                from src.utils.gpu_utils import gpu_manager
+                if gpu_manager.check_lightgbm_gpu():
+                    self.params.update({
+                        'device': 'gpu',
+                        'gpu_platform_id': gpu_platform_id,
+                        'gpu_device_id': gpu_device_id,
+                        'gpu_use_dp': False,  # 使用单精度
+                    })
+                    logger.info("🚀 LightGBM将使用GPU训练")
+                else:
+                    self.use_gpu = False
+                    self.params['force_col_wise'] = True
+                    logger.warning("⚠️  LightGBM GPU不可用，降级为CPU模式")
+            except Exception as e:
+                logger.warning(f"GPU初始化失败: {e}，使用CPU模式")
+                self.use_gpu = False
+                self.params['force_col_wise'] = True
+        else:
+            self.params['force_col_wise'] = True
 
         self.model = None
         self.feature_names = None
