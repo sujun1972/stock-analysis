@@ -5,6 +5,7 @@
 本指南介绍core量化系统新增的两个关键模块：
 
 ### 第一部分：因子有效性分析工具
+- **统一因子分析器门面 (FactorAnalyzer)** ⭐ **新增推荐**
 - IC分析（信息系数）
 - 分层回测（按因子值分组测试）
 - 因子相关性分析和热力图
@@ -14,6 +15,75 @@
 - 网格搜索优化器
 - 贝叶斯优化器（使用scikit-optimize）
 - Walk-Forward验证框架
+
+---
+
+## 🌟 推荐：使用统一门面 FactorAnalyzer
+
+**FactorAnalyzer** 是新增的统一因子分析器门面，整合了所有因子分析功能，提供一站式服务。
+
+### 为什么使用FactorAnalyzer？
+
+1. **统一入口**：一个类完成所有因子分析，无需分别调用4个不同的工具
+2. **便捷方法**：提供高层封装，减少重复代码
+3. **自动化报告**：一键生成完整分析报告
+4. **综合评分**：自动计算因子综合得分和使用建议
+
+### 快速示例
+
+```python
+from analysis import FactorAnalyzer
+
+# 1. 创建分析器
+analyzer = FactorAnalyzer()
+
+# 2. 快速分析单个因子
+report = analyzer.quick_analyze(factor_df, prices_df, factor_name='MOM20')
+print(report)  # 显示完整报告
+
+# 3. 对比多个因子
+comparison = analyzer.compare_factors(factor_dict, prices_df)
+print(comparison)  # 因子排名表
+
+# 4. 优化因子组合
+opt_result, combined_factor = analyzer.optimize_factor_portfolio(
+    factor_dict, prices_df,
+    optimization_method='max_icir'
+)
+
+# 5. 生成完整报告
+full_report = analyzer.generate_full_report(
+    factor_dict, prices_df,
+    include_ic=True,
+    include_layering=True,
+    include_correlation=True,
+    include_optimization=True,
+    output_path='factor_report.json'
+)
+```
+
+### 便捷函数
+
+如果只需要快速分析，可以使用便捷函数：
+
+```python
+from analysis import (
+    quick_analyze_factor,
+    compare_multiple_factors,
+    optimize_factor_combination
+)
+
+# 快速分析
+report = quick_analyze_factor(factor_df, prices_df, factor_name='MOM20')
+
+# 快速对比
+comparison = compare_multiple_factors(factor_dict, prices_df)
+
+# 快速优化
+opt_result, combined = optimize_factor_combination(factor_dict, prices_df)
+```
+
+完整示例请参考：[examples/complete_factor_analysis_example.py](../examples/complete_factor_analysis_example.py)
 
 ---
 
