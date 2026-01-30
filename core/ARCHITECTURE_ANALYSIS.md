@@ -23,7 +23,7 @@
 
 ### 1.1 整体架构风格
 
-**Stock-Analysis Core** 采用**分层架构**（Layered Architecture）+ **模块化设计**（Modular Design），将系统分为8个主要层次：
+**Stock-Analysis Core** 采用**分层架构**（Layered Architecture）+ **模块化设计**（Modular Design），将系统分为9个主要层次：
 
 ```
 应用层 (Application Layer)
@@ -36,9 +36,11 @@
     ↓
 数据质量层 (Data Quality Layer)
     ↓
-数据管道层 (Data Pipeline Layer) ✨ NEW
+数据管道层 (Data Pipeline Layer) ✨
     ↓
 数据访问层 (Data Access Layer)
+    ↓
+监控观测层 (Monitoring & Observability Layer) ✨ NEW
     ↓
 基础设施层 (Infrastructure Layer)
 ```
@@ -118,7 +120,118 @@ class Settings(BaseSettings):
 - Docker友好（环境变量注入）
 - 开发环境隔离
 
-##### 2.1.2 日志系统（src/utils/logger.py）
+##### 2.1.2 监控与日志系统（src/monitoring/） ✨ NEW
+
+**技术选型**：Loguru + TimescaleDB
+
+**架构特点**：
+- **统一监控入口**：MonitoringSystem整合指标、日志、错误追踪
+- **性能指标收集**：Counter、Gauge、Histogram、Timer四种类型
+- **结构化日志**：JSON格式，按类型分离（app/error/performance）
+- **错误智能分组**：SHA256哈希自动归类相同错误
+- **装饰器支持**：@timer自动计时函数执行
+- **TimescaleDB存储**：6张hypertable，自动保留策略（7-90天）
+- **后台监控线程**：定时健康检查（可选，默认60秒）
+
+**核心模块**：
+
+```python
+# 1. 性能指标收集器（metrics_collector.py）
+class MetricsCollector:
+    - record_metric(): 记录指标（counter/gauge/histogram/timer）
+    - record_timing(): 记录计时指标
+    - @timer decorator: 自动计时装饰器
+    - get_statistics(): 获取统计信息（平均值、百分位数）
+
+class MemoryMonitor:
+    - collect_memory_metrics(): 收集RSS/VMS内存使用（基于psutil）
+    - get_memory_statistics(): 内存统计分析
+
+class DatabaseMetricsCollector:
+    - record_query_metrics(): 记录数据库查询性能
+    - get_slow_queries(): 获取慢查询列表（>1000ms）
+    - get_query_statistics(): 查询性能统计
+
+# 2. 结构化日志（structured_logger.py）
+class StructuredLogger:
+    - log_operation(): 记录操作日志
+    - log_performance(): 记录性能日志
+    - log_error(): 记录错误日志（带完整堆栈）
+    - log_data_quality(): 记录数据质量日志
+
+class LogQueryEngine:
+    - query_logs(): 按时间、级别、关键词查询日志
+    - get_error_logs(): 获取错误日志
+    - aggregate_errors(): 错误聚合分析
+
+# 3. 错误追踪器（error_tracker.py）
+class ErrorTracker:
+    - track_error(): 追踪错误（带上下文、堆栈）
+    - get_error_statistics(): 错误统计（总数、唯一数、按严重程度）
+    - get_top_errors(): 高频错误Top N
+    - get_error_trends(): 错误趋势分析
+    - mark_resolved(): 标记错误已解决
+
+# 4. 统一监控系统（monitoring_system.py）
+class MonitoringSystem:
+    - track_operation(): 追踪操作（自动计时+错误捕获）
+    - get_system_status(): 获取系统整体状态
+    - get_performance_report(): 性能报告
+    - get_error_report(): 错误报告
+    - cleanup_old_data(): 清理旧数据
+```
+
+**数据库架构**：
+
+```sql
+-- 6张TimescaleDB超表
+1. performance_metrics      -- 性能指标（保留7天）
+2. timing_records          -- 计时记录（保留30天）
+3. memory_snapshots        -- 内存快照（保留7天）
+4. database_query_performance -- 查询性能（保留30天）
+5. error_events            -- 错误事件（保留90天）
+6. error_statistics        -- 错误统计（保留90天）
+
+-- 3个统计视图
+- slow_queries_summary      -- 慢查询汇总
+- error_summary            -- 错误汇总
+- performance_metrics_summary -- 性能指标汇总
+```
+
+**使用示例**：
+
+```python
+from src.monitoring import initialize_global_monitoring, get_global_monitoring
+
+# 初始化全局监控
+monitoring = initialize_global_monitoring(
+    log_dir="./logs",
+    service_name="stock-analysis"
+)
+
+# 自动追踪操作
+result = monitoring.track_operation("calculate_features", func, *args)
+
+# 装饰器计时
+@monitoring.metrics.timer("data_processing")
+def process_data(stock_code):
+    pass
+
+# 错误追踪
+try:
+    risky_operation()
+except Exception as e:
+    monitoring.error_tracker.track_error(e, severity="ERROR")
+```
+
+**优势**：
+- **全面性**：覆盖性能、日志、错误三大维度
+- **易用性**：装饰器+统一接口，零侵入
+- **高性能**：异步写入、批量处理、内存缓存
+- **可扩展**：支持自定义指标、日志字段、错误上下文
+- **生产就绪**：自动轮转、保留策略、后台监控
+
+##### 2.1.3 传统日志系统（src/utils/logger.py）
 
 **技术选型**：Loguru
 

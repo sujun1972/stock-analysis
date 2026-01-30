@@ -37,6 +37,7 @@
 | Alpha因子 | 125+ | 动量、反转、波动率、成交量等 |
 | 技术指标 | 60+ | 趋势、动量、波动率、成交量 |
 | 交易策略 | 5 种 | 动量、均值回归、多因子、ML、组合 |
+| 监控指标 | 4 类 | Counter、Gauge、Histogram、Timer |
 | 性能提升 | 35x | 向量化计算相比循环实现 |
 | 文档完整度 | 95% | Google Style文档字符串 |
 
@@ -247,7 +248,37 @@
 - 风险平价权重
 - 约束优化
 
-### 8. 参数优化
+### 8. 监控与日志（NEW ✨）
+
+#### 性能指标收集
+- **4种指标类型**: Counter、Gauge、Histogram、Timer
+- **装饰器支持**: @timer自动计时函数执行
+- **统计分析**: 平均值、百分位数(p50/p95/p99)、成功率
+- **内存监控**: RSS/VMS内存使用追踪（基于psutil）
+- **数据库监控**: 慢查询检测(>1s)、查询性能分析
+
+#### 结构化日志
+- **JSON格式**: 使用loguru序列化，易于查询和分析
+- **分类存储**: app、error、performance三类日志分离
+- **自动轮转**: 每日0点自动切换，保留30天
+- **日志查询**: 按时间、级别、关键词、操作过滤
+- **性能日志**: 专门记录耗时操作，便于性能分析
+
+#### 错误追踪
+- **智能分组**: SHA256哈希自动归类相同错误
+- **严重程度**: CRITICAL、ERROR、WARNING三级分类
+- **趋势分析**: 错误频率统计、时间分布分析
+- **解决状态**: 标记错误是否已修复
+- **上下文记录**: 完整堆栈、模块、函数、自定义上下文
+
+#### 统一监控系统
+- **一站式接口**: 整合指标、日志、错误追踪
+- **后台监控**: 可选的定时健康检查（默认60秒）
+- **系统状态**: 实时获取整体运行状态
+- **数据清理**: 自动清理旧数据（默认保留30天）
+- **TimescaleDB存储**: 6张hypertable，保留策略7-90天
+
+### 9. 参数优化
 
 #### 网格搜索
 - 遍历所有参数组合
@@ -457,6 +488,7 @@ print(f"最大回撤: {results.max_drawdown:.2%}")
 | 风险管理 | `src/risk_management/` | VaR、回撤、仓位 | 100% |
 | 因子分析 | `src/analysis/` | IC、分层、相关性 | 100% |
 | 参数优化 | `src/optimization/` | 网格、贝叶斯、WF | 100% |
+| 监控日志 | `src/monitoring/` | 指标、日志、错误追踪 | 100% |
 | 配置管理 | `src/config/` | Pydantic配置 | 100% |
 | 工具 | `src/utils/` | 日志、缓存、通用工具 | 100% |
 
@@ -770,7 +802,69 @@ layer_results = layered.run(factor, future_returns)
 layered.plot_layer_returns()
 ```
 
-### 10. 参数优化
+### 10. 监控与日志
+
+```python
+from src.monitoring import (
+    MonitoringSystem,
+    MetricType,
+    initialize_global_monitoring,
+    get_global_monitoring
+)
+
+# 初始化全局监控
+monitoring = initialize_global_monitoring(
+    log_dir="./logs",
+    service_name="stock-analysis",
+    enable_background_monitoring=True
+)
+
+# 记录性能指标
+monitoring.metrics.record_metric("stocks_processed", 1000, MetricType.COUNTER)
+
+# 追踪操作性能
+def calculate_features(data):
+    # 复杂计算...
+    return features
+
+result = monitoring.track_operation("feature_calculation", calculate_features, data)
+
+# 使用装饰器自动计时
+@monitoring.metrics.timer("data_processing")
+def process_data(stock_code):
+    # 数据处理逻辑
+    pass
+
+# 记录错误
+try:
+    risky_operation()
+except Exception as e:
+    monitoring.error_tracker.track_error(
+        e,
+        severity="ERROR",
+        module="trading",
+        function="execute_order",
+        order_id=12345
+    )
+
+# 获取系统状态
+status = monitoring.get_system_status()
+print(f"总错误数: {status['errors']['total_errors']}")
+print(f"内存使用: {status.get('memory_mb', 'N/A')} MB")
+
+# 获取性能报告
+report = monitoring.get_performance_report(operation="feature_calculation")
+print(f"平均耗时: {report['statistics']['mean']:.2f}ms")
+print(f"P99: {report['statistics']['p99']:.2f}ms")
+
+# 查询日志
+logs = monitoring.log_query.query_logs(
+    start_time=datetime.now() - timedelta(hours=1),
+    level="ERROR"
+)
+```
+
+### 11. 参数优化
 
 ```python
 from src.optimization import GridSearchOptimizer, BayesianOptimizer
@@ -859,7 +953,8 @@ python core/tests/run_tests.py
 | 回测层 | 90% | 156 | ✅ |
 | 风控层 | 100% | 41 | ✅ |
 | 模型层 | 80% | 198 | ✅ |
-| **总计** | **85%** | **2,468** | ✅ |
+| 监控层 | 100% | 83 | ✅ |
+| **总计** | **86%** | **2,551** | ✅ |
 
 ---
 
