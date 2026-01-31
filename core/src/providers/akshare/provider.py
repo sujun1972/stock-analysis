@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import time
 import pandas as pd
 from src.utils.logger import get_logger
+from src.utils.response import Response
 from ..base_provider import BaseDataProvider
 from .api_client import AkShareAPIClient
 from .data_converter import AkShareDataConverter
@@ -73,36 +74,58 @@ class AkShareProvider(BaseDataProvider):
 
     # ========== 股票列表相关 ==========
 
-    def get_stock_list(self) -> pd.DataFrame:
+    def get_stock_list(self) -> Response:
         """
         获取全部 A 股股票列表
 
         Returns:
-            pd.DataFrame: 标准化的股票列表
-
-        Raises:
-            AkShareDataError: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的股票列表
+                - metadata: 元数据(n_stocks, provider)
         """
         try:
+            start_time = time.time()
             logger.info("正在从 AkShare 获取股票列表...")
 
             # 获取股票基本信息
             df = self.api_client.execute(self.api_client.stock_info_a_code_name)
 
             if df is None or df.empty:
-                raise AkShareDataError("获取股票列表失败，返回数据为空")
+                return Response.error(
+                    error="获取股票列表失败，返回数据为空",
+                    error_code="AKSHARE_EMPTY_DATA",
+                    provider=self.provider_name
+                )
 
             # 转换为标准格式
             df = self.converter.convert_stock_list(df)
+            elapsed = time.time() - start_time
 
             logger.info(f"成功获取 {len(df)} 只股票")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {len(df)} 只股票",
+                n_stocks=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except AkShareDataError as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="AKSHARE_DATA_ERROR",
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取股票列表失败: {str(e)}",
+                error_code="AKSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name
+            )
 
-    def get_new_stocks(self, days: int = 30) -> pd.DataFrame:
+    def get_new_stocks(self, days: int = 30) -> Response:
         """
         获取最近 N 天上市的新股
 
@@ -110,19 +133,24 @@ class AkShareProvider(BaseDataProvider):
             days: 最近天数
 
         Returns:
-            pd.DataFrame: 标准化的新股列表
-
-        Raises:
-            AkShareDataError: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的新股列表
+                - metadata: 元数据(n_stocks, days)
         """
         try:
+            start_time = time.time()
             logger.info(f"正在从 AkShare 获取最近 {days} 天的新股...")
 
             # 获取次新股数据（包含上市日期）
             df = self.api_client.execute(self.api_client.stock_new_a_spot_em)
 
             if df is None or df.empty:
-                raise AkShareDataError("获取新股列表失败，返回数据为空")
+                return Response.error(
+                    error="获取新股列表失败，返回数据为空",
+                    error_code="AKSHARE_EMPTY_DATA",
+                    provider=self.provider_name,
+                    days=days
+                )
 
             # 筛选最近 N 天上市的股票
             cutoff_date = datetime.now() - timedelta(days=days)
@@ -131,25 +159,46 @@ class AkShareProvider(BaseDataProvider):
 
             # 转换为标准格式
             df = self.converter.convert_new_stocks(df)
+            elapsed = time.time() - start_time
 
             logger.info(f"成功获取 {len(df)} 只新股")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取最近 {days} 天的 {len(df)} 只新股",
+                n_stocks=len(df),
+                days=days,
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except AkShareDataError as e:
+            logger.error(f"获取新股列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="AKSHARE_DATA_ERROR",
+                provider=self.provider_name,
+                days=days
+            )
         except Exception as e:
             logger.error(f"获取新股列表失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取新股列表失败: {str(e)}",
+                error_code="AKSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name,
+                days=days
+            )
 
-    def get_delisted_stocks(self) -> pd.DataFrame:
+    def get_delisted_stocks(self) -> Response:
         """
         获取退市股票列表
 
         Returns:
-            pd.DataFrame: 标准化的退市股票列表
-
-        Raises:
-            AkShareDataError: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的退市股票列表
+                - metadata: 元数据(n_stocks, provider)
         """
         try:
+            start_time = time.time()
             logger.info("正在从 AkShare 获取退市股票列表...")
 
             # 获取上交所退市股票
@@ -171,16 +220,38 @@ class AkShareProvider(BaseDataProvider):
             # 合并上深两市数据
             dfs = [df for df in [df_sh, df_sz] if df is not None and not df.empty]
             if not dfs:
-                raise AkShareDataError("获取退市股票列表失败，返回数据为空")
+                return Response.error(
+                    error="获取退市股票列表失败，返回数据为空",
+                    error_code="AKSHARE_EMPTY_DATA",
+                    provider=self.provider_name
+                )
 
             df = pd.concat(dfs, ignore_index=True)
+            elapsed = time.time() - start_time
 
             logger.info(f"成功获取 {len(df)} 只退市股票")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {len(df)} 只退市股票",
+                n_stocks=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except AkShareDataError as e:
+            logger.error(f"获取退市股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="AKSHARE_DATA_ERROR",
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取退市股票列表失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取退市股票列表失败: {str(e)}",
+                error_code="AKSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name
+            )
 
     # ========== 日线数据相关 ==========
 
@@ -190,7 +261,7 @@ class AkShareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = 'qfq'
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取股票日线数据
 
@@ -201,9 +272,13 @@ class AkShareProvider(BaseDataProvider):
             adjust: 复权方式 ('qfq', 'hfq', '')
 
         Returns:
-            pd.DataFrame: 标准化的日线数据
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的日线数据
+                - metadata: 元数据(code, n_records, date_range, adjust)
         """
         try:
+            start_time = time.time()
+
             # 标准化日期格式
             start = self.normalize_date(start_date) if start_date else \
                 (datetime.now() - timedelta(days=AkShareConfig.DEFAULT_HISTORY_DAYS)).strftime('%Y%m%d')
@@ -224,17 +299,47 @@ class AkShareProvider(BaseDataProvider):
 
             if df is None or df.empty:
                 logger.warning(f"{code}: 无数据")
-                return pd.DataFrame()
+                return Response.warning(
+                    message=f"{code}: 无数据",
+                    data=pd.DataFrame(),
+                    code=code,
+                    date_range=f"{start}~{end}",
+                    adjust=adjust,
+                    provider=self.provider_name
+                )
 
-            # 转换为标���格式
+            # 转换为标准格式
             df = self.converter.convert_daily_data(df)
+            elapsed = time.time() - start_time
 
             logger.debug(f"成功获取 {code} 日线数据 {len(df)} 条")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {code} 日线数据",
+                code=code,
+                n_records=len(df),
+                date_range=f"{start}~{end}",
+                adjust=adjust,
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except AkShareDataError as e:
+            logger.error(f"获取 {code} 日线数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="AKSHARE_DATA_ERROR",
+                code=code,
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取 {code} 日线数据失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取日线数据失败: {str(e)}",
+                error_code="AKSHARE_UNEXPECTED_ERROR",
+                code=code,
+                provider=self.provider_name
+            )
 
     def get_daily_batch(
         self,
@@ -242,7 +347,7 @@ class AkShareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = 'qfq'
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> Response:
         """
         批量获取多只股票的日线数据
 
@@ -253,22 +358,61 @@ class AkShareProvider(BaseDataProvider):
             adjust: 复权方式
 
         Returns:
-            Dict[str, pd.DataFrame]: 股票代码到数据的映射
+            Response: 响应对象
+                - data: Dict[str, pd.DataFrame] 股票代码到数据的映射
+                - metadata: 元数据(n_stocks, n_success, n_failed, failed_codes)
         """
+        start_time = time.time()
         result = {}
+        failed_codes = []
 
         for i, code in enumerate(codes, 1):
-            try:
-                logger.info(f"[{i}/{len(codes)}] 获取 {code} 日线数据")
-                df = self.get_daily_data(code, start_date, end_date, adjust)
-                if not df.empty:
-                    result[code] = df
-            except Exception as e:
-                logger.error(f"获取 {code} 日线数据失败: {e}")
-                continue
+            logger.info(f"[{i}/{len(codes)}] 获取 {code} 日线数据")
+            response = self.get_daily_data(code, start_date, end_date, adjust)
+            if response.is_success() and response.data is not None and not response.data.empty:
+                result[code] = response.data
+            else:
+                failed_codes.append(code)
 
-        logger.info(f"批量获取完成，成功: {len(result)}/{len(codes)}")
-        return result
+        elapsed = time.time() - start_time
+        n_success = len(result)
+        n_failed = len(failed_codes)
+
+        logger.info(f"批量获取完成，成功: {n_success}/{len(codes)}")
+
+        if n_success == 0:
+            return Response.error(
+                error="批量获取失败，所有股票数据获取失败",
+                error_code="AKSHARE_BATCH_ALL_FAILED",
+                data={},
+                n_stocks=len(codes),
+                n_success=0,
+                n_failed=n_failed,
+                failed_codes=failed_codes,
+                provider=self.provider_name
+            )
+        elif n_failed > 0:
+            return Response.warning(
+                message=f"批量获取完成，部分失败 (成功: {n_success}/{len(codes)})",
+                data=result,
+                n_stocks=len(codes),
+                n_success=n_success,
+                n_failed=n_failed,
+                failed_codes=failed_codes,
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
+        else:
+            return Response.success(
+                data=result,
+                message=f"批量获取完成 (成功: {n_success}/{len(codes)})",
+                n_stocks=len(codes),
+                n_success=n_success,
+                n_failed=0,
+                failed_codes=[],
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
     # ========== 分时数据相关 ==========
 
@@ -279,7 +423,7 @@ class AkShareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = ''
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取股票分时数据
 
@@ -291,9 +435,13 @@ class AkShareProvider(BaseDataProvider):
             adjust: 复权方式
 
         Returns:
-            pd.DataFrame: 标准化的分时数据
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的分时数据
+                - metadata: 元数据(code, period, n_records)
         """
         try:
+            start_time = time.time()
+
             # 标准化日期时间格式
             start = self.normalize_datetime(start_date) if start_date else \
                 (datetime.now() - timedelta(days=AkShareConfig.DEFAULT_MINUTE_DAYS)).strftime('%Y-%m-%d 09:30:00')
@@ -314,17 +462,47 @@ class AkShareProvider(BaseDataProvider):
 
             if df is None or df.empty:
                 logger.warning(f"{code}: 无分时数据")
-                return pd.DataFrame()
+                return Response.warning(
+                    message=f"{code}: 无分时数据",
+                    data=pd.DataFrame(),
+                    code=code,
+                    period=period,
+                    provider=self.provider_name
+                )
 
             # 转换为标准格式
             df = self.converter.convert_minute_data(df, period)
+            elapsed = time.time() - start_time
 
             logger.debug(f"成功获取 {code} 分时数据 {len(df)} 条")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {code} 分时数据",
+                code=code,
+                period=period,
+                n_records=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except AkShareDataError as e:
+            logger.error(f"获取 {code} 分时数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="AKSHARE_DATA_ERROR",
+                code=code,
+                period=period,
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取 {code} 分时数据失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取分时数据失败: {str(e)}",
+                error_code="AKSHARE_UNEXPECTED_ERROR",
+                code=code,
+                period=period,
+                provider=self.provider_name
+            )
 
     # ========== 实时行情相关 ==========
 
@@ -332,7 +510,7 @@ class AkShareProvider(BaseDataProvider):
         self,
         codes: Optional[List[str]] = None,
         save_callback: Optional[Callable[[Dict[str, Any]], None]] = None
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取实时行情数据
 
@@ -344,12 +522,24 @@ class AkShareProvider(BaseDataProvider):
             save_callback: 可选的回调函数，用于每获取一条数据后立即保存
 
         Returns:
-            pd.DataFrame: 标准化的实时行情数据
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的实时行情数据
+                - metadata: 元数据(n_stocks, provider)
         """
         try:
+            start_time = time.time()
+
             # 如果指定了股票代码且数量<=100，使用单个股票行情接口（更快）
             if codes and len(codes) <= 100:
-                return self._get_realtime_quotes_batch(codes, save_callback=save_callback)
+                df_result = self._get_realtime_quotes_batch(codes, save_callback=save_callback)
+                elapsed = time.time() - start_time
+                return Response.success(
+                    data=df_result,
+                    message=f"成功获取 {len(df_result)} 只股票的实时行情",
+                    n_stocks=len(df_result),
+                    provider=self.provider_name,
+                    elapsed_time=f"{elapsed:.2f}s"
+                )
 
             # 获取全部实时行情
             logger.info("正在获取实时行情... (此操作可能需要 3-5 分钟，共58个批次)")
@@ -359,12 +549,14 @@ class AkShareProvider(BaseDataProvider):
             df = self.api_client.execute(self.api_client.stock_zh_a_spot_em)
 
             if df is None or df.empty:
-                raise AkShareDataError(
-                    "获取实时行情失败，返回数据为空。可能原因：\n"
-                    "1. 网络连接超时（数据获取需3-5分钟）\n"
-                    "2. 东方财富网接口限流\n"
-                    "3. 非交易时段数据源无响应\n"
-                    "建议：稍后重试或使用Tushare数据源"
+                return Response.error(
+                    error="获取实时行情失败，返回数据为空。可能原因：\n"
+                          "1. 网络连接超时（数据获取需3-5分钟）\n"
+                          "2. 东方财富网接口限流\n"
+                          "3. 非交易时段数据源无响应\n"
+                          "建议：稍后重试或使用Tushare数据源",
+                    error_code="AKSHARE_EMPTY_DATA",
+                    provider=self.provider_name
                 )
 
             # 转换为标准格式
@@ -374,12 +566,30 @@ class AkShareProvider(BaseDataProvider):
             if codes:
                 df = df[df['code'].isin(codes)]
 
+            elapsed = time.time() - start_time
             logger.info(f"成功获取 {len(df)} 只股票的实时行情")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {len(df)} 只股票的实时行情",
+                n_stocks=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except AkShareDataError as e:
+            logger.error(f"获取实时行情失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="AKSHARE_DATA_ERROR",
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取实时行情失败: {str(e)}",
+                error_code="AKSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name
+            )
 
     def _get_realtime_quotes_batch(
         self,

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict
 from datetime import datetime, date
 import pandas as pd
+from src.utils.response import Response
 
 
 class BaseDataProvider(ABC):
@@ -44,27 +45,34 @@ class BaseDataProvider(ABC):
     # ========== 股票列表相关 ==========
 
     @abstractmethod
-    def get_stock_list(self) -> pd.DataFrame:
+    def get_stock_list(self) -> Response:
         """
         获取全部 A 股股票列表
 
         Returns:
-            pd.DataFrame: 包含以下标准化字段
-                - code: 股票代码 (str, 如 '000001')
-                - name: 股票名称 (str)
-                - market: 市场类型 (str, 如 '上海主板')
-                - industry: 行业 (str, 可选)
-                - area: 地区 (str, 可选)
-                - list_date: 上市日期 (date, 可选)
-                - status: 状态 (str, 如 '正常')
+            Response: 响应对象
+                - status: 响应状态 (success/error/warning)
+                - data: pd.DataFrame 包含以下标准化字段
+                    - code: 股票代码 (str, 如 '000001')
+                    - name: 股票名称 (str)
+                    - market: 市场类型 (str, 如 '上海主板')
+                    - industry: 行业 (str, 可选)
+                    - area: 地区 (str, 可选)
+                    - list_date: 上市日期 (date, 可选)
+                    - status: 状态 (str, 如 '正常')
+                - message: 响应消息
+                - metadata: 元数据(n_stocks: 股票数量, provider: 提供者名称)
 
-        Raises:
-            Exception: 获取数据失败
+        Examples:
+            >>> response = provider.get_stock_list()
+            >>> if response.is_success():
+            >>>     df = response.data
+            >>>     print(f"获取{response.metadata['n_stocks']}只股票")
         """
         pass
 
     @abstractmethod
-    def get_new_stocks(self, days: int = 30) -> pd.DataFrame:
+    def get_new_stocks(self, days: int = 30) -> Response:
         """
         获取最近 N 天上市的新股
 
@@ -72,28 +80,26 @@ class BaseDataProvider(ABC):
             days: 最近天数，默认 30 天
 
         Returns:
-            pd.DataFrame: 包含标准化字段（同 get_stock_list）
-
-        Raises:
-            Exception: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 包含标准化字段（同 get_stock_list）
+                - metadata: 元数据(n_stocks: 新股数量, days: 天数)
         """
         pass
 
     @abstractmethod
-    def get_delisted_stocks(self) -> pd.DataFrame:
+    def get_delisted_stocks(self) -> Response:
         """
         获取退市股票列表
 
         Returns:
-            pd.DataFrame: 包含以下标准化字段
-                - code: 股票代码
-                - name: 股票名称
-                - list_date: 上市日期
-                - delist_date: 退市日期
-                - market: 市场类型
-
-        Raises:
-            Exception: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 包含以下标准化字段
+                    - code: 股票代码
+                    - name: 股票名称
+                    - list_date: 上市日期
+                    - delist_date: 退市日期
+                    - market: 市场类型
+                - metadata: 元数据(n_stocks: 退市股票数量)
         """
         pass
 
@@ -106,7 +112,7 @@ class BaseDataProvider(ABC):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = 'qfq'
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取股票日线数据
 
@@ -117,21 +123,25 @@ class BaseDataProvider(ABC):
             adjust: 复权方式 ('qfq': 前复权, 'hfq': 后复权, '': 不复权)
 
         Returns:
-            pd.DataFrame: 包含以下标准化字段
-                - trade_date: 交易日期 (date)
-                - open: 开盘价 (float)
-                - high: 最高价 (float)
-                - low: 最低价 (float)
-                - close: 收盘价 (float)
-                - volume: 成交量 (int)
-                - amount: 成交额 (float)
-                - amplitude: 振幅 (float, 可选)
-                - pct_change: 涨跌幅 (float, 可选)
-                - change_amount: 涨跌额 (float, 可选)
-                - turnover: 换手率 (float, 可选)
-
-        Raises:
-            Exception: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 包含以下标准化字段
+                    - trade_date: 交易日期 (date)
+                    - open: 开盘价 (float)
+                    - high: 最高价 (float)
+                    - low: 最低价 (float)
+                    - close: 收盘价 (float)
+                    - volume: 成交量 (int)
+                    - amount: 成交额 (float)
+                    - amplitude: 振幅 (float, 可选)
+                    - pct_change: 涨跌幅 (float, 可选)
+                    - change_amount: 涨跌额 (float, 可选)
+                    - turnover: 换手率 (float, 可选)
+                - metadata: 元数据(
+                    code: 股票代码,
+                    n_records: 记录数,
+                    date_range: 日期范围,
+                    adjust: 复权方式
+                )
         """
         pass
 
@@ -142,7 +152,7 @@ class BaseDataProvider(ABC):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = 'qfq'
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> Response:
         """
         批量获取多只股票的日线数据
 
@@ -153,7 +163,14 @@ class BaseDataProvider(ABC):
             adjust: 复权方式
 
         Returns:
-            Dict[str, pd.DataFrame]: 字典，key为股票代码，value为日线数据
+            Response: 响应对象
+                - data: Dict[str, pd.DataFrame] 字典，key为股票代码，value为日线数据
+                - metadata: 元数据(
+                    n_stocks: 股票数量,
+                    n_success: 成功数量,
+                    n_failed: 失败数量,
+                    failed_codes: 失败的股票代码列表
+                )
         """
         pass
 
@@ -167,7 +184,7 @@ class BaseDataProvider(ABC):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = ''
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取股票分时数据
 
@@ -179,18 +196,24 @@ class BaseDataProvider(ABC):
             adjust: 复权方式
 
         Returns:
-            pd.DataFrame: 包含以下标准化字段
-                - trade_time: 交易时间 (datetime)
-                - open: 开盘价 (float)
-                - high: 最高价 (float)
-                - low: 最低价 (float)
-                - close: 收盘价 (float)
-                - volume: 成交量 (int)
-                - amount: 成交额 (float)
-                - amplitude: 振幅 (float, 可选)
-                - pct_change: 涨跌幅 (float, 可选)
-                - change_amount: 涨跌额 (float, 可选)
-                - turnover: 换手率 (float, 可选)
+            Response: 响应对象
+                - data: pd.DataFrame 包含以下标准化字段
+                    - trade_time: 交易时间 (datetime)
+                    - open: 开盘价 (float)
+                    - high: 最高价 (float)
+                    - low: 最低价 (float)
+                    - close: 收盘价 (float)
+                    - volume: 成交量 (int)
+                    - amount: 成交额 (float)
+                    - amplitude: 振幅 (float, 可选)
+                    - pct_change: 涨跌幅 (float, 可选)
+                    - change_amount: 涨跌额 (float, 可选)
+                    - turnover: 换手率 (float, 可选)
+                - metadata: 元数据(
+                    code: 股票代码,
+                    period: 周期,
+                    n_records: 记录数
+                )
         """
         pass
 
@@ -200,7 +223,7 @@ class BaseDataProvider(ABC):
     def get_realtime_quotes(
         self,
         codes: Optional[List[str]] = None
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取实时行情数据
 
@@ -208,21 +231,23 @@ class BaseDataProvider(ABC):
             codes: 股票代码列表 (None 表示获取全部)
 
         Returns:
-            pd.DataFrame: 包含以下标准化字段
-                - code: 股票代码 (str)
-                - name: 股票名称 (str)
-                - latest_price: 最新价 (float)
-                - open: 开盘价 (float)
-                - high: 最高价 (float)
-                - low: 最低价 (float)
-                - pre_close: 昨收价 (float)
-                - volume: 成交量 (int)
-                - amount: 成交额 (float)
-                - pct_change: 涨跌幅 (float)
-                - change_amount: 涨跌额 (float)
-                - turnover: 换手率 (float, 可选)
-                - amplitude: 振幅 (float, 可选)
-                - trade_time: 行情时间 (datetime)
+            Response: 响应对象
+                - data: pd.DataFrame 包含以下标准化字段
+                    - code: 股票代码 (str)
+                    - name: 股票名称 (str)
+                    - latest_price: 最新价 (float)
+                    - open: 开盘价 (float)
+                    - high: 最高价 (float)
+                    - low: 最低价 (float)
+                    - pre_close: 昨收价 (float)
+                    - volume: 成交量 (int)
+                    - amount: 成交额 (float)
+                    - pct_change: 涨跌幅 (float)
+                    - change_amount: 涨跌额 (float)
+                    - turnover: 换手率 (float, 可选)
+                    - amplitude: 振幅 (float, 可选)
+                    - trade_time: 行情时间 (datetime)
+                - metadata: 元数据(n_stocks: 股票数量)
         """
         pass
 

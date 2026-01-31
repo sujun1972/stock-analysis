@@ -29,6 +29,7 @@ from src.providers.tushare.exceptions import (
     TusharePermissionError,
     TushareRateLimitError
 )
+from src.utils.response import Response
 
 
 class TestTushareProvider(unittest.TestCase):
@@ -101,19 +102,23 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_stock_list()
+        response = provider.get_stock_list()
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertGreater(len(result), 0)
-        self.assertIn('code', result.columns)
-        self.assertIn('name', result.columns)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, pd.DataFrame)
+        self.assertGreater(len(response.data), 0)
+        self.assertIn('code', response.data.columns)
+        self.assertIn('name', response.data.columns)
+        self.assertIn('n_stocks', response.metadata)
+        self.assertEqual(response.metadata['n_stocks'], 2)
 
-        print(f"  ✓ 成功获取 {len(result)} 只股票")
+        print(f"  ✓ 成功获取 {len(response.data)} 只股票")
 
     def test_04_get_stock_list_empty(self):
-        """测试4: 获取空股票列表应抛出异常"""
-        print("\n[测试4] 获取空股票列表应抛出异常...")
+        """测试4: 获取空股票列表应返回错误响应"""
+        print("\n[测试4] 获取空股票列表应返回错误响应...")
 
         # Mock API 返回空数据
         mock_client_instance = MagicMock()
@@ -121,11 +126,14 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
+        response = provider.get_stock_list()
 
-        with self.assertRaises(TushareDataError):
-            provider.get_stock_list()
+        # 验证错误响应
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_error())
+        self.assertIn('TUSHARE_EMPTY_DATA', response.error_code)
 
-        print("  ✓ 正确抛出 TushareDataError")
+        print("  ✓ 正确返回错误响应")
 
     def test_05_get_new_stocks(self):
         """测试5: 获取新股列表"""
@@ -143,13 +151,17 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_new_stocks(days=30)
+        response = provider.get_new_stocks(days=30)
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertGreater(len(result), 0)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, pd.DataFrame)
+        self.assertGreater(len(response.data), 0)
+        self.assertIn('n_stocks', response.metadata)
+        self.assertIn('days', response.metadata)
 
-        print(f"  ✓ 成功获取 {len(result)} 只新股")
+        print(f"  ✓ 成功获取 {len(response.data)} 只新股")
 
     def test_06_get_delisted_stocks(self):
         """测试6: 获取退市股票"""
@@ -170,14 +182,17 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_delisted_stocks()
+        response = provider.get_delisted_stocks()
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertGreater(len(result), 0)
-        self.assertIn('delist_date', result.columns)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, pd.DataFrame)
+        self.assertGreater(len(response.data), 0)
+        self.assertIn('delist_date', response.data.columns)
+        self.assertIn('n_stocks', response.metadata)
 
-        print(f"  ✓ 成功获取 {len(result)} 只退市股票")
+        print(f"  ✓ 成功获取 {len(response.data)} 只退市股票")
 
     # ========== 日线数据测试 ==========
 
@@ -206,20 +221,24 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_daily_data(
+        response = provider.get_daily_data(
             code='000001',
             start_date='2024-01-01',
             end_date='2024-01-31'
         )
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 2)
-        self.assertIn('trade_date', result.columns)
-        self.assertIn('open', result.columns)
-        self.assertIn('close', result.columns)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, pd.DataFrame)
+        self.assertEqual(len(response.data), 2)
+        self.assertIn('trade_date', response.data.columns)
+        self.assertIn('open', response.data.columns)
+        self.assertIn('close', response.data.columns)
+        self.assertIn('code', response.metadata)
+        self.assertIn('n_records', response.metadata)
 
-        print(f"  ✓ 成功获取 {len(result)} 条日线数据")
+        print(f"  ✓ 成功获取 {len(response.data)} 条日线数据")
 
     def test_08_get_daily_data_empty(self):
         """测试8: 获取空日线数据"""
@@ -232,11 +251,13 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_daily_data(code='999999')
+        response = provider.get_daily_data(code='999999')
 
-        # 应返回空 DataFrame 而不是抛出异常
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertTrue(result.empty)
+        # 验证警告响应
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_warning())
+        self.assertIsInstance(response.data, pd.DataFrame)
+        self.assertTrue(response.data.empty)
 
         print("  ✓ 空数据处理正确")
 
@@ -281,19 +302,24 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_daily_batch(
+        response = provider.get_daily_batch(
             codes=['000001', '600000'],
             start_date='2024-01-01',
             end_date='2024-01-31'
         )
 
-        # 验证结果
-        self.assertIsInstance(result, dict)
-        self.assertEqual(len(result), 2)
-        self.assertIn('000001', result)
-        self.assertIn('600000', result)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, dict)
+        self.assertEqual(len(response.data), 2)
+        self.assertIn('000001', response.data)
+        self.assertIn('600000', response.data)
+        self.assertIn('n_stocks', response.metadata)
+        self.assertIn('n_success', response.metadata)
+        self.assertIn('n_failed', response.metadata)
 
-        print(f"  ✓ 成功批量获取 {len(result)} 只股票数据")
+        print(f"  ✓ 成功批量获取 {len(response.data)} 只股票数据")
 
     # ========== 分钟数据测试 ==========
 
@@ -319,20 +345,24 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_minute_data(
+        response = provider.get_minute_data(
             code='000001',
             period='5',
             start_date='2024-01-01',
             end_date='2024-01-01'
         )
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 2)
-        self.assertIn('trade_time', result.columns)
-        self.assertIn('period', result.columns)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, pd.DataFrame)
+        self.assertEqual(len(response.data), 2)
+        self.assertIn('trade_time', response.data.columns)
+        self.assertIn('period', response.data.columns)
+        self.assertIn('code', response.metadata)
+        self.assertIn('period', response.metadata)
 
-        print(f"  ✓ 成功获取 {len(result)} 条分钟数据")
+        print(f"  ✓ 成功获取 {len(response.data)} 条分钟数据")
 
     # ========== 实时行情测试 ==========
 
@@ -361,19 +391,22 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
-        result = provider.get_realtime_quotes(codes=['000001', '600000'])
+        response = provider.get_realtime_quotes(codes=['000001', '600000'])
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 2)
-        self.assertIn('code', result.columns)
-        self.assertIn('latest_price', result.columns)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, pd.DataFrame)
+        self.assertEqual(len(response.data), 2)
+        self.assertIn('code', response.data.columns)
+        self.assertIn('latest_price', response.data.columns)
+        self.assertIn('n_stocks', response.metadata)
 
-        print(f"  ✓ 成功获取 {len(result)} 只股票实时行情")
+        print(f"  ✓ 成功获取 {len(response.data)} 只股票实时行情")
 
     def test_12_get_realtime_quotes_empty(self):
-        """测试12: 获取空实时行情应抛出异常"""
-        print("\n[测试12] 获取空实时行情应抛出异常...")
+        """测试12: 获取空实时行情应返回错误响应"""
+        print("\n[测试12] 获取空实时行情应返回错误响应...")
 
         # Mock API 返回空数据
         mock_client_instance = MagicMock()
@@ -382,11 +415,14 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
+        response = provider.get_realtime_quotes()
 
-        with self.assertRaises(TushareDataError):
-            provider.get_realtime_quotes()
+        # 验证错误响应
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_error())
+        self.assertIn('TUSHARE_EMPTY_DATA', response.error_code)
 
-        print("  ✓ 正确抛出 TushareDataError")
+        print("  ✓ 正确返回错误响应")
 
     # ========== 错误处理测试 ==========
 
@@ -401,11 +437,15 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
+        response = provider.get_stock_list()
 
-        with self.assertRaises(TusharePermissionError):
-            provider.get_stock_list()
+        # 验证错误响应
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_error())
+        self.assertIn('TUSHARE_PERMISSION_ERROR', response.error_code)
+        self.assertIn('积分不足', response.error_message)
 
-        print("  ✓ 权限错误正确传递")
+        print("  ✓ 权限错误正确处理")
 
     def test_14_rate_limit_error_handling(self):
         """测试14: 频率限制错误处理"""
@@ -421,13 +461,16 @@ class TestTushareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = TushareProvider(token='test_token')
+        response = provider.get_daily_data(code='000001')
 
-        with self.assertRaises(TushareRateLimitError) as context:
-            provider.get_daily_data(code='000001')
+        # 验证错误响应
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_error())
+        self.assertIn('TUSHARE_RATE_LIMIT_ERROR', response.error_code)
+        self.assertIn('retry_after', response.metadata)
+        self.assertEqual(response.metadata['retry_after'], 60)
 
-        self.assertEqual(context.exception.retry_after, 60)
-
-        print("  ✓ 频率限制错误正确传递")
+        print("  ✓ 频率限制错误正确处理")
 
     # ========== 日期处理测试 ==========
 
@@ -454,13 +497,16 @@ class TestTushareProvider(unittest.TestCase):
         provider = TushareProvider(token='test_token')
 
         # 测试不同的日期格式
-        result1 = provider.get_daily_data(
+        response = provider.get_daily_data(
             code='000001',
             start_date='2024-01-01',  # 带横杠
             end_date='20240131'  # 不带横杠
         )
 
-        self.assertIsInstance(result1, pd.DataFrame)
+        # 验证 Response 对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+        self.assertIsInstance(response.data, pd.DataFrame)
 
         print("  ✓ 日期格式标准化正确")
 

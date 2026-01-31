@@ -6,13 +6,19 @@ Tushare 数据提供者主类
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
+import time
 import pandas as pd
 from src.utils.logger import get_logger
+from src.utils.response import Response
 from ..base_provider import BaseDataProvider
 from .api_client import TushareAPIClient
 from .data_converter import TushareDataConverter
 from .config import TushareConfig, TushareFields
-from .exceptions import TushareDataError
+from .exceptions import (
+    TushareDataError,
+    TusharePermissionError,
+    TushareRateLimitError
+)
 
 logger = get_logger(__name__)
 
@@ -83,17 +89,17 @@ class TushareProvider(BaseDataProvider):
 
     # ========== 股票列表相关 ==========
 
-    def get_stock_list(self) -> pd.DataFrame:
+    def get_stock_list(self) -> Response:
         """
         获取全部 A 股股票列表
 
         Returns:
-            pd.DataFrame: 标准化的股票列表
-
-        Raises:
-            TushareDataError: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的股票列表
+                - metadata: 元数据(n_stocks, provider)
         """
         try:
+            start_time = time.time()
             logger.info("正在从 Tushare 获取股票列表...")
 
             # 获取股票基本信息
@@ -105,19 +111,56 @@ class TushareProvider(BaseDataProvider):
             )
 
             if df is None or df.empty:
-                raise TushareDataError("获取股票列表失败，返回数据为空")
+                return Response.error(
+                    error="获取股票列表失败，返回数据为空",
+                    error_code="TUSHARE_EMPTY_DATA",
+                    provider=self.provider_name
+                )
 
             # 转换为标准格式
             df = self.converter.convert_stock_list(df)
+            elapsed = time.time() - start_time
 
             logger.info(f"成功获取 {len(df)} 只股票")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {len(df)} 只股票",
+                n_stocks=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except TusharePermissionError as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_PERMISSION_ERROR",
+                provider=self.provider_name
+            )
+        except TushareRateLimitError as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_RATE_LIMIT_ERROR",
+                provider=self.provider_name,
+                retry_after=e.retry_after
+            )
+        except TushareDataError as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_DATA_ERROR",
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取股票列表失败: {str(e)}",
+                error_code="TUSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name
+            )
 
-    def get_new_stocks(self, days: int = 30) -> pd.DataFrame:
+    def get_new_stocks(self, days: int = 30) -> Response:
         """
         获取最近 N 天上市的新股
 
@@ -125,12 +168,12 @@ class TushareProvider(BaseDataProvider):
             days: 最近天数
 
         Returns:
-            pd.DataFrame: 标准化的新股列表
-
-        Raises:
-            TushareDataError: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的新股列表
+                - metadata: 元数据(n_stocks, days)
         """
         try:
+            start_time = time.time()
             logger.info(f"正在从 Tushare 获取最近 {days} 天的新股...")
 
             # 计算日期范围
@@ -163,25 +206,63 @@ class TushareProvider(BaseDataProvider):
 
             # 转换为标准格式
             df = self.converter.convert_new_stocks(df)
+            elapsed = time.time() - start_time
 
             logger.info(f"成功获取 {len(df)} 只新股")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取最近 {days} 天的 {len(df)} 只新股",
+                n_stocks=len(df),
+                days=days,
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except TusharePermissionError as e:
+            logger.error(f"获取新股列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_PERMISSION_ERROR",
+                provider=self.provider_name,
+                days=days
+            )
+        except TushareRateLimitError as e:
+            logger.error(f"获取新股列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_RATE_LIMIT_ERROR",
+                provider=self.provider_name,
+                days=days,
+                retry_after=e.retry_after
+            )
+        except TushareDataError as e:
+            logger.error(f"获取新股列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_DATA_ERROR",
+                provider=self.provider_name,
+                days=days
+            )
         except Exception as e:
             logger.error(f"获取新股列表失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取新股列表失败: {str(e)}",
+                error_code="TUSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name,
+                days=days
+            )
 
-    def get_delisted_stocks(self) -> pd.DataFrame:
+    def get_delisted_stocks(self) -> Response:
         """
         获取退市股票列表
 
         Returns:
-            pd.DataFrame: 标准化的退市股票列表
-
-        Raises:
-            TushareDataError: 获取数据失败
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的退市股票列表
+                - metadata: 元数据(n_stocks)
         """
         try:
+            start_time = time.time()
             logger.info("正在从 Tushare 获取退市股票列表...")
 
             # 使用 stock_basic 接口，list_status='D' 获取退市股票
@@ -193,17 +274,54 @@ class TushareProvider(BaseDataProvider):
             )
 
             if df is None or df.empty:
-                raise TushareDataError("获取退市股票列表失败，返回数据为空")
+                return Response.error(
+                    error="获取退市股票列表失败，返回数据为空",
+                    error_code="TUSHARE_EMPTY_DATA",
+                    provider=self.provider_name
+                )
 
             # 转换为标准格式
             df = self.converter.convert_delisted_stocks(df)
+            elapsed = time.time() - start_time
 
             logger.info(f"成功获取 {len(df)} 只退市股票")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {len(df)} 只退市股票",
+                n_stocks=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except TusharePermissionError as e:
+            logger.error(f"获取退市股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_PERMISSION_ERROR",
+                provider=self.provider_name
+            )
+        except TushareRateLimitError as e:
+            logger.error(f"获取退市股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_RATE_LIMIT_ERROR",
+                provider=self.provider_name,
+                retry_after=e.retry_after
+            )
+        except TushareDataError as e:
+            logger.error(f"获取退市股票列表失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_DATA_ERROR",
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取退市股票列表失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取退市股票列表失败: {str(e)}",
+                error_code="TUSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name
+            )
 
     # ========== 日线数据相关 ==========
 
@@ -213,7 +331,7 @@ class TushareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = 'qfq'
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取股票日线数据
 
@@ -224,9 +342,13 @@ class TushareProvider(BaseDataProvider):
             adjust: 复权方式 ('qfq', 'hfq', '')
 
         Returns:
-            pd.DataFrame: 标准化的日线数据
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的日线数据
+                - metadata: 元数据(code, n_records, date_range, adjust)
         """
         try:
+            start_time = time.time()
+
             # 标准化日期格式
             start = self.normalize_date(start_date) if start_date else \
                 (datetime.now() - timedelta(days=TushareConfig.DEFAULT_HISTORY_DAYS)).strftime('%Y%m%d')
@@ -255,17 +377,64 @@ class TushareProvider(BaseDataProvider):
 
             if df is None or df.empty:
                 logger.warning(f"{code}: 无数据")
-                return pd.DataFrame()
+                return Response.warning(
+                    message=f"{code}: 无数据",
+                    data=pd.DataFrame(),
+                    code=code,
+                    date_range=f"{start}~{end}",
+                    adjust=adjust,
+                    provider=self.provider_name
+                )
 
             # 转换为标准格式
             df = self.converter.convert_daily_data(df)
+            elapsed = time.time() - start_time
 
             logger.debug(f"成功获取 {code} 日线数据 {len(df)} 条")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {code} 日线数据",
+                code=code,
+                n_records=len(df),
+                date_range=f"{start}~{end}",
+                adjust=adjust,
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except TusharePermissionError as e:
+            logger.error(f"获取 {code} 日线数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_PERMISSION_ERROR",
+                code=code,
+                provider=self.provider_name
+            )
+        except TushareRateLimitError as e:
+            logger.error(f"获取 {code} 日线数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_RATE_LIMIT_ERROR",
+                code=code,
+                provider=self.provider_name,
+                retry_after=e.retry_after
+            )
+        except TushareDataError as e:
+            logger.error(f"获取 {code} 日线数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_DATA_ERROR",
+                code=code,
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取 {code} 日线数据失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取日线数据失败: {str(e)}",
+                error_code="TUSHARE_UNEXPECTED_ERROR",
+                code=code,
+                provider=self.provider_name
+            )
 
     def get_daily_batch(
         self,
@@ -273,7 +442,7 @@ class TushareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = 'qfq'
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> Response:
         """
         批量获取多只股票的日线数据
 
@@ -284,22 +453,65 @@ class TushareProvider(BaseDataProvider):
             adjust: 复权方式
 
         Returns:
-            Dict[str, pd.DataFrame]: 股票代码到数据的映射
+            Response: 响应对象
+                - data: Dict[str, pd.DataFrame] 股票代码到数据的映射
+                - metadata: 元数据(n_stocks, n_success, n_failed, failed_codes)
         """
+        start_time = time.time()
         result = {}
+        failed_codes = []
 
         for i, code in enumerate(codes, 1):
             try:
                 logger.info(f"[{i}/{len(codes)}] 获取 {code} 日线数据")
-                df = self.get_daily_data(code, start_date, end_date, adjust)
-                if not df.empty:
-                    result[code] = df
+                response = self.get_daily_data(code, start_date, end_date, adjust)
+                if response.is_success() and response.data is not None and not response.data.empty:
+                    result[code] = response.data
+                else:
+                    failed_codes.append(code)
             except Exception as e:
                 logger.error(f"获取 {code} 日线数据失败: {e}")
+                failed_codes.append(code)
                 continue
 
-        logger.info(f"批量获取完成，成功: {len(result)}/{len(codes)}")
-        return result
+        elapsed = time.time() - start_time
+        n_success = len(result)
+        n_failed = len(failed_codes)
+
+        logger.info(f"批量获取完成，成功: {n_success}/{len(codes)}")
+
+        if n_success == 0:
+            return Response.error(
+                error="批量获取失败，所有股票数据获取失败",
+                error_code="TUSHARE_BATCH_ALL_FAILED",
+                data={},
+                n_stocks=len(codes),
+                n_success=0,
+                n_failed=n_failed,
+                failed_codes=failed_codes,
+                provider=self.provider_name
+            )
+        elif n_failed > 0:
+            return Response.warning(
+                message=f"批量获取完成，部分失败 (成功: {n_success}/{len(codes)})",
+                data=result,
+                n_stocks=len(codes),
+                n_success=n_success,
+                n_failed=n_failed,
+                failed_codes=failed_codes,
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
+        else:
+            return Response.success(
+                data=result,
+                message=f"批量获取完成 (成功: {n_success}/{len(codes)})",
+                n_stocks=len(codes),
+                n_success=n_success,
+                n_failed=0,
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
     # ========== 分时数据相关 ==========
 
@@ -310,7 +522,7 @@ class TushareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = ''
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取股票分时数据
 
@@ -324,9 +536,13 @@ class TushareProvider(BaseDataProvider):
             adjust: 复权方式
 
         Returns:
-            pd.DataFrame: 标准化的分时数据
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的分时数据
+                - metadata: 元数据(code, period, n_records)
         """
         try:
+            start_time = time.time()
+
             # 标准化日期格式
             start = self.normalize_date(start_date) if start_date else \
                 (datetime.now() - timedelta(days=5)).strftime('%Y%m%d')
@@ -353,24 +569,73 @@ class TushareProvider(BaseDataProvider):
 
             if df is None or df.empty:
                 logger.warning(f"{code}: 无分时数据")
-                return pd.DataFrame()
+                return Response.warning(
+                    message=f"{code}: 无分时数据",
+                    data=pd.DataFrame(),
+                    code=code,
+                    period=period,
+                    provider=self.provider_name
+                )
 
             # 转换为标准格式
             df = self.converter.convert_minute_data(df, period)
+            elapsed = time.time() - start_time
 
             logger.debug(f"成功获取 {code} 分时数据 {len(df)} 条")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {code} {period}分钟数据",
+                code=code,
+                period=period,
+                n_records=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except TusharePermissionError as e:
+            logger.error(f"获取 {code} 分时数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_PERMISSION_ERROR",
+                code=code,
+                period=period,
+                provider=self.provider_name
+            )
+        except TushareRateLimitError as e:
+            logger.error(f"获取 {code} 分时数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_RATE_LIMIT_ERROR",
+                code=code,
+                period=period,
+                provider=self.provider_name,
+                retry_after=e.retry_after
+            )
+        except TushareDataError as e:
+            logger.error(f"获取 {code} 分时数据失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_DATA_ERROR",
+                code=code,
+                period=period,
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取 {code} 分时数据失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取分时数据失败: {str(e)}",
+                error_code="TUSHARE_UNEXPECTED_ERROR",
+                code=code,
+                period=period,
+                provider=self.provider_name
+            )
 
     # ========== 实时行情相关 ==========
 
     def get_realtime_quotes(
         self,
         codes: Optional[List[str]] = None
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         获取实时行情数据
 
@@ -380,9 +645,12 @@ class TushareProvider(BaseDataProvider):
             codes: 股票代码列表 (None 表示获取全部)
 
         Returns:
-            pd.DataFrame: 标准化的实时行情数据
+            Response: 响应对象
+                - data: pd.DataFrame 标准化的实时行情数据
+                - metadata: 元数据(n_stocks)
         """
         try:
+            start_time = time.time()
             logger.info("正在获取实时行情...")
 
             # 如果指定了代码列表，转换格式
@@ -397,17 +665,54 @@ class TushareProvider(BaseDataProvider):
             )
 
             if df is None or df.empty:
-                raise TushareDataError("获取实时行情失败，返回数据为空")
+                return Response.error(
+                    error="获取实时行情失败，返回数据为空",
+                    error_code="TUSHARE_EMPTY_DATA",
+                    provider=self.provider_name
+                )
 
             # 转换为标准格式
             df = self.converter.convert_realtime_quotes(df)
+            elapsed = time.time() - start_time
 
             logger.info(f"成功获取 {len(df)} 只股票的实时行情")
-            return df
+            return Response.success(
+                data=df,
+                message=f"成功获取 {len(df)} 只股票的实时行情",
+                n_stocks=len(df),
+                provider=self.provider_name,
+                elapsed_time=f"{elapsed:.2f}s"
+            )
 
+        except TusharePermissionError as e:
+            logger.error(f"获取实时行情失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_PERMISSION_ERROR",
+                provider=self.provider_name
+            )
+        except TushareRateLimitError as e:
+            logger.error(f"获取实时行情失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_RATE_LIMIT_ERROR",
+                provider=self.provider_name,
+                retry_after=e.retry_after
+            )
+        except TushareDataError as e:
+            logger.error(f"获取实时行情失败: {e}")
+            return Response.error(
+                error=str(e),
+                error_code="TUSHARE_DATA_ERROR",
+                provider=self.provider_name
+            )
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}")
-            raise
+            return Response.error(
+                error=f"获取实时行情失败: {str(e)}",
+                error_code="TUSHARE_UNEXPECTED_ERROR",
+                provider=self.provider_name
+            )
 
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
