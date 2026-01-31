@@ -184,7 +184,10 @@ class GRUStockTrainer:
                 device = self.gpu_manager.get_device(prefer_gpu=use_gpu)
             elif use_gpu and torch.cuda.is_available():
                 device = 'cuda'
-            elif torch.backends.mps.is_available():
+            elif use_gpu and torch.backends.mps.is_available():
+                # MPS在RNN训练中数值不稳定，建议使用CPU
+                logger.warning("检测到MPS设备，但GRU/RNN在MPS上可能数值不稳定")
+                logger.warning("建议使用use_gpu=False强制使用CPU，或等待PyTorch MPS优化")
                 device = 'mps'
             else:
                 device = 'cpu'
@@ -222,7 +225,18 @@ class GRUStockTrainer:
         self.num_workers = num_workers
 
         # 优化器和损失函数
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        # PyTorch 2.10在macOS上Adam优化器存在段错误问题，使用SGD with momentum
+        import platform
+        if platform.system() == 'Darwin':
+            logger.warning("检测到macOS系统，使用SGD优化器代替Adam避免段错误")
+            self.optimizer = optim.SGD(
+                self.model.parameters(),
+                lr=learning_rate,
+                momentum=0.9
+            )
+        else:
+            self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+
         self.criterion = nn.MSELoss()
 
         # 学习率调度器
@@ -306,6 +320,12 @@ class GRUStockTrainer:
                 # 标准训练
                 predictions = self.model(sequences)
                 loss = self.criterion(predictions, targets)
+
+                # 检查loss是否有效
+                if not torch.isfinite(loss):
+                    logger.warning(f"检测到无效loss值: {loss.item()}，跳过此批次")
+                    continue
+
                 loss.backward()
                 self.optimizer.step()
 

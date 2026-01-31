@@ -182,13 +182,17 @@ class TestGRUGPUTraining:
 
     def test_training_convergence(self, sample_sequence_data):
         """测试训练收敛性"""
+        import platform
         X_train, y_train, X_valid, y_valid = sample_sequence_data
+
+        # macOS上MPS设备训练GRU数值不稳定，使用CPU
+        use_gpu = False if platform.system() == 'Darwin' else True
 
         trainer = GRUStockTrainer(
             input_size=10,
             hidden_size=32,
             num_layers=2,
-            use_gpu=True,
+            use_gpu=use_gpu,
             learning_rate=0.01
         )
 
@@ -264,13 +268,17 @@ class TestGRUGPUPrediction:
 
     def test_prediction_values(self, sample_sequence_data):
         """测试预测值的合理性"""
+        import platform
         X_train, y_train, X_valid, y_valid = sample_sequence_data
+
+        # macOS上MPS设备训练GRU数值不稳定，使用CPU
+        use_gpu = False if platform.system() == 'Darwin' else True
 
         trainer = GRUStockTrainer(
             input_size=10,
             hidden_size=16,
             num_layers=1,
-            use_gpu=True
+            use_gpu=use_gpu
         )
 
         trainer.train(
