@@ -160,16 +160,16 @@ class TestCorrelationVisualizer:
 
         fig = visualizer.plot_vif_analysis(vif_df, threshold=10.0)
 
-        # 应该有"无多重共线性"的标注
-        annotation_text = fig.layout.annotations[0].text
+        # 应该有"无多重共线性"的标注，检查最后一个annotation（第一个是阈值线）
+        annotation_text = fig.layout.annotations[-1].text
         assert "无多重共线性" in annotation_text
 
     def test_plot_vif_analysis_some_high(self, visualizer, sample_vif_df):
         """测试部分VIF超过阈值"""
         fig = visualizer.plot_vif_analysis(sample_vif_df, threshold=10.0)
 
-        # 应该有多重共线性警告
-        annotation_text = fig.layout.annotations[0].text
+        # 应该有多重共线性警告，检查最后一个annotation（第一个是阈值线）
+        annotation_text = fig.layout.annotations[-1].text
         assert "多重共线性风险" in annotation_text
 
     def test_plot_rolling_correlation(

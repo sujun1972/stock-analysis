@@ -293,8 +293,8 @@ class FactorVisualizer(BaseVisualizer):
             title=title, x_label="分组", y_label="平均收益率 (%)"
         )
 
-        # 提取数据
-        if "mean_return" in quantile_returns.columns:
+        # 提取数据（支持DataFrame和Series两种输入格式）
+        if isinstance(quantile_returns, pd.DataFrame) and "mean_return" in quantile_returns.columns:
             returns = quantile_returns["mean_return"].values * 100
         else:
             returns = quantile_returns.values * 100

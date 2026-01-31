@@ -45,6 +45,10 @@ class BacktestVisualizer(BaseVisualizer):
         Returns:
             Plotly图表对象
         """
+        # 验证数据不为空
+        if len(equity_curve) == 0:
+            raise ValueError("净值曲线数据不能为空")
+
         fig = self.create_figure(
             title=title, x_label="日期", y_label="净值"
         )
@@ -379,8 +383,8 @@ class BacktestVisualizer(BaseVisualizer):
         Returns:
             Plotly图表对象
         """
-        # 计算月度收益
-        monthly_returns = returns.resample("M").apply(
+        # 计算月度收益（使用ME表示月末，兼容pandas 2.0+）
+        monthly_returns = returns.resample("ME").apply(
             lambda x: (1 + x).prod() - 1
         )
 

@@ -96,9 +96,10 @@ class TestBaseVisualizer:
             visualizer.save_figure(fig, str(save_path), format="html")
 
             assert save_path.exists()
-            content = save_path.read_text()
+            content = save_path.read_text(encoding="utf-8")
             assert "plotly" in content.lower()
-            assert "测试" in content
+            # Plotly会将中文编码为Unicode转义序列或直接包含中文
+            assert "测试" in content or "\\u6d4b\\u8bd5" in content
 
     def test_save_figure_creates_directory(self, visualizer):
         """测试保存时自动创建目录"""

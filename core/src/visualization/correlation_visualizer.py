@@ -372,10 +372,8 @@ class CorrelationVisualizer(BaseVisualizer):
         if title is None:
             title = f"{factor1.name} vs {factor2.name} 滚动相关性"
 
-        # 计算滚动相关性
-        rolling_corr = (
-            factor1.rolling(window).corr(factor2.rolling(window))
-        )
+        # 计算滚动相关性（pandas 2.0+兼容语法）
+        rolling_corr = factor1.rolling(window).corr(factor2)
 
         fig = self.create_figure(
             title=title, x_label="日期", y_label="相关系数"

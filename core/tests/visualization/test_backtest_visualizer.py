@@ -280,8 +280,9 @@ class TestBacktestVisualizer:
     def test_negative_returns(self, visualizer):
         """测试负收益场景"""
         dates = pd.date_range(start="2023-01-01", periods=100, freq="D")
-        # 大部分为负收益
-        returns = pd.Series(np.random.randn(100) * 0.01 - 0.001, index=dates)
+        # 固定的负收益序列，确保累计收益为负
+        np.random.seed(42)  # 固定随机种子
+        returns = pd.Series(np.random.randn(100) * 0.01 - 0.005, index=dates)
 
         fig = visualizer.plot_cumulative_returns(returns)
         assert isinstance(fig, go.Figure)

@@ -66,9 +66,9 @@ class TestFactorVisualizer:
         assert len(fig.data) >= 1
         assert fig.data[0].name == "IC"
 
-        # 检查统计信息标注
+        # 检查统计信息标注（最后一个annotation是统计信息，前面的是均值线）
         assert len(fig.layout.annotations) >= 1
-        annotation_text = fig.layout.annotations[0].text
+        annotation_text = fig.layout.annotations[-1].text
         assert "IC均值" in annotation_text
         assert "IR比率" in annotation_text
 
