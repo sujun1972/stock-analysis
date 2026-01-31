@@ -254,7 +254,8 @@ class TestVolatilityCalculateAll:
     def test_calculate_all_basic(self, sample_ohlc_data):
         """测试计算所有波动率因子"""
         calc = VolatilityFactorCalculator(sample_ohlc_data.copy())
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 检查历史波动率
         assert any('VOLATILITY' in col for col in result.columns)
@@ -265,7 +266,8 @@ class TestVolatilityCalculateAll:
         """测试只有close列时calculate_all"""
         df = pd.DataFrame({'close': np.random.randn(100).cumsum() + 100})
         calc = VolatilityFactorCalculator(df)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 应该有历史波动率，但没有Parkinson波动率
         assert any('VOLATILITY' in col for col in result.columns)
@@ -340,7 +342,8 @@ class TestVolatilityPerformance:
         import time
         start = time.time()
         calc = VolatilityFactorCalculator(df)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
         elapsed = time.time() - start
 
         assert elapsed < 1.0

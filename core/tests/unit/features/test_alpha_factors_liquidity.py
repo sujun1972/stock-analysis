@@ -245,7 +245,8 @@ class TestCalculateAll:
     def test_calculate_all_basic(self, sample_price_volume_data):
         """测试calculate_all方法"""
         calc = LiquidityFactorCalculator(sample_price_volume_data)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 应该包含默认的流动性因子
         assert 'ILLIQUIDITY20' in result.columns
@@ -254,7 +255,8 @@ class TestCalculateAll:
         """测试calculate_all不修改原数据（非inplace模式）"""
         original_df = sample_price_volume_data.copy()
         calc = LiquidityFactorCalculator(original_df, inplace=False)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 原始DataFrame不应该有新列
         assert 'ILLIQUIDITY20' not in original_df.columns
@@ -264,11 +266,15 @@ class TestCalculateAll:
     def test_calculate_all_inplace(self, sample_price_volume_data):
         """测试calculate_all的inplace模式"""
         calc = LiquidityFactorCalculator(sample_price_volume_data, inplace=True)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
 
-        # inplace模式下，df应该被修改
+        # inplace模式下，df应该被修改，并且返回Response对象
         assert 'ILLIQUIDITY20' in calc.df.columns
-        assert result is calc.df
+        # Response对象的data应该指向修改后的df
+        if hasattr(resp, 'data'):
+            assert resp.data is calc.df
+        else:
+            assert resp is calc.df
 
 
 # ==================== 边界情况测试 ====================

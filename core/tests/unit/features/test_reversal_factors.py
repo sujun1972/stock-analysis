@@ -381,7 +381,8 @@ class TestReversalCalculateAll:
     def test_calculate_all_basic(self, sample_ohlc_data):
         """测试计算所有反转因子"""
         calc = ReversalFactorCalculator(sample_ohlc_data.copy())
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 检查所有类型的因子都生成了
         assert any('REV' in col for col in result.columns)
@@ -396,7 +397,8 @@ class TestReversalCalculateAll:
         })
 
         calc = ReversalFactorCalculator(df)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 应该有短期反转和Z-score，但没有隔夜因子
         assert any('REV' in col for col in result.columns)
@@ -514,7 +516,8 @@ class TestReversalPerformance:
         import time
         start = time.time()
         calc = ReversalFactorCalculator(df)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
         elapsed = time.time() - start
 
         # 应该在1秒内完成
@@ -550,7 +553,8 @@ class TestReversalRealWorldScenarios:
     def test_oscillation_scenario(self, oscillating_data):
         """测试震荡市场"""
         calc = ReversalFactorCalculator(oscillating_data.copy())
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 震荡市场中，反转因子应该频繁变号
         sign_changes = (result['REV1'].dropna().diff().abs() > 0).sum()

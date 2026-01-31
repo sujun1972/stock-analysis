@@ -486,7 +486,8 @@ class TestAlphaFactorsIntegration:
 
         alpha = AlphaFactors(df)
         # 使用正确的方法名
-        result = alpha.add_all_alpha_factors()
+        resp = alpha.add_all_alpha_factors()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 应该生成大量因子
         assert len(result.columns) >= 20  # 至少20个因子
@@ -510,7 +511,8 @@ class TestPerformanceAndStress:
         start = time.time()
 
         calc = MomentumFactorCalculator(df)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         elapsed = time.time() - start
 

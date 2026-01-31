@@ -225,7 +225,8 @@ class TestTrendFactors:
     def test_calculate_all_trend(self, sample_price_volume_data):
         """测试计算所有趋势因子"""
         calc = TrendFactorCalculator(sample_price_volume_data.copy())
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 检查是否生成了趋势相关列
         assert len(result.columns) > len(sample_price_volume_data.columns)
@@ -240,7 +241,8 @@ class TestVolumeCalculateAll:
     def test_volume_calculate_all(self, sample_price_volume_data):
         """测试计算所有成交量因子"""
         calc = VolumeFactorCalculator(sample_price_volume_data.copy())
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
 
         # 检查成交量因子
         assert any('VOLUME' in col for col in result.columns)
@@ -341,7 +343,8 @@ class TestVolumePerformance:
         import time
         start = time.time()
         calc = VolumeFactorCalculator(df)
-        result = calc.calculate_all()
+        resp = calc.calculate_all()
+        result = resp.data if hasattr(resp, 'data') else resp
         elapsed = time.time() - start
 
         assert elapsed < 1.0

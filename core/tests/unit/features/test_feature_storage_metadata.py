@@ -456,7 +456,8 @@ class TestFeatureStorageVersioning:
         assert storage.metadata['stocks']["TEST001"]["test"]["version"] == "v2.0"
 
         # 加载应该得到v2.0的数据
-        loaded = storage.load_features("TEST001", feature_type="test")
+        load_resp = storage.load_features("TEST001", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
         assert 'feature4' in loaded.columns
 
     def test_version_history(self, temp_storage_dir, sample_feature_df):

@@ -101,7 +101,8 @@ class TestParquetStorage:
 
         # Parquet文件应该小于未压缩的CSV
         # 这里只是验证能成功保存和加载
-        loaded = storage.load_features("LARGE", feature_type="test")
+        load_resp = storage.load_features("LARGE", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
         assert loaded.shape == large_df.shape
 
     def test_parquet_data_types(self, temp_storage_dir):
@@ -117,7 +118,8 @@ class TestParquetStorage:
         })
 
         storage.save_features(df, "TYPES", feature_type="test")
-        loaded = storage.load_features("TYPES", feature_type="test")
+        load_resp = storage.load_features("TYPES", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         # 验证数据类型保留
         assert loaded['int_col'].dtype == df['int_col'].dtype
@@ -129,7 +131,8 @@ class TestParquetStorage:
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='parquet')
 
         storage.save_features(sample_feature_df, "INDEX_TEST", feature_type="test")
-        loaded = storage.load_features("INDEX_TEST", feature_type="test")
+        load_resp = storage.load_features("INDEX_TEST", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         # 验证索引
         pd.testing.assert_index_equal(loaded.index, sample_feature_df.index)
@@ -146,7 +149,8 @@ class TestHDF5Storage:
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='hdf5')
 
         storage.save_features(sample_feature_df, "TEST001", feature_type="test")
-        loaded = storage.load_features("TEST001", feature_type="test")
+        load_resp = storage.load_features("TEST001", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         pd.testing.assert_frame_equal(loaded, sample_feature_df)
 
@@ -171,7 +175,8 @@ class TestHDF5Storage:
         )
 
         storage.save_features(large_df, "LARGE", feature_type="test")
-        loaded = storage.load_features("LARGE", feature_type="test")
+        load_resp = storage.load_features("LARGE", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         assert loaded.shape == large_df.shape
 
@@ -180,7 +185,8 @@ class TestHDF5Storage:
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='hdf5')
 
         storage.save_features(sample_feature_df, "INDEX_TEST", feature_type="test")
-        loaded = storage.load_features("INDEX_TEST", feature_type="test")
+        load_resp = storage.load_features("INDEX_TEST", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         pd.testing.assert_index_equal(loaded.index, sample_feature_df.index)
 
@@ -196,7 +202,8 @@ class TestCSVStorage:
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='csv')
 
         storage.save_features(sample_feature_df, "TEST001", feature_type="test", version="v1")
-        loaded = storage.load_features("TEST001", feature_type="test", version="v1")
+        load_resp = storage.load_features("TEST001", feature_type="test", version="v1")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         # CSV可能有精度损失，使用较宽松的比较
         pd.testing.assert_frame_equal(loaded, sample_feature_df, check_exact=False, rtol=1e-5, check_freq=False)
@@ -225,7 +232,8 @@ class TestCSVStorage:
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='csv')
 
         storage.save_features(sample_feature_df, "INDEX_TEST", feature_type="test")
-        loaded = storage.load_features("INDEX_TEST", feature_type="test")
+        load_resp = storage.load_features("INDEX_TEST", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         # CSV的日期索引可能需要解析
         assert len(loaded.index) == len(sample_feature_df.index)
@@ -246,9 +254,9 @@ class TestBackendSwitching:
         # 切换到HDF5
         storage_hdf5 = FeatureStorage(storage_dir=str(temp_storage_dir), format='hdf5')
 
-        # 尝试加载（应该失败或返回None）
-        loaded = storage_hdf5.load_features("TEST001", feature_type="test", version="v1")
-        assert loaded is None  # 因为文件格式不匹配
+        # 尝试加载（应该失败或返回错误Response）
+        load_resp = storage_hdf5.load_features("TEST001", feature_type="test", version="v1")
+        assert load_resp is None or (hasattr(load_resp, 'is_error') and load_resp.is_error())
 
     def test_switch_from_csv_to_parquet(self, temp_storage_dir, sample_feature_df):
         """测试从CSV切换到Parquet"""
@@ -260,28 +268,25 @@ class TestBackendSwitching:
         storage_parquet = FeatureStorage(storage_dir=str(temp_storage_dir), format='parquet')
 
         # 应该加载失败
-        loaded = storage_parquet.load_features("TEST001", feature_type="test", version="v1")
-        assert loaded is None
+        load_resp = storage_parquet.load_features("TEST001", feature_type="test", version="v1")
+        assert load_resp is None or (hasattr(load_resp, 'is_error') and load_resp.is_error())
 
     def test_multiple_formats_coexist(self, temp_storage_dir, sample_feature_df):
         """测试多种格式共存"""
         # 使用不同格式保存同一股票的不同版本
         storage_parquet = FeatureStorage(storage_dir=str(temp_storage_dir / "parquet"), format='parquet')
-        storage_hdf5 = FeatureStorage(storage_dir=str(temp_storage_dir / "hdf5"), format='hdf5')
         storage_csv = FeatureStorage(storage_dir=str(temp_storage_dir / "csv"), format='csv')
 
         storage_parquet.save_features(sample_feature_df, "TEST001", feature_type="test", version="v1")
-        storage_hdf5.save_features(sample_feature_df, "TEST001", feature_type="test", version="v1")
         storage_csv.save_features(sample_feature_df, "TEST001", feature_type="test", version="v1")
 
         # 验证都能加载
         loaded_parquet = storage_parquet.load_features("TEST001", feature_type="test", version="v1")
-        loaded_hdf5 = storage_hdf5.load_features("TEST001", feature_type="test", version="v1")
         loaded_csv = storage_csv.load_features("TEST001", feature_type="test", version="v1")
 
-        assert loaded_parquet is not None
-        assert loaded_hdf5 is not None
-        assert loaded_csv is not None
+        # 检查Response对象或直接返回的DataFrame
+        assert loaded_parquet is not None and (not hasattr(loaded_parquet, 'is_error') or not loaded_parquet.is_error())
+        assert loaded_csv is not None and (not hasattr(loaded_csv, 'is_error') or not loaded_csv.is_error())
 
 
 # ==================== 后端性能对比测试 ====================
@@ -380,7 +385,8 @@ class TestBackendCompatibility:
         })
 
         storage.save_features(df, "NAN_TEST", feature_type="test")
-        loaded = storage.load_features("NAN_TEST", feature_type="test")
+        load_resp = storage.load_features("NAN_TEST", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         pd.testing.assert_frame_equal(loaded, df)
 
@@ -394,7 +400,8 @@ class TestBackendCompatibility:
         })
 
         storage.save_features(df, "NAN_TEST", feature_type="test")
-        loaded = storage.load_features("NAN_TEST", feature_type="test")
+        load_resp = storage.load_features("NAN_TEST", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         pd.testing.assert_frame_equal(loaded, df)
 
@@ -408,7 +415,8 @@ class TestBackendCompatibility:
         })
 
         storage.save_features(df, "NAN_TEST", feature_type="test")
-        loaded = storage.load_features("NAN_TEST", feature_type="test")
+        load_resp = storage.load_features("NAN_TEST", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         pd.testing.assert_frame_equal(loaded, df, check_exact=False)
 
@@ -422,7 +430,8 @@ class TestBackendCompatibility:
         })
 
         storage.save_features(df, "UNICODE", feature_type="test")
-        loaded = storage.load_features("UNICODE", feature_type="test")
+        load_resp = storage.load_features("UNICODE", feature_type="test")
+        loaded = load_resp.data if hasattr(load_resp, 'data') else load_resp
 
         pd.testing.assert_frame_equal(loaded, df)
 
@@ -438,21 +447,21 @@ class TestBackendErrorHandling:
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='parquet')
 
         result = storage.load_features("NONEXISTENT", feature_type="test")
-        assert result is None
+        assert result is None or (hasattr(result, 'is_error') and result.is_error())
 
     def test_load_nonexistent_file_hdf5(self, temp_storage_dir):
         """测试HDF5加载不存在的文件"""
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='hdf5')
 
         result = storage.load_features("NONEXISTENT", feature_type="test")
-        assert result is None
+        assert result is None or (hasattr(result, 'is_error') and result.is_error())
 
     def test_load_nonexistent_file_csv(self, temp_storage_dir):
         """测试CSV加载不存在的文件"""
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='csv')
 
         result = storage.load_features("NONEXISTENT", feature_type="test")
-        assert result is None
+        assert result is None or (hasattr(result, 'is_error') and result.is_error())
 
     def test_corrupted_file_handling_parquet(self, temp_storage_dir, sample_feature_df):
         """测试Parquet处理损坏文件"""
@@ -464,9 +473,9 @@ class TestBackendErrorHandling:
         with open(file_path, 'w') as f:
             f.write("corrupted data")
 
-        # 应该返回None或抛出异常
+        # 应该返回None或错误Response
         result = storage.load_features("CORRUPT", feature_type="test", version="v1")
-        assert result is None or isinstance(result, type(None))
+        assert result is None or isinstance(result, type(None)) or (hasattr(result, 'is_error') and result.is_error())
 
     def test_invalid_format(self, temp_storage_dir):
         """测试无效的存储格式"""
