@@ -40,7 +40,41 @@ raise DataValidationError(
 
 ---
 
-### 2. Response Format (统一返回格式)
+### 2. Logging Standards (日志使用规范)
+
+**文件**: `check-logging/skill.md`
+
+**用途**: 检查 core 子项目的代码是否正确使用统一日志系统（基于 loguru）
+
+**适用场景**:
+- 代码质量检查
+- 日志规范审查
+- 代码重构
+- 新功能开发
+
+**核心内容**:
+- ✅ 检查 print() 的不当使用
+- ✅ 检查标准库 logging 的使用
+- ✅ 验证 logger 导入和初始化
+- ✅ 日志级别使用统计
+- ✅ 自动生成检查报告
+
+**快速示例**:
+```python
+from src.utils.logger import get_logger
+
+# 正确的日志使用方式
+logger = get_logger(__name__)
+
+logger.debug("调试信息：变量值 = {}", value)
+logger.info("正在处理数据...")
+logger.warning("警告：配置项缺失，使用默认值")
+logger.error("错误：数据加载失败 - {}", error_msg)
+```
+
+---
+
+### 3. Response Format (统一返回格式)
 
 **文件**: `response-format.md`
 
@@ -138,10 +172,10 @@ cat .claude/skills/exception-handling.md
 
 ## 📊 当前统计
 
-- **Skills总数**: 2个
-- **覆盖领域**: 异常处理、API标准化
-- **代码示例**: 25+个
-- **快速参考**: 4个速查表
+- **Skills总数**: 3个
+- **覆盖领域**: 异常处理、日志规范、API标准化
+- **代码示例**: 30+个
+- **快速参考**: 5个速查表
 
 ---
 
