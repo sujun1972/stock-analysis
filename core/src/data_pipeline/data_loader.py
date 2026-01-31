@@ -59,11 +59,9 @@ class DataLoader:
             if df is None or len(df) == 0:
                 raise DataNotFoundError(
                     f"无法获取股票数据",
-                    details={
-                        "symbol": symbol,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    }
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date
                 )
 
             logger.info(f"加载股票 {symbol} 数据: {len(df)} 条记录 ({start_date} ~ {end_date})")
@@ -85,7 +83,7 @@ class DataLoader:
             raise
         except Exception as e:
             logger.error(f"加载数据失败: {symbol}, 错误: {e}")
-            raise DataError(f"加载数据失败: {e}", details={"symbol": symbol})
+            raise DataError(f"加载数据失败: {e}", symbol=symbol)
 
     def _ensure_datetime_index(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
         """确保DataFrame有日期时间索引"""
@@ -108,5 +106,6 @@ class DataLoader:
         if missing_cols:
             raise DataError(
                 f"数据缺少必要列: {missing_cols}",
-                details={"symbol": symbol, "missing_columns": missing_cols}
+                symbol=symbol,
+                missing_columns=missing_cols
             )

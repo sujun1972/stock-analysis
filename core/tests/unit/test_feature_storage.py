@@ -469,9 +469,17 @@ class TestFeatureUpdate:
         df2 = pd.DataFrame({'value': [4, 5]}, index=pd.date_range('2024-01-04', periods=2))
         result = storage.update_features('000001', df2, 'transformed', mode='append')
 
-        # update_features 当前实现有bug,返回False
-        # TODO: 等待update_features方法修复后,改为检查result.is_success()
-        assert result is False  # 临时: 实现有bug,总是失败
+        # 验证更新成功
+        assert result.is_success()
+
+        # 验证合并后的数据
+        load_result = storage.load_features('000001', 'transformed')
+        assert load_result.is_success()
+        loaded_df = load_result.data
+
+        # 应该有5行数据(3行原始 + 2行新增)
+        assert len(loaded_df) == 5
+        assert list(loaded_df['value']) == [1, 2, 3, 4, 5]
 
 
 class TestFeatureDelete:

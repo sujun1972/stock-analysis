@@ -534,8 +534,10 @@ class TestCompareVersions:
             model_type='test'
         )
 
-        comparison = registry.compare_versions('compare_test', 1, 2)
+        response = registry.compare_versions('compare_test', 1, 2)
 
+        assert response.is_success()
+        comparison = response.data
         assert 'version1' in comparison
         assert 'version2' in comparison
         assert 'metric_diff' in comparison
@@ -555,8 +557,10 @@ class TestCompareVersions:
             model_type='test'
         )
 
-        comparison = registry.compare_versions('diff_test', 1, 2)
+        response = registry.compare_versions('diff_test', 1, 2)
 
+        assert response.is_success()
+        comparison = response.data
         assert comparison['metric_diff']['ic'] == pytest.approx(0.05)
         assert comparison['metric_diff']['rmse'] == pytest.approx(-0.01)
 
@@ -564,8 +568,8 @@ class TestCompareVersions:
         """测试对比不存在的版本"""
         registry.save_model(sample_model, 'test', model_type='test')
 
-        with pytest.raises(ValueError):
-            registry.compare_versions('test', 1, 99)
+        response = registry.compare_versions('test', 1, 99)
+        assert not response.is_success()  # 应该返回失败的Response而不是抛出异常
 
 
 # ==================== 删除操作测试 ====================
@@ -684,22 +688,25 @@ class TestEdgeCases:
     def test_save_model_with_empty_name(self, registry, sample_model):
         """测试空名称"""
         # 这应该正常工作，因为Python允许空字符串作为字典键
-        name, version = registry.save_model(sample_model, '', model_type='test')
-        assert name == ''
-        assert version == 1
+        response = registry.save_model(sample_model, '', model_type='test')
+        assert response.is_success()
+        assert response.data['model_name'] == ''
+        assert response.data['version'] == 1
 
     def test_save_model_with_special_characters(self, registry, sample_model):
         """测试特殊字符名称"""
         # 某些特殊字符可能在文件系统中有问题
         special_name = 'model-2024_v1.0'
-        name, version = registry.save_model(sample_model, special_name, model_type='test')
+        response = registry.save_model(sample_model, special_name, model_type='test')
 
-        assert name == special_name
-        assert version == 1
+        assert response.is_success()
+        assert response.data['model_name'] == special_name
+        assert response.data['version'] == 1
 
         # 验证可以加载
-        loaded_model, _ = registry.load_model(special_name)
-        assert loaded_model is not None
+        load_response = registry.load_model(special_name)
+        assert load_response.is_success()
+        assert load_response.data['model'] is not None
 
     def test_metadata_with_none_values(self):
         """测试 None 值的元数据"""
@@ -736,10 +743,11 @@ class TestEdgeCases:
 
         # 第二个实例：验证可以访问
         registry2 = ModelRegistry(base_dir=temp_registry_dir)
-        model, metadata = registry2.load_model('persist_test')
+        response = registry2.load_model('persist_test')
 
-        assert model is not None
-        assert metadata.model_name == 'persist_test'
+        assert response.is_success()
+        assert response.data['model'] is not None
+        assert response.data['metadata'].model_name == 'persist_test'
 
     def test_large_metadata(self, registry, sample_model):
         """测试大型元数据"""
@@ -755,7 +763,9 @@ class TestEdgeCases:
         )
 
         # 验证可以正确加载
-        _, loaded_meta = registry.load_model('large_meta')
+        response = registry.load_model('large_meta')
+        assert response.is_success()
+        loaded_meta = response.data['metadata']
         assert len(loaded_meta.performance_metrics) == 100
 
 
@@ -767,29 +777,33 @@ class TestIntegration:
     def test_complete_model_lifecycle(self, registry, sample_model):
         """测试完整的模型生命周期"""
         # 1. 保存初始版本
-        name, v1 = registry.save_model(
+        response1 = registry.save_model(
             sample_model, 'lifecycle',
             metadata={'ic': 0.90},
             model_type='lightgbm',
             description='初始版本'
         )
-        assert v1 == 1
+        assert response1.is_success()
+        assert response1.data['version'] == 1
 
         # 2. 保存改进版本
-        _, v2 = registry.save_model(
+        response2 = registry.save_model(
             sample_model, 'lifecycle',
             metadata={'ic': 0.92},
             model_type='lightgbm',
             description='改进版本'
         )
-        assert v2 == 2
+        assert response2.is_success()
+        assert response2.data['version'] == 2
 
         # 3. 查看历史
         history = registry.get_model_history('lifecycle')
         assert len(history) == 2
 
         # 4. 对比版本
-        comparison = registry.compare_versions('lifecycle', 1, 2)
+        comp_response = registry.compare_versions('lifecycle', 1, 2)
+        assert comp_response.is_success()
+        comparison = comp_response.data
         assert comparison['metric_diff']['ic'] == pytest.approx(0.02)
 
         # 5. 列出所有模型
@@ -797,12 +811,16 @@ class TestIntegration:
         assert 'lifecycle' in models['name'].values
 
         # 6. 加载最新版本
-        model, metadata = registry.load_model('lifecycle')
+        load_response = registry.load_model('lifecycle')
+        assert load_response.is_success()
+        metadata = load_response.data['metadata']
         assert metadata.version == 2
         assert metadata.description == '改进版本'
 
         # 7. 加载旧版本
-        old_model, old_meta = registry.load_model('lifecycle', version=1)
+        old_response = registry.load_model('lifecycle', version=1)
+        assert old_response.is_success()
+        old_meta = old_response.data['metadata']
         assert old_meta.version == 1
         assert old_meta.description == '初始版本'
 
@@ -831,7 +849,9 @@ class TestIntegration:
         best_model = None
         best_ic = 0
         for name, model_type, metadata in models_config:
-            _, meta = registry.load_model(name)
+            response = registry.load_model(name)
+            assert response.is_success()
+            meta = response.data['metadata']
             if meta.performance_metrics['ic'] > best_ic:
                 best_ic = meta.performance_metrics['ic']
                 best_model = name

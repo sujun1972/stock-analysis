@@ -593,7 +593,7 @@ class FeatureStorage:
         new_df: pd.DataFrame,
         feature_type: str = 'transformed',
         mode: str = 'append'
-    ) -> bool:
+    ) -> Response:
         """
         更新特征数据
 
@@ -604,18 +604,16 @@ class FeatureStorage:
             mode: 更新模式 ('append', 'replace')
 
         返回:
-            是否更新成功
+            Response对象，包含更新结果
 
         注意:
-            本方法返回bool，但内部调用save_features和load_features返回Response对象，
-            需要通过.is_success()检查成功状态，通过.data访问数据
+            本方法返回Response对象，需要通过.is_success()检查成功状态
         """
         try:
             if mode == 'replace':
                 # 直接替换
                 version = self._get_next_version(stock_code, feature_type)
-                response = self.save_features(new_df, stock_code, feature_type, version)
-                return response.is_success()
+                return self.save_features(new_df, stock_code, feature_type, version)
 
             elif mode == 'append':
                 # 加载旧数据（load_features返回Response对象）
@@ -623,8 +621,7 @@ class FeatureStorage:
 
                 if not response.is_success():
                     # 没有旧数据，直接保存
-                    response = self.save_features(new_df, stock_code, feature_type, 'v1')
-                    return response.is_success()
+                    return self.save_features(new_df, stock_code, feature_type, 'v1')
 
                 # 从Response中提取DataFrame
                 old_df = response.data
@@ -636,15 +633,14 @@ class FeatureStorage:
 
                 # 保存新版本（save_features返回Response对象）
                 version = self._get_next_version(stock_code, feature_type)
-                response = self.save_features(combined_df, stock_code, feature_type, version)
-                return response.is_success()
+                return self.save_features(combined_df, stock_code, feature_type, version)
 
             else:
-                raise ValueError(f"不支持的更新模式: {mode}")
+                return Response.error(f"不支持的更新模式: {mode}")
 
         except Exception as e:
             logger.error(f"更新特征失败: {e}")
-            return False
+            return Response.error(f"更新特征失败: {str(e)}")
 
     def _get_next_version(self, stock_code: str, feature_type: str) -> str:
         """
