@@ -28,6 +28,8 @@
 ```
 CLI命令行层 (CLI Layer) ✨ NEW
     ↓
+可视化层 (Visualization Layer) ✨ NEW
+    ↓
 应用层 (Application Layer)
     ↓
 策略层 (Strategy Layer)
@@ -128,11 +130,11 @@ class Settings(BaseSettings):
 
 **架构特点**：
 - **统一CLI接口**：stock-cli命令统一入口
-- **7个核心命令**：download、features、train、backtest、analyze、init、version
+- **8个核心命令**：download、features、train、backtest、analyze、visualize、config、init
 - **美观终端输出**：基于Rich的彩色输出、进度条、表格
 - **参数验证**：自定义Click类型，智能参数校验
 - **交互式配置**：配置向导简化首次使用
-- **完整测试覆盖**：142个单元测试，覆盖所有命令和工具
+- **完整测试覆盖**：240+单元测试，覆盖所有命令和工具
 
 **核心模块**：
 
@@ -216,6 +218,83 @@ class ConfigWizard:  # 交互式配置（150行）
 - 测试覆盖：142个测试用例
 - 文档完整：1,400+行使用指南
 - 开发效率：命令行操作替代代码编写，效率提升3-5倍
+
+##### 2.1.2.5 可视化层（src/visualization/） ✨ NEW
+
+**技术选型**：Plotly + Jinja2
+
+**架构特点**：
+- **交互式图表**：基于Plotly的缩放、拖拽、悬停功能
+- **模块化设计**：4个可视化器（BacktestVisualizer、FactorVisualizer、CorrelationVisualizer、BaseVisualizer）
+- **主题系统**：支持亮色/暗色主题，YAML配置化
+- **HTML报告生成**：Jinja2模板引擎，美观的现代化UI
+- **30+图表类型**：涵盖回测、因子、相关性分析全场景
+- **静态导出支持**：PNG/PDF/SVG格式（通过kaleido）
+
+**核心模块**：
+
+```python
+# 1. 基础可视化器（base_visualizer.py）
+class BaseVisualizer:
+    - create_figure(): 创建基础图表
+    - save_figure(): 保存多种格式
+    - get_color_scale(): 生成颜色刻度
+    - 主题配置加载
+
+# 2. 回测可视化器（backtest_visualizer.py）
+class BacktestVisualizer:
+    - plot_equity_curve(): 净值曲线
+    - plot_drawdown(): 回撤分析
+    - plot_returns_distribution(): 收益分布
+    - plot_position_heatmap(): 持仓热力图
+    - plot_rolling_metrics(): 滚动指标
+    # 10个图表方法
+
+# 3. 因子可视化器（factor_visualizer.py）
+class FactorVisualizer:
+    - plot_ic_time_series(): IC时间序列
+    - plot_quantile_returns(): 分层收益
+    - plot_long_short_performance(): 多空组合
+    - plot_batch_ic_comparison(): 多因子对比
+    # 9个图表方法
+
+# 4. 相关性可视化器（correlation_visualizer.py）
+class CorrelationVisualizer:
+    - plot_correlation_heatmap(): 相关性矩阵
+    - plot_correlation_network(): 网络图
+    - plot_vif_analysis(): VIF分析
+    # 5个图表方法
+
+# 5. HTML报告生成器（report_generator.py）
+class HTMLReportGenerator:
+    - generate_backtest_report(): 完整回测报告
+    - generate_factor_report(): 完整因子报告
+    # Jinja2模板渲染
+```
+
+**设计模式**：
+- **继承**：BacktestVisualizer等继承BaseVisualizer，复用基础功能
+- **模板方法**：BaseVisualizer定义通用流程，子类实现具体图表
+- **策略模式**：主题配置动态加载，支持自定义主题
+- **工厂模式**：图表类型和颜色刻度的生成
+
+**优势**：
+- **高复用性**：基础功能统一管理，减少重复代码
+- **易扩展**：添加新图表只需扩展子类，不影响其他模块
+- **测试友好**：每个可视化器独立测试，240+测试用例覆盖
+- **用户体验**：交互式图表 + 美观UI，显著提升分析效率
+
+**CLI集成**：
+```bash
+# visualize命令（280行代码）
+stock-cli visualize backtest --data result.csv --output report.html
+stock-cli visualize factor --ic-data ic.csv --output factor_report.html
+
+# backtest命令集成
+stock-cli backtest --strategy momentum --visualize --output visual.html
+```
+
+**代码量**：~2,500行核心 + ~3,000行测试 + ~800行文档
 
 ##### 2.1.3 监控与日志系统（src/monitoring/）
 

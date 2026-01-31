@@ -1,0 +1,42 @@
+# 可视化配色主题配置
+default_theme:
+  colors:
+    primary: "#1f77b4"        # 主策略
+    benchmark: "#ff7f0e"      # 基准
+    long: "#2ca02c"           # 多头
+    short: "#d62728"          # 空头
+    positive: "#28a745"       # 正收益
+    negative: "#dc3545"       # 负收益
+    neutral: "#6c757d"        # 中性
+
+  style:
+    figure_size: [12, 6]
+    dpi: 100
+    font_family: "sans-serif"
+    title_size: 14
+    label_size: 12
+    legend_size: 10
+    grid_alpha: 0.3
+    grid_style: "--"
+
+dark_theme:
+  colors:
+    primary: "#3daee9"
+    benchmark: "#fdbc4b"
+    long: "#27ae60"
+    short: "#da4453"
+    positive: "#27ae60"
+    negative: "#da4453"
+    neutral: "#7f8c8d"
+
+  style:
+    figure_size: [12, 6]
+    dpi: 100
+    font_family: "sans-serif"
+    title_size: 14
+    label_size: 12
+    legend_size: 10
+    grid_alpha: 0.2
+    grid_style: ":"
+    background: "#31363b"
+    text_color: "#eff0f1"

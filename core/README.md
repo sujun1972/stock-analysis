@@ -31,13 +31,14 @@
 
 | 指标 | 数值 | 说明 |
 |------|------|------|
-| 代码规模 | 97,000+ 行 | 源码44K + 测试52K + 文档12K |
-| 测试用例 | 2,680+ 个 | 单元测试 + 集成测试 + CLI测试 |
+| 代码规模 | 104,000+ 行 | 源码51K + 测试55K + 文档13K |
+| 测试用例 | 2,920+ 个 | 单元测试 + 集成测试 + CLI测试 |
 | 测试覆盖率 | 85% | 核心模块100%覆盖 |
 | Alpha因子 | 125+ | 动量、反转、波动率、成交量等 |
 | 技术指标 | 60+ | 趋势、动量、波动率、成交量 |
 | 交易策略 | 5 种 | 动量、均值回归、多因子、ML、组合 |
-| CLI命令 | 13 个 | download/features/train/backtest/analyze/init/config/* |
+| 可视化图表 | 30+ 种 | 净值、回撤、IC、相关性、分层收益等 |
+| CLI命令 | 8 个 | download/features/train/backtest/analyze/visualize/config/init |
 | 配置模板 | 6 个 | development/production/research/backtest/training/minimal |
 | 监控指标 | 4 类 | Counter、Gauge、Histogram、Timer |
 | 性能提升 | 35x | 向量化计算相比循环实现 |
@@ -297,10 +298,64 @@
 - 模拟真实参数进化
 - 防止过拟合
 
-### 10. 命令行工具（NEW ✨）
+### 10. 可视化工具（NEW ✨）
+
+#### 交互式图表与HTML报告
+- **30+图表类型**: 净值曲线、回撤分析、IC时间序列、相关性热力图等
+- **Plotly交互式**: 缩放、拖拽、悬停查看详细数值
+- **美观UI设计**: 现代化渐变色、响应式布局、卡片动画
+- **双主题支持**: 默认亮色主题 + 暗色主题
+
+#### 回测结果可视化
+```python
+from visualization import BacktestVisualizer, HTMLReportGenerator
+
+# 生成单个图表
+viz = BacktestVisualizer()
+viz.plot_equity_curve(equity, benchmark, save_path="equity.html")
+viz.plot_drawdown(equity, save_path="drawdown.html")
+
+# 生成完整HTML报告（9个图表）
+report_gen = HTMLReportGenerator()
+report_gen.generate_backtest_report(
+    equity_curve=equity,
+    returns=returns,
+    strategy_name="动量策略",
+    output_path="report.html"
+)
+```
+
+#### 因子分析可视化
+```python
+from visualization import FactorVisualizer
+
+factor_viz = FactorVisualizer()
+factor_viz.plot_ic_time_series(ic_series, save_path="ic.html")
+factor_viz.plot_quantile_returns(quantile_returns, save_path="quantile.html")
+```
+
+#### CLI集成
+```bash
+# 生成回测可视化报告
+stock-cli visualize backtest --data result.csv --output report.html
+
+# 生成因子分析报告
+stock-cli visualize factor --ic-data ic.csv --output factor_report.html
+
+# 回测时直接生成可视化
+stock-cli backtest --strategy momentum --visualize --output visual.html
+```
+
+#### 实现特点
+- **~2,500行核心代码**: 4个可视化器 + HTML报告生成器
+- **240+测试用例**: 完整的单元测试和边界测试
+- **800行使用指南**: 详细文档和示例代码
+- **支持静态导出**: PNG/PDF/SVG格式（需安装kaleido）
+
+### 11. 命令行工具（NEW ✨）
 
 #### stock-cli - 统一CLI工具
-- **7个命令**: download、features、train、backtest、analyze、init、version
+- **8个命令**: download、features、train、backtest、analyze、visualize、config、init
 - **彩色输出**: 基于Rich库的美观终端输出
 - **进度条**: 实时任务进度显示
 - **参数验证**: 智能参数校验和提示

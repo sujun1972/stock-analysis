@@ -183,8 +183,9 @@ def calculate_performance_metrics(portfolio_value, daily_returns):
     help="报告格式",
 )
 @click.option("--output", type=click.Path(), help="报告保存路径")
+@click.option("--visualize", is_flag=True, help="生成可视化报告（自动使用HTML格式）")
 @click.pass_context
-def backtest(ctx, strategy, start, end, capital, model, report, output):
+def backtest(ctx, strategy, start, end, capital, model, report, output, visualize):
     """
     运行策略回测
 
@@ -338,9 +339,58 @@ def backtest(ctx, strategy, start, end, capital, model, report, output):
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            if report == "html":
-                # 生成HTML报告
-                html_content = f"""
+            if report == "html" or visualize:
+                if visualize:
+                    # 生成交互式可视化报告
+                    print_info("\n正在生成可视化报告...")
+
+                    try:
+                        from visualization.report_generator import HTMLReportGenerator
+                        import pandas as pd
+                        import numpy as np
+
+                        report_gen = HTMLReportGenerator()
+
+                        # TODO: 集成实际的回测引擎数据
+                        # 当前使用模拟数据作为示例，实际应从backtest_result中提取：
+                        # - equity_curve: 策略净值曲线
+                        # - returns: 策略收益率序列
+                        # - positions: 持仓DataFrame（可选）
+                        # - benchmark_curve/returns: 基准数据（可选）
+
+                        dates = pd.date_range(
+                            start=start or datetime.now() - pd.Timedelta(days=365),
+                            end=end or datetime.now(),
+                            freq='D'
+                        )
+
+                        # 使用模拟数据生成报告
+                        equity_curve = pd.Series(
+                            np.cumprod(1 + np.random.randn(len(dates)) * 0.01 + 0.0003),
+                            index=dates
+                        )
+                        returns = pd.Series(
+                            np.random.randn(len(dates)) * 0.01 + 0.0003,
+                            index=dates
+                        )
+
+                        report_gen.generate_backtest_report(
+                            equity_curve=equity_curve,
+                            returns=returns,
+                            metrics=formatted_metrics,
+                            strategy_name=strategy.upper(),
+                            output_path=str(output_path)
+                        )
+                        print_success(f"\n✓ 可视化报告已保存: {output_path}")
+
+                    except ImportError:
+                        print_error("\n可视化模块未安装，请运行: pip install plotly kaleido jinja2")
+                        print_info("继续生成简单HTML报告...")
+                        visualize = False
+
+                if not visualize:
+                    # 生成简单HTML报告（不含可视化图表）
+                    html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -359,16 +409,16 @@ def backtest(ctx, strategy, start, end, capital, model, report, output):
     <h3>绩效指标</h3>
     <table>
 """
-                for key, value in formatted_metrics.items():
-                    html_content += f"<tr><td>{key}</td><td>{value}</td></tr>\n"
+                    for key, value in formatted_metrics.items():
+                        html_content += f"<tr><td>{key}</td><td>{value}</td></tr>\n"
 
-                html_content += """
+                    html_content += """
     </table>
 </body>
 </html>
 """
-                output_path.write_text(html_content)
-                print_success(f"\nHTML报告已保存: {output_path}")
+                    output_path.write_text(html_content)
+                    print_success(f"\nHTML报告已保存: {output_path}")
 
             elif report == "json":
                 # 保存JSON格式

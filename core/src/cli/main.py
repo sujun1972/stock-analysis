@@ -48,12 +48,13 @@ def cli(ctx, config, log_level, no_color):
     Stock-CLI 提供便捷的命令行接口来访问核心功能：
 
     \b
-    • download  - 下载股票历史数据
-    • features  - 计算技术指标和Alpha因子
-    • train     - 训练机器学习模型
-    • backtest  - 运行策略回测
-    • analyze   - 进行因子分析
-    • config    - 配置管理（模板、验证）
+    • download   - 下载股票历史数据
+    • features   - 计算技术指标和Alpha因子
+    • train      - 训练机器学习模型
+    • backtest   - 运行策略回测
+    • analyze    - 进行因子分析
+    • visualize  - 生成可视化报告
+    • config     - 配置管理（模板、验证）
 
     示例:
 
@@ -99,7 +100,7 @@ def cli(ctx, config, log_level, no_color):
 # 注册子命令
 # 导入命令模块
 try:
-    from cli.commands import download, features, train, backtest, analyze, config
+    from cli.commands import download, features, train, backtest, analyze, config, visualize
 
     cli.add_command(download.download)
     cli.add_command(features.features)
@@ -107,6 +108,7 @@ try:
     cli.add_command(backtest.backtest)
     cli.add_command(analyze.analyze)
     cli.add_command(config.config)
+    cli.add_command(visualize.visualize)
 except ImportError as e:
     # 命令模块尚未完全实现，先注册一个占位命令
     logger.warning(f"部分命令模块尚未实现: {e}")
