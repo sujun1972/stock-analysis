@@ -7,6 +7,8 @@ Utils模块 - 通用工具函数集合
 - data_utils: 数据处理通用函数（填充、异常检测、验证）
 - calculation_utils: 计算相关函数（收益率、滚动统计、技术指标）
 - validation_utils: 数据验证函数（参数检查、数据完整性）
+- response: 统一API返回格式（Response类）
+- error_handling: 错误处理工具（装饰器、重试策略）
 - market_utils: 市场工具函数（交易时段、交易日历）
 - type_utils: 类型相关工具
 - logger: 日志工具
@@ -105,6 +107,24 @@ from .validation_utils import (
     # 时间序列验证
     validate_date_range,
     validate_frequency_consistency,
+)
+
+# 统一返回格式
+from .response import (
+    Response,
+    ResponseStatus,
+    success,
+    error,
+    warning,
+)
+
+# 错误处理工具
+from .error_handling import (
+    handle_errors,
+    retry_on_error,
+    log_errors,
+    safe_execute,
+    format_exception_message,
 )
 
 # 市场工具
@@ -206,6 +226,20 @@ __all__ = [
     # 时间序列验证
     'validate_date_range',
     'validate_frequency_consistency',
+
+    # ==================== 统一返回格式 ====================
+    'Response',
+    'ResponseStatus',
+    'success',
+    'error',
+    'warning',
+
+    # ==================== 错误处理工具 ====================
+    'handle_errors',
+    'retry_on_error',
+    'log_errors',
+    'safe_execute',
+    'format_exception_message',
 
     # ==================== 市场工具 ====================
     'MarketUtils',
