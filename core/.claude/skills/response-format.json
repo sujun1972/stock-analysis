@@ -1,0 +1,42 @@
+{
+  "name": "response-format",
+  "description": "统一API返回格式使用指南 - 如何在core项目中正确使用Response类构建标准化API",
+  "version": "1.0.0",
+  "category": "best-practices",
+  "tags": ["response", "api", "standardization", "best-practices", "code-quality"],
+  "author": "Stock Analysis Team",
+  "created": "2026-01-31",
+  "applies_to": [
+    "新API开发",
+    "现有API重构",
+    "特征计算函数",
+    "回测接口",
+    "数据验证",
+    "模型训练接口"
+  ],
+  "examples": {
+    "success_response": "如何创建成功响应",
+    "error_response": "如何创建错误响应",
+    "warning_response": "如何创建警告响应",
+    "feature_calculation": "特征计算API示例",
+    "data_validation": "数据验证API示例",
+    "backtest_api": "回测API示例"
+  },
+  "quick_reference": {
+    "response_types": [
+      "Response.success() - 成功响应",
+      "Response.error() - 错误响应",
+      "Response.warning() - 警告响应"
+    ],
+    "status_checks": [
+      "response.is_success()",
+      "response.is_error()",
+      "response.is_warning()"
+    ],
+    "convenience_functions": [
+      "success()",
+      "error()",
+      "warning()"
+    ]
+  }
+}

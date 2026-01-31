@@ -40,6 +40,50 @@ raise DataValidationError(
 
 ---
 
+### 2. Response Format (统一返回格式)
+
+**文件**: `response-format.md`
+
+**用途**: 统一API返回格式使用指南
+
+**适用场景**:
+- 新API开发
+- 现有API重构
+- 特征计算函数
+- 回测接口
+- 数据验证
+- 模型训练接口
+
+**核心内容**:
+- ✅ Response类完整使用指南
+- ✅ 成功/错误/警告三种状态的使用
+- ✅ 丰富的实际代码示例
+- ✅ 最佳实践和检查清单
+- ✅ 与异常系统的集成
+
+**快速示例**:
+```python
+from src.utils.response import Response
+
+def calculate_features(data: pd.DataFrame) -> Response:
+    """计算特征"""
+    try:
+        features = AlphaFactors(data).calculate_all_alpha_factors()
+        return Response.success(
+            data=features,
+            message="特征计算完成",
+            n_features=len(features.columns),
+            elapsed_time="2.5s"
+        )
+    except Exception as e:
+        return Response.error(
+            error=f"计算失败: {str(e)}",
+            error_code="CALCULATION_ERROR"
+        )
+```
+
+---
+
 ## 🎯 如何使用
 
 ### 方式1: Claude Code自动应用
@@ -94,10 +138,10 @@ cat .claude/skills/exception-handling.md
 
 ## 📊 当前统计
 
-- **Skills总数**: 1个
-- **覆盖领域**: 异常处理
-- **代码示例**: 15+个
-- **快速参考**: 2个速查表
+- **Skills总数**: 2个
+- **覆盖领域**: 异常处理、API标准化
+- **代码示例**: 25+个
+- **快速参考**: 4个速查表
 
 ---
 
