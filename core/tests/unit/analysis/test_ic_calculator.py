@@ -14,12 +14,6 @@ IC计算器单元测试
 import pytest
 import pandas as pd
 import numpy as np
-from datetime import datetime
-import sys
-from pathlib import Path
-
-# 添加src到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
 
 from analysis.ic_calculator import ICCalculator, ICResult
 
@@ -229,7 +223,13 @@ class TestCalculateICStats:
         """测试基本IC统计"""
         ic_calc = ICCalculator(forward_periods=5, method='spearman')
 
-        result = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
+        response = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
+
+        # 验证Response成功
+        assert response.is_success()
+
+        # 从Response中提取IC结果
+        result = response.data
 
         assert isinstance(result, ICResult)
         assert isinstance(result.mean_ic, float)
@@ -245,7 +245,13 @@ class TestCalculateICStats:
         factor_df, price_df = correlated_data
         ic_calc = ICCalculator(forward_periods=5, method='spearman')
 
-        result = ic_calc.calculate_ic_stats(factor_df, price_df)
+        response = ic_calc.calculate_ic_stats(factor_df, price_df)
+
+        # 验证Response成功
+        assert response.is_success()
+
+        # 从Response中提取IC结果
+        result = response.data
 
         # 高相关数据应该有较高的IC
         assert abs(result.mean_ic) > 0.01  # IC均值应该显著
@@ -255,8 +261,13 @@ class TestCalculateICStats:
     def test_calculate_ic_stats_to_dict(self, sample_factor_data, sample_price_data):
         """测试ICResult转字典"""
         ic_calc = ICCalculator()
-        result = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
+        response = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
 
+        # 验证Response成功
+        assert response.is_success()
+
+        # 从Response中提取IC结果
+        result = response.data
         result_dict = result.to_dict()
 
         assert isinstance(result_dict, dict)
@@ -270,8 +281,13 @@ class TestCalculateICStats:
     def test_calculate_ic_stats_str(self, sample_factor_data, sample_price_data):
         """测试ICResult字符串格式化"""
         ic_calc = ICCalculator()
-        result = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
+        response = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
 
+        # 验证Response成功
+        assert response.is_success()
+
+        # 从Response中提取IC结果
+        result = response.data
         result_str = str(result)
 
         assert isinstance(result_str, str)
@@ -289,8 +305,11 @@ class TestCalculateICStats:
         factor_df = pd.DataFrame(np.random.randn(5, 2), index=dates, columns=stocks)
         price_df = pd.DataFrame(np.random.randn(5, 2) + 100, index=dates, columns=stocks)
 
-        with pytest.raises(ValueError, match="有效IC值太少"):
-            ic_calc.calculate_ic_stats(factor_df, price_df)
+        response = ic_calc.calculate_ic_stats(factor_df, price_df)
+
+        # 应该返回错误Response
+        assert response.is_error()
+        assert response.error_code in ["INSUFFICIENT_IC_VALUES", "IC_CALCULATION_ERROR"]
 
 
 class TestCalculateMultiFactorIC:
@@ -512,7 +531,13 @@ class TestICCalculatorIntegration:
         ic_calc = ICCalculator(forward_periods=5, method='spearman')
 
         # 2. 计算IC统计
-        ic_result = ic_calc.calculate_ic_stats(factor_df, price_df)
+        response = ic_calc.calculate_ic_stats(factor_df, price_df)
+
+        # 验证Response成功
+        assert response.is_success()
+
+        # 从Response中提取IC结果
+        ic_result = response.data
 
         assert abs(ic_result.mean_ic) > 0
         assert ic_result.ic_ir != 0
@@ -585,10 +610,16 @@ class TestICCalculatorPerformance:
         ic_calc = ICCalculator(forward_periods=5, method='spearman')
 
         start_time = time.time()
-        ic_result = ic_calc.calculate_ic_stats(factor_df, price_df)
+        response = ic_calc.calculate_ic_stats(factor_df, price_df)
         duration = time.time() - start_time
 
         assert duration < 2.0  # 应该在2秒内完成
+
+        # 验证Response成功
+        assert response.is_success()
+
+        # 从Response中提取IC结果
+        ic_result = response.data
         assert isinstance(ic_result, ICResult)
 
 

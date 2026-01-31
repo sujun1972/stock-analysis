@@ -16,15 +16,15 @@ from dataclasses import dataclass
 import warnings
 import time
 
-from ..utils.response import Response, ResponseStatus
+from utils.response import Response, ResponseStatus
 
 warnings.filterwarnings('ignore')
 
 # 导入并行计算工具
 try:
-    from ..utils.parallel_executor import ParallelExecutor
-    from ..utils.task_partitioner import TaskPartitioner
-    from ..config.features import ParallelComputingConfig, get_feature_config
+    from utils.parallel_executor import ParallelExecutor
+    from utils.task_partitioner import TaskPartitioner
+    from config.features import ParallelComputingConfig, get_feature_config
     HAS_PARALLEL_SUPPORT = True
 except ImportError:
     HAS_PARALLEL_SUPPORT = False

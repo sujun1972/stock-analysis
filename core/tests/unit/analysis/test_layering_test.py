@@ -12,12 +12,6 @@
 import pytest
 import pandas as pd
 import numpy as np
-from datetime import datetime
-import sys
-from pathlib import Path
-
-# 添加src到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
 
 from analysis.layering_test import LayeringTest, LayerResult
 

@@ -17,11 +17,6 @@
 import pytest
 import pandas as pd
 import numpy as np
-import sys
-from pathlib import Path
-
-# 添加src到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
 
 from analysis.factor_analyzer import FactorAnalyzer, FactorAnalysisReport
 from analysis.ic_calculator import ICCalculator, ICResult

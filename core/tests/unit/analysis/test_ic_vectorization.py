@@ -357,7 +357,13 @@ class TestICStats:
         """测试IC统计指标计算"""
         ic_calc = ICCalculator(forward_periods=5)
 
-        ic_result = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
+        response = ic_calc.calculate_ic_stats(sample_factor_data, sample_price_data)
+
+        # 验证Response成功
+        assert response.is_success()
+
+        # 从Response中提取IC结果
+        ic_result = response.data
 
         # 检查返回的统计指标
         assert hasattr(ic_result, 'mean_ic')
@@ -388,9 +394,10 @@ class TestICStats:
 
         ic_calc = ICCalculator(forward_periods=1)
 
-        # 应该抛出异常或返回警告
-        with pytest.raises(ValueError, match="有效IC值太少"):
-            ic_calc.calculate_ic_stats(factor_df, price_df)
+        # 应该返回错误Response
+        response = ic_calc.calculate_ic_stats(factor_df, price_df)
+        assert response.is_error()
+        assert response.error_code in ["INSUFFICIENT_IC_VALUES", "IC_CALCULATION_ERROR"]
 
 
 # ==================== 边界条件测试 ====================

@@ -26,14 +26,14 @@ from .ic_calculator import ICCalculator, ICResult
 from .layering_test import LayeringTest
 from .factor_correlation import FactorCorrelation
 from .factor_optimizer import FactorOptimizer, OptimizationResult
-from ..utils.response import Response, ResponseStatus
+from utils.response import Response, ResponseStatus
 
 warnings.filterwarnings('ignore')
 
 # 导入并行计算工具
 try:
-    from ..utils.parallel_executor import ParallelExecutor
-    from ..config.features import ParallelComputingConfig, get_feature_config
+    from utils.parallel_executor import ParallelExecutor
+    from config.features import ParallelComputingConfig, get_feature_config
     HAS_PARALLEL_SUPPORT = True
 except ImportError:
     HAS_PARALLEL_SUPPORT = False
@@ -57,7 +57,7 @@ def _analyze_single_factor_worker_v2(args):
     try:
         # 创建禁用并行的分析器（避免嵌套并行）
         if HAS_PARALLEL_SUPPORT:
-            from ..config.features import ParallelComputingConfig
+            from config.features import ParallelComputingConfig
             sub_config = ParallelComputingConfig(enable_parallel=False)
         else:
             sub_config = None
@@ -557,11 +557,19 @@ class FactorAnalyzer:
         for factor_name, factor_df in factor_dict.items():
             try:
                 # 快速分析每个因子
-                report = self.quick_analyze(
+                response = self.quick_analyze(
                     factor_df, prices,
                     factor_name=factor_name,
                     include_layering=True
                 )
+
+                # 检查Response是否成功
+                if not (response.is_success() or response.status.name == 'WARNING'):
+                    logger.warning(f"分析因子{factor_name}失败: {response.error}")
+                    continue
+
+                # 从Response中提取报告
+                report = response.data
 
                 # 提取关键指标
                 row = {
@@ -762,13 +770,18 @@ class FactorAnalyzer:
         if include_ic or include_layering:
             for factor_name, factor_df in factor_dict.items():
                 try:
-                    factor_report = self.analyze_factor(
+                    response = self.analyze_factor(
                         factor_df, prices,
                         factor_name=factor_name,
                         include_ic=include_ic,
                         include_layering=include_layering
                     )
-                    report['individual_analysis'][factor_name] = factor_report.to_dict()
+                    # 从Response中提取报告
+                    if response.is_success() or response.status.name == 'WARNING':
+                        factor_report = response.data
+                        report['individual_analysis'][factor_name] = factor_report.to_dict()
+                    else:
+                        logger.warning(f"分析因子{factor_name}失败: {response.error}")
                 except Exception as e:
                     logger.warning(f"分析因子{factor_name}失败: {e}")
 
