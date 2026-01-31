@@ -565,9 +565,13 @@ class GRUStockTrainer:
         # 加载权重
         self.model.load_state_dict(checkpoint['model_state_dict'])
 
-        # 重新创建optimizer以匹配新模型
-        self.optimizer = optim.Adam(self.model.parameters())
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        # optimizer已经在__init__中创建，直接加载state_dict
+        # 注意：如果保存和加载的平台不同（macOS vs Linux），优化器类型可能不匹配
+        try:
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        except (KeyError, ValueError) as e:
+            logger.warning(f"无法加载优化器状态（可能是不同平台）: {e}")
+            logger.warning("优化器将使用默认初始状态")
 
         self.history = checkpoint.get('history', {'train_loss': [], 'valid_loss': []})
 
