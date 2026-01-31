@@ -40,8 +40,13 @@ if PYTORCH_AVAILABLE:
                 sequences: (N, T, F) - N个样本，T个时间步，F个特征
                 targets: (N,) - N个目标值
             """
-            self.sequences = torch.FloatTensor(sequences)
-            self.targets = torch.FloatTensor(targets)
+            # 使用torch.from_numpy避免在macOS上的段错误
+            # 确保输入是float32类型的numpy数组
+            sequences = np.asarray(sequences, dtype=np.float32)
+            targets = np.asarray(targets, dtype=np.float32)
+
+            self.sequences = torch.from_numpy(sequences).float()
+            self.targets = torch.from_numpy(targets).float()
 
         def __len__(self):
             return len(self.sequences)
@@ -158,6 +163,12 @@ class GRUStockTrainer:
         """
         if not PYTORCH_AVAILABLE:
             raise ImportError("需要安装PyTorch: pip install torch")
+
+        # macOS上使用多进程DataLoader可能导致段错误，强制设为0
+        import platform
+        if platform.system() == 'Darwin' and num_workers > 0:
+            logger.warning(f"检测到macOS系统，将num_workers从{num_workers}设为0以避免多进程问题")
+            num_workers = 0
 
         # 尝试导入GPU管理器
         try:
@@ -368,14 +379,16 @@ class GRUStockTrainer:
         logger.info(f"训练序列: {X_train_seq.shape}")
 
         # 创建数据加载器（GPU优化）
+        # macOS上pin_memory可能导致段错误，仅在CUDA设备上启用
+        use_pin_memory = ('cuda' in str(self.device) and torch.cuda.is_available())
+
         train_dataset = StockSequenceDataset(X_train_seq, y_train_seq)
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=('cuda' in str(self.device)),  # 启用内存固定
-            persistent_workers=(self.num_workers > 0)
+            pin_memory=use_pin_memory
         )
 
         # 验证集
@@ -391,7 +404,7 @@ class GRUStockTrainer:
                 batch_size=batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
-                pin_memory=('cuda' in str(self.device))
+                pin_memory=use_pin_memory
             )
 
         # 训练循环
@@ -468,13 +481,16 @@ class GRUStockTrainer:
         )
 
         # 创建数据加载器（GPU优化）
+        # macOS上pin_memory可能导致段错误，仅在CUDA设备上启用
+        use_pin_memory = ('cuda' in str(self.device) and torch.cuda.is_available())
+
         dataset = StockSequenceDataset(sequences, np.zeros(len(sequences)))
         loader = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=('cuda' in str(self.device))
+            pin_memory=use_pin_memory
         )
 
         # 预测
