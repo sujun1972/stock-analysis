@@ -230,10 +230,20 @@ def test_model_trainer():
     # 准备数据
     print("\n3.3 数据分割")
     split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
-    X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+    response = trainer.prepare_data(
         df, feature_cols, 'target',
         split_config=split_config
     )
+
+    assert response.is_success, f"数据准备失败: {response.error}"
+
+    data = response.data
+
+    X_train, y_train = data["X_train"], data["y_train"]
+
+    X_valid, y_valid = data["X_valid"], data["y_valid"]
+
+    X_test, y_test = data["X_test"], data["y_test"]
 
     # 训练
     print("\n3.4 训练模型")

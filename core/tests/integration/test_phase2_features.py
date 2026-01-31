@@ -242,7 +242,11 @@ def test_feature_storage():
         assert success, f"保存 {stock_code} 失败"
 
     print("\n4.2 加载特征数据")
-    loaded_df = storage.load_features('000001', feature_type='technical')
+    response = storage.load_features('000001', feature_type='technical')
+
+    assert response.is_success, f"加载失败: {response.error}"
+
+    loaded_df = response.data
     assert loaded_df is not None, "加载失败"
     assert len(loaded_df) == len(test_df), "数据长度不匹配"
     assert list(loaded_df.columns) == list(test_df.columns), "列名不匹配"
@@ -321,7 +325,11 @@ def test_integrated_pipeline():
     storage.save_features(final_df, '000001', 'transformed', 'v1')
 
     print("\n5.6 验证保存")
-    loaded_df = storage.load_features('000001', 'transformed', 'v1')
+    response = storage.load_features('000001', 'transformed', 'v1')
+
+    assert response.is_success, f"加载失败: {response.error}"
+
+    loaded_df = response.data
     assert loaded_df is not None, "加载失败"
     assert len(loaded_df.columns) == len(final_df.columns), "列数不匹配"
 

@@ -59,11 +59,10 @@ class TrainingError(BaseModelTrainingError):
     pass
 
 
-class DataPreparationError(DataValidationError):
+class DataPreparationError(TrainingError):
     """数据准备错误（迁移到统一异常系统）
 
-    该异常类现在继承自统一异常系统的DataValidationError。
-    用于数据准备阶段的验证错误。
+    该异常类继承自TrainingError，用于数据准备阶段的错误。
 
     Examples:
         >>> raise DataPreparationError(
@@ -76,7 +75,7 @@ class DataPreparationError(DataValidationError):
     pass
 
 
-class ModelCreationError(ModelError):
+class ModelCreationError(TrainingError):
     """模型创建错误（迁移到统一异常系统）
 
     当模型创建或初始化失败时抛出。
@@ -93,7 +92,7 @@ class ModelCreationError(ModelError):
     pass
 
 
-class InvalidModelTypeError(ModelError):
+class InvalidModelTypeError(TrainingError):
     """无效模型类型错误（迁移到统一异常系统）
 
     当指定的模型类型不被支持时抛出。

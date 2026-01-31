@@ -190,6 +190,11 @@ class TestTemplatesApplyCommand:
                 mock_instance = Mock()
                 mock_mgr.return_value = mock_instance
 
+                # Mock load_template返回值
+                mock_template = Mock()
+                mock_template.recommendations = []  # 空列表，避免迭代错误
+                mock_instance.load_template.return_value = mock_template
+
                 # 模拟用户拒绝覆盖
                 result = runner.invoke(
                     templates_apply,

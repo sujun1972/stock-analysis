@@ -605,29 +605,39 @@ class FeatureStorage:
 
         返回:
             是否更新成功
+
+        注意:
+            本方法返回bool，但内部调用save_features和load_features返回Response对象，
+            需要通过.is_success()检查成功状态，通过.data访问数据
         """
         try:
             if mode == 'replace':
                 # 直接替换
                 version = self._get_next_version(stock_code, feature_type)
-                return self.save_features(new_df, stock_code, feature_type, version)
+                response = self.save_features(new_df, stock_code, feature_type, version)
+                return response.is_success()
 
             elif mode == 'append':
-                # 加载旧数据
-                old_df = self.load_features(stock_code, feature_type)
+                # 加载旧数据（load_features返回Response对象）
+                response = self.load_features(stock_code, feature_type)
 
-                if old_df is None:
+                if not response.is_success():
                     # 没有旧数据，直接保存
-                    return self.save_features(new_df, stock_code, feature_type, 'v1')
+                    response = self.save_features(new_df, stock_code, feature_type, 'v1')
+                    return response.is_success()
+
+                # 从Response中提取DataFrame
+                old_df = response.data
 
                 # 合并数据（去重）
                 combined_df = pd.concat([old_df, new_df])
                 combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
                 combined_df = combined_df.sort_index()
 
-                # 保存新版本
+                # 保存新版本（save_features返回Response对象）
                 version = self._get_next_version(stock_code, feature_type)
-                return self.save_features(combined_df, stock_code, feature_type, version)
+                response = self.save_features(combined_df, stock_code, feature_type, version)
+                return response.is_success()
 
             else:
                 raise ValueError(f"不支持的更新模式: {mode}")

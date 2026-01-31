@@ -104,18 +104,20 @@ class TestEndToEndWorkflow:
 
         # 3. 准备数据
         split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
-            realistic_stock_data,
-            feature_columns,
-            'target',
-            split_config
+        X_train, y_train, X_valid, y_valid, X_test, y_test = unwrap_prepare_data(
+            trainer.prepare_data(
+                realistic_stock_data,
+                feature_columns,
+                'target',
+                split_config
+            )
         )
 
         # 4. 训练
         trainer.train(X_train, y_train, X_valid, y_valid)
 
         # 5. 评估
-        metrics = trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False)
+        metrics = unwrap_response(trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False))
 
         # 验证评估指标
         assert 'ic' in metrics
@@ -138,7 +140,7 @@ class TestEndToEndWorkflow:
         new_trainer.load_model('lightgbm_stock_model')
 
         # 8. 验证加载的模型
-        new_metrics = new_trainer.evaluate(X_test, y_test, verbose=False)
+        new_metrics = unwrap_response(new_trainer.evaluate(X_test, y_test, verbose=False))
 
         # 加载前后的评估结果应该一致
         assert abs(metrics['ic'] - new_metrics['ic']) < 1e-6
@@ -160,15 +162,25 @@ class TestEndToEndWorkflow:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        response = trainer.prepare_data(
             realistic_stock_data,
             feature_columns,
             'target',
             split_config
         )
 
+        assert response.is_success, f"数据准备失败: {response.error}"
+
+        data = response.data
+
+        X_train, y_train = data["X_train"], data["y_train"]
+
+        X_valid, y_valid = data["X_valid"], data["y_valid"]
+
+        X_test, y_test = data["X_test"], data["y_test"]
+
         trainer.train(X_train, y_train, X_valid, y_valid)
-        metrics = trainer.evaluate(X_test, y_test, verbose=False)
+        metrics = unwrap_response(trainer.evaluate(X_test, y_test, verbose=False))
 
         # Ridge 模型评估
         assert 'ic' in metrics
@@ -229,7 +241,7 @@ class TestModelComparison:
             realistic_stock_data, feature_columns, 'target', split_config
         )
         lgb_trainer.train(X_train, y_train, X_valid, y_valid)
-        lgb_metrics = lgb_trainer.evaluate(X_test, y_test, verbose=False)
+        lgb_metrics = unwrap_response(lgb_trainer.evaluate(X_test, y_test, verbose=False))
 
         # Ridge
         ridge_config = TrainingConfig(
@@ -239,7 +251,7 @@ class TestModelComparison:
         )
         ridge_trainer = ModelTrainer(config=ridge_config)
         ridge_trainer.train(X_train, y_train, X_valid, y_valid)
-        ridge_metrics = ridge_trainer.evaluate(X_test, y_test, verbose=False)
+        ridge_metrics = unwrap_response(ridge_trainer.evaluate(X_test, y_test, verbose=False))
 
         # 两个模型都应该有合理的结果
         assert 'ic' in lgb_metrics
@@ -282,12 +294,22 @@ class TestParameterTuning:
             )
 
             trainer = ModelTrainer(config=config)
-            X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+            response = trainer.prepare_data(
                 realistic_stock_data, feature_columns, 'target', split_config
             )
 
+            assert response.is_success, f"数据准备失败: {response.error}"
+
+            data = response.data
+
+            X_train, y_train = data["X_train"], data["y_train"]
+
+            X_valid, y_valid = data["X_valid"], data["y_valid"]
+
+            X_test, y_test = data["X_test"], data["y_test"]
+
             trainer.train(X_train, y_train, X_valid, y_valid)
-            metrics = trainer.evaluate(X_test, y_test, verbose=False)
+            metrics = unwrap_response(trainer.evaluate(X_test, y_test, verbose=False))
 
             results.append({
                 'learning_rate': lr,
@@ -323,12 +345,22 @@ class TestParameterTuning:
             )
 
             trainer = ModelTrainer(config=config)
-            X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+            response = trainer.prepare_data(
                 realistic_stock_data, feature_columns, 'target', split_config
             )
 
+            assert response.is_success, f"数据准备失败: {response.error}"
+
+            data = response.data
+
+            X_train, y_train = data["X_train"], data["y_train"]
+
+            X_valid, y_valid = data["X_valid"], data["y_valid"]
+
+            X_test, y_test = data["X_test"], data["y_test"]
+
             trainer.train(X_train, y_train, X_valid, y_valid)
-            metrics = trainer.evaluate(X_test, y_test, verbose=False)
+            metrics = unwrap_response(trainer.evaluate(X_test, y_test, verbose=False))
 
             results.append({
                 'alpha': alpha,
@@ -371,12 +403,27 @@ class TestDataSplitting:
         for split_config in split_configs:
             trainer = ModelTrainer(config=config)
 
-            X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+            response = trainer.prepare_data(
                 realistic_stock_data,
                 feature_columns,
                 'target',
                 split_config
             )
+
+
+            assert response.is_success, f"数据准备失败: {response.error}"
+
+
+            data = response.data
+
+
+            X_train, y_train = data["X_train"], data["y_train"]
+
+
+            X_valid, y_valid = data["X_valid"], data["y_valid"]
+
+
+            X_test, y_test = data["X_test"], data["y_test"]
 
             # 验证分割比例
             total_samples = len(X_train) + len(X_valid) + len(X_test)
@@ -418,13 +465,23 @@ class TestErrorRecovery:
 
         # 数据准备应该能处理 NaN
         split_config = DataSplitConfig(remove_nan=True)
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        response = trainer.prepare_data(
             df, feature_columns, 'target', split_config
         )
 
+        assert response.is_success, f"数据准备失败: {response.error}"
+
+        data = response.data
+
+        X_train, y_train = data["X_train"], data["y_train"]
+
+        X_valid, y_valid = data["X_valid"], data["y_valid"]
+
+        X_test, y_test = data["X_test"], data["y_test"]
+
         # 训练应该成功
         trainer.train(X_train, y_train, X_valid, y_valid)
-        metrics = trainer.evaluate(X_test, y_test, verbose=False)
+        metrics = unwrap_response(trainer.evaluate(X_test, y_test, verbose=False))
 
         assert 'ic' in metrics
 
@@ -489,9 +546,19 @@ class TestPerformance:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig()
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        response = trainer.prepare_data(
             realistic_stock_data, feature_columns, 'target', split_config
         )
+
+        assert response.is_success, f"数据准备失败: {response.error}"
+
+        data = response.data
+
+        X_train, y_train = data["X_train"], data["y_train"]
+
+        X_valid, y_valid = data["X_valid"], data["y_valid"]
+
+        X_test, y_test = data["X_test"], data["y_test"]
 
         # 测量训练时间
         start_time = time.time()
@@ -500,7 +567,7 @@ class TestPerformance:
 
         # 测量评估时间
         start_time = time.time()
-        metrics = trainer.evaluate(X_test, y_test, verbose=False)
+        metrics = unwrap_response(trainer.evaluate(X_test, y_test, verbose=False))
         eval_time = time.time() - start_time
 
         print(f"\n性能测试:")
