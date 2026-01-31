@@ -10,6 +10,7 @@ from datetime import datetime
 import warnings
 from loguru import logger
 import gc
+import time
 
 warnings.filterwarnings('ignore')
 
@@ -19,6 +20,8 @@ from src.config.trading_rules import (
     T_PLUS_N,
     MarketType
 )
+from src.utils.response import Response
+from src.exceptions import BacktestError
 
 from .cost_analyzer import TradingCostAnalyzer, Trade
 from .slippage_models import SlippageModel, FixedSlippageModel
@@ -218,7 +221,7 @@ class BacktestEngine:
         top_n: int = 50,
         holding_period: int = 5,
         rebalance_freq: str = 'W'
-    ) -> Dict:
+    ) -> Response:
         """
         纯多头回测（等权重选股策略）
 
@@ -439,13 +442,21 @@ class BacktestEngine:
             verbose=False
         )
 
-        return {
-            'portfolio_value': self.portfolio_value,
-            'positions': self.positions,
-            'daily_returns': self.daily_returns,
-            'cost_analysis': cost_metrics,
-            'cost_analyzer': self.cost_analyzer
-        }
+        return Response.success(
+            data={
+                'portfolio_value': self.portfolio_value,
+                'positions': self.positions,
+                'daily_returns': self.daily_returns,
+                'cost_analysis': cost_metrics,
+                'cost_analyzer': self.cost_analyzer
+            },
+            message="多头回测完成",
+            backtest_type="long_only",
+            n_days=len(self.portfolio_value),
+            initial_capital=self.initial_capital,
+            final_value=float(self.portfolio_value['total'].iloc[-1]),
+            total_return=float((self.portfolio_value['total'].iloc[-1] / self.initial_capital - 1))
+        )
 
     def backtest_market_neutral(
         self,
@@ -457,7 +468,7 @@ class BacktestEngine:
         rebalance_freq: str = 'W',
         margin_rate: float = 0.10,
         margin_ratio: float = 0.5
-    ) -> Dict:
+    ) -> Response:
         """
         市场中性策略回测（多空对冲）
 
@@ -815,13 +826,22 @@ class BacktestEngine:
             verbose=False
         )
 
-        return {
-            'portfolio_value': self.portfolio_value,
-            'positions': self.positions,
-            'daily_returns': self.daily_returns,
-            'cost_analysis': cost_metrics,
-            'cost_analyzer': self.cost_analyzer
-        }
+        return Response.success(
+            data={
+                'portfolio_value': self.portfolio_value,
+                'positions': self.positions,
+                'daily_returns': self.daily_returns,
+                'cost_analysis': cost_metrics,
+                'cost_analyzer': self.cost_analyzer
+            },
+            message="市场中性回测完成",
+            backtest_type="market_neutral",
+            n_days=len(self.portfolio_value),
+            initial_capital=self.initial_capital,
+            final_value=float(self.portfolio_value['total'].iloc[-1]),
+            total_return=float((self.portfolio_value['total'].iloc[-1] / self.initial_capital - 1)),
+            total_short_interest=float(self.portfolio_value['short_interest'].iloc[-1])
+        )
 
     def get_portfolio_value(self) -> pd.DataFrame:
         """获取组合净值曲线"""
@@ -852,7 +872,7 @@ class BacktestEngine:
         rebalance_freq: str = 'W',
         chunk_size: int = 60,
         enable_memory_monitor: bool = False
-    ) -> Dict:
+    ) -> Response:
         """
         分块回测（内存优化版）
 
@@ -986,13 +1006,21 @@ class BacktestEngine:
                 verbose=False
             )
 
-            return {
-                'portfolio_value': self.portfolio_value,
-                'positions': self.positions,
-                'daily_returns': self.daily_returns,
-                'cost_analysis': cost_metrics,
-                'cost_analyzer': self.cost_analyzer
-            }
+            return Response.success(
+                data={
+                    'portfolio_value': self.portfolio_value,
+                    'positions': self.positions,
+                    'daily_returns': self.daily_returns,
+                    'cost_analysis': cost_metrics,
+                    'cost_analyzer': self.cost_analyzer
+                },
+                message="分块回测完成",
+                backtest_type="long_only_chunked",
+                n_days=len(self.portfolio_value),
+                initial_capital=self.initial_capital,
+                final_value=float(self.portfolio_value['total'].iloc[-1]),
+                total_return=float((self.portfolio_value['total'].iloc[-1] / self.initial_capital - 1))
+            )
 
         finally:
             if context is not None:

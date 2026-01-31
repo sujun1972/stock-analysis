@@ -69,28 +69,31 @@ class TestReturnMetrics:
         """测试总收益率计算"""
         analyzer = PerformanceAnalyzer(returns_positive)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 总收益 = (1+r1)*(1+r2)*...*(1+rn) - 1
         expected = (1.01 * 1.02 * 1.015 * 1.01 * 1.005) - 1
-        assert abs(metrics['total_return'] - expected) < 0.0001
+        assert abs(metrics.data['total_return'] - expected) < 0.0001
 
     def test_calculate_annual_return(self, returns_positive):
         """测试年化收益率"""
         analyzer = PerformanceAnalyzer(returns_positive, periods_per_year=252)
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 年化收益率应该存在（键名是annualized_return）
         assert 'annualized_return' in metrics
-        assert metrics['annualized_return'] > 0
+        assert metrics.data['annualized_return'] > 0
 
     def test_average_return(self, returns_mixed):
         """测试平均收益率"""
         analyzer = PerformanceAnalyzer(returns_mixed)
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         expected_avg = returns_mixed.mean()
         # 平均收益率应该接近returns的平均值
-        assert metrics['total_return'] / len(returns_mixed) - expected_avg < 0.01
+        assert metrics.data['total_return'] / len(returns_mixed) - expected_avg < 0.01
 
 
 class TestRiskMetrics:
@@ -124,10 +127,11 @@ class TestRiskMetrics:
         returns = pd.Series([0.02, -0.03, 0.01, -0.02, 0.015, -0.01])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 下行波动率应该只考虑负收益
         assert 'downside_deviation' in metrics
-        assert metrics['downside_deviation'] > 0
+        assert metrics.data['downside_deviation'] > 0
 
     def test_max_drawdown(self):
         """测试最大回撤"""
@@ -135,10 +139,11 @@ class TestRiskMetrics:
         returns = pd.Series([0.1, 0.05, -0.15, -0.1, 0.2, 0.05])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         assert 'max_drawdown' in metrics
-        assert metrics['max_drawdown'] < 0  # 回撤是负数
-        assert metrics['max_drawdown'] > -1  # 不会超过-100%
+        assert metrics.data['max_drawdown'] < 0  # 回撤是负数
+        assert metrics.data['max_drawdown'] > -1  # 不会超过-100%
 
     def test_max_drawdown_recovery(self):
         """测试回撤恢复"""
@@ -146,6 +151,7 @@ class TestRiskMetrics:
         returns = pd.Series([0.1, -0.2, -0.1, 0.15, 0.15, 0.1])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 应该计算回撤持续期
         assert 'max_drawdown_duration' in metrics
@@ -181,6 +187,7 @@ class TestRiskAdjustedMetrics:
         """测试Sortino比率"""
         analyzer = PerformanceAnalyzer(good_returns, risk_free_rate=0.03)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         assert 'sortino_ratio' in metrics
         # Sortino比率应该高于Sharpe（因为只考虑下行风险）
@@ -192,6 +199,7 @@ class TestRiskAdjustedMetrics:
         returns = pd.Series([0.02, 0.01, -0.05, -0.02, 0.03, 0.02, 0.01])
         analyzer = PerformanceAnalyzer(returns, periods_per_year=252)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         assert 'calmar_ratio' in metrics
 
@@ -205,6 +213,7 @@ class TestRiskAdjustedMetrics:
             benchmark_returns=benchmark_returns
         )
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         assert 'information_ratio' in metrics
 
@@ -217,36 +226,39 @@ class TestWinRateMetrics:
         returns = pd.Series([0.02, -0.01, 0.01, -0.005, 0.015, -0.02, 0.01])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 4个正收益 / 7个总收益 = 57.14%
         expected_win_rate = 4 / 7
-        assert abs(metrics['win_rate'] - expected_win_rate) < 0.01
+        assert abs(metrics.data['win_rate'] - expected_win_rate) < 0.01
 
     def test_avg_win_loss(self):
         """测试平均盈亏"""
         returns = pd.Series([0.02, -0.01, 0.01, -0.02])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         assert 'average_win' in metrics
         assert 'average_loss' in metrics
 
         # 平均盈利 = (0.02 + 0.01) / 2 = 0.015
-        assert abs(metrics['average_win'] - 0.015) < 0.0001
+        assert abs(metrics.data['average_win'] - 0.015) < 0.0001
 
         # 平均亏损 = (-0.01 + -0.02) / 2 = -0.015
-        assert abs(metrics['average_loss'] - (-0.015)) < 0.0001
+        assert abs(metrics.data['average_loss'] - (-0.015)) < 0.0001
 
     def test_profit_factor(self):
         """测试盈亏比"""
         returns = pd.Series([0.04, -0.01, 0.02, -0.01])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 总盈利 = 0.06, 总亏损 = 0.02
         # 盈亏比 = 0.06 / 0.02 = 3.0
         assert 'profit_factor' in metrics
-        assert abs(metrics['profit_factor'] - 3.0) < 0.01
+        assert abs(metrics.data['profit_factor'] - 3.0) < 0.01
 
 
 class TestBetaAndAlpha:
@@ -263,10 +275,11 @@ class TestBetaAndAlpha:
             benchmark_returns=benchmark
         )
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         assert 'beta' in metrics
         # Beta应该接近1.5
-        assert 0.8 < metrics['beta'] < 2.0
+        assert 0.8 < metrics.data['beta'] < 2.0
 
     def test_alpha_calculation(self):
         """测试Alpha计算"""
@@ -279,6 +292,7 @@ class TestBetaAndAlpha:
             risk_free_rate=0.03
         )
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         assert 'alpha' in metrics
 
@@ -292,11 +306,12 @@ class TestBetaAndAlpha:
             benchmark_returns=benchmark
         )
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 信息比率应该存在
         assert 'information_ratio' in metrics
         # IR应该是有限值（不是NaN或inf）
-        assert np.isfinite(metrics['information_ratio'])
+        assert np.isfinite(metrics.data['information_ratio'])
 
 
 class TestEdgeCases:
@@ -307,36 +322,40 @@ class TestEdgeCases:
         returns = pd.Series([0.0] * 10)
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert metrics['total_return'] == 0.0
-        assert metrics['volatility'] == 0.0
-        assert metrics['win_rate'] == 0.0
+        assert metrics.data['total_return'] == 0.0
+        assert metrics.data['volatility'] == 0.0
+        assert metrics.data['win_rate'] == 0.0
 
     def test_all_positive_returns(self):
         """测试全正收益"""
         returns = pd.Series([0.01, 0.02, 0.015, 0.01, 0.005])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert metrics['win_rate'] == 1.0
-        assert metrics['max_drawdown'] == 0.0  # 没有回撤
+        assert metrics.data['win_rate'] == 1.0
+        assert metrics.data['max_drawdown'] == 0.0  # 没有回撤
 
     def test_all_negative_returns(self):
         """测试全负收益"""
         returns = pd.Series([-0.01, -0.02, -0.015, -0.01, -0.005])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert metrics['win_rate'] == 0.0
-        assert metrics['total_return'] < 0
+        assert metrics.data['win_rate'] == 0.0
+        assert metrics.data['total_return'] < 0
 
     def test_single_return(self):
         """测试单个收益"""
         returns = pd.Series([0.05])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert abs(metrics['total_return'] - 0.05) < 0.0001
+        assert abs(metrics.data['total_return'] - 0.05) < 0.0001
 
     def test_very_long_series(self):
         """测试很长的序列"""
@@ -344,6 +363,7 @@ class TestEdgeCases:
         returns = pd.Series(np.random.normal(0.001, 0.02, 1000))
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics()
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 应该能正常计算
         assert 'total_return' in metrics
@@ -354,9 +374,10 @@ class TestEdgeCases:
         returns = pd.Series([0.5, -0.4, 0.3, -0.3, 0.2])
         analyzer = PerformanceAnalyzer(returns)
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 应该能处理大幅波动
-        assert metrics['volatility'] > 0
+        assert metrics.data['volatility'] > 0
 
 
 class TestPrintMethods:
@@ -385,6 +406,7 @@ class TestPrintMethods:
         # verbose=True不应该抛出异常
         try:
             metrics = analyzer.calculate_all_metrics(verbose=True)
+            assert metrics.is_success(), f'指标计算失败: {metrics.error}'
             assert metrics is not None
             assert 'total_return' in metrics
         except Exception as e:
@@ -400,6 +422,7 @@ class TestCalculateMetricsMethod:
         analyzer = PerformanceAnalyzer(returns, risk_free_rate=0.03)
 
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 必需的指标
         required_metrics = [
@@ -425,6 +448,7 @@ class TestCalculateMetricsMethod:
         )
 
         metrics = analyzer.calculate_all_metrics(verbose=False)
+        assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 有基准时的额外指标
         benchmark_metrics = ['beta', 'alpha', 'information_ratio']

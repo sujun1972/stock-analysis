@@ -10,6 +10,8 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 
+from src.utils.response import Response
+
 
 class SignalType(Enum):
     """信号类型枚举"""
@@ -34,7 +36,7 @@ class SignalGenerator:
         scores: pd.DataFrame,
         buy_threshold: float,
         sell_threshold: Optional[float] = None
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         基于阈值生成信号
 
@@ -44,31 +46,61 @@ class SignalGenerator:
             sell_threshold: 卖出阈值（评分 < 阈值 则卖出，默认为买入阈值）
 
         Returns:
-            signals: 信号DataFrame
+            Response对象，包含信号DataFrame
         """
-        if sell_threshold is None:
-            sell_threshold = buy_threshold
+        try:
+            if scores.empty:
+                return Response.error(
+                    error="评分数据为空",
+                    error_code="EMPTY_SCORES",
+                    signal_type="threshold"
+                )
 
-        signals = pd.DataFrame(
-            SignalType.HOLD.value,
-            index=scores.index,
-            columns=scores.columns
-        )
+            if sell_threshold is None:
+                sell_threshold = buy_threshold
 
-        # 买入信号
-        signals[scores > buy_threshold] = SignalType.BUY.value
+            signals = pd.DataFrame(
+                SignalType.HOLD.value,
+                index=scores.index,
+                columns=scores.columns
+            )
 
-        # 卖出信号
-        signals[scores < sell_threshold] = SignalType.SELL.value
+            # 买入信号
+            signals[scores > buy_threshold] = SignalType.BUY.value
 
-        return signals
+            # 卖出信号
+            signals[scores < sell_threshold] = SignalType.SELL.value
+
+            n_buy = (signals == SignalType.BUY.value).sum().sum()
+            n_sell = (signals == SignalType.SELL.value).sum().sum()
+            n_hold = (signals == SignalType.HOLD.value).sum().sum()
+
+            return Response.success(
+                data=signals,
+                message="阈值信号生成完成",
+                signal_type="threshold",
+                buy_threshold=buy_threshold,
+                sell_threshold=sell_threshold,
+                n_buy=int(n_buy),
+                n_sell=int(n_sell),
+                n_hold=int(n_hold)
+            )
+
+        except Exception as e:
+            logger.error(f"阈值信号生成失败: {str(e)}")
+            return Response.error(
+                error=f"阈值信号生成失败: {str(e)}",
+                error_code="SIGNAL_GENERATION_ERROR",
+                signal_type="threshold",
+                exception_type=type(e).__name__
+            )
 
     @staticmethod
     def generate_rank_signals(
         scores: pd.DataFrame,
         top_n: int,
         bottom_n: Optional[int] = None
-    ) -> pd.DataFrame:
+    ) -> Response:
         """
         基于排名生成信号
 
@@ -80,30 +112,58 @@ class SignalGenerator:
             bottom_n: 卖出后N只（可选，用于做空）
 
         Returns:
-            signals: 信号DataFrame
+            Response对象，包含信号DataFrame
         """
-        signals = pd.DataFrame(
-            SignalType.HOLD.value,
-            index=scores.index,
-            columns=scores.columns
-        )
+        try:
+            if scores.empty:
+                return Response.error(
+                    error="评分数据为空",
+                    error_code="EMPTY_SCORES",
+                    signal_type="rank"
+                )
 
-        for date in scores.index:
-            date_scores = scores.loc[date].dropna()
+            signals = pd.DataFrame(
+                SignalType.HOLD.value,
+                index=scores.index,
+                columns=scores.columns
+            )
 
-            if len(date_scores) == 0:
-                continue
+            for date in scores.index:
+                date_scores = scores.loc[date].dropna()
 
-            # 买入信号：选择评分最高的 top_n 只
-            top_stocks = date_scores.nlargest(top_n).index
-            signals.loc[date, top_stocks] = SignalType.BUY.value
+                if len(date_scores) == 0:
+                    continue
 
-            # 卖出信号：选择评分最低的 bottom_n 只（如果指定）
-            if bottom_n is not None and bottom_n > 0:
-                bottom_stocks = date_scores.nsmallest(bottom_n).index
-                signals.loc[date, bottom_stocks] = SignalType.SELL.value
+                # 买入信号：选择评分最高的 top_n 只
+                top_stocks = date_scores.nlargest(top_n).index
+                signals.loc[date, top_stocks] = SignalType.BUY.value
 
-        return signals
+                # 卖出信号：选择评分最低的 bottom_n 只（如果指定）
+                if bottom_n is not None and bottom_n > 0:
+                    bottom_stocks = date_scores.nsmallest(bottom_n).index
+                    signals.loc[date, bottom_stocks] = SignalType.SELL.value
+
+            n_buy = (signals == SignalType.BUY.value).sum().sum()
+            n_sell = (signals == SignalType.SELL.value).sum().sum()
+
+            return Response.success(
+                data=signals,
+                message="排名信号生成完成",
+                signal_type="rank",
+                top_n=top_n,
+                bottom_n=bottom_n if bottom_n is not None else 0,
+                n_buy=int(n_buy),
+                n_sell=int(n_sell)
+            )
+
+        except Exception as e:
+            logger.error(f"排名信号生成失败: {str(e)}")
+            return Response.error(
+                error=f"排名信号生成失败: {str(e)}",
+                error_code="SIGNAL_GENERATION_ERROR",
+                signal_type="rank",
+                exception_type=type(e).__name__
+            )
 
     @staticmethod
     def generate_cross_signals(

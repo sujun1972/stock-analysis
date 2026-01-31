@@ -136,19 +136,20 @@ class TestLongOnlyBacktest:
             holding_period=5,
             rebalance_freq='W'
         )
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 验证结果结构
-        assert 'portfolio_value' in results
-        assert 'positions' in results
-        assert 'daily_returns' in results
-        assert 'cost_analysis' in results
+        assert 'portfolio_value' in results.data
+        assert 'positions' in results.data
+        assert 'daily_returns' in results.data
+        assert 'cost_analysis' in results.data
 
         # 验证数据类型
-        assert isinstance(results['portfolio_value'], pd.DataFrame)
-        assert isinstance(results['daily_returns'], pd.Series)
+        assert isinstance(results.data['portfolio_value'], pd.DataFrame)
+        assert isinstance(results.data['daily_returns'], pd.Series)
 
         # 验证组合净值
-        pv = results['portfolio_value']
+        pv = results.data['portfolio_value']
         assert 'cash' in pv.columns
         assert 'holdings' in pv.columns
         assert 'total' in pv.columns
@@ -215,8 +216,8 @@ class TestLongOnlyBacktest:
         )
 
         # 都应该成功运行
-        assert 'portfolio_value' in results_small
-        assert 'portfolio_value' in results_large
+        assert 'portfolio_value' in results.data_small
+        assert 'portfolio_value' in results.data_large
 
     def test_holding_period(self, sample_data):
         """测试持仓期限制"""
@@ -230,10 +231,11 @@ class TestLongOnlyBacktest:
             holding_period=10,  # 最少持有10天
             rebalance_freq='W'
         )
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 验证回测成功
-        assert 'portfolio_value' in results
-        assert len(results['portfolio_value']) == len(signals)
+        assert 'portfolio_value' in results.data
+        assert len(results.data['portfolio_value']) == len(signals)
 
     def test_with_different_slippage_models(self, sample_data):
         """测试不同滑点模型"""
@@ -267,8 +269,9 @@ class TestLongOnlyBacktest:
             prices=prices,
             top_n=5
         )
+        assert results.is_success(), f'回测失败: {results.error}'
 
-        pv = results['portfolio_value']
+        pv = results.data['portfolio_value']
 
         # 现金不应该变成负数（允许小的浮点误差）
         assert (pv['cash'] >= -1).all()
@@ -324,10 +327,11 @@ class TestMarketNeutralBacktest:
             bottom_n=5,
             margin_rate=0.10
         )
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 验证结果
-        assert 'portfolio_value' in results
-        pv = results['portfolio_value']
+        assert 'portfolio_value' in results.data
+        pv = results.data['portfolio_value']
 
         # 应该有多空头市值
         assert 'long_value' in pv.columns
@@ -421,9 +425,10 @@ class TestEdgeCases:
 
         engine = BacktestEngine()
         results = engine.backtest_long_only(signals, prices, top_n=3)
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 应该能正常运行
-        assert results['portfolio_value'] is not None
+        assert results.data['portfolio_value'] is not None
 
     def test_single_stock(self):
         """测试单只股票"""
@@ -444,8 +449,9 @@ class TestEdgeCases:
 
         engine = BacktestEngine()
         results = engine.backtest_long_only(signals, prices, top_n=1)
+        assert results.is_success(), f'回测失败: {results.error}'
 
-        assert results['portfolio_value'] is not None
+        assert results.data['portfolio_value'] is not None
 
     def test_insufficient_capital(self):
         """测试资金不足"""
@@ -468,9 +474,10 @@ class TestEdgeCases:
         # 很少的初始资金
         engine = BacktestEngine(initial_capital=10000)
         results = engine.backtest_long_only(signals, prices, top_n=5)
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 应该能运行但可能无法建仓
-        assert results['portfolio_value'] is not None
+        assert results.data['portfolio_value'] is not None
 
     def test_nan_prices(self):
         """测试包含NaN的价格"""
@@ -494,9 +501,10 @@ class TestEdgeCases:
 
         engine = BacktestEngine()
         results = engine.backtest_long_only(signals, prices, top_n=3)
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 应该能处理NaN并跳过
-        assert results['portfolio_value'] is not None
+        assert results.data['portfolio_value'] is not None
 
     def test_invalid_rebalance_freq(self):
         """测试无效的调仓频率"""
@@ -546,13 +554,14 @@ class TestCostAnalyzerIntegration:
 
         engine = BacktestEngine()
         results = engine.backtest_long_only(signals, prices, top_n=3, rebalance_freq='W')
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 应该有交易记录
-        assert len(results['cost_analyzer'].trades) > 0
+        assert len(results.data['cost_analyzer'].trades) > 0
 
         # 应该有成本分析
-        assert 'cost_analysis' in results
-        assert 'total_cost' in results['cost_analysis']
+        assert 'cost_analysis' in results.data
+        assert 'total_cost' in results.data['cost_analysis']
 
 
 class TestMarketDataIntegration:
@@ -679,10 +688,11 @@ class TestMarketDataIntegration:
             prices=market_data_sample['prices'],
             top_n=3
         )
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 应该成功完成
-        assert 'portfolio_value' in results
-        assert len(results['portfolio_value']) > 0
+        assert 'portfolio_value' in results.data
+        assert len(results.data['portfolio_value']) > 0
 
     def test_backtest_with_all_market_data(self, market_data_sample):
         """测试带完整市场数据的回测"""
@@ -708,11 +718,12 @@ class TestMarketDataIntegration:
             prices=market_data_sample['prices'],
             top_n=3
         )
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 验证结果
-        assert 'portfolio_value' in results
-        assert results['portfolio_value'] is not None
-        assert len(results['cost_analyzer'].trades) > 0
+        assert 'portfolio_value' in results.data
+        assert results.data['portfolio_value'] is not None
+        assert len(results.data['cost_analyzer'].trades) > 0
 
     def test_slippage_with_vs_without_volume_data(self, market_data_sample):
         """对比有无成交量数据时的滑点差异"""
@@ -780,9 +791,10 @@ class TestAdvancedBacktestFeatures:
         )
 
         results = engine.backtest_long_only(signals, prices, top_n=3)
+        assert results.is_success(), f'回测失败: {results.error}'
 
-        assert 'portfolio_value' in results
-        assert len(results['cost_analyzer'].trades) > 0
+        assert 'portfolio_value' in results.data
+        assert len(results.data['cost_analyzer'].trades) > 0
 
     def test_large_capital_high_slippage(self):
         """测试大资金时滑点影响"""
@@ -856,9 +868,10 @@ class TestAdvancedBacktestFeatures:
         )
 
         results = engine.backtest_long_only(signals, prices, top_n=3, rebalance_freq='W')
+        assert results.is_success(), f'回测失败: {results.error}'
 
         # 验证成本分解
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
 
         assert 'total_commission' in cost_analysis
         assert 'total_stamp_tax' in cost_analysis

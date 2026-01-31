@@ -8,6 +8,9 @@ import numpy as np
 from typing import Optional, Dict, List
 import warnings
 from loguru import logger
+import time
+
+from src.utils.response import Response
 
 warnings.filterwarnings('ignore')
 
@@ -244,7 +247,7 @@ class PerformanceAnalyzer:
 
     # ==================== 综合分析 ====================
 
-    def calculate_all_metrics(self, verbose: bool = True) -> Dict[str, float]:
+    def calculate_all_metrics(self, verbose: bool = True) -> Response:
         """
         计算所有绩效指标
 
@@ -252,9 +255,12 @@ class PerformanceAnalyzer:
             verbose: 是否打印结果
 
         返回:
-            所有指标字典
+            Response对象，包含所有绩效指标
         """
-        self.metrics = {
+        start_time = time.time()
+
+        try:
+            self.metrics = {
             # 收益指标
             'total_return': self.total_return(),
             'annualized_return': self.annualized_return(),
@@ -276,41 +282,59 @@ class PerformanceAnalyzer:
             'average_win': self.average_win(),
             'average_loss': self.average_loss(),
             'win_loss_ratio': self.win_loss_ratio(),
-        }
+            }
 
-        # 基准相关指标
-        if self.benchmark_returns is not None:
-            self.metrics['information_ratio'] = self.information_ratio()
+            # 基准相关指标
+            if self.benchmark_returns is not None:
+                self.metrics['information_ratio'] = self.information_ratio()
 
-            # 计算Alpha和Beta
-            aligned = pd.DataFrame({
-                'strategy': self.returns,
-                'benchmark': self.benchmark_returns
-            }).dropna()
+                # 计算Alpha和Beta
+                aligned = pd.DataFrame({
+                    'strategy': self.returns,
+                    'benchmark': self.benchmark_returns
+                }).dropna()
 
-            if len(aligned) > 1:
-                # Beta
-                cov = aligned['strategy'].cov(aligned['benchmark'])
-                var = aligned['benchmark'].var()
-                beta = cov / var if var > 0 else 0.0
+                if len(aligned) > 1:
+                    # Beta
+                    cov = aligned['strategy'].cov(aligned['benchmark'])
+                    var = aligned['benchmark'].var()
+                    beta = cov / var if var > 0 else 0.0
 
-                # Alpha（年化）
-                strategy_return = self.annualized_return()
-                benchmark_analyzer = PerformanceAnalyzer(
-                    self.benchmark_returns,
-                    risk_free_rate=self.risk_free_rate,
-                    periods_per_year=self.periods_per_year
-                )
-                benchmark_return = benchmark_analyzer.annualized_return()
-                alpha = strategy_return - (self.risk_free_rate + beta * (benchmark_return - self.risk_free_rate))
+                    # Alpha（年化）
+                    strategy_return = self.annualized_return()
+                    benchmark_analyzer = PerformanceAnalyzer(
+                        self.benchmark_returns,
+                        risk_free_rate=self.risk_free_rate,
+                        periods_per_year=self.periods_per_year
+                    )
+                    benchmark_return = benchmark_analyzer.annualized_return()
+                    alpha = strategy_return - (self.risk_free_rate + beta * (benchmark_return - self.risk_free_rate))
 
-                self.metrics['alpha'] = alpha
-                self.metrics['beta'] = beta
+                    self.metrics['alpha'] = alpha
+                    self.metrics['beta'] = beta
 
-        if verbose:
-            self.print_metrics()
+            if verbose:
+                self.print_metrics()
 
-        return self.metrics
+            elapsed_time = time.time() - start_time
+
+            return Response.success(
+                data=self.metrics,
+                message="绩效指标计算完成",
+                n_metrics=len(self.metrics),
+                total_return=self.metrics['total_return'],
+                sharpe_ratio=self.metrics['sharpe_ratio'],
+                max_drawdown=self.metrics['max_drawdown'],
+                elapsed_time=f"{elapsed_time:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"绩效指标计算失败: {str(e)}")
+            return Response.error(
+                error=f"绩效指标计算失败: {str(e)}",
+                error_code="METRICS_CALCULATION_ERROR",
+                exception_type=type(e).__name__
+            )
 
     def print_metrics(self):
         """打印绩效指标"""
