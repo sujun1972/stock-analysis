@@ -15,6 +15,12 @@ from .slippage_models import (
     create_slippage_model
 )
 from .short_selling import ShortSellingCosts, ShortPosition
+from .parallel_backtester import (
+    ParallelBacktester,
+    BacktestTask,
+    BacktestResult,
+    parallel_backtest
+)
 
 __all__ = [
     'BacktestEngine',
@@ -33,4 +39,9 @@ __all__ = [
     # Short selling
     'ShortSellingCosts',
     'ShortPosition',
+    # Parallel backtest
+    'ParallelBacktester',
+    'BacktestTask',
+    'BacktestResult',
+    'parallel_backtest',
 ]

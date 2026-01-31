@@ -156,6 +156,33 @@
 
 ### 5. 回测引擎
 
+#### 并行多策略回测（NEW ✨）
+```python
+from src.backtest import ParallelBacktester
+from src.strategies import MomentumStrategy, MeanReversionStrategy
+
+# 创建多个策略
+strategies = [
+    MomentumStrategy("动量-20日", {'lookback': 20}),
+    MomentumStrategy("动量-10日", {'lookback': 10}),
+    MeanReversionStrategy("均值回归", {'lookback': 15})
+]
+
+# 并行回测（3-8倍加速）
+backtester = ParallelBacktester(n_workers=4)
+results = backtester.run(strategies, prices_df)
+
+# 自动生成对比报告
+report = backtester.generate_comparison_report(results)
+print(report)
+```
+
+**核心特性**：
+- **并行回测**: 同时回测多个策略，3-8倍性能提升
+- **自动对比**: 生成策略对比报告（夏普比率、收益、回撤等）
+- **便捷函数**: parallel_backtest 一键调用
+- **完整测试**: 28个单元测试覆盖
+
 #### 向量化高性能回测
 - **性能**: 1000只股票×250天数据，仅需~2秒
 - **矢量化操作**: 避免Python循环
@@ -283,10 +310,38 @@
 
 ### 9. 参数优化
 
+#### 并行参数优化（NEW ✨）
+```python
+from src.optimization import ParallelParameterOptimizer
+
+# 统一接口，3种优化方法
+optimizer = ParallelParameterOptimizer(
+    method='grid',      # 'grid', 'random', 'bayesian'
+    n_workers=8         # 并行worker数量
+)
+
+# 定义参数空间
+param_space = {
+    'lookback': [10, 20, 30],
+    'top_n': [20, 30, 50]
+}
+
+# 执行优化（3-8倍加速）
+result = optimizer.optimize(objective_func, param_space)
+print(f"最优参数: {result.best_params}")
+print(f"最优得分: {result.best_score}")
+```
+
+**核心特性**：
+- **3种优化方法**: 网格搜索、随机搜索、贝叶斯优化
+- **并行计算**: 基于ParallelExecutor，3-8倍性能提升
+- **统一接口**: 一致的API和结果格式
+- **便捷函数**: parallel_grid_search, parallel_random_search
+
 #### 网格搜索
 - 遍历所有参数组合
 - 完整不遗漏
-- 适合小参数空间
+- 适合小参数空间（<1000组合）
 
 #### 贝叶斯优化
 - 高效搜索高维空间

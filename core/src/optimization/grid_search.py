@@ -19,6 +19,28 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
+# ==================== 模块级函数（支持序列化）====================
+
+def _evaluate_single_params_wrapper(args: Tuple) -> Dict:
+    """
+    评估单个参数组合的包装函数（模块级，支持multiprocessing序列化）
+
+    Args:
+        args: (参数字典, 目标函数, 是否详细日志) 元组
+
+    Returns:
+        {'params': params, 'score': score} 字典
+    """
+    params, objective_func, verbose_debug = args
+    try:
+        score = objective_func(params)
+        return {'params': params, 'score': score}
+    except Exception as e:
+        if verbose_debug:
+            logger.debug(f"参数{params}评估失败: {e}")
+        return {'params': params, 'score': np.nan}
+
+
 @dataclass
 class GridSearchResult:
     """网格搜索结果数据类"""
@@ -186,34 +208,40 @@ class GridSearchOptimizer:
         objective_func: Callable,
         param_combinations: List[Dict]
     ) -> List[Dict]:
-        """并行搜索"""
+        """并行搜索（使用统一并行框架）"""
         try:
-            from joblib import Parallel, delayed
+            from src.utils.parallel_executor import ParallelExecutor
+            from src.config.features import ParallelComputingConfig
 
-            logger.info(f"使用{self.n_jobs}个进程并行搜索...")
+            logger.info(f"使用统一并行框架搜索（{self.n_jobs} workers）...")
 
-            def evaluate_params(params):
-                try:
-                    score = objective_func(params)
-                    return {'params': params, 'score': score}
-                except Exception as e:
-                    logger.debug(f"参数{params}评估失败: {e}")
-                    return {'params': params, 'score': np.nan}
+            # 创建并行配置
+            config = ParallelComputingConfig(
+                enable_parallel=True,
+                n_workers=self.n_jobs,
+                show_progress=self.verbose,
+                parallel_backend='multiprocessing'  # 网格搜索用多进程
+            )
 
+            # 准备任务（包装目标函数和参数）
+            tasks = [(params, objective_func, False) for params in param_combinations]
+
+            # 使用 ParallelExecutor
             try:
-                # 尝试使用loky backend，更好地处理不可pickle的对象
-                results = Parallel(n_jobs=self.n_jobs, backend='loky')(
-                    delayed(evaluate_params)(params)
-                    for params in param_combinations
-                )
+                with ParallelExecutor(config) as executor:
+                    results = executor.map(
+                        _evaluate_single_params_wrapper,
+                        tasks,
+                        desc="网格搜索",
+                        ignore_errors=True
+                    )
+                return results
             except Exception as e:
                 logger.warning(f"并行搜索失败({e})，回退到串行搜索")
                 return self._search_serial(objective_func, param_combinations)
 
-            return results
-
-        except ImportError:
-            logger.warning("joblib未安装，回退到串行搜索")
+        except ImportError as e:
+            logger.warning(f"并行框架导入失败({e})，回退到串行搜索")
             return self._search_serial(objective_func, param_combinations)
 
     def analyze_param_importance(
