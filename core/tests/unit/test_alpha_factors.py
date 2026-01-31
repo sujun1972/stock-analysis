@@ -289,13 +289,20 @@ class TestVolumeFactorCalculator:
         calc = VolumeFactorCalculator(sample_price_data)
         result = calc.add_price_volume_correlation(periods=[20, 60])
 
+        # 验证两种价量相关性因子都被创建
         assert 'PV_CORR20' in result.columns
         assert 'PV_CORR60' in result.columns
+        assert 'PV_ABS_CORR20' in result.columns
+        assert 'PV_ABS_CORR60' in result.columns
 
         # 相关系数应该在[-1, 1]范围内
         corr_valid = result['PV_CORR20'].dropna()
         if len(corr_valid) > 0:
             assert (corr_valid >= -1).all() and (corr_valid <= 1).all()
+
+        abs_corr_valid = result['PV_ABS_CORR20'].dropna()
+        if len(abs_corr_valid) > 0:
+            assert (abs_corr_valid >= -1).all() and (abs_corr_valid <= 1).all()
 
     def test_volume_factors_missing_volume(self, minimal_price_data):
         """测试缺少成交量列时的处理"""

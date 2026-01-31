@@ -162,13 +162,18 @@ class TestPriceVolumeCorrelation:
         calc = VolumeFactorCalculator(increasing_volume_data.copy())
         result = calc.add_price_volume_correlation(periods=[20])
 
-        # 价量齐升，但PV_CORR计算的是价格变化率和成交量的相关性
-        # 不是价格和成交量本身的相关性,所以相关性可能为负
-        # 只需要验证相关性在[-1, 1]范围内即可
+        # PV_CORR计算的是价格变化率与成交量变化率的相关性
+        # 价量齐升时，两者变化率应该同步，相关性应为正
         valid_corr = result['PV_CORR20'].dropna()
         if len(valid_corr) > 0:
             assert (valid_corr >= -1).all()
             assert (valid_corr <= 1).all()
+            # 价量同步上涨，平均相关性应该偏正
+            avg_corr = valid_corr.mean()
+            assert avg_corr > -0.5, f"价量齐升时平均相关性({avg_corr:.2f})应不太负"
+
+        # 验证PV_ABS_CORR也被计算
+        assert 'PV_ABS_CORR20' in result.columns
 
     def test_price_volume_divergence(self, price_volume_divergence_data):
         """测试价量背离检测"""
@@ -183,6 +188,27 @@ class TestPriceVolumeCorrelation:
             assert (valid_corr <= 1).all()
             # 验证确实计算出了相关性(不全是NaN)
             assert len(valid_corr) > 10
+
+        # 验证两种相关性因子都存在
+        assert 'PV_CORR20' in result.columns
+        assert 'PV_ABS_CORR20' in result.columns
+
+    def test_pv_corr_vs_abs_corr_difference(self, sample_price_volume_data):
+        """测试PV_CORR和PV_ABS_CORR的区别"""
+        calc = VolumeFactorCalculator(sample_price_volume_data.copy())
+        result = calc.add_price_volume_correlation(periods=[20])
+
+        # 两个指标都应该存在
+        assert 'PV_CORR20' in result.columns
+        assert 'PV_ABS_CORR20' in result.columns
+
+        # 两个指标的值可能不同
+        pv_corr = result['PV_CORR20'].dropna()
+        pv_abs_corr = result['PV_ABS_CORR20'].dropna()
+
+        # 都应该在[-1, 1]范围内
+        assert (pv_corr >= -1).all() and (pv_corr <= 1).all()
+        assert (pv_abs_corr >= -1).all() and (pv_abs_corr <= 1).all()
 
 
 # ==================== 趋势因子测试 ====================

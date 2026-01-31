@@ -151,7 +151,8 @@ class TestDataQuality:
                 assert valid_values.max() <= 1.2, f"{factor} 最大值异常"
 
         # 单独测试包含CORR的因子（价格-成交量相关性等，范围应该是[-1, 1]）
-        pv_corr_factors = [col for col in result.columns if 'PV_CORR' in col or ('CORR' in col and 'R2' not in col)]
+        # 注意: PV_CORR和PV_ABS_CORR都是相关性因子
+        pv_corr_factors = [col for col in result.columns if 'PV_CORR' in col or 'PV_ABS_CORR' in col or ('CORR' in col and 'R2' not in col and 'PV' not in col)]
         for factor in pv_corr_factors:
             valid_values = result[factor].dropna()
             if len(valid_values) > 0:

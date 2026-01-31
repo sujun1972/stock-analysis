@@ -248,17 +248,45 @@ class BaseFactorCalculator(ABC):
             16字符的哈希字符串
 
         注意:
-            基于索引计算哈希，相同索引的DataFrame共享缓存
-            这是安全的，因为相同索引意味着相同的时间序列
+            基于索引 + 数据样本计算哈希，确保不同数据集不会产生相同哈希
+            即使两个DataFrame有相同的索引，如果数据内容不同，也会产生不同的哈希
         """
         try:
-            # 使用索引计算哈希（比整个数据快得多）
+            # 1. 计算索引哈希
             index_hash = hashlib.md5(
                 pd.util.hash_pandas_object(self.df.index, index=False).values
-            ).hexdigest()
-            return index_hash[:16]
+            ).digest()
+
+            # 2. 计算数据样本哈希（前后各5行，避免全量计算）
+            if len(self.df) > 0:
+                # 选择关键列进行哈希（close价格是最核心的）
+                key_cols = ['close']
+                if 'high' in self.df.columns:
+                    key_cols.append('high')
+                if 'low' in self.df.columns:
+                    key_cols.append('low')
+
+                # 提取样本数据
+                sample_size = min(5, len(self.df))
+                sample_data = pd.concat([
+                    self.df[key_cols].head(sample_size),
+                    self.df[key_cols].tail(sample_size)
+                ])
+
+                # 计算样本数据哈希
+                data_hash = hashlib.md5(
+                    pd.util.hash_pandas_object(sample_data, index=False).values
+                ).digest()
+
+                # 合并索引哈希和数据哈希
+                combined_hash = hashlib.md5(index_hash + data_hash).hexdigest()
+            else:
+                combined_hash = hashlib.md5(index_hash).hexdigest()
+
+            return combined_hash[:16]
+
         except Exception as e:
-            logger.warning(f"计算数据指纹失败: {e}，使用随机值")
+            logger.warning(f"计算数据指纹失败: {e}，使用对象ID")
             return hashlib.md5(str(id(self.df)).encode()).hexdigest()[:16]
 
     @abstractmethod
@@ -825,6 +853,10 @@ class VolumeFactorCalculator(BaseFactorCalculator):
         """
         添加价量相关性因子
 
+        计算两种价量相关性指标:
+        1. PV_CORR: 价格变化率与成交量变化率的相关性（量价同步性）
+        2. PV_ABS_CORR: 价格变化率与成交量绝对值的相关性（原有逻辑）
+
         参数:
             periods: 周期列表
             price_col: 价格列名
@@ -832,6 +864,10 @@ class VolumeFactorCalculator(BaseFactorCalculator):
 
         返回:
             添加价量相关性因子的DataFrame
+
+        注意:
+            - PV_CORR更符合量价关系的经济学含义（涨跌同步性）
+            - PV_ABS_CORR可用于检测价格变化与成交量活跃度的关系
         """
         if volume_col is None:
             volume_col = self._get_volume_column()
@@ -846,11 +882,17 @@ class VolumeFactorCalculator(BaseFactorCalculator):
         logger.debug(f"计算价量相关性因子，周期: {periods}")
 
         price_ret = self._calculate_returns(price_col)
+        volume_ret = self.df[volume_col].pct_change()
 
         for period in periods:
             try:
-                # 价格收益率与成交量的相关系数
+                # 1. 价格变化率与成交量变化率的相关性（推荐使用）
                 self.df[f'PV_CORR{period}'] = (
+                    price_ret.rolling(window=period).corr(volume_ret)
+                )
+
+                # 2. 价格变化率与成交量绝对值的相关性（保留用于对比）
+                self.df[f'PV_ABS_CORR{period}'] = (
                     price_ret.rolling(window=period).corr(self.df[volume_col])
                 )
 

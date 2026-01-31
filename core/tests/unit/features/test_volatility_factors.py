@@ -120,26 +120,31 @@ class TestHistoricalVolatility:
         assert (valid_vol >= 0).all()
 
     def test_high_vol_larger_than_low_vol(self):
-        """测试波动率计算的基本功能"""
-        # 由于发现BaseFactorCalculator可能存在缓存共享问题
-        # 这里改为验证波动率计算的基本功能
+        """测试高波动率数据产生更大的波动率值"""
+        # 创建低波动率数据
+        np.random.seed(42)
+        low_vol_prices = 100 * (1 + np.random.normal(0, 0.005, 100)).cumprod()
+        df_low = pd.DataFrame({'close': low_vol_prices})
 
-        # 创建一个波动较大的数据
+        # 创建高波动率数据（使用不同的随机种子确保数据不同）
         np.random.seed(777)
-        prices = 100 * (1 + np.random.normal(0, 0.03, 100)).cumprod()
-        df = pd.DataFrame({'close': prices})
+        high_vol_prices = 100 * (1 + np.random.normal(0, 0.03, 100)).cumprod()
+        df_high = pd.DataFrame({'close': high_vol_prices})
 
-        calc = VolatilityFactorCalculator(df)
-        result = calc.add_volatility_factors(periods=[20])
+        # 计算波动率
+        calc_low = VolatilityFactorCalculator(df_low)
+        result_low = calc_low.add_volatility_factors(periods=[20])
 
-        # 验证波动率被正确计算
-        assert 'VOLATILITY20' in result.columns
-        vol_values = result['VOLATILITY20'].dropna()
+        calc_high = VolatilityFactorCalculator(df_high)
+        result_high = calc_high.add_volatility_factors(periods=[20])
 
-        # 波动率应该在合理范围内(年化0-100%)
-        assert len(vol_values) > 0
-        assert (vol_values > 0).all()  # 波动率应该是正数
-        assert (vol_values < 200).all()  # 年化波动率不应超过200%
+        # 验证高波动率数据产生更大的波动率值
+        avg_vol_low = result_low['VOLATILITY20'].dropna().mean()
+        avg_vol_high = result_high['VOLATILITY20'].dropna().mean()
+
+        assert avg_vol_high > avg_vol_low, f"高波动率({avg_vol_high:.2f})应大于低波动率({avg_vol_low:.2f})"
+        assert avg_vol_low > 0, "低波动率应为正数"
+        assert avg_vol_high < 200, "年化波动率不应超过200%"
 
     def test_volatility_annualization(self, sample_ohlc_data):
         """测试波动率年化"""
