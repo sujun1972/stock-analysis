@@ -393,14 +393,21 @@ class DataVersionManager:
             if not version:
                 raise ValueError(f"版本不存在: {version_number}")
 
-            # 更新活跃状态
-            query = """
+            # 先将该symbol的所有版本设为非活跃
+            query_deactivate = """
+                UPDATE data_versions
+                SET is_active = FALSE
+                WHERE symbol = %s
+            """
+            self.db._execute_update(query_deactivate, (symbol,))
+
+            # 再将指定版本设为活跃
+            query_activate = """
                 UPDATE data_versions
                 SET is_active = TRUE
                 WHERE symbol = %s AND version_number = %s
             """
-
-            self.db._execute_update(query, (symbol, version_number))
+            self.db._execute_update(query_activate, (symbol, version_number))
 
             logger.info(f"设置活跃版本: {symbol} - {version_number}")
             return True

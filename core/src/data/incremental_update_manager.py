@@ -17,6 +17,7 @@
 """
 
 import pandas as pd
+import numpy as np
 from typing import Optional, Dict, List, Tuple, Any
 from datetime import datetime, timedelta
 from loguru import logger
@@ -78,6 +79,13 @@ class IncrementalUpdateManager:
         try:
             start_time = time.time()
 
+            # 0. 对远程数据进行四舍五入，以匹配数据库存储精度（NUMERIC(10,2)）
+            # 需要复制一份避免修改原始数据
+            remote_df = remote_df.copy()
+            float_columns = remote_df.select_dtypes(include=['float64', 'float32']).columns
+            for col in float_columns:
+                remote_df.loc[:, col] = remote_df[col].round(2)
+
             # 1. 获取本地数据
             active_version = self.version_mgr.get_active_version(symbol)
 
@@ -96,16 +104,22 @@ class IncrementalUpdateManager:
                 }
 
             # 2. 从数据库加载本地数据
-            # 注意：active_version中的日期已经是YYYY-MM-DD格式，直接使用
-            start_date = str(active_version['start_date'])
-            end_date = str(active_version['end_date'])
+            # 使用本地和远程数据的日期范围并集，确保能加载所有相关数据
+            local_start = str(active_version['start_date'])
+            local_end = str(active_version['end_date'])
+            remote_start = str(remote_df.index.min().date())
+            remote_end = str(remote_df.index.max().date())
+
+            # 取最小的开始日期和最大的结束日期
+            start_date = min(local_start, remote_start)
+            end_date = max(local_end, remote_end)
 
             logger.debug(f"{symbol} 加载本地数据: {start_date} ~ {end_date}")
 
             local_df = self.db.query_manager.load_daily_data(
                 symbol,
-                start_date,  # 直接使用YYYY-MM-DD格式
-                end_date     # 直接使用YYYY-MM-DD格式
+                start_date,
+                end_date
             )
 
             if local_df is None or len(local_df) == 0:
@@ -206,6 +220,14 @@ class IncrementalUpdateManager:
 
         try:
             start_time = time.time()
+
+            # 对远程数据进行四舍五入，以匹配数据库存储精度（NUMERIC(10,2)）
+            # 这样可以确保数据一致性，避免精度差异导致的误判
+            # 需要复制一份避免修改原始数据
+            remote_df = remote_df.copy()
+            float_columns = remote_df.select_dtypes(include=['float64', 'float32']).columns
+            for col in float_columns:
+                remote_df.loc[:, col] = remote_df[col].round(2)
 
             # 1. 检测增量
             incremental_info = self.detect_incremental_updates(symbol, remote_df)
@@ -321,13 +343,31 @@ class IncrementalUpdateManager:
             是否相等
         """
         try:
-            # 比较主要字段
-            key_fields = ['close', 'volume']
+            # 找到两行共同的字段
+            common_fields = set(row1.index) & set(row2.index)
 
-            for field in key_fields:
-                if field in row1.index and field in row2.index:
-                    # 允许微小的浮点误差
-                    if abs(row1[field] - row2[field]) > 1e-6:
+            if not common_fields:
+                return False
+
+            # 比较所有共同字段
+            for field in common_fields:
+                val1 = row1[field]
+                val2 = row2[field]
+
+                # 处理不同类型的比较
+                if pd.isna(val1) and pd.isna(val2):
+                    continue
+                elif pd.isna(val1) or pd.isna(val2):
+                    return False
+                elif isinstance(val1, (int, np.integer, float, np.floating)) and isinstance(val2, (int, np.integer, float, np.floating)):
+                    # 统一处理数值类型（int和float可能混合出现，如volume）
+                    # 浮点数允许微小误差（考虑数据库存储精度）
+                    tolerance = max(1e-2, abs(float(val1)) * 1e-6)
+                    if abs(float(val1) - float(val2)) > tolerance:
+                        return False
+                else:
+                    # 其他类型直接比较
+                    if val1 != val2:
                         return False
 
             return True

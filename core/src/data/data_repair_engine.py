@@ -110,7 +110,8 @@ class DataRepairEngine:
             # 1. 数据验证 - 识别问题
             validator = DataValidator(df_repaired)
             validation_response = validator.validate_all(strict_mode=False)
-            validation_results = validation_response.data if validation_response.is_success() else {}
+            # 即使验证失败，也需要获取验证结果（包含问题详情）
+            validation_results = validation_response.data if validation_response.data else {}
 
             # 2. 修复缺失值
             if not auto_repair:
@@ -470,7 +471,15 @@ class DataRepairEngine:
         """
         try:
             before_count = len(df)
-            df_repaired = df.drop_duplicates(keep='first')
+            # 先重置索引，去重后再恢复
+            # 这样可以同时去除索引和数据都重复的记录
+            if df.index.duplicated().sum() > 0:
+                # 如果有重复索引，直接按索引去重（保留第一个）
+                df_repaired = df[~df.index.duplicated(keep='first')]
+            else:
+                # 如果索引不重复，按列值去重
+                df_repaired = df.drop_duplicates(keep='first')
+
             after_count = len(df_repaired)
 
             removed_count = before_count - after_count

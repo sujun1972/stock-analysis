@@ -78,8 +78,10 @@ class TestIncrementalUpdateManager:
             data_source='akshare'
         )
 
-        # 添加新记录
-        df_new = self._create_test_dataframe(110)  # 多10条
+        # 添加新记录 - 保留前100行，添加新的10行
+        # 注意：为了确保前100行数据一致，我们需要复制df_initial并追加新数据
+        df_new_only = self._create_test_dataframe(110).iloc[100:]  # 只取后10行
+        df_new = pd.concat([df_initial.copy(), df_new_only])
 
         result = self.manager.detect_incremental_updates(self.test_symbol, df_new)
 
