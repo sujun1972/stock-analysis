@@ -28,14 +28,14 @@ try:
     from .missing_handler import MissingHandler
     from .outlier_detector import OutlierDetector
     from .data_checksum_validator import DataChecksumValidator
-    from ..exceptions import DataValidationError
+    from ..exceptions import DataValidationError, DatabaseError
 except ImportError:
     from src.database.db_manager import DatabaseManager, get_database
     from src.data.data_validator import DataValidator
     from src.data.missing_handler import MissingHandler
     from src.data.outlier_detector import OutlierDetector
     from src.data.data_checksum_validator import DataChecksumValidator
-    from src.exceptions import DataValidationError
+    from src.exceptions import DataValidationError, DatabaseError
 
 
 class DataRepairEngine:
@@ -249,9 +249,18 @@ class DataRepairEngine:
 
             return df_repaired, repair_report
 
-        except Exception as e:
-            logger.error(f"数据修复失败: {symbol} - {e}")
+        except (DataValidationError, DatabaseError):
+            # 已知异常,记录日志后向上传播
+            logger.error(f"数据修复失败: {symbol}")
             raise
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"数据修复失败(未预期异常): {symbol} - {e}")
+            raise DataValidationError(
+                f"数据修复失败: {str(e)}",
+                error_code="DATA_REPAIR_FAILED",
+                symbol=symbol
+            ) from e
 
     def repair_missing_values(
         self,
@@ -313,9 +322,25 @@ class DataRepairEngine:
 
             return df_repaired, report
 
-        except Exception as e:
-            logger.error(f"缺失值修复失败: {e}")
+        except DataValidationError:
+            # 已知验证异常,向上传播
             raise
+        except (AttributeError, KeyError) as e:
+            # 数据结构问题
+            logger.error(f"缺失值修复失败(数据结构错误): {e}")
+            raise DataValidationError(
+                f"数据结构不符合要求: {str(e)}",
+                error_code="INVALID_DATA_STRUCTURE",
+                method=method
+            ) from e
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"缺失值修复失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"缺失值修复失败: {str(e)}",
+                error_code="MISSING_VALUE_REPAIR_FAILED",
+                method=method
+            ) from e
 
     def repair_outliers(
         self,
@@ -399,9 +424,25 @@ class DataRepairEngine:
 
             return df_repaired, report
 
-        except Exception as e:
-            logger.error(f"异常值修复失败: {e}")
+        except DataValidationError:
+            # 已知验证异常,向上传播
             raise
+        except (AttributeError, KeyError) as e:
+            # 数据结构问题
+            logger.error(f"异常值修复失败(数据结构错误): {e}")
+            raise DataValidationError(
+                f"数据结构不符合要求: {str(e)}",
+                error_code="INVALID_DATA_STRUCTURE",
+                method=method
+            ) from e
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"异常值修复失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"异常值修复失败: {str(e)}",
+                error_code="OUTLIER_REPAIR_FAILED",
+                method=method
+            ) from e
 
     def repair_price_logic(
         self,
@@ -476,9 +517,20 @@ class DataRepairEngine:
 
             return df_repaired, report
 
+        except (AttributeError, KeyError) as e:
+            # 数据结构问题
+            logger.error(f"价格逻辑修复失败(数据结构错误): {e}")
+            raise DataValidationError(
+                f"数据结构不符合要求: {str(e)}",
+                error_code="INVALID_DATA_STRUCTURE"
+            ) from e
         except Exception as e:
-            logger.error(f"价格逻辑修复失败: {e}")
-            raise
+            # 未预期的异常
+            logger.error(f"价格逻辑修复失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"价格逻辑修复失败: {str(e)}",
+                error_code="PRICE_LOGIC_REPAIR_FAILED"
+            ) from e
 
     def repair_duplicates(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -510,9 +562,20 @@ class DataRepairEngine:
 
             return df_repaired
 
+        except (AttributeError, KeyError) as e:
+            # 数据结构问题
+            logger.error(f"重复记录修复失败(数据结构错误): {e}")
+            raise DataValidationError(
+                f"数据结构不符合要求: {str(e)}",
+                error_code="INVALID_DATA_STRUCTURE"
+            ) from e
         except Exception as e:
-            logger.error(f"重复记录修复失败: {e}")
-            raise
+            # 未预期的异常
+            logger.error(f"重复记录修复失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"重复记录修复失败: {str(e)}",
+                error_code="DUPLICATE_REPAIR_FAILED"
+            ) from e
 
     def _log_repair(
         self,
@@ -633,9 +696,18 @@ class DataRepairEngine:
 
             return history
 
-        except Exception as e:
-            logger.error(f"获取修复历史失败: {e}")
+        except DatabaseError:
+            # 数据库异常,向上传播
+            logger.error(f"获取修复历史失败")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"获取修复历史失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"查询修复历史失败: {str(e)}",
+                error_code="QUERY_REPAIR_HISTORY_FAILED",
+                symbol=symbol
+            ) from e
 
 
 # ==================== 便捷函数 ====================

@@ -23,10 +23,10 @@ import json
 
 try:
     from ..database.db_manager import DatabaseManager, get_database
-    from ..exceptions import DataValidationError, DataError
+    from ..exceptions import DataValidationError, DataError, DatabaseError
 except ImportError:
     from src.database.db_manager import DatabaseManager, get_database
-    from src.exceptions import DataValidationError, DataError
+    from src.exceptions import DataValidationError, DataError, DatabaseError
 
 
 class DataVersionManager:
@@ -158,16 +158,35 @@ class DataVersionManager:
                         symbol=symbol
                     )
 
-            except Exception as e:
+            except (DatabaseError, DataError, DataValidationError):
+                # 已知的业务异常,直接向上传播
                 conn.rollback()
                 raise
+            except Exception as e:
+                # 数据库操作异常,转换为DatabaseError
+                conn.rollback()
+                raise DatabaseError(
+                    f"数据库操作失败: {str(e)}",
+                    error_code="DATABASE_OPERATION_FAILED",
+                    operation="create_version",
+                    symbol=symbol
+                ) from e
 
             finally:
                 cursor.close()
 
-        except Exception as e:
-            logger.error(f"创建版本失败: {symbol} - {e}")
+        except (DatabaseError, DataError, DataValidationError):
+            # 已知异常,记录日志后向上传播
+            logger.error(f"创建版本失败: {symbol}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"创建版本失败(未预期异常): {symbol} - {e}")
+            raise DatabaseError(
+                f"创建版本失败: {str(e)}",
+                error_code="VERSION_CREATE_FAILED",
+                symbol=symbol
+            ) from e
 
         finally:
             if conn:
@@ -215,9 +234,18 @@ class DataVersionManager:
                 logger.debug(f"股票 {symbol} 无活跃版本")
                 return None
 
-        except Exception as e:
-            logger.error(f"获取活跃版本失败: {symbol} - {e}")
+        except DatabaseError:
+            # 数据库异常,记录日志后向上传播
+            logger.error(f"获取活跃版本失败: {symbol}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"获取活跃版本失败(未预期异常): {symbol} - {e}")
+            raise DatabaseError(
+                f"查询活跃版本失败: {str(e)}",
+                error_code="QUERY_ACTIVE_VERSION_FAILED",
+                symbol=symbol
+            ) from e
 
     def get_version_by_number(
         self,
@@ -267,9 +295,19 @@ class DataVersionManager:
             else:
                 return None
 
-        except Exception as e:
-            logger.error(f"获取版本失败: {symbol} - {version_number} - {e}")
+        except DatabaseError:
+            # 数据库异常,记录日志后向上传播
+            logger.error(f"获取版本失败: {symbol} - {version_number}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"获取版本失败(未预期异常): {symbol} - {version_number} - {e}")
+            raise DatabaseError(
+                f"查询版本失败: {str(e)}",
+                error_code="QUERY_VERSION_FAILED",
+                symbol=symbol,
+                version_number=version_number
+            ) from e
 
     def get_version_history(
         self,
@@ -321,9 +359,18 @@ class DataVersionManager:
             logger.debug(f"获取版本历史: {symbol} - {len(versions)}个版本")
             return versions
 
-        except Exception as e:
-            logger.error(f"获取版本历史失败: {symbol} - {e}")
+        except DatabaseError:
+            # 数据库异常,记录日志后向上传播
+            logger.error(f"获取版本历史失败: {symbol}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"获取版本历史失败(未预期异常): {symbol} - {e}")
+            raise DatabaseError(
+                f"查询版本历史失败: {str(e)}",
+                error_code="QUERY_VERSION_HISTORY_FAILED",
+                symbol=symbol
+            ) from e
 
     def compare_versions(
         self,
@@ -388,9 +435,20 @@ class DataVersionManager:
             logger.info(f"版本对比: {symbol} - {version1} vs {version2}")
             return comparison
 
-        except Exception as e:
-            logger.error(f"版本对比失败: {symbol} - {e}")
+        except (DatabaseError, DataValidationError):
+            # 已知异常(包括版本不存在等),记录日志后向上传播
+            logger.error(f"版本对比失败: {symbol}")
             raise
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"版本对比失败(未预期异常): {symbol} - {e}")
+            raise DatabaseError(
+                f"版本对比失败: {str(e)}",
+                error_code="VERSION_COMPARE_FAILED",
+                symbol=symbol,
+                version1=version1,
+                version2=version2
+            ) from e
 
     def set_active_version(self, symbol: str, version_number: str) -> bool:
         """
@@ -433,9 +491,19 @@ class DataVersionManager:
             logger.info(f"设置活跃版本: {symbol} - {version_number}")
             return True
 
-        except Exception as e:
-            logger.error(f"设置活跃版本失败: {symbol} - {version_number} - {e}")
+        except (DatabaseError, DataValidationError):
+            # 已知异常(包括版本不存在等),记录日志后向上传播
+            logger.error(f"设置活跃版本失败: {symbol} - {version_number}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"设置活跃版本失败(未预期异常): {symbol} - {version_number} - {e}")
+            raise DatabaseError(
+                f"设置活跃版本失败: {str(e)}",
+                error_code="SET_ACTIVE_VERSION_FAILED",
+                symbol=symbol,
+                version_number=version_number
+            ) from e
 
     def cleanup_old_versions(
         self,
@@ -506,9 +574,18 @@ class DataVersionManager:
 
             return result
 
-        except Exception as e:
-            logger.error(f"版本清理失败: {e}")
+        except DatabaseError:
+            # 数据库异常,记录日志后向上传播
+            logger.error(f"版本清理失败")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"版本清理失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"版本清理失败: {str(e)}",
+                error_code="VERSION_CLEANUP_FAILED",
+                keep_recent=keep_recent
+            ) from e
 
     def get_version_chain(self, symbol: str, version_number: str) -> List[Dict[str, Any]]:
         """
@@ -571,9 +648,19 @@ class DataVersionManager:
             logger.debug(f"获取版本链: {symbol} - {version_number} - {len(chain)}层")
             return chain
 
-        except Exception as e:
-            logger.error(f"获取版本链失败: {symbol} - {version_number} - {e}")
+        except DatabaseError:
+            # 数据库异常,记录日志后向上传播
+            logger.error(f"获取版本链失败: {symbol} - {version_number}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"获取版本链失败(未预期异常): {symbol} - {version_number} - {e}")
+            raise DatabaseError(
+                f"查询版本链失败: {str(e)}",
+                error_code="QUERY_VERSION_CHAIN_FAILED",
+                symbol=symbol,
+                version_number=version_number
+            ) from e
 
     def _generate_version_number(self, symbol: str) -> str:
         """
@@ -647,9 +734,18 @@ class DataVersionManager:
             logger.debug(f"生成版本号: {symbol} - {version_number}")
             return version_number
 
-        except Exception as e:
-            logger.error(f"生成版本号失败: {symbol} - {e}")
+        except DatabaseError:
+            # 数据库异常,记录日志后向上传播
+            logger.error(f"生成版本号失败: {symbol}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"生成版本号失败(未预期异常): {symbol} - {e}")
+            raise DatabaseError(
+                f"生成版本号失败: {str(e)}",
+                error_code="GENERATE_VERSION_NUMBER_FAILED",
+                symbol=symbol
+            ) from e
 
 
 # ==================== 便捷函数 ====================

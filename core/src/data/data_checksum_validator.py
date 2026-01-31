@@ -25,8 +25,10 @@ import pickle
 
 try:
     from ..database.db_manager import DatabaseManager, get_database
+    from ..exceptions import DataValidationError, DatabaseError
 except ImportError:
     from src.database.db_manager import DatabaseManager, get_database
+    from src.exceptions import DataValidationError, DatabaseError
 
 
 class DataChecksumValidator:
@@ -123,11 +125,31 @@ class DataChecksumValidator:
                 elif method == 'md5':
                     return hashlib.md5(data_bytes).hexdigest()
                 else:
-                    raise ValueError(f"不支持的哈希方法: {method}")
+                    raise DataValidationError(
+                        f"不支持的哈希方法: {method}",
+                        error_code="UNSUPPORTED_HASH_METHOD",
+                        method=method,
+                        supported_methods=['sha256', 'md5']
+                    )
 
-        except Exception as e:
-            logger.error(f"计算校验和失败: {e}")
+        except DataValidationError:
+            # 已知验证异常,向上传播
             raise
+        except (ValueError, KeyError, AttributeError) as e:
+            # 数据格式或结构问题
+            logger.error(f"计算校验和失败(数据格式错误): {e}")
+            raise DataValidationError(
+                f"数据格式不符合要求: {str(e)}",
+                error_code="INVALID_DATA_FORMAT",
+                error_detail=str(e)
+            ) from e
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"计算校验和失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"校验和计算失败: {str(e)}",
+                error_code="CHECKSUM_CALCULATION_FAILED"
+            ) from e
 
     @staticmethod
     def validate_checksum(
@@ -161,9 +183,17 @@ class DataChecksumValidator:
 
             return is_valid, actual_checksum
 
-        except Exception as e:
-            logger.error(f"校验和验证失败: {e}")
+        except DataValidationError:
+            # 校验和计算异常,向上传播
             raise
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"校验和验证失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"校验和验证失败: {str(e)}",
+                error_code="CHECKSUM_VALIDATION_FAILED",
+                expected=expected_checksum
+            ) from e
 
     @staticmethod
     def calculate_incremental_checksum(
@@ -260,9 +290,24 @@ class DataChecksumValidator:
 
             return checksums
 
-        except Exception as e:
-            logger.error(f"增量校验和计算失败: {e}")
+        except DataValidationError:
+            # 校验和计算异常,向上传播
             raise
+        except (KeyError, AttributeError, ValueError) as e:
+            # 数据结构或索引问题
+            logger.error(f"增量校验和计算失败(数据结构错误): {e}")
+            raise DataValidationError(
+                f"数据结构不符合要求: {str(e)}",
+                error_code="INVALID_DATA_STRUCTURE",
+                error_detail=str(e)
+            ) from e
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"增量校验和计算失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"增量校验和计算失败: {str(e)}",
+                error_code="INCREMENTAL_CHECKSUM_FAILED"
+            ) from e
 
     def save_chunk_checksums(
         self,
@@ -341,9 +386,27 @@ class DataChecksumValidator:
 
             return chunks_saved
 
-        except Exception as e:
-            logger.error(f"保存分块校验和失败: {e}")
+        except (DataValidationError, DatabaseError):
+            # 已知异常,向上传播
             raise
+        except ValueError as e:
+            # 参数验证异常
+            logger.error(f"保存分块校验和失败(参数错误): {e}")
+            raise DataValidationError(
+                str(e),
+                error_code="INVALID_CHUNK_TYPE",
+                chunk_type=chunk_type,
+                supported_types=['daily', 'weekly', 'monthly']
+            ) from e
+        except Exception as e:
+            # 未预期的异常,可能是数据库操作失败
+            logger.error(f"保存分块校验和失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"保存分块校验和失败: {str(e)}",
+                error_code="SAVE_CHUNK_CHECKSUM_FAILED",
+                version_id=version_id,
+                chunk_type=chunk_type
+            ) from e
 
     def validate_chunk_checksums(
         self,
@@ -433,9 +496,18 @@ class DataChecksumValidator:
 
             return validation_result
 
-        except Exception as e:
-            logger.error(f"分块校验和验证失败: {e}")
+        except (DataValidationError, DatabaseError):
+            # 已知异常,向上传播
             raise
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"分块校验和验证失败(未预期异常): {e}")
+            raise DataValidationError(
+                f"分块校验和验证失败: {str(e)}",
+                error_code="CHUNK_VALIDATION_FAILED",
+                version_id=version_id,
+                chunk_type=chunk_type
+            ) from e
 
     def _save_single_chunk(
         self,
@@ -464,9 +536,18 @@ class DataChecksumValidator:
                 (version_id, chunk_type, chunk_key, checksum, record_count)
             )
 
-        except Exception as e:
-            logger.error(f"保存分块校验和失败: {chunk_key} - {e}")
+        except DatabaseError:
+            # 数据库异常,向上传播
+            logger.error(f"保存分块校验和失败: {chunk_key}")
             raise
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"保存分块校验和失败(未预期异常): {chunk_key} - {e}")
+            raise DatabaseError(
+                f"保存分块校验和失败: {str(e)}",
+                error_code="SAVE_SINGLE_CHUNK_FAILED",
+                chunk_key=chunk_key
+            ) from e
 
 
 # ==================== 便捷函数 ====================
