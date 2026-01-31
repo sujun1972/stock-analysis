@@ -18,6 +18,26 @@ from src.models.model_trainer import (
 )
 
 
+def unwrap_response(response):
+    """从Response对象中提取数据"""
+    if hasattr(response, 'data'):
+        return response.data
+    return response
+
+
+def unwrap_prepare_data(response):
+    """从prepare_data的Response中提取训练数据"""
+    if hasattr(response, 'data'):
+        data = response.data
+        return (
+            data['X_train'], data['y_train'],
+            data['X_valid'], data['y_valid'],
+            data['X_test'], data['y_test']
+        )
+    # 如果已经是元组，直接返回
+    return response
+
+
 # ==================== Fixtures ====================
 
 @pytest.fixture
@@ -129,7 +149,17 @@ class TestEndToEndWorkflow:
         assert -1 <= metrics['ic'] <= 1
 
         # 6. 保存模型
-        model_path = trainer.save_model('lightgbm_stock_model', save_metrics=True)
+        model_path_response = trainer.save_model('lightgbm_stock_model', save_metrics=True)
+        # 处理Response对象
+        if hasattr(model_path_response, 'data'):
+            data = model_path_response.data
+            # 可能是字典 {'model_path': ..., 'metadata_path': ...} 或直接是路径字符串
+            if isinstance(data, dict):
+                model_path = data.get('model_path', data.get('path'))
+            else:
+                model_path = data
+        else:
+            model_path = model_path_response
 
         # 验证文件存在
         assert Path(model_path).exists()
@@ -196,7 +226,7 @@ class TestEndToEndWorkflow:
         feature_columns
     ):
         """测试便捷函数工作流"""
-        trainer, metrics = train_stock_model(
+        response = train_stock_model(
             realistic_stock_data,
             feature_columns,
             'target',
@@ -205,6 +235,14 @@ class TestEndToEndWorkflow:
             train_ratio=0.7,
             valid_ratio=0.15
         )
+
+        # 处理Response对象
+        if hasattr(response, 'data'):
+            result = response.data
+            trainer = result.get('trainer') or result.get('model')
+            metrics = result.get('metrics') or result.get('test_metrics')
+        else:
+            trainer, metrics = response
 
         # 验证返回值
         assert isinstance(trainer, ModelTrainer)
@@ -237,8 +275,10 @@ class TestModelComparison:
             output_dir=temp_model_dir
         )
         lgb_trainer = ModelTrainer(config=lgb_config)
-        X_train, y_train, X_valid, y_valid, X_test, y_test = lgb_trainer.prepare_data(
-            realistic_stock_data, feature_columns, 'target', split_config
+        X_train, y_train, X_valid, y_valid, X_test, y_test = unwrap_prepare_data(
+            lgb_trainer.prepare_data(
+                realistic_stock_data, feature_columns, 'target', split_config
+            )
         )
         lgb_trainer.train(X_train, y_train, X_valid, y_valid)
         lgb_metrics = unwrap_response(lgb_trainer.evaluate(X_test, y_test, verbose=False))
@@ -502,8 +542,10 @@ class TestErrorRecovery:
         trainer1 = ModelTrainer(config=config1)
 
         split_config = DataSplitConfig()
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer1.prepare_data(
-            realistic_stock_data, feature_columns, 'target', split_config
+        X_train, y_train, X_valid, y_valid, X_test, y_test = unwrap_prepare_data(
+            trainer1.prepare_data(
+                realistic_stock_data, feature_columns, 'target', split_config
+            )
         )
 
         trainer1.train(X_train, y_train, X_valid, y_valid)
@@ -519,7 +561,7 @@ class TestErrorRecovery:
         trainer2.load_model('test_model')
 
         # 应该能正常评估
-        metrics = trainer2.evaluate(X_test, y_test, verbose=False)
+        metrics = unwrap_response(trainer2.evaluate(X_test, y_test, verbose=False))
         assert 'ic' in metrics
 
 

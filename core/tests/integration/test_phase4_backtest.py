@@ -21,6 +21,13 @@ import pandas as pd
 import numpy as np
 
 
+def unwrap_response(response):
+    """从Response对象中提取数据"""
+    if hasattr(response, 'data'):
+        return response.data
+    return response
+
+
 def create_test_market_data(n_days: int = 100, n_stocks: int = 10) -> Tuple:
     """创建测试市场数据"""
     np.random.seed(42)
@@ -179,7 +186,7 @@ def test_performance_analyzer():
 
     # 全面分析
     print("\n2.6 全面绩效分析")
-    metrics = analyzer.calculate_all_metrics(verbose=False)
+    metrics = unwrap_response(analyzer.calculate_all_metrics(verbose=False))
 
     print(f"  计算指标数: {len(metrics)}")
 
@@ -214,18 +221,20 @@ def test_backtest_engine():
 
     # 运行回测
     print("\n3.3 运行回测")
-    results = engine.backtest_long_only(
+    results = unwrap_response(engine.backtest_long_only(
         signals=signals_df,
         prices=prices_df,
         top_n=5,
         holding_period=5,
         rebalance_freq='W'
-    )
+    ))
 
     print(f"  回测完成")
 
     # 检查结果
     print("\n3.4 检查回测结果")
+    # 确保results是字典
+    assert isinstance(results, dict), f"results应该是字典，实际类型: {type(results)}"
     portfolio_value = results['portfolio_value']
     daily_returns = results['daily_returns']
 
@@ -287,13 +296,13 @@ def test_integrated_backtest():
         verbose=False
     )
 
-    results = engine.backtest_long_only(
+    results = unwrap_response(engine.backtest_long_only(
         signals=signals_df,
         prices=prices_df,
         top_n=backtest_config['top_n'],
         holding_period=backtest_config['holding_period'],
         rebalance_freq=backtest_config['rebalance_freq']
-    )
+    ))
 
     # 绩效分析
     print("\n4.4 绩效分析")
@@ -303,7 +312,7 @@ def test_integrated_backtest():
         periods_per_year=252
     )
 
-    metrics = analyzer.calculate_all_metrics(verbose=True)
+    metrics = unwrap_response(analyzer.calculate_all_metrics(verbose=True))
 
     # 验证关键指标
     print("\n4.5 验证关键指标")

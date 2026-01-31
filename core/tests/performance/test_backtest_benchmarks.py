@@ -41,13 +41,10 @@ from .benchmarks import (
 
 def unwrap_response(response):
     """
-    从 Response 对象中提取数据
-
-    在重构过程中，许多函数从直接返回数据改为返回 Response 对象。
-    此函数用于统一解包 Response 对象，提取其中的实际数据。
+    从 Response 对象中提取数据（兼容性封装）
 
     Args:
-        response: Response 对象或原始数据（兼容旧 API）
+        response: Response 对象或原始数据
 
     Returns:
         解包后的数据（通常是 DataFrame 或 dict）

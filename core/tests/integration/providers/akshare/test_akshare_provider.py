@@ -27,6 +27,16 @@ from src.providers.akshare.exceptions import (
 )
 
 
+def unwrap_response(response):
+    """从Response对象中提取数据"""
+    if hasattr(response, 'data'):
+        # 如果data是None，返回空DataFrame
+        if response.data is None:
+            return pd.DataFrame()
+        return response.data
+    return response if response is not None else pd.DataFrame()
+
+
 class TestAkShareProviderIntegration(unittest.TestCase):
     """AkShareProvider 集成测试（真实API调用）"""
 
@@ -53,7 +63,10 @@ class TestAkShareProviderIntegration(unittest.TestCase):
         print("\n[测试1] 获取股票列表...")
 
         try:
-            result = self.provider.get_stock_list()
+            response = self.provider.get_stock_list()
+
+            # 处理Response对象
+            result = unwrap_response(response)
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)
@@ -77,12 +90,18 @@ class TestAkShareProviderIntegration(unittest.TestCase):
             end_date = datetime.now().strftime('%Y%m%d')
             start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
 
-            result = self.provider.get_daily_data(
+            response = self.provider.get_daily_data(
                 code='000001',
                 start_date=start_date,
                 end_date=end_date,
                 adjust='qfq'
             )
+
+            # 处理Response对象 - 检查错误状态
+            if hasattr(response, 'status') and response.status == 'ERROR':
+                self.skipTest(f"API错误: {response.error_code}")
+
+            result = unwrap_response(response)
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)

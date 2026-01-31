@@ -20,6 +20,25 @@ import numpy as np
 from typing import Tuple
 
 
+def unwrap_response(response):
+    """从Response对象中提取数据"""
+    if hasattr(response, 'data'):
+        return response.data
+    return response
+
+
+def unwrap_prepare_data(response):
+    """从prepare_data的Response中提取训练数据"""
+    if hasattr(response, 'data'):
+        data = response.data
+        return (
+            data['X_train'], data['y_train'],
+            data['X_valid'], data['y_valid'],
+            data['X_test'], data['y_test']
+        )
+    return response
+
+
 def create_test_data(n_samples: int = 1000, n_features: int = 20) -> Tuple:
     """创建测试数据"""
     np.random.seed(42)
@@ -191,7 +210,7 @@ def test_model_evaluator():
 
     # 全面评估
     print("\n2.8 全面评估:")
-    metrics = evaluator.evaluate_regression(predictions, actual_returns, verbose=False)
+    metrics = unwrap_response(evaluator.evaluate_regression(predictions, actual_returns, verbose=False))
 
     print(f"  评估指标数量: {len(metrics)}")
     assert 'ic' in metrics, "缺少IC指标"
@@ -252,7 +271,7 @@ def test_model_trainer():
 
     # 评估
     print("\n3.5 评估模型")
-    test_metrics = trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False)
+    test_metrics = unwrap_response(trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False))
 
     print(f"  测试集指标:")
     print(f"    RMSE: {test_metrics['rmse']:.6f}")
@@ -276,7 +295,7 @@ def test_model_trainer():
     print("  ✓ 模型已加载")
 
     # 验证加载后的模型
-    new_metrics = new_trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False)
+    new_metrics = unwrap_response(new_trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False))
     assert abs(new_metrics['rmse'] - test_metrics['rmse']) < 1e-6, "加载后RMSE不一致"
     print("  ✓ 加载后模型预测一致")
 
@@ -299,7 +318,7 @@ def test_integrated_workflow():
     print("\n4.2 使用便捷函数训练模型")
     from src.models.model_trainer import train_stock_model
 
-    trainer, test_metrics = train_stock_model(
+    response = train_stock_model(
         df=df,
         feature_cols=feature_cols,
         target_col='target',
@@ -312,6 +331,14 @@ def test_integrated_workflow():
         valid_ratio=0.15,
         save_path=None
     )
+
+    # 处理Response对象
+    if hasattr(response, 'data'):
+        result = response.data
+        trainer = result.get('trainer') or result.get('model')
+        test_metrics = result.get('metrics') or result.get('test_metrics')
+    else:
+        trainer, test_metrics = response
 
     print(f"\n4.3 模型性能:")
     print(f"  RMSE: {test_metrics['rmse']:.6f}")

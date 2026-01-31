@@ -35,6 +35,24 @@ from src.providers.tushare.exceptions import (
 )
 
 
+def unwrap_response(response):
+    """从Response对象中提取数据"""
+    if hasattr(response, 'status'):
+        # 检查错误状态
+        if response.status == 'ERROR':
+            error_code = getattr(response, 'error_code', '')
+            if 'RATE_LIMIT' in error_code:
+                raise TushareRateLimitError(str(response.message))
+            elif 'PERMISSION' in error_code:
+                raise TusharePermissionError(str(response.message))
+        # 返回数据，如果为None返回空DataFrame
+        data = response.data if hasattr(response, 'data') else None
+        if data is None:
+            return pd.DataFrame()
+        return data
+    return response if response is not None else pd.DataFrame()
+
+
 class TestTushareProviderIntegration(unittest.TestCase):
     """TushareProvider 集成测试（需要真实 Token）"""
 
@@ -70,7 +88,7 @@ class TestTushareProviderIntegration(unittest.TestCase):
         print("\n[测试1] 获取股票列表...")
 
         try:
-            result = self.provider.get_stock_list()
+            result = unwrap_response(self.provider.get_stock_list())
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)
@@ -97,12 +115,12 @@ class TestTushareProviderIntegration(unittest.TestCase):
             end_date = datetime.now().strftime('%Y%m%d')
             start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
 
-            result = self.provider.get_daily_data(
+            result = unwrap_response(self.provider.get_daily_data(
                 code='000001',
                 start_date=start_date,
                 end_date=end_date,
                 adjust='qfq'
-            )
+            ))
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)
@@ -139,11 +157,11 @@ class TestTushareProviderIntegration(unittest.TestCase):
             end_date = datetime.now().strftime('%Y%m%d')
             start_date = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
 
-            result = self.provider.get_daily_batch(
+            result = unwrap_response(self.provider.get_daily_batch(
                 codes=codes,
                 start_date=start_date,
                 end_date=end_date
-            )
+            ))
 
             # 验证结果
             self.assertIsInstance(result, dict)
@@ -168,7 +186,7 @@ class TestTushareProviderIntegration(unittest.TestCase):
         print("\n[测试4] 获取新股列表...")
 
         try:
-            result = self.provider.get_new_stocks(days=90)
+            result = unwrap_response(self.provider.get_new_stocks(days=90))
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)
@@ -194,7 +212,7 @@ class TestTushareProviderIntegration(unittest.TestCase):
         print("\n[测试5] 获取退市股票列表...")
 
         try:
-            result = self.provider.get_delisted_stocks()
+            result = unwrap_response(self.provider.get_delisted_stocks())
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)
@@ -222,12 +240,12 @@ class TestTushareProviderIntegration(unittest.TestCase):
             # 获取最近一天的5分钟数据
             date = datetime.now().strftime('%Y%m%d')
 
-            result = self.provider.get_minute_data(
+            result = unwrap_response(self.provider.get_minute_data(
                 code='000001',
                 period='5',
                 start_date=date,
                 end_date=date
-            )
+            ))
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)
@@ -252,9 +270,9 @@ class TestTushareProviderIntegration(unittest.TestCase):
         print("\n[测试7] 获取实时行情...")
 
         try:
-            result = self.provider.get_realtime_quotes(
+            result = unwrap_response(self.provider.get_realtime_quotes(
                 codes=['000001', '600000']
-            )
+            ))
 
             # 验证结果
             self.assertIsInstance(result, pd.DataFrame)
@@ -284,7 +302,7 @@ class TestTushareProviderIntegration(unittest.TestCase):
 
         try:
             # 获取股票列表
-            stock_list = self.provider.get_stock_list()
+            stock_list = unwrap_response(self.provider.get_stock_list())
             self.assertGreater(len(stock_list), 0)
 
             # 随机选择一只股票
@@ -295,11 +313,11 @@ class TestTushareProviderIntegration(unittest.TestCase):
             end_date = datetime.now().strftime('%Y%m%d')
             start_date = (datetime.now() - timedelta(days=5)).strftime('%Y%m%d')
 
-            daily_data = self.provider.get_daily_data(
+            daily_data = unwrap_response(self.provider.get_daily_data(
                 code=test_code,
                 start_date=start_date,
                 end_date=end_date
-            )
+            ))
 
             if not daily_data.empty:
                 # 检查数据完整性
@@ -333,7 +351,12 @@ class TestTushareProviderIntegration(unittest.TestCase):
         print("\n[测试9] 错误处理...")
 
         # 测试无效股票代码
-        result = self.provider.get_daily_data(code='999999')
+        response = self.provider.get_daily_data(code='999999')
+        # 处理Response对象，允许WARNING状态
+        if hasattr(response, 'status'):
+            result = response.data if hasattr(response, 'data') else pd.DataFrame()
+        else:
+            result = response
         self.assertIsInstance(result, pd.DataFrame)
         self.assertTrue(result.empty)
 

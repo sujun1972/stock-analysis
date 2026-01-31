@@ -340,7 +340,12 @@ class TestBatchFactorAnalysis:
             forward_periods=5,
             parallel_config=config_serial
         )
-        reports_serial = analyzer_serial.batch_analyze(factor_dict, prices_df)
+        reports_serial_response = analyzer_serial.batch_analyze(factor_dict, prices_df)
+        # 处理Response对象
+        if hasattr(reports_serial_response, 'data'):
+            reports_serial = reports_serial_response.data
+        else:
+            reports_serial = reports_serial_response
 
         # 并行批量分析
         config_parallel = ParallelComputingConfig(
@@ -352,7 +357,12 @@ class TestBatchFactorAnalysis:
             forward_periods=5,
             parallel_config=config_parallel
         )
-        reports_parallel = analyzer_parallel.batch_analyze(factor_dict, prices_df)
+        reports_parallel_response = analyzer_parallel.batch_analyze(factor_dict, prices_df)
+        # 处理Response对象
+        if hasattr(reports_parallel_response, 'data'):
+            reports_parallel = reports_parallel_response.data
+        else:
+            reports_parallel = reports_parallel_response
 
         # 验证分析成功数量一致
         assert len(reports_serial) == len(reports_parallel)

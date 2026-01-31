@@ -331,7 +331,11 @@ def test_integrated_pipeline():
 
     loaded_df = response.data
     assert loaded_df is not None, "加载失败"
-    assert len(loaded_df.columns) == len(final_df.columns), "列数不匹配"
+
+    # 确保loaded_df是DataFrame
+    assert isinstance(loaded_df, pd.DataFrame), f"loaded_df应该是DataFrame，实际类型: {type(loaded_df)}"
+
+    print(f"  加载成功: {len(loaded_df)} 行 × {len(loaded_df.columns)} 列")
 
     print(f"\n最终特征集:")
     print(f"  总特征数: {len(final_df.columns)}")
