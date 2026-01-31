@@ -1,6 +1,11 @@
 """
 Alpha因子模块扩展测试
 包含深度测试、集成测试、性能测试和数据质量测试
+
+注意:
+- add_all_alpha_factors() 方法返回 Response 对象，需要通过 result.data 访问 DataFrame
+- 便捷函数 calculate_all_alpha_factors() 也返回 Response 对象
+- Response.data 包含计算后的 DataFrame，Response.metadata 包含执行元信息
 """
 
 import pytest
@@ -110,7 +115,7 @@ class TestDataQuality:
 
         factor_names = af.get_factor_names()
         for factor in factor_names:
-            inf_count = np.isinf(result[factor]).sum()
+            inf_count = np.isinf(result.data[factor]).sum()
             assert inf_count == 0, f"因子 {factor} 包含 {inf_count} 个无穷大值"
 
     def test_nan_percentage_reasonable(self, sample_price_data):
@@ -118,11 +123,11 @@ class TestDataQuality:
         af = AlphaFactors(sample_price_data)
         result = af.add_all_alpha_factors()
 
-        total_rows = len(result)
+        total_rows = len(result.data)
         factor_names = af.get_factor_names()
 
         for factor in factor_names:
-            nan_count = result[factor].isna().sum()
+            nan_count = result.data[factor].isna().sum()
             nan_percentage = nan_count / total_rows * 100
 
             # NaN值不应超过50%（考虑到滚动窗口）
@@ -135,26 +140,26 @@ class TestDataQuality:
         result = af.add_all_alpha_factors()
 
         # 测试相关系数在[-1, 1]范围内
-        corr_factors = [col for col in result.columns if 'CORR' in col]
+        corr_factors = [col for col in result.data.columns if 'CORR' in col]
         for factor in corr_factors:
-            valid_values = result[factor].dropna()
+            valid_values = result.data[factor].dropna()
             if len(valid_values) > 0:
                 assert valid_values.min() >= -1.1, f"{factor} 最小值异常"
                 assert valid_values.max() <= 1.1, f"{factor} 最大值异常"
 
         # 测试R2在[0, 1]范围内（排除相关系数因子）
-        r2_factors = [col for col in result.columns if 'R2' in col and 'CORR' not in col]
+        r2_factors = [col for col in result.data.columns if 'R2' in col and 'CORR' not in col]
         for factor in r2_factors:
-            valid_values = result[factor].dropna()
+            valid_values = result.data[factor].dropna()
             if len(valid_values) > 0:
                 assert valid_values.min() >= -0.2, f"{factor} 最小值异常"
                 assert valid_values.max() <= 1.2, f"{factor} 最大值异常"
 
         # 单独测试包含CORR的因子（价格-成交量相关性等，范围应该是[-1, 1]）
         # 注意: PV_CORR和PV_ABS_CORR都是相关性因子
-        pv_corr_factors = [col for col in result.columns if 'PV_CORR' in col or 'PV_ABS_CORR' in col or ('CORR' in col and 'R2' not in col and 'PV' not in col)]
+        pv_corr_factors = [col for col in result.data.columns if 'PV_CORR' in col or 'PV_ABS_CORR' in col or ('CORR' in col and 'R2' not in col and 'PV' not in col)]
         for factor in pv_corr_factors:
-            valid_values = result[factor].dropna()
+            valid_values = result.data[factor].dropna()
             if len(valid_values) > 0:
                 assert valid_values.min() >= -1.1, f"{factor} 最小值异常"
                 assert valid_values.max() <= 1.1, f"{factor} 最大值异常"
@@ -165,9 +170,9 @@ class TestDataQuality:
         result = af.add_all_alpha_factors()
 
         # 分割为两个时间段
-        mid_point = len(result) // 2
-        period1 = result.iloc[:mid_point]
-        period2 = result.iloc[mid_point:]
+        mid_point = len(result.data) // 2
+        period1 = result.data.iloc[:mid_point]
+        period2 = result.data.iloc[mid_point:]
 
         factor_names = af.get_factor_names()
 
@@ -266,7 +271,7 @@ class TestPerformanceDeep:
         assert elapsed_time < 10, f"大数据集处理过慢: {elapsed_time:.2f}秒"
 
         # 验证结果正确
-        assert len(result) == 1000
+        assert len(result.data) == 1000
         assert len(af.get_factor_names()) > 50
 
     def test_inplace_memory_efficiency(self, sample_price_data):

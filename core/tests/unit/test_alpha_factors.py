@@ -1,6 +1,11 @@
 """
 Alpha因子模块单元测试
 测试所有因子计算器的功能和边界情况
+
+注意:
+- calculate_all() 方法返回 Response 对象，需要通过 result.data 访问 DataFrame
+- add_* 方法直接返回 DataFrame，可以直接访问
+- 便捷函数 (calculate_all_alpha_factors等) 返回 Response 对象
 """
 
 import pytest
@@ -166,9 +171,9 @@ class TestMomentumFactorCalculator:
         result = calc.calculate_all()
 
         # 检查所有类型的因子都已创建
-        assert any('MOM' in col for col in result.columns)
-        assert any('RS' in col for col in result.columns)
-        assert any('ACC' in col for col in result.columns)
+        assert any('MOM' in col for col in result.data.columns)
+        assert any('RS' in col for col in result.data.columns)
+        assert any('ACC' in col for col in result.data.columns)
 
     def test_inplace_modification(self, sample_price_data):
         """测试原地修改模式"""
@@ -221,8 +226,8 @@ class TestReversalFactorCalculator:
         calc = ReversalFactorCalculator(sample_price_data)
         result = calc.calculate_all()
 
-        assert any('REV' in col for col in result.columns)
-        assert any('ZSCORE' in col for col in result.columns)
+        assert any('REV' in col for col in result.data.columns)
+        assert any('ZSCORE' in col for col in result.data.columns)
 
 
 # ==================== 波动率因子测试 ====================
@@ -266,7 +271,7 @@ class TestVolatilityFactorCalculator:
         calc = VolatilityFactorCalculator(sample_price_data)
         result = calc.calculate_all()
 
-        assert any('VOLATILITY' in col for col in result.columns)
+        assert any('VOLATILITY' in col for col in result.data.columns)
 
 
 # ==================== 成交量因子测试 ====================
@@ -317,7 +322,7 @@ class TestVolumeFactorCalculator:
         calc = VolumeFactorCalculator(sample_price_data)
         result = calc.calculate_all()
 
-        assert any('VOLUME' in col for col in result.columns)
+        assert any('VOLUME' in col for col in result.data.columns)
 
 
 # ==================== 趋势因子测试 ====================
@@ -360,8 +365,8 @@ class TestTrendFactorCalculator:
         calc = TrendFactorCalculator(sample_price_data)
         result = calc.calculate_all()
 
-        assert any('TREND' in col for col in result.columns)
-        assert any('BREAKOUT' in col for col in result.columns)
+        assert any('TREND' in col for col in result.data.columns)
+        assert any('BREAKOUT' in col for col in result.data.columns)
 
 
 # ==================== 流动性因子测试 ====================
@@ -506,26 +511,26 @@ class TestConvenienceFunctions:
         """测试一键计算所有因子的便捷函数"""
         result = calculate_all_alpha_factors(sample_price_data, inplace=False)
 
-        # 检查返回的是新DataFrame
-        assert result is not sample_price_data
-        assert len(result.columns) > len(sample_price_data.columns)
+        # 检查返回的是Response对象
+        assert result.data is not sample_price_data
+        assert len(result.data.columns) > len(sample_price_data.columns)
 
     def test_calculate_momentum_factors(self, sample_price_data):
         """测试计算动量因子的便捷函数"""
         result = calculate_momentum_factors(sample_price_data, inplace=False)
 
         # 应该包含动量因子
-        assert any('MOM' in col for col in result.columns)
-        assert any('RS' in col for col in result.columns)
-        assert any('ACC' in col for col in result.columns)
+        assert any('MOM' in col for col in result.data.columns)
+        assert any('RS' in col for col in result.data.columns)
+        assert any('ACC' in col for col in result.data.columns)
 
     def test_calculate_reversal_factors(self, sample_price_data):
         """测试计算反转因子的便捷函数"""
         result = calculate_reversal_factors(sample_price_data, inplace=False)
 
         # 应该包含反转因子
-        assert any('REV' in col for col in result.columns)
-        assert any('ZSCORE' in col for col in result.columns)
+        assert any('REV' in col for col in result.data.columns)
+        assert any('ZSCORE' in col for col in result.data.columns)
 
 
 # ==================== 边界情况和异常测试 ====================
@@ -568,9 +573,9 @@ class TestEdgeCases:
         result = af.add_all_alpha_factors()
 
         # 动量应该接近0
-        mom_cols = [col for col in result.columns if col.startswith('MOM')]
+        mom_cols = [col for col in result.data.columns if col.startswith('MOM')]
         for col in mom_cols:
-            valid_values = result[col].dropna()
+            valid_values = result.data[col].dropna()
             if len(valid_values) > 0:
                 assert (valid_values.abs() < 0.01).all()
 
