@@ -20,6 +20,11 @@ import numpy as np
 from typing import List, Union, Optional, Any, Tuple, Literal
 from datetime import datetime
 
+try:
+    from ..exceptions import DataValidationError
+except ImportError:
+    from src.exceptions import DataValidationError
+
 
 # ==================== DataFrame验证函数 ====================
 
@@ -54,7 +59,12 @@ def validate_columns_exist(
     is_valid = len(missing_columns) == 0
 
     if not is_valid and raise_error:
-        raise ValueError(f"缺少必需的列: {missing_columns}")
+        raise DataValidationError(
+            f"缺少必需的列: {missing_columns}",
+            error_code="MISSING_REQUIRED_COLUMNS",
+            required_columns=required_columns,
+            missing_columns=missing_columns
+        )
 
     return is_valid, missing_columns
 
@@ -81,7 +91,12 @@ def validate_dataframe_not_empty(
     is_valid = not df.empty and len(df) >= min_rows
 
     if not is_valid and raise_error:
-        raise ValueError(f"DataFrame为空或行数不足（需要至少{min_rows}行，实际{len(df)}行）")
+        raise DataValidationError(
+            f"DataFrame为空或行数不足（需要至少{min_rows}行，实际{len(df)}行）",
+            error_code="INSUFFICIENT_ROWS",
+            min_rows=min_rows,
+            actual_rows=len(df)
+        )
 
     return is_valid
 
@@ -116,8 +131,11 @@ def validate_no_missing_values(
     is_valid = len(invalid_columns) == 0
 
     if not is_valid and raise_error:
-        raise ValueError(
-            f"以下列的缺失值比例超过阈值{threshold}:\n{invalid_columns}"
+        raise DataValidationError(
+            f"以下列的缺失值比例超过阈值{threshold}:\n{invalid_columns}",
+            error_code="EXCESSIVE_MISSING_VALUES",
+            threshold=threshold,
+            invalid_columns=invalid_columns.to_dict()
         )
 
     return is_valid, missing_ratio
@@ -143,8 +161,11 @@ def validate_datetime_index(
     is_valid = isinstance(df.index, pd.DatetimeIndex)
 
     if not is_valid and raise_error:
-        raise ValueError(
-            f"DataFrame索引必须是DatetimeIndex，当前类型: {type(df.index).__name__}"
+        raise DataValidationError(
+            f"DataFrame索引必须是DatetimeIndex，当前类型: {type(df.index).__name__}",
+            error_code="INVALID_INDEX_TYPE",
+            expected_type="DatetimeIndex",
+            actual_type=type(df.index).__name__
         )
 
     return is_valid
@@ -176,7 +197,12 @@ def validate_sorted_index(
 
     if not is_valid and raise_error:
         order = "升序" if ascending else "降序"
-        raise ValueError(f"DataFrame索引必须{order}排列")
+        raise DataValidationError(
+            f"DataFrame索引必须{order}排列",
+            error_code="UNSORTED_INDEX",
+            expected_order=order,
+            ascending=ascending
+        )
 
     return is_valid
 
@@ -217,7 +243,11 @@ def validate_ohlcv_data(
     # 如果缺少列，直接返回
     if not is_valid:
         if raise_error:
-            raise ValueError("\n".join(errors))
+            raise DataValidationError(
+                "\n".join(errors),
+                error_code="OHLCV_VALIDATION_FAILED",
+                errors=errors
+            )
         return False, errors
 
     # 验证价格关系：high >= low
@@ -264,7 +294,11 @@ def validate_ohlcv_data(
     is_valid = len(errors) == 0
 
     if not is_valid and raise_error:
-        raise ValueError("OHLCV数据验证失败:\n" + "\n".join(errors))
+        raise DataValidationError(
+            "OHLCV数据验证失败:\n" + "\n".join(errors),
+            error_code="OHLCV_VALIDATION_FAILED",
+            errors=errors
+        )
 
     return is_valid, errors
 
@@ -317,7 +351,13 @@ def validate_price_range(
     is_valid = len(errors) == 0
 
     if not is_valid and raise_error:
-        raise ValueError("价格范围验证失败:\n" + "\n".join(errors))
+        raise DataValidationError(
+            "价格范围验证失败:\n" + "\n".join(errors),
+            error_code="PRICE_RANGE_VALIDATION_FAILED",
+            errors=errors,
+            min_price=min_price,
+            max_price=max_price
+        )
 
     return is_valid, errors
 
@@ -347,9 +387,12 @@ def validate_daily_return_range(
     is_valid = len(abnormal_returns) == 0
 
     if not is_valid and raise_error:
-        raise ValueError(
+        raise DataValidationError(
             f"存在{len(abnormal_returns)}个异常日收益率（超过±{max_daily_return*100}%）:\n"
-            f"{abnormal_returns}"
+            f"{abnormal_returns}",
+            error_code="ABNORMAL_DAILY_RETURNS",
+            max_daily_return=max_daily_return,
+            abnormal_count=len(abnormal_returns)
         )
 
     return is_valid, abnormal_returns
@@ -387,7 +430,13 @@ def validate_positive_number(
         condition = "正"
 
     if not is_valid and raise_error:
-        raise ValueError(f"{param_name}必须是{condition}数，当前值: {value}")
+        raise DataValidationError(
+            f"{param_name}必须是{condition}数，当前值: {value}",
+            error_code="INVALID_POSITIVE_NUMBER",
+            param_name=param_name,
+            value=value,
+            allow_zero=allow_zero
+        )
 
     return is_valid
 
@@ -445,7 +494,14 @@ def validate_range(
                 errors.append(f"必须小于{max_value}")
 
     if not is_valid and raise_error:
-        raise ValueError(f"{param_name}超出范围（当前值: {value}）: {', '.join(errors)}")
+        raise DataValidationError(
+            f"{param_name}超出范围（当前值: {value}）: {', '.join(errors)}",
+            error_code="VALUE_OUT_OF_RANGE",
+            param_name=param_name,
+            value=value,
+            min_value=min_value,
+            max_value=max_value
+        )
 
     return is_valid
 
@@ -520,8 +576,12 @@ def validate_enum(
     is_valid = value in allowed_values
 
     if not is_valid and raise_error:
-        raise ValueError(
-            f"{param_name}的值'{value}'不在允许列表中: {allowed_values}"
+        raise DataValidationError(
+            f"{param_name}的值'{value}'不在允许列表中: {allowed_values}",
+            error_code="INVALID_ENUM_VALUE",
+            param_name=param_name,
+            value=value,
+            allowed_values=allowed_values
         )
 
     return is_valid
@@ -562,8 +622,12 @@ def validate_window_size(
         errors.append(f"不能大于数据长度{data_length}")
 
     if not is_valid and raise_error:
-        raise ValueError(
-            f"{param_name}不合理（当前值: {window}）: {', '.join(errors)}"
+        raise DataValidationError(
+            f"{param_name}不合理（当前值: {window}）: {', '.join(errors)}",
+            error_code="INVALID_WINDOW_SIZE",
+            param_name=param_name,
+            window=window,
+            data_length=data_length
         )
 
     return is_valid
@@ -598,8 +662,11 @@ def validate_date_range(
     is_valid = start <= end
 
     if not is_valid and raise_error:
-        raise ValueError(
-            f"开始日期({start})不能晚于结束日期({end})"
+        raise DataValidationError(
+            f"开始日期({start})不能晚于结束日期({end})",
+            error_code="INVALID_DATE_RANGE",
+            start_date=str(start),
+            end_date=str(end)
         )
 
     return is_valid
@@ -628,7 +695,12 @@ def validate_frequency_consistency(
     """
     if not isinstance(df.index, pd.DatetimeIndex):
         if raise_error:
-            raise ValueError("DataFrame索引必须是DatetimeIndex")
+            raise DataValidationError(
+                "DataFrame索引必须是DatetimeIndex",
+                error_code="INVALID_INDEX_TYPE",
+                expected_type="DatetimeIndex",
+                actual_type=type(df.index).__name__
+            )
         return False, None
 
     # 推断频率
@@ -639,7 +711,10 @@ def validate_frequency_consistency(
         is_valid = inferred_freq is not None
 
         if not is_valid and raise_error:
-            raise ValueError("无法推断时间序列的频率，数据可能不规则")
+            raise DataValidationError(
+                "无法推断时间序列的频率，数据可能不规则",
+                error_code="IRREGULAR_FREQUENCY"
+            )
 
         return is_valid, inferred_freq
     else:
@@ -647,8 +722,11 @@ def validate_frequency_consistency(
         is_valid = inferred_freq == expected_freq
 
         if not is_valid and raise_error:
-            raise ValueError(
-                f"时间序列频率不匹配: 期望{expected_freq}，推断为{inferred_freq}"
+            raise DataValidationError(
+                f"时间序列频率不匹配: 期望{expected_freq}，推断为{inferred_freq}",
+                error_code="FREQUENCY_MISMATCH",
+                expected_freq=expected_freq,
+                inferred_freq=inferred_freq
             )
 
         return is_valid, inferred_freq

@@ -19,6 +19,11 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Union, Tuple, Literal
 
+try:
+    from ..exceptions import DataValidationError
+except ImportError:
+    from src.exceptions import DataValidationError
+
 
 # ==================== 收益率计算函数 ====================
 
@@ -56,7 +61,12 @@ def calculate_returns(
     elif method == 'log':
         return np.log(prices / prices.shift(periods))
     else:
-        raise ValueError(f"不支持的计算方法: {method}")
+        raise DataValidationError(
+            f"不支持的计算方法: {method}",
+            error_code="UNSUPPORTED_CALCULATION_METHOD",
+            method=method,
+            supported_methods=['simple', 'log']
+        )
 
 
 def calculate_cumulative_returns(
@@ -361,7 +371,11 @@ def exponential_moving_average(
     elif alpha is not None:
         return series.ewm(alpha=alpha, adjust=adjust, min_periods=min_periods).mean()
     else:
-        raise ValueError("必须提供span或alpha参数")
+        raise DataValidationError(
+            "必须提供span或alpha参数",
+            error_code="MISSING_REQUIRED_PARAMETER",
+            required_parameters=['span', 'alpha']
+        )
 
 
 def exponential_weighted_std(
@@ -389,7 +403,11 @@ def exponential_weighted_std(
     elif alpha is not None:
         return series.ewm(alpha=alpha, adjust=adjust, min_periods=min_periods).std()
     else:
-        raise ValueError("必须提供span或alpha参数")
+        raise DataValidationError(
+            "必须提供span或alpha参数",
+            error_code="MISSING_REQUIRED_PARAMETER",
+            required_parameters=['span', 'alpha']
+        )
 
 
 # ==================== 技术指标基础函数 ====================

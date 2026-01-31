@@ -28,12 +28,14 @@ try:
     from .missing_handler import MissingHandler
     from .outlier_detector import OutlierDetector
     from .data_checksum_validator import DataChecksumValidator
+    from ..exceptions import DataValidationError
 except ImportError:
     from src.database.db_manager import DatabaseManager, get_database
     from src.data.data_validator import DataValidator
     from src.data.missing_handler import MissingHandler
     from src.data.outlier_detector import OutlierDetector
     from src.data.data_checksum_validator import DataChecksumValidator
+    from src.exceptions import DataValidationError
 
 
 class DataRepairEngine:
@@ -91,12 +93,21 @@ class DataRepairEngine:
         """
         # 参数验证
         if df is None or len(df) == 0:
-            raise ValueError(f"输入DataFrame为空: {symbol}")
+            raise DataValidationError(
+                f"输入DataFrame为空: {symbol}",
+                error_code="EMPTY_DATAFRAME",
+                symbol=symbol
+            )
 
         required_columns = ['close']  # 至少需要close列
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
-            raise ValueError(f"缺少必需列: {missing_columns}")
+            raise DataValidationError(
+                f"缺少必需列: {missing_columns}",
+                error_code="MISSING_REQUIRED_COLUMNS",
+                symbol=symbol,
+                missing_columns=missing_columns
+            )
 
         try:
             repair_date = datetime.now().date()
@@ -281,7 +292,12 @@ class DataRepairEngine:
             elif method == 'mean':
                 df_repaired = handler.fill_with_rolling_mean(window=5)
             else:
-                raise ValueError(f"不支持的修复方法: {method}")
+                raise DataValidationError(
+                    f"不支持的修复方法: {method}",
+                    error_code="UNSUPPORTED_REPAIR_METHOD",
+                    method=method,
+                    supported_methods=['smart', 'ffill', 'bfill', 'interpolation', 'mean']
+                )
 
             missing_count_after = df_repaired.isnull().sum().sum()
             repaired_count = missing_count_before - missing_count_after
@@ -363,7 +379,12 @@ class DataRepairEngine:
                     columns=price_columns
                 )
             else:
-                raise ValueError(f"不支持的修复方法: {method} (支持: winsorize/interpolate/remove)")
+                raise DataValidationError(
+                    f"不支持的修复方法: {method}",
+                    error_code="UNSUPPORTED_REPAIR_METHOD",
+                    method=method,
+                    supported_methods=['winsorize', 'interpolate', 'remove']
+                )
 
             report = {
                 'method': method,

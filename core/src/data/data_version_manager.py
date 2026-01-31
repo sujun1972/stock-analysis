@@ -23,8 +23,10 @@ import json
 
 try:
     from ..database.db_manager import DatabaseManager, get_database
+    from ..exceptions import DataValidationError, DataError
 except ImportError:
     from src.database.db_manager import DatabaseManager, get_database
+    from src.exceptions import DataValidationError, DataError
 
 
 class DataVersionManager:
@@ -150,7 +152,11 @@ class DataVersionManager:
                     return version_info
                 else:
                     conn.rollback()
-                    raise ValueError("版本创建失败: 无返回结果")
+                    raise DataError(
+                        "版本创建失败: 无返回结果",
+                        error_code="VERSION_CREATE_FAILED",
+                        symbol=symbol
+                    )
 
             except Exception as e:
                 conn.rollback()
@@ -341,9 +347,19 @@ class DataVersionManager:
             v2 = self.get_version_by_number(symbol, version2)
 
             if not v1:
-                raise ValueError(f"版本不存在: {version1}")
+                raise DataValidationError(
+                    f"版本不存在: {version1}",
+                    error_code="VERSION_NOT_FOUND",
+                    symbol=symbol,
+                    version_number=version1
+                )
             if not v2:
-                raise ValueError(f"版本不存在: {version2}")
+                raise DataValidationError(
+                    f"版本不存在: {version2}",
+                    error_code="VERSION_NOT_FOUND",
+                    symbol=symbol,
+                    version_number=version2
+                )
 
             comparison = {
                 'version1': version1,
@@ -391,7 +407,12 @@ class DataVersionManager:
             # 检查版本是否存在
             version = self.get_version_by_number(symbol, version_number)
             if not version:
-                raise ValueError(f"版本不存在: {version_number}")
+                raise DataValidationError(
+                    f"版本不存在: {version_number}",
+                    error_code="VERSION_NOT_FOUND",
+                    symbol=symbol,
+                    version_number=version_number
+                )
 
             # 先将该symbol的所有版本设为非活跃
             query_deactivate = """
