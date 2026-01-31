@@ -22,6 +22,7 @@ from src.features.storage.feature_storage import FeatureStorage
 from src.features.storage.parquet_storage import ParquetStorage
 from src.features.storage.hdf5_storage import HDF5Storage
 from src.features.storage.csv_storage import CSVStorage
+from src.utils.response import Response
 
 
 # ==================== Fixtures ====================
@@ -60,11 +61,16 @@ class TestParquetStorage:
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='parquet')
 
         # 保存
-        storage.save_features(sample_feature_df, "TEST001", feature_type="test", version="v1")
+        save_resp = storage.save_features(sample_feature_df, "TEST001", feature_type="test", version="v1")
+        assert isinstance(save_resp, Response)
+        assert save_resp.is_success()
 
         # 加载
-        loaded = storage.load_features("TEST001", feature_type="test", version="v1")
+        load_resp = storage.load_features("TEST001", feature_type="test", version="v1")
+        assert isinstance(load_resp, Response)
+        assert load_resp.is_success()
 
+        loaded = load_resp.data
         # 验证 (check_freq=False to ignore index frequency differences)
         pd.testing.assert_frame_equal(loaded, sample_feature_df, check_freq=False)
 

@@ -14,6 +14,11 @@ from abc import ABC, abstractmethod
 from loguru import logger
 import hashlib
 import threading
+import time
+
+# 导入Response类
+from src.utils.response import Response
+from src.exceptions import FeatureCalculationError
 
 
 # ==================== 基础类和配置 ====================
@@ -290,6 +295,19 @@ class BaseFactorCalculator(ABC):
     @abstractmethod
     def _validate_dataframe(self):
         """验证DataFrame格式 - 子类必须实现"""
+        pass
+
+    @abstractmethod
+    def calculate_all(self) -> Response:
+        """
+        计算所有因子 - 子类必须实现
+
+        返回:
+            Response对象，包含计算结果和元信息
+            - data: 添加因子后的DataFrame
+            - message: 成功消息
+            - metadata: 包含因子数量、耗时等信息
+        """
         pass
 
     def _get_volume_column(self) -> Optional[str]:

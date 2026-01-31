@@ -8,8 +8,10 @@
 import pandas as pd
 from typing import List
 from loguru import logger
+import time
 
 from .base import BaseFactorCalculator, FactorConfig
+from src.utils.response import Response
 
 
 class VolumeFactorCalculator(BaseFactorCalculator):
@@ -132,8 +134,36 @@ class VolumeFactorCalculator(BaseFactorCalculator):
 
         return self.df
 
-    def calculate_all(self) -> pd.DataFrame:
-        """计算所有成交量类因子"""
-        self.add_volume_factors()
-        self.add_price_volume_correlation()
-        return self.df
+    def calculate_all(self) -> Response:
+        """
+        计算所有成交量类因子
+
+        返回:
+            Response对象，包含计算结果和元信息
+        """
+        try:
+            start_time = time.time()
+            initial_cols = len(self.df.columns)
+
+            # 计算各类成交量因子
+            self.add_volume_factors()
+            self.add_price_volume_correlation()
+
+            # 计算新增因子数量
+            n_factors_added = len(self.df.columns) - initial_cols
+            elapsed = time.time() - start_time
+
+            return Response.success(
+                data=self.df,
+                message=f"成交量因子计算完成",
+                n_factors=n_factors_added,
+                total_columns=len(self.df.columns),
+                elapsed_time=f"{elapsed:.3f}s"
+            )
+        except Exception as e:
+            logger.error(f"成交量因子计算失败: {e}")
+            return Response.error(
+                error=f"成交量因子计算失败: {str(e)}",
+                error_code="VOLUME_CALCULATION_ERROR",
+                exception_type=type(e).__name__
+            )

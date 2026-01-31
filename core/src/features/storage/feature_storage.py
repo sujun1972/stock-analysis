@@ -33,6 +33,8 @@ from .hdf5_storage import HDF5Storage
 from .csv_storage import CSVStorage
 
 from src.utils.logger import logger
+from src.utils.response import Response
+from src.exceptions import FeatureStorageError
 
 warnings.filterwarnings('ignore')
 
@@ -180,7 +182,7 @@ class FeatureStorage:
         feature_type: str = 'transformed',
         version: str = 'v1',
         metadata: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    ) -> Response:
         """
         保存特征数据
 
@@ -192,13 +194,18 @@ class FeatureStorage:
             metadata: 额外元数据
 
         返回:
-            是否保存成功
+            Response对象，包含保存结果和元信息
         """
         try:
             # 验证输入
             if df.empty:
                 logger.warning(f"保存失败: DataFrame 为空 (股票={stock_code}, 类型={feature_type})")
-                return False
+                return Response.error(
+                    error="DataFrame 为空，无法保存",
+                    error_code="EMPTY_DATAFRAME_ERROR",
+                    stock_code=stock_code,
+                    feature_type=feature_type
+                )
 
             # 构建文件路径
             file_path = self.backend.build_file_path(stock_code, feature_type, version)
@@ -208,13 +215,19 @@ class FeatureStorage:
 
             if not success:
                 logger.error(f"后端保存失败: 股票={stock_code}, 类型={feature_type}")
-                return False
+                return Response.error(
+                    error="后端保存失败",
+                    error_code="BACKEND_SAVE_ERROR",
+                    stock_code=stock_code,
+                    feature_type=feature_type,
+                    file_path=str(file_path)
+                )
 
             # 更新元数据
             if stock_code not in self.metadata['stocks']:
                 self.metadata['stocks'][stock_code] = {}
 
-            self.metadata['stocks'][stock_code][feature_type] = {
+            feature_metadata = {
                 'version': version,
                 'file_path': str(file_path),
                 'rows': len(df),
@@ -228,7 +241,10 @@ class FeatureStorage:
                 'metadata': metadata or {}
             }
 
-            if not self._save_metadata():
+            self.metadata['stocks'][stock_code][feature_type] = feature_metadata
+
+            metadata_saved = self._save_metadata()
+            if not metadata_saved:
                 logger.warning(
                     f"元数据保存失败，但特征文件已保存: "
                     f"股票={stock_code}, 类型={feature_type}"
@@ -239,17 +255,37 @@ class FeatureStorage:
                 f"版本={version}, 行数={len(df)}, 列数={len(df.columns)}"
             )
 
-            return True
+            return Response.success(
+                data={'file_path': str(file_path)},
+                message=f"特征保存成功",
+                stock_code=stock_code,
+                feature_type=feature_type,
+                version=version,
+                rows=len(df),
+                columns=len(df.columns),
+                metadata_saved=metadata_saved
+            )
 
         except (IOError, OSError) as e:
             logger.error(f"文件系统错误: {e} (股票={stock_code}, 类型={feature_type})")
-            return False
+            return Response.error(
+                error=f"文件系统错误: {str(e)}",
+                error_code="FILE_SYSTEM_ERROR",
+                stock_code=stock_code,
+                feature_type=feature_type
+            )
         except Exception as e:
             logger.error(
                 f"保存特征失败: {e} (股票={stock_code}, 类型={feature_type})",
                 exc_info=True
             )
-            return False
+            return Response.error(
+                error=f"保存特征失败: {str(e)}",
+                error_code="FEATURE_SAVE_ERROR",
+                stock_code=stock_code,
+                feature_type=feature_type,
+                exception_type=type(e).__name__
+            )
 
     # ==================== 特征加载 ====================
 
@@ -258,7 +294,7 @@ class FeatureStorage:
         stock_code: str,
         feature_type: str = 'transformed',
         version: str = None
-    ) -> Optional[pd.DataFrame]:
+    ) -> Response:
         """
         加载特征数据
 
@@ -268,7 +304,7 @@ class FeatureStorage:
             version: 版本号（None表示最新版本）
 
         返回:
-            特征DataFrame，如果不存在返回None
+            Response对象，包含加载结果和元信息
         """
         try:
             # 查找版本
@@ -279,7 +315,12 @@ class FeatureStorage:
                     version = self.metadata['stocks'][stock_code][feature_type]['version']
                 else:
                     logger.warning(f"找不到特征: 股票={stock_code}, 类型={feature_type}")
-                    return None
+                    return Response.error(
+                        error=f"找不到特征",
+                        error_code="FEATURE_NOT_FOUND",
+                        stock_code=stock_code,
+                        feature_type=feature_type
+                    )
 
             # 构建文件路径
             file_path = self.backend.build_file_path(stock_code, feature_type, version)
@@ -287,31 +328,78 @@ class FeatureStorage:
             # 使用后端加载数据
             df = self.backend.load(file_path)
 
-            if df is not None:
-                logger.info(
-                    f"特征加载成功: 股票={stock_code}, 类型={feature_type}, "
-                    f"版本={version}, 行数={len(df)}, 列数={len(df.columns)}"
+            if df is None:
+                logger.warning(f"加载失败，返回None: 股票={stock_code}, 类型={feature_type}")
+                return Response.error(
+                    error="加载失败，后端返回None",
+                    error_code="BACKEND_LOAD_ERROR",
+                    stock_code=stock_code,
+                    feature_type=feature_type,
+                    version=version,
+                    file_path=str(file_path)
                 )
 
-            return df
+            logger.info(
+                f"特征加载成功: 股票={stock_code}, 类型={feature_type}, "
+                f"版本={version}, 行数={len(df)}, 列数={len(df.columns)}"
+            )
+
+            # 准备日期范围信息
+            date_range = None
+            if isinstance(df.index, pd.DatetimeIndex):
+                date_range = {
+                    'start': str(df.index.min()),
+                    'end': str(df.index.max())
+                }
+
+            return Response.success(
+                data=df,
+                message="特征加载成功",
+                stock_code=stock_code,
+                feature_type=feature_type,
+                version=version,
+                rows=len(df),
+                columns=len(df.columns),
+                date_range=date_range,
+                file_path=str(file_path)
+            )
 
         except FileNotFoundError as e:
             logger.warning(
                 f"特征文件不存在: 股票={stock_code}, 类型={feature_type}, "
                 f"版本={version}"
             )
-            return None
+            return Response.error(
+                error=f"特征文件不存在",
+                error_code="FILE_NOT_FOUND",
+                stock_code=stock_code,
+                feature_type=feature_type,
+                version=version
+            )
         except (IOError, OSError) as e:
             logger.error(
                 f"文件系统错误: {e} (股票={stock_code}, 类型={feature_type})"
             )
-            return None
+            return Response.error(
+                error=f"文件系统错误: {str(e)}",
+                error_code="FILE_SYSTEM_ERROR",
+                stock_code=stock_code,
+                feature_type=feature_type,
+                version=version
+            )
         except Exception as e:
             logger.error(
                 f"加载特征失败: {e} (股票={stock_code}, 类型={feature_type})",
                 exc_info=True
             )
-            return None
+            return Response.error(
+                error=f"加载特征失败: {str(e)}",
+                error_code="FEATURE_LOAD_ERROR",
+                stock_code=stock_code,
+                feature_type=feature_type,
+                version=version,
+                exception_type=type(e).__name__
+            )
 
     def load_multiple_stocks(
         self,

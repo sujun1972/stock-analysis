@@ -21,6 +21,7 @@ from src.features.alpha_factors import (
     MomentumFactorCalculator,
     FactorConfig,
 )
+from src.utils.response import Response
 
 
 # ==================== Fixtures ====================
@@ -393,18 +394,34 @@ class TestMomentumCalculateAll:
     def test_calculate_all_basic(self, sample_price_data):
         """测试计算所有动量因子"""
         calc = MomentumFactorCalculator(sample_price_data.copy())
-        result = calc.calculate_all()
+        response = calc.calculate_all()
+
+        # 检查Response格式
+        assert isinstance(response, Response)
+        assert response.is_success()
+
+        # 检查数据
+        result = response.data
+        assert isinstance(result, pd.DataFrame)
 
         # 检查所有类型的因子都生成了
         assert any('MOM' in col for col in result.columns)
         assert any('RS' in col for col in result.columns)
         assert any('ACC' in col for col in result.columns)
 
+        # 检查元数据
+        assert 'n_factors' in response.metadata
+        assert 'elapsed_time' in response.metadata
+        assert response.metadata['n_factors'] > 0
+
     def test_calculate_all_no_modification(self, sample_price_data):
         """测试原始数据不被修改（如果传入副本）"""
         original = sample_price_data.copy()
         calc = MomentumFactorCalculator(sample_price_data.copy())
-        calc.calculate_all()
+        response = calc.calculate_all()
+
+        # 检查Response成功
+        assert response.is_success()
 
         # 原始数据应该没有新增列
         assert set(original.columns) == set(sample_price_data.columns)
@@ -528,8 +545,12 @@ class TestMomentumPerformance:
         import time
         start = time.time()
         calc = MomentumFactorCalculator(df)
-        result = calc.calculate_all()
+        response = calc.calculate_all()
         elapsed = time.time() - start
+
+        # 检查Response成功
+        assert response.is_success()
+        result = response.data
 
         # 应该在1秒内完成
         assert elapsed < 1.0

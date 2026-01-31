@@ -21,9 +21,14 @@ Alpha因子库 - 模块化版本
 import pandas as pd
 from typing import Dict, List, Any
 from loguru import logger
+import time
 
 # 导入基础类
 from .base import FactorCache, FactorConfig, BaseFactorCalculator
+
+# 导入Response类
+from src.utils.response import Response
+from src.exceptions import FeatureCalculationError
 
 # 导入各类因子计算器
 from .momentum import MomentumFactorCalculator
@@ -177,7 +182,7 @@ class AlphaFactors:
 
     # ==================== 综合方法 ====================
 
-    def add_all_alpha_factors(self, show_cache_stats: bool = False) -> pd.DataFrame:
+    def add_all_alpha_factors(self, show_cache_stats: bool = False) -> Response:
         """
         一键添加所有Alpha因子（优化版本）
 
@@ -185,7 +190,7 @@ class AlphaFactors:
             show_cache_stats: 是否显示缓存统计信息
 
         返回:
-            添加所有Alpha因子的DataFrame
+            Response对象，包含计算结果和元信息
 
         优化特性:
             - 共享缓存减少重复计算
@@ -193,32 +198,69 @@ class AlphaFactors:
             - 可选的数据泄漏检测
         """
         logger.info("开始计算所有Alpha因子（优化版本）...")
+        start_time = time.time()
+        initial_cols = len(self.df.columns)
 
         try:
+            # 存储各类因子的计算结果
+            factor_results = {}
+
             # 动量类因子
-            self.momentum.calculate_all()
+            resp = self.momentum.calculate_all()
+            if resp.is_error():
+                return resp
+            factor_results['momentum'] = resp.metadata
 
             # 反转类因子
-            self.reversal.calculate_all()
+            resp = self.reversal.calculate_all()
+            if resp.is_error():
+                return resp
+            factor_results['reversal'] = resp.metadata
 
             # 波动率类因子
-            self.volatility.calculate_all()
+            resp = self.volatility.calculate_all()
+            if resp.is_error():
+                return resp
+            factor_results['volatility'] = resp.metadata
 
             # 成交量类因子
-            self.volume.calculate_all()
+            resp = self.volume.calculate_all()
+            if resp.is_error():
+                return resp
+            factor_results['volume'] = resp.metadata
 
-            # 趋势类因子（向量化优化）
-            self.trend.calculate_all()
+            # 趋势类因子
+            resp = self.trend.calculate_all()
+            if resp.is_error():
+                return resp
+            factor_results['trend'] = resp.metadata
 
             # 流动性因子
-            self.liquidity.calculate_all()
+            resp = self.liquidity.calculate_all()
+            if resp.is_error():
+                return resp
+            factor_results['liquidity'] = resp.metadata
 
+            # 计算总计信息
+            total_factors_added = len(self.df.columns) - initial_cols
             factor_count = len(self.get_factor_names())
+            elapsed = time.time() - start_time
+
             logger.info(f"Alpha因子计算完成，共 {len(self.df.columns)} 列，因子数: {factor_count}")
+
+            # 准备响应元数据
+            response_metadata = {
+                'n_factors': total_factors_added,
+                'total_columns': len(self.df.columns),
+                'factor_count': factor_count,
+                'elapsed_time': f"{elapsed:.3f}s",
+                'factor_breakdown': factor_results
+            }
 
             # 显示缓存统计（可选）
             if show_cache_stats:
                 cache_stats = self.get_cache_stats()
+                response_metadata['cache_stats'] = cache_stats
                 logger.info(
                     f"缓存统计: 命中率={cache_stats['hit_rate']:.2%}, "
                     f"命中={cache_stats['hits']}, 未命中={cache_stats['misses']}, "
@@ -229,16 +271,38 @@ class AlphaFactors:
             if self._enable_leak_detection:
                 logger.info("执行数据泄漏检测...")
                 leakage_detected = self._check_all_factors_for_leakage()
+                response_metadata['leakage_detected'] = leakage_detected
+
                 if leakage_detected:
                     logger.warning("⚠️  检测到潜在数据泄漏，请检查因子计算逻辑")
+                    return Response.warning(
+                        message="Alpha因子计算完成，但检测到潜在数据泄漏",
+                        data=self.df,
+                        **response_metadata
+                    )
                 else:
                     logger.info("✓ 数据泄漏检测通过")
 
-        except Exception as e:
-            logger.error(f"计算Alpha因子时发生错误: {e}")
-            raise
+            return Response.success(
+                data=self.df,
+                message="Alpha因子计算完成",
+                **response_metadata
+            )
 
-        return self.df
+        except FeatureCalculationError as e:
+            logger.error(f"计算Alpha因子时发生错误: {e}")
+            return Response.error(
+                error=e.message,
+                error_code=e.error_code,
+                **e.context
+            )
+        except Exception as e:
+            logger.error(f"计算Alpha因子时发生未预期错误: {e}")
+            return Response.error(
+                error=f"Alpha因子计算失败: {str(e)}",
+                error_code="ALPHA_CALCULATION_ERROR",
+                exception_type=type(e).__name__
+            )
 
     def _check_all_factors_for_leakage(self) -> bool:
         """
@@ -332,7 +396,7 @@ def calculate_all_alpha_factors(
     enable_leak_detection: bool = False,
     show_cache_stats: bool = False,
     config=None
-) -> pd.DataFrame:
+) -> Response:
     """
     便捷函数：一键计算所有Alpha因子（优化版本）
 
@@ -344,7 +408,7 @@ def calculate_all_alpha_factors(
         config: FeatureEngineerConfig实例（可选）
 
     返回:
-        包含所有Alpha因子的DataFrame
+        Response对象，包含计算结果和元信息
 
     优化特性:
         - 向量化计算（35x 性能提升）
