@@ -444,13 +444,15 @@ class TestModelTrainer:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig(train_ratio=0.6, valid_ratio=0.2)
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        response = trainer.prepare_data(
             sample_dataframe, feature_cols, 'target', split_config
         )
 
-        assert len(X_train) > 0
-        assert len(X_valid) > 0
-        assert len(X_test) > 0
+        assert response.is_success()
+        data = response.data
+        assert len(data['X_train']) > 0
+        assert len(data['X_valid']) > 0
+        assert len(data['X_test']) > 0
 
     def test_train_lightgbm(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试训练 LightGBM 模型"""
@@ -463,12 +465,15 @@ class TestModelTrainer:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig()
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        prep_response = trainer.prepare_data(
             sample_dataframe, feature_cols, 'target', split_config
         )
+        assert prep_response.is_success()
+        data = prep_response.data
 
-        trainer.train(X_train, y_train, X_valid, y_valid)
+        train_response = trainer.train(data['X_train'], data['y_train'], data['X_valid'], data['y_valid'])
 
+        assert train_response.is_success()
         assert trainer.model is not None
         assert len(trainer.training_history) > 0
 
@@ -482,12 +487,15 @@ class TestModelTrainer:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig()
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        prep_response = trainer.prepare_data(
             sample_dataframe, feature_cols, 'target', split_config
         )
+        assert prep_response.is_success()
+        data = prep_response.data
 
-        trainer.train(X_train, y_train, X_valid, y_valid)
+        train_response = trainer.train(data['X_train'], data['y_train'], data['X_valid'], data['y_valid'])
 
+        assert train_response.is_success()
         assert trainer.model is not None
 
     def test_evaluate_without_training(self, sample_dataframe, feature_cols, temp_model_dir):
@@ -496,12 +504,15 @@ class TestModelTrainer:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig()
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        prep_response = trainer.prepare_data(
             sample_dataframe, feature_cols, 'target', split_config
         )
+        assert prep_response.is_success()
+        data = prep_response.data
 
-        with pytest.raises(TrainingError, match="模型未训练"):
-            trainer.evaluate(X_test, y_test)
+        eval_response = trainer.evaluate(data['X_test'], data['y_test'])
+        assert not eval_response.is_success()
+        assert eval_response.error_code == "MODEL_NOT_TRAINED"
 
     def test_evaluate_after_training(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试训练后评估"""
@@ -514,13 +525,19 @@ class TestModelTrainer:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig()
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        prep_response = trainer.prepare_data(
             sample_dataframe, feature_cols, 'target', split_config
         )
+        assert prep_response.is_success()
+        data = prep_response.data
 
-        trainer.train(X_train, y_train, X_valid, y_valid)
-        metrics = trainer.evaluate(X_test, y_test, verbose=False)
+        train_response = trainer.train(data['X_train'], data['y_train'], data['X_valid'], data['y_valid'])
+        assert train_response.is_success()
 
+        eval_response = trainer.evaluate(data['X_test'], data['y_test'], verbose=False)
+
+        assert eval_response.is_success()
+        metrics = eval_response.data
         assert isinstance(metrics, dict)
         assert 'ic' in metrics
         assert 'rmse' in metrics
@@ -536,26 +553,35 @@ class TestModelTrainer:
         trainer = ModelTrainer(config=config)
 
         split_config = DataSplitConfig()
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
+        prep_response = trainer.prepare_data(
             sample_dataframe, feature_cols, 'target', split_config
         )
+        assert prep_response.is_success()
+        data = prep_response.data
 
         # 训练
-        trainer.train(X_train, y_train, X_valid, y_valid)
+        train_response = trainer.train(data['X_train'], data['y_train'], data['X_valid'], data['y_valid'])
+        assert train_response.is_success()
 
         # 评估
-        metrics_before = trainer.evaluate(X_test, y_test, verbose=False)
+        eval_response_before = trainer.evaluate(data['X_test'], data['y_test'], verbose=False)
+        assert eval_response_before.is_success()
+        metrics_before = eval_response_before.data
 
         # 保存
-        model_path = trainer.save_model('test_model')
-        assert Path(model_path).exists()
+        save_response = trainer.save_model('test_model')
+        assert save_response.is_success()
+        assert Path(save_response.data['model_path']).exists()
 
         # 加载
         new_trainer = ModelTrainer(config=config)
-        new_trainer.load_model('test_model')
+        load_response = new_trainer.load_model('test_model')
+        assert load_response.is_success()
 
         # 再次评估
-        metrics_after = new_trainer.evaluate(X_test, y_test, verbose=False)
+        eval_response_after = new_trainer.evaluate(data['X_test'], data['y_test'], verbose=False)
+        assert eval_response_after.is_success()
+        metrics_after = eval_response_after.data
 
         # 比较评估结果（应该相同）
         assert abs(metrics_before['ic'] - metrics_after['ic']) < 1e-6
@@ -569,7 +595,7 @@ class TestConvenienceFunctions:
 
     def test_train_stock_model(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试 train_stock_model 便捷函数"""
-        trainer, metrics = train_stock_model(
+        response = train_stock_model(
             sample_dataframe,
             feature_cols,
             'target',
@@ -579,6 +605,9 @@ class TestConvenienceFunctions:
             valid_ratio=0.15
         )
 
+        assert response.is_success()
+        trainer = response.data['trainer']
+        metrics = response.data['test_metrics']
         assert isinstance(trainer, ModelTrainer)
         assert isinstance(metrics, dict)
         assert 'ic' in metrics

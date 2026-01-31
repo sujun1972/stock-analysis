@@ -155,7 +155,7 @@ class ModelRegistry:
         model_type: str = 'unknown',
         description: str = "",
         auto_version: bool = True
-    ) -> Tuple[str, int]:
+    ):
         """
         保存模型
 
@@ -168,67 +168,100 @@ class ModelRegistry:
             auto_version: 是否自动版本号
 
         返回:
-            (model_name, version): 模型名称和版本号
+            Response对象，成功时data包含:
+            {
+                'model_name': 模型名称,
+                'version': 版本号,
+                'model_path': 模型文件路径,
+                'metadata_path': 元数据文件路径
+            }
         """
-        # 获取版本号
-        version = self._get_next_version(name) if auto_version else 1
+        from src.utils.response import Response
+        import time
 
-        # 创建模型目录
-        model_dir = self._get_model_dir(name)
+        try:
+            start_time = time.time()
 
-        # 保存模型文件
-        model_path = model_dir / f'v{version}_model.pkl'
-        with open(model_path, 'wb') as f:
-            pickle.dump(model, f)
+            # 获取版本号
+            version = self._get_next_version(name) if auto_version else 1
 
-        logger.info(f"保存模型: {name} v{version} -> {model_path}")
+            # 创建模型目录
+            model_dir = self._get_model_dir(name)
 
-        # 提取特征名（如果可用）
-        feature_names = None
-        if hasattr(model, 'feature_names_'):
-            feature_names = model.feature_names_
-        elif hasattr(model, 'model') and hasattr(model.model, 'feature_name_'):
-            feature_names = model.model.feature_name_()
+            # 保存模型文件
+            model_path = model_dir / f'v{version}_model.pkl'
+            with open(model_path, 'wb') as f:
+                pickle.dump(model, f)
 
-        # 创建元数据
-        model_metadata = ModelMetadata(
-            model_name=name,
-            version=version,
-            timestamp=datetime.now().isoformat(),
-            model_type=model_type,
-            feature_names=feature_names,
-            performance_metrics=metadata or {},
-            training_config=getattr(model, 'config', {}),
-            description=description
-        )
+            logger.info(f"保存模型: {name} v{version} -> {model_path}")
 
-        # 保存元数据
-        metadata_path = model_dir / f'v{version}_metadata.json'
-        with open(metadata_path, 'w') as f:
-            json.dump(model_metadata.to_dict(), f, indent=2)
+            # 提取特征名（如果可用）
+            feature_names = None
+            if hasattr(model, 'feature_names_'):
+                feature_names = model.feature_names_
+            elif hasattr(model, 'model') and hasattr(model.model, 'feature_name_'):
+                feature_names = model.model.feature_name_()
 
-        # 更新索引
-        if name not in self.index:
-            self.index[name] = []
+            # 创建元数据
+            model_metadata = ModelMetadata(
+                model_name=name,
+                version=version,
+                timestamp=datetime.now().isoformat(),
+                model_type=model_type,
+                feature_names=feature_names,
+                performance_metrics=metadata or {},
+                training_config=getattr(model, 'config', {}),
+                description=description
+            )
 
-        self.index[name].append({
-            'version': version,
-            'timestamp': model_metadata.timestamp,
-            'model_path': str(model_path),
-            'metadata_path': str(metadata_path)
-        })
+            # 保存元数据
+            metadata_path = model_dir / f'v{version}_metadata.json'
+            with open(metadata_path, 'w') as f:
+                json.dump(model_metadata.to_dict(), f, indent=2)
 
-        self._save_index()
+            # 更新索引
+            if name not in self.index:
+                self.index[name] = []
 
-        logger.info(f"✓ 模型保存成功: {name} v{version}")
+            self.index[name].append({
+                'version': version,
+                'timestamp': model_metadata.timestamp,
+                'model_path': str(model_path),
+                'metadata_path': str(metadata_path)
+            })
 
-        return name, version
+            self._save_index()
+
+            elapsed_time = time.time() - start_time
+            logger.info(f"✓ 模型保存成功: {name} v{version}")
+
+            return Response.success(
+                data={
+                    'model_name': name,
+                    'version': version,
+                    'model_path': str(model_path),
+                    'metadata_path': str(metadata_path)
+                },
+                message=f"模型保存成功: {name} v{version}",
+                model_type=model_type,
+                n_features=len(feature_names) if feature_names else 0,
+                elapsed_time=f"{elapsed_time:.2f}s"
+            )
+
+        except Exception as e:
+            logger.exception(f"保存模型时发生异常: {e}")
+            return Response.error(
+                error=f"保存模型失败: {str(e)}",
+                error_code="MODEL_SAVE_ERROR",
+                model_name=name,
+                model_type=model_type
+            )
 
     def load_model(
         self,
         name: str,
         version: Optional[int] = None
-    ) -> Tuple[Any, ModelMetadata]:
+    ):
         """
         加载模型
 
@@ -237,38 +270,90 @@ class ModelRegistry:
             version: 版本号（None=最新版本）
 
         返回:
-            (model, metadata): 模型对象和元数据
+            Response对象，成功时data包含:
+            {
+                'model': 模型对象,
+                'metadata': 元数据对象
+            }
         """
-        if name not in self.index:
-            raise ValueError(f"模型不存在: {name}")
+        from src.utils.response import Response
+        import time
 
-        # 获取版本
-        if version is None:
-            # 加载最新版本
-            versions = sorted(self.index[name], key=lambda x: x['version'])
-            model_info = versions[-1]
-        else:
-            # 加载指定版本
-            model_info = next(
-                (m for m in self.index[name] if m['version'] == version),
-                None
+        try:
+            start_time = time.time()
+
+            if name not in self.index:
+                return Response.error(
+                    error=f"模型不存在: {name}",
+                    error_code="MODEL_NOT_FOUND",
+                    model_name=name,
+                    available_models=list(self.index.keys())
+                )
+
+            # 获取版本
+            if version is None:
+                # 加载最新版本
+                versions = sorted(self.index[name], key=lambda x: x['version'])
+                model_info = versions[-1]
+                version_type = "latest"
+            else:
+                # 加载指定版本
+                model_info = next(
+                    (m for m in self.index[name] if m['version'] == version),
+                    None
+                )
+                if model_info is None:
+                    available_versions = [m['version'] for m in self.index[name]]
+                    return Response.error(
+                        error=f"版本不存在: {name} v{version}",
+                        error_code="VERSION_NOT_FOUND",
+                        model_name=name,
+                        requested_version=version,
+                        available_versions=available_versions
+                    )
+                version_type = "specified"
+
+            # 加载模型
+            model_path = Path(model_info['model_path'])
+            with open(model_path, 'rb') as f:
+                model = pickle.load(f)
+
+            # 加载元数据
+            metadata_path = Path(model_info['metadata_path'])
+            with open(metadata_path, 'r') as f:
+                metadata = ModelMetadata.from_dict(json.load(f))
+
+            elapsed_time = time.time() - start_time
+            logger.info(f"加载模型: {name} v{metadata.version}")
+
+            return Response.success(
+                data={
+                    'model': model,
+                    'metadata': metadata
+                },
+                message=f"模型加载成功: {name} v{metadata.version}",
+                model_name=name,
+                version=metadata.version,
+                version_type=version_type,
+                model_type=metadata.model_type,
+                elapsed_time=f"{elapsed_time:.2f}s"
             )
-            if model_info is None:
-                raise ValueError(f"版本不存在: {name} v{version}")
 
-        # 加载模型
-        model_path = Path(model_info['model_path'])
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
-
-        # 加载元数据
-        metadata_path = Path(model_info['metadata_path'])
-        with open(metadata_path, 'r') as f:
-            metadata = ModelMetadata.from_dict(json.load(f))
-
-        logger.info(f"加载模型: {name} v{metadata.version}")
-
-        return model, metadata
+        except FileNotFoundError as e:
+            return Response.error(
+                error=f"模型文件不存在: {str(e)}",
+                error_code="MODEL_FILE_NOT_FOUND",
+                model_name=name,
+                version=version
+            )
+        except Exception as e:
+            logger.exception(f"加载模型时发生异常: {e}")
+            return Response.error(
+                error=f"加载模型失败: {str(e)}",
+                error_code="MODEL_LOAD_ERROR",
+                model_name=name,
+                version=version
+            )
 
     def get_model_history(self, name: str) -> pd.DataFrame:
         """
@@ -403,7 +488,7 @@ class ModelRegistry:
         name: str,
         version1: int,
         version2: int
-    ) -> Dict:
+    ):
         """
         对比两个版本
 
@@ -413,34 +498,59 @@ class ModelRegistry:
             version2: 版本2
 
         返回:
-            comparison: 对比结果
+            Response对象，成功时data包含对比结果
         """
-        # 加载两个版本的元数据
-        _, metadata1 = self.load_model(name, version1)
-        _, metadata2 = self.load_model(name, version2)
+        from src.utils.response import Response
 
-        comparison = {
-            'version1': {
-                'version': metadata1.version,
-                'timestamp': metadata1.timestamp,
-                'metrics': metadata1.performance_metrics
-            },
-            'version2': {
-                'version': metadata2.version,
-                'timestamp': metadata2.timestamp,
-                'metrics': metadata2.performance_metrics
-            },
-            'metric_diff': {}
-        }
+        try:
+            # 加载两个版本的元数据
+            response1 = self.load_model(name, version1)
+            if not response1.is_success():
+                return response1
 
-        # 计算指标差异
-        for metric in metadata1.performance_metrics.keys():
-            if metric in metadata2.performance_metrics:
-                diff = (metadata2.performance_metrics[metric] -
-                        metadata1.performance_metrics[metric])
-                comparison['metric_diff'][metric] = diff
+            response2 = self.load_model(name, version2)
+            if not response2.is_success():
+                return response2
 
-        return comparison
+            metadata1 = response1.data['metadata']
+            metadata2 = response2.data['metadata']
+
+            comparison = {
+                'version1': {
+                    'version': metadata1.version,
+                    'timestamp': metadata1.timestamp,
+                    'metrics': metadata1.performance_metrics
+                },
+                'version2': {
+                    'version': metadata2.version,
+                    'timestamp': metadata2.timestamp,
+                    'metrics': metadata2.performance_metrics
+                },
+                'metric_diff': {}
+            }
+
+            # 计算指标差异
+            for metric in metadata1.performance_metrics.keys():
+                if metric in metadata2.performance_metrics:
+                    diff = (metadata2.performance_metrics[metric] -
+                            metadata1.performance_metrics[metric])
+                    comparison['metric_diff'][metric] = diff
+
+            return Response.success(
+                data=comparison,
+                message=f"版本对比完成: {name} v{version1} vs v{version2}",
+                model_name=name
+            )
+
+        except Exception as e:
+            logger.exception(f"对比版本时发生异常: {e}")
+            return Response.error(
+                error=f"对比版本失败: {str(e)}",
+                error_code="VERSION_COMPARE_ERROR",
+                model_name=name,
+                version1=version1,
+                version2=version2
+            )
 
     def export_model(self, name: str, version: Optional[int], output_path: str):
         """
@@ -450,23 +560,54 @@ class ModelRegistry:
             name: 模型名称
             version: 版本号（None=最新）
             output_path: 输出路径
+
+        返回:
+            Response对象，成功时data包含导出路径信息
         """
-        model, metadata = self.load_model(name, version)
+        from src.utils.response import Response
 
-        output_dir = Path(output_path)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            response = self.load_model(name, version)
+            if not response.is_success():
+                return response
 
-        # 保存模型
-        model_path = output_dir / f'{name}_v{metadata.version}.pkl'
-        with open(model_path, 'wb') as f:
-            pickle.dump(model, f)
+            model = response.data['model']
+            metadata = response.data['metadata']
 
-        # 保存元数据
-        metadata_path = output_dir / f'{name}_v{metadata.version}_metadata.json'
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata.to_dict(), f, indent=2)
+            output_dir = Path(output_path)
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"✓ 导出模型到: {output_dir}")
+            # 保存模型
+            model_path = output_dir / f'{name}_v{metadata.version}.pkl'
+            with open(model_path, 'wb') as f:
+                pickle.dump(model, f)
+
+            # 保存元数据
+            metadata_path = output_dir / f'{name}_v{metadata.version}_metadata.json'
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata.to_dict(), f, indent=2)
+
+            logger.info(f"✓ 导出模型到: {output_dir}")
+
+            return Response.success(
+                data={
+                    'output_dir': str(output_dir),
+                    'model_path': str(model_path),
+                    'metadata_path': str(metadata_path)
+                },
+                message=f"模型导出成功: {name} v{metadata.version}",
+                model_name=name,
+                version=metadata.version
+            )
+
+        except Exception as e:
+            logger.exception(f"导出模型时发生异常: {e}")
+            return Response.error(
+                error=f"导出模型失败: {str(e)}",
+                error_code="MODEL_EXPORT_ERROR",
+                model_name=name,
+                version=version
+            )
 
     def __repr__(self):
         n_models = len(self.index)

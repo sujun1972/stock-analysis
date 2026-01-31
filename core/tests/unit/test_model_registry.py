@@ -258,14 +258,15 @@ class TestModelSave:
 
     def test_save_simple_model(self, registry, sample_model):
         """测试保存简单模型"""
-        name, version = registry.save_model(
+        response = registry.save_model(
             model=sample_model,
             name='simple_model',
             model_type='test'
         )
 
-        assert name == 'simple_model'
-        assert version == 1
+        assert response.is_success()
+        assert response.data['model_name'] == 'simple_model'
+        assert response.data['version'] == 1
         assert 'simple_model' in registry.index
         assert len(registry.index['simple_model']) == 1
 
@@ -277,7 +278,7 @@ class TestModelSave:
             'train_date': '2026-01-29'
         }
 
-        name, version = registry.save_model(
+        save_response = registry.save_model(
             model=sample_model,
             name='model_with_meta',
             metadata=metadata,
@@ -285,8 +286,14 @@ class TestModelSave:
             description='生产模型'
         )
 
+        assert save_response.is_success()
+        assert save_response.data['model_name'] == 'model_with_meta'
+        assert save_response.data['version'] == 1
+
         # 加载并验证
-        _, loaded_meta = registry.load_model('model_with_meta')
+        load_response = registry.load_model('model_with_meta')
+        assert load_response.is_success()
+        loaded_meta = load_response.data['metadata']
 
         assert loaded_meta.performance_metrics['train_ic'] == 0.95
         assert loaded_meta.model_type == 'lightgbm'
@@ -295,15 +302,15 @@ class TestModelSave:
     def test_save_multiple_versions(self, registry, sample_model):
         """测试保存多个版本"""
         # 保存版本1
-        name1, version1 = registry.save_model(sample_model, 'multi_ver', model_type='v1')
+        resp1 = registry.save_model(sample_model, 'multi_ver', model_type='v1')
         # 保存版本2
-        name2, version2 = registry.save_model(sample_model, 'multi_ver', model_type='v2')
+        resp2 = registry.save_model(sample_model, 'multi_ver', model_type='v2')
         # 保存版本3
-        name3, version3 = registry.save_model(sample_model, 'multi_ver', model_type='v3')
+        resp3 = registry.save_model(sample_model, 'multi_ver', model_type='v3')
 
-        assert version1 == 1
-        assert version2 == 2
-        assert version3 == 3
+        assert resp1.is_success() and resp1.data['version'] == 1
+        assert resp2.is_success() and resp2.data['version'] == 2
+        assert resp3.is_success() and resp3.data['version'] == 3
         assert len(registry.index['multi_ver']) == 3
 
     def test_save_creates_directory_structure(self, registry, sample_model):
@@ -321,7 +328,9 @@ class TestModelSave:
 
         registry.save_model(model, 'feature_model', model_type='test')
 
-        _, metadata = registry.load_model('feature_model')
+        load_response = registry.load_model('feature_model')
+        assert load_response.is_success()
+        metadata = load_response.data['metadata']
         assert metadata.feature_names == ['f1', 'f2', 'f3']
 
     def test_save_updates_index(self, registry, sample_model):
@@ -353,8 +362,11 @@ class TestModelLoad:
             )
 
         # 加载最新版本
-        model, metadata = registry.load_model('versioned_model')
+        load_response = registry.load_model('versioned_model')
 
+        assert load_response.is_success()
+        model = load_response.data['model']
+        metadata = load_response.data['metadata']
         assert metadata.version == 3
         assert metadata.performance_metrics['version_info'] == 'v3'
 
@@ -370,22 +382,27 @@ class TestModelLoad:
             )
 
         # 加载版本2
-        model, metadata = registry.load_model('specific_ver', version=2)
+        load_response = registry.load_model('specific_ver', version=2)
 
+        assert load_response.is_success()
+        model = load_response.data['model']
+        metadata = load_response.data['metadata']
         assert metadata.version == 2
         assert metadata.performance_metrics['ver'] == 2
 
     def test_load_nonexistent_model(self, registry):
         """测试加载不存在的模型"""
-        with pytest.raises(ValueError, match="模型不存在"):
-            registry.load_model('nonexistent_model')
+        load_response = registry.load_model('nonexistent_model')
+        assert not load_response.is_success()
+        assert load_response.error_code == "MODEL_NOT_FOUND"
 
     def test_load_nonexistent_version(self, registry, sample_model):
         """测试加载不存在的版本"""
         registry.save_model(sample_model, 'test_model', model_type='test')
 
-        with pytest.raises(ValueError, match="版本不存在"):
-            registry.load_model('test_model', version=99)
+        load_response = registry.load_model('test_model', version=99)
+        assert not load_response.is_success()
+        assert load_response.error_code == "VERSION_NOT_FOUND"
 
     def test_load_preserves_model_functionality(self, registry):
         """测试加载后模型功能正常"""
@@ -395,7 +412,9 @@ class TestModelLoad:
         registry.save_model(original_model, 'func_test', model_type='test')
 
         # 加载并测试
-        loaded_model, _ = registry.load_model('func_test')
+        load_response = registry.load_model('func_test')
+        assert load_response.is_success()
+        loaded_model = load_response.data['model']
 
         result = loaded_model.predict()
         np.testing.assert_array_equal(result, [1.0, 2.0, 3.0])

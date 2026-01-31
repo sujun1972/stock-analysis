@@ -2,7 +2,13 @@
 Models module
 """
 
-from .lightgbm_model import LightGBMStockModel, train_lightgbm_model
+# 基础模型（可选导入lightgbm）
+try:
+    from .lightgbm_model import LightGBMStockModel, train_lightgbm_model
+    LIGHTGBM_AVAILABLE = True
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+
 from .ridge_model import RidgeStockModel
 from .model_evaluator import ModelEvaluator, evaluate_model
 from .model_trainer import ModelTrainer, train_stock_model
@@ -19,6 +25,7 @@ from .ensemble import (
 # 模型注册表
 from .model_registry import ModelRegistry, ModelMetadata
 
+# GRU模型（可选导入PyTorch）
 try:
     from .gru_model import GRUStockModel, GRUStockTrainer
     GRU_AVAILABLE = True
@@ -27,8 +34,6 @@ except ImportError:
 
 __all__ = [
     # 基础模型
-    'LightGBMStockModel',
-    'train_lightgbm_model',
     'RidgeStockModel',
 
     # 评估
@@ -50,6 +55,9 @@ __all__ = [
     'ModelRegistry',
     'ModelMetadata',
 ]
+
+if LIGHTGBM_AVAILABLE:
+    __all__.extend(['LightGBMStockModel', 'train_lightgbm_model'])
 
 if GRU_AVAILABLE:
     __all__.extend(['GRUStockModel', 'GRUStockTrainer'])

@@ -35,7 +35,13 @@ import pickle
 from loguru import logger
 from scipy.optimize import minimize
 
-from .lightgbm_model import LightGBMStockModel
+try:
+    from .lightgbm_model import LightGBMStockModel
+    LIGHTGBM_AVAILABLE = True
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+    LightGBMStockModel = None
+
 from .ridge_model import RidgeStockModel
 
 try:
