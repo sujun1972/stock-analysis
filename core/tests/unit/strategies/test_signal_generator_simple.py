@@ -13,6 +13,7 @@ import sys
 # Path already configured in conftest.py
 
 from strategies.signal_generator import SignalType, SignalGenerator
+from src.utils.response import Response
 
 
 class TestSignalGenerator(unittest.TestCase):
@@ -39,13 +40,18 @@ class TestSignalGenerator(unittest.TestCase):
 
     def test_generate_threshold_signals(self):
         """测试阈值信号生成"""
-        signals = SignalGenerator.generate_threshold_signals(
+        response = SignalGenerator.generate_threshold_signals(
             self.scores,
             buy_threshold=0.5,
             sell_threshold=-0.5
         )
 
-        # 验证返回DataFrame
+        # 验证返回Response对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+
+        # 获取实际数据
+        signals = response.data
         self.assertIsInstance(signals, pd.DataFrame)
         self.assertEqual(signals.shape, self.scores.shape)
 
@@ -55,11 +61,18 @@ class TestSignalGenerator(unittest.TestCase):
 
     def test_generate_rank_signals(self):
         """测试排名信号生成"""
-        signals = SignalGenerator.generate_rank_signals(
+        response = SignalGenerator.generate_rank_signals(
             self.scores,
             top_n=3,
             bottom_n=2
         )
+
+        # 验证Response对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+
+        # 获取实际数据
+        signals = response.data
 
         # 验证每天的买入信号数量
         for date in signals.index:

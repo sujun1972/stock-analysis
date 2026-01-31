@@ -340,7 +340,7 @@ class BaseStrategy(ABC):
         }
         backtest_params.update(kwargs)
 
-        results = engine.backtest_long_only(
+        response = engine.backtest_long_only(
             signals=signals,
             prices=prices,
             **backtest_params
@@ -348,7 +348,11 @@ class BaseStrategy(ABC):
 
         logger.success(f"✓ 回测完成: {self.name}")
 
-        return results
+        # 提取Response.data（兼容Response格式）
+        if hasattr(response, 'data'):
+            return response.data
+        else:
+            return response
 
     def get_strategy_info(self) -> Dict[str, Any]:
         """

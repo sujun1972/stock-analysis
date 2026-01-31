@@ -43,11 +43,15 @@ class TestThresholdSignals(unittest.TestCase):
 
     def test_basic_threshold_signals(self):
         """测试基本阈值信号"""
-        signals = SignalGenerator.generate_threshold_signals(
+        response = SignalGenerator.generate_threshold_signals(
             self.scores,
             buy_threshold=0.5,
             sell_threshold=-0.5
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 验证信号类型
         unique_values = signals.stack().unique()
@@ -69,25 +73,33 @@ class TestThresholdSignals(unittest.TestCase):
 
     def test_threshold_signals_all_buy(self):
         """测试全部买入信号"""
-        signals = SignalGenerator.generate_threshold_signals(
+        response = SignalGenerator.generate_threshold_signals(
             self.scores,
             buy_threshold=-10,  # 非常低的阈值
             sell_threshold=-20
         )
 
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
+
         # 所有信号应该是买入
-        self.assertTrue(all(signals == SignalType.BUY))
+        self.assertTrue((signals == SignalType.BUY.value).all().all())
 
     def test_threshold_signals_all_hold(self):
         """测试全部持有信号"""
-        signals = SignalGenerator.generate_threshold_signals(
+        response = SignalGenerator.generate_threshold_signals(
             self.scores,
             buy_threshold=10,  # 非常高的阈值
             sell_threshold=-10
         )
 
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
+
         # 所有信号应该是持有
-        self.assertTrue(all(signals == SignalType.HOLD))
+        self.assertTrue((signals == SignalType.HOLD.value).all().all())
 
 
 class TestRankSignals(unittest.TestCase):
@@ -108,11 +120,15 @@ class TestRankSignals(unittest.TestCase):
 
     def test_basic_rank_signals(self):
         """测试基本排名信号"""
-        signals = SignalGenerator.generate_rank_signals(
+        response = SignalGenerator.generate_rank_signals(
             self.scores,
             top_n=5,
             bottom_n=3
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 验证每天买入信号数量
         for date in signals.index:
@@ -125,11 +141,15 @@ class TestRankSignals(unittest.TestCase):
 
     def test_rank_signals_only_buy(self):
         """测试只买入信号"""
-        signals = SignalGenerator.generate_rank_signals(
+        response = SignalGenerator.generate_rank_signals(
             self.scores,
             top_n=5,
             bottom_n=0
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 验证每天最多有5个买入信号
         for date in signals.index:
@@ -145,11 +165,15 @@ class TestRankSignals(unittest.TestCase):
         scores_with_nan = self.scores.copy()
         scores_with_nan.iloc[:3, :] = np.nan
 
-        signals = SignalGenerator.generate_rank_signals(
+        response = SignalGenerator.generate_rank_signals(
             scores_with_nan,
             top_n=5,
             bottom_n=2
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # NaN值对应的日期应该没有买入/卖出信号（全是持有）
         for i in range(3):

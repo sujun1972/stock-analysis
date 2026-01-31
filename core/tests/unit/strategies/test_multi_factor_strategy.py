@@ -379,7 +379,7 @@ class TestMultiFactorStrategy(unittest.TestCase):
         )
 
         # 多因子策略需要features参数
-        results = engine.backtest_long_only(
+        response = engine.backtest_long_only(
             signals=strategy.generate_signals(
                 self.prices,
                 features=self.features_df,
@@ -389,6 +389,10 @@ class TestMultiFactorStrategy(unittest.TestCase):
             top_n=5,
             holding_period=5
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        results = response.data
 
         # 验证返回结果
         self.assertIn('portfolio_value', results)

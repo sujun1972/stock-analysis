@@ -351,12 +351,16 @@ class TestStrategyCombiner(unittest.TestCase):
             method='weighted'
         )
 
-        results = engine.backtest_long_only(
+        response = engine.backtest_long_only(
             signals=combined_signals,
             prices=self.prices,
             top_n=5,
             holding_period=5
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        results = response.data
 
         # 验证返回结果
         self.assertIn('portfolio_value', results)
@@ -508,12 +512,16 @@ class TestStrategyCombiner(unittest.TestCase):
             self.prices,
             volumes=self.volumes
         )
-        mom_results = engine.backtest_long_only(
+        mom_response = engine.backtest_long_only(
             signals=mom_signals,
             prices=self.prices,
             top_n=5,
             holding_period=5
         )
+
+        # 验证Response对象
+        self.assertTrue(mom_response.is_success())
+        mom_results = mom_response.data
 
         # 组合策略
         combiner = StrategyCombiner(
@@ -533,12 +541,16 @@ class TestStrategyCombiner(unittest.TestCase):
             verbose=False
         )
 
-        combined_results = engine2.backtest_long_only(
+        combined_response = engine2.backtest_long_only(
             signals=combined_signals,
             prices=self.prices,
             top_n=5,
             holding_period=5
         )
+
+        # 验证Response对象
+        self.assertTrue(combined_response.is_success())
+        combined_results = combined_response.data
 
         # 两种策略都应该能够运行
         self.assertIsNotNone(mom_results['portfolio_value'])

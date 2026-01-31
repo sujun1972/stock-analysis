@@ -375,12 +375,16 @@ class TestMLStrategy(unittest.TestCase):
         )
 
         # 回测
-        results = engine.backtest_long_only(
+        response = engine.backtest_long_only(
             signals=signals,
             prices=prices,
             top_n=3,
             holding_period=5
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        results = response.data
 
         # 验证返回结果
         self.assertIn('portfolio_value', results)
