@@ -28,6 +28,37 @@ from src.features.streaming_feature_engine import StreamingFeatureEngine, Stream
 from src.backtest.backtest_engine import BacktestEngine
 from src.utils.memory_pool import DataFrameMemoryPool, get_global_memory_pool, reset_global_memory_pool
 from src.utils.memory_profiler import memory_profiler, get_current_memory_usage
+from src.utils.response import Response
+
+
+# ==================== Response 辅助函数 ====================
+
+
+def unwrap_response(response):
+    """
+    从 Response 对象中提取数据
+
+    在重构过程中，回测和特征计算函数从直接返回数据改为返回 Response 对象。
+    此函数用于统一解包 Response 对象，提取其中的实际数据。
+
+    Args:
+        response: Response 对象或原始数据（兼容旧 API）
+
+    Returns:
+        解包后的数据（dict 或 DataFrame）
+
+    Raises:
+        ValueError: 如果 Response 状态为失败
+
+    Examples:
+        >>> results = unwrap_response(engine.backtest_long_only_chunked(...))
+        >>> final_value = results['portfolio_value']['total'].iloc[-1]
+    """
+    if isinstance(response, Response):
+        if not response.is_success():
+            raise ValueError(f"操作失败: {response.error_message}")
+        return response.data
+    return response
 
 
 @pytest.fixture
@@ -221,13 +252,14 @@ class TestBacktestBenchmark:
         engine_regular = BacktestEngine(initial_capital=2000000, verbose=False)
 
         with memory_profiler("常规回测", track_interval=0.5, log_result=False) as _:
-            results_regular = engine_regular.backtest_long_only(
+            results_regular_response = engine_regular.backtest_long_only(
                 signals=signals_df,
                 prices=prices_df,
                 top_n=10,
                 holding_period=5,
                 rebalance_freq='W'
             )
+            results_regular = unwrap_response(results_regular_response)  # 解包Response对象
 
         time_regular = time.time() - time_start_regular
         mem_after_regular = get_current_memory_usage()['process_rss_mb']
@@ -248,7 +280,7 @@ class TestBacktestBenchmark:
         engine_chunked = BacktestEngine(initial_capital=2000000, verbose=False)
 
         with memory_profiler("分块回测", track_interval=0.5, log_result=False) as _:
-            results_chunked = engine_chunked.backtest_long_only_chunked(
+            results_chunked_response = engine_chunked.backtest_long_only_chunked(
                 signals=signals_df,
                 prices=prices_df,
                 top_n=10,
@@ -256,6 +288,7 @@ class TestBacktestBenchmark:
                 rebalance_freq='W',
                 chunk_size=100
             )
+            results_chunked = unwrap_response(results_chunked_response)  # 解包Response对象
 
         time_chunked = time.time() - time_start_chunked
         mem_after_chunked = get_current_memory_usage()['process_rss_mb']
@@ -451,7 +484,7 @@ class TestMemoryOptimizationIntegration:
             # 步骤2: 分块回测
             backtest_engine = BacktestEngine(initial_capital=3000000, verbose=False)
 
-            results = backtest_engine.backtest_long_only_chunked(
+            results_response = backtest_engine.backtest_long_only_chunked(
                 signals=signals_df,
                 prices=prices_df,
                 top_n=8,
@@ -459,6 +492,7 @@ class TestMemoryOptimizationIntegration:
                 rebalance_freq='W',
                 chunk_size=60
             )
+            results = unwrap_response(results_response)  # 解包Response对象
 
         mem_end = get_current_memory_usage()['process_rss_mb']
         mem_used_total = mem_end - mem_start

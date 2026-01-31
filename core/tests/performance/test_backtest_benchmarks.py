@@ -25,6 +25,7 @@ sys.path.insert(0, str(project_root / 'src'))
 from backtest.backtest_engine import BacktestEngine
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.mean_reversion_strategy import MeanReversionStrategy
+from src.utils.response import Response
 
 from .benchmarks import (
     PerformanceBenchmarkBase,
@@ -35,22 +36,61 @@ from .benchmarks import (
 )
 
 
+# ==================== Response 辅助函数 ====================
+
+
+def unwrap_response(response):
+    """
+    从 Response 对象中提取数据
+
+    在重构过程中，许多函数从直接返回数据改为返回 Response 对象。
+    此函数用于统一解包 Response 对象，提取其中的实际数据。
+
+    Args:
+        response: Response 对象或原始数据（兼容旧 API）
+
+    Returns:
+        解包后的数据（通常是 DataFrame 或 dict）
+
+    Raises:
+        ValueError: 如果 Response 状态为失败
+
+    Examples:
+        >>> result = unwrap_response(engine.backtest_long_only(signals, prices))
+        >>> assert isinstance(result, dict)
+    """
+    if isinstance(response, Response):
+        if not response.is_success():
+            raise ValueError(f"操作失败: {response.error_message}")
+        return response.data
+    return response
+
+
 # ==================== 模块级别辅助函数（用于并行处理）====================
 
 
 def _run_single_backtest(args):
     """
-    单次回测的辅助函数（模块级别，可被pickle）
+    单次回测的辅助函数（模块级别，用于并行处理）
+
+    注意：此函数必须是模块级别的，因为 multiprocessing 需要能够 pickle 它。
 
     Args:
         args: (signals, prices) 元组
 
     Returns:
-        回测结果字典
+        dict: 回测结果字典（已从 Response 对象中解包）
     """
     signals, prices = args
     engine = BacktestEngine(initial_capital=1_000_000)
-    return engine.backtest_long_only(signals, prices)
+    result_response = engine.backtest_long_only(signals, prices)
+
+    # 解包 Response 对象（使用与顶层相同的逻辑）
+    if isinstance(result_response, Response):
+        if not result_response.is_success():
+            raise ValueError(f"操作失败: {result_response.error_message}")
+        return result_response.data
+    return result_response
 
 
 # ==================== 回测数据生成 ====================
@@ -158,8 +198,11 @@ class TestBacktestEnginePerformance(PerformanceBenchmarkBase):
         engine = BacktestEngine(initial_capital=10_000_000, commission_rate=0.0003)
 
         # 使用long_only回测(实际API)
-        results = engine.backtest_long_only(signals, prices)
+        results_response = engine.backtest_long_only(signals, prices)
         elapsed = time.time() - start
+
+        # 解包Response对象
+        results = unwrap_response(results_response)
 
         # 验证结果
         assert results is not None
@@ -206,7 +249,8 @@ class TestBacktestEnginePerformance(PerformanceBenchmarkBase):
 
         start = time.time()
         engine = BacktestEngine(initial_capital=1_000_000, commission_rate=0.0003)
-        results = engine.backtest_long_only(signals, prices)
+        results_response = engine.backtest_long_only(signals, prices)
+        results = unwrap_response(results_response)  # 解包Response对象
         elapsed = time.time() - start
 
         threshold = 0.5  # 中等规模应该很快
@@ -256,7 +300,8 @@ class TestStrategyBacktestPerformance(PerformanceBenchmarkBase):
         # 信号已经是得分格式,直接使用
         start = time.time()
         engine = BacktestEngine(initial_capital=1_000_000)
-        results = engine.backtest_long_only(signals, prices, top_n=20)
+        results_response = engine.backtest_long_only(signals, prices, top_n=20)
+        results = unwrap_response(results_response)  # 解包Response对象
         elapsed = time.time() - start
 
         threshold = PerformanceThresholds.BACKTEST_LONG_ONLY
@@ -285,7 +330,8 @@ class TestStrategyBacktestPerformance(PerformanceBenchmarkBase):
 
         start = time.time()
         engine = BacktestEngine(initial_capital=1_000_000)
-        results = engine.backtest_market_neutral(signals, prices, top_n=20, bottom_n=20)
+        results_response = engine.backtest_market_neutral(signals, prices, top_n=20, bottom_n=20)
+        results = unwrap_response(results_response)  # 解包Response对象
         elapsed = time.time() - start
 
         threshold = PerformanceThresholds.BACKTEST_MARKET_NEUTRAL
@@ -322,7 +368,8 @@ class TestStrategyBacktestPerformance(PerformanceBenchmarkBase):
 
         # 2. 回测
         engine = BacktestEngine(initial_capital=1_000_000)
-        results = engine.backtest_long_only(signals, prices, top_n=1)
+        results_response = engine.backtest_long_only(signals, prices, top_n=1)
+        results = unwrap_response(results_response)  # 解包Response对象
 
         elapsed = time.time() - start
 
@@ -355,7 +402,8 @@ class TestPerformanceAnalyzerBenchmark(PerformanceBenchmarkBase):
 
         # 先运行回测获得结果
         engine = BacktestEngine(initial_capital=1_000_000)
-        results = engine.backtest_long_only(signals, prices)
+        results_response = engine.backtest_long_only(signals, prices)
+        results = unwrap_response(results_response)  # 解包Response对象
 
         # 测试性能指标计算
         from backtest.performance_analyzer import PerformanceAnalyzer
@@ -386,7 +434,8 @@ class TestPerformanceAnalyzerBenchmark(PerformanceBenchmarkBase):
         prices = backtest_prices_medium
 
         engine = BacktestEngine(initial_capital=1_000_000)
-        results = engine.backtest_long_only(signals, prices)
+        results_response = engine.backtest_long_only(signals, prices)
+        results = unwrap_response(results_response)  # 解包Response对象
 
         from backtest.performance_analyzer import PerformanceAnalyzer
 
@@ -427,7 +476,8 @@ class TestParallelBacktestPerformance(PerformanceBenchmarkBase):
         results_seq = []
         for _ in range(4):  # 模拟4个策略
             engine = BacktestEngine(initial_capital=1_000_000)
-            result = engine.backtest_long_only(signals, prices)
+            result_response = engine.backtest_long_only(signals, prices)
+            result = unwrap_response(result_response)  # 解包Response对象
             results_seq.append(result)
         sequential_time = time.time() - start
 

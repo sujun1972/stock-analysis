@@ -30,6 +30,7 @@ from features.alpha_factors import (
     VolumeFactorCalculator,
 )
 from features.technical_indicators import TechnicalIndicators
+from src.utils.response import Response
 
 from .benchmarks import (
     PerformanceBenchmarkBase,
@@ -38,6 +39,37 @@ from .benchmarks import (
     print_benchmark_result,
     performance_reporter,
 )
+
+
+# ==================== Response 辅助函数 ====================
+
+
+def unwrap_response(response):
+    """
+    从 Response 对象中提取数据
+
+    在重构过程中，Alpha 因子计算函数从直接返回 DataFrame 改为返回 Response 对象。
+    此函数用于统一解包 Response 对象，提取其中的 DataFrame。
+
+    Args:
+        response: Response 对象或原始数据（兼容旧 API）
+
+    Returns:
+        pd.DataFrame: 解包后的 DataFrame，包含计算后的特征
+
+    Raises:
+        ValueError: 如果 Response 状态为失败
+
+    Examples:
+        >>> alpha = AlphaFactors(data)
+        >>> result = unwrap_response(alpha.add_all_alpha_factors())
+        >>> assert isinstance(result, pd.DataFrame)
+    """
+    if isinstance(response, Response):
+        if not response.is_success():
+            raise ValueError(f"操作失败: {response.error_message}")
+        return response.data
+    return response
 
 
 # ==================== Alpha因子性能测试 ====================
@@ -60,7 +92,8 @@ class TestAlphaFactorsPerformance(PerformanceBenchmarkBase):
         # 执行计算
         start = time.time()
         alpha = AlphaFactors(data)
-        result = alpha.add_all_alpha_factors()
+        result_response = alpha.add_all_alpha_factors()
+        result = unwrap_response(result_response)  # 解包Response对象
         elapsed = time.time() - start
 
         # 验证结果
@@ -99,7 +132,8 @@ class TestAlphaFactorsPerformance(PerformanceBenchmarkBase):
 
         start = time.time()
         calc = MomentumFactorCalculator(data)
-        result = calc.calculate_all()
+        result_response = calc.calculate_all()
+        result = unwrap_response(result_response)  # 解包Response对象
         elapsed = time.time() - start
 
         threshold = 0.5  # 单因子类型<0.5秒
@@ -133,7 +167,8 @@ class TestAlphaFactorsPerformance(PerformanceBenchmarkBase):
 
         start = time.time()
         calc = ReversalFactorCalculator(data)
-        result = calc.calculate_all()
+        result_response = calc.calculate_all()
+        result = unwrap_response(result_response)  # 解包Response对象
         elapsed = time.time() - start
 
         threshold = 0.5
@@ -167,7 +202,8 @@ class TestAlphaFactorsPerformance(PerformanceBenchmarkBase):
 
         start = time.time()
         calc = VolatilityFactorCalculator(data)
-        result = calc.calculate_all()
+        result_response = calc.calculate_all()
+        result = unwrap_response(result_response)  # 解包Response对象
         elapsed = time.time() - start
 
         threshold = 0.5
@@ -201,7 +237,8 @@ class TestAlphaFactorsPerformance(PerformanceBenchmarkBase):
 
         start = time.time()
         calc = VolumeFactorCalculator(data)
-        result = calc.calculate_all()
+        result_response = calc.calculate_all()
+        result = unwrap_response(result_response)  # 解包Response对象
         elapsed = time.time() - start
 
         threshold = 0.5
@@ -393,7 +430,8 @@ class TestBatchCalculationPerformance(PerformanceBenchmarkBase):
         results = []
         for i in range(n_stocks):
             alpha = AlphaFactors(data)
-            result = alpha.add_all_alpha_factors()
+            result_response = alpha.add_all_alpha_factors()
+            result = unwrap_response(result_response)  # 解包Response对象
             results.append(result)
         elapsed = time.time() - start
 
