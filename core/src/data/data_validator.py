@@ -18,6 +18,9 @@ from typing import Optional, Dict, List, Any, Tuple
 from loguru import logger
 from datetime import datetime, timedelta
 
+from utils.response import Response
+from exceptions import DataValidationError
+
 
 class DataValidator:
     """
@@ -79,12 +82,14 @@ class DataValidator:
             f"必需字段={self.required_fields}"
         )
 
-    def validate_required_fields(self) -> bool:
+    def validate_required_fields(self) -> Response:
         """
         验证必需字段是否存在
 
         返回：
-            True表示通过，False表示失败
+            Response对象，包含验证结果
+            - 成功: data={'passed': True, 'required_fields': [...]}
+            - 失败: error信息，missing_fields列表
         """
         missing_fields = [
             field for field in self.required_fields
@@ -96,17 +101,28 @@ class DataValidator:
             logger.error(error_msg)
             self.validation_results['errors'].append(error_msg)
             self.validation_results['passed'] = False
-            return False
+
+            return Response.error(
+                error=error_msg,
+                error_code="MISSING_REQUIRED_FIELDS",
+                missing_fields=missing_fields,
+                required_fields=self.required_fields
+            )
 
         logger.info(f"✓ 必需字段验证通过: {self.required_fields}")
-        return True
+        return Response.success(
+            data={'passed': True, 'required_fields': self.required_fields},
+            message="必需字段验证通过"
+        )
 
-    def validate_data_types(self) -> bool:
+    def validate_data_types(self) -> Response:
         """
         验证数据类型正确性
 
         返回：
-            True表示通过，False表示失败
+            Response对象，包含验证结果
+            - 成功: data={'passed': True}
+            - 失败: error信息，type_errors列表
         """
         type_errors = []
 
@@ -129,12 +145,20 @@ class DataValidator:
             logger.error(error_msg)
             self.validation_results['errors'].append(error_msg)
             self.validation_results['passed'] = False
-            return False
+
+            return Response.error(
+                error=error_msg,
+                error_code="INVALID_DATA_TYPES",
+                type_errors=type_errors
+            )
 
         logger.info("✓ 数据类型验证通过")
-        return True
+        return Response.success(
+            data={'passed': True},
+            message="数据类型验证通过"
+        )
 
-    def validate_price_logic(self) -> Tuple[bool, Dict[str, int]]:
+    def validate_price_logic(self) -> Response:
         """
         验证价格逻辑关系
 
@@ -145,7 +169,9 @@ class DataValidator:
         4. 价格 > 0
 
         返回：
-            (是否通过, 错误统计字典)
+            Response对象，包含验证结果
+            - 成功: data={'passed': True, 'error_stats': {...}}
+            - 警告: 有问题但可修复，返回warning状态
         """
         has_ohlc = all(col in self.df.columns for col in ['open', 'high', 'low', 'close'])
 
@@ -159,7 +185,7 @@ class DataValidator:
         # 检查 high ≥ low
         if 'high' in self.df.columns and 'low' in self.df.columns:
             invalid = self.df['high'] < self.df['low']
-            error_stats['high_less_than_low'] = invalid.sum()
+            error_stats['high_less_than_low'] = int(invalid.sum())
 
             if invalid.any():
                 warning_msg = f"发现 {invalid.sum()} 条记录的high < low"
@@ -169,7 +195,7 @@ class DataValidator:
         # 检查 close 在 [low, high] 范围内
         if has_ohlc:
             invalid_close = (self.df['close'] < self.df['low']) | (self.df['close'] > self.df['high'])
-            error_stats['close_out_of_range'] = invalid_close.sum()
+            error_stats['close_out_of_range'] = int(invalid_close.sum())
 
             if invalid_close.any():
                 warning_msg = f"发现 {invalid_close.sum()} 条记录的close不在[low, high]范围内"
@@ -179,7 +205,7 @@ class DataValidator:
         # 检查 open 在 [low, high] 范围内
         if has_ohlc:
             invalid_open = (self.df['open'] < self.df['low']) | (self.df['open'] > self.df['high'])
-            error_stats['open_out_of_range'] = invalid_open.sum()
+            error_stats['open_out_of_range'] = int(invalid_open.sum())
 
             if invalid_open.any():
                 warning_msg = f"发现 {invalid_open.sum()} 条记录的open不在[low, high]范围内"
@@ -190,7 +216,7 @@ class DataValidator:
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in self.df.columns]
         for col in price_cols:
             negative = self.df[col] <= 0
-            negative_count = negative.sum()
+            negative_count = int(negative.sum())
 
             if negative_count > 0:
                 error_stats['negative_price'] += negative_count
@@ -202,20 +228,27 @@ class DataValidator:
         total_errors = sum(error_stats.values())
         passed = total_errors == 0
 
-        if passed:
-            logger.info("✓ 价格逻辑验证通过")
-        else:
-            logger.warning(f"⚠ 价格逻辑验证发现 {total_errors} 个问题")
-
         self.validation_results['stats']['price_logic_errors'] = error_stats
 
-        return passed, error_stats
+        if passed:
+            logger.info("✓ 价格逻辑验证通过")
+            return Response.success(
+                data={'passed': True, 'error_stats': error_stats},
+                message="价格逻辑验证通过"
+            )
+        else:
+            logger.warning(f"⚠ 价格逻辑验证发现 {total_errors} 个问题")
+            return Response.warning(
+                message=f"价格逻辑验证发现 {total_errors} 个问题",
+                data={'passed': False, 'error_stats': error_stats},
+                total_errors=total_errors
+            )
 
     def validate_date_continuity(
         self,
         allow_gaps: bool = True,
         max_gap_days: int = 10
-    ) -> Tuple[bool, List[Tuple[datetime, datetime, int]]]:
+    ) -> Response:
         """
         验证日期序列连续性
 
@@ -224,7 +257,10 @@ class DataValidator:
             max_gap_days: 最大允许间隔天数
 
         返回：
-            (是否通过, 间隔列表)
+            Response对象，包含验证结果
+            - 成功: data={'passed': True, 'gaps': [...]}
+            - 警告: 有间隔但allow_gaps=True
+            - 错误: 日期未排序或不允许间隔
         """
         # 获取日期索引
         if self.date_column:
@@ -234,7 +270,10 @@ class DataValidator:
                 warning_msg = "索引不是DatetimeIndex，跳过日期连续性检查"
                 logger.warning(warning_msg)
                 self.validation_results['warnings'].append(warning_msg)
-                return True, []
+                return Response.warning(
+                    message=warning_msg,
+                    data={'passed': True, 'gaps': [], 'skipped': True}
+                )
             dates = self.df.index
 
         # 检查日期排序
@@ -243,7 +282,11 @@ class DataValidator:
             logger.error(error_msg)
             self.validation_results['errors'].append(error_msg)
             self.validation_results['passed'] = False
-            return False, []
+            return Response.error(
+                error=error_msg,
+                error_code="DATE_NOT_SORTED",
+                data={'passed': False, 'gaps': []}
+            )
 
         # 检查日期间隔
         gaps = []
@@ -255,7 +298,14 @@ class DataValidator:
             if gap_days > max_gap_days:
                 start_date = dates[i - 1]
                 end_date = dates[i]
-                gaps.append((start_date, end_date, gap_days))
+                # 转换为可序列化的格式
+                gaps.append({
+                    'start_date': str(start_date.date()) if hasattr(start_date, 'date') else str(start_date),
+                    'end_date': str(end_date.date()) if hasattr(end_date, 'date') else str(end_date),
+                    'gap_days': gap_days
+                })
+
+        self.validation_results['stats']['date_gaps'] = gaps
 
         if gaps:
             warning_msg = f"发现 {len(gaps)} 个日期间隔 > {max_gap_days}天"
@@ -264,12 +314,27 @@ class DataValidator:
 
             if not allow_gaps:
                 self.validation_results['passed'] = False
-                return False, gaps
+                return Response.error(
+                    error=warning_msg,
+                    error_code="DATE_GAPS_NOT_ALLOWED",
+                    data={'passed': False, 'gaps': gaps},
+                    n_gaps=len(gaps),
+                    max_gap_days=max_gap_days
+                )
+            else:
+                return Response.warning(
+                    message=warning_msg,
+                    data={'passed': True, 'gaps': gaps},
+                    n_gaps=len(gaps),
+                    max_gap_days=max_gap_days
+                )
 
         logger.info(f"✓ 日期连续性验证通过 (间隔数={len(gaps)})")
-        self.validation_results['stats']['date_gaps'] = gaps
-
-        return True, gaps
+        return Response.success(
+            data={'passed': True, 'gaps': gaps},
+            message="日期连续性验证通过",
+            n_gaps=0
+        )
 
     def validate_value_ranges(
         self,
@@ -277,7 +342,7 @@ class DataValidator:
         price_max: float = 10000.0,
         volume_min: float = 0,
         volume_max: float = 1e12
-    ) -> Tuple[bool, Dict[str, int]]:
+    ) -> Response:
         """
         验证数值范围合理性
 
@@ -288,7 +353,9 @@ class DataValidator:
             volume_max: 最大成交量
 
         返回：
-            (是否通过, 异常统计)
+            Response对象，包含验证结果
+            - 成功: data={'passed': True, 'range_errors': {}}
+            - 警告: 有超出范围的值
         """
         range_errors = {}
 
@@ -297,7 +364,7 @@ class DataValidator:
 
         for col in price_cols:
             out_of_range = (self.df[col] < price_min) | (self.df[col] > price_max)
-            count = out_of_range.sum()
+            count = int(out_of_range.sum())
 
             if count > 0:
                 range_errors[f'{col}_out_of_range'] = count
@@ -310,7 +377,7 @@ class DataValidator:
 
         for col in volume_cols:
             out_of_range = (self.df[col] < volume_min) | (self.df[col] > volume_max)
-            count = out_of_range.sum()
+            count = int(out_of_range.sum())
 
             if count > 0:
                 range_errors[f'{col}_out_of_range'] = count
@@ -319,20 +386,27 @@ class DataValidator:
                 self.validation_results['warnings'].append(warning_msg)
 
         passed = len(range_errors) == 0
+        self.validation_results['stats']['value_range_errors'] = range_errors
 
         if passed:
             logger.info("✓ 数值范围验证通过")
+            return Response.success(
+                data={'passed': True, 'range_errors': range_errors},
+                message="数值范围验证通过"
+            )
         else:
-            logger.warning(f"⚠ 数值范围验证发现 {sum(range_errors.values())} 个问题")
-
-        self.validation_results['stats']['value_range_errors'] = range_errors
-
-        return passed, range_errors
+            total_out_of_range = sum(range_errors.values())
+            logger.warning(f"⚠ 数值范围验证发现 {total_out_of_range} 个问题")
+            return Response.warning(
+                message=f"数值范围验证发现 {total_out_of_range} 个问题",
+                data={'passed': False, 'range_errors': range_errors},
+                total_out_of_range=total_out_of_range
+            )
 
     def validate_missing_values(
         self,
         max_missing_rate: float = 0.5
-    ) -> Tuple[bool, Dict[str, float]]:
+    ) -> Response:
         """
         验证缺失值比例
 
@@ -340,14 +414,16 @@ class DataValidator:
             max_missing_rate: 最大允许缺失率（默认50%）
 
         返回：
-            (是否通过, 缺失率字典)
+            Response对象，包含验证结果
+            - 成功: data={'passed': True, 'missing_stats': {...}}
+            - 警告: 有列缺失率过高
         """
         missing_stats = {}
         total_rows = len(self.df)
 
         for col in self.df.columns:
             missing_count = self.df[col].isna().sum()
-            missing_rate = missing_count / total_rows
+            missing_rate = missing_count / total_rows if total_rows > 0 else 0
 
             missing_stats[col] = {
                 'count': int(missing_count),
@@ -366,42 +442,57 @@ class DataValidator:
         ]
 
         passed = len(high_missing_cols) == 0
+        self.validation_results['stats']['missing_values'] = missing_stats
 
         if passed:
             logger.info("✓ 缺失值验证通过")
+            return Response.success(
+                data={'passed': True, 'missing_stats': missing_stats},
+                message="缺失值验证通过"
+            )
         else:
             logger.warning(f"⚠ {len(high_missing_cols)} 列缺失率过高")
+            return Response.warning(
+                message=f"{len(high_missing_cols)} 列缺失率过高",
+                data={'passed': False, 'missing_stats': missing_stats},
+                high_missing_cols=high_missing_cols,
+                n_high_missing_cols=len(high_missing_cols)
+            )
 
-        self.validation_results['stats']['missing_values'] = missing_stats
-
-        return passed, missing_stats
-
-    def validate_duplicates(self) -> Tuple[bool, int]:
+    def validate_duplicates(self) -> Response:
         """
         验证是否存在重复记录
 
         返回：
-            (是否通过, 重复记录数)
+            Response对象，包含验证结果
+            - 成功: data={'passed': True, 'duplicate_count': 0}
+            - 警告: 有重复记录
         """
-        duplicate_count = self.df.duplicated().sum()
+        duplicate_count = int(self.df.duplicated().sum())
+        self.validation_results['stats']['duplicate_records'] = duplicate_count
 
         if duplicate_count > 0:
             warning_msg = f"发现 {duplicate_count} 条重复记录"
             logger.warning(warning_msg)
             self.validation_results['warnings'].append(warning_msg)
+            return Response.warning(
+                message=warning_msg,
+                data={'passed': False, 'duplicate_count': duplicate_count},
+                duplicate_count=duplicate_count
+            )
         else:
             logger.info("✓ 无重复记录")
-
-        self.validation_results['stats']['duplicate_records'] = int(duplicate_count)
-
-        return duplicate_count == 0, duplicate_count
+            return Response.success(
+                data={'passed': True, 'duplicate_count': 0},
+                message="无重复记录"
+            )
 
     def validate_all(
         self,
         strict_mode: bool = False,
         allow_date_gaps: bool = True,
         max_missing_rate: float = 0.5
-    ) -> Dict[str, Any]:
+    ) -> Response:
         """
         执行全部验证检查
 
@@ -411,7 +502,10 @@ class DataValidator:
             max_missing_rate: 最大允许缺失率
 
         返回：
-            完整的验证结果字典
+            Response对象，包含完整的验证结果
+            - 成功: 所有验证通过（严格模式下无警告）
+            - 警告: 有警告但非严格模式
+            - 错误: 有错误或严格模式下有警告
         """
         logger.info("开始全面数据验证...")
 
@@ -453,18 +547,45 @@ class DataValidator:
             'strict_mode': strict_mode
         }
 
+        # 根据验证结果返回不同的Response
         if self.validation_results['passed']:
             logger.info(
                 f"✓ 数据验证通过! "
                 f"(错误={error_count}, 警告={warning_count})"
             )
+
+            if warning_count > 0:
+                return Response.warning(
+                    message=f"数据验证通过，但有 {warning_count} 个警告",
+                    data=self.validation_results,
+                    error_count=error_count,
+                    warning_count=warning_count,
+                    total_records=len(self.df),
+                    total_columns=len(self.df.columns)
+                )
+            else:
+                return Response.success(
+                    data=self.validation_results,
+                    message="数据验证完全通过",
+                    error_count=error_count,
+                    warning_count=warning_count,
+                    total_records=len(self.df),
+                    total_columns=len(self.df.columns)
+                )
         else:
             logger.error(
                 f"✗ 数据验证失败! "
                 f"(错误={error_count}, 警告={warning_count})"
             )
-
-        return self.validation_results
+            return Response.error(
+                error=f"数据验证失败: {error_count} 个错误, {warning_count} 个警告",
+                error_code="VALIDATION_FAILED",
+                data=self.validation_results,
+                error_count=error_count,
+                warning_count=warning_count,
+                total_records=len(self.df),
+                total_columns=len(self.df.columns)
+            )
 
     def get_validation_report(self) -> str:
         """
@@ -552,7 +673,7 @@ def validate_stock_data(
     df: pd.DataFrame,
     required_fields: List[str] = None,
     strict_mode: bool = False
-) -> Dict[str, Any]:
+) -> Response:
     """
     便捷函数：快速验证股票数据
 
@@ -562,7 +683,7 @@ def validate_stock_data(
         strict_mode: 严格模式
 
     返回：
-        验证结果字典
+        Response对象，包含验证结果
     """
     validator = DataValidator(df, required_fields=required_fields)
     return validator.validate_all(strict_mode=strict_mode)
