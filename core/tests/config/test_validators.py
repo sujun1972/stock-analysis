@@ -182,11 +182,16 @@ class TestConfigValidator:
 
     def test_validate_database_success(self, validator):
         """测试数据库验证通过"""
-        with patch.object(validator, '_test_db_connection') as mock_conn:
+        with patch.object(validator, '_test_db_connection') as mock_conn, \
+             patch.object(validator, '_check_timescaledb_extension') as mock_timescale:
+            # 模拟连接成功
             mock_conn.return_value = Mock()
+            # 模拟TimescaleDB已安装
+            mock_timescale.return_value = True
 
             issues = validator.validate_database()
 
+            # 当连接成功且TimescaleDB已安装时，不应有任何issues
             assert len(issues) == 0
 
     def test_validate_database_missing_host(self, validator):

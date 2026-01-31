@@ -192,7 +192,11 @@ class ConfigMigrator:
         config = self._load_env_file()
 
         # 获取迁移规则
-        migration_key = f"{from_version}_{to_version}".replace(".", "_")
+        # 构造migration key: ConfigVersion.V1_0 -> "v1.0_to_v2.0"
+        # 注意: 保留版本号中的点号，不要替换为下划线
+        from_ver_str = from_version.value if hasattr(from_version, 'value') else str(from_version)
+        to_ver_str = to_version.value if hasattr(to_version, 'value') else str(to_version)
+        migration_key = f"{from_ver_str}_to_{to_ver_str}"
         if migration_key not in MIGRATION_RULES:
             issues.append(MigrationIssue(
                 severity="error",
@@ -279,7 +283,10 @@ class ConfigMigrator:
         changes_made = []
 
         # 获取迁移规则
-        migration_key = f"{from_version}_{to_version}".replace(".", "_")
+        # 构造migration key，与MIGRATION_RULES字典的key格式保持一致
+        from_ver_str = from_version.value if hasattr(from_version, 'value') else str(from_version)
+        to_ver_str = to_version.value if hasattr(to_version, 'value') else str(to_version)
+        migration_key = f"{from_ver_str}_to_{to_ver_str}"
         rules = MIGRATION_RULES[migration_key]
 
         # 应用重命名

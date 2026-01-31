@@ -327,9 +327,14 @@ def test_integrated_pipeline():
     print("\n5.6 验证保存")
     response = storage.load_features('000001', 'transformed', 'v1')
 
-    assert response.is_success, f"加载失败: {response.error}"
+    # 判断response类型并unwrap
+    if hasattr(response, 'is_success'):
+        assert response.is_success, f"加载失败: {response.error}"
+        loaded_df = response.data
+    else:
+        # 直接返回DataFrame
+        loaded_df = response
 
-    loaded_df = response.data
     assert loaded_df is not None, "加载失败"
 
     # 确保loaded_df是DataFrame

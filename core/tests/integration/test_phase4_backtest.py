@@ -235,8 +235,10 @@ def test_backtest_engine():
     print("\n3.4 检查回测结果")
     # 确保results是字典
     assert isinstance(results, dict), f"results应该是字典，实际类型: {type(results)}"
-    portfolio_value = results['portfolio_value']
-    daily_returns = results['daily_returns']
+
+    # unwrap nested Response objects if any
+    portfolio_value = unwrap_response(results['portfolio_value'])
+    daily_returns = unwrap_response(results['daily_returns'])
 
     print(f"  交易日数: {len(portfolio_value)}")
     print(f"  最终资产: {portfolio_value['total'].iloc[-1]:,.0f}")

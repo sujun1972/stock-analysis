@@ -277,8 +277,8 @@ class TestModelPersistence(unittest.TestCase):
 
             # 创建并训练模型（CPU模式，快速训练）
             model = GRUStockModel(
-                input_dim=10,
-                hidden_dim=32,
+                input_size=10,
+                hidden_size=32,
                 num_layers=1,
                 device='cpu'
             )

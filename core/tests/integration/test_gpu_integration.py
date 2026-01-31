@@ -411,6 +411,13 @@ class TestEndToEndWorkflow:
         # 4. 评估
         valid_targets = y_valid[10:].values  # 对齐序列长度
         from sklearn.metrics import mean_squared_error
+
+        # 验证数据不包含无穷大或NaN值
+        assert not np.any(np.isinf(valid_targets)), "valid_targets contains infinity"
+        assert not np.any(np.isnan(valid_targets)), "valid_targets contains NaN"
+        assert not np.any(np.isinf(predictions)), "predictions contains infinity"
+        assert not np.any(np.isnan(predictions)), "predictions contains NaN"
+
         mse = mean_squared_error(valid_targets, predictions)
 
         # 5. 保存模型
