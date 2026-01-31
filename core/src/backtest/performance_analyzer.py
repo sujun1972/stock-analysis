@@ -17,7 +17,7 @@ class PerformanceAnalyzer:
 
     def __init__(
         self,
-        returns: pd.Series,
+        returns: pd.Series | Dict,
         benchmark_returns: Optional[pd.Series] = None,
         risk_free_rate: float = 0.03,
         periods_per_year: int = 252
@@ -26,12 +26,22 @@ class PerformanceAnalyzer:
         初始化绩效分析器
 
         参数:
-            returns: 策略收益率序列
+            returns: 策略收益率序列，或者包含'daily_returns'键的回测结果字典
             benchmark_returns: 基准收益率序列
             risk_free_rate: 无风险利率（年化）
             periods_per_year: 每年期数（日频=252, 周频=52, 月频=12）
         """
-        self.returns = returns.dropna()
+        # 如果传入的是字典（回测结果），提取daily_returns
+        if isinstance(returns, dict):
+            if 'daily_returns' in returns:
+                self.returns = returns['daily_returns'].dropna()
+            elif 'returns' in returns:
+                self.returns = returns['returns'].dropna()
+            else:
+                raise ValueError("回测结果字典必须包含'daily_returns'或'returns'键")
+        else:
+            self.returns = returns.dropna()
+
         self.benchmark_returns = benchmark_returns.dropna() if benchmark_returns is not None else None
         self.risk_free_rate = risk_free_rate
         self.periods_per_year = periods_per_year
@@ -116,6 +126,35 @@ class PerformanceAnalyzer:
             return ann_return / max_dd
         else:
             return np.inf if ann_return > 0 else 0.0
+
+    def calculate_drawdown(self) -> Dict:
+        """
+        计算详细的回撤信息
+
+        返回:
+            包含回撤详细信息的字典
+        """
+        cum_returns = self.cumulative_returns()
+        running_max = (1 + cum_returns).cummax()
+        drawdown_series = (1 + cum_returns) / running_max - 1
+
+        # 最大回撤
+        max_dd = drawdown_series.min()
+
+        # 最大回撤发生时间
+        max_dd_date = drawdown_series.idxmin()
+
+        # 最大回撤持续期
+        max_dd_duration = self.max_drawdown_duration()
+
+        # 回撤序列
+        return {
+            'max_drawdown': max_dd,
+            'max_drawdown_date': max_dd_date,
+            'max_drawdown_duration': max_dd_duration,
+            'drawdown_series': drawdown_series,
+            'running_max': running_max
+        }
 
     # ==================== 风险调整收益指标 ====================
 

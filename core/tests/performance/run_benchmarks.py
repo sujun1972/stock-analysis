@@ -18,7 +18,6 @@ import argparse
 import subprocess
 from pathlib import Path
 from datetime import datetime
-import json
 
 # 添加项目路径
 project_root = Path(__file__).parent.parent.parent
@@ -80,8 +79,10 @@ def run_pytest_benchmarks(category: str, verbose: bool = False):
 
     tests = test_files.get(category, test_files['all'])
 
-    # 构建pytest命令
+    # 构建pytest命令（使用当前Python环境的pytest）
     cmd = [
+        sys.executable,
+        '-m',
         'pytest',
         '-v' if verbose else '-q',
         '--tb=short',

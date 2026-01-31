@@ -243,6 +243,27 @@ class TechnicalIndicators(BaseIndicator):
 
     # ==================== 综合指标 ====================
 
+    def add_moving_averages(
+        self,
+        ma_periods: list = [5, 10, 20, 60, 120, 250],
+        ema_periods: list = [12, 26, 50],
+        price_col: str = 'close'
+    ) -> pd.DataFrame:
+        """
+        添加所有移动平均线指标（MA + EMA）
+
+        参数:
+            ma_periods: MA周期列表
+            ema_periods: EMA周期列表
+            price_col: 价格列名
+
+        返回:
+            添加移动平均线的DataFrame
+        """
+        self.add_ma(ma_periods, price_col)
+        self.add_ema(ema_periods, price_col)
+        return self.df
+
     def add_all_indicators(self) -> pd.DataFrame:
         """
         一键添加所有常用技术指标
