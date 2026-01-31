@@ -64,15 +64,15 @@ class TestBacktestEngineWithCostAnalysis:
         )
 
         # 检查成本分析结果存在
-        assert 'cost_analysis' in results
-        assert 'cost_analyzer' in results
+        assert 'cost_analysis' in results.data
+        assert 'cost_analyzer' in results.data
 
         # 检查交易被记录
-        cost_analyzer = results['cost_analyzer']
+        cost_analyzer = results.data['cost_analyzer']
         assert len(cost_analyzer.trades) > 0
 
         # 检查成本指标
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
         assert 'total_cost' in cost_analysis
         assert 'n_trades' in cost_analysis
         assert cost_analysis['total_cost'] > 0
@@ -97,7 +97,7 @@ class TestBacktestEngineWithCostAnalysis:
             rebalance_freq='W'
         )
 
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
 
         # 检查成本构成比例合理
         total_cost = cost_analysis['total_cost']
@@ -136,7 +136,7 @@ class TestBacktestEngineWithCostAnalysis:
             rebalance_freq='W'
         )
 
-        cost_analyzer = results['cost_analyzer']
+        cost_analyzer = results.data['cost_analyzer']
         trades_df = cost_analyzer.get_trades_dataframe()
 
         # 检查有买入和卖出交易
@@ -177,10 +177,10 @@ class TestBacktestEngineWithCostAnalysis:
         )
 
         # 日度调仓的成本应该高于周度
-        cost_daily = results_daily['cost_analysis']['total_cost']
-        cost_weekly = results_weekly['cost_analysis']['total_cost']
-        trades_daily = results_daily['cost_analysis']['n_trades']
-        trades_weekly = results_weekly['cost_analysis']['n_trades']
+        cost_daily = results_daily.data['cost_analysis']['total_cost']
+        cost_weekly = results_weekly.data['cost_analysis']['total_cost']
+        trades_daily = results_daily.data['cost_analysis']['n_trades']
+        trades_weekly = results_weekly.data['cost_analysis']['n_trades']
 
         assert cost_daily > cost_weekly, "日度调仓成本应该高于周度"
         assert trades_daily > trades_weekly, "日度调仓交易次数应该更多"
@@ -198,7 +198,7 @@ class TestBacktestEngineWithCostAnalysis:
             rebalance_freq='W'
         )
 
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
 
         # 检查换手率存在且合理
         assert 'annual_turnover_rate' in cost_analysis
@@ -221,7 +221,7 @@ class TestBacktestEngineWithCostAnalysis:
             rebalance_freq='W'
         )
 
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
 
         # 检查成本影响指标
         assert 'cost_to_capital_ratio' in cost_analysis
@@ -256,7 +256,7 @@ class TestBacktestEngineWithCostAnalysis:
             rebalance_freq='W'
         )
 
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
 
         # 滑点成本应该为0
         assert cost_analysis['total_slippage'] == 0.0
@@ -297,8 +297,8 @@ class TestBacktestEngineWithCostAnalysis:
         )
 
         # 高佣金的总成本应该更高
-        cost_high = results_high['cost_analysis']['total_commission']
-        cost_low = results_low['cost_analysis']['total_commission']
+        cost_high = results_high.data['cost_analysis']['total_commission']
+        cost_low = results_low.data['cost_analysis']['total_commission']
 
         assert cost_high > cost_low, "高佣金应该导致更高的总佣金"
 
@@ -315,7 +315,7 @@ class TestBacktestEngineWithCostAnalysis:
             rebalance_freq='W'
         )
 
-        cost_analyzer = results['cost_analyzer']
+        cost_analyzer = results.data['cost_analyzer']
         cost_by_stock = cost_analyzer.calculate_cost_by_stock()
 
         # 应该有多只股票的成本统计
@@ -337,7 +337,7 @@ class TestBacktestEngineWithCostAnalysis:
             rebalance_freq='W'
         )
 
-        cost_analyzer = results['cost_analyzer']
+        cost_analyzer = results.data['cost_analyzer']
         cost_over_time = cost_analyzer.calculate_cost_over_time()
 
         # 应该有时间序列数据
@@ -377,7 +377,7 @@ class TestBacktestEngineWithCostAnalysis:
         )
 
         # 成本应该为0或空字典（无交易时）
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
         if cost_analysis:  # 如果有成本分析结果
             assert cost_analysis.get('n_trades', 0) == 0 or cost_analysis.get('total_cost', 0) == 0
         else:  # 无交易记录
@@ -409,7 +409,7 @@ class TestCostAnalysisEdgeCases:
         )
 
         # 应该只有买入交易，没有卖出
-        cost_analyzer = results['cost_analyzer']
+        cost_analyzer = results.data['cost_analyzer']
         trades_df = cost_analyzer.get_trades_dataframe()
 
         # 至少有一笔买入交易
@@ -443,7 +443,7 @@ class TestCostAnalysisEdgeCases:
         )
 
         # 应该有较多交易（如果有交易的话）
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
         if cost_analysis:  # 有成本分析结果
             # 可能因为资金不足无法交易，所以放宽条件
             assert cost_analysis.get('n_trades', 0) >= 0
@@ -479,7 +479,7 @@ class TestCostAnalysisEdgeCases:
                 holding_period=5,
                 rebalance_freq='W'
             )
-            costs.append(results['cost_analysis']['total_cost'])
+            costs.append(results.data['cost_analysis']['total_cost'])
 
         # 持仓股票越多，调仓成本可能越高
         # 但不是严格递增（取决于调仓频率和信号稳定性）
@@ -517,7 +517,7 @@ def test_integration_with_performance_analyzer():
 
     # 使用绩效分析器
     analyzer = PerformanceAnalyzer(
-        returns=results['daily_returns'],
+        returns=results.data['daily_returns'],
         risk_free_rate=0.03,
         periods_per_year=252
     )
@@ -525,12 +525,12 @@ def test_integration_with_performance_analyzer():
     metrics = analyzer.calculate_all_metrics(verbose=False)
 
     # 检查可以同时获得绩效指标和成本分析
-    assert 'sharpe_ratio' in metrics
-    assert 'total_cost' in results['cost_analysis']
+    assert 'sharpe_ratio' in metrics.data
+    assert 'total_cost' in results.data['cost_analysis']
 
     # 成本应该影响收益
-    total_return = metrics['total_return']
-    cost_drag = results['cost_analysis']['cost_drag']
+    total_return = metrics.data['total_return']
+    cost_drag = results.data['cost_analysis']['cost_drag']
 
     # 成本拖累应该是合理的
     assert 0 <= cost_drag <= abs(total_return)

@@ -208,11 +208,16 @@ class MeanReversionStrategy(BaseStrategy):
             z_scores = self.calculate_z_score(prices)
             scores = -z_scores
 
-        # 2. 使用信号生成器
-        signals = SignalGenerator.generate_rank_signals(
+        # 2. 使用信号生成器生成排名信号（返回Response对象）
+        signals_response = SignalGenerator.generate_rank_signals(
             scores=scores,
             top_n=self.config.top_n
         )
+
+        # 检查信号生成结果并提取数据
+        if not signals_response.is_success():
+            raise ValueError(f"信号生成失败: {signals_response.error}")
+        signals = signals_response.data
 
         # 3. 过滤
         if volumes is not None:

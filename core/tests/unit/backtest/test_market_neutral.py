@@ -79,13 +79,13 @@ class TestMarketNeutralBacktest:
         )
 
         # 验证结果结构
-        assert 'portfolio_value' in results
-        assert 'positions' in results
-        assert 'daily_returns' in results
-        assert 'cost_analysis' in results
+        assert 'portfolio_value' in results.data
+        assert 'positions' in results.data
+        assert 'daily_returns' in results.data
+        assert 'cost_analysis' in results.data
 
         # 验证组合净值DataFrame
-        pv = results['portfolio_value']
+        pv = results.data['portfolio_value']
         assert 'cash' in pv.columns
         assert 'long_value' in pv.columns
         assert 'short_value' in pv.columns
@@ -120,7 +120,7 @@ class TestMarketNeutralBacktest:
         )
 
         # 检查持仓历史
-        positions = results['positions']
+        positions = results.data['positions']
 
         # 找到有持仓的日期
         has_long = False
@@ -155,7 +155,7 @@ class TestMarketNeutralBacktest:
         )
 
         # 检查利息累计
-        pv = results['portfolio_value']
+        pv = results.data['portfolio_value']
         short_interest = pv['short_interest']
 
         # 利息应该随时间增加
@@ -189,8 +189,8 @@ class TestMarketNeutralBacktest:
         )
 
         # 高费率应该导致更高的利息成本
-        interest_low = results_low['portfolio_value']['short_interest'].iloc[-1]
-        interest_high = results_high['portfolio_value']['short_interest'].iloc[-1]
+        interest_low = results_low.data['portfolio_value']['short_interest'].iloc[-1]
+        interest_high = results_high.data['portfolio_value']['short_interest'].iloc[-1]
 
         if interest_high > 0:
             assert interest_high > interest_low
@@ -213,7 +213,7 @@ class TestMarketNeutralBacktest:
         )
 
         # 验证成本分析器有交易记录
-        cost_analyzer = results['cost_analyzer']
+        cost_analyzer = results.data['cost_analyzer']
         assert len(cost_analyzer.trades) > 0
 
         # 检查交易类型
@@ -248,8 +248,8 @@ class TestMarketNeutralBacktest:
         )
 
         # 每日调仓应该有更多交易
-        trades_daily = len(results_daily['cost_analyzer'].trades)
-        trades_weekly = len(results_weekly['cost_analyzer'].trades)
+        trades_daily = len(results_daily.data['cost_analyzer'].trades)
+        trades_weekly = len(results_weekly.data['cost_analyzer'].trades)
 
         assert trades_daily >= trades_weekly
 
@@ -266,7 +266,7 @@ class TestMarketNeutralBacktest:
             bottom_n=5
         )
 
-        pv = results['portfolio_value']['total']
+        pv = results.data['portfolio_value']['total']
 
         # 检查没有NaN值
         assert not pv.isna().any()
@@ -293,7 +293,7 @@ class TestMarketNeutralBacktest:
             rebalance_freq='W'
         )
 
-        positions = results['positions']
+        positions = results.data['positions']
 
         # 检查持仓数量不超过限制
         for pos_record in positions:
@@ -316,7 +316,7 @@ class TestMarketNeutralBacktest:
             bottom_n=5
         )
 
-        pv = results['portfolio_value']
+        pv = results.data['portfolio_value']
 
         # 现金不应该变成负数（允许小的浮点误差）
         assert (pv['cash'] >= -1).all()
@@ -356,7 +356,7 @@ class TestMarketNeutralEdgeCases:
         )
 
         # 应该能正常运行（最多持有5只）
-        assert 'portfolio_value' in results
+        assert 'portfolio_value' in results.data
 
     def test_zero_signals(self):
         """测试全零信号"""
@@ -388,7 +388,7 @@ class TestMarketNeutralEdgeCases:
         )
 
         # 应该能正常运行
-        assert 'portfolio_value' in results
+        assert 'portfolio_value' in results.data
 
     def test_single_day(self):
         """测试单日数据"""
@@ -417,7 +417,7 @@ class TestMarketNeutralEdgeCases:
         )
 
         # 单日数据应该不会有交易（需要次日）
-        pv = results['portfolio_value']
+        pv = results.data['portfolio_value']
         assert len(pv) == 1
         assert pv['total'].iloc[0] == 1000000  # 应该等于初始资金
 
@@ -478,8 +478,8 @@ class TestMarketNeutralVsLongOnly:
             holding_period=5
         )
 
-        final_long = results_long['portfolio_value']['total'].iloc[-1]
-        final_neutral = results_neutral['portfolio_value']['total'].iloc[-1]
+        final_long = results_long.data['portfolio_value']['total'].iloc[-1]
+        final_neutral = results_neutral.data['portfolio_value']['total'].iloc[-1]
 
         # 在牛市中，纯多头通常表现更好（因为市场中性抵消了市场收益）
         # 但这取决于信号质量，所以只验证两者都能运行

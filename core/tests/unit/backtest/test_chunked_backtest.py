@@ -75,13 +75,13 @@ class TestChunkedBacktest:
         )
 
         # 验证结果结构
-        assert 'portfolio_value' in results
-        assert 'positions' in results
-        assert 'daily_returns' in results
-        assert 'cost_analysis' in results
+        assert 'portfolio_value' in results.data
+        assert 'positions' in results.data
+        assert 'daily_returns' in results.data
+        assert 'cost_analysis' in results.data
 
         # 验证portfolio_value
-        portfolio_value = results['portfolio_value']
+        portfolio_value = results.data['portfolio_value']
         assert not portfolio_value.empty
         assert len(portfolio_value) == len(prices_df)
         assert 'cash' in portfolio_value.columns
@@ -127,8 +127,8 @@ class TestChunkedBacktest:
         )
 
         # 比较最终资产（应该非常接近，允许小误差）
-        final_regular = results_regular['portfolio_value']['total'].iloc[-1]
-        final_chunked = results_chunked['portfolio_value']['total'].iloc[-1]
+        final_regular = results_regular.data['portfolio_value']['total'].iloc[-1]
+        final_chunked = results_chunked.data['portfolio_value']['total'].iloc[-1]
 
         relative_error = abs(final_chunked - final_regular) / final_regular
         # 分块回测由于窗口切分，允许有小幅差异（3%以内可接受）
@@ -136,8 +136,8 @@ class TestChunkedBacktest:
             f"分块回测与常规回测结果差异过大: {relative_error:.2%}"
 
         # 比较收益率曲线相关性
-        returns_regular = results_regular['daily_returns'].fillna(0)
-        returns_chunked = results_chunked['daily_returns'].fillna(0)
+        returns_regular = results_regular.data['daily_returns'].fillna(0)
+        returns_chunked = results_chunked.data['daily_returns'].fillna(0)
 
         correlation = returns_regular.corr(returns_chunked)
         # 分块回测由于窗口边界处理，相关性略低但仍然很高（>0.98可接受）
@@ -163,7 +163,7 @@ class TestChunkedBacktest:
                 chunk_size=chunk_size
             )
 
-            final_value = results['portfolio_value']['total'].iloc[-1]
+            final_value = results.data['portfolio_value']['total'].iloc[-1]
             results_list.append(final_value)
 
         # 验证不同chunk_size的结果应该非常接近
@@ -192,8 +192,8 @@ class TestChunkedBacktest:
         )
 
         # 应该能正常运行
-        assert not results['portfolio_value'].empty
-        assert len(results['portfolio_value']) == len(prices_df)
+        assert not results.data['portfolio_value'].empty
+        assert len(results.data['portfolio_value']) == len(prices_df)
 
     def test_edge_case_large_chunk_size(self, sample_market_data):
         """测试边界情况：很大的chunk_size"""
@@ -212,7 +212,7 @@ class TestChunkedBacktest:
         )
 
         # 应该正常运行（相当于不分块）
-        assert not results['portfolio_value'].empty
+        assert not results.data['portfolio_value'].empty
 
     def test_edge_case_chunk_size_equals_data_length(self, sample_market_data):
         """测试chunk_size等于数据长度"""
@@ -230,7 +230,7 @@ class TestChunkedBacktest:
         )
 
         # 应该与常规回测结果一致
-        assert not results['portfolio_value'].empty
+        assert not results.data['portfolio_value'].empty
 
     def test_portfolio_continuity(self, sample_market_data):
         """测试组合净值连续性（无跳跃）"""
@@ -247,7 +247,7 @@ class TestChunkedBacktest:
             chunk_size=60
         )
 
-        portfolio_value = results['portfolio_value']['total']
+        portfolio_value = results.data['portfolio_value']['total']
 
         # 检查日收益率是否合理（没有异常跳跃）
         daily_returns = portfolio_value.pct_change().dropna()
@@ -274,7 +274,7 @@ class TestChunkedBacktest:
             chunk_size=60
         )
 
-        positions = results['positions']
+        positions = results.data['positions']
 
         # 验证每个日期都有持仓记录
         assert len(positions) == len(prices_df)
@@ -304,7 +304,7 @@ class TestChunkedBacktest:
             chunk_size=60
         )
 
-        cost_analysis = results['cost_analysis']
+        cost_analysis = results.data['cost_analysis']
 
         # 验证成本分析结果
         assert 'total_commission' in cost_analysis
@@ -335,7 +335,7 @@ class TestChunkedBacktest:
             )
 
             # 应该能正常运行
-            assert not results['portfolio_value'].empty
+            assert not results.data['portfolio_value'].empty
 
     def test_with_memory_monitor(self, sample_market_data):
         """测试内存监控功能"""
@@ -355,7 +355,7 @@ class TestChunkedBacktest:
         )
 
         # 应该能正常运行（监控不影响功能）
-        assert not results['portfolio_value'].empty
+        assert not results.data['portfolio_value'].empty
 
 
 @pytest.mark.slow
@@ -397,8 +397,8 @@ class TestChunkedBacktestPerformance:
         )
 
         # 验证能处理大数据集
-        assert len(results['portfolio_value']) == 1000
-        assert results['portfolio_value']['total'].iloc[-1] > 0
+        assert len(results.data['portfolio_value']) == 1000
+        assert results.data['portfolio_value']['total'].iloc[-1] > 0
 
 
 @pytest.mark.integration
@@ -453,11 +453,11 @@ class TestChunkedBacktestIntegration:
         )
 
         # 验证完整性
-        assert len(results['portfolio_value']) == len(dates)
-        assert len(results['positions']) == len(dates)
+        assert len(results.data['portfolio_value']) == len(dates)
+        assert len(results.data['positions']) == len(dates)
 
         # 计算指标
-        portfolio_value = results['portfolio_value']
+        portfolio_value = results.data['portfolio_value']
         final_value = portfolio_value['total'].iloc[-1]
         total_return = (final_value / 5000000 - 1) * 100
 

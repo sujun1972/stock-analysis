@@ -257,11 +257,16 @@ class MultiFactorStrategy(BaseStrategy):
         # 转换为DataFrame
         scores_df = pd.DataFrame(scores_dict).T
 
-        # 2. 生成排名信号
-        signals = SignalGenerator.generate_rank_signals(
+        # 2. 生成排名信号（返回Response对象）
+        signals_response = SignalGenerator.generate_rank_signals(
             scores=scores_df,
             top_n=self.config.top_n
         )
+
+        # 检查信号生成结果并提取数据
+        if not signals_response.is_success():
+            raise ValueError(f"信号生成失败: {signals_response.error}")
+        signals = signals_response.data
 
         # 3. 对齐到价格DataFrame的索引
         signals = signals.reindex(prices.index, fill_value=0)

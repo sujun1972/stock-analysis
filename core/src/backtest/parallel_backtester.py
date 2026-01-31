@@ -318,10 +318,19 @@ class ParallelBacktester:
 
             execution_time = time.time() - start_time
 
+            # 统一处理Response对象：回测引擎返回Response对象，需要提取data字段
+            if hasattr(result, 'data') and hasattr(result, 'is_success'):
+                if not result.is_success():
+                    raise ValueError(f"回测失败: {result.error}")
+                result_data = result.data
+            else:
+                # 向后兼容：如果直接返回dict则使用原值
+                result_data = result
+
             return BacktestResult(
                 strategy_name=task.strategy_name,
                 success=True,
-                result=result,
+                result=result_data,
                 execution_time=execution_time
             )
 

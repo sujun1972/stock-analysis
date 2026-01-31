@@ -190,9 +190,9 @@ class TestLongOnlyBacktest:
         )
 
         # 每日调仓应该有更多交易
-        trades_daily = len(results_daily['cost_analyzer'].trades)
-        trades_weekly = len(results_weekly['cost_analyzer'].trades)
-        trades_monthly = len(results_monthly['cost_analyzer'].trades)
+        trades_daily = len(results_daily.data['cost_analyzer'].trades)
+        trades_weekly = len(results_weekly.data['cost_analyzer'].trades)
+        trades_monthly = len(results_monthly.data['cost_analyzer'].trades)
 
         assert trades_daily >= trades_weekly >= trades_monthly
 
@@ -216,8 +216,8 @@ class TestLongOnlyBacktest:
         )
 
         # 都应该成功运行
-        assert 'portfolio_value' in results.data_small
-        assert 'portfolio_value' in results.data_large
+        assert 'portfolio_value' in results_small.data
+        assert 'portfolio_value' in results_large.data
 
     def test_holding_period(self, sample_data):
         """测试持仓期限制"""
@@ -256,8 +256,8 @@ class TestLongOnlyBacktest:
         results2 = engine2.backtest_long_only(signals, prices, top_n=5)
 
         # 两种模型都应该成功运行
-        assert results1['portfolio_value'] is not None
-        assert results2['portfolio_value'] is not None
+        assert results1.data['portfolio_value'] is not None
+        assert results2.data['portfolio_value'] is not None
 
     def test_capital_management(self, sample_data):
         """测试资金管理"""
@@ -751,8 +751,8 @@ class TestMarketDataIntegration:
         )
 
         # 两者应该有不同的滑点成本
-        cost1 = results1['cost_analysis']['total_slippage']
-        cost2 = results2['cost_analysis']['total_slippage']
+        cost1 = results1.data['cost_analysis']['total_slippage']
+        cost2 = results2.data['cost_analysis']['total_slippage']
 
         # 成本可能不同（取决于成交量数据）
         assert cost1 >= 0
@@ -830,12 +830,12 @@ class TestAdvancedBacktestFeatures:
 
         # 大资金的滑点成本比例应该更高
         small_slippage_ratio = (
-            results_small['cost_analysis']['total_slippage'] /
-            results_small['cost_analysis']['total_cost']
+            results_small.data['cost_analysis']['total_slippage'] /
+            results_small.data['cost_analysis']['total_cost']
         )
         large_slippage_ratio = (
-            results_large['cost_analysis']['total_slippage'] /
-            results_large['cost_analysis']['total_cost']
+            results_large.data['cost_analysis']['total_slippage'] /
+            results_large.data['cost_analysis']['total_cost']
         )
 
         # 验证结果合理

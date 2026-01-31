@@ -82,7 +82,7 @@ class TestReturnMetrics:
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 年化收益率应该存在（键名是annualized_return）
-        assert 'annualized_return' in metrics
+        assert 'annualized_return' in metrics.data
         assert metrics.data['annualized_return'] > 0
 
     def test_average_return(self, returns_mixed):
@@ -120,7 +120,7 @@ class TestRiskMetrics:
         metrics_stable = analyzer_stable.calculate_all_metrics(verbose=False)
 
         # 高波动序列的波动率应该更高（键名是volatility）
-        assert metrics_volatile['volatility'] > metrics_stable['volatility']
+        assert metrics_volatile.data['volatility'] > metrics_stable.data['volatility']
 
     def test_downside_deviation(self):
         """测试下行波动率"""
@@ -130,7 +130,7 @@ class TestRiskMetrics:
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 下行波动率应该只考虑负收益
-        assert 'downside_deviation' in metrics
+        assert 'downside_deviation' in metrics.data
         assert metrics.data['downside_deviation'] > 0
 
     def test_max_drawdown(self):
@@ -141,7 +141,7 @@ class TestRiskMetrics:
         metrics = analyzer.calculate_all_metrics()
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert 'max_drawdown' in metrics
+        assert 'max_drawdown' in metrics.data
         assert metrics.data['max_drawdown'] < 0  # 回撤是负数
         assert metrics.data['max_drawdown'] > -1  # 不会超过-100%
 
@@ -154,7 +154,7 @@ class TestRiskMetrics:
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 应该计算回撤持续期
-        assert 'max_drawdown_duration' in metrics
+        assert 'max_drawdown_duration' in metrics.data
 
 
 class TestRiskAdjustedMetrics:
@@ -181,7 +181,7 @@ class TestRiskAdjustedMetrics:
         metrics_poor = analyzer_poor.calculate_all_metrics()
 
         # 优质收益的夏普比率应该更高
-        assert metrics_good['sharpe_ratio'] > metrics_poor['sharpe_ratio']
+        assert metrics_good.data['sharpe_ratio'] > metrics_poor.data['sharpe_ratio']
 
     def test_sortino_ratio(self, good_returns):
         """测试Sortino比率"""
@@ -189,7 +189,7 @@ class TestRiskAdjustedMetrics:
         metrics = analyzer.calculate_all_metrics()
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert 'sortino_ratio' in metrics
+        assert 'sortino_ratio' in metrics.data
         # Sortino比率应该高于Sharpe（因为只考虑下行风险）
         # 在大部分正收益的情况下
 
@@ -201,7 +201,7 @@ class TestRiskAdjustedMetrics:
         metrics = analyzer.calculate_all_metrics()
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert 'calmar_ratio' in metrics
+        assert 'calmar_ratio' in metrics.data
 
     def test_information_ratio(self):
         """测试信息比率（需要基准）"""
@@ -215,7 +215,7 @@ class TestRiskAdjustedMetrics:
         metrics = analyzer.calculate_all_metrics()
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert 'information_ratio' in metrics
+        assert 'information_ratio' in metrics.data
 
 
 class TestWinRateMetrics:
@@ -239,8 +239,8 @@ class TestWinRateMetrics:
         metrics = analyzer.calculate_all_metrics(verbose=False)
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert 'average_win' in metrics
-        assert 'average_loss' in metrics
+        assert 'average_win' in metrics.data
+        assert 'average_loss' in metrics.data
 
         # 平均盈利 = (0.02 + 0.01) / 2 = 0.015
         assert abs(metrics.data['average_win'] - 0.015) < 0.0001
@@ -257,7 +257,7 @@ class TestWinRateMetrics:
 
         # 总盈利 = 0.06, 总亏损 = 0.02
         # 盈亏比 = 0.06 / 0.02 = 3.0
-        assert 'profit_factor' in metrics
+        assert 'profit_factor' in metrics.data
         assert abs(metrics.data['profit_factor'] - 3.0) < 0.01
 
 
@@ -277,7 +277,7 @@ class TestBetaAndAlpha:
         metrics = analyzer.calculate_all_metrics()
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert 'beta' in metrics
+        assert 'beta' in metrics.data
         # Beta应该接近1.5
         assert 0.8 < metrics.data['beta'] < 2.0
 
@@ -294,7 +294,7 @@ class TestBetaAndAlpha:
         metrics = analyzer.calculate_all_metrics()
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
-        assert 'alpha' in metrics
+        assert 'alpha' in metrics.data
 
     def test_information_ratio_calculation(self):
         """测试信息比率计算（包含跟踪误差）"""
@@ -309,7 +309,7 @@ class TestBetaAndAlpha:
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 信息比率应该存在
-        assert 'information_ratio' in metrics
+        assert 'information_ratio' in metrics.data
         # IR应该是有限值（不是NaN或inf）
         assert np.isfinite(metrics.data['information_ratio'])
 
@@ -366,8 +366,8 @@ class TestEdgeCases:
         assert metrics.is_success(), f'指标计算失败: {metrics.error}'
 
         # 应该能正常计算
-        assert 'total_return' in metrics
-        assert 'sharpe_ratio' in metrics
+        assert 'total_return' in metrics.data
+        assert 'sharpe_ratio' in metrics.data
 
     def test_extreme_values(self):
         """测试极端值"""
@@ -408,7 +408,7 @@ class TestPrintMethods:
             metrics = analyzer.calculate_all_metrics(verbose=True)
             assert metrics.is_success(), f'指标计算失败: {metrics.error}'
             assert metrics is not None
-            assert 'total_return' in metrics
+            assert 'total_return' in metrics.data
         except Exception as e:
             assert False, f"calculate_all_metrics(verbose=True) raised exception: {e}"
 
@@ -435,7 +435,7 @@ class TestCalculateMetricsMethod:
         ]
 
         for metric in required_metrics:
-            assert metric in metrics, f"Missing metric: {metric}"
+            assert metric in metrics.data, f"Missing metric: {metric}"
 
     def test_with_benchmark_returns_additional_metrics(self):
         """测试有基准时返回额外指标"""
@@ -454,7 +454,7 @@ class TestCalculateMetricsMethod:
         benchmark_metrics = ['beta', 'alpha', 'information_ratio']
 
         for metric in benchmark_metrics:
-            assert metric in metrics, f"Missing benchmark metric: {metric}"
+            assert metric in metrics.data, f"Missing benchmark metric: {metric}"
 
 
 class TestCumulativeReturns:

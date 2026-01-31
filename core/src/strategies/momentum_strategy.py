@@ -158,11 +158,16 @@ class MomentumStrategy(BaseStrategy):
         if self.filter_negative:
             momentum[momentum < 0] = np.nan
 
-        # 3. 使用信号生成器生成排名信号
-        signals = SignalGenerator.generate_rank_signals(
+        # 3. 使用信号生成器生成排名信号（返回Response对象）
+        signals_response = SignalGenerator.generate_rank_signals(
             scores=momentum,
             top_n=self.config.top_n
         )
+
+        # 检查信号生成结果并提取数据
+        if not signals_response.is_success():
+            raise ValueError(f"信号生成失败: {signals_response.error}")
+        signals = signals_response.data
 
         # 4. 过滤股票（价格、成交量等）
         if volumes is not None:
