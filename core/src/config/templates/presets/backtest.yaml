@@ -1,0 +1,29 @@
+name: "回测优化配置"
+description: "适合大规模回测，向量化计算、多进程并行、内存优化"
+version: "2.0"
+tags: ["backtest", "optimization", "performance"]
+extends: "production"  # 继承生产环境配置
+
+settings:
+  ml:
+    cache_features: true
+
+  performance:
+    parallel:
+      backend: "multiprocessing"
+      n_workers: 12
+      chunk_size: 10000
+    memory:
+      enable_streaming: true
+      memory_limit_gb: 16
+
+  backtest:
+    vectorized: true
+    enable_cache: true
+    parallel_strategies: true
+
+recommendations:
+  - "回测建议使用向量化计算提升速度"
+  - "大规模回测建议启用流式处理节省内存"
+  - "建议使用多进程并行回测多个策略"
+  - "启用结果缓存避免重复计算"

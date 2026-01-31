@@ -1,0 +1,55 @@
+name: "研究环境配置"
+description: "适合策略研究和因子挖掘，启用完整因子库和高级分析工具"
+version: "2.0"
+tags: ["research", "factor", "analysis"]
+
+settings:
+  app:
+    environment: "research"
+    debug: false
+    log_level: "INFO"
+
+  database:
+    host: "localhost"
+    port: 5432
+    database: "stock_analysis_research"
+    user: "stock_user"
+    password: "stock_password_123"
+
+  data_source:
+    provider: "tushare"
+    tushare_token: "${TUSHARE_TOKEN}"
+
+  paths:
+    data_dir: "/data/research"
+    models_dir: "/data/research/models"
+    cache_dir: "/data/research/cache"
+    results_dir: "/data/research/results"
+
+  ml:
+    default_target_period: 5
+    default_scaler_type: "robust"
+    cache_features: true
+    feature_version: "v2.0"
+
+  features:
+    technical_indicators:
+      enabled: true
+      ma_periods: [5, 10, 20, 30, 60, 120]
+      ema_periods: [5, 10, 20, 60]
+    alpha_factors:
+      enabled: true
+      categories: ["momentum", "reversal", "volatility", "volume", "technical"]
+      momentum_periods: [5, 10, 20, 60, 120]
+
+  performance:
+    parallel:
+      backend: "multiprocessing"
+      n_workers: 8
+      chunk_size: 2000
+
+recommendations:
+  - "研究环境建议启用完整因子库（125+ 因子）"
+  - "使用 Tushare 数据源获取更全面的数据"
+  - "启用因子缓存加速重复计算"
+  - "建议定期导出研究结果和模型版本"

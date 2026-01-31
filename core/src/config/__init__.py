@@ -9,6 +9,8 @@
 - 数据流水线配置 (pipeline.py)
 """
 
+from loguru import logger
+
 # ==================== 核心配置 ====================
 from .settings import (
     get_settings,
@@ -155,18 +157,18 @@ def validate_config() -> bool:
         provider = settings.data_source.provider
         if provider == 'tushare':
             if not settings.data_source.tushare_token:
-                print("警告: 使用 Tushare 但未配置 Token")
+                logger.warning("使用 Tushare 但未配置 Token")
 
         # 验证路径配置
         from pathlib import Path
         data_path = Path(settings.paths.data_dir)
         if not data_path.exists():
-            print(f"警告: 数据目录不存在: {data_path}")
+            logger.warning(f"数据目录不存在: {data_path}")
 
         return True
 
     except Exception as e:
-        print(f"配置验证失败: {e}")
+        logger.error(f"配置验证失败: {e}")
         return False
 
 

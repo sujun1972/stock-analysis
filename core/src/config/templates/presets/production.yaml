@@ -1,0 +1,58 @@
+name: "生产环境配置"
+description: "适合生产部署，高性能、高可用、完整监控"
+version: "2.0"
+tags: ["production", "performance", "monitoring"]
+
+settings:
+  app:
+    environment: "production"
+    debug: false
+    log_level: "INFO"
+
+  database:
+    host: "${DB_HOST}"  # 从环境变量读取
+    port: 5432
+    database: "stock_analysis"
+    user: "${DB_USER}"
+    password: "${DB_PASSWORD}"
+
+  data_source:
+    provider: "tushare"
+    tushare_token: "${TUSHARE_TOKEN}"
+
+  paths:
+    data_dir: "/data"
+    models_dir: "/data/models"
+    cache_dir: "/data/cache"
+    results_dir: "/data/results"
+
+  ml:
+    default_target_period: 5
+    default_scaler_type: "robust"
+    cache_features: true
+    feature_version: "v2.0"
+
+  performance:
+    parallel:
+      backend: "multiprocessing"
+      n_workers: 15
+      chunk_size: 5000
+    gpu:
+      enable_gpu: true
+      device_id: 0
+    memory:
+      enable_streaming: true
+      memory_limit_gb: 32
+
+  monitoring:
+    enabled: true
+    metrics_collection: true
+    error_tracking: true
+    performance_profiling: false
+
+recommendations:
+  - "生产环境必须关闭调试模式"
+  - "建议使用强密码并定期更换"
+  - "启用监控和告警系统"
+  - "定期备份数据库和模型文件"
+  - "使用多进程并行加速计算"

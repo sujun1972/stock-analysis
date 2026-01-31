@@ -31,13 +31,14 @@
 
 | 指标 | 数值 | 说明 |
 |------|------|------|
-| 代码规模 | 93,000+ 行 | 源码40K + 测试52K + 文档11K |
-| 测试用例 | 2,610 个 | 单元测试 + 集成测试 + CLI测试 |
+| 代码规模 | 97,000+ 行 | 源码44K + 测试52K + 文档12K |
+| 测试用例 | 2,680+ 个 | 单元测试 + 集成测试 + CLI测试 |
 | 测试覆盖率 | 85% | 核心模块100%覆盖 |
 | Alpha因子 | 125+ | 动量、反转、波动率、成交量等 |
 | 技术指标 | 60+ | 趋势、动量、波动率、成交量 |
 | 交易策略 | 5 种 | 动量、均值回归、多因子、ML、组合 |
-| CLI命令 | 7 个 | download/features/train/backtest/analyze/init/version |
+| CLI命令 | 13 个 | download/features/train/backtest/analyze/init/config/* |
+| 配置模板 | 6 个 | development/production/research/backtest/training/minimal |
 | 监控指标 | 4 类 | Counter、Gauge、Histogram、Timer |
 | 性能提升 | 35x | 向量化计算相比循环实现 |
 | 文档完整度 | 95% | Google Style文档字符串 |
@@ -352,6 +353,53 @@ stock-cli analyze corr --factors all
 - **1,400+行文档**: 详细使用指南和示例
 - **多线程支持**: 并行处理提升效率
 - **错误友好**: 清晰的错误提示和帮助信息
+
+### 8. 配置管理系统（NEW ✨）
+
+#### 交互式配置向导
+- **基础向导**: 5分钟完成首次配置（数据库、数据源、路径）
+- **高级向导**: 性能调优、特征工程、策略参数配置
+- **迁移向导**: 跨版本配置自动升级
+
+#### 配置模板库
+- **6个预设模板**: development、production、research、backtest、training、minimal
+- **场景化配置**: 一键切换不同使用场景
+- **模板继承**: 支持自定义模板和继承机制
+- **智能推荐**: 基于硬件和数据规模的自动配置建议
+
+```bash
+# 列出可用模板
+stock-cli config templates-list
+
+# 应用生产环境模板
+stock-cli config templates-apply production
+
+# 对比两个模板
+stock-cli config templates-diff development production
+```
+
+#### 配置验证与诊断
+- **全面验证**: 数据库连接、路径权限、数据源可用性、参数合理性
+- **错误分级**: CRITICAL、ERROR、WARNING、INFO 四级问题分类
+- **自动修复**: 部分问题提供一键修复命令
+- **诊断报告**: HTML/JSON 格式的详细报告
+
+```bash
+# 验证当前配置
+stock-cli config validate
+
+# 生成诊断报告
+stock-cli config diagnose
+
+# 导出HTML报告
+stock-cli config validate -f html -o report.html
+```
+
+#### 核心优势
+- **降低使用门槛**: 新用户5分钟完成配置
+- **提升可靠性**: 配置验证覆盖率100%
+- **增强灵活性**: 多环境快速切换
+- **改善体验**: 20+ 错误代码详细说明
 
 ---
 

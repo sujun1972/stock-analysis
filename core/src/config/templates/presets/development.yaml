@@ -1,0 +1,49 @@
+name: "开发环境配置"
+description: "适合本地开发和调试，启用调试模式，使用小数据集"
+version: "2.0"
+tags: ["development", "debug", "local"]
+
+settings:
+  app:
+    environment: "development"
+    debug: true
+    log_level: "DEBUG"
+
+  database:
+    host: "localhost"
+    port: 5432
+    database: "stock_analysis_dev"
+    user: "stock_user"
+    password: "stock_password_123"
+
+  data_source:
+    provider: "akshare"
+    tushare_token: ""
+
+  paths:
+    data_dir: "/data"
+    models_dir: "/data/models"
+    cache_dir: "/data/cache"
+    results_dir: "/data/results"
+
+  ml:
+    default_target_period: 5
+    default_scaler_type: "robust"
+    cache_features: true
+    feature_version: "v2.0"
+
+  performance:
+    parallel:
+      backend: "threading"
+      n_workers: 4
+      chunk_size: 1000
+    gpu:
+      enable_gpu: false
+    memory:
+      enable_streaming: false
+
+recommendations:
+  - "开发环境建议启用调试模式以便排查问题"
+  - "使用较小的数据集（如30天）进行快速迭代"
+  - "建议使用 threading 后端避免多进程调试复杂度"
+  - "可以禁用特征缓存以测试最新代码"

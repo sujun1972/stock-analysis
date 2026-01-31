@@ -53,6 +53,7 @@ def cli(ctx, config, log_level, no_color):
     • train     - 训练机器学习模型
     • backtest  - 运行策略回测
     • analyze   - 进行因子分析
+    • config    - 配置管理（模板、验证）
 
     示例:
 
@@ -98,13 +99,14 @@ def cli(ctx, config, log_level, no_color):
 # 注册子命令
 # 导入命令模块
 try:
-    from cli.commands import download, features, train, backtest, analyze
+    from cli.commands import download, features, train, backtest, analyze, config
 
     cli.add_command(download.download)
     cli.add_command(features.features)
     cli.add_command(train.train)
     cli.add_command(backtest.backtest)
     cli.add_command(analyze.analyze)
+    cli.add_command(config.config)
 except ImportError as e:
     # 命令模块尚未完全实现，先注册一个占位命令
     logger.warning(f"部分命令模块尚未实现: {e}")

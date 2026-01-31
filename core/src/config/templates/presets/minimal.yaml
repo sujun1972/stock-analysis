@@ -1,0 +1,31 @@
+name: "最小配置"
+description: "最简配置，快速上手，使用所有默认值"
+version: "2.0"
+tags: ["minimal", "quickstart", "beginner"]
+
+settings:
+  app:
+    environment: "development"
+    debug: true
+    log_level: "INFO"
+
+  database:
+    host: "localhost"
+    port: 5432
+    database: "stock_analysis"
+    user: "stock_user"
+    password: "stock_password_123"
+
+  data_source:
+    provider: "akshare"
+
+  paths:
+    data_dir: "/data"
+    models_dir: "/data/models"
+    cache_dir: "/data/cache"
+    results_dir: "/data/results"
+
+recommendations:
+  - "这是最简配置，适合快速上手"
+  - "首次使用建议运行: stock-cli download --days 30"
+  - "更多配置选项请参考文档或运行高级向导"
