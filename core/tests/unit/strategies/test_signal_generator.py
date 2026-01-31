@@ -214,7 +214,11 @@ class TestCrossSignals(unittest.TestCase):
         fast.iloc[:25] = slow.iloc[:25] - 1
         fast.iloc[25:] = slow.iloc[25:] + 1
 
-        signals = SignalGenerator.generate_cross_signals(fast, slow)
+        response = SignalGenerator.generate_cross_signals(fast, slow)
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 验证交叉点附近有买入信号
         cross_signals = signals.iloc[24:27]
@@ -231,7 +235,11 @@ class TestCrossSignals(unittest.TestCase):
         fast.iloc[:25] = slow.iloc[:25] + 1
         fast.iloc[25:] = slow.iloc[25:] - 1
 
-        signals = SignalGenerator.generate_cross_signals(fast, slow)
+        response = SignalGenerator.generate_cross_signals(fast, slow)
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 验证交叉点附近有卖出信号
         cross_signals = signals.iloc[24:27]
@@ -266,11 +274,15 @@ class TestTrendSignals(unittest.TestCase):
 
     def test_uptrend_signals(self):
         """测试上升趋势信号"""
-        signals = SignalGenerator.generate_trend_signals(
+        response = SignalGenerator.generate_trend_signals(
             self.uptrend,
             lookback_period=20,
             threshold=0.05
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 大部分应该是买入信号
         buy_count = (signals == SignalType.BUY.value).sum().sum()
@@ -280,11 +292,15 @@ class TestTrendSignals(unittest.TestCase):
 
     def test_downtrend_signals(self):
         """测试下降趋势信号"""
-        signals = SignalGenerator.generate_trend_signals(
+        response = SignalGenerator.generate_trend_signals(
             self.downtrend,
             lookback_period=20,
             threshold=0.05
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 大部分应该是卖出信号
         sell_count = (signals == SignalType.SELL.value).sum().sum()
@@ -294,11 +310,15 @@ class TestTrendSignals(unittest.TestCase):
 
     def test_sideways_signals(self):
         """测试震荡信号"""
-        signals = SignalGenerator.generate_trend_signals(
+        response = SignalGenerator.generate_trend_signals(
             self.sideways,
             lookback_period=20,
             threshold=0.05
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 大部分应该是持有信号
         hold_count = (signals == SignalType.HOLD.value).sum().sum()
@@ -327,10 +347,14 @@ class TestBreakoutSignals(unittest.TestCase):
 
     def test_upward_breakout(self):
         """测试向上突破"""
-        signals = SignalGenerator.generate_breakout_signals(
+        response = SignalGenerator.generate_breakout_signals(
             self.prices,
             lookback_period=20
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 第50天应该有买入信号
         buy_count = (signals.iloc[50] == SignalType.BUY.value).sum()
@@ -338,10 +362,14 @@ class TestBreakoutSignals(unittest.TestCase):
 
     def test_downward_breakout(self):
         """测试向下突破"""
-        signals = SignalGenerator.generate_breakout_signals(
+        response = SignalGenerator.generate_breakout_signals(
             self.prices,
             lookback_period=20
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        signals = response.data
 
         # 第70天应该有卖出信号
         sell_count = (signals.iloc[70] == SignalType.SELL.value).sum()
@@ -385,10 +413,14 @@ class TestCombineSignals(unittest.TestCase):
 
     def test_vote_method(self):
         """测试投票组合法"""
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             [self.signals1, self.signals2, self.signals3],
             method='vote'
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        combined = response.data
 
         # 验证结果形状
         self.assertEqual(combined.shape, self.signals1.shape)
@@ -399,11 +431,15 @@ class TestCombineSignals(unittest.TestCase):
 
     def test_weighted_method(self):
         """测试加权组合法"""
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             [self.signals1, self.signals2, self.signals3],
             method='weighted',
             weights=[0.5, 0.3, 0.2]
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        combined = response.data
 
         # 验证结果在[-1, 1]范围内
         self.assertTrue((combined.values >= -1).all())
@@ -411,10 +447,14 @@ class TestCombineSignals(unittest.TestCase):
 
     def test_and_method(self):
         """测试AND组合法"""
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             [self.signals1, self.signals2, self.signals3],
             method='and'
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        combined = response.data
 
         # 验证结果形状
         self.assertEqual(combined.shape, self.signals1.shape)
@@ -426,10 +466,14 @@ class TestCombineSignals(unittest.TestCase):
 
     def test_or_method(self):
         """测试OR组合法"""
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             [self.signals1, self.signals2, self.signals3],
             method='or'
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        combined = response.data
 
         # 验证结果形状
         self.assertEqual(combined.shape, self.signals1.shape)
@@ -440,31 +484,39 @@ class TestCombineSignals(unittest.TestCase):
 
     def test_invalid_method(self):
         """测试无效的组合方法"""
-        with self.assertRaises(ValueError):
-            SignalGenerator.combine_signals(
-                [self.signals1, self.signals2],
-                method='invalid_method'
-            )
+        response = SignalGenerator.combine_signals(
+            [self.signals1, self.signals2],
+            method='invalid_method'
+        )
+        # 验证返回错误Response
+        self.assertTrue(response.is_error())
+        self.assertEqual(response.error_code, "INVALID_METHOD")
 
     def test_weighted_without_weights(self):
         """测试加权法但未提供权重"""
         # 应该使用均等权重
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             [self.signals1, self.signals2],
             method='weighted'
         )
+
+        # 验证Response对象
+        self.assertTrue(response.is_success())
+        combined = response.data
 
         self.assertIsNotNone(combined)
         self.assertEqual(combined.shape, self.signals1.shape)
 
     def test_mismatched_weights(self):
         """测试权重数量不匹配"""
-        with self.assertRaises(ValueError):
-            SignalGenerator.combine_signals(
-                [self.signals1, self.signals2, self.signals3],
-                method='weighted',
-                weights=[0.5, 0.5]  # 只有2个权重,但有3个信号
-            )
+        response = SignalGenerator.combine_signals(
+            [self.signals1, self.signals2, self.signals3],
+            method='weighted',
+            weights=[0.5, 0.5]  # 只有2个权重,但有3个信号
+        )
+        # 验证返回错误Response
+        self.assertTrue(response.is_error())
+        self.assertEqual(response.error_code, "WEIGHT_LENGTH_MISMATCH")
 
 
 if __name__ == '__main__':

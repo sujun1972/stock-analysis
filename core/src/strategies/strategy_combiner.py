@@ -140,15 +140,25 @@ class StrategyCombiner:
             signals_list = self.generate_individual_signals(prices, features, volumes)
 
         # 2. 使用信号生成器组合
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             signal_list=signals_list,
             weights=self.weights,
             method=method
         )
 
-        logger.success(f"✓ 策略组合完成，买入信号数: {(combined == 1).sum().sum()}")
-
-        return combined
+        # 处理Response
+        if response.is_success():
+            combined = response.data
+            logger.success(f"✓ 策略组合完成，买入信号数: {(combined == 1).sum().sum()}")
+            return combined
+        else:
+            logger.error(f"策略组合失败: {response.error}")
+            # 返回空信号
+            return pd.DataFrame(
+                0,
+                index=prices.index,
+                columns=prices.columns
+            )
 
     def analyze_agreement(
         self,

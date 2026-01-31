@@ -88,12 +88,17 @@ class TestSignalGenerator(unittest.TestCase):
         signal1 = pd.DataFrame(1, index=self.dates, columns=self.stocks)
         signal2 = pd.DataFrame(-1, index=self.dates, columns=self.stocks)
 
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             [signal1, signal2],
             method='vote'
         )
 
+        # 验证Response对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+
         # 投票应该产生某种结果
+        combined = response.data
         self.assertIsInstance(combined, pd.DataFrame)
         self.assertEqual(combined.shape, signal1.shape)
 
@@ -102,13 +107,18 @@ class TestSignalGenerator(unittest.TestCase):
         signal1 = pd.DataFrame(1, index=self.dates, columns=self.stocks)
         signal2 = pd.DataFrame(-1, index=self.dates, columns=self.stocks)
 
-        combined = SignalGenerator.combine_signals(
+        response = SignalGenerator.combine_signals(
             [signal1, signal2],
             method='weighted',
             weights=[0.7, 0.3]
         )
 
+        # 验证Response对象
+        self.assertIsInstance(response, Response)
+        self.assertTrue(response.is_success())
+
         # 验证加权结果
+        combined = response.data
         self.assertIsInstance(combined, pd.DataFrame)
 
         # 0.7 * 1 + 0.3 * (-1) = 0.4, which is between -0.5 and 0.5, so becomes HOLD (0)
