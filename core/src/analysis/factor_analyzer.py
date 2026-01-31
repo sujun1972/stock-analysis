@@ -20,11 +20,13 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 from loguru import logger
 from dataclasses import dataclass
 import warnings
+import time
 
 from .ic_calculator import ICCalculator, ICResult
 from .layering_test import LayeringTest
 from .factor_correlation import FactorCorrelation
 from .factor_optimizer import FactorOptimizer, OptimizationResult
+from ..utils.response import Response, ResponseStatus
 
 warnings.filterwarnings('ignore')
 
@@ -55,6 +57,7 @@ def _analyze_single_factor_worker_v2(args):
     try:
         # 创建禁用并行的分析器（避免嵌套并行）
         if HAS_PARALLEL_SUPPORT:
+            from ..config.features import ParallelComputingConfig
             sub_config = ParallelComputingConfig(enable_parallel=False)
         else:
             sub_config = None
@@ -71,13 +74,17 @@ def _analyze_single_factor_worker_v2(args):
             parallel_config=sub_config
         )
 
-        report = analyzer.quick_analyze(
+        response = analyzer.quick_analyze(
             factor_df, prices,
             factor_name=factor_name,
             include_layering=True
         )
 
-        return (factor_name, report, None)
+        # 从Response中提取报告数据
+        if response.is_success() or response.status.value == "warning":
+            return (factor_name, response.data, None)
+        else:
+            return (factor_name, None, response.error)
 
     except Exception as e:
         logger.warning(f"并行分析因子{factor_name}失败: {e}")
@@ -263,7 +270,7 @@ class FactorAnalyzer:
         prices: pd.DataFrame,
         factor_name: str = "Factor",
         include_layering: bool = True
-    ) -> FactorAnalysisReport:
+    ) -> Response:
         """
         快速分析单个因子（初级用法）
 
@@ -274,45 +281,107 @@ class FactorAnalyzer:
             include_layering: 是否包含分层测试
 
         Returns:
-            因子分析报告
+            Response对象，data字段包含FactorAnalysisReport
+
+        Examples:
+            >>> analyzer = FactorAnalyzer()
+            >>> response = analyzer.quick_analyze(factor_df, prices_df, factor_name='MOM')
+            >>> if response.is_success():
+            >>>     report = response.data
+            >>>     print(f"IC均值: {report.ic_result.mean_ic}")
         """
-        logger.info(f"快速分析因子: {factor_name}")
-
-        # 确保factor是DataFrame格式
-        if isinstance(factor, pd.Series):
-            factor = factor.to_frame(name=factor_name)
-
-        report = FactorAnalysisReport(factor_name=factor_name)
-
-        # 1. IC分析（必选）
         try:
-            ic_result = self.ic_calculator.calculate_ic_stats(factor, prices)
-            report.ic_result = ic_result
-            logger.info(f"IC分析完成: IC={ic_result.mean_ic:.4f}, ICIR={ic_result.ic_ir:.4f}")
-        except Exception as e:
-            logger.warning(f"IC分析失败: {e}")
+            start_time = time.time()
+            logger.info(f"快速分析因子: {factor_name}")
 
-        # 2. 分层测试（可选）
-        if include_layering:
-            try:
-                layering_result = self.layering_test.perform_layering_test(
-                    factor, prices
+            # 数据验证
+            if factor is None or prices is None:
+                return Response.error(
+                    error="因子数据或价格数据为空",
+                    error_code="INVALID_INPUT",
+                    factor_name=factor_name
                 )
-                report.layering_result = layering_result
 
-                # 分析单调性
-                monotonicity = self.layering_test.analyze_monotonicity(layering_result)
-                report.layering_summary = monotonicity
+            # 确保factor是DataFrame格式
+            if isinstance(factor, pd.Series):
+                factor = factor.to_frame(name=factor_name)
 
-                logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
+            if factor.empty or prices.empty:
+                return Response.error(
+                    error="因子数据或价格数据为空DataFrame",
+                    error_code="EMPTY_DATA",
+                    factor_name=factor_name
+                )
+
+            report = FactorAnalysisReport(factor_name=factor_name)
+            warnings = []
+
+            # 1. IC分析（必选）
+            try:
+                ic_response = self.ic_calculator.calculate_ic_stats(factor, prices)
+                if ic_response.is_success():
+                    ic_result = ic_response.data
+                    report.ic_result = ic_result
+                    logger.info(f"IC分析完成: IC={ic_result.mean_ic:.4f}, ICIR={ic_result.ic_ir:.4f}")
+                else:
+                    error_msg = ic_response.error if hasattr(ic_response, 'error') else str(ic_response)
+                    logger.warning(f"IC分析失败: {error_msg}")
+                    warnings.append(f"IC分析失败: {error_msg}")
             except Exception as e:
-                logger.warning(f"分层测试失败: {e}")
+                logger.warning(f"IC分析失败: {e}")
+                warnings.append(f"IC分析失败: {str(e)}")
 
-        # 3. 综合评分
-        report.overall_score = self._calculate_overall_score(report)
-        report.recommendation = self._generate_recommendation(report)
+            # 2. 分层测试（可选）
+            if include_layering:
+                try:
+                    layering_result = self.layering_test.perform_layering_test(
+                        factor, prices
+                    )
+                    report.layering_result = layering_result
 
-        return report
+                    # 分析单调性
+                    monotonicity = self.layering_test.analyze_monotonicity(layering_result)
+                    report.layering_summary = monotonicity
+
+                    logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
+                except Exception as e:
+                    logger.warning(f"分层测试失败: {e}")
+                    warnings.append(f"分层测试失败: {str(e)}")
+
+            # 3. 综合评分
+            report.overall_score = self._calculate_overall_score(report)
+            report.recommendation = self._generate_recommendation(report)
+
+            elapsed_time = time.time() - start_time
+
+            # 判断是否有警告
+            if warnings:
+                return Response.warning(
+                    message=f"因子分析完成但有{len(warnings)}个警告",
+                    data=report,
+                    factor_name=factor_name,
+                    elapsed_time=f"{elapsed_time:.2f}s",
+                    warnings=warnings,
+                    overall_score=report.overall_score,
+                    recommendation=report.recommendation
+                )
+            else:
+                return Response.success(
+                    data=report,
+                    message=f"因子 {factor_name} 分析完成",
+                    factor_name=factor_name,
+                    elapsed_time=f"{elapsed_time:.2f}s",
+                    overall_score=report.overall_score,
+                    recommendation=report.recommendation
+                )
+
+        except Exception as e:
+            logger.error(f"快速分析因子失败: {e}", exc_info=True)
+            return Response.error(
+                error=f"快速分析因子失败: {str(e)}",
+                error_code="ANALYSIS_ERROR",
+                factor_name=factor_name
+            )
 
     def analyze_factor(
         self,
@@ -322,7 +391,7 @@ class FactorAnalyzer:
         include_ic: bool = True,
         include_layering: bool = True,
         include_decay_analysis: bool = False
-    ) -> FactorAnalysisReport:
+    ) -> Response:
         """
         完整分析单个因子（中级用法）
 
@@ -335,46 +404,132 @@ class FactorAnalyzer:
             include_decay_analysis: 是否包含IC衰减分析
 
         Returns:
-            因子分析报告
+            Response对象，data字段包含FactorAnalysisReport
+
+        Examples:
+            >>> analyzer = FactorAnalyzer()
+            >>> response = analyzer.analyze_factor(
+            ...     factor_df, prices_df,
+            ...     factor_name='REV',
+            ...     include_ic=True,
+            ...     include_layering=True
+            ... )
+            >>> if response.is_success():
+            ...     report = response.data
+            ...     print(report.to_dict())
         """
-        logger.info(f"完整分析因子: {factor_name}")
+        try:
+            start_time = time.time()
+            logger.info(f"完整分析因子: {factor_name}")
 
-        # 确保factor是DataFrame格式
-        if isinstance(factor, pd.Series):
-            factor = factor.to_frame(name=factor_name)
-
-        report = FactorAnalysisReport(factor_name=factor_name)
-
-        # 1. IC分析
-        if include_ic:
-            try:
-                ic_result = self.ic_calculator.calculate_ic_stats(factor, prices)
-                report.ic_result = ic_result
-                logger.info(f"IC分析完成: IC={ic_result.mean_ic:.4f}, ICIR={ic_result.ic_ir:.4f}")
-            except Exception as e:
-                logger.warning(f"IC分析失败: {e}")
-
-        # 2. 分层测试
-        if include_layering:
-            try:
-                layering_result = self.layering_test.perform_layering_test(
-                    factor, prices
+            # 数据验证
+            if factor is None or prices is None:
+                return Response.error(
+                    error="因子数据或价格数据为空",
+                    error_code="INVALID_INPUT",
+                    factor_name=factor_name
                 )
-                report.layering_result = layering_result
 
-                # 分析单调性
-                monotonicity = self.layering_test.analyze_monotonicity(layering_result)
-                report.layering_summary = monotonicity
+            # 确保factor是DataFrame格式
+            if isinstance(factor, pd.Series):
+                factor = factor.to_frame(name=factor_name)
 
-                logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
-            except Exception as e:
-                logger.warning(f"分层测试失败: {e}")
+            if factor.empty or prices.empty:
+                return Response.error(
+                    error="因子数据或价格数据为空DataFrame",
+                    error_code="EMPTY_DATA",
+                    factor_name=factor_name
+                )
 
-        # 3. 综合评分
-        report.overall_score = self._calculate_overall_score(report)
-        report.recommendation = self._generate_recommendation(report)
+            report = FactorAnalysisReport(factor_name=factor_name)
+            warnings_list = []
 
-        return report
+            # 1. IC分析
+            if include_ic:
+                try:
+                    ic_response = self.ic_calculator.calculate_ic_stats(factor, prices)
+                    if ic_response.is_success():
+                        ic_result = ic_response.data
+                        report.ic_result = ic_result
+                        logger.info(f"IC分析完成: IC={ic_result.mean_ic:.4f}, ICIR={ic_result.ic_ir:.4f}")
+                    else:
+                        error_msg = ic_response.error if hasattr(ic_response, 'error') else str(ic_response)
+                        logger.warning(f"IC分析失败: {error_msg}")
+                        warnings_list.append(f"IC分析失败: {error_msg}")
+                except Exception as e:
+                    logger.warning(f"IC分析失败: {e}")
+                    warnings_list.append(f"IC分析失败: {str(e)}")
+
+            # 2. 分层测试
+            if include_layering:
+                try:
+                    layering_result = self.layering_test.perform_layering_test(
+                        factor, prices
+                    )
+                    report.layering_result = layering_result
+
+                    # 分析单调性
+                    monotonicity = self.layering_test.analyze_monotonicity(layering_result)
+                    report.layering_summary = monotonicity
+
+                    logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
+                except Exception as e:
+                    logger.warning(f"分层测试失败: {e}")
+                    warnings_list.append(f"分层测试失败: {str(e)}")
+
+            # 3. IC衰减分析（可选）
+            if include_decay_analysis:
+                try:
+                    # TODO: 添加IC衰减分析实现
+                    logger.info("IC衰减分析功能待实现")
+                    warnings_list.append("IC衰减分析功能待实现")
+                except Exception as e:
+                    logger.warning(f"IC衰减分析失败: {e}")
+                    warnings_list.append(f"IC衰减分析失败: {str(e)}")
+
+            # 4. 综合评分
+            report.overall_score = self._calculate_overall_score(report)
+            report.recommendation = self._generate_recommendation(report)
+
+            elapsed_time = time.time() - start_time
+
+            # 检查是否有足够的分析结果
+            if report.ic_result is None and report.layering_result is None:
+                return Response.error(
+                    error="所有分析项目均失败",
+                    error_code="ALL_ANALYSIS_FAILED",
+                    factor_name=factor_name,
+                    warnings=warnings_list
+                )
+
+            # 判断是否有警告
+            if warnings_list:
+                return Response.warning(
+                    message=f"因子完整分析完成但有{len(warnings_list)}个警告",
+                    data=report,
+                    factor_name=factor_name,
+                    elapsed_time=f"{elapsed_time:.2f}s",
+                    warnings=warnings_list,
+                    overall_score=report.overall_score,
+                    recommendation=report.recommendation
+                )
+            else:
+                return Response.success(
+                    data=report,
+                    message=f"因子 {factor_name} 完整分析成功",
+                    factor_name=factor_name,
+                    elapsed_time=f"{elapsed_time:.2f}s",
+                    overall_score=report.overall_score,
+                    recommendation=report.recommendation
+                )
+
+        except Exception as e:
+            logger.error(f"完整分析因子失败: {e}", exc_info=True)
+            return Response.error(
+                error=f"完整分析因子失败: {str(e)}",
+                error_code="ANALYSIS_ERROR",
+                factor_name=factor_name
+            )
 
     def compare_factors(
         self,
@@ -492,14 +647,19 @@ class FactorAnalyzer:
 
         for factor_name, factor_df in factor_dict.items():
             try:
-                ic_result = self.ic_calculator.calculate_ic_stats(factor_df, prices)
-                ic_series_dict[factor_name] = ic_result.ic_series
-                ic_stats_list.append({
-                    '因子名': factor_name,
-                    'IC均值': ic_result.mean_ic,
-                    'IC标准差': ic_result.std_ic,
-                    'ICIR': ic_result.ic_ir
-                })
+                ic_response = self.ic_calculator.calculate_ic_stats(factor_df, prices)
+                if ic_response.is_success():
+                    ic_result = ic_response.data
+                    ic_series_dict[factor_name] = ic_result.ic_series
+                    ic_stats_list.append({
+                        '因子名': factor_name,
+                        'IC均值': ic_result.mean_ic,
+                        'IC标准差': ic_result.std_ic,
+                        'ICIR': ic_result.ic_ir
+                    })
+                else:
+                    error_msg = ic_response.error if hasattr(ic_response, 'error') else str(ic_response)
+                    logger.warning(f"计算{factor_name}的IC失败: {error_msg}")
             except Exception as e:
                 logger.warning(f"计算{factor_name}的IC失败: {e}")
 
@@ -674,7 +834,7 @@ class FactorAnalyzer:
         factor_dict: Dict[str, pd.DataFrame],
         prices: pd.DataFrame,
         n_jobs: int = None
-    ) -> Dict[str, FactorAnalysisReport]:
+    ) -> Response:
         """
         批量分析多个因子（支持并行）
 
@@ -684,64 +844,126 @@ class FactorAnalyzer:
             n_jobs: 并行任务数（向后兼容参数，优先使用parallel_config）
 
         Returns:
-            {因子名: 分析报告}
+            Response对象，data字段包含 {因子名: FactorAnalysisReport} 字典
 
-        Example:
-            >>> reports = analyzer.batch_analyze(factor_dict, prices)
-            >>> # 自动并行处理（基于配置）
+        Examples:
+            >>> analyzer = FactorAnalyzer()
+            >>> response = analyzer.batch_analyze(factor_dict, prices)
+            >>> if response.is_success():
+            ...     reports = response.data
+            ...     for name, report in reports.items():
+            ...         print(f"{name}: {report.overall_score}")
 
             >>> # 或显式指定worker数量
-            >>> reports = analyzer.batch_analyze(factor_dict, prices, n_jobs=8)
+            >>> response = analyzer.batch_analyze(factor_dict, prices, n_jobs=8)
         """
-        logger.info(f"批量分析{len(factor_dict)}个因子...")
+        try:
+            start_time = time.time()
+            logger.info(f"批量分析{len(factor_dict)}个因子...")
 
-        # 向后兼容：n_jobs覆盖配置
-        if n_jobs is not None and n_jobs != 1:
-            if HAS_PARALLEL_SUPPORT:
-                self.parallel_config.n_workers = n_jobs
-                self.parallel_config.enable_parallel = True
-            else:
-                logger.warning("并行计算模块未找到，将忽略n_jobs参数")
+            # 数据验证
+            if not factor_dict:
+                return Response.error(
+                    error="因子字典为空",
+                    error_code="EMPTY_FACTOR_DICT"
+                )
 
-        # 判断是否使用并行
-        use_parallel = (
-            HAS_PARALLEL_SUPPORT and
-            self.parallel_config and
-            self.parallel_config.enable_parallel and
-            self.parallel_config.n_workers > 1 and
-            len(factor_dict) >= 4  # 至少4个因子才并行
-        )
+            if prices is None or prices.empty:
+                return Response.error(
+                    error="价格数据为空",
+                    error_code="EMPTY_PRICE_DATA"
+                )
 
-        if use_parallel:
-            logger.debug(
-                f"使用并行批量分析: {len(factor_dict)}个因子, "
-                f"{self.parallel_config.n_workers}个worker"
+            # 向后兼容：n_jobs覆盖配置
+            if n_jobs is not None and n_jobs != 1:
+                if HAS_PARALLEL_SUPPORT:
+                    self.parallel_config.n_workers = n_jobs
+                    self.parallel_config.enable_parallel = True
+                else:
+                    logger.warning("并行计算模块未找到，将忽略n_jobs参数")
+
+            # 判断是否使用并行
+            use_parallel = (
+                HAS_PARALLEL_SUPPORT and
+                self.parallel_config and
+                self.parallel_config.enable_parallel and
+                self.parallel_config.n_workers > 1 and
+                len(factor_dict) >= 4  # 至少4个因子才并行
             )
-            reports = self._batch_analyze_parallel(factor_dict, prices)
-        else:
-            if not use_parallel and len(factor_dict) < 4:
-                logger.debug(f"因子数量较少({len(factor_dict)})，使用串行分析")
-            reports = self._batch_analyze_serial(factor_dict, prices)
 
-        logger.info(f"批量分析完成: {len(reports)}/{len(factor_dict)}个成功")
+            if use_parallel:
+                logger.debug(
+                    f"使用并行批量分析: {len(factor_dict)}个因子, "
+                    f"{self.parallel_config.n_workers}个worker"
+                )
+                reports = self._batch_analyze_parallel(factor_dict, prices)
+            else:
+                if not use_parallel and len(factor_dict) < 4:
+                    logger.debug(f"因子数量较少({len(factor_dict)})，使用串行分析")
+                reports = self._batch_analyze_serial(factor_dict, prices)
 
-        return reports
+            elapsed_time = time.time() - start_time
+            success_count = len(reports)
+            total_count = len(factor_dict)
+            failed_count = total_count - success_count
+
+            logger.info(f"批量分析完成: {success_count}/{total_count}个成功")
+
+            # 判断结果
+            if success_count == 0:
+                return Response.error(
+                    error="所有因子分析均失败",
+                    error_code="ALL_FACTORS_FAILED",
+                    total_factors=total_count,
+                    elapsed_time=f"{elapsed_time:.2f}s"
+                )
+            elif failed_count > 0:
+                return Response.warning(
+                    message=f"批量分析完成，但有{failed_count}个因子失败",
+                    data=reports,
+                    total_factors=total_count,
+                    success_count=success_count,
+                    failed_count=failed_count,
+                    elapsed_time=f"{elapsed_time:.2f}s",
+                    parallel_mode="并行" if use_parallel else "串行"
+                )
+            else:
+                return Response.success(
+                    data=reports,
+                    message=f"批量分析成功完成{total_count}个因子",
+                    total_factors=total_count,
+                    success_count=success_count,
+                    elapsed_time=f"{elapsed_time:.2f}s",
+                    parallel_mode="并行" if use_parallel else "串行"
+                )
+
+        except Exception as e:
+            logger.error(f"批量分析失败: {e}", exc_info=True)
+            return Response.error(
+                error=f"批量分析失败: {str(e)}",
+                error_code="BATCH_ANALYSIS_ERROR",
+                total_factors=len(factor_dict) if factor_dict else 0
+            )
 
     def _batch_analyze_serial(
         self,
         factor_dict: Dict[str, pd.DataFrame],
         prices: pd.DataFrame
     ) -> Dict[str, FactorAnalysisReport]:
-        """串行批量分析（原实现）"""
+        """串行批量分析（内部方法）"""
         reports = {}
 
         for factor_name, factor_df in factor_dict.items():
             try:
-                report = self.quick_analyze(
+                response = self.quick_analyze(
                     factor_df, prices,
                     factor_name=factor_name
                 )
-                reports[factor_name] = report
+                # 提取Response中的报告数据
+                if response.is_success() or response.status == ResponseStatus.WARNING:
+                    reports[factor_name] = response.data
+                else:
+                    logger.warning(f"分析因子{factor_name}失败: {response.error}")
             except Exception as e:
                 logger.warning(f"分析因子{factor_name}失败: {e}")
 

@@ -14,6 +14,9 @@ from typing import Dict, List, Optional, Union, Tuple
 from loguru import logger
 from dataclasses import dataclass
 import warnings
+import time
+
+from ..utils.response import Response, ResponseStatus
 
 warnings.filterwarnings('ignore')
 
@@ -113,6 +116,7 @@ def _compute_ic_chunk_worker(args):
 def _analyze_single_factor_worker(args):
     """
     分析单个因子（模块级函数，用于批量分析）
+    注意：此函数暂未使用，保留以备将来扩展
 
     Args:
         args: (factor_name, factor_df, prices_df, forward_periods, method, min_periods)
@@ -120,20 +124,20 @@ def _analyze_single_factor_worker(args):
     Returns:
         (factor_name, ic_result)
     """
-    factor_name, factor_df, prices_df, forward_periods, method, min_periods = args
+    factor_name, factor_df, prices_df, forward_periods, method, _min_periods = args
 
     try:
         # 创建临时计算器
         calc = ICCalculator(forward_periods=forward_periods, method=method, parallel_config=None)
 
-        # 计算IC序列（串行）
-        future_returns = prices_df.pct_change(forward_periods).shift(-forward_periods)
-        ic_series = calc._calculate_ic_series_vectorized(factor_df, future_returns)
+        # 计算IC统计（现在返回Response）
+        ic_response = calc.calculate_ic_stats(factor_df, prices_df)
 
-        # 计算统计指标
-        ic_result = calc.calculate_ic_stats(ic_series)
-
-        return (factor_name, ic_result)
+        if ic_response.is_success():
+            return (factor_name, ic_response.data)
+        else:
+            logger.error(f"分析因子{factor_name}失败: {ic_response.error}")
+            return (factor_name, None)
 
     except Exception as e:
         logger.error(f"分析因子{factor_name}失败: {e}")
@@ -416,7 +420,7 @@ class ICCalculator:
         self,
         factor_df: pd.DataFrame,
         prices_df: pd.DataFrame
-    ) -> ICResult:
+    ) -> Response:
         """
         计算IC统计指标（完整分析）
 
@@ -425,43 +429,89 @@ class ICCalculator:
             prices_df: 价格DataFrame
 
         Returns:
-            ICResult对象，包含所有IC统计指标
+            Response对象，data字段包含ICResult对象
+
+        Examples:
+            >>> calculator = ICCalculator(forward_periods=5)
+            >>> response = calculator.calculate_ic_stats(factor_df, prices_df)
+            >>> if response.is_success():
+            ...     ic_result = response.data
+            ...     print(f"IC均值: {ic_result.mean_ic:.4f}")
+            ...     print(f"ICIR: {ic_result.ic_ir:.4f}")
         """
-        logger.info("开始计算IC统计指标...")
+        try:
+            start_time = time.time()
+            logger.info("开始计算IC统计指标...")
 
-        # 1. 计算IC时间序列
-        ic_series = self.calculate_ic_series(factor_df, prices_df)
+            # 数据验证
+            if factor_df is None or prices_df is None:
+                return Response.error(
+                    error="因子数据或价格数据为空",
+                    error_code="INVALID_INPUT"
+                )
 
-        if len(ic_series) < 10:
-            raise ValueError(f"有效IC值太少({len(ic_series)})，无法计算统计指标")
+            if factor_df.empty or prices_df.empty:
+                return Response.error(
+                    error="因子数据或价格数据为空DataFrame",
+                    error_code="EMPTY_DATA",
+                    factor_shape=factor_df.shape,
+                    prices_shape=prices_df.shape
+                )
 
-        # 2. 计算统计指标
-        mean_ic = ic_series.mean()
-        std_ic = ic_series.std()
-        ic_ir = mean_ic / std_ic if std_ic > 0 else 0.0
-        positive_rate = (ic_series > 0).mean()
+            # 1. 计算IC时间序列
+            ic_series = self.calculate_ic_series(factor_df, prices_df)
 
-        # 3. 计算t统计量和p值
-        n = len(ic_series)
-        t_stat = mean_ic / (std_ic / np.sqrt(n)) if std_ic > 0 else 0.0
+            if len(ic_series) < 10:
+                return Response.error(
+                    error=f"有效IC值太少({len(ic_series)})，无法计算统计指标",
+                    error_code="INSUFFICIENT_IC_VALUES",
+                    n_valid_ic=len(ic_series),
+                    min_required=10
+                )
 
-        # 简化的p值计算（双侧检验）
-        from scipy import stats
-        p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df=n-1))
+            # 2. 计算统计指标
+            mean_ic = ic_series.mean()
+            std_ic = ic_series.std()
+            ic_ir = mean_ic / std_ic if std_ic > 0 else 0.0
+            positive_rate = (ic_series > 0).mean()
 
-        result = ICResult(
-            mean_ic=mean_ic,
-            std_ic=std_ic,
-            ic_ir=ic_ir,
-            positive_rate=positive_rate,
-            t_stat=t_stat,
-            p_value=p_value,
-            ic_series=ic_series
-        )
+            # 3. 计算t统计量和p值
+            n = len(ic_series)
+            t_stat = mean_ic / (std_ic / np.sqrt(n)) if std_ic > 0 else 0.0
 
-        logger.success(f"IC统计完成: IC={mean_ic:.4f}, ICIR={ic_ir:.4f}")
+            # 简化的p值计算（双侧检验）
+            from scipy import stats
+            p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df=n-1))
 
-        return result
+            result = ICResult(
+                mean_ic=mean_ic,
+                std_ic=std_ic,
+                ic_ir=ic_ir,
+                positive_rate=positive_rate,
+                t_stat=t_stat,
+                p_value=p_value,
+                ic_series=ic_series
+            )
+
+            elapsed_time = time.time() - start_time
+
+            logger.success(f"IC统计完成: IC={mean_ic:.4f}, ICIR={ic_ir:.4f}")
+
+            return Response.success(
+                data=result,
+                message="IC统计指标计算成功",
+                mean_ic=mean_ic,
+                ic_ir=ic_ir,
+                n_valid_ic=len(ic_series),
+                elapsed_time=f"{elapsed_time:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"计算IC统计指标失败: {e}", exc_info=True)
+            return Response.error(
+                error=f"计算IC统计指标失败: {str(e)}",
+                error_code="IC_CALCULATION_ERROR"
+            )
 
     def calculate_multi_factor_ic(
         self,
@@ -485,19 +535,24 @@ class ICCalculator:
         for factor_name, factor_df in factor_dict.items():
             try:
                 logger.debug(f"计算因子: {factor_name}")
-                ic_result = self.calculate_ic_stats(factor_df, prices_df)
+                ic_response = self.calculate_ic_stats(factor_df, prices_df)
 
-                row = {
-                    '因子名': factor_name,
-                    'IC均值': ic_result.mean_ic,
-                    'IC标准差': ic_result.std_ic,
-                    'ICIR': ic_result.ic_ir,
-                    'IC正值率': ic_result.positive_rate,
-                    't统计量': ic_result.t_stat,
-                    'p值': ic_result.p_value,
-                    '有效天数': len(ic_result.ic_series)
-                }
-                results.append(row)
+                if ic_response.is_success():
+                    ic_result = ic_response.data
+                    row = {
+                        '因子名': factor_name,
+                        'IC均值': ic_result.mean_ic,
+                        'IC标准差': ic_result.std_ic,
+                        'ICIR': ic_result.ic_ir,
+                        'IC正值率': ic_result.positive_rate,
+                        't统计量': ic_result.t_stat,
+                        'p值': ic_result.p_value,
+                        '有效天数': len(ic_result.ic_series)
+                    }
+                    results.append(row)
+                else:
+                    logger.error(f"计算因子{factor_name}的IC失败: {ic_response.error}")
+                    continue
 
             except Exception as e:
                 logger.error(f"计算因子{factor_name}的IC失败: {e}")
@@ -581,14 +636,18 @@ class ICCalculator:
             self.forward_periods = period
 
             try:
-                ic_result = self.calculate_ic_stats(factor_df, prices_df)
+                ic_response = self.calculate_ic_stats(factor_df, prices_df)
 
-                decay_results.append({
-                    '持有期': period,
-                    'IC均值': ic_result.mean_ic,
-                    'ICIR': ic_result.ic_ir,
-                    'IC正值率': ic_result.positive_rate
-                })
+                if ic_response.is_success():
+                    ic_result = ic_response.data
+                    decay_results.append({
+                        '持有期': period,
+                        'IC均值': ic_result.mean_ic,
+                        'ICIR': ic_result.ic_ir,
+                        'IC正值率': ic_result.positive_rate
+                    })
+                else:
+                    logger.warning(f"持有期{period}天的IC计算失败: {ic_response.error}")
 
             except Exception as e:
                 logger.warning(f"持有期{period}天的IC计算失败: {e}")
