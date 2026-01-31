@@ -109,11 +109,12 @@ class DataRepairEngine:
 
             # 1. 数据验证 - 识别问题
             validator = DataValidator(df_repaired)
-            validation_results = validator.validate_all(strict_mode=False)
+            validation_response = validator.validate_all(strict_mode=False)
+            validation_results = validation_response.data if validation_response.is_success() else {}
 
             # 2. 修复缺失值
             if not auto_repair:
-                missing_stats = validation_results['stats'].get('missing_values', {})
+                missing_stats = validation_results.get('stats', {}).get('missing_values', {})
                 has_missing = any(
                     stats['count'] > 0 for stats in missing_stats.values()
                 )
@@ -160,7 +161,7 @@ class DataRepairEngine:
                     })
 
             # 4. 修复价格逻辑错误
-            price_logic_errors = validation_results['stats'].get('price_logic_errors', {})
+            price_logic_errors = validation_results.get('stats', {}).get('price_logic_errors', {})
             total_logic_errors = sum(price_logic_errors.values())
 
             if total_logic_errors > 0:
@@ -181,7 +182,7 @@ class DataRepairEngine:
                         })
 
             # 5. 修复重复记录
-            duplicate_count = validation_results['stats'].get('duplicate_records', 0)
+            duplicate_count = validation_results.get('stats', {}).get('duplicate_records', 0)
 
             if duplicate_count > 0:
                 issues_found.append({

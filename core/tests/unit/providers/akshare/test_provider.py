@@ -16,6 +16,7 @@ sys.path.insert(0, str(project_root / 'core' / 'src'))
 
 from src.providers.akshare.provider import AkShareProvider
 from src.providers.akshare.exceptions import AkShareDataError
+from src.utils.response import Response
 
 
 class TestAkShareProvider(unittest.TestCase):
@@ -69,17 +70,19 @@ class TestAkShareProvider(unittest.TestCase):
         provider = AkShareProvider()
         result = provider.get_stock_list()
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertGreater(len(result), 0)
-        self.assertIn('code', result.columns)
-        self.assertIn('name', result.columns)
+        # 验证结果 - 现在返回 Response 对象
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertGreater(len(result.data), 0)
+        self.assertIn('code', result.data.columns)
+        self.assertIn('name', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 只股票")
+        print(f"  ✓ 成功获取 {len(result.data)} 只股票")
 
     def test_03_get_stock_list_empty(self):
-        """测试3: 获取空股票列表应抛出异常"""
-        print("\n[测试3] 获取空股票列表应抛出异常...")
+        """测试3: 获取空股票列表应返回错误响应"""
+        print("\n[测试3] 获取空股票列表应返回错误响应...")
 
         # Mock API 返回空数据
         mock_client_instance = MagicMock()
@@ -87,11 +90,14 @@ class TestAkShareProvider(unittest.TestCase):
         self.mock_api_client.return_value = mock_client_instance
 
         provider = AkShareProvider()
+        result = provider.get_stock_list()
 
-        with self.assertRaises(AkShareDataError):
-            provider.get_stock_list()
+        # 验证返回错误响应
+        self.assertIsInstance(result, Response)
+        self.assertFalse(result.is_success())
+        self.assertIn('AKSHARE_EMPTY_DATA', result.error_code)
 
-        print("  ✓ 正确抛出 AkShareDataError")
+        print("  ✓ 正确返回错误响应")
 
     def test_04_get_daily_data(self):
         """测试4: 获取日线数据"""
@@ -120,12 +126,14 @@ class TestAkShareProvider(unittest.TestCase):
             end_date='2024-01-31'
         )
 
-        # 验证结果
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 2)
-        self.assertIn('trade_date', result.columns)
+        # 验证结果 - 现在返回 Response 对象
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertEqual(len(result.data), 2)
+        self.assertIn('trade_date', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 条日线数据")
+        print(f"  ✓ 成功获取 {len(result.data)} 条日线数据")
 
 
 def run_tests():

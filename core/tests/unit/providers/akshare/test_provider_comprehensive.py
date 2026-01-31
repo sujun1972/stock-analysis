@@ -21,6 +21,7 @@ sys.path.insert(0, str(project_root / 'core' / 'src'))
 from src.providers.akshare.provider import AkShareProvider
 from src.providers.akshare.exceptions import AkShareDataError
 from src.providers.akshare.config import AkShareConfig
+from src.utils.response import Response
 
 
 class TestAkShareProviderInit(unittest.TestCase):
@@ -109,28 +110,31 @@ class TestStockListMethods(unittest.TestCase):
         result = provider.get_stock_list()
 
         # 验证
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertGreater(len(result), 0)
-        self.assertIn('code', result.columns)
-        self.assertIn('name', result.columns)
-        self.assertIn('market', result.columns)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertGreater(len(result.data), 0)
+        self.assertIn('code', result.data.columns)
+        self.assertIn('name', result.data.columns)
+        self.assertIn('market', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 只股票")
+        print(f"  ✓ 成功获取 {len(result.data)} 只股票")
 
     def test_get_stock_list_empty(self):
         """测试获取空股票列表"""
-        print("\n[测试] 获取空股票列表应抛出异常...")
+        print("\n[测试] 获取空股票列表返回错误...")
 
         # Mock 返回空数据
         self.mock_client_instance.execute.return_value = pd.DataFrame()
 
         provider = AkShareProvider()
+        result = provider.get_stock_list()
 
-        with self.assertRaises(AkShareDataError) as cm:
-            provider.get_stock_list()
-
-        self.assertIn('返回数据为空', str(cm.exception))
-        print("  ✓ 正确抛出异常")
+        # 验证返回错误的 Response
+        self.assertIsInstance(result, Response)
+        self.assertFalse(result.is_success())
+        self.assertIn('返回数据为空', result.error_message)
+        print("  ✓ 正确返回错误响应")
 
     def test_get_stock_list_exception(self):
         """测试获取股票列表异常"""
@@ -140,10 +144,12 @@ class TestStockListMethods(unittest.TestCase):
         self.mock_client_instance.execute.side_effect = Exception("网络错误")
 
         provider = AkShareProvider()
+        result = provider.get_stock_list()
 
-        with self.assertRaises(Exception):
-            provider.get_stock_list()
-
+        # 验证返回错误的 Response
+        self.assertIsInstance(result, Response)
+        self.assertFalse(result.is_success())
+        self.assertIn('网络错误', result.error_message)
         print("  ✓ 正确处理异常")
 
     def test_get_new_stocks_success(self):
@@ -162,12 +168,14 @@ class TestStockListMethods(unittest.TestCase):
         result = provider.get_new_stocks(days=30)
 
         # 验证
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertGreater(len(result), 0)
-        self.assertIn('code', result.columns)
-        self.assertIn('list_date', result.columns)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertGreater(len(result.data), 0)
+        self.assertIn('code', result.data.columns)
+        self.assertIn('list_date', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 只新股")
+        print(f"  ✓ 成功获取 {len(result.data)} 只新股")
 
     def test_get_new_stocks_filter_by_days(self):
         """测试按天数筛选新股"""
@@ -189,9 +197,11 @@ class TestStockListMethods(unittest.TestCase):
         result = provider.get_new_stocks(days=30)
 
         # 验证筛选结果
-        self.assertEqual(len(result), 2)  # 只有2只新股在30天内
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertEqual(len(result.data), 2)  # 只有2只新股在30天内
 
-        print(f"  ✓ 筛选正确，获得 {len(result)} 只新股")
+        print(f"  ✓ 筛选正确，获得 {len(result.data)} 只新股")
 
     def test_get_delisted_stocks_success(self):
         """测试成功获取退市股票"""
@@ -221,12 +231,14 @@ class TestStockListMethods(unittest.TestCase):
         result = provider.get_delisted_stocks()
 
         # 验证
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 3)  # 2���上交所 + 1只深交所
-        self.assertIn('code', result.columns)
-        self.assertIn('delist_date', result.columns)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertEqual(len(result.data), 3)  # 2���上交所 + 1只深交所
+        self.assertIn('code', result.data.columns)
+        self.assertIn('delist_date', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 只退市股票")
+        print(f"  ✓ 成功获取 {len(result.data)} 只退市股票")
 
     def test_get_delisted_stocks_sz_failed(self):
         """测试深交所退市数据获取失败"""
@@ -249,7 +261,9 @@ class TestStockListMethods(unittest.TestCase):
         result = provider.get_delisted_stocks()
 
         # 验证仍然返回上交所数据
-        self.assertEqual(len(result), 1)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertEqual(len(result.data), 1)
 
         print("  ✓ 正确处理部分失败")
 
@@ -290,11 +304,13 @@ class TestDailyDataMethods(unittest.TestCase):
         )
 
         # 验证
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 3)
-        self.assertIn('trade_date', result.columns)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertEqual(len(result.data), 3)
+        self.assertIn('trade_date', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 条日线数据")
+        print(f"  ✓ 成功获取 {len(result.data)} 条日线数据")
 
     def test_get_daily_data_default_dates(self):
         """测试使用默认日期"""
@@ -316,7 +332,9 @@ class TestDailyDataMethods(unittest.TestCase):
 
         # 验证 execute 被调用
         self.mock_client_instance.execute.assert_called_once()
-        self.assertGreater(len(result), 0)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertGreater(len(result.data), 0)
 
         print("  ✓ 默认日期处理正确")
 
@@ -342,6 +360,10 @@ class TestDailyDataMethods(unittest.TestCase):
             self.mock_client_instance.execute.reset_mock()
             result = provider.get_daily_data(code='000001', adjust=adjust)
 
+            # 验证返回 Response 对象
+            self.assertIsInstance(result, Response)
+            self.assertTrue(result.is_success())
+
             # 验证 adjust 参数传递
             call_args = self.mock_client_instance.execute.call_args
             self.assertEqual(call_args[1]['adjust'], adjust)
@@ -357,8 +379,10 @@ class TestDailyDataMethods(unittest.TestCase):
         provider = AkShareProvider()
         result = provider.get_daily_data(code='000001')
 
-        # 验证返回空 DataFrame
-        self.assertTrue(result.empty)
+        # 验证返回空 DataFrame（警告状态，但有空数据）
+        self.assertIsInstance(result, Response)
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertTrue(result.data.empty)
 
         print("  ✓ 空数据处理正确")
 
@@ -383,13 +407,15 @@ class TestDailyDataMethods(unittest.TestCase):
         result = provider.get_daily_batch(codes)
 
         # 验证
-        self.assertIsInstance(result, dict)
-        self.assertEqual(len(result), 3)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, dict)
+        self.assertEqual(len(result.data), 3)
         for code in codes:
-            self.assertIn(code, result)
-            self.assertIsInstance(result[code], pd.DataFrame)
+            self.assertIn(code, result.data)
+            self.assertIsInstance(result.data[code], pd.DataFrame)
 
-        print(f"  ✓ 成功批量获取 {len(result)} 只股票")
+        print(f"  ✓ 成功批量获取 {len(result.data)} 只股票")
 
     def test_get_daily_batch_partial_failure(self):
         """测试批量获取部分失败"""
@@ -420,11 +446,13 @@ class TestDailyDataMethods(unittest.TestCase):
         codes = ['000001', '600000', '000002']
         result = provider.get_daily_batch(codes)
 
-        # 验证部分成功
-        self.assertLess(len(result), len(codes))
-        self.assertGreater(len(result), 0)
+        # 验证部分成功（返回警告状态，但有部分数据）
+        self.assertIsInstance(result, Response)
+        self.assertIsInstance(result.data, dict)
+        self.assertLess(len(result.data), len(codes))
+        self.assertGreater(len(result.data), 0)
 
-        print(f"  ✓ 部分成功: {len(result)}/{len(codes)}")
+        print(f"  ✓ 部分成功: {len(result.data)}/{len(codes)}")
 
 
 class TestMinuteDataMethods(unittest.TestCase):
@@ -458,12 +486,14 @@ class TestMinuteDataMethods(unittest.TestCase):
         result = provider.get_minute_data(code='000001', period='5')
 
         # 验���
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 2)
-        self.assertIn('trade_time', result.columns)
-        self.assertIn('period', result.columns)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertEqual(len(result.data), 2)
+        self.assertIn('trade_time', result.data.columns)
+        self.assertIn('period', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 条分时数据")
+        print(f"  ✓ 成功获取 {len(result.data)} 条分时数据")
 
     def test_get_minute_data_different_periods(self):
         """测试不同周期"""
@@ -484,7 +514,9 @@ class TestMinuteDataMethods(unittest.TestCase):
 
         for period in ['1', '5', '15', '30', '60']:
             result = provider.get_minute_data(code='000001', period=period)
-            self.assertTrue(all(result['period'] == period))
+            self.assertIsInstance(result, Response)
+            self.assertTrue(result.is_success())
+            self.assertTrue(all(result.data['period'] == period))
 
         print("  ✓ 不同周期处理正确")
 
@@ -497,7 +529,9 @@ class TestMinuteDataMethods(unittest.TestCase):
         provider = AkShareProvider()
         result = provider.get_minute_data(code='000001', period='5')
 
-        self.assertTrue(result.empty)
+        self.assertIsInstance(result, Response)
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertTrue(result.data.empty)
 
         print("  ✓ 空数据处理正确")
 
@@ -538,12 +572,14 @@ class TestRealtimeQuotesMethods(unittest.TestCase):
         result = provider.get_realtime_quotes()
 
         # 验证
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 2)
-        self.assertIn('code', result.columns)
-        self.assertIn('name', result.columns)
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertEqual(len(result.data), 2)
+        self.assertIn('code', result.data.columns)
+        self.assertIn('name', result.data.columns)
 
-        print(f"  ✓ 成功获取 {len(result)} 条实时行情")
+        print(f"  ✓ 成功获取 {len(result.data)} 条实时行情")
 
     def test_get_realtime_quotes_batch_small(self):
         """测试批量获取少量股票（<=100）"""
@@ -570,10 +606,12 @@ class TestRealtimeQuotesMethods(unittest.TestCase):
         result = provider.get_realtime_quotes(codes=codes)
 
         # 验证
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertLessEqual(len(result), len(codes))
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+        self.assertIsInstance(result.data, pd.DataFrame)
+        self.assertLessEqual(len(result.data), len(codes))
 
-        print(f"  ✓ 成功批量获取 {len(result)} 条行情")
+        print(f"  ✓ 成功批量获取 {len(result.data)} 条行情")
 
     def test_get_realtime_quotes_with_callback(self):
         """测试带回调函数的实时行情获取"""
@@ -602,6 +640,10 @@ class TestRealtimeQuotesMethods(unittest.TestCase):
         provider = AkShareProvider()
         result = provider.get_realtime_quotes(codes=['000001'], save_callback=save_callback)
 
+        # 验证
+        self.assertIsInstance(result, Response)
+        self.assertTrue(result.is_success())
+
         # 验证回调被调用
         self.assertGreater(len(callback_data), 0)
 
@@ -614,11 +656,12 @@ class TestRealtimeQuotesMethods(unittest.TestCase):
         self.mock_client_instance.execute.return_value = pd.DataFrame()
 
         provider = AkShareProvider()
+        result = provider.get_realtime_quotes()
 
-        with self.assertRaises(AkShareDataError) as cm:
-            provider.get_realtime_quotes()
-
-        self.assertIn('返回数据为空', str(cm.exception))
+        # 验证返回错误的 Response
+        self.assertIsInstance(result, Response)
+        self.assertFalse(result.is_success())
+        self.assertIn('返回数据为空', result.error_message)
 
         print("  ✓ 空数据异常处理正确")
 
