@@ -70,13 +70,41 @@ except ImportError:
 
 # ==================== 异常类 ====================
 
-class ParallelExecutionError(Exception):
-    """并行执行错误"""
+# 导入统一异常系统
+from src.exceptions import StockAnalysisError
+
+class ParallelExecutionError(StockAnalysisError):
+    """并行执行错误（迁移到统一异常系统）
+
+    当并行任务执行失败时抛出。
+
+    Examples:
+        >>> raise ParallelExecutionError(
+        ...     "并行任务执行失败",
+        ...     error_code="PARALLEL_EXEC_ERROR",
+        ...     backend="multiprocessing",
+        ...     n_workers=4,
+        ...     failed_tasks=3,
+        ...     total_tasks=100
+        ... )
+    """
     pass
 
 
-class BackendNotAvailableError(Exception):
-    """后端不可用错误"""
+class BackendNotAvailableError(StockAnalysisError):
+    """后端不可用错误（迁移到统一异常系统）
+
+    当请求的并行计算后端不可用时抛出。
+
+    Examples:
+        >>> raise BackendNotAvailableError(
+        ...     "Ray后端不可用",
+        ...     error_code="BACKEND_NOT_AVAILABLE",
+        ...     requested_backend="ray",
+        ...     available_backends=["multiprocessing", "threading"],
+        ...     suggestion="请安装ray: pip install ray"
+        ... )
+    """
     pass
 
 

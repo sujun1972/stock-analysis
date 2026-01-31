@@ -62,18 +62,56 @@ ScalerType = Union[StandardScaler, RobustScaler, MinMaxScaler]
 
 # ==================== 异常类 ====================
 
-class TransformError(Exception):
-    """转换错误基类"""
+# 导入统一异常系统
+from src.exceptions import FeatureError, DataValidationError
+
+class TransformError(FeatureError):
+    """转换错误基类（迁移到统一异常系统）
+
+    该异常类现在继承自统一异常系统的FeatureError。
+    支持错误代码和上下文信息。
+
+    Examples:
+        >>> raise TransformError(
+        ...     "数据转换失败",
+        ...     error_code="TRANSFORM_ERROR",
+        ...     transform_type="normalization",
+        ...     data_shape=df.shape
+        ... )
+    """
     pass
 
 
-class InvalidDataError(TransformError):
-    """无效数据错误"""
+class InvalidDataError(DataValidationError):
+    """无效数据错误（迁移到统一异常系统）
+
+    该异常类现在继承自统一异常系统的DataValidationError。
+    支持错误代码和上下文信息。
+
+    Examples:
+        >>> raise InvalidDataError(
+        ...     "DataFrame为空",
+        ...     error_code="EMPTY_DATAFRAME",
+        ...     expected_rows=">0",
+        ...     actual_rows=0
+        ... )
+    """
     pass
 
 
 class ScalerNotFoundError(TransformError):
-    """Scaler未找到错误"""
+    """Scaler未找到错误（迁移到统一异常系统）
+
+    当尝试加载不存在的Scaler对象时抛出。
+
+    Examples:
+        >>> raise ScalerNotFoundError(
+        ...     "Scaler文件不存在",
+        ...     error_code="SCALER_NOT_FOUND",
+        ...     scaler_path="/path/to/scaler.pkl",
+        ...     scaler_type="RobustScaler"
+        ... )
+    """
     pass
 
 

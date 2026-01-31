@@ -47,13 +47,40 @@ except ImportError:
 
 # ==================== 异常类 ====================
 
-class EnsembleError(Exception):
-    """集成错误基类"""
+# 导入统一异常系统
+from src.exceptions import ModelError
+
+class EnsembleError(ModelError):
+    """集成错误基类（迁移到统一异常系统）
+
+    该异常类现在继承自统一异常系统的ModelError。
+    支持错误代码和上下文信息。
+
+    Examples:
+        >>> raise EnsembleError(
+        ...     "集成模型创建失败",
+        ...     error_code="ENSEMBLE_CREATION_ERROR",
+        ...     n_models=3,
+        ...     ensemble_method="weighted_average"
+        ... )
+    """
     pass
 
 
 class IncompatibleModelsError(EnsembleError):
-    """模型不兼容错误"""
+    """模型不兼容错误（迁移到统一异常系统）
+
+    当尝试集成不兼容的模型时抛出。
+
+    Examples:
+        >>> raise IncompatibleModelsError(
+        ...     "模型输出维度不一致",
+        ...     error_code="INCOMPATIBLE_MODELS",
+        ...     model_1_output_shape=(100, 1),
+        ...     model_2_output_shape=(100, 5),
+        ...     reason="输出维度必须相同"
+        ... )
+    """
     pass
 
 

@@ -30,23 +30,75 @@ from .model_evaluator import ModelEvaluator
 
 # ==================== 异常类 ====================
 
-class TrainingError(Exception):
-    """训练过程错误基类"""
+# 导入统一异常系统
+from src.exceptions import ModelError, ModelTrainingError as BaseModelTrainingError, DataValidationError
+
+class TrainingError(BaseModelTrainingError):
+    """训练过程错误基类（迁移到统一异常系统）
+
+    该异常类现在继承自统一异常系统的ModelTrainingError。
+    支持错误代码和上下文信息。
+
+    Examples:
+        >>> raise TrainingError(
+        ...     "模型训练失败",
+        ...     error_code="TRAINING_FAILED",
+        ...     model_type="LightGBM",
+        ...     n_samples=1000,
+        ...     n_features=125,
+        ...     reason="数据包含NaN值"
+        ... )
+    """
     pass
 
 
-class DataPreparationError(TrainingError):
-    """数据准备错误"""
+class DataPreparationError(DataValidationError):
+    """数据准备错误（迁移到统一异常系统）
+
+    该异常类现在继承自统一异常系统的DataValidationError。
+    用于数据准备阶段的验证错误。
+
+    Examples:
+        >>> raise DataPreparationError(
+        ...     "特征列不存在",
+        ...     error_code="MISSING_FEATURES",
+        ...     required_features=['open', 'high', 'low', 'close'],
+        ...     missing_features=['volume']
+        ... )
+    """
     pass
 
 
-class ModelCreationError(TrainingError):
-    """模型创建错误"""
+class ModelCreationError(ModelError):
+    """模型创建错误（迁移到统一异常系统）
+
+    当模型创建或初始化失败时抛出。
+
+    Examples:
+        >>> raise ModelCreationError(
+        ...     "模型创建失败",
+        ...     error_code="MODEL_INIT_ERROR",
+        ...     model_type="LightGBM",
+        ...     model_params=params,
+        ...     reason="参数配置错误"
+        ... )
+    """
     pass
 
 
-class InvalidModelTypeError(TrainingError):
-    """无效模型类型错误"""
+class InvalidModelTypeError(ModelError):
+    """无效模型类型错误（迁移到统一异常系统）
+
+    当指定的模型类型不被支持时抛出。
+
+    Examples:
+        >>> raise InvalidModelTypeError(
+        ...     "不支持的模型类型",
+        ...     error_code="UNSUPPORTED_MODEL_TYPE",
+        ...     requested_type="xgboost",
+        ...     supported_types=["lightgbm", "ridge", "gru"]
+        ... )
+    """
     pass
 
 

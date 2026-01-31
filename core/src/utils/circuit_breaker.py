@@ -81,12 +81,47 @@ class CircuitBreakerMetrics:
         }
 
 
-class CircuitBreakerError(Exception):
-    """断路器打开异常"""
+# 导入统一异常系统
+from src.exceptions import StockAnalysisError
 
-    def __init__(self, message: str, breaker_name: str):
-        super().__init__(message)
-        self.breaker_name = breaker_name
+class CircuitBreakerError(StockAnalysisError):
+    """断路器打开异常（迁移到统一异常系统）
+
+    当断路器处于OPEN状态时抛出，阻止调用执行。
+
+    Migration Note:
+        旧代码: exception.breaker_name
+        新代码: exception.context['breaker_name']
+        兼容: 提供breaker_name属性以保持向后兼容
+
+    Examples:
+        >>> raise CircuitBreakerError(
+        ...     "断路器打开，拒绝请求",
+        ...     error_code="CIRCUIT_BREAKER_OPEN",
+        ...     breaker_name="api_circuit",
+        ...     failure_count=10,
+        ...     state="OPEN"
+        ... )
+    """
+
+    def __init__(self, message: str, error_code: str = None, breaker_name: str = None, **context):
+        """
+        初始化断路器异常
+
+        Args:
+            message: 错误消息
+            error_code: 错误代码
+            breaker_name: 断路器名称
+            **context: 其他上下文信息
+        """
+        if breaker_name:
+            context['breaker_name'] = breaker_name
+        super().__init__(message, error_code=error_code or "CIRCUIT_BREAKER_OPEN", **context)
+
+    @property
+    def breaker_name(self) -> Optional[str]:
+        """向后兼容属性：获取breaker_name"""
+        return self.context.get('breaker_name')
 
 
 class CircuitBreaker:

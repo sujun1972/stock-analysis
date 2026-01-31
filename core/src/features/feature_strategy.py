@@ -101,13 +101,61 @@ TupleParams = List[tuple]  # 元组参数列表类型
 
 # ==================== 异常类 ====================
 
-class FeatureComputationError(Exception):
-    """特征计算错误"""
+# 导入统一异常系统
+from src.exceptions import FeatureCalculationError, DataValidationError
+
+# 向后兼容：保留旧异常名称作为别名
+class FeatureComputationError(FeatureCalculationError):
+    """特征计算错误（向后兼容别名）
+
+    该异常类现在继承自统一异常系统的FeatureCalculationError。
+    支持错误代码和上下文信息。
+
+    Migration Note:
+        旧代码: raise FeatureComputationError("计算失败")
+        新代码: raise FeatureComputationError(
+                    "计算失败",
+                    error_code="FEATURE_CALC_ERROR",
+                    feature_name="MA_20",
+                    stock_code="000001"
+                )
+
+    Examples:
+        >>> raise FeatureComputationError(
+        ...     "MA计算失败",
+        ...     error_code="MA_CALCULATION_ERROR",
+        ...     period=20,
+        ...     data_length=10,
+        ...     reason="数据点不足"
+        ... )
+    """
     pass
 
 
-class InvalidDataError(Exception):
-    """无效数据错误"""
+class InvalidDataError(DataValidationError):
+    """无效数据错误（向后兼容别名）
+
+    该异常类现在继承自统一异常系统的DataValidationError。
+    支持错误代码和上下文信息。
+
+    Migration Note:
+        旧代码: raise InvalidDataError("DataFrame为空")
+        新代码: raise InvalidDataError(
+                    "DataFrame为空",
+                    error_code="EMPTY_DATAFRAME",
+                    expected_rows=">0",
+                    actual_rows=0
+                )
+
+    Examples:
+        >>> raise InvalidDataError(
+        ...     "缺少必需列",
+        ...     error_code="MISSING_REQUIRED_COLUMNS",
+        ...     required_columns=['open', 'high', 'low', 'close'],
+        ...     actual_columns=df.columns.tolist(),
+        ...     missing_columns=['volume']
+        ... )
+    """
     pass
 
 
