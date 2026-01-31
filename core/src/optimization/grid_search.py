@@ -233,11 +233,25 @@ class GridSearchOptimizer:
                         _evaluate_single_params_wrapper,
                         tasks,
                         desc="网格搜索",
-                        ignore_errors=True
+                        ignore_errors=False  # 改为 False，让序列化错误直接抛出
                     )
+
+                # 检查结果完整性
+                if len(results) != len(param_combinations):
+                    logger.warning(
+                        f"并行搜索返回结果不完整 ({len(results)}/{len(param_combinations)})，回退到串行搜索"
+                    )
+                    return self._search_serial(objective_func, param_combinations)
+
                 return results
+
             except Exception as e:
-                logger.warning(f"并行搜索失败({e})，回退到串行搜索")
+                error_msg = str(e)
+                # 检查是否是序列化错误
+                if "Can't pickle" in error_msg or "Can't get local object" in error_msg:
+                    logger.warning(f"目标函数无法序列化，回退到串行搜索")
+                else:
+                    logger.warning(f"并行搜索失败({e})，回退到串行搜索")
                 return self._search_serial(objective_func, param_combinations)
 
         except ImportError as e:
