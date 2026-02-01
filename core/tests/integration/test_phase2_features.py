@@ -10,6 +10,10 @@ from pathlib import Path
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+# 导入unwrap工具
+from conftest import unwrap_response
 
 from src.features.technical_indicators import TechnicalIndicators, calculate_all_indicators
 from src.features.alpha_factors import AlphaFactors, calculate_all_alpha_factors
@@ -300,7 +304,7 @@ def test_integrated_pipeline():
     # Step 2: 计算Alpha因子
     print("\n5.3 计算Alpha因子")
     af = AlphaFactors(ti_df)
-    af_df = af.add_all_alpha_factors()
+    af_df = unwrap_response(af.add_all_alpha_factors())
     print(f"  Alpha因子后: {len(af_df.columns)} 列")
 
     # Step 3: 特征转换
@@ -327,13 +331,8 @@ def test_integrated_pipeline():
     print("\n5.6 验证保存")
     response = storage.load_features('000001', 'transformed', 'v1')
 
-    # 判断response类型并unwrap
-    if hasattr(response, 'is_success'):
-        assert response.is_success, f"加载失败: {response.error}"
-        loaded_df = response.data
-    else:
-        # 直接返回DataFrame
-        loaded_df = response
+    # 使用unwrap_response确保完全解包
+    loaded_df = unwrap_response(response)
 
     assert loaded_df is not None, "加载失败"
 

@@ -19,15 +19,16 @@ if str(src_path) not in sys.path:
 
 def unwrap_response(response):
     """
-    解包Response对象，返回data
+    解包Response对象，返回data，递归处理嵌套Response
 
     用于简化测试中Response对象的处理，自动验证操作是否成功并提取数据。
+    支持递归unwrap嵌套的Response对象和字典中的Response值。
 
     Args:
-        response: Response对象
+        response: Response对象或普通数据
 
     Returns:
-        response.data的内容
+        response.data的内容，如果嵌套则递归unwrap
 
     Raises:
         AssertionError: 如果Response表示失败
@@ -39,8 +40,25 @@ def unwrap_response(response):
         >>> # assert response.is_success(), f"操作失败: {response.error_message}"
         >>> # loaded_df = response.data
     """
+    # 如果不是Response对象，直接返回
+    if not hasattr(response, 'is_success'):
+        return response
+
+    # 验证Response成功
     assert response.is_success(), f"操作失败: {response.error_message}"
-    return response.data
+    data = response.data
+
+    # 如果data是字典，递归unwrap字典中的每个值
+    if isinstance(data, dict):
+        result = {}
+        for k, v in data.items():
+            result[k] = unwrap_response(v)
+        return result
+    # 如果data本身也是Response，递归unwrap
+    elif hasattr(data, 'is_success'):
+        return unwrap_response(data)
+
+    return data
 
 
 def unwrap_prepare_data(response):

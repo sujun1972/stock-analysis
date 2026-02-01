@@ -402,17 +402,14 @@ class ConfigDiagnostics:
 
     def _check_gpu_available(self) -> bool:
         """检查 GPU 是否可用"""
-        # 尝试检测 CUDA
         try:
             import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            pass
-
-        # 尝试检测 Apple MPS
-        try:
-            import torch
-            return torch.backends.mps.is_available()
+            # 先检测 CUDA
+            if torch.cuda.is_available():
+                return True
+            # 再检测 Apple MPS
+            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                return True
         except (ImportError, AttributeError):
             pass
 

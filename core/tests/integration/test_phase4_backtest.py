@@ -22,9 +22,19 @@ import numpy as np
 
 
 def unwrap_response(response):
-    """从Response对象中提取数据"""
+    """从Response对象中提取数据，递归处理嵌套Response"""
     if hasattr(response, 'data'):
-        return response.data
+        data = response.data
+        # 如果data是字典，递归unwrap字典中的每个值
+        if isinstance(data, dict):
+            result = {}
+            for k, v in data.items():
+                result[k] = unwrap_response(v)
+            return result
+        # 如果data本身也是Response，递归unwrap
+        elif hasattr(data, 'data'):
+            return unwrap_response(data)
+        return data
     return response
 
 
@@ -236,9 +246,9 @@ def test_backtest_engine():
     # 确保results是字典
     assert isinstance(results, dict), f"results应该是字典，实际类型: {type(results)}"
 
-    # unwrap nested Response objects if any
-    portfolio_value = unwrap_response(results['portfolio_value'])
-    daily_returns = unwrap_response(results['daily_returns'])
+    # 获取结果（已经在unwrap_response中递归unwrap了）
+    portfolio_value = results['portfolio_value']
+    daily_returns = results['daily_returns']
 
     print(f"  交易日数: {len(portfolio_value)}")
     print(f"  最终资产: {portfolio_value['total'].iloc[-1]:,.0f}")
@@ -255,7 +265,12 @@ def test_backtest_engine():
         periods_per_year=252
     )
 
-    metrics = analyzer.calculate_all_metrics(verbose=False)
+    metrics_response = analyzer.calculate_all_metrics(verbose=False)
+    # 手动unwrap
+    if hasattr(metrics_response, 'data'):
+        metrics = metrics_response.data
+    else:
+        metrics = metrics_response
 
     print(f"  夏普比率: {metrics['sharpe_ratio']:.4f}")
     print(f"  最大回撤: {metrics['max_drawdown']*100:.2f}%")
@@ -314,7 +329,12 @@ def test_integrated_backtest():
         periods_per_year=252
     )
 
-    metrics = unwrap_response(analyzer.calculate_all_metrics(verbose=True))
+    metrics_response = analyzer.calculate_all_metrics(verbose=True)
+    # 手动unwrap
+    if hasattr(metrics_response, 'data'):
+        metrics = metrics_response.data
+    else:
+        metrics = metrics_response
 
     # 验证关键指标
     print("\n4.5 验证关键指标")

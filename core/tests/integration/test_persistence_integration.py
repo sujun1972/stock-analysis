@@ -269,21 +269,21 @@ class TestModelPersistence(unittest.TestCase):
         """测试2: GRU模型保存和加载"""
 
         try:
-            from src.models import GRUStockModel
+            from src.models import GRUStockTrainer
 
             # 创建训练数据
             X_train, y_train = self._create_training_data(200)
             X_test, y_test = self._create_training_data(50)
 
             # 创建并训练模型（CPU模式，快速训练）
-            model = GRUStockModel(
+            trainer = GRUStockTrainer(
                 input_size=10,
                 hidden_size=32,
                 num_layers=1,
-                device='cpu'
+                use_gpu=False  # 强制使用CPU
             )
 
-            model.train(
+            trainer.train(
                 X_train, y_train,
                 X_test, y_test,
                 epochs=2,  # 快速测试，只训练2轮
@@ -291,24 +291,24 @@ class TestModelPersistence(unittest.TestCase):
             )
 
             # 原始预测
-            original_pred = model.predict(X_test)
+            original_pred = trainer.predict(X_test)
 
             # 保存模型
             model_path = Path(self.temp_dir) / 'gru_model.pth'
-            model.save_model(str(model_path))
+            trainer.save_model(str(model_path))
             self.assertTrue(model_path.exists(), "模型文件未创建")
 
             # 加载模型
-            loaded_model = GRUStockModel(
-                input_dim=10,
-                hidden_dim=32,
+            loaded_trainer = GRUStockTrainer(
+                input_size=10,
+                hidden_size=32,
                 num_layers=1,
-                device='cpu'
+                use_gpu=False
             )
-            loaded_model.load_model(str(model_path))
+            loaded_trainer.load_model(str(model_path))
 
             # 加载后预测
-            loaded_pred = loaded_model.predict(X_test)
+            loaded_pred = loaded_trainer.predict(X_test)
 
             # 验证预测一致性（神经网络允许稍大误差）
             np.testing.assert_array_almost_equal(

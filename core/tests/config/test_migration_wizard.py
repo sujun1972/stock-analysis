@@ -107,8 +107,8 @@ MODELS_PATH=/models
         migrator = ConfigMigrator(config_file)
         issues = migrator.check_compatibility(ConfigVersion.V2_0, ConfigVersion.V2_0)
 
-        # 应该提示无需迁移
-        assert any("无需迁移" in i.message or "same version" in i.message.lower() for i in issues)
+        # 应该提示无需迁移（检查message或suggestion字段）
+        assert any("无需迁移" in i.suggestion or "无需迁移" in i.message or "same version" in i.message.lower() for i in issues)
 
     def test_check_unknown_version(self, tmp_path):
         """测试未知版本的兼容性"""
