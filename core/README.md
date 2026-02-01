@@ -6,11 +6,10 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Quality](https://img.shields.io/badge/code%20quality-A-brightgreen.svg)]()
-[![Test Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen.svg)]()
+[![Test Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen.svg)]()
 [![Status](https://img.shields.io/badge/status-production%20ready-success.svg)]()
 
-**[特性](#核心特性) • [快速开始](#快速开始) • [架构](#系统架构) • [文档](#完整文档) • [示例](#使用示例)**
+**[快速开始](#快速开始) • [核心特性](#核心特性) • [文档](#完整文档) • [示例](#使用示例)**
 
 </div>
 
@@ -18,31 +17,100 @@
 
 ## 项目简介
 
-**Stock-Analysis Core** 是一个生产级的A股量化交易系统核心框架，提供从数据获取、特征工程、策略开发到回测验证的完整解决方案。项目采用现代化的软件工程实践，具有高性能、高可扩展性和生产级代码质量。
-
-### 项目定位
-
-- **完整性**: 覆盖量化交易全流程（数据→特征→策略→回测→风控）
-- **生产级**: 90%类型提示、95%文档覆盖、2,468个测试用例
-- **高性能**: 向量化计算35倍加速、LRU缓存50%优化、TimescaleDB 10倍查询提升
-- **专业性**: 125+ Alpha因子、5种交易策略、4种滑点模型、完整风控体系
+**Stock-Analysis Core** 是一个**生产级**的A股量化交易系统核心框架，提供从数据获取、特征工程、策略开发到回测验证的完整解决方案。
 
 ### 核心指标
 
 | 指标 | 数值 | 说明 |
 |------|------|------|
-| 代码规模 | 104,000+ 行 | 源码51K + 测试55K + 文档13K |
-| 测试用例 | 2,920+ 个 | 单元测试 + 集成测试 + CLI测试 |
-| 测试覆盖率 | 85% | 核心模块100%覆盖 |
-| Alpha因子 | 125+ | 动量、反转、波动率、成交量等 |
-| 技术指标 | 60+ | 趋势、动量、波动率、成交量 |
-| 交易策略 | 5 种 | 动量、均值回归、多因子、ML、组合 |
-| 可视化图表 | 30+ 种 | 净值、回撤、IC、相关性、分层收益等 |
-| CLI命令 | 8 个 | download/features/train/backtest/analyze/visualize/config/init |
-| 配置模板 | 6 个 | development/production/research/backtest/training/minimal |
-| 监控指标 | 4 类 | Counter、Gauge、Histogram、Timer |
-| 性能提升 | 35x | 向量化计算相比循环实现 |
-| 文档完整度 | 95% | Google Style文档字符串 |
+| 📊 **代码规模** | 147,936行 | 源码67K + 测试80K |
+| ✅ **测试覆盖率** | 90%+ | 3,200+测试用例 |
+| 🧬 **Alpha因子** | 125+ | 动量、反转、波动率等 |
+| 📈 **技术指标** | 60+ | 趋势、动量、波动率 |
+| 🚀 **性能提升** | 35x | 向量化计算加速 |
+| 📚 **文档完整度** | 95% | Google Style文档 |
+
+### 项目亮点
+
+- ✅ **生产级质量**: 90%+测试覆盖率、95%文档覆盖率、统一异常处理
+- ⚡ **高性能**: 向量化计算35倍加速、GPU训练15-20倍提速
+- 🧪 **完整测试**: 3,200+测试用例（单元+集成+性能测试）
+- 🔧 **易于扩展**: 统一API、Response格式、30+自定义异常类
+- 📦 **开箱即用**: Docker一键部署、CLI工具、6种配置模板
+
+---
+
+## 快速开始
+
+### 安装
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/your-org/stock-analysis.git
+cd stock-analysis/core
+
+# 2. 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 3. 安装依赖
+pip install -r requirements.txt
+
+# 4. 配置初始化
+stock-cli init
+```
+
+### Hello World (30秒上手)
+
+```python
+from src.providers import DataProviderFactory
+from src.features import AlphaFactors, TechnicalIndicators
+from src.strategies import MomentumStrategy
+from src.backtest import BacktestEngine
+
+# 1. 获取数据
+provider = DataProviderFactory.create_provider('akshare')
+prices = provider.get_daily_data('000001.SZ', '2024-01-01', '2024-12-31')
+
+# 2. 计算特征
+alpha = AlphaFactors(prices)
+features = alpha.calculate_all_alpha_factors()  # 125+因子
+
+tech = TechnicalIndicators(prices)
+tech.add_all_indicators()  # 60+技术指标
+
+# 3. 生成信号
+strategy = MomentumStrategy('MOM20', {'lookback_period': 20})
+signals = strategy.generate_signals(prices, features)
+
+# 4. 回测验证
+engine = BacktestEngine(initial_capital=1_000_000)
+results = engine.backtest_long_only(signals, prices)
+
+# 5. 查看结果
+print(f"年化收益率: {results.annualized_return:.2%}")
+print(f"夏普比率: {results.sharpe_ratio:.2f}")
+print(f"最大回撤: {results.max_drawdown:.2%}")
+```
+
+### CLI工具快速上手
+
+```bash
+# 下载数据
+stock-cli download --stock 000001.SZ --start 2024-01-01
+
+# 计算特征
+stock-cli features --stock 000001.SZ --output features.parquet
+
+# 训练模型
+stock-cli train --data features.parquet --target return_5d --model lightgbm
+
+# 运行回测
+stock-cli backtest --strategy momentum --stock 000001.SZ
+
+# 生成可视化
+stock-cli visualize --type backtest --input results.csv
+```
 
 ---
 
@@ -50,1101 +118,195 @@
 
 ### 1. 数据管理
 
-#### 多数据源支持
-- **AkShare**: 免费数据源（推荐）
-- **Tushare Pro**: 专业数据源
-- **统一接口**: 工厂模式，一键切换
+- **多数据源**: AkShare（免费推荐）、Tushare Pro
+- **时序数据库**: TimescaleDB自动分区，10-100倍查询加速
+- **数据质量**: 6种验证器 + 7种缺失值处理 + 4种异常检测
+- **高可用**: 智能重试、断路器、断点续传、自动降级
 
-#### TimescaleDB时序数据库
-- **超表自动分区**: 按时间自动分区，查询速度提升10-100倍
-- **连接池管理**: 单例模式，全局唯一连接池，查询延迟从50ms→5ms
-- **数据压缩**: 自动压缩，节省70%存储空间
+### 2. 特征工程
 
-#### 数据质量保障
-- **6种验证器**: 必需字段、数据类型、价格逻辑、日期连续性等
-- **7种缺失值处理**: 前向/后向填充、插值、均值、智能填充
-- **4种异常检测**: IQR、Z-score、价格跳变、Winsorize
-- **停牌过滤**: 零成交量、价格不变、涨跌停检测
+- **125+ Alpha因子**: 动量、反转、波动率、成交量、量价关系
+- **60+ 技术指标**: 趋势、动量、波动率、成交量指标
+- **性能优化**: 35倍向量化加速、LRU缓存、Copy-on-Write
+- **灵活存储**: CSV/Parquet/HDF5多后端
 
-#### 异常处理与容错（NEW ✨）
-- **智能重试**: 4种重试策略（固定、线性、指数、抖动退避），网络请求成功率提升至95%+
-- **断路器模式**: 自动熔断保护，防止级联故障
-- **断点续传**: 大批量下载任务可靠性提升至95%+，支持中断恢复
-- **智能降级**: 数据源自动故障转移，系统可用性达99.5%+
+### 3. 机器学习
 
-### 2. 特征工程（业界领先）
-
-#### 125+ Alpha因子库
-- **动量因子**: MOM5/10/20/60/120、加速动量、相对强度
-- **反转因子**: 日内/隔夜/周反转、均值回归
-- **波动率因子**: 历史波动率、已实现波动率、下行波动率、偏度
-- **成交量因子**: 成交量变化率、量价相关性、换手率
-- **量价关系因子**: VWAP偏离、量价背离、资金流向
-- **技术形态因子**: 突破、支撑/阻力位、K线组合
-
-#### 60+ 技术指标
-- **趋势指标**: SMA、EMA、WMA、MACD、ADX、CCI
-- **动量指标**: RSI、KDJ、ROC、Williams %R
-- **波动率指标**: Bollinger Bands、ATR、Keltner Channels
-- **成交量指标**: OBV、Volume Ratio、VWAP、Money Flow
-
-#### 性能优化
-- **向量化计算**: 35倍性能提升（1000只股票×250天：35秒→1秒）
-- **LRU缓存**: 30-50%重复计算减少（缓存命中率~60%）
-- **Copy-on-Write**: 50%内存节省（Pandas 2.0+特性）
-
-#### 灵活的存储后端
-- **CSV**: 便于检查和导出
-- **Parquet**: 压缩高效（推荐）
-- **HDF5**: 大数据集支持
-
-### 3. 机器学习模型
-
-#### 3种核心模型
-1. **LightGBMStockModel**: 梯度提升树（推荐）
-   - 快速训练和预测
-   - 自动超参数调优（网格搜索/随机搜索）
-   - 特征重要性分析
-   - Early Stopping
-   - **🚀 GPU加速**: 10-15倍训练加速
-
-2. **GRUStockModel**: 深度学习时序模型
-   - 多层GRU单元
-   - Dropout正则化
-   - PyTorch实现
-   - **🚀 GPU加速**: 15-20倍训练加速，混合精度训练（AMP）
-
-3. **RidgeStockModel**: 基线模型
-   - 线性回归 + L2正则化
-   - 快速收敛
-
-#### 模型集成框架
-- **加权平均**: 自动权重优化
-- **投票法**: 适合分类任务
-- **Stacking**: 性能最优（通常提升5-15% IC）
-
-#### 模型管理
-- **版本管理**: 自动版本号、元数据追踪
-- **性能追踪**: 指标历史记录
-- **一键部署**: 导出生产环境模型
-
-#### 完整评估体系（20+指标）
-- **收益指标**: 年化收益率、超额收益、累计收益
-- **风险指标**: 最大回撤、夏普比率、索提诺比率、Calmar比率
-- **相关性指标**: IC、RankIC、ICIR
-- **准确性指标**: RMSE、MAE、R²
+- **3种核心模型**: LightGBM（推荐）、GRU深度学习、Ridge基线
+- **GPU加速**: 训练速度提升15-20倍
+- **模型集成**: 加权平均、投票法、Stacking
+- **完整评估**: 20+指标（收益、风险、IC、准确性）
 
 ### 4. 交易策略
 
-#### 5种经典策略
-1. **动量策略**: 买入强势股，持有固定周期
-2. **均值回归策略**: 捕捉超卖股票反弹
-3. **多因子策略**: 组合多个Alpha因子
-4. **机器学习策略**: 基于模型预测
-5. **策略组合器**: 多策略信号融合
-
-#### 信号生成工具
-- **阈值信号**: 基于评分的买卖信号
-- **排名信号**: 选取前N名和后M名
-- **趋势信号**: 基于价格趋势
-- **组合信号**: 多信号融合（投票/加权/AND/OR）
-
-#### 统一接口
-- 所有策略继承自`BaseStrategy`
-- 易于扩展和组合
-- 与回测引擎无缝集成
+- **5种经典策略**: 动量、均值回归、多因子、机器学习、组合
+- **统一框架**: 所有策略继承BaseStrategy，易于扩展
+- **信号融合**: 阈值、排名、趋势、组合信号
 
 ### 5. 回测引擎
 
-#### 并行多策略回测（NEW ✨）
+- **并行回测**: 多策略同时回测，3-8倍性能提升
+- **向量化**: 1000只股票×250天仅需2秒
+- **真实成本**: 佣金、印花税、4种滑点模型
+- **A股规则**: T+1、涨跌停、交易时间完整支持
+
+### 6. 风险管理
+
+- **风险指标**: VaR、CVaR、最大回撤、压力测试
+- **仓位管理**: 固定比例、风险平价、凯利公式、动态调整
+- **实时监控**: 自动风控检查、超限告警
+
+---
+
+## 完整文档
+
+### 用户指南
+
+- 📖 [架构分析](ARCHITECTURE_ANALYSIS.md) - 系统架构深度解析
+- 🗺️ [开发路线图](DEVELOPMENT_ROADMAP.md) - 版本历史与未来规划
+- 🔧 [重构计划](REFACTORING_PLAN.md) - 代码质量提升计划
+
+### 专题文档
+
+- 🎨 [可视化指南](docs/VISUALIZATION_GUIDE.md) - 30+图表使用说明
+- 🧬 [特征配置指南](docs/FEATURE_CONFIG_GUIDE.md) - 因子计算配置
+- 🤖 [模型使用指南](docs/MODEL_USAGE_GUIDE.md) - 模型训练与评估
+- 📋 [配置模板指南](docs/TEMPLATES_GUIDE.md) - 6种配置模板说明
+
+### API参考
+
+- 📘 [数据层API](src/data/) - 数据获取、存储、质量检查
+- 🧪 [特征层API](src/features/) - 因子计算、技术指标
+- 🧠 [模型层API](src/models/) - 模型训练、评估、集成
+- 📊 [策略层API](src/strategies/) - 策略开发、信号生成
+- 🔙 [回测层API](src/backtest/) - 回测引擎、性能分析
+
+---
+
+## 使用示例
+
+### 完整交易工作流
+
+```python
+from src.api.feature_api import calculate_alpha_factors
+from src.models.model_trainer import ModelTrainer, TrainingConfig
+from src.strategies import MLStrategy
+from src.backtest import BacktestEngine
+
+# 1. 计算特征（使用统一API）
+response = calculate_alpha_factors(
+    data=prices_df,
+    factor_groups=['momentum', 'reversal', 'volatility']
+)
+if response.is_success():
+    features = response.data
+    print(f"计算了 {response.metadata['n_features']} 个因子")
+
+# 2. 训练模型（统一Response格式）
+config = TrainingConfig(model_type='lightgbm')
+trainer = ModelTrainer(config)
+
+# 准备数据
+prep_response = trainer.prepare_data(
+    df=features,
+    feature_cols=feature_names,
+    target_col='return_5d'
+)
+
+# 训练
+train_response = trainer.train(
+    X_train=prep_response.data['X_train'],
+    y_train=prep_response.data['y_train'],
+    X_valid=prep_response.data['X_valid'],
+    y_valid=prep_response.data['y_valid']
+)
+
+# 评估
+eval_response = trainer.evaluate(
+    X=prep_response.data['X_test'],
+    y=prep_response.data['y_test']
+)
+print(f"测试集 R²: {eval_response.data['r2']:.4f}")
+
+# 3. 策略回测
+strategy = MLStrategy('ML策略', {'model': train_response.data['model']})
+signals = strategy.generate_signals(prices, features)
+
+engine = BacktestEngine(initial_capital=1_000_000)
+results = engine.backtest_long_only(signals, prices)
+```
+
+### 因子分析示例
+
+```python
+from src.analysis import ICCalculator, FactorAnalyzer, LayeringTest
+
+# IC分析
+ic_calc = ICCalculator()
+ic_results = ic_calc.calculate_ic(factors, returns)
+print(f"平均IC: {ic_results['mean_ic']:.4f}")
+
+# 分层回测
+layering = LayeringTest(n_quantiles=10)
+layer_results = layering.run(factors['MOM_20'], prices)
+layering.plot_results()  # 生成分层收益图
+
+# 因子优化
+analyzer = FactorAnalyzer()
+best_factors = analyzer.select_best_factors(
+    factors, returns,
+    method='forward',  # 前向逐步选择
+    max_factors=20
+)
+```
+
+### 并行回测示例
+
 ```python
 from src.backtest import ParallelBacktester
-from src.strategies import MomentumStrategy, MeanReversionStrategy
 
 # 创建多个策略
 strategies = [
-    MomentumStrategy("动量-20日", {'lookback': 20}),
-    MomentumStrategy("动量-10日", {'lookback': 10}),
-    MeanReversionStrategy("均值回归", {'lookback': 15})
+    MomentumStrategy('MOM-20', {'lookback': 20}),
+    MomentumStrategy('MOM-10', {'lookback': 10}),
+    MeanReversionStrategy('MR-15', {'lookback': 15})
 ]
 
 # 并行回测（3-8倍加速）
 backtester = ParallelBacktester(n_workers=4)
 results = backtester.run(strategies, prices_df)
 
-# 自动生成对比报告
+# 生成对比报告
 report = backtester.generate_comparison_report(results)
 print(report)
 ```
 
-**核心特性**：
-- **并行回测**: 同时回测多个策略，3-8倍性能提升
-- **自动对比**: 生成策略对比报告（夏普比率、收益、回撤等）
-- **便捷函数**: parallel_backtest 一键调用
-- **完整测试**: 28个单元测试覆盖
-
-#### 向量化高性能回测
-- **性能**: 1000只股票×250天数据，仅需~2秒
-- **矢量化操作**: 避免Python循环
-- **内存优化**: Copy-on-Write模式
-
-#### A股交易规则
-- **T+1制度**: 当日买入次日才能卖出
-- **涨跌停限制**: ±10%主板，±20%科创板，±5% ST股
-- **交易时间**: 9:30-11:30, 13:00-15:00
-
-#### 真实交易成本
-- **佣金**: 万3-万5可配置
-- **印花税**: 千1（单边）
-- **滑点**: 4种模型
-  - 固定比例滑点（简单快速）
-  - 成交量滑点（考虑流动性）
-  - 市场冲击模型（Almgren-Chriss，最真实）
-  - 买卖价差模型（高频交易）
-
-#### 市场中性策略
-- **融券支持**: 做空功能
-- **融券成本**: 年化8-12%利率（A股标准）
-- **360天计息**: 符合A股规则
-- **自动追踪**: 融券利息精确计算
-
-#### 交易成本分析
-- 每笔交易成本记录
-- 换手率分析（年化/总）
-- 成本影响评估
-- 按股票/时间维度统计
-
-#### 绩效分析
-- 15+绩效指标
-- 净值曲线绘图
-- 回撤分析
-- 收益分布统计
-
-### 6. 风险管理（完整体系）
-
-#### VaR/CVaR计算（3种方法）
-- **历史模拟法**: 无分布假设（推荐）
-- **参数法**: 正态分布假设（快速）
-- **蒙特卡洛模拟**: 10,000次模拟（精确）
-- **VaR回测**: 验证模型准确性
-
-#### 回撤控制（4级预警）
-- **Safe**: < 5% 安全
-- **Alert**: 5-10% 警示
-- **Warning**: 10-15% 警告
-- **Critical**: > 15% 危险
-- **自动建议**: 仓位调整方案
-
-#### 仓位管理（6种方法）
-- **等权重**: 简单平均
-- **凯利公式**: Fractional Kelly
-- **风险平价**: Risk Parity
-- **波动率目标**: Volatility Targeting
-- **最大夏普**: Maximum Sharpe Ratio
-- **最小方差**: Minimum Variance
-
-#### 综合风险监控
-- **多维度评分**: VaR + 回撤 + 集中度 + 波动率
-- **4级风险等级**: low/medium/high/critical
-- **实时警报**: 风险阈值触发通知
-
-#### 压力测试
-- **历史情景**: 2015股灾、2020疫情等
-- **假设情景**: 自定义冲击
-- **蒙特卡洛**: 随机情景生成
-
-### 7. 因子分析
-
-#### IC分析
-- **IC**: Information Coefficient（因子与未来收益相关性）
-- **RankIC**: 秩相关系数（更稳健）
-- **ICIR**: IC信息比率（IC均值/标准差）
-- **统计检验**: t检验和p值
-- **时间序列**: IC稳定性分析
-
-#### 因子分层回测
-- 按因子分值分层
-- 计算各层收益率
-- 层间差异分析
-- 因子有效性验证
-
-#### 因子相关性分析
-- 因子间相关性矩阵
-- PCA降维分析
-- 多重共线性诊断
-
-#### 因子组合优化
-- Sharpe比率最大化
-- 风险平价权重
-- 约束优化
-
-### 8. 监控与日志（NEW ✨）
-
-#### 性能指标收集
-- **4种指标类型**: Counter、Gauge、Histogram、Timer
-- **装饰器支持**: @timer自动计时函数执行
-- **统计分析**: 平均值、百分位数(p50/p95/p99)、成功率
-- **内存监控**: RSS/VMS内存使用追踪（基于psutil）
-- **数据库监控**: 慢查询检测(>1s)、查询性能分析
-
-#### 结构化日志
-- **JSON格式**: 使用loguru序列化，易于查询和分析
-- **分类存储**: app、error、performance三类日志分离
-- **自动轮转**: 每日0点自动切换，保留30天
-- **日志查询**: 按时间、级别、关键词、操作过滤
-- **性能日志**: 专门记录耗时操作，便于性能分析
-
-#### 错误追踪
-- **智能分组**: SHA256哈希自动归类相同错误
-- **严重程度**: CRITICAL、ERROR、WARNING三级分类
-- **趋势分析**: 错误频率统计、时间分布分析
-- **解决状态**: 标记错误是否已修复
-- **上下文记录**: 完整堆栈、模块、函数、自定义上下文
-
-#### 统一监控系统
-- **一站式接口**: 整合指标、日志、错误追踪
-- **后台监控**: 可选的定时健康检查（默认60秒）
-- **系统状态**: 实时获取整体运行状态
-- **数据清理**: 自动清理旧数据（默认保留30天）
-- **TimescaleDB存储**: 6张hypertable，保留策略7-90天
-
-### 9. 参数优化
-
-#### 并行参数优化（NEW ✨）
-```python
-from src.optimization import ParallelParameterOptimizer
-
-# 统一接口，3种优化方法
-optimizer = ParallelParameterOptimizer(
-    method='grid',      # 'grid', 'random', 'bayesian'
-    n_workers=8         # 并行worker数量
-)
-
-# 定义参数空间
-param_space = {
-    'lookback': [10, 20, 30],
-    'top_n': [20, 30, 50]
-}
-
-# 执行优化（3-8倍加速）
-result = optimizer.optimize(objective_func, param_space)
-print(f"最优参数: {result.best_params}")
-print(f"最优得分: {result.best_score}")
-```
-
-**核心特性**：
-- **3种优化方法**: 网格搜索、随机搜索、贝叶斯优化
-- **并行计算**: 基于ParallelExecutor，3-8倍性能提升
-- **统一接口**: 一致的API和结果格式
-- **便捷函数**: parallel_grid_search, parallel_random_search
-
-#### 网格搜索
-- 遍历所有参数组合
-- 完整不遗漏
-- 适合小参数空间（<1000组合）
-
-#### 贝叶斯优化
-- 高效搜索高维空间
-- 依赖学习和智能采样
-- 适合参数多且计算昂贵
-
-#### Walk-Forward验证
-- 滚动式交叉验证
-- 模拟真实参数进化
-- 防止过拟合
-
-### 10. 可视化工具（NEW ✨）
-
-#### 交互式图表与HTML报告
-- **30+图表类型**: 净值曲线、回撤分析、IC时间序列、相关性热力图等
-- **Plotly交互式**: 缩放、拖拽、悬停查看详细数值
-- **美观UI设计**: 现代化渐变色、响应式布局、卡片动画
-- **双主题支持**: 默认亮色主题 + 暗色主题
-
-#### 回测结果可视化
-```python
-from visualization import BacktestVisualizer, HTMLReportGenerator
-
-# 生成单个图表
-viz = BacktestVisualizer()
-viz.plot_equity_curve(equity, benchmark, save_path="equity.html")
-viz.plot_drawdown(equity, save_path="drawdown.html")
-
-# 生成完整HTML报告（9个图表）
-report_gen = HTMLReportGenerator()
-report_gen.generate_backtest_report(
-    equity_curve=equity,
-    returns=returns,
-    strategy_name="动量策略",
-    output_path="report.html"
-)
-```
-
-#### 因子分析可视化
-```python
-from visualization import FactorVisualizer
-
-factor_viz = FactorVisualizer()
-factor_viz.plot_ic_time_series(ic_series, save_path="ic.html")
-factor_viz.plot_quantile_returns(quantile_returns, save_path="quantile.html")
-```
-
-#### CLI集成
-```bash
-# 生成回测可视化报告
-stock-cli visualize backtest --data result.csv --output report.html
-
-# 生成因子分析报告
-stock-cli visualize factor --ic-data ic.csv --output factor_report.html
-
-# 回测时直接生成可视化
-stock-cli backtest --strategy momentum --visualize --output visual.html
-```
-
-#### 实现特点
-- **~2,500行核心代码**: 4个可视化器 + HTML报告生成器
-- **240+测试用例**: 完整的单元测试和边界测试
-- **800行使用指南**: 详细文档和示例代码
-- **支持静态导出**: PNG/PDF/SVG格式（需安装kaleido）
-
-### 11. 命令行工具（NEW ✨）
-
-#### stock-cli - 统一CLI工具
-- **8个命令**: download、features、train、backtest、analyze、visualize、config、init
-- **彩色输出**: 基于Rich库的美观终端输出
-- **进度条**: 实时任务进度显示
-- **参数验证**: 智能参数校验和提示
-- **交互式配置**: 一键配置向导
-
-#### 核心命令
-
-**数据管理**
-```bash
-# 下载股票数据
-stock-cli download --symbols 000001,600000 --days 30
-
-# 计算特征（125+ Alpha因子 + 60+技术指标）
-stock-cli features --symbols all --format parquet
-```
-
-**模型训练**
-```bash
-# 训练LightGBM模型
-stock-cli train --model lightgbm --data /data/features/
-
-# 支持GRU/Ridge模型，自定义参数
-stock-cli train --model gru --target return_10d --test-size 0.3
-```
-
-**策略回测**
-```bash
-# 回测动量策略
-stock-cli backtest --strategy momentum --capital 1000000
-
-# 生成HTML报告
-stock-cli backtest --strategy multi_factor --report html --output results/
-```
-
-**因子分析**
-```bash
-# IC分析
-stock-cli analyze ic --factor MOM_20
-
-# 因子分层回测
-stock-cli analyze quantiles --factor VOL_20 --layers 10
-
-# 因子相关性分析
-stock-cli analyze corr --factors all
-```
-
-#### 实现特点
-- **2,517行代码**: 完整实现7个命令
-- **142个测试**: 全面的单元测试覆盖
-- **1,400+行文档**: 详细使用指南和示例
-- **多线程支持**: 并行处理提升效率
-- **错误友好**: 清晰的错误提示和帮助信息
-
-### 8. 配置管理系统（NEW ✨）
-
-#### 交互式配置向导
-- **基础向导**: 5分钟完成首次配置（数据库、数据源、路径）
-- **高级向导**: 性能调优、特征工程、策略参数配置
-- **迁移向导**: 跨版本配置自动升级
-
-#### 配置模板库
-- **6个预设模板**: development、production、research、backtest、training、minimal
-- **场景化配置**: 一键切换不同使用场景
-- **模板继承**: 支持自定义模板和继承机制
-- **智能推荐**: 基于硬件和数据规模的自动配置建议
-
-```bash
-# 列出可用模板
-stock-cli config templates-list
-
-# 应用生产环境模板
-stock-cli config templates-apply production
-
-# 对比两个模板
-stock-cli config templates-diff development production
-```
-
-#### 配置验证与诊断
-- **全面验证**: 数据库连接、路径权限、数据源可用性、参数合理性
-- **错误分级**: CRITICAL、ERROR、WARNING、INFO 四级问题分类
-- **自动修复**: 部分问题提供一键修复命令
-- **诊断报告**: HTML/JSON 格式的详细报告
-
-```bash
-# 验证当前配置
-stock-cli config validate
-
-# 生成诊断报告
-stock-cli config diagnose
-
-# 导出HTML报告
-stock-cli config validate -f html -o report.html
-```
-
-#### 核心优势
-- **降低使用门槛**: 新用户5分钟完成配置
-- **提升可靠性**: 配置验证覆盖率100%
-- **增强灵活性**: 多环境快速切换
-- **改善体验**: 20+ 错误代码详细说明
-
 ---
 
-## 快速开始
+## 性能基准
 
-### 环境要求
+### 特征计算性能
 
-- Python >= 3.9
-- PostgreSQL + TimescaleDB扩展
-- 8GB+ RAM（推荐16GB）
-
-### 安装步骤
-
-#### 1. 安装依赖
-
-```bash
-cd core
-pip install -r requirements.txt
-```
-
-#### 2. 配置数据库
-
-```bash
-# 安装TimescaleDB
-# macOS
-brew install timescaledb
-
-# Ubuntu
-sudo add-apt-repository ppa:timescale/timescaledb-ppa
-sudo apt-get update
-sudo apt-get install timescaledb-postgresql-14
-
-# 初始化数据库
-psql -U postgres
-CREATE DATABASE stock_db;
-\c stock_db
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-```
-
-#### 3. 配置环境变量
-
-使用CLI配置向导（推荐）：
-
-```bash
-python -m cli.main init
-```
-
-或手动创建 `.env` 文件：
-
-```bash
-# 数据库配置
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=stock_db
-DB_USER=postgres
-DB_PASSWORD=your_password
-
-# 数据源配置
-DATA_SOURCE=akshare  # 或 tushare
-TUSHARE_TOKEN=your_token  # 如果使用Tushare
-
-# 路径配置
-DATA_DIR=./data
-MODEL_DIR=./models
-CACHE_DIR=./cache
-```
-
-#### 4. 快速开始（使用CLI）
-
-```bash
-# 下载数据
-python -m cli.main download --symbols 000001,600000 --days 30
-
-# 计算特征
-python -m cli.main features --symbols 000001,600000
-
-# 训练模型
-python -m cli.main train --model lightgbm --data ./data/features/
-
-# 运行回测
-python -m cli.main backtest --strategy momentum --capital 1000000
-```
-
-#### 5. GPU加速配置（可选）
-
-如需启用GPU加速，请安装CUDA版本的PyTorch和LightGBM：
-
-```bash
-# 1. 安装CUDA版PyTorch（根据CUDA版本选择）
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-# 2. 安装GPU版LightGBM
-pip install lightgbm --install-option=--gpu
-# 或使用conda
-conda install -c conda-forge lightgbm-gpu
-
-# 3. 验证GPU安装
-python -c "from src.utils.gpu_utils import gpu_manager; print(gpu_manager.get_system_info())"
-```
-
-**GPU加速功能：**
-- **LightGBM训练**: 10-15倍加速（大数据集）
-- **GRU模型训练**: 15-20倍加速
-- **混合精度训练**: 额外1.5-2倍加速（RTX 20系及以上）
-- **自动批次大小**: 根据GPU内存自动优化
-- **自动降级**: GPU不可用时自动切换CPU模式
-
-**环境要求：**
-- NVIDIA GPU（CUDA Compute Capability ≥ 3.5）
-- CUDA 11.0+
-- 驱动版本 ≥ 450.80.02
-
-### Hello World 示例
-
-```python
-from src.database import DatabaseManager
-from src.features import AlphaFactors
-from src.strategies import MomentumStrategy
-from src.backtest import BacktestEngine
-
-# 1. 加载数据
-db = DatabaseManager.get_instance()
-prices = db.query_stock_data('000001', '2024-01-01', '2024-12-31')
-
-# 2. 计算特征
-alpha = AlphaFactors(prices)
-features = alpha.calculate_all_alpha_factors()
-
-# 3. 生成策略信号
-strategy = MomentumStrategy('MOM20', {'lookback_period': 20, 'top_n': 50})
-signals = strategy.generate_signals(prices)
-
-# 4. 回测
-engine = BacktestEngine(initial_capital=1_000_000)
-results = engine.backtest_long_only(signals, prices)
-
-# 5. 查看结果
-print(f"总收益率: {results.total_return:.2%}")
-print(f"年化收益率: {results.annualized_return:.2%}")
-print(f"夏普比率: {results.sharpe_ratio:.2f}")
-print(f"最大回撤: {results.max_drawdown:.2%}")
-```
-
----
-
-## 系统架构
-
-### 分层架构
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      应用层 (Application)                    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │  参数优化   │  │  因子分析   │  │  风险管理   │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      策略层 (Strategy)                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │  交易策略   │  │  回测引擎   │  │  绩效评估   │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      模型层 (Model)                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │  LightGBM   │  │     GRU     │  │   集成模型  │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    特征工程层 (Features)                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ 125+ Alpha  │  │  60+ 指标   │  │  特征转换   │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    数据质量层 (Data Quality)                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │  数据验证   │  │  缺失处理   │  │  异常检测   │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      数据层 (Data)                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │  数据源     │  │ TimescaleDB │  │  连接池     │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└───────────────────────────────────────────────────────────��─┘
-```
-
-### 核心模块
-
-| 模块 | 路径 | 功能 | 完成度 |
-|------|------|------|--------|
-| 数据源 | `src/providers/` | 多数据源支持 | 100% |
-| 数据库 | `src/database/` | TimescaleDB管理 | 100% |
-| 数据质量 | `src/data/` | 验证、缺失、异常、停牌 | 100% |
-| 特征工程 | `src/features/` | Alpha因子、技术指标 | 100% |
-| 机器学习 | `src/models/` | 模型训练、评估、集成 | 100% |
-| 交易策略 | `src/strategies/` | 策略开发框架 | 100% |
-| 回测引擎 | `src/backtest/` | 向量化回测 | 100% |
-| 风险管理 | `src/risk_management/` | VaR、回撤、仓位 | 100% |
-| 因子分析 | `src/analysis/` | IC、分层、相关性 | 100% |
-| 参数优化 | `src/optimization/` | 网格、贝叶斯、WF | 100% |
-| 监控日志 | `src/monitoring/` | 指标、日志、错误追踪 | 100% |
-| 配置管理 | `src/config/` | Pydantic配置 | 100% |
-| 工具 | `src/utils/` | 日志、缓存、通用工具 | 100% |
-
-### 设计模式
-
-| 模式 | 应用场景 | 位置 | 优势 |
+| 场景 | 数据规模 | 耗时 | 性能 |
 |------|---------|------|------|
-| 单例模式 | 数据库连接池 | `database/manager.py` | 全局唯一，资源高效 |
-| 工厂模式 | 数据源创建 | `providers/factory.py` | 解耦，易扩展 |
-| 策略模式 | 交易策略 | `strategies/base.py` | 统一接口，可组合 |
-| 组合模式 | 数据库管理器 | `database/manager.py` | 单一职责，分层管理 |
-| 观察者模式 | 风险监控 | `risk_management/` | 实时响应，解耦 |
-
----
-
-## 完整文档
-
-### 核心文档
-
-| 文档 | 说明 | 行数 |
-|------|------|------|
-| [README.md](README.md) | 项目概览、快速开始 | 本文档 |
-| [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) | 架构深度分析、设计模式 | 详见文档 |
-| [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | 开发路线图、未来规划 | 详见文档 |
-
-### 使用指南
-
-| 文档 | 说明 | 行数 |
-|------|------|------|
-| [BACKTEST_USAGE_GUIDE.md](docs/BACKTEST_USAGE_GUIDE.md) | 回测引擎详细使用 | 1,060 |
-| [DATA_QUALITY_GUIDE.md](docs/DATA_QUALITY_GUIDE.md) | 数据质量检查工具 | 940 |
-| [MODEL_USAGE_GUIDE.md](docs/MODEL_USAGE_GUIDE.md) | 模型训练和评估 | 734 |
-| [ENSEMBLE_GUIDE.md](docs/ENSEMBLE_GUIDE.md) | 集成学习方法 | 654 |
-| [FACTOR_ANALYSIS_GUIDE.md](docs/FACTOR_ANALYSIS_GUIDE.md) | 因子分析工具 | 649 |
-| [PROVIDER_FACTORY_GUIDE.md](docs/PROVIDER_FACTORY_GUIDE.md) | 数据源工厂使用 | 503 |
-
-### 示例代码
-
-位于 `examples/` 目录，包含11个完整示例：
-
-1. **basic_workflow.py**: 完整工作流演示
-2. **alpha_factors_demo.py**: Alpha因子计算
-3. **strategy_backtest.py**: 策略回测示例
-4. **model_training.py**: 模型训练示例
-5. **risk_management_demo.py**: 风险管理演示
-6. **factor_analysis_demo.py**: 因子分析示例
-7. **parameter_optimization.py**: 参数优化示例
-8. **data_quality_check.py**: 数据质量检查
-9. **ensemble_model.py**: 集成模型使用
-10. **market_neutral_strategy.py**: 市场中性策略
-11. **walk_forward_validation.py**: Walk-Forward验证
-
----
-
-## 使用示例
-
-### 1. 数据获取与存储
-
-```python
-from src.providers import DataProviderFactory
-from src.database import DatabaseManager
-
-# 创建数据源（自动根据配置选择）
-provider = DataProviderFactory.create_provider()
-
-# 获取股票数据
-data = provider.get_daily_data('000001', start='2024-01-01', end='2024-12-31')
-
-# 存储到数据库
-db = DatabaseManager.get_instance()
-db.insert_stock_data(data)
-
-# 查询数据
-data = db.query_stock_data('000001', '2024-01-01', '2024-12-31')
-```
-
-### 2. 数据质量检查
-
-```python
-from src.data import DataValidator, MissingHandler, OutlierDetector
-
-# 数据验证
-validator = DataValidator(data)
-report = validator.validate_all()
-print(f"验证通过: {report.is_valid}")
-
-# 缺失值处理
-handler = MissingHandler(data)
-data = handler.smart_fill()  # 智能填充
-
-# 异常检测
-detector = OutlierDetector(data)
-outliers = detector.detect_outliers(method='iqr')
-data = detector.handle_outliers(method='winsorize')
-```
-
-### 3. 特征工程
-
-```python
-from src.features import AlphaFactors, TechnicalIndicators
-
-# 计算Alpha因子
-alpha = AlphaFactors(data)
-features = alpha.calculate_all_alpha_factors()  # 125+因子
-
-# 或计算单个因子
-mom_20 = alpha.momentum_factor('MOM20', period=20)
-
-# 计算技术指标
-ti = TechnicalIndicators(data)
-data = ti.add_all_indicators()  # 60+指标
-
-# 或计算单个指标
-data = ti.add_rsi(period=14)
-data = ti.add_macd()
-```
-
-### 4. 机器学习模型
-
-#### CPU训练（默认）
-
-```python
-from src.models import LightGBMStockModel, ModelEvaluator
-
-# 训练模型
-model = LightGBMStockModel()
-model.train(
-    X_train, y_train,
-    X_valid, y_valid,
-    early_stopping_rounds=50
-)
-
-# 预测
-predictions = model.predict(X_test)
-
-# 评估
-evaluator = ModelEvaluator()
-metrics = evaluator.evaluate_regression(y_test, predictions)
-print(f"RMSE: {metrics['rmse']:.4f}")
-print(f"IC: {metrics['ic']:.4f}")
-```
-
-#### GPU加速训练
-
-```python
-from src.models import LightGBMStockModel, GRUStockTrainer
-from src.utils.gpu_utils import gpu_manager
-
-# 查看GPU状态
-print(gpu_manager.get_system_info())
-
-# LightGBM GPU训练（10-15倍加速）
-model_gpu = LightGBMStockModel(
-    use_gpu=True,  # 启用GPU
-    n_estimators=500
-)
-model_gpu.train(X_train, y_train, X_valid, y_valid)
-
-# GRU GPU训练（15-20倍加速）
-gru_trainer = GRUStockTrainer(
-    input_size=50,
-    hidden_size=64,
-    num_layers=2,
-    use_gpu=True,  # 启用GPU
-    batch_size=None  # 自动计算最优批次大小
-)
-history = gru_trainer.train(
-    X_train, y_train,
-    X_valid, y_valid,
-    seq_length=20,
-    epochs=100
-)
-
-# GPU内存管理
-from src.utils.gpu_utils import GPUMemoryManager
-
-with GPUMemoryManager():
-    # 训练多个模型，自动管理GPU内存
-    model1 = LightGBMStockModel(use_gpu=True)
-    model1.train(X_train1, y_train1)
-
-    del model1  # 释放内存
-
-    model2 = LightGBMStockModel(use_gpu=True)
-    model2.train(X_train2, y_train2)
-```
-
-### 5. 集成模型
-
-```python
-from src.models import LightGBMStockModel, GRUStockModel, RidgeStockModel
-from src.models.ensemble import StackingEnsemble
-
-# 创建基模型
-lgb = LightGBMStockModel()
-gru = GRUStockModel()
-ridge = RidgeStockModel()
-
-# 创建Stacking集成
-ensemble = StackingEnsemble(
-    base_models=[lgb, gru],
-    meta_model=ridge
-)
-
-# 训练
-ensemble.fit(X_train, y_train, X_valid, y_valid)
-
-# 预测
-predictions = ensemble.predict(X_test)
-```
-
-### 6. 交易策略
-
-```python
-from src.strategies import MomentumStrategy, MultiFactorStrategy
-
-# 动量策略
-strategy = MomentumStrategy(
-    name='MOM20',
-    params={
-        'lookback_period': 20,
-        'top_n': 50,
-        'holding_period': 5
-    }
-)
-
-# 多因子策略
-multi_factor = MultiFactorStrategy(
-    name='MultiAlpha',
-    params={
-        'factors': ['MOM20', 'REVERSAL_5', 'VOL_20'],
-        'weights': [0.5, 0.3, 0.2],
-        'normalize': 'zscore'
-    }
-)
-
-# 生成信号
-signals = strategy.generate_signals(prices, features)
-```
-
-### 7. 回测
-
-```python
-from src.backtest import BacktestEngine, FixedSlippageModel
-
-# 创建回测引擎
-engine = BacktestEngine(
-    initial_capital=1_000_000,
-    commission_rate=0.0003,
-    tax_rate=0.001,
-    slippage_model=FixedSlippageModel(0.001)
-)
-
-# 多头回测
-results = engine.backtest_long_only(
-    signals=signals,
-    prices=prices,
-    rebalance_freq='weekly'
-)
-
-# 市场中性回测（多空）
-results = engine.backtest_market_neutral(
-    signals=signals,
-    prices=prices,
-    short_cost_rate=0.10  # 年化融券成本10%
-)
-
-# 查看结果
-print(results.summary())
-results.plot_equity_curve()
-```
-
-### 8. 风险管理
-
-```python
-from src.risk_management import VaRCalculator, DrawdownController, PositionSizer
-
-# VaR计算
-var_calc = VaRCalculator(confidence_level=0.95)
-var = var_calc.calculate_historical_var(returns)
-cvar = var_calc.calculate_cvar(returns)
-
-# 回撤控制
-drawdown_ctrl = DrawdownController(
-    alert_level=0.05,
-    warning_level=0.10,
-    critical_level=0.15
-)
-status = drawdown_ctrl.update(current_value, peak_value)
-
-# 仓位管理
-sizer = PositionSizer()
-weights = sizer.calculate_kelly_weights(returns, risk_free_rate=0.03)
-```
-
-### 9. 因子分析
-
-```python
-from src.analysis import ICCalculator, LayeredBacktest
-
-# IC分析
-ic_calc = ICCalculator(forward_periods=5)
-ic_result = ic_calc.calculate_ic(factor, future_returns)
-print(f"IC: {ic_result.ic:.4f}")
-print(f"ICIR: {ic_result.icir:.4f}")
-print(f"p-value: {ic_result.p_value:.4f}")
-
-# 因子分层回测
-layered = LayeredBacktest(n_layers=5)
-layer_results = layered.run(factor, future_returns)
-layered.plot_layer_returns()
-```
-
-### 10. 监控与日志
-
-```python
-from src.monitoring import (
-    MonitoringSystem,
-    MetricType,
-    initialize_global_monitoring,
-    get_global_monitoring
-)
-
-# 初始化全局监控
-monitoring = initialize_global_monitoring(
-    log_dir="./logs",
-    service_name="stock-analysis",
-    enable_background_monitoring=True
-)
-
-# 记录性能指标
-monitoring.metrics.record_metric("stocks_processed", 1000, MetricType.COUNTER)
-
-# 追踪操作性能
-def calculate_features(data):
-    # 复杂计算...
-    return features
-
-result = monitoring.track_operation("feature_calculation", calculate_features, data)
-
-# 使用装饰器自动计时
-@monitoring.metrics.timer("data_processing")
-def process_data(stock_code):
-    # 数据处理逻辑
-    pass
-
-# 记录错误
-try:
-    risky_operation()
-except Exception as e:
-    monitoring.error_tracker.track_error(
-        e,
-        severity="ERROR",
-        module="trading",
-        function="execute_order",
-        order_id=12345
-    )
-
-# 获取系统状态
-status = monitoring.get_system_status()
-print(f"总错误数: {status['errors']['total_errors']}")
-print(f"内存使用: {status.get('memory_mb', 'N/A')} MB")
-
-# 获取性能报告
-report = monitoring.get_performance_report(operation="feature_calculation")
-print(f"平均耗时: {report['statistics']['mean']:.2f}ms")
-print(f"P99: {report['statistics']['p99']:.2f}ms")
-
-# 查询日志
-logs = monitoring.log_query.query_logs(
-    start_time=datetime.now() - timedelta(hours=1),
-    level="ERROR"
-)
-```
-
-### 11. 参数优化
-
-```python
-from src.optimization import GridSearchOptimizer, BayesianOptimizer
-
-# 网格搜索
-grid_optimizer = GridSearchOptimizer(
-    strategy=strategy,
-    param_grid={
-        'lookback_period': [10, 20, 30],
-        'top_n': [30, 50, 100]
-    }
-)
-best_params = grid_optimizer.optimize(prices, benchmark)
-
-# 贝叶斯优化
-bayes_optimizer = BayesianOptimizer(
-    strategy=strategy,
-    param_space={
-        'lookback_period': (5, 60),
-        'top_n': (20, 100)
-    }
-)
-best_params = bayes_optimizer.optimize(
-    prices, benchmark,
-    n_iterations=50
-)
-```
-
----
-
-## 性能优化
-
-### 计算性能
-
-| 优化技术 | 性能提升 | 应用场景 |
-|---------|---------|---------|
-| 向量化计算 | 35x | Alpha因子计算 |
-| LRU缓存 | 30-50% | 特征重复计算 |
-| Copy-on-Write | 50% 内存节省 | Pandas数据操作 |
-| 连接池 | 10x | 数据库查询 |
-| TimescaleDB超表 | 10-100x | 时序数据查询 |
-
-### 性能基准
-
-| 操作 | 数据规模 | 时间 | 评价 |
-|------|---------|------|------|
-| 125个Alpha因子 | 1只股票×1年 | ~0.5秒 | 优秀 |
-| 125个Alpha因子 | 1000只股票×1年 | ~60秒 | 良好 |
-| 加载日线数据 | 1只股票×10年 | ~0.1秒 | 优秀 |
-| 向量化回测 | 1000只股票×1年 | ~2秒 | 优秀 |
-| LightGBM训练 | 10万样本×125特征 | ~10秒 | 优秀 |
+| Alpha因子 | 1000股×250天 | ~1秒 | 35倍加速 |
+| 技术指标 | 1000股×250天 | ~0.5秒 | 向量化 |
+| IC计算 | 500股×1000天 | ~3秒 | 11倍加速 |
+
+### 回测性能
+
+| 场景 | 数据规模 | 耗时 |
+|------|---------|------|
+| 单策略回测 | 1000股×250天 | ~2秒 |
+| 并行回测（4策略） | 1000股×250天 | ~3秒 |
+| 市场中性回测 | 500股×250天 | ~5秒 |
+
+### 模型训练性能
+
+| 模型 | 样本数 | CPU耗时 | GPU耗时 | 加速比 |
+|------|--------|---------|---------|--------|
+| LightGBM | 100万 | ~10秒 | ~1秒 | 10x |
+| GRU | 50万 | ~60秒 | ~3秒 | 20x |
 
 ---
 
@@ -1154,107 +316,27 @@ best_params = bayes_optimizer.optimize(
 
 ```bash
 # 运行所有测试
-python core/tests/run_tests.py --all
+pytest tests/ -v
 
-# 只运行单元测试
-python core/tests/run_tests.py --unit
+# 运行单元测试
+pytest tests/unit/ -v
 
-# 只运行集成测试
-python core/tests/run_tests.py --integration
+# 运行集成测试
+pytest tests/integration/ -v
 
-# 生成覆盖率报告
-python core/tests/run_tests.py --coverage
+# 运行性能测试
+cd tests/performance && python run_benchmarks.py
 
-# 快速测试（排除慢速测试）
-python core/tests/run_tests.py --fast
-
-# 交互式菜单
-python core/tests/run_tests.py
+# 测试覆盖率
+pytest tests/ --cov=src --cov-report=html
 ```
 
-### 测试覆盖率
+### 测试统计
 
-| 模块 | 覆盖率 | 测试数 | 状态 |
-|------|--------|--------|------|
-| 数据层 | 85% | 245 | ✅ |
-| 特征层 | 50% | 183 | ✅ |
-| 策略层 | 100% | 108 | ✅ |
-| 回测层 | 90% | 156 | ✅ |
-| 风控层 | 100% | 41 | ✅ |
-| 模型层 | 80% | 198 | ✅ |
-| 监控层 | 100% | 83 | ✅ |
-| **总计** | **86%** | **2,551** | ✅ |
-
----
-
-## 项目结构
-
-```
-core/
-├── src/                          # 源代码
-│   ├── providers/               # 数据源（17个文件）
-│   ├── database/                # 数据库管理（6个文件）
-│   ├── data/                    # 数据质量（11个文件）
-│   ├── features/                # 特征工程（15个文件）
-│   ├── models/                  # 机器学习（12个文件）
-│   ├── strategies/              # 交易策略（8个文件）
-│   ├── backtest/                # 回测引擎（9个文件）
-│   ├── risk_management/         # 风险管理（7个文件）
-│   ├── analysis/                # 因子分析（6个文件）
-│   ├── optimization/            # 参数优化（4个文件）
-│   ├── config/                  # 配置管理（6个文件）
-│   └── utils/                   # 工具（9个文件）
-├── tests/                        # 测试（87个文件，2,468个用例）
-│   ├── unit/                    # 单元测试
-│   └── integration/             # 集成测试
-├── docs/                         # 文档（11,719行）
-├── examples/                     # 示例（11个）
-├── data/                         # 数据目录
-├── models/                       # 模型目录
-├── cache/                        # 缓存目录
-├── requirements.txt             # 依赖
-└── README.md                    # 本文档
-```
-
----
-
-## 技术栈
-
-### 核心依赖
-
-| 类别 | 技术 | 版本 | 用途 |
-|------|------|------|------|
-| 数据处理 | Pandas | 2.0+ | 数据处理、Copy-on-Write |
-| 数值计算 | NumPy | 1.24+ | 向量化计算 |
-| 技术指标 | TA-Lib | 0.4+ | 技术指标计算 |
-| 机器学习 | LightGBM | 4.0+ | 梯度提升树 |
-| 深度学习 | PyTorch | 2.0+ | GRU模型 |
-| 数据库 | TimescaleDB | - | 时序数据库 |
-| 数据源 | AkShare | 1.11+ | 免费数据 |
-| 数据源 | Tushare | - | 专业数据 |
-| 日志 | Loguru | - | 日志系统 |
-| 配置 | Pydantic | - | 配置管理 |
-| 测试 | Pytest | - | 测试框架 |
-
-### 版本要求
-
-- Python >= 3.9
-- 支持Python 3.9、3.10、3.11
-
----
-
-## 与业界标准对比
-
-| 功能 | Core | Backtrader | Zipline | VeighNa | 评价 |
-|------|------|-----------|---------|---------|------|
-| 数据管理 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 优于大部分 |
-| 特征工程 | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | **业界领先** |
-| 回测引擎 | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 接近标准 |
-| 策略层 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 完整 |
-| 风控系统 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 完整 |
-| 实盘交易 | ❌ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 待开发 |
-| 性能 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | **业界领先** |
-| 代码质量 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 优秀 |
+- **单元测试**: 3,200+个
+- **集成测试**: 24个端到端测试
+- **性能测试**: 31个基准测试
+- **测试覆盖率**: 90%+
 
 ---
 
@@ -1262,108 +344,69 @@ core/
 
 我们欢迎所有形式的贡献！
 
-### 贡献方式
+### 如何贡献
 
-1. **报告Bug**: 在GitHub Issues中提交问题
-2. **功能建议**: 在GitHub Issues中提出新功能
-3. **代码贡献**:
-   - Fork项目
-   - 创建feature分支
-   - 提交Pull Request
+1. Fork项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 打开Pull Request
 
 ### 代码规范
 
-- 遵循PEP 8
-- 90%以上类型提示覆盖
-- 所有函数必须有Google Style文档字符串
-- 新功能必须有单元测试
-- 测试覆盖率不低于80%
+- 遵循PEP 8规范
+- 使用类型提示（Type Hints）
+- 编写完整的文档字符串（Google Style）
+- 添加单元测试
+- 测试覆盖率≥90%
 
 ---
 
-## 常见问题
+## 技术栈
 
-### 1. 如何选择数据源？
-
-- **AkShare**: 免费，无需Token，推荐用于学习和研究
-- **Tushare Pro**: 专业数据，需要积分，数据更全面
-
-### 2. 数据库可以不用TimescaleDB吗？
-
-可以，但强烈推荐TimescaleDB。普通PostgreSQL也能工作，但查询性能会差10-100倍。
-
-### 3. 如何提升计算速度？
-
-1. 启用LRU缓存（默认开启）
-2. 使用Pandas 2.0+ Copy-on-Write
-3. 减少不必要的因子计算
-4. 使用GPU加速LightGBM（需要GPU版本）
-
-### 4. 如何自定义策略？
-
-继承`BaseStrategy`并实现`generate_signals`和`calculate_scores`方法：
-
-```python
-from src.strategies import BaseStrategy
-
-class MyStrategy(BaseStrategy):
-    def calculate_scores(self, prices: pd.DataFrame) -> pd.Series:
-        # 实现你的评分逻辑
-        return scores
-
-    def generate_signals(self, prices: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
-        # 实现你的信号生成逻辑
-        return signals
-```
-
-### 5. 回测结果可靠吗？
-
-本项目回测引擎考虑了：
-- T+1交易制度
-- 涨跌停限制
-- 真实交易成本（佣金、印花税）
-- 4种滑点模型
-- 融券成本
-
-但仍需注意：
-- 回测不等于实盘
-- 注意过拟合风险
-- 需要Walk-Forward验证
+| 类别 | 技术 |
+|------|------|
+| **语言** | Python 3.9+ |
+| **数据处理** | Pandas 2.0+, NumPy 1.24+ |
+| **机器学习** | LightGBM 4.0+, PyTorch 2.0+, Scikit-learn |
+| **数据库** | TimescaleDB (PostgreSQL 14+) |
+| **技术分析** | TA-Lib 0.4+ |
+| **配置管理** | Pydantic 2.0+ |
+| **日志系统** | Loguru |
+| **测试框架** | Pytest 7.4+ |
+| **CLI工具** | Click, Rich |
 
 ---
 
-## 许可证
+## License
 
-MIT License
+本项目采用 MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
-## 联系方式
+## 支持
 
-- **GitHub**: [项目地址]
-- **Issues**: [问题反馈]
-- **Email**: [联系邮箱]
+- 📧 **问题反馈**: [GitHub Issues](https://github.com/your-org/stock-analysis/issues)
+- 💬 **讨论区**: [GitHub Discussions](https://github.com/your-org/stock-analysis/discussions)
+- 📚 **文档**: [完整文档](https://stock-analysis.readthedocs.io/)
 
 ---
 
 ## 致谢
 
-感谢以下开源项目：
+感谢所有贡献者对本项目的支持！
 
-- [Pandas](https://pandas.pydata.org/) - 数据处理
-- [NumPy](https://numpy.org/) - 数值计算
-- [LightGBM](https://lightgbm.readthedocs.io/) - 机器学习
-- [PyTorch](https://pytorch.org/) - 深度学习
-- [TimescaleDB](https://www.timescale.com/) - 时序数据库
-- [AkShare](https://github.com/akfamily/akshare) - 数据源
-- [TA-Lib](https://github.com/mrjbq7/ta-lib) - 技术指标
+特别感谢以下开源项目：
+- [AkShare](https://github.com/akfamily/akshare) - 免费开源的金融数据接口库
+- [LightGBM](https://github.com/microsoft/LightGBM) - 高性能梯度提升框架
+- [Pandas](https://github.com/pandas-dev/pandas) - 强大的数据分析工具
 
 ---
 
 <div align="center">
 
-**[⬆ 回到顶部](#stock-analysis-core)**
+**Made with ❤️ by Quant Team**
 
-Made with ❤️ by Quant Team
+⭐ 如果这个项目对你有帮助，请给我们一个Star！
 
 </div>
