@@ -19,6 +19,9 @@ import psycopg2
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
+# 导入异常类
+from src.exceptions import DatabaseError
+
 
 class TestDataQueryManagerComprehensive(unittest.TestCase):
     """DataQueryManager 完整测试"""
@@ -178,8 +181,11 @@ class TestDataQueryManagerComprehensive(unittest.TestCase):
 
         mock_read_sql.side_effect = psycopg2.OperationalError("Connection lost")
 
-        with self.assertRaises(psycopg2.OperationalError):
+        with self.assertRaises(DatabaseError) as context:
             self.query_manager.get_stock_list()
+
+        # 验证异常细节
+        self.assertEqual(context.exception.error_code, "DB_CONNECTION_ERROR")
 
         self.mock_pool_manager.release_connection.assert_called()
         print("  ✓ 错误处理测试通过")

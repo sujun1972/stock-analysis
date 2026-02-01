@@ -19,6 +19,9 @@ import psycopg2
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
+# 导入异常类
+from src.exceptions import DatabaseError
+
 
 class TestDataInsertManagerComprehensive(unittest.TestCase):
     """DataInsertManager 完整测试"""
@@ -119,8 +122,12 @@ class TestDataInsertManagerComprehensive(unittest.TestCase):
 
         mock_execute_batch.side_effect = psycopg2.IntegrityError("Duplicate key")
 
-        with self.assertRaises(psycopg2.IntegrityError):
+        with self.assertRaises(DatabaseError) as context:
             self.insert_manager.save_stock_list(df)
+
+        # 验证异常细节
+        self.assertEqual(context.exception.error_code, "DB_INTEGRITY_ERROR")
+        self.assertIn("save_stock_list", str(context.exception.context))
 
         self.mock_conn.rollback.assert_called_once()
         print("  ✓ 错误处理测试通过")
@@ -550,7 +557,7 @@ class TestDataInsertManagerComprehensive(unittest.TestCase):
 
         mock_execute_batch.side_effect = psycopg2.DatabaseError("Constraint violation")
 
-        with self.assertRaises(psycopg2.DatabaseError):
+        with self.assertRaises(DatabaseError):
             self.insert_manager.save_stock_list(df)
 
         # 验证回滚被调用
