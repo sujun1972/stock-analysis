@@ -185,10 +185,11 @@ class GRUStockTrainer:
             elif use_gpu and torch.cuda.is_available():
                 device = 'cuda'
             elif use_gpu and torch.backends.mps.is_available():
-                # MPS在RNN训练中数值不稳定，建议使用CPU
-                logger.warning("检测到MPS设备，但GRU/RNN在MPS上可能数值不稳定")
-                logger.warning("建议使用use_gpu=False强制使用CPU，或等待PyTorch MPS优化")
-                device = 'mps'
+                # MPS在RNN训练中数值不稳定，强制使用CPU
+                logger.warning("检测到MPS设备，但GRU/RNN在MPS上存在严重数值不稳定问题")
+                logger.warning("自动切换到CPU以确保训练稳定性")
+                device = 'cpu'
+                use_gpu = False  # 标记为未使用GPU
             else:
                 device = 'cpu'
 
@@ -229,9 +230,12 @@ class GRUStockTrainer:
         import platform
         if platform.system() == 'Darwin':
             logger.warning("检测到macOS系统，使用SGD优化器代替Adam避免段错误")
+            # SGD通常需要更小的学习率，降低10倍
+            sgd_lr = learning_rate * 0.1
+            logger.info(f"调整SGD学习率: {learning_rate} -> {sgd_lr}")
             self.optimizer = optim.SGD(
                 self.model.parameters(),
-                lr=learning_rate,
+                lr=sgd_lr,
                 momentum=0.9
             )
         else:
@@ -314,6 +318,11 @@ class GRUStockTrainer:
                     loss = self.criterion(predictions, targets)
 
                 self.scaler.scale(loss).backward()
+
+                # 梯度裁剪，防止梯度爆炸
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
@@ -327,6 +336,10 @@ class GRUStockTrainer:
                     continue
 
                 loss.backward()
+
+                # 梯度裁剪，防止梯度爆炸
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
                 self.optimizer.step()
 
             total_loss += loss.item()
@@ -352,11 +365,16 @@ class GRUStockTrainer:
                 predictions = self.model(sequences)
                 loss = self.criterion(predictions, targets)
 
+                # 检查loss是否有效
+                if not torch.isfinite(loss):
+                    logger.warning(f"验证集检测到无效loss值: {loss.item()}，跳过此批次")
+                    continue
+
                 total_loss += loss.item()
                 num_batches += 1
 
         # 防止除零错误
-        return total_loss / num_batches if num_batches > 0 else 0.0
+        return total_loss / num_batches if num_batches > 0 else float('inf')
 
     def train(
         self,
@@ -439,6 +457,11 @@ class GRUStockTrainer:
             if valid_loader is not None:
                 valid_loss = self.validate(valid_loader)
                 self.history['valid_loss'].append(valid_loss)
+
+                # 检查验证损失是否有效
+                if not np.isfinite(valid_loss):
+                    logger.warning(f"\n检测到无效的验证损失 {valid_loss}，停止训练")
+                    break
 
                 # 学习率调整
                 self.scheduler.step(valid_loss)

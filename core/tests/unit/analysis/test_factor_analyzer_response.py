@@ -18,9 +18,9 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from analysis.factor_analyzer import FactorAnalyzer, FactorAnalysisReport
-from analysis.ic_calculator import ICCalculator, ICResult
-from utils.response import Response, ResponseStatus
+from src.analysis.factor_analyzer import FactorAnalyzer, FactorAnalysisReport
+from src.analysis.ic_calculator import ICCalculator, ICResult
+from src.utils.response import Response, ResponseStatus
 
 
 class TestFactorAnalyzerResponse:

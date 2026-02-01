@@ -241,7 +241,12 @@ class TestGRUStockTrainerInit:
 
         assert trainer.device == torch.device('cpu')
         assert isinstance(trainer.model, GRUStockModel)
-        assert isinstance(trainer.optimizer, torch.optim.Adam)
+        # 在macOS上使用SGD，其他平台使用Adam
+        import platform
+        if platform.system() == 'Darwin':
+            assert isinstance(trainer.optimizer, torch.optim.SGD)
+        else:
+            assert isinstance(trainer.optimizer, torch.optim.Adam)
 
     def test_trainer_initialization_auto_device(self):
         """测试自动设备选择"""
@@ -271,8 +276,14 @@ class TestGRUStockTrainerInit:
         )
 
         # 验证optimizer的学习率
+        # 在macOS上SGD学习率会降低10倍
         lr = trainer.optimizer.param_groups[0]['lr']
-        assert abs(lr - 0.001) < 1e-6
+        import platform
+        if platform.system() == 'Darwin':
+            expected_lr = 0.0001  # 0.001 * 0.1
+        else:
+            expected_lr = 0.001
+        assert abs(lr - expected_lr) < 1e-6
 
     def test_trainer_cuda_device_selection(self):
         """测试CUDA设备选择逻辑"""
