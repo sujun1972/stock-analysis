@@ -487,7 +487,7 @@ def main():
 
     # 配置
     config = {
-        'output_dir': 'core/examples/pipeline_outputs',
+        'output_dir': 'pipeline_outputs',
         'n_samples': 2000,
         'n_features': 50,
         'train_ratio': 0.6,

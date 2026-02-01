@@ -109,9 +109,10 @@ pip install akshare tushare lightgbm torch pyarrow tables
 
 ## 相关文档
 
-- [重构计划文档](../../REFACTORING_PLAN.md)
-- [性能测试文档](../performance/README.md)
-- [单元测试文档](../unit/README.md)
+- 📖 [测试编写指南](../../docs/developer_guide/testing.md) - 如何编写测试
+- ⚡ [性能测试文档](../performance/README.md) - 性能基准测试
+- 🏗️ [系统架构](../../docs/architecture/overview.md) - 架构设计
+- 🗺️ [开发路线图](../../docs/ROADMAP.md) - 项目规划
 
 ---
 

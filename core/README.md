@@ -160,20 +160,32 @@ stock-cli visualize --type backtest --input results.csv
 
 ## 完整文档
 
-### 用户指南
+### 📚 文档中心
 
-- 📖 [架构分析](ARCHITECTURE_ANALYSIS.md) - 系统架构深度解析
-- 🗺️ [开发路线图](DEVELOPMENT_ROADMAP.md) - 版本历史与未来规划
-- 🔧 [重构计划](REFACTORING_PLAN.md) - 代码质量提升计划
+- 📖 [文档中心](docs/README.md) - 文档导航和索引
+- 🏗️ [系统架构](docs/architecture/overview.md) - 六层架构与技术实现
+- 🗺️ [开发路线图](docs/ROADMAP.md) - 版本历史与开发规划
 
-### 专题文档
+### 📅 规划与历史
 
-- 🎨 [可视化指南](docs/VISUALIZATION_GUIDE.md) - 30+图表使用说明
-- 🧬 [特征配置指南](docs/FEATURE_CONFIG_GUIDE.md) - 因子计算配置
-- 🤖 [模型使用指南](docs/MODEL_USAGE_GUIDE.md) - 模型训练与评估
-- 📋 [配置模板指南](docs/TEMPLATES_GUIDE.md) - 6种配置模板说明
+- 📅 [2026年度规划](docs/planning/roadmap_2026.md) - 年度详细规划
+- ⭐ [v3.0.0 发布说明](docs/versions/v3.0.0.md) - 最新版本详情
+- 📄 [完整变更日志](docs/versions/CHANGELOG.md) - 所有版本变更
+- 🔧 [技术债务追踪](docs/planning/tech_debt.md) - 技术债务管理
 
-### API参考
+### 📖 专题指南
+
+- 🎨 [可视化指南](docs/user_guide/VISUALIZATION_GUIDE.md) - 30+图表使用说明
+- 🧬 [特征配置指南](docs/user_guide/FEATURE_CONFIG_GUIDE.md) - 因子计算配置
+- 🤖 [模型使用指南](docs/user_guide/MODEL_USAGE_GUIDE.md) - 模型训练与评估
+- 📋 [配置模板指南](docs/user_guide/TEMPLATES_GUIDE.md) - 6种配置模板说明
+- 🔙 [回测使用指南](docs/user_guide/BACKTEST_USAGE_GUIDE.md) - 回测引擎使用
+- 🔧 [CLI命令指南](docs/user_guide/CLI_GUIDE.md) - 命令行工具详解
+- 📊 [数据质量指南](docs/user_guide/DATA_QUALITY_GUIDE.md) - 数据验证与清洗
+- 🤝 [模型集成指南](docs/user_guide/ENSEMBLE_GUIDE.md) - 模型集成方法
+- 📈 [因子分析指南](docs/user_guide/FACTOR_ANALYSIS_GUIDE.md) - 因子分析工具
+
+### 💻 API参考
 
 - 📘 [数据层API](src/data/) - 数据获取、存储、质量检查
 - 🧪 [特征层API](src/features/) - 因子计算、技术指标

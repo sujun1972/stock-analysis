@@ -327,9 +327,12 @@ pytest test_*.py --benchmark-save=perf_$DATE
 
 ## 相关文档
 
-- [REFACTORING_PLAN.md](../../REFACTORING_PLAN.md) - 重构计划和性能目标
-- [pytest文档](https://docs.pytest.org/) - pytest使用指南
-- [pytest-benchmark](https://pytest-benchmark.readthedocs.io/) - pytest-benchmark插件
+- 📖 [测试编写指南](../../docs/developer_guide/testing.md) - 如何编写测试
+- ⚡ [性能优化分析](../../docs/architecture/performance.md) - 35倍性能提升
+- 🏗️ [系统架构](../../docs/architecture/overview.md) - 架构设计
+- 🗺️ [开发路线图](../../docs/ROADMAP.md) - 性能目标与规划
+- 📚 [pytest文档](https://docs.pytest.org/) - pytest使用指南
+- 📚 [pytest-benchmark](https://pytest-benchmark.readthedocs.io/) - pytest-benchmark插件
 
 ## 维护信息
 

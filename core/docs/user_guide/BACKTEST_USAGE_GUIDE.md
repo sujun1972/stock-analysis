@@ -1049,7 +1049,7 @@ trades_df.to_csv('trades.csv')
 ## 技术支持
 
 如有问题，请：
-1. 查看示例代码：`core/examples/backtest_*.py`
+1. 查看示例代码：[examples/](examples/) - backtest_*.py 系列
 2. 运行集成测试：`pytest tests/integration/test_phase4_backtest.py`
 3. 提交Issue到GitHub
 

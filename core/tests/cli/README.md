@@ -78,5 +78,6 @@ open htmlcov/index.html
 
 ## 相关文档
 
-- [CLI使用指南](../../docs/CLI_GUIDE.md)
-- [开发路线图](../../DEVELOPMENT_ROADMAP.md)
+- 📖 [测试编写指南](../../docs/developer_guide/testing.md) - 如何编写测试
+- 🔧 [CLI使用指南](../../docs/user_guide/CLI_GUIDE.md) - CLI命令详解
+- 🗺️ [开发路线图](../../docs/ROADMAP.md) - 项目规划

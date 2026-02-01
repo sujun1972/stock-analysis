@@ -196,7 +196,7 @@ def example_basic_comparison():
     logger.info(f"  测试集 IC: {results_df.loc[best_model_name, 'Test IC']:.6f}")
 
     # 保存结果
-    output_dir = Path('core/examples/comparison_outputs')
+    output_dir = Path('comparison_outputs')
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results_df.to_csv(output_dir / 'model_comparison.csv')
@@ -426,7 +426,7 @@ def generate_summary_report():
         }
 
     # 保存报告
-    output_dir = Path('core/examples/comparison_outputs')
+    output_dir = Path('comparison_outputs')
     output_dir.mkdir(parents=True, exist_ok=True)
 
     report_path = output_dir / 'summary_report.json'
@@ -484,7 +484,7 @@ def main():
     logger.info("  3. 分析预测分位数性能")
     logger.info("  4. 生成可复现的评估报告")
 
-    logger.info("\n输出目录: core/examples/comparison_outputs/")
+    logger.info("\n输出目录: comparison_outputs/")
     logger.info("  - model_comparison.csv : 详细对比结果")
     logger.info("  - summary_report.json  : 汇总报告")
 

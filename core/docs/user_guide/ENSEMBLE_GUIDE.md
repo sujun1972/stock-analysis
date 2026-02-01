@@ -633,7 +633,7 @@ ensemble = WeightedAverageEnsemble([
 
 - **论文**：[Stacking and Blending](https://www.sciencedirect.com/science/article/abs/pii/S0893608005800231)
 - **案例**：Netflix Prize 获奖方案使用了大量集成技术
-- **代码**：`core/examples/ensemble_example.py` 完整示例
+- **代码**：[examples/ensemble_example.py](examples/ensemble_example.py) 完整示例
 - **测试**：`core/tests/unit/test_ensemble.py` 单元测试
 
 ---

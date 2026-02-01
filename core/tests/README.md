@@ -7,6 +7,14 @@
 
 ---
 
+> 📚 **测试编写指南**：查看 [../docs/developer_guide/testing.md](../docs/developer_guide/testing.md)
+>
+> 本文档关注**如何运行测试**，包括交互式菜单、测试统计、性能优化。
+>
+> 如需**编写测试**、了解测试哲学和最佳实践，请查看上述链接。
+
+---
+
 ## 📋 目录
 
 - [快速开始](#-快速开始)
@@ -486,21 +494,25 @@ python run_tests.py --all
 
 ## 📚 详细文档
 
-### 子目录文档
+### 测试文档
 
-- [单元测试 - Providers](unit/providers/tushare/README.md) - Tushare数据提供商测试
-- [单元测试 - Providers](unit/providers/akshare/README.md) - AkShare数据提供商测试
-- [CLI测试](cli/README.md) - 命令行工具测试
-- [配置测试](config/README.md) - 配置管理测试
-- [集成测试](integration/README.md) - 集成测试文档
-- [性能测试](performance/README.md) - 性能基准测试
-- [测试报告](reports/README.md) - 报告说明
+- 📖 **[测试编写指南](../docs/developer_guide/testing.md)** - 如何编写测试、最佳实践
+- 🔗 **[集成测试](integration/README.md)** - 端到端工作流、多数据源集成
+- ⚡ **[性能测试](performance/README.md)** - 性能基准测试、回归检测
+- 🖥️ **[CLI测试](cli/README.md)** - 命令行工具测试
 
-### 相关文档
+### 特定模块测试
 
-- [开发路线图](../DEVELOPMENT_ROADMAP.md)
-- [重构计划](../REFACTORING_PLAN.md)
-- [项目架构说明](../docs/ARCHITECTURE.md)
+- [Tushare Provider测试](unit/providers/tushare/README.md) - Tushare数据提供商测试
+- [AkShare Provider测试](unit/providers/akshare/README.md) - AkShare数据提供商测试
+- [配置测试](config/README.md) - 配置管理测试fixtures
+- [测试报告](reports/README.md) - 测试报告格式说明
+
+### 项目文档
+
+- 🏗️ [系统架构](../docs/architecture/overview.md) - 六层架构设计
+- 🗺️ [开发路线图](../docs/ROADMAP.md) - 项目规划与版本历史
+- 🤝 [贡献指南](../docs/developer_guide/contributing.md) - 如何贡献代码
 
 ---
 

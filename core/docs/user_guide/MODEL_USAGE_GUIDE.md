@@ -702,17 +702,17 @@ predictions = model.predict(X_new)
 
 ## 示例代码
 
-完整示例位于 `core/examples/` 目录：
+完整示例位于 [examples/](examples/) 目录：
 
-1. **[model_basic_usage.py](../examples/model_basic_usage.py)** - 基础模型使用
-2. **[ensemble_example.py](../examples/ensemble_example.py)** - 集成模型示例
+1. **[model_basic_usage.py](examples/model_basic_usage.py)** - 基础模型使用
+2. **[ensemble_example.py](examples/ensemble_example.py)** - 集成模型示例
 3. **[model_training_pipeline.py](../examples/model_training_pipeline.py)** - 完整训练流程
 4. **[model_comparison_demo.py](../examples/model_comparison_demo.py)** - 模型对比
 
 运行示例：
 
 ```bash
-cd core/examples
+cd docs/user_guide/examples
 python model_basic_usage.py
 python ensemble_example.py
 python model_training_pipeline.py
@@ -725,7 +725,7 @@ python model_comparison_demo.py
 
 - **集成学习指南**: [ENSEMBLE_GUIDE.md](ENSEMBLE_GUIDE.md)
 - **因子分析指南**: [FACTOR_ANALYSIS_GUIDE.md](FACTOR_ANALYSIS_GUIDE.md)
-- **开发路线图**: [DEVELOPMENT_ROADMAP.md](../DEVELOPMENT_ROADMAP.md)
+- **开发路线图**: [ROADMAP.md](../ROADMAP.md)
 
 ---
 

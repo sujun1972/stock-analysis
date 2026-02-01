@@ -306,7 +306,7 @@ def main():
         else:
             logger.info(f"  {model_name:12s}: N/A (未运行)")
 
-    logger.info("\n模型文件已保存到: core/examples/saved_models/")
+    logger.info("\n模型文件已保存到: saved_models/")
     logger.info("\n下一步:")
     logger.info("  1. 查看 ensemble_example.py 学习模型集成")
     logger.info("  2. 查看 model_training_pipeline.py 学习完整训练流程")

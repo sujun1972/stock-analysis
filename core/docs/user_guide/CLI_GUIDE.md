@@ -299,7 +299,7 @@ $ ./bin/stock-cli init
 ./bin/stock-cli train --output /data/models/my_model.pkl
 ```
 
-**注意**: 此功能正在开发中，当前请使用 Python API 进行模型训练（见 `examples/model_training_example.py`）
+**注意**: 此功能正在开发中，当前请使用 Python API 进行模型训练（见 [examples/model_training_pipeline.py](examples/model_training_pipeline.py)）
 
 ---
 
@@ -344,7 +344,7 @@ $ ./bin/stock-cli init
   --report html --output results/backtest.html
 ```
 
-**注意**: 此功能正在开发中，当前请使用 Python API 进行回测（见 `examples/backtest_basic_usage.py`）
+**注意**: 此功能正在开发中，当前请使用 Python API 进行回测（见 [examples/backtest_basic_usage.py](examples/backtest_basic_usage.py)）
 
 ---
 
@@ -396,7 +396,7 @@ $ ./bin/stock-cli init
 ./bin/stock-cli analyze batch --output reports/factor_analysis.html
 ```
 
-**注意**: 此功能正在开发中，当前请使用 Python API 进行因子分析（见 `examples/factor_analysis_example.py`）
+**注意**: 此功能正在开发中，当前请使用 Python API 进行因子分析（见 [examples/complete_factor_analysis_example.py](examples/complete_factor_analysis_example.py)）
 
 ---
 
@@ -572,10 +572,10 @@ export DATABASE_PORT=5432
 
 ## 更多资源
 
-- **项目文档**: [README.md](../README.md)
-- **架构分析**: [ARCHITECTURE_ANALYSIS.md](../ARCHITECTURE_ANALYSIS.md)
-- **开发路线图**: [DEVELOPMENT_ROADMAP.md](../DEVELOPMENT_ROADMAP.md)
-- **示例代码**: [examples/](../examples/)
+- **项目文档**: [README.md](../../README.md)
+- **系统架构**: [architecture/overview.md](../architecture/overview.md)
+- **开发路线图**: [ROADMAP.md](../ROADMAP.md)
+- **文档中心**: [docs/README.md](../README.md)
 - **GitHub**: https://github.com/yourusername/stock-analysis
 
 ---
