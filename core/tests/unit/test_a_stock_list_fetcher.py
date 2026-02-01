@@ -94,8 +94,10 @@ class TestFetchAkshareStockList:
 
         result = fetch_akshare_stock_list(save_path=save_path, save_to_db=False)
 
-        assert result is True
+        assert result.is_success()
         assert os.path.exists(save_path)
+        assert result.data is not None
+        assert len(result.data) == 6
 
         # 读取保存的文件验证
         saved_df = pd.read_csv(save_path)
@@ -172,13 +174,14 @@ class TestFetchAkshareStockList:
     @patch('src.a_stock_list_fetcher.save_stock_list_to_database')
     def test_fetch_akshare_with_db_save(self, mock_save_db, mock_ak, sample_akshare_data, temp_directory):
         """测试保存到数据库"""
+        from src.utils.response import Response
         mock_ak.return_value = sample_akshare_data
-        mock_save_db.return_value = True
+        mock_save_db.return_value = Response.success(message="数据库保存成功")
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
 
         result = fetch_akshare_stock_list(save_path=save_path, save_to_db=True)
 
-        assert result is True
+        assert result.is_success()
         mock_save_db.assert_called_once()
 
     @patch('src.a_stock_list_fetcher.ak.stock_zh_a_spot_em')
@@ -190,7 +193,8 @@ class TestFetchAkshareStockList:
 
         result = fetch_akshare_stock_list(save_path=save_path, save_to_db=False)
 
-        assert result is False
+        assert result.is_error()
+        assert result.error_code is not None
         mock_logger.error.assert_called()
 
     @patch('src.a_stock_list_fetcher.ak.stock_zh_a_spot_em')
@@ -224,8 +228,9 @@ class TestFetchTushareStockList:
 
         result = fetch_tushare_stock_list(save_path=save_path, save_to_db=False)
 
-        assert result is True
+        assert result.is_success()
         assert os.path.exists(save_path)
+        assert result.data is not None
         mock_ts.set_token.assert_called_once_with('test_token')
 
     @patch('src.a_stock_list_fetcher.TUSHARE_TOKEN', '')
@@ -236,7 +241,8 @@ class TestFetchTushareStockList:
 
         result = fetch_tushare_stock_list(save_path=save_path, save_to_db=False)
 
-        assert result is False
+        assert result.is_error()
+        assert result.error_code == "TUSHARE_TOKEN_NOT_CONFIGURED"
         mock_logger.error.assert_called()
 
     @patch('src.a_stock_list_fetcher.ts')
@@ -244,16 +250,17 @@ class TestFetchTushareStockList:
     @patch('src.a_stock_list_fetcher.save_stock_list_to_database')
     def test_fetch_tushare_with_db_save(self, mock_save_db, mock_ts, sample_tushare_data, temp_directory):
         """测试保存到数据库"""
+        from src.utils.response import Response
         mock_pro = Mock()
         mock_pro.stock_basic.return_value = sample_tushare_data
         mock_ts.pro_api.return_value = mock_pro
-        mock_save_db.return_value = True
+        mock_save_db.return_value = Response.success(message="数据库保存成功")
 
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
 
         result = fetch_tushare_stock_list(save_path=save_path, save_to_db=True)
 
-        assert result is True
+        assert result.is_success()
         mock_save_db.assert_called_once()
 
     @patch('src.a_stock_list_fetcher.ts')
@@ -266,7 +273,8 @@ class TestFetchTushareStockList:
 
         result = fetch_tushare_stock_list(save_path=save_path, save_to_db=False)
 
-        assert result is False
+        assert result.is_error()
+        assert result.error_code is not None
         mock_logger.error.assert_called()
 
 
@@ -278,48 +286,52 @@ class TestFetchAndSaveAStockList:
     @patch('src.a_stock_list_fetcher.fetch_akshare_stock_list')
     def test_fetch_default_akshare(self, mock_akshare, temp_directory):
         """测试默认使用 AkShare"""
-        mock_akshare.return_value = True
+        from src.utils.response import Response
+        mock_akshare.return_value = Response.success(data=pd.DataFrame(), message="成功")
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
 
         result = fetch_and_save_a_stock_list(save_path=save_path, save_to_db=False)
 
-        assert result is True
+        assert result.is_success()
         mock_akshare.assert_called_once_with(save_path, False)
 
     @patch('src.a_stock_list_fetcher.fetch_akshare_stock_list')
     def test_fetch_explicit_akshare(self, mock_akshare, temp_directory):
         """测试显式指定 AkShare"""
-        mock_akshare.return_value = True
+        from src.utils.response import Response
+        mock_akshare.return_value = Response.success(data=pd.DataFrame(), message="成功")
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
 
         result = fetch_and_save_a_stock_list(save_path=save_path, save_to_db=False, data_source='akshare')
 
-        assert result is True
+        assert result.is_success()
         mock_akshare.assert_called_once()
 
     @patch('src.a_stock_list_fetcher.fetch_tushare_stock_list')
     def test_fetch_explicit_tushare(self, mock_tushare, temp_directory):
         """测试显式指定 Tushare"""
-        mock_tushare.return_value = True
+        from src.utils.response import Response
+        mock_tushare.return_value = Response.success(data=pd.DataFrame(), message="成功")
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
 
         result = fetch_and_save_a_stock_list(save_path=save_path, save_to_db=False, data_source='tushare')
 
-        assert result is True
+        assert result.is_success()
         mock_tushare.assert_called_once()
 
     @patch('src.a_stock_list_fetcher.fetch_akshare_stock_list')
     @patch('src.a_stock_list_fetcher.logger')
     def test_fetch_unknown_source_fallback(self, mock_logger, mock_akshare, temp_directory):
         """测试未知数据源回退到 AkShare"""
-        mock_akshare.return_value = True
+        from src.utils.response import Response
+        mock_akshare.return_value = Response.success(data=pd.DataFrame(), message="成功")
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
 
         result = fetch_and_save_a_stock_list(save_path=save_path, save_to_db=False, data_source='unknown')
 
-        assert result is True
+        assert result.is_success()
         mock_akshare.assert_called_once()
-        mock_logger.info.assert_called()
+        mock_logger.warning.assert_called()
 
 
 # ==================== save_stock_list_to_database 测试 ====================
@@ -347,7 +359,8 @@ class TestSaveStockListToDatabase:
 
         result = save_stock_list_to_database(sample_tushare_data)
 
-        assert result is True
+        assert result.is_success()
+        assert result.metadata.get('n_saved') == len(sample_tushare_data)
         mock_create_engine.assert_called_once()
 
     @patch('src.a_stock_list_fetcher.DATABASE_CONFIG', None)
@@ -356,7 +369,8 @@ class TestSaveStockListToDatabase:
         """测试没有数据库配置"""
         result = save_stock_list_to_database(sample_tushare_data)
 
-        assert result is False
+        assert result.is_error()
+        assert result.error_code == "DATABASE_CONFIG_NOT_SET"
         mock_logger.error.assert_called()
 
     @patch('src.a_stock_list_fetcher.create_engine')
@@ -374,7 +388,8 @@ class TestSaveStockListToDatabase:
 
         result = save_stock_list_to_database(sample_tushare_data)
 
-        assert result is False
+        assert result.is_error()
+        assert result.error_code is not None
         mock_logger.error.assert_called()
 
 
@@ -393,9 +408,10 @@ class TestGetAStockListDetailed:
 
         result = get_a_stock_list_detailed(save_dir=temp_directory, save_to_db=False)
 
-        assert result is not None
-        assert isinstance(result, pd.DataFrame)
-        assert len(result) > 0
+        assert result.is_success()
+        assert result.data is not None
+        assert isinstance(result.data, pd.DataFrame)
+        assert len(result.data) > 0
 
     @patch('src.a_stock_list_fetcher.TUSHARE_TOKEN', '')
     @patch('src.a_stock_list_fetcher.logger')
@@ -403,7 +419,8 @@ class TestGetAStockListDetailed:
         """测试没有 token"""
         result = get_a_stock_list_detailed(save_dir=temp_directory, save_to_db=False)
 
-        assert result is None
+        assert result.is_error()
+        assert result.error_code == "TUSHARE_TOKEN_NOT_CONFIGURED"
         mock_logger.error.assert_called()
 
     @patch('src.a_stock_list_fetcher.ts')
@@ -415,7 +432,8 @@ class TestGetAStockListDetailed:
 
         result = get_a_stock_list_detailed(save_dir=temp_directory, save_to_db=False)
 
-        assert result is None
+        assert result.is_error()
+        assert result.error_code is not None
         mock_logger.error.assert_called()
 
 
@@ -441,9 +459,10 @@ class TestUpdateStockListFromDatabase:
 
         result = update_stock_list_from_database()
 
-        assert result is not None
-        assert isinstance(result, pd.DataFrame)
-        assert len(result) == len(sample_tushare_data)
+        assert result.is_success()
+        assert result.data is not None
+        assert isinstance(result.data, pd.DataFrame)
+        assert len(result.data) == len(sample_tushare_data)
 
     @patch('src.a_stock_list_fetcher.DATABASE_CONFIG', None)
     @patch('src.a_stock_list_fetcher.logger')
@@ -451,7 +470,8 @@ class TestUpdateStockListFromDatabase:
         """测试没有数据库配置"""
         result = update_stock_list_from_database()
 
-        assert result is None
+        assert result.is_error()
+        assert result.error_code == "DATABASE_CONFIG_NOT_SET"
         mock_logger.error.assert_called()
 
     @patch('src.a_stock_list_fetcher.create_engine')
@@ -469,7 +489,8 @@ class TestUpdateStockListFromDatabase:
 
         result = update_stock_list_from_database()
 
-        assert result is None
+        assert result.is_error()
+        assert result.error_code is not None
         mock_logger.error.assert_called()
 
 
@@ -570,7 +591,8 @@ class TestEdgeCases:
         result = fetch_akshare_stock_list(save_path=save_path, save_to_db=False)
 
         # 空数据会导致失败
-        assert result is False
+        assert result.is_error()
+        assert result.error_code == "AKSHARE_DATA_FORMAT_ERROR"
         mock_logger.error.assert_called()
 
     @patch('src.a_stock_list_fetcher.ak.stock_zh_a_spot_em')
@@ -583,7 +605,7 @@ class TestEdgeCases:
 
             result = fetch_akshare_stock_list(save_path=save_path, save_to_db=False)
 
-            assert result is True
+            assert result.is_success()
             assert os.path.exists(save_path)
 
     @patch('src.a_stock_list_fetcher.ak.stock_zh_a_spot_em')
@@ -599,7 +621,8 @@ class TestEdgeCases:
 
         result = fetch_akshare_stock_list(save_path=save_path, save_to_db=False)
 
-        assert result is True
+        assert result.is_success()
+        assert result.metadata.get('n_stocks') == 5000
         saved_df = pd.read_csv(save_path)
         assert len(saved_df) == 5000
 
@@ -609,6 +632,7 @@ class TestEdgeCases:
 class TestIntegration:
     """集成测试"""
 
+    @patch('src.a_stock_list_fetcher.pd.Timestamp')
     @patch('src.a_stock_list_fetcher.ak.stock_zh_a_spot_em')
     @patch('src.a_stock_list_fetcher.create_engine')
     @patch('src.a_stock_list_fetcher.DATABASE_CONFIG', {
@@ -618,13 +642,16 @@ class TestIntegration:
         'user': 'testuser',
         'password': 'testpass'
     })
-    def test_full_workflow_akshare_to_db(self, mock_create_engine, mock_ak, sample_akshare_data, temp_directory):
+    def test_full_workflow_akshare_to_db(self, mock_create_engine, mock_ak, mock_timestamp, sample_akshare_data, temp_directory):
         """测试完整工作流：AkShare -> CSV + 数据库"""
         mock_ak.return_value = sample_akshare_data
+        mock_timestamp.now.return_value = pd.Timestamp('2026-01-29')
 
-        mock_engine = Mock()
+        mock_engine = MagicMock()
         mock_conn = MagicMock()
-        mock_engine.connect.return_value = mock_conn
+        mock_engine.connect.return_value.__enter__ = Mock(return_value=mock_conn)
+        mock_engine.connect.return_value.__exit__ = Mock(return_value=False)
+        mock_conn.execute = Mock()
         mock_create_engine.return_value = mock_engine
 
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
@@ -635,8 +662,9 @@ class TestIntegration:
             data_source='akshare'
         )
 
-        assert result is True
+        assert result.is_success()
         assert os.path.exists(save_path)
+        assert result.metadata.get('db_saved') is True
         mock_create_engine.assert_called_once()
 
     @patch('src.a_stock_list_fetcher.ak.stock_zh_a_spot_em')
@@ -644,13 +672,16 @@ class TestIntegration:
     @patch('src.a_stock_list_fetcher.logger')
     def test_csv_success_db_failure(self, mock_logger, mock_save_db, mock_ak, sample_akshare_data, temp_directory):
         """测试CSV成功但数据库失败的情况"""
+        from src.utils.response import Response
         mock_ak.return_value = sample_akshare_data
-        mock_save_db.return_value = False
+        mock_save_db.return_value = Response.error(error="数据库连接失败", error_code="DB_ERROR")
         save_path = os.path.join(temp_directory, 'test_stock_list.csv')
 
         result = fetch_akshare_stock_list(save_path=save_path, save_to_db=True)
 
-        # 主函数返回True（CSV成功）
-        assert result is True
+        # 主函数返回成功（CSV成功）
+        assert result.is_success()
+        # 但数据库保存失败
+        assert result.metadata.get('db_saved') is False
         # 但应该有错误日志
         mock_logger.error.assert_called()

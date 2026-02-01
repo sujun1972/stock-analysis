@@ -419,6 +419,42 @@ class ModelValidationError(ModelError):
     pass
 
 
+# ==================== 分析相关异常 ====================
+
+class AnalysisError(StockAnalysisError):
+    """分析相关异常基类
+
+    所有与因子分析、IC计算、回测分析相关的异常都应继承此类。
+
+    Examples:
+        >>> raise AnalysisError(
+        ...     "IC分析失败",
+        ...     error_code="IC_ANALYSIS_ERROR",
+        ...     factor_name="MOM_20",
+        ...     reason="数据不足"
+        ... )
+    """
+    pass
+
+
+# ==================== 网络相关异常 ====================
+
+class NetworkError(StockAnalysisError):
+    """网络相关异常基类
+
+    所有与网络请求、API调用相关的异常都应继承此类。
+
+    Examples:
+        >>> raise NetworkError(
+        ...     "API请求超时",
+        ...     error_code="API_TIMEOUT",
+        ...     url="https://api.example.com/stock",
+        ...     timeout=30
+        ... )
+    """
+    pass
+
+
 # ==================== 策略和回测相关异常 ====================
 
 class StrategyError(StockAnalysisError):
@@ -591,6 +627,12 @@ __all__ = [
     'ModelPredictionError',
     'ModelNotFoundError',
     'ModelValidationError',
+
+    # 分析相关异常
+    'AnalysisError',
+
+    # 网络相关异常
+    'NetworkError',
 
     # 策略和回测相关异常
     'StrategyError',

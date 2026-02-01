@@ -14,6 +14,22 @@ from typing import Dict, List, Optional, Union
 from loguru import logger
 import warnings
 
+# 导入异常类
+try:
+    from ..exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+except ImportError:
+    from src.exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+
 warnings.filterwarnings('ignore')
 
 
@@ -311,8 +327,10 @@ class FactorCorrelation:
 
         except ImportError as e:
             logger.warning(f"绘图库未安装: {e}")
+        except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+            logger.warning(f"绘制热力图失败(已知异常): {e}")
         except Exception as e:
-            logger.error(f"绘制热力图失败: {e}")
+            logger.warning(f"绘制热力图失败(未预期异常): {e}", exc_info=True)
 
     def plot_correlation_network(
         self,
@@ -410,7 +428,9 @@ class FactorCorrelation:
 
         except ImportError as e:
             logger.warning(f"networkx或matplotlib未安装: {e}")
+        except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+            logger.warning(f"绘制网络图失败(已知异常): {e}")
         except Exception as e:
-            logger.error(f"绘制网络图失败: {e}")
+            logger.warning(f"绘制网络图失败(未预期异常): {e}", exc_info=True)
 
 

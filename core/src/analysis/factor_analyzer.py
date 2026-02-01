@@ -28,6 +28,22 @@ from .factor_correlation import FactorCorrelation
 from .factor_optimizer import FactorOptimizer, OptimizationResult
 from utils.response import Response, ResponseStatus
 
+# 导入异常类
+try:
+    from ..exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+except ImportError:
+    from src.exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+
 warnings.filterwarnings('ignore')
 
 # 导入并行计算工具
@@ -86,9 +102,27 @@ def _analyze_single_factor_worker_v2(args):
         else:
             return (factor_name, None, response.error)
 
+    except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+        # 已知的分析异常，直接返回错误信息
+        logger.warning(f"并行分析因子{factor_name}失败(已知异常): {e}")
+        error_dict = {
+            'error_type': e.__class__.__name__,
+            'error_code': getattr(e, 'error_code', 'KNOWN_ANALYSIS_ERROR'),
+            'message': str(e),
+            'context': {'factor_name': factor_name}
+        }
+        return (factor_name, None, error_dict)
+
     except Exception as e:
-        logger.warning(f"并行分析因子{factor_name}失败: {e}")
-        return (factor_name, None, str(e))
+        # 未预期的异常
+        logger.warning(f"并行分析因子{factor_name}失败(未预期异常): {e}")
+        error_dict = {
+            'error_type': 'Exception',
+            'error_code': 'PARALLEL_ANALYSIS_FAILED',
+            'message': f'并行分析因子失败: {str(e)}',
+            'context': {'factor_name': factor_name}
+        }
+        return (factor_name, None, error_dict)
 
 
 @dataclass
@@ -327,8 +361,11 @@ class FactorAnalyzer:
                     error_msg = ic_response.error if hasattr(ic_response, 'error') else str(ic_response)
                     logger.warning(f"IC分析失败: {error_msg}")
                     warnings.append(f"IC分析失败: {error_msg}")
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                logger.warning(f"IC分析失败(已知异常): {e}")
+                warnings.append(f"IC分析失败: {str(e)}")
             except Exception as e:
-                logger.warning(f"IC分析失败: {e}")
+                logger.warning(f"IC分析失败(未预期异常): {e}", exc_info=True)
                 warnings.append(f"IC分析失败: {str(e)}")
 
             # 2. 分层测试（可选）
@@ -344,8 +381,11 @@ class FactorAnalyzer:
                     report.layering_summary = monotonicity
 
                     logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
+                except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                    logger.warning(f"分层测试失败(已知异常): {e}")
+                    warnings.append(f"分层测试失败: {str(e)}")
                 except Exception as e:
-                    logger.warning(f"分层测试失败: {e}")
+                    logger.warning(f"分层测试失败(未预期异常): {e}", exc_info=True)
                     warnings.append(f"分层测试失败: {str(e)}")
 
             # 3. 综合评分
@@ -456,8 +496,11 @@ class FactorAnalyzer:
                         error_msg = ic_response.error if hasattr(ic_response, 'error') else str(ic_response)
                         logger.warning(f"IC分析失败: {error_msg}")
                         warnings_list.append(f"IC分析失败: {error_msg}")
+                except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                    logger.warning(f"IC分析失败(已知异常): {e}")
+                    warnings_list.append(f"IC分析失败: {str(e)}")
                 except Exception as e:
-                    logger.warning(f"IC分析失败: {e}")
+                    logger.warning(f"IC分析失败(未预期异常): {e}", exc_info=True)
                     warnings_list.append(f"IC分析失败: {str(e)}")
 
             # 2. 分层测试
@@ -473,8 +516,11 @@ class FactorAnalyzer:
                     report.layering_summary = monotonicity
 
                     logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
+                except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                    logger.warning(f"分层测试失败(已知异常): {e}")
+                    warnings_list.append(f"分层测试失败: {str(e)}")
                 except Exception as e:
-                    logger.warning(f"分层测试失败: {e}")
+                    logger.warning(f"分层测试失败(未预期异常): {e}", exc_info=True)
                     warnings_list.append(f"分层测试失败: {str(e)}")
 
             # 3. IC衰减分析（可选）
@@ -594,8 +640,10 @@ class FactorAnalyzer:
 
                 results.append(row)
 
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                logger.warning(f"分析因子{factor_name}失败(已知异常): {e}")
             except Exception as e:
-                logger.warning(f"分析因子{factor_name}失败: {e}")
+                logger.warning(f"分析因子{factor_name}失败(未预期异常): {e}", exc_info=True)
 
         comparison_df = pd.DataFrame(results)
 
@@ -615,8 +663,10 @@ class FactorAnalyzer:
                     aggregate_method='concat'
                 )
                 logger.info(f"相关性分析完成: {corr_matrix.shape}")
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                logger.warning(f"相关性分析失败(已知异常): {e}")
             except Exception as e:
-                logger.warning(f"相关性分析失败: {e}")
+                logger.warning(f"相关性分析失败(未预期异常): {e}", exc_info=True)
 
         logger.info(f"因子对比完成，共{len(comparison_df)}个因子")
 
@@ -668,8 +718,10 @@ class FactorAnalyzer:
                 else:
                     error_msg = ic_response.error if hasattr(ic_response, 'error') else str(ic_response)
                     logger.warning(f"计算{factor_name}的IC失败: {error_msg}")
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                logger.warning(f"计算{factor_name}的IC失败(已知异常): {e}")
             except Exception as e:
-                logger.warning(f"计算{factor_name}的IC失败: {e}")
+                logger.warning(f"计算{factor_name}的IC失败(未预期异常): {e}", exc_info=True)
 
         ic_stats_df = pd.DataFrame(ic_stats_list).set_index('因子名')
 
@@ -782,8 +834,10 @@ class FactorAnalyzer:
                         report['individual_analysis'][factor_name] = factor_report.to_dict()
                     else:
                         logger.warning(f"分析因子{factor_name}失败: {response.error}")
+                except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                    logger.warning(f"分析因子{factor_name}失败(已知异常): {e}")
                 except Exception as e:
-                    logger.warning(f"分析因子{factor_name}失败: {e}")
+                    logger.warning(f"分析因子{factor_name}失败(未预期异常): {e}", exc_info=True)
 
         # 2. 因子对比
         try:
@@ -793,8 +847,10 @@ class FactorAnalyzer:
                 rank_by='ic_ir'
             )
             report['comparison'] = comparison_df.to_dict('records')
+        except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+            logger.warning(f"因子对比失败(已知异常): {e}")
         except Exception as e:
-            logger.warning(f"因子对比失败: {e}")
+            logger.warning(f"因子对比失败(未预期异常): {e}", exc_info=True)
 
         # 3. 相关性分析
         if include_correlation and len(factor_dict) > 1:
@@ -816,8 +872,10 @@ class FactorAnalyzer:
                         for f1, f2, corr in high_corr_pairs
                     ]
                 }
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                logger.warning(f"相关性分析失败(已知异常): {e}")
             except Exception as e:
-                logger.warning(f"相关性分析失败: {e}")
+                logger.warning(f"相关性分析失败(未预期异常): {e}", exc_info=True)
 
         # 4. 组合优化
         if include_optimization and len(factor_dict) > 1:
@@ -828,8 +886,10 @@ class FactorAnalyzer:
                 )
 
                 report['optimization'] = opt_result.to_dict()
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                logger.warning(f"组合优化失败(已知异常): {e}")
             except Exception as e:
-                logger.warning(f"组合优化失败: {e}")
+                logger.warning(f"组合优化失败(未预期异常): {e}", exc_info=True)
 
         # 5. 保存报告（如果指定路径）
         if output_path:
@@ -977,8 +1037,10 @@ class FactorAnalyzer:
                     reports[factor_name] = response.data
                 else:
                     logger.warning(f"分析因子{factor_name}失败: {response.error}")
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+                logger.warning(f"分析因子{factor_name}失败(已知异常): {e}")
             except Exception as e:
-                logger.warning(f"分析因子{factor_name}失败: {e}")
+                logger.warning(f"分析因子{factor_name}失败(未预期异常): {e}", exc_info=True)
 
         return reports
 

@@ -18,6 +18,22 @@ import time
 
 from utils.response import Response, ResponseStatus
 
+# 导入异常类
+try:
+    from ..exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+except ImportError:
+    from src.exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+
 warnings.filterwarnings('ignore')
 
 # 导入并行计算工具
@@ -106,8 +122,12 @@ def _compute_ic_chunk_worker(args):
                 if not np.isnan(ic):
                     ic_results.append((date, ic))
 
+        except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+            logger.debug(f"计算日期{date}的IC失败(已知异常): {e}")
+            continue
+
         except Exception as e:
-            logger.debug(f"计算日期{date}的IC失败: {e}")
+            logger.debug(f"计算日期{date}的IC失败(未预期异常): {e}")
             continue
 
     return ic_results
@@ -139,8 +159,12 @@ def _analyze_single_factor_worker(args):
             logger.error(f"分析因子{factor_name}失败: {ic_response.error}")
             return (factor_name, None)
 
+    except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+        logger.warning(f"分析因子{factor_name}失败(已知异常): {e}")
+        return (factor_name, None)
+
     except Exception as e:
-        logger.error(f"分析因子{factor_name}失败: {e}")
+        logger.warning(f"分析因子{factor_name}失败(未预期异常): {e}", exc_info=True)
         return (factor_name, None)
 
 
@@ -221,8 +245,12 @@ class ICCalculator:
 
             return ic
 
+        except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
+            logger.debug(f"计算IC失败(已知异常): {e}")
+            return np.nan
+
         except Exception as e:
-            logger.debug(f"计算IC失败: {e}")
+            logger.debug(f"计算IC失败(未预期异常): {e}")
             return np.nan
 
     def _calculate_ic_series_vectorized(
@@ -554,8 +582,12 @@ class ICCalculator:
                     logger.error(f"计算因子{factor_name}的IC失败: {ic_response.error}")
                     continue
 
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+                logger.warning(f"计算因子{factor_name}的IC失败(已知异常): {e}")
+                continue
+
             except Exception as e:
-                logger.error(f"计算因子{factor_name}的IC失败: {e}")
+                logger.warning(f"计算因子{factor_name}的IC失败(未预期异常): {e}", exc_info=True)
                 continue
 
         if not results:
@@ -649,8 +681,11 @@ class ICCalculator:
                 else:
                     logger.warning(f"持有期{period}天的IC计算失败: {ic_response.error}")
 
+            except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+                logger.warning(f"持有期{period}天的IC计算失败(已知异常): {e}")
+
             except Exception as e:
-                logger.warning(f"持有期{period}天的IC计算失败: {e}")
+                logger.warning(f"持有期{period}天的IC计算失败(未预期异常): {e}", exc_info=True)
 
             # 恢复原始前瞻期
             self.forward_periods = original_period

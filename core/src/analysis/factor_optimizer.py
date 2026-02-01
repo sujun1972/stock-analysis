@@ -16,6 +16,22 @@ from loguru import logger
 from dataclasses import dataclass
 import warnings
 
+# 导入异常类
+try:
+    from ..exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+except ImportError:
+    from src.exceptions import (
+        AnalysisError,
+        DataValidationError,
+        InsufficientDataError,
+        FeatureCalculationError
+    )
+
 warnings.filterwarnings('ignore')
 
 
@@ -247,8 +263,11 @@ class FactorOptimizer:
         except ImportError:
             logger.error("scipy未安装，无法执行优化")
             raise
+        except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+            logger.warning(f"优化失败(已知异常): {e}")
+            raise
         except Exception as e:
-            logger.error(f"优化失败: {e}")
+            logger.warning(f"优化失败(未预期异常): {e}", exc_info=True)
             raise
 
     def optimize_min_correlation(
@@ -333,8 +352,12 @@ class FactorOptimizer:
 
             return opt_result
 
+        except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
+            logger.warning(f"优化失败(已知异常): {e}")
+            raise
+
         except Exception as e:
-            logger.error(f"优化失败: {e}")
+            logger.warning(f"优化失败(未预期异常): {e}", exc_info=True)
             raise
 
     def _calculate_icir(self, ic_df: pd.DataFrame, weights: np.ndarray) -> float:

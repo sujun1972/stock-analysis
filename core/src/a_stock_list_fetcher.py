@@ -13,6 +13,14 @@ try:
 except ImportError:
     from src.config.settings import get_settings
 
+# 导入Response和异常类
+try:
+    from .utils.response import Response
+    from .exceptions import DataProviderError, DatabaseError, NetworkError
+except ImportError:
+    from src.utils.response import Response
+    from src.exceptions import DataProviderError, DatabaseError, NetworkError
+
 # 获取配置实例
 settings = get_settings()
 TUSHARE_TOKEN = settings.TUSHARE_TOKEN or ""
@@ -25,7 +33,7 @@ DATABASE_CONFIG = {
 }
 
 def fetch_akshare_stock_list(save_path: str = "./a_stock_list.csv",
-                             save_to_db: bool = False) -> bool:
+                             save_to_db: bool = False) -> Response:
     """
     使用AkShare获取全部A股股票列表并保存到本地CSV文件和/或数据库（推荐，免费无限制）
 
@@ -34,24 +42,13 @@ def fetch_akshare_stock_list(save_path: str = "./a_stock_list.csv",
         save_to_db: 是否保存到数据库，默认为False
 
     返回:
-        bool: 操作是否成功
+        Response: 成功返回股票列表，失败返回错误信息
     """
     try:
         logger.info("正在使用AkShare获取A股列表数据...")
 
         # 使用AkShare获取A股实时行情数据（包含所有上市股票）
         stock_zh_a_spot_em_df = ak.stock_zh_a_spot_em()
-
-        # 选择需要的列并重命名以匹配原有格式
-        # AkShare返回的列名：代码, 名称, 最新价, 涨跌幅, 涨跌额, 成交量, 成交额, 振幅, 最高, 最低, 今开, 昨收, 量比, 换手率, 市盈率-动态, 市净率
-        column_mapping = {
-            '代码': 'symbol',
-            '名称': 'name',
-            '市盈率-动态': 'pe',
-            '市净率': 'pb',
-            '总市值': 'total_mv',
-            '流通市值': 'circ_mv'
-        }
 
         # 创建标准化的DataFrame
         a_stocks = pd.DataFrame()
@@ -101,10 +98,11 @@ def fetch_akshare_stock_list(save_path: str = "./a_stock_list.csv",
         logger.info(f"💾 CSV数据已保存至: {save_path}")
 
         # 如果选择保存到数据库
+        db_result = None
         if save_to_db:
-            db_success = save_stock_list_to_database(a_stocks)
-            if not db_success:
-                logger.error("⚠️ CSV文件保存成功，但数据库保存失败")
+            db_result = save_stock_list_to_database(a_stocks)
+            if db_result.is_error():
+                logger.error(f"⚠️ CSV文件保存成功，但数据库保存失败: {db_result.error}")
 
         # 显示前几行数据预览
         logger.info("\n📊 数据预览:")
@@ -115,15 +113,55 @@ def fetch_akshare_stock_list(save_path: str = "./a_stock_list.csv",
         market_distribution = a_stocks['market'].value_counts()
         logger.info(f"{market_distribution}")
 
-        return True
+        return Response.success(
+            data=a_stocks,
+            message=f"成功获取并保存{len(a_stocks)}只股票",
+            n_stocks=len(a_stocks),
+            save_path=save_path,
+            db_saved=db_result.is_success() if db_result else False
+        )
+
+    except KeyError as e:
+        # 数据格式错误（AkShare返回的数据列名不匹配）
+        logger.error(f"数据格式错误: {e}")
+        return Response.error(
+            error=f"AkShare数据格式错误: {str(e)}",
+            error_code="AKSHARE_DATA_FORMAT_ERROR",
+            error_detail=str(e)
+        )
+
+    except (IOError, OSError) as e:
+        # 文件保存错误
+        logger.error(f"文件保存失败: {e}")
+        return Response.error(
+            error=f"CSV文件保存失败: {str(e)}",
+            error_code="FILE_SAVE_ERROR",
+            save_path=save_path,
+            error_detail=str(e)
+        )
+
+    except DataProviderError as e:
+        # 已知的数据源异常
+        logger.error(f"数据源异常: {e.message}")
+        return Response.error(
+            error=e.message,
+            error_code=e.error_code,
+            **e.context
+        )
 
     except Exception as e:
-        logger.error(f"❌ 使用AkShare获取或保存数据时出错: {e}")
-        return False
+        # 未预期的异常
+        logger.error(f"使用AkShare获取股票列表失败(未预期异常): {e}")
+        return Response.error(
+            error=f"获取股票列表失败: {str(e)}",
+            error_code="FETCH_STOCK_LIST_FAILED",
+            data_source="akshare",
+            error_detail=str(e)
+        )
 
 def fetch_and_save_a_stock_list(save_path: str = "./a_stock_list.csv",
                                save_to_db: bool = False,
-                               data_source: str = 'akshare') -> bool:
+                               data_source: str = 'akshare') -> Response:
     """
     获取全部A股股票列表并保存到本地CSV文件和/或数据库（智能选择数据源）
 
@@ -133,18 +171,18 @@ def fetch_and_save_a_stock_list(save_path: str = "./a_stock_list.csv",
         data_source: 数据源选择，'akshare'(推荐) 或 'tushare'
 
     返回:
-        bool: 操作是否成功
+        Response: 成功返回股票列表，失败返回错误信息
     """
     if data_source == 'akshare':
         return fetch_akshare_stock_list(save_path, save_to_db)
     elif data_source == 'tushare':
         return fetch_tushare_stock_list(save_path, save_to_db)
     else:
-        logger.info(f"未知的数据源: {data_source}，默认使用AkShare")
+        logger.warning(f"未知的数据源: {data_source}，默认使用AkShare")
         return fetch_akshare_stock_list(save_path, save_to_db)
 
 def fetch_tushare_stock_list(save_path: str = "./a_stock_list.csv",
-                             save_to_db: bool = False) -> bool:
+                             save_to_db: bool = False) -> Response:
     """
     使用Tushare获取全部A股股票列表并保存到本地CSV文件和/或数据库（备用方法）
 
@@ -153,18 +191,22 @@ def fetch_tushare_stock_list(save_path: str = "./a_stock_list.csv",
         save_to_db: 是否保存到数据库，默认为False
 
     返回:
-        bool: 操作是否成功
+        Response: 成功返回股票列表，失败返回错误信息
     """
     try:
         # 检查TUSHARE_TOKEN是否已配置
         if not TUSHARE_TOKEN:
             logger.error("❌ 错误: 请在 config/config.py 中配置 TUSHARE_TOKEN")
-            return False
-            
+            return Response.error(
+                error="Tushare Token未配置",
+                error_code="TUSHARE_TOKEN_NOT_CONFIGURED",
+                message="请在 config/config.py 中配置 TUSHARE_TOKEN"
+            )
+
         # 1. 设置Token并初始化Pro接口
         ts.set_token(TUSHARE_TOKEN)
         pro = ts.pro_api()
-        
+
         # 2. 获取股票列表基本信息
         logger.info("正在从Tushare获取A股列表数据...")
         stock_basic = pro.stock_basic(
@@ -172,74 +214,119 @@ def fetch_tushare_stock_list(save_path: str = "./a_stock_list.csv",
             list_status='L',  # L-上市，D-退市，P-暂停上市
             fields='ts_code,symbol,name,area,industry,market,list_date,is_hs'
         )
-        
+
         # 3. 筛选A股（剔除科创板、北交所等，根据需求调整）
         # 主要A股市场：主板、中小板、创业板
         a_share_markets = ['主板', '中小板', '创业板']
         a_stocks = stock_basic[stock_basic['market'].isin(a_share_markets)]
-        
+
         # 4. 按股票代码排序
         a_stocks = a_stocks.sort_values('ts_code').reset_index(drop=True)
-        
+
         # 5. 保存到CSV文件（原有功能保持不变）
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         a_stocks.to_csv(save_path, index=False, encoding='utf-8-sig')
         logger.success(f"✅ 成功获取 {len(a_stocks)} 只A股股票列表")
         logger.info(f"💾 CSV数据已保存至: {save_path}")
-        
+
         # 6. 如果选择保存到数据库
+        db_result = None
         if save_to_db:
-            db_success = save_stock_list_to_database(a_stocks)
-            if not db_success:
-                logger.error("⚠️ CSV文件保存成功，但数据库保存失败")
-        
+            db_result = save_stock_list_to_database(a_stocks)
+            if db_result.is_error():
+                logger.error(f"⚠️ CSV文件保存成功，但数据库保存失败: {db_result.error}")
+
         # 显示前几行数据预览
         logger.info("\n📊 数据预览:")
         logger.info(a_stocks.head(10))
-        
+
         # 显示各市场分布
         logger.info("\n📈 各市场股票数量分布:")
         market_distribution = a_stocks['market'].value_counts()
         logger.info(f"{market_distribution}")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ 获取或保存数据时出错: {e}")
-        return False
 
-def save_stock_list_to_database(stock_df: pd.DataFrame) -> bool:
+        return Response.success(
+            data=a_stocks,
+            message=f"成功获取并保存{len(a_stocks)}只股票",
+            n_stocks=len(a_stocks),
+            save_path=save_path,
+            db_saved=db_result.is_success() if db_result else False
+        )
+
+    except KeyError as e:
+        # 数据格式错误（Tushare返回的数据列名不匹配）
+        logger.error(f"数据格式错误: {e}")
+        return Response.error(
+            error=f"Tushare数据格式错误: {str(e)}",
+            error_code="TUSHARE_DATA_FORMAT_ERROR",
+            error_detail=str(e)
+        )
+
+    except (IOError, OSError) as e:
+        # 文件保存错误
+        logger.error(f"文件保存失败: {e}")
+        return Response.error(
+            error=f"CSV文件保存失败: {str(e)}",
+            error_code="FILE_SAVE_ERROR",
+            save_path=save_path,
+            error_detail=str(e)
+        )
+
+    except DataProviderError as e:
+        # 已知的数据源异常
+        logger.error(f"数据源异常: {e.message}")
+        return Response.error(
+            error=e.message,
+            error_code=e.error_code,
+            **e.context
+        )
+
+    except Exception as e:
+        # 未预期的异常
+        logger.error(f"使用Tushare获取股票列表失败(未预期异常): {e}")
+        return Response.error(
+            error=f"获取股票列表失败: {str(e)}",
+            error_code="FETCH_STOCK_LIST_FAILED",
+            data_source="tushare",
+            error_detail=str(e)
+        )
+
+def save_stock_list_to_database(stock_df: pd.DataFrame) -> Response:
     """
     将股票列表数据保存到数据库
-    
+
     参数:
         stock_df: 包含股票数据的DataFrame
-        
+
     返回:
-        bool: 操作是否成功
+        Response: 成功返回保存结果，失败返回错误信息
     """
     try:
         # 检查数据库配置是否存在
         if not DATABASE_CONFIG:
             logger.error("❌ 错误: 请在 config/config.py 中配置 DATABASE_CONFIG")
-            return False
-            
+            return Response.error(
+                error="数据库配置未设置",
+                error_code="DATABASE_CONFIG_NOT_SET",
+                message="请在 config/config.py 中配置 DATABASE_CONFIG"
+            )
+
         # 创建数据库连接
         db_url = f"postgresql://{DATABASE_CONFIG['user']}:{DATABASE_CONFIG['password']}@{DATABASE_CONFIG['host']}:{DATABASE_CONFIG['port']}/{DATABASE_CONFIG['database']}"
         engine = create_engine(db_url)
-        
+
         # 测试数据库连接
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        
+
         logger.info("🔄 正在保存股票列表到数据库...")
-        
+
         # 准备数据 - 确保列名和数据类型匹配数据库表结构
         # 添加创建时间和更新时间
         stock_df = stock_df.copy()
         stock_df['created_at'] = pd.Timestamp.now()
         stock_df['updated_at'] = pd.Timestamp.now()
-        
+
         # 保存到数据库
         # 使用 if_exists='replace' 会先清空表再插入，适合全量更新
         # 使用 if_exists='append' 会追加数据，但可能导致重复
@@ -254,41 +341,68 @@ def save_stock_list_to_database(stock_df: pd.DataFrame) -> bool:
                 index=False,
                 method='multi'  # 批量插入
             )
-        
-        logger.success(f"✅ 成功保存 {len(stock_df)} 只股票到数据库")
-        return True
-        
-    except SQLAlchemyError as e:
-        logger.error(f"❌ 数据库操作失败: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"❌ 保存到数据库时出错: {e}")
-        return False
 
-def get_a_stock_list_detailed(save_dir: str = "./stock_data", 
-                             save_to_db: bool = False) -> Optional[pd.DataFrame]:
+        logger.success(f"✅ 成功保存 {len(stock_df)} 只股票到数据库")
+        return Response.success(
+            message=f"成功保存{len(stock_df)}只股票到数据库",
+            n_saved=len(stock_df)
+        )
+
+    except SQLAlchemyError as e:
+        # 数据库操作异常
+        logger.error(f"❌ 数据库操作失败: {e}")
+        return Response.error(
+            error=f"数据库操作失败: {str(e)}",
+            error_code="DATABASE_OPERATION_ERROR",
+            error_detail=str(e)
+        )
+
+    except DatabaseError as e:
+        # 已知的数据库异常
+        logger.error(f"数据库异常: {e.message}")
+        return Response.error(
+            error=e.message,
+            error_code=e.error_code,
+            **e.context
+        )
+
+    except Exception as e:
+        # 未预期的异常
+        logger.error(f"❌ 保存到数据库时出错(未预期异常): {e}")
+        return Response.error(
+            error=f"保存到数据库失败: {str(e)}",
+            error_code="DATABASE_SAVE_FAILED",
+            error_detail=str(e)
+        )
+
+def get_a_stock_list_detailed(save_dir: str = "./stock_data",
+                             save_to_db: bool = False) -> Response:
     """
     获取更详细的A股列表信息，包含更多字段
-    
+
     参数:
         save_dir: 数据保存目录
         save_to_db: 是否保存到数据库，默认为False
-        
+
     返回:
-        pd.DataFrame: 包含详细信息的DataFrame，失败时返回None
+        Response: 成功返回详细股票列表，失败返回错误信息
     """
     try:
         # 检查TUSHARE_TOKEN是否已配置
         if not TUSHARE_TOKEN:
             logger.error("❌ 错误: 请在 config/config.py 中配置 TUSHARE_TOKEN")
-            return None
-            
+            return Response.error(
+                error="Tushare Token未配置",
+                error_code="TUSHARE_TOKEN_NOT_CONFIGURED",
+                message="请在 config/config.py 中配置 TUSHARE_TOKEN"
+            )
+
         ts.set_token(TUSHARE_TOKEN)
         pro = ts.pro_api()
-        
+
         # 创建保存目录
         os.makedirs(save_dir, exist_ok=True)
-        
+
         # 获取更详细的字段
         logger.info("正在获取详细的A股列表数据...")
         stock_detailed = pro.stock_basic(
@@ -299,63 +413,135 @@ def get_a_stock_list_detailed(save_dir: str = "./stock_data",
                 exchange,curr_type,list_status,list_date,delist_date,is_hs
             '''
         )
-        
+
         # 筛选主要A股
         a_share_markets = ['主板', '中小板', '创业板']
         a_stocks_detailed = stock_detailed[stock_detailed['market'].isin(a_share_markets)]
-        
+
         # 保存详细数据到CSV
         detailed_path = os.path.join(save_dir, "a_stock_list_detailed.csv")
         a_stocks_detailed.to_csv(detailed_path, index=False, encoding='utf-8-sig')
-        
+
         # 保存基础数据到CSV（简化版）
         basic_path = os.path.join(save_dir, "a_stock_list_basic.csv")
         basic_fields = ['ts_code', 'symbol', 'name', 'industry', 'market', 'list_date']
         a_stocks_detailed[basic_fields].to_csv(basic_path, index=False, encoding='utf-8-sig')
-        
+
         logger.success(f"✅ 详细数据已保存至: {detailed_path}")
         logger.success(f"✅ 基础数据已保存至: {basic_path}")
         logger.info(f"📊 总共获取 {len(a_stocks_detailed)} 只A股")
-        
-        # 如果选择保存到数据库
-        if save_to_db:
-            db_success = save_stock_list_to_database(a_stocks_detailed[basic_fields])
-            if not db_success:
-                logger.error("⚠️ CSV文件保存成功，但数据库保存失败")
-        
-        return a_stocks_detailed
-        
-    except Exception as e:
-        logger.error(f"❌ 获取详细数据时出错: {e}")
-        return None
 
-def update_stock_list_from_database() -> Optional[pd.DataFrame]:
+        # 如果选择保存到数据库
+        db_result = None
+        if save_to_db:
+            db_result = save_stock_list_to_database(a_stocks_detailed[basic_fields])
+            if db_result.is_error():
+                logger.error(f"⚠️ CSV文件保存成功，但数据库保存失败: {db_result.error}")
+
+        return Response.success(
+            data=a_stocks_detailed,
+            message=f"成功获取{len(a_stocks_detailed)}只股票的详细信息",
+            n_stocks=len(a_stocks_detailed),
+            detailed_path=detailed_path,
+            basic_path=basic_path,
+            db_saved=db_result.is_success() if db_result else False
+        )
+
+    except KeyError as e:
+        # 数据格式错误
+        logger.error(f"数据格式错误: {e}")
+        return Response.error(
+            error=f"Tushare数据格式错误: {str(e)}",
+            error_code="TUSHARE_DATA_FORMAT_ERROR",
+            error_detail=str(e)
+        )
+
+    except (IOError, OSError) as e:
+        # 文件保存错误
+        logger.error(f"文件保存失败: {e}")
+        return Response.error(
+            error=f"CSV文件保存失败: {str(e)}",
+            error_code="FILE_SAVE_ERROR",
+            save_dir=save_dir,
+            error_detail=str(e)
+        )
+
+    except DataProviderError as e:
+        # 已知的数据源异常
+        logger.error(f"数据源异常: {e.message}")
+        return Response.error(
+            error=e.message,
+            error_code=e.error_code,
+            **e.context
+        )
+
+    except Exception as e:
+        # 未预期的异常
+        logger.error(f"获取详细股票列表失败(未预期异常): {e}")
+        return Response.error(
+            error=f"获取详细数据失败: {str(e)}",
+            error_code="FETCH_DETAILED_LIST_FAILED",
+            error_detail=str(e)
+        )
+
+def update_stock_list_from_database() -> Response:
     """
     从数据库获取股票列表
-    
+
     返回:
-        pd.DataFrame: 包含股票数据的DataFrame，失败时返回None
+        Response: 成功返回股票列表，失败返回错误信息
     """
     try:
         if not DATABASE_CONFIG:
             logger.error("❌ 错误: 请在 config/config.py 中配置 DATABASE_CONFIG")
-            return None
-            
+            return Response.error(
+                error="数据库配置未设置",
+                error_code="DATABASE_CONFIG_NOT_SET",
+                message="请在 config/config.py 中配置 DATABASE_CONFIG"
+            )
+
         # 创建数据库连接
         db_url = f"postgresql://{DATABASE_CONFIG['user']}:{DATABASE_CONFIG['password']}@{DATABASE_CONFIG['host']}:{DATABASE_CONFIG['port']}/{DATABASE_CONFIG['database']}"
         engine = create_engine(db_url)
-        
+
         logger.info("🔄 正在从数据库读取股票列表...")
-        
+
         # 从数据库读取数据
         stock_df = pd.read_sql('stocks', engine)
-        
+
         logger.success(f"✅ 从数据库成功读取 {len(stock_df)} 只股票")
-        return stock_df
-        
+        return Response.success(
+            data=stock_df,
+            message=f"成功从数据库读取{len(stock_df)}只股票",
+            n_stocks=len(stock_df)
+        )
+
+    except SQLAlchemyError as e:
+        # 数据库操作异常
+        logger.error(f"❌ 数据库操作失败: {e}")
+        return Response.error(
+            error=f"数据库操作失败: {str(e)}",
+            error_code="DATABASE_OPERATION_ERROR",
+            error_detail=str(e)
+        )
+
+    except DatabaseError as e:
+        # 已知的数据库异常
+        logger.error(f"数据库异常: {e.message}")
+        return Response.error(
+            error=e.message,
+            error_code=e.error_code,
+            **e.context
+        )
+
     except Exception as e:
-        logger.error(f"❌ 从数据库读取数据时出错: {e}")
-        return None
+        # 未预期的异常
+        logger.error(f"❌ 从数据库读取数据时出错(未预期异常): {e}")
+        return Response.error(
+            error=f"从数据库读取失败: {str(e)}",
+            error_code="DATABASE_READ_FAILED",
+            error_detail=str(e)
+        )
 
 # 使用示例
 if __name__ == "__main__":
@@ -364,28 +550,29 @@ if __name__ == "__main__":
     # 检查命令行参数
     if len(sys.argv) > 1 and sys.argv[1] == "--db-only":
         logger.info("🚀 模式: 只保存到数据库")
-        
+
         # 使用临时文件路径，保存后立即删除
         temp_csv_path = "./data/temp_stock_list.csv"
-        success = fetch_and_save_a_stock_list(
+        result = fetch_and_save_a_stock_list(
             save_path=temp_csv_path,
             save_to_db=True
         )
-        
+
         # 删除临时CSV文件
         if os.path.exists(temp_csv_path):
             os.remove(temp_csv_path)
             logger.info(f"🗑️  已删除临时CSV文件")
-            
+
     else:
         # 默认：两者都保存
         logger.info("📊 模式: 同时保存到CSV和数据库")
-        success = fetch_and_save_a_stock_list(
+        result = fetch_and_save_a_stock_list(
             save_path="./data/a_stock_list.csv",
             save_to_db=True
         )
-    
-    if success:
+
+    if result.is_success():
         logger.info("\n🎉 A股列表获取完成！")
     else:
-        logger.error("\n💥 A股列表获取失败，请检查配置和网络连接")
+        logger.error(f"\n💥 A股列表获取失败: {result.error}")
+        logger.error(f"错误码: {result.error_code}")

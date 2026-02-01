@@ -595,6 +595,7 @@ class TestDatabaseManagerComprehensive(unittest.TestCase):
         print("\n[测试26] 查询错误处理")
 
         from database.db_manager import DatabaseManager
+        from src.exceptions import DatabaseError
 
         mock_conn = Mock()
         mock_cursor = Mock()
@@ -607,8 +608,13 @@ class TestDatabaseManagerComprehensive(unittest.TestCase):
 
         db = DatabaseManager()
 
-        with self.assertRaises(psycopg2.DatabaseError):
+        # 现在应该抛出我们的业务异常DatabaseError
+        with self.assertRaises(DatabaseError) as context:
             db._execute_query("INVALID SQL")
+
+        # 验证错误码
+        self.assertEqual(context.exception.error_code, "DB_QUERY_FAILED")
+        self.assertIn("数据库查询失败", context.exception.message)
 
         mock_pool_instance.putconn.assert_called_once()
         print("  ✓ 查询错误处理测试通过")
@@ -645,6 +651,7 @@ class TestDatabaseManagerComprehensive(unittest.TestCase):
         print("\n[测试28] 更新错误处理")
 
         from database.db_manager import DatabaseManager
+        from src.exceptions import DatabaseError
 
         mock_conn = Mock()
         mock_cursor = Mock()
@@ -657,8 +664,13 @@ class TestDatabaseManagerComprehensive(unittest.TestCase):
 
         db = DatabaseManager()
 
-        with self.assertRaises(psycopg2.DatabaseError):
+        # 现在应该抛出我们的业务异常DatabaseError
+        with self.assertRaises(DatabaseError) as context:
             db._execute_update("INVALID UPDATE")
+
+        # 验证错误码
+        self.assertEqual(context.exception.error_code, "DB_UPDATE_FAILED")
+        self.assertIn("数据库更新失败", context.exception.message)
 
         mock_conn.rollback.assert_called_once()
         print("  ✓ 更新错误处理测试通过")

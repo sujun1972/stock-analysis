@@ -12,6 +12,7 @@ import threading
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 import pandas as pd
 from loguru import logger
+import psycopg2
 
 # 导入专门的管理器
 from .connection_pool_manager import ConnectionPoolManager
@@ -21,6 +22,12 @@ if TYPE_CHECKING:
 from .table_manager import TableManager
 from .data_insert_manager import DataInsertManager
 from .data_query_manager import DataQueryManager
+
+# 导入异常类
+try:
+    from ..exceptions import DatabaseError
+except ImportError:
+    from src.exceptions import DatabaseError
 
 # 尝试加载配置
 try:
@@ -131,6 +138,9 @@ class DatabaseManager:
 
         Returns:
             查询结果列表（tuple列表）
+
+        Raises:
+            DatabaseError: 数据库操作失败
         """
         conn = None
         try:
@@ -138,9 +148,51 @@ class DatabaseManager:
             with conn.cursor() as cursor:
                 cursor.execute(query, params)
                 return cursor.fetchall()
-        except Exception as e:
-            logger.error(f"查询执行失败: {query[:100]}... - {e}")
+
+        except psycopg2.OperationalError as e:
+            # 连接错误(网络中断、数据库宕机等)
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                query=query[:100],
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误
+            logger.error(f"SQL语法错误: {e}")
+            raise DatabaseError(
+                "SQL语句错误",
+                error_code="DB_SYNTAX_ERROR",
+                query=query[:100],
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.DataError as e:
+            # 数据类型错误
+            logger.error(f"数据类型错误: {e}")
+            raise DatabaseError(
+                "数据类型不匹配",
+                error_code="DB_DATA_TYPE_ERROR",
+                query=query[:100],
+                params=str(params),
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常,直接向上传播
             raise
+
+        except Exception as e:
+            # 未预期的异常,转换为DatabaseError
+            logger.error(f"查询执行失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"数据库查询失败: {str(e)}",
+                error_code="DB_QUERY_FAILED",
+                query=query[:100]
+            ) from e
+
         finally:
             if conn:
                 self.release_connection(conn)
@@ -155,6 +207,9 @@ class DatabaseManager:
 
         Returns:
             受影响的行数
+
+        Raises:
+            DatabaseError: 数据库操作失败
         """
         conn = None
         try:
@@ -163,11 +218,73 @@ class DatabaseManager:
                 cursor.execute(query, params)
                 conn.commit()
                 return cursor.rowcount
-        except Exception as e:
+
+        except psycopg2.OperationalError as e:
+            # 连接错误
             if conn:
                 conn.rollback()
-            logger.error(f"更新执行失败: {query[:100]}... - {e}")
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                query=query[:100],
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误
+            if conn:
+                conn.rollback()
+            logger.error(f"SQL语法错误: {e}")
+            raise DatabaseError(
+                "SQL语句错误",
+                error_code="DB_SYNTAX_ERROR",
+                query=query[:100],
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.IntegrityError as e:
+            # 完整性约束错误（违反唯一性、外键等）
+            if conn:
+                conn.rollback()
+            logger.error(f"数据完整性错误: {e}")
+            raise DatabaseError(
+                "数据完整性约束违反",
+                error_code="DB_INTEGRITY_ERROR",
+                query=query[:100],
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.DataError as e:
+            # 数据类型错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据类型错误: {e}")
+            raise DatabaseError(
+                "数据类型不匹配",
+                error_code="DB_DATA_TYPE_ERROR",
+                query=query[:100],
+                params=str(params),
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常,先回滚再向上传播
+            if conn:
+                conn.rollback()
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            if conn:
+                conn.rollback()
+            logger.error(f"更新执行失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"数据库更新失败: {str(e)}",
+                error_code="DB_UPDATE_FAILED",
+                query=query[:100]
+            ) from e
+
         finally:
             if conn:
                 self.release_connection(conn)
