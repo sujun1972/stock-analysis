@@ -42,6 +42,14 @@
 
 - [Docker 部署](deployment/docker.md) - Docker Compose、Dockerfile、监控
 
+### 📊 优化规划 (Planning) 🆕
+
+项目优化与改进计划文档。
+
+- 🔴 [**项目深度分析报告**](planning/optimization_analysis.md) - **包含架构设计缺陷分析**（第八章第三节）
+- [**优化实施路线图 v2.0**](planning/optimization_roadmap.md) - **已更新**：10 周优化计划（包含架构修正）
+- [**测试框架实施指南**](planning/testing_guide.md) - 从 0% 到 60% 测试覆盖率的完整指南
+
 ---
 
 ## 目录结构
@@ -62,7 +70,11 @@ backend/docs/
 │   └── contributing.md                # 贡献指南
 ├── deployment/                        # 部署文档
 │   └── docker.md                      # Docker 部署
-└── planning/                          # 规划文档（预留）
+└── planning/                          # 📊 优化规划 🆕
+    ├── README.md                      # 规划文档导航
+    ├── optimization_analysis.md       # 项目深度分析报告 (含架构缺陷)
+    ├── optimization_roadmap.md        # 优化实施路线图 v2.0 (10 周)
+    └── testing_guide.md               # 测试框架实施指南
 
 backend/.claude/skills/                # Claude Code Skills
 ├── README.md                          # Skills 使用指南
@@ -83,9 +95,11 @@ backend/.claude/skills/                # Claude Code Skills
 
 ### 开发者
 
-1. 阅读 [架构总览](architecture/overview.md) 了解系统架构
-2. 查看 [技术栈](architecture/tech_stack.md) 了解技术选型
-3. 参考 [贡献指南](developer_guide/contributing.md) 参与开发
+1. 🔴 **首先阅读**: [项目深度分析报告 - 架构设计缺陷](planning/optimization_analysis.md#八点三架构设计缺陷最重要发现)
+2. 阅读 [架构总览](architecture/overview.md) 了解系统架构
+3. 查看 [技术栈](architecture/tech_stack.md) 了解技术选型
+4. 📊 **行动计划**: [优化实施路线图 v2.0](planning/optimization_roadmap.md) - 10 周优化计划
+5. 参考 [贡献指南](developer_guide/contributing.md) 参与开发
 
 ### 部署人员
 
@@ -104,6 +118,7 @@ backend/.claude/skills/                # Claude Code Skills
 | 用户指南 (User Guide) | 100% | ✅ 完成 |
 | 开发指南 (Developer Guide) | 100% | ✅ 完成 |
 | 部署文档 (Deployment) | 100% | ✅ 完成 |
+| 📊 优化规划 (Planning) | 100% | 🆕 新增 |
 | **总体进度** | **100%** | 🎉 全部完成 |
 
 ---
