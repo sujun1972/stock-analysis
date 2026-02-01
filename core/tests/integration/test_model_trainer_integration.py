@@ -13,9 +13,9 @@ import shutil
 from src.models.model_trainer import (
     TrainingConfig,
     DataSplitConfig,
-    ModelTrainer,
-    train_stock_model
+    ModelTrainer
 )
+from src.models.training_pipeline import train_stock_model
 
 
 def unwrap_response(response):

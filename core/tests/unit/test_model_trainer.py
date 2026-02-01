@@ -27,10 +27,11 @@ from src.models.model_trainer import (
     GRUTrainingStrategy,
     StrategyFactory,
     ModelEvaluationHelper,
-    ModelTrainer,
-    # 便捷函数
-    train_stock_model
+    ModelTrainer
 )
+
+# 便捷函数从 training_pipeline 导入
+from src.models.training_pipeline import train_stock_model
 
 
 # ==================== Fixtures ====================

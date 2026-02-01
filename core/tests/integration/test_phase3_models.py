@@ -316,7 +316,7 @@ def test_integrated_workflow():
 
     # 使用便捷函数训练模型
     print("\n4.2 使用便捷函数训练模型")
-    from src.models.model_trainer import train_stock_model
+    from src.models.training_pipeline import train_stock_model
 
     response = train_stock_model(
         df=df,

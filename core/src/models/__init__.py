@@ -11,7 +11,19 @@ except ImportError:
 
 from .ridge_model import RidgeStockModel
 from .model_evaluator import ModelEvaluator, evaluate_model
-from .model_trainer import ModelTrainer, train_stock_model
+from .model_trainer import ModelTrainer
+from .training_pipeline import TrainingPipeline, train_stock_model
+from .model_validator import (
+    TimeSeriesCrossValidator,
+    ModelStabilityTester,
+    OverfittingDetector,
+    cross_validate_model
+)
+from .hyperparameter_tuner import (
+    GridSearchTuner,
+    RandomSearchTuner,
+    tune_hyperparameters
+)
 from .comparison_evaluator import ComparisonEvaluator
 
 # 集成模块
@@ -43,7 +55,19 @@ __all__ = [
 
     # 训练
     'ModelTrainer',
+    'TrainingPipeline',
     'train_stock_model',
+
+    # 验证
+    'TimeSeriesCrossValidator',
+    'ModelStabilityTester',
+    'OverfittingDetector',
+    'cross_validate_model',
+
+    # 超参数调优
+    'GridSearchTuner',
+    'RandomSearchTuner',
+    'tune_hyperparameters',
 
     # 集成
     'WeightedAverageEnsemble',

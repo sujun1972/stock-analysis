@@ -1,14 +1,19 @@
 """
-统一模型训练器
+统一模型训练器（核心模块）
 提供统一接口训练和评估不同类型的模型
 
-重构说明:
+重构说明 (TD-005):
 - 模块化设计: 分离数据准备、训练策略、模型创建逻辑
 - 策略模式: 每种模型类型有独立的训练策略
 - 工厂模式: 统一的模型创建接口
 - 统一日志系统: 使用 loguru 替代 print
 - 增强错误处理: 自定义异常类和数据验证
 - 配置管理: 使用 dataclass 管理训练参数
+
+配套模块:
+- training_pipeline.py: 端到端训练流程管理
+- model_validator.py: 模型验证（交叉验证、稳定性测试）
+- hyperparameter_tuner.py: 超参数调优（网格搜索、随机搜索）
 """
 
 import pandas as pd
@@ -927,106 +932,9 @@ class ModelTrainer:
             )
 
 
-# ==================== 便捷函数 ====================
-
-def train_stock_model(
-    df: pd.DataFrame,
-    feature_cols: List[str],
-    target_col: str,
-    model_type: str = 'lightgbm',
-    model_params: Optional[Dict[str, Any]] = None,
-    train_ratio: float = 0.7,
-    valid_ratio: float = 0.15,
-    save_path: Optional[str] = None
-):
-    """
-    便捷函数：训练股票预测模型
-
-    Args:
-        df: 数据 DataFrame
-        feature_cols: 特征列
-        target_col: 目标列
-        model_type: 模型类型
-        model_params: 模型参数
-        train_ratio: 训练集比例
-        valid_ratio: 验证集比例
-        save_path: 保存路径
-
-    Returns:
-        Response对象，成功时data包含:
-        {
-            'trainer': 训练器对象,
-            'test_metrics': 测试集评估指标,
-            'model_path': 模型保存路径（如果save_path不为None）
-        }
-    """
-    from src.utils.response import Response
-
-    try:
-        # 创建配置
-        training_config = TrainingConfig(
-            model_type=model_type,
-            model_params=model_params or {}
-        )
-
-        split_config = DataSplitConfig(
-            train_ratio=train_ratio,
-            valid_ratio=valid_ratio
-        )
-
-        # 创建训练器
-        trainer = ModelTrainer(config=training_config)
-
-        # 准备数据
-        prepare_response = trainer.prepare_data(df, feature_cols, target_col, split_config)
-        if not prepare_response.is_success():
-            return prepare_response
-
-        data = prepare_response.data
-        X_train = data['X_train']
-        y_train = data['y_train']
-        X_valid = data['X_valid']
-        y_valid = data['y_valid']
-        X_test = data['X_test']
-        y_test = data['y_test']
-
-        # 训练模型
-        train_response = trainer.train(X_train, y_train, X_valid, y_valid)
-        if not train_response.is_success():
-            return train_response
-
-        # 评估模型
-        eval_response = trainer.evaluate(X_test, y_test, dataset_name='test')
-        if not eval_response.is_success():
-            return eval_response
-
-        test_metrics = eval_response.data
-
-        # 保存模型
-        model_path = None
-        if save_path:
-            save_response = trainer.save_model(save_path)
-            if not save_response.is_success():
-                return save_response
-            model_path = save_response.data['model_path']
-
-        return Response.success(
-            data={
-                'trainer': trainer,
-                'test_metrics': test_metrics,
-                'model_path': model_path
-            },
-            message="模型训练流程完成",
-            model_type=model_type
-        )
-
-    except Exception as e:
-        logger.exception(f"训练流程发生异常: {e}")
-        return Response.error(
-            error=f"训练流程失败: {str(e)}",
-            error_code="TRAINING_PIPELINE_ERROR"
-        )
-
+# ==================== 注意 ====================
+# 便捷函数已迁移到 training_pipeline.py 模块
+# 请使用: from src.models.training_pipeline import train_stock_model
 
 # ==================== 使用示例 ====================
 
@@ -1110,25 +1018,5 @@ if __name__ == "__main__":
         import traceback
         logger.error(traceback.format_exc())
 
-    # 测试便捷函数
-    logger.info("\n" + "="*60)
-    logger.info("测试便捷函数")
-    logger.info("="*60)
-
-    try:
-        trainer, metrics = train_stock_model(
-            df,
-            feature_cols,
-            'target',
-            model_type='ridge',
-            save_path='test_ridge_model'
-        )
-
-        logger.success("\n✓ 便捷函数测试完成")
-
-    except Exception as e:
-        logger.error(f"\n✗ 便捷函数测试失败: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-
     logger.success("\n✓ 所有测试完成")
+    logger.info("\n提示: 便捷函数已迁移到 training_pipeline.py 模块")
