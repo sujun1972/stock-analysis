@@ -6,7 +6,14 @@
 """
 
 import logging
+import psycopg2
 from typing import TYPE_CHECKING
+
+# 导入异常类
+try:
+    from ..exceptions import DatabaseError
+except ImportError:
+    from src.exceptions import DatabaseError
 
 if TYPE_CHECKING:
     from psycopg2.extensions import cursor as Cursor
@@ -80,11 +87,59 @@ class TableManager:
             conn.commit()
             logger.info("\n✅ 数据库初始化完成！")
 
-        except Exception as e:
+        except psycopg2.OperationalError as e:
+            # 连接错误
             if conn:
                 conn.rollback()
-            logger.error(f"❌ 数据库初始化失败: {e}")
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="init_all_tables",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误（DDL语句错误）
+            if conn:
+                conn.rollback()
+            logger.error(f"SQL语法错误: {e}")
+            raise DatabaseError(
+                "表结构创建失败（SQL错误）",
+                error_code="DB_SYNTAX_ERROR",
+                operation="init_all_tables",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.IntegrityError as e:
+            # 数据完整性错误（不太可能在DDL操作中发生）
+            if conn:
+                conn.rollback()
+            logger.error(f"数据完整性错误: {e}")
+            raise DatabaseError(
+                "数据完整性约束违反",
+                error_code="DB_INTEGRITY_ERROR",
+                operation="init_all_tables",
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，先回滚再向上传播
+            if conn:
+                conn.rollback()
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 数据库初始化失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"数据库初始化失败: {str(e)}",
+                error_code="DB_INIT_FAILED",
+                operation="init_all_tables"
+            ) from e
+
         finally:
             if conn:
                 cursor.close()
@@ -303,8 +358,18 @@ class TableManager:
                     );
                 """)
                 logger.info(f"✓ {table_name} TimescaleDB时序表优化完成")
-        except Exception as e:
+
+        except psycopg2.ProgrammingError as e:
+            # TimescaleDB扩展未安装或语法错误 - 这是可接受的情况
             logger.warning(f"TimescaleDB优化跳过 ({table_name}): {e}")
+
+        except psycopg2.OperationalError as e:
+            # 连接问题 - 记录但不中断
+            logger.warning(f"TimescaleDB优化因连接问题跳过 ({table_name}): {e}")
+
+        except Exception as e:
+            # 其他未预期异常 - 记录但不中断（TimescaleDB是可选功能）
+            logger.warning(f"TimescaleDB优化跳过(未预期异常) ({table_name}): {e}")
 
     def _optimize_minute_data_with_timescaledb(self, cursor: 'Cursor') -> None:
         """TimescaleDB优化分时数据表"""
@@ -335,5 +400,15 @@ class TableManager:
                     SELECT add_compression_policy('stock_minute', INTERVAL '30 days');
                 """)
                 logger.info("✓ 分时数据压缩策略设置完成")
-        except Exception as e:
+
+        except psycopg2.ProgrammingError as e:
+            # TimescaleDB扩展未安装或语法错误 - 这是可接受的情况
             logger.warning(f"TimescaleDB分时数据优化跳过: {e}")
+
+        except psycopg2.OperationalError as e:
+            # 连接问题 - 记录但不中断
+            logger.warning(f"TimescaleDB分时数据优化因连接问题跳过: {e}")
+
+        except Exception as e:
+            # 其他未预期异常 - 记录但不中断（TimescaleDB是可选功能）
+            logger.warning(f"TimescaleDB分时数据优化跳过(未预期异常): {e}")

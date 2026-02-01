@@ -8,6 +8,7 @@
 import pandas as pd
 import numpy as np
 from psycopg2 import extras
+import psycopg2
 import logging
 from typing import TYPE_CHECKING, Dict, Any
 
@@ -21,6 +22,12 @@ from src.utils.type_utils import (
     safe_float_or_zero,
     safe_int_or_zero
 )
+
+# 导入异常类
+try:
+    from ..exceptions import DatabaseError
+except ImportError:
+    from src.exceptions import DatabaseError
 
 if TYPE_CHECKING:
     from .connection_pool_manager import ConnectionPoolManager
@@ -114,11 +121,59 @@ class DataInsertManager:
             logger.info(f"✓ 保存股票列表到 stock_basic: {count} 条记录")
             return count
 
-        except Exception as e:
+        except psycopg2.IntegrityError as e:
+            # 完整性约束错误（理论上不应发生，因为有ON CONFLICT处理）
             if conn:
                 conn.rollback()
-            logger.error(f"❌ 保存股票列表失败: {e}")
+            logger.error(f"数据完整性错误: {e}")
+            raise DatabaseError(
+                "保存股票列表时违反数据完整性约束",
+                error_code="DB_INTEGRITY_ERROR",
+                operation="save_stock_list",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="save_stock_list",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.DataError as e:
+            # 数据类型错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据类型错误: {e}")
+            raise DatabaseError(
+                "数据类型不匹配",
+                error_code="DB_DATA_TYPE_ERROR",
+                operation="save_stock_list",
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，先回滚再向上传播
+            if conn:
+                conn.rollback()
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存股票列表失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"保存股票列表失败: {str(e)}",
+                error_code="DB_INSERT_FAILED",
+                operation="save_stock_list"
+            ) from e
+
         finally:
             if conn:
                 cursor.close()
@@ -204,11 +259,63 @@ class DataInsertManager:
             logger.info(f"✓ 保存 {stock_code} 日线数据: {count} 条记录")
             return count
 
-        except Exception as e:
+        except psycopg2.IntegrityError as e:
+            # 完整性约束错误
             if conn:
                 conn.rollback()
-            logger.error(f"❌ 保存 {stock_code} 日线数据失败: {e}")
+            logger.error(f"数据完整性错误: {e}")
+            raise DatabaseError(
+                "保存日线数据时违反数据完整性约束",
+                error_code="DB_INTEGRITY_ERROR",
+                operation="save_daily_data",
+                stock_code=stock_code,
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="save_daily_data",
+                stock_code=stock_code,
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.DataError as e:
+            # 数据类型错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据类型错误: {e}")
+            raise DatabaseError(
+                "数据类型不匹配",
+                error_code="DB_DATA_TYPE_ERROR",
+                operation="save_daily_data",
+                stock_code=stock_code,
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，先回滚再向上传播
+            if conn:
+                conn.rollback()
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存 {stock_code} 日线数据失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"保存日线数据失败: {str(e)}",
+                error_code="DB_INSERT_FAILED",
+                operation="save_daily_data",
+                stock_code=stock_code
+            ) from e
+
         finally:
             if conn:
                 cursor.close()
@@ -278,11 +385,63 @@ class DataInsertManager:
 
             return 1
 
-        except Exception as e:
+        except psycopg2.IntegrityError as e:
+            # 完整性约束错误
             if conn:
                 conn.rollback()
-            logger.error(f"❌ 保存单条实时行情数据失败 {quote.get('code', 'Unknown')}: {e}")
+            logger.error(f"数据完整性错误: {e}")
+            raise DatabaseError(
+                "保存实时行情数据时违反数据完整性约束",
+                error_code="DB_INTEGRITY_ERROR",
+                operation="save_realtime_quote_single",
+                stock_code=quote.get('code', 'Unknown'),
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="save_realtime_quote_single",
+                stock_code=quote.get('code', 'Unknown'),
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.DataError as e:
+            # 数据类型错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据类型错误: {e}")
+            raise DatabaseError(
+                "数据类型不匹配",
+                error_code="DB_DATA_TYPE_ERROR",
+                operation="save_realtime_quote_single",
+                stock_code=quote.get('code', 'Unknown'),
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，先回滚再向上传播
+            if conn:
+                conn.rollback()
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存单条实时行情数据失败(未预期异常) {quote.get('code', 'Unknown')}: {e}")
+            raise DatabaseError(
+                f"保存实时行情数据失败: {str(e)}",
+                error_code="DB_INSERT_FAILED",
+                operation="save_realtime_quote_single",
+                stock_code=quote.get('code', 'Unknown')
+            ) from e
+
         finally:
             if conn:
                 cursor.close()
@@ -370,11 +529,59 @@ class DataInsertManager:
             logger.info(f"✓ 保存实时行情数据: {count} 条记录")
             return count
 
-        except Exception as e:
+        except psycopg2.IntegrityError as e:
+            # 完整性约束错误
             if conn:
                 conn.rollback()
-            logger.error(f"❌ 保存实时行情数据失败: {e}")
+            logger.error(f"数据完整性错误: {e}")
+            raise DatabaseError(
+                "批量保存实时行情数据时违反数据完整性约束",
+                error_code="DB_INTEGRITY_ERROR",
+                operation="save_realtime_quotes",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="save_realtime_quotes",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.DataError as e:
+            # 数据类型错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据类型错误: {e}")
+            raise DatabaseError(
+                "数据类型不匹配",
+                error_code="DB_DATA_TYPE_ERROR",
+                operation="save_realtime_quotes",
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，先回滚再向上传播
+            if conn:
+                conn.rollback()
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存实时行情数据失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"批量保存实时行情数据失败: {str(e)}",
+                error_code="DB_INSERT_FAILED",
+                operation="save_realtime_quotes"
+            ) from e
+
         finally:
             if conn:
                 cursor.close()
@@ -445,11 +652,71 @@ class DataInsertManager:
             logger.info(f"✓ 保存 {code} {period}分钟数据: {len(records)} 条记录")
             return len(records)
 
-        except Exception as e:
+        except psycopg2.IntegrityError as e:
+            # 完整性约束错误
             if conn:
                 conn.rollback()
-            logger.error(f"❌ 保存分时数据失败: {e}")
+            logger.error(f"数据完整性错误: {e}")
+            raise DatabaseError(
+                "保存分时数据时违反数据完整性约束",
+                error_code="DB_INTEGRITY_ERROR",
+                operation="save_minute_data",
+                stock_code=code,
+                period=period,
+                trade_date=trade_date,
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="save_minute_data",
+                stock_code=code,
+                period=period,
+                trade_date=trade_date,
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.DataError as e:
+            # 数据类型错误
+            if conn:
+                conn.rollback()
+            logger.error(f"数据类型错误: {e}")
+            raise DatabaseError(
+                "数据类型不匹配",
+                error_code="DB_DATA_TYPE_ERROR",
+                operation="save_minute_data",
+                stock_code=code,
+                period=period,
+                trade_date=trade_date,
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，先回滚再向上传播
+            if conn:
+                conn.rollback()
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 保存分时数据失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"保存分时数据失败: {str(e)}",
+                error_code="DB_INSERT_FAILED",
+                operation="save_minute_data",
+                stock_code=code,
+                period=period,
+                trade_date=trade_date
+            ) from e
+
         finally:
             if conn:
                 cursor.close()

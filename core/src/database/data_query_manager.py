@@ -6,9 +6,16 @@
 """
 
 import pandas as pd
+import psycopg2
 import logging
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
 from datetime import datetime, timedelta
+
+# 导入异常类
+try:
+    from ..exceptions import DatabaseError
+except ImportError:
+    from src.exceptions import DatabaseError
 
 if TYPE_CHECKING:
     from .connection_pool_manager import ConnectionPoolManager
@@ -87,9 +94,42 @@ class DataQueryManager:
             logger.info(f"✓ 加载 {stock_code} 数据: {len(df)} 条记录")
             return df
 
-        except Exception as e:
-            logger.error(f"❌ 加载 {stock_code} 数据失败: {e}")
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="load_daily_data",
+                stock_code=stock_code,
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误
+            logger.error(f"SQL语法错误: {e}")
+            raise DatabaseError(
+                "SQL语句错误",
+                error_code="DB_SYNTAX_ERROR",
+                operation="load_daily_data",
+                stock_code=stock_code,
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，直接向上传播
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"❌ 加载 {stock_code} 数据失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"加载日线数据失败: {str(e)}",
+                error_code="DB_QUERY_FAILED",
+                operation="load_daily_data",
+                stock_code=stock_code
+            ) from e
+
         finally:
             if conn:
                 self.pool_manager.release_connection(conn)
@@ -123,9 +163,39 @@ class DataQueryManager:
             logger.info(f"✓ 获取股票列表: {len(df)} 只股票")
             return df
 
-        except Exception as e:
-            logger.error(f"❌ 获取股票列表失败: {e}")
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="get_stock_list",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误
+            logger.error(f"SQL语法错误: {e}")
+            raise DatabaseError(
+                "SQL语句错误",
+                error_code="DB_SYNTAX_ERROR",
+                operation="get_stock_list",
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，直接向上传播
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"❌ 获取股票列表失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"获取股票列表失败: {str(e)}",
+                error_code="DB_QUERY_FAILED",
+                operation="get_stock_list"
+            ) from e
+
         finally:
             if conn:
                 self.pool_manager.release_connection(conn)
@@ -161,9 +231,39 @@ class DataQueryManager:
             logger.info(f"✓ 获取 {len(codes)} 只最早更新的股票代码")
             return codes
 
-        except Exception as e:
-            logger.error(f"❌ 获取最旧实时行情股票失败: {e}")
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="get_oldest_realtime_stocks",
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误
+            logger.error(f"SQL语法错误: {e}")
+            raise DatabaseError(
+                "SQL语句错误",
+                error_code="DB_SYNTAX_ERROR",
+                operation="get_oldest_realtime_stocks",
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，直接向上传播
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"❌ 获取最旧实时行情股票失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"获取最旧实时行情股票失败: {str(e)}",
+                error_code="DB_QUERY_FAILED",
+                operation="get_oldest_realtime_stocks"
+            ) from e
+
         finally:
             if conn:
                 cursor.close()
@@ -240,8 +340,9 @@ class DataQueryManager:
                 'latest_date': str(latest_date) if latest_date else None
             }
 
-        except Exception as e:
-            logger.error(f"❌ 检查 {code} 数据完整性失败: {e}")
+        except psycopg2.OperationalError as e:
+            # 连接错误 - 返回默认值以支持容错
+            logger.warning(f"数据库连接错误(容错模式): {e}")
             return {
                 'has_data': False,
                 'is_complete': False,
@@ -249,6 +350,29 @@ class DataQueryManager:
                 'earliest_date': None,
                 'latest_date': None
             }
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误 - 返回默认值以支持容错
+            logger.warning(f"SQL语法错误(容错模式): {e}")
+            return {
+                'has_data': False,
+                'is_complete': False,
+                'record_count': 0,
+                'earliest_date': None,
+                'latest_date': None
+            }
+
+        except Exception as e:
+            # 未预期的异常 - 返回默认值以支持容错
+            logger.error(f"❌ 检查 {code} 数据完整性失败(未预期异常): {e}")
+            return {
+                'has_data': False,
+                'is_complete': False,
+                'record_count': 0,
+                'earliest_date': None,
+                'latest_date': None
+            }
+
         finally:
             if conn:
                 self.pool_manager.release_connection(conn)
@@ -281,9 +405,48 @@ class DataQueryManager:
             logger.info(f"✓ 加载 {code} {period}分钟数据: {len(df)} 条记录")
             return df
 
-        except Exception as e:
-            logger.error(f"❌ 加载分时数据失败: {e}")
+        except psycopg2.OperationalError as e:
+            # 连接错误
+            logger.error(f"数据库连接错误: {e}")
+            raise DatabaseError(
+                "数据库连接失败",
+                error_code="DB_CONNECTION_ERROR",
+                operation="load_minute_data",
+                stock_code=code,
+                period=period,
+                trade_date=trade_date,
+                error_detail=str(e)
+            ) from e
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误
+            logger.error(f"SQL语法错误: {e}")
+            raise DatabaseError(
+                "SQL语句错误",
+                error_code="DB_SYNTAX_ERROR",
+                operation="load_minute_data",
+                stock_code=code,
+                period=period,
+                trade_date=trade_date,
+                error_detail=str(e)
+            ) from e
+
+        except DatabaseError:
+            # 已知的业务异常，直接向上传播
             raise
+
+        except Exception as e:
+            # 未预期的异常
+            logger.error(f"❌ 加载分时数据失败(未预期异常): {e}")
+            raise DatabaseError(
+                f"加载分时数据失败: {str(e)}",
+                error_code="DB_QUERY_FAILED",
+                operation="load_minute_data",
+                stock_code=code,
+                period=period,
+                trade_date=trade_date
+            ) from e
+
         finally:
             if conn:
                 self.pool_manager.release_connection(conn)
@@ -337,14 +500,36 @@ class DataQueryManager:
                 'completeness': round(completeness, 2)
             }
 
-        except Exception as e:
-            logger.error(f"❌ 检查数据完整性失败: {e}")
+        except psycopg2.OperationalError as e:
+            # 连接错误 - 返回默认值以支持容错
+            logger.warning(f"数据库连接错误(容错模式): {e}")
             return {
                 'is_complete': False,
                 'record_count': 0,
                 'expected_count': 0,
                 'completeness': 0
             }
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误 - 返回默认值以支持容错
+            logger.warning(f"SQL语法错误(容错模式): {e}")
+            return {
+                'is_complete': False,
+                'record_count': 0,
+                'expected_count': 0,
+                'completeness': 0
+            }
+
+        except Exception as e:
+            # 未预期的异常 - 返回默认值以支持容错
+            logger.error(f"❌ 检查数据完整性失败(未预期异常): {e}")
+            return {
+                'is_complete': False,
+                'record_count': 0,
+                'expected_count': 0,
+                'completeness': 0
+            }
+
         finally:
             if conn:
                 cursor.close()
@@ -372,9 +557,21 @@ class DataQueryManager:
                 date_obj = datetime.strptime(trade_date, '%Y-%m-%d')
                 return date_obj.weekday() < 5  # 0-4 为周一到周五
 
-        except Exception as e:
-            logger.warning(f"检查交易日失败: {e}")
+        except psycopg2.OperationalError as e:
+            # 连接错误 - 返回默认值以支持容错
+            logger.warning(f"数据库连接错误(容错模式): {e}")
             return True  # 默认为交易日
+
+        except psycopg2.ProgrammingError as e:
+            # SQL语法错误 - 返回默认值以支持容错
+            logger.warning(f"SQL语法错误(容错模式): {e}")
+            return True  # 默认为交易日
+
+        except Exception as e:
+            # 未预期的异常 - 返回默认值以支持容错
+            logger.warning(f"检查交易日失败(未预期异常): {e}")
+            return True  # 默认为交易日
+
         finally:
             if conn:
                 cursor.close()
