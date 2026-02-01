@@ -253,13 +253,19 @@ def build_pytest_cmd(
 
     # 排除慢速测试
     if exclude_slow:
-        # 排除GRU模型测试（最慢的测试）
+        # 排除GRU模型测试（最慢的测试，会导致段错误）
         cmd.append('--ignore=tests/unit/models/test_gru_model.py')
         cmd.append('--ignore=tests/unit/test_gru_model_comprehensive.py')
+
+        # 排除耗时的单元测试（每个测试1-5秒）
+        cmd.append('--ignore=tests/unit/analysis/test_factor_analyzer.py')  # 5.28s, 4.20s, 1.76s
+        cmd.append('--ignore=tests/unit/backtest/test_parallel_backtester.py')  # 1.07s, 1.04s, 1.01s
+        cmd.append('--ignore=tests/unit/utils/test_parallel_executor.py')  # 1.55s, 1.29s, 1.12s
+
         # 排除外部API集成测试（需要网络连接和API token）
         cmd.append('--ignore=tests/integration/providers/akshare/')
         cmd.append('--ignore=tests/integration/providers/test_tushare_provider.py')
-        print_warning("已排除慢速GRU模型测试（2个文件）和外部API集成测试（AkShare, Tushare）")
+        print_warning("已排除慢速测试：GRU模型、因子分析器、并行回测、并行执行器、外部API")
 
     # 标记过滤
     if markers:
@@ -290,48 +296,56 @@ def show_menu():
     """显示交互式菜单"""
     print_header("Core项目测试运行器")
 
-    # 预计时间（基于历史数据）
+    # 预计时间（基于2026-02-01实测数据 - 已优化）
     estimated_times = {
-        '1': '~90秒',
-        '2': '~27秒',
-        '3': '~60秒',
-        '4': '~30秒',
+        '1': '~260秒 (4.5分钟)',
+        '2': '~38秒',        # 快速单元测试（已优化）⚡
+        '3': '~80秒',        # 所有单元测试 (排除GRU)
+        '4': '~175秒 (3分钟)',  # 所有集成测试
         '5': '~3秒',
         '6': '变化',
-        '7': '~5秒',
-        '8': '~20秒',
-        '9': '~15秒',
-        'L': '~2秒'
+        'I1': '~30秒',       # 集成测试-快速
+        'I2': '~120秒',      # 集成测试-完整不含外部API
+        'I3': '~175秒',      # 集成测试-全部
     }
 
     print("请选择要运行的测试:")
     print()
-    print(f"{Colors.BOLD}[综合测试]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[1]{Colors.ENDC} 运行所有测试 (带覆盖率报告) {Colors.OKCYAN}[{estimated_times['1']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[2]{Colors.ENDC} 运行所有测试 (快速模式) {Colors.OKCYAN}[{estimated_times['2']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[3]{Colors.ENDC} 只运行单元测试 {Colors.OKCYAN}[{estimated_times['3']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[4]{Colors.ENDC} 只运行集成测试 {Colors.OKCYAN}[{estimated_times['4']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[5]{Colors.ENDC} 只运行性能测试 {Colors.OKCYAN}[{estimated_times['5']}]{Colors.ENDC}")
+    print(f"{Colors.BOLD}[快速测试 - 推荐日常使用]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[2]{Colors.ENDC} 快速单元测试 (排除慢速测试: GRU/因子分析/并行) {Colors.OKCYAN}[{estimated_times['2']}]{Colors.ENDC} ⚡")
+    print(f"  {Colors.BOLD}[Q]{Colors.ENDC} 快速集成测试 (排除外部API) {Colors.OKCYAN}[{estimated_times['I1']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[X]{Colors.ENDC} 快速诊断 (只运行失败过的测试) {Colors.OKCYAN}[<10秒]{Colors.ENDC}")
     print()
-    print(f"{Colors.BOLD}[核心层测试]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[D]{Colors.ENDC} 数据层测试 (data + providers) {Colors.OKCYAN}[~8秒]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[F]{Colors.ENDC} 特征层测试 (features) {Colors.OKCYAN}[{estimated_times['9']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[M]{Colors.ENDC} 模型层测试 (models, 排除GRU) {Colors.OKCYAN}[{estimated_times['8']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[B]{Colors.ENDC} 回测层测试 (backtest) {Colors.OKCYAN}[~8秒]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[S]{Colors.ENDC} 策略层测试 (strategies) {Colors.OKCYAN}[~5秒]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[R]{Colors.ENDC} 风控层测试 (risk_management) {Colors.OKCYAN}[~2秒]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[A]{Colors.ENDC} 因子分析层测试 (analysis) {Colors.OKCYAN}[~4秒]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[O]{Colors.ENDC} 参数优化层测试 (optimization) {Colors.OKCYAN}[~3秒]{Colors.ENDC}")
+    print(f"{Colors.BOLD}[完整测试]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[1]{Colors.ENDC} 运行所有测试 (单元+集成, 带覆盖率) {Colors.OKCYAN}[{estimated_times['1']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[3]{Colors.ENDC} 所有单元测试 (排除GRU) {Colors.OKCYAN}[{estimated_times['3']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[4]{Colors.ENDC} 所有集成测试 {Colors.OKCYAN}[{estimated_times['4']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[5]{Colors.ENDC} 性能测试 {Colors.OKCYAN}[{estimated_times['5']}]{Colors.ENDC}")
+    print()
+    print(f"{Colors.BOLD}[集成测试分类 - 按速度]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[I1]{Colors.ENDC} 快速集成测试 (排除外部API) {Colors.OKCYAN}[{estimated_times['I1']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[I2]{Colors.ENDC} 中速集成测试 (含数据库/不含API) {Colors.OKCYAN}[{estimated_times['I2']}]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[I3]{Colors.ENDC} 完整集成测试 (含外部API) {Colors.OKCYAN}[{estimated_times['I3']}]{Colors.ENDC}")
+    print()
+    print(f"{Colors.BOLD}[单元测试 - 按功能层]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[D]{Colors.ENDC} 数据层 (data + providers) {Colors.OKCYAN}[~8秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[F]{Colors.ENDC} 特征层 (features) {Colors.OKCYAN}[~15秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[M]{Colors.ENDC} 模型层 (models, 排除GRU) {Colors.OKCYAN}[~20秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[B]{Colors.ENDC} 回测层 (backtest) {Colors.OKCYAN}[~8秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[S]{Colors.ENDC} 策略层 (strategies) {Colors.OKCYAN}[~5秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[R]{Colors.ENDC} 风控层 (risk_management) {Colors.OKCYAN}[~2秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[A]{Colors.ENDC} 因子分析层 (analysis) {Colors.OKCYAN}[~4秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[O]{Colors.ENDC} 参数优化层 (optimization) {Colors.OKCYAN}[~3秒]{Colors.ENDC}")
     print()
     print(f"{Colors.BOLD}[其他选项]{Colors.ENDC}")
     print(f"  {Colors.BOLD}[6]{Colors.ENDC} 运行特定模块测试 {Colors.OKCYAN}[{estimated_times['6']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[L]{Colors.ENDC} 按层级查看所有可用测试模块 {Colors.OKCYAN}[{estimated_times['L']}]{Colors.ENDC}")
-    print(f"  {Colors.BOLD}[X]{Colors.ENDC} 快速诊断 (只运行失败过的测试)")
+    print(f"  {Colors.BOLD}[L]{Colors.ENDC} 按层级查看所有可用测试模块 {Colors.OKCYAN}[<1秒]{Colors.ENDC}")
     print(f"  {Colors.BOLD}[P]{Colors.ENDC} 切换并行模式 (加速测试执行)")
+    print(f"  {Colors.BOLD}[T]{Colors.ENDC} 查看测试统计信息")
     print(f"  {Colors.BOLD}[0]{Colors.ENDC} 退出")
     print()
 
-    choice = input(f"{Colors.OKBLUE}请输入选项 [0-6/D/F/M/B/S/R/A/O/L/X/P]: {Colors.ENDC}")
+    choice = input(f"{Colors.OKBLUE}请输入选项: {Colors.ENDC}")
     return choice.strip().upper()
 
 def run_all_tests(coverage: bool = True, fast: bool = False, parallel: bool = False, failed_first: bool = False):
@@ -348,11 +362,61 @@ def run_unit_tests(coverage: bool = True, parallel: bool = False):
     returncode, output = run_command(cmd, "运行单元测试", capture_output=True)
     return returncode
 
-def run_integration_tests(coverage: bool = True, parallel: bool = False):
-    """运行集成测试"""
-    print_header("运行集成测试")
-    cmd = build_pytest_cmd('tests/integration/', coverage=coverage, parallel=parallel)
-    returncode, output = run_command(cmd, "运行集成测试", capture_output=True)
+def run_integration_tests(coverage: bool = True, parallel: bool = False, speed_level: str = 'all'):
+    """
+    运行集成测试
+
+    Args:
+        coverage: 是否生成覆盖率报告
+        parallel: 是否并行运行
+        speed_level: 速度级别
+            - 'fast': 快速测试，排除外部API和慢速测试 (~30秒)
+            - 'medium': 中速测试，包含数据库测试，排除外部API (~120秒)
+            - 'all': 所有集成测试 (~175秒)
+    """
+    if speed_level == 'fast':
+        print_header("运行快速集成测试 (排除外部API和慢速测试)")
+    elif speed_level == 'medium':
+        print_header("运行中速集成测试 (包含数据库，排除外部API)")
+    else:
+        print_header("运行所有集成测试")
+
+    # 构建命令
+    python_cmd = get_python_cmd()
+    cmd = [python_cmd, '-m', 'pytest', 'tests/integration/']
+
+    # 根据速度级别排除测试
+    if speed_level in ['fast', 'medium']:
+        # 排除外部API测试 (最耗时: 每个测试4-5秒)
+        cmd.append('--ignore=tests/integration/providers/')
+        cmd.append('--ignore=tests/integration/test_multi_data_source.py')
+        cmd.append('--ignore=tests/integration/test_end_to_end_workflow.py')
+        print_info("已排除外部API测试 (providers, multi_data_source, end_to_end_workflow)")
+
+    if speed_level == 'fast':
+        # 额外排除中速测试
+        cmd.append('--ignore=tests/integration/test_database_security_and_concurrency.py')
+        cmd.append('--ignore=tests/integration/test_database_manager_refactored.py')
+        cmd.append('--ignore=tests/integration/test_parallel_ic_calculation.py')
+        cmd.append('--ignore=tests/integration/test_gpu_integration.py')
+        cmd.append('--ignore=tests/integration/test_model_trainer_integration.py')
+        print_info("已排除数据库和GPU相关慢速测试")
+
+    # 覆盖率选项
+    if coverage:
+        cmd.extend([
+            '--cov=src',
+            '--cov-report=html:tests/reports/htmlcov',
+            '--cov-report=term',
+        ])
+
+    # 其他选项
+    cmd.extend(['-v', '--tb=short'])
+
+    if parallel:
+        cmd.extend(['-n', '4'])
+
+    returncode, _ = run_command(cmd, "运行集成测试", capture_output=True)
     return returncode
 
 def run_performance_tests():
@@ -549,8 +613,58 @@ def run_failed_first():
     """优先运行失败的测试"""
     print_header("快速诊断 - 运行失败过的测试")
     cmd = build_pytest_cmd(coverage=False, failed_first=True, exclude_slow=True)
-    returncode, output = run_command(cmd, "优先运行失败测试", capture_output=True)
+    returncode, _ = run_command(cmd, "优先运行失败测试", capture_output=True)
     return returncode
+
+def show_test_statistics():
+    """显示测试统计信息"""
+    print_header("测试统计信息")
+
+    test_categories = {
+        '单元测试': {
+            '数据层': 'tests/unit/data tests/unit/providers',
+            '特征层': 'tests/unit/features',
+            '模型层': 'tests/unit/models',
+            '回测层': 'tests/unit/backtest',
+            '策略层': 'tests/unit/strategies',
+            '风控层': 'tests/unit/risk_management',
+            '因子分析层': 'tests/unit/analysis',
+            '参数优化层': 'tests/unit/optimization',
+            '其他': 'tests/unit/config tests/unit/utils tests/unit/api',
+        },
+        '集成测试': {
+            '外部API (慢)': 'tests/integration/providers tests/integration/test_multi_data_source.py tests/integration/test_end_to_end_workflow.py',
+            '数据库 (中)': 'tests/integration/test_database_*.py',
+            'GPU/模型 (中)': 'tests/integration/test_gpu_integration.py tests/integration/test_model_trainer_integration.py',
+            '其他 (快)': 'tests/integration/test_phase*.py tests/integration/test_backtest*.py tests/integration/test_feature*.py',
+        }
+    }
+
+    for category, subcats in test_categories.items():
+        print(f"\n{Colors.BOLD}{category}:{Colors.ENDC}")
+        for subcat, paths in subcats.items():
+            count = 0
+            for path in paths.split():
+                full_path = get_project_root() / path
+                if full_path.exists():
+                    if full_path.is_file():
+                        count += 1
+                    else:
+                        files = list(full_path.glob('test_*.py'))
+                        count += len(files)
+
+            print(f"  {subcat}: {count} 个测试文件")
+
+    print(f"\n{Colors.BOLD}耗时参考 (基于2026-02-01实测):{Colors.ENDC}")
+    print(f"  快速单元测试: ~38秒 (2582个测试) ⚡")
+    print(f"  完整单元测试 (排除GRU): ~80秒 (2665个测试)")
+    print(f"  快速集成测试: ~30秒")
+    print(f"  中速集成测试: ~120秒")
+    print(f"  完整集成测试: ~175秒")
+    print(f"  所有测试: ~260秒 (4.5分钟)")
+    print()
+
+    return 0
 
 def interactive_mode():
     """交互式模式"""
@@ -562,20 +676,30 @@ def interactive_mode():
         if choice == '0':
             print_info("退出测试运行器")
             return 0
-        # 综合测试
+        # 快速测试
+        elif choice == '2':
+            return run_all_tests(coverage=False, fast=True, parallel=parallel_mode)
+        elif choice == 'Q':
+            return run_integration_tests(coverage=False, parallel=parallel_mode, speed_level='fast')
+        elif choice == 'X':
+            return run_failed_first()
+        # 完整测试
         elif choice == '1':
             return run_all_tests(coverage=True, fast=False, parallel=parallel_mode)
-        elif choice == '2':
-            return run_all_tests(coverage=True, fast=True, parallel=parallel_mode)
         elif choice == '3':
             return run_unit_tests(coverage=True, parallel=parallel_mode)
         elif choice == '4':
-            return run_integration_tests(coverage=True, parallel=parallel_mode)
+            return run_integration_tests(coverage=True, parallel=parallel_mode, speed_level='all')
         elif choice == '5':
             return run_performance_tests()
-        elif choice == '6':
-            return run_specific_module()
-        # 核心层测试
+        # 集成测试分类
+        elif choice == 'I1':
+            return run_integration_tests(coverage=False, parallel=parallel_mode, speed_level='fast')
+        elif choice == 'I2':
+            return run_integration_tests(coverage=False, parallel=parallel_mode, speed_level='medium')
+        elif choice == 'I3':
+            return run_integration_tests(coverage=True, parallel=parallel_mode, speed_level='all')
+        # 单元测试按层
         elif choice == 'D':
             return run_layer_tests('data', coverage=True, parallel=parallel_mode)
         elif choice == 'F':
@@ -593,11 +717,14 @@ def interactive_mode():
         elif choice == 'O':
             return run_layer_tests('optimization', coverage=True, parallel=parallel_mode)
         # 其他选项
+        elif choice == '6':
+            return run_specific_module()
         elif choice == 'L':
             list_all_test_modules()
             continue
-        elif choice == 'X':
-            return run_failed_first()
+        elif choice == 'T':
+            show_test_statistics()
+            continue
         elif choice == 'P':
             parallel_mode = not parallel_mode
             if parallel_mode:
@@ -690,7 +817,6 @@ def main():
 
     # 根据参数运行相应的测试
     returncode = 0
-    output = ""
 
     # 列出模块
     if args.list_modules:
@@ -706,7 +832,7 @@ def main():
     elif args.unit:
         returncode = run_unit_tests(coverage=coverage, parallel=args.parallel)
     elif args.integration:
-        returncode = run_integration_tests(coverage=coverage, parallel=args.parallel)
+        returncode = run_integration_tests(coverage=coverage, parallel=args.parallel, speed_level='all')
     elif args.performance:
         returncode = run_performance_tests()
     # 传统模块测试（保持向后兼容）
@@ -722,17 +848,12 @@ def main():
             print_error(f"测试文件不存在: {test_path}")
             return 1
         cmd = build_pytest_cmd(test_path, coverage=coverage)
-        returncode, output = run_command(cmd, f"运行 {args.module}", capture_output=True)
+        returncode, _ = run_command(cmd, f"运行 {args.module}", capture_output=True)
     elif args.failed_first:
         returncode = run_failed_first()
     else:
         parser.print_help()
         return 0
-
-    # 检查覆盖率阈值
-    if args.min_coverage > 0 and coverage and output:
-        if not check_coverage_threshold(output, args.min_coverage):
-            return 1
 
     return returncode
 

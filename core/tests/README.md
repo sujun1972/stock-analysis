@@ -1,199 +1,542 @@
-# Core 项目测试套件
+# Stock Analysis Core - 测试套件文档
 
-完整的测试套件，覆盖所有重构后的模块化组件。
+> 完整的测试框架，覆盖量化交易系统的所有核心模块
+>
+> **最后更新**: 2026-02-01
+> **测试通过率**: 98%+ ✅
 
-## 📁 目录结构
+---
 
-```
-tests/
-├── conftest.py          # pytest配置（导入路径设置）⭐ NEW
-│
-├── unit/                # 单元测试（组件级测试）
-│   ├── providers/       # 数据提供商测试
-│   ├── models/          # 模型测试
-│   ├── features/        # 特征工程测试
-│   ├── strategies/      # 策略测试（7个文件，108个测试用例）⭐
-│   ├── risk_management/ # 风控测试（3个文件，41个测试用例）⭐ NEW
-│   ├── config/          # 配置测试
-│   └── ...
-│
-├── integration/         # 集成测试（端到端测试）
-│   ├── providers/       # 提供商集成测试
-│   ├── test_data_pipeline.py
-│   ├── test_database_manager_refactored.py
-│   └── ...
-│
-├── performance/         # 性能测试（性能基准测试）
-│   ├── test_performance_iterrows.py
-│   └── test_performance_sample_balancing.py
-│
-├── run_tests.py        # 统一测试运行器
-└── README.md           # 本文件
-```
+## 📋 目录
+
+- [快速开始](#-快速开始)
+- [测试目录结构](#-测试目录结构)
+- [测试统计](#-测试统计)
+- [运行测试](#-运行测试)
+- [性能优化建议](#-性能优化建议)
+- [常见问题](#-常见问题)
+- [详细文档](#-详细文档)
+
+---
 
 ## 🚀 快速开始
 
-### 方法1: 使用统一测试运行器 ⭐ 推荐
+### 方法1: 交互式菜单（推荐）
 
-**交互式菜单模式**（最简单）：
 ```bash
 cd core/tests
-python3 run_tests.py
+python run_tests.py
 ```
 
-**命令行模式**：
-```bash
-# 运行所有测试（带覆盖率报告）
-python3 run_tests.py --all
+然后选择你要运行的测试:
+- **[2] 快速单元测试** (~38秒) ⚡ - 日常开发推荐
+- **[Q] 快速集成测试** (~30秒) - 验证集成无误
+- **[X] 快速诊断** (<10秒) - 只运行失败过的测试
 
-# 快速测试（排除慢速的GRU模型测试和外部API测试）
-python3 run_tests.py --fast
-
-# 只运行单元测试
-python3 run_tests.py --unit
-
-# 只运行集成测试
-python3 run_tests.py --integration
-
-# 只运行性能测试
-python3 run_tests.py --performance
-
-# 运行Provider测试
-python3 run_tests.py --providers
-
-# 运行模型测试（排除GRU）
-python3 run_tests.py --models
-
-# 运行特征工程测试
-python3 run_tests.py --features
-
-# 运行策略测试 ⭐
-python3 run_tests.py --module unit/strategies/
-
-# 运行风控测试 ⭐ NEW
-python3 run_tests.py --module unit/risk_management/
-
-# 运行特定模块
-python3 run_tests.py --module unit/test_data_loader.py
-
-# 查看所有选项
-python3 run_tests.py --help
-```
-
-### 方法2: 直接使用pytest
+### 方法2: 命令行直接运行
 
 ```bash
-# 运行所有测试并生成覆盖率报告
-pytest tests/ --cov=src --cov-report=html --cov-report=term -v
+# 快速单元测试（推荐日常使用）
+python run_tests.py --fast
 
-# 只运行单元测试
-pytest tests/unit/ --cov=src --cov-report=html -v
+# 运行所有测试
+python run_tests.py --all
 
-# 排除慢速测试
-pytest tests/ --cov=src --cov-report=html \
-  --ignore=tests/unit/models/test_gru_model.py -v
-
-# 运行特定测试文件
-pytest tests/unit/test_data_loader.py -v
+# 查看帮助
+python run_tests.py --help
 ```
 
-## 📊 查看覆盖率报告
+---
 
-测试完成后，在浏览器中打开覆盖率报告：
+## 📁 测试目录结构
+
+```
+core/tests/
+│
+├── 📄 run_tests.py              # 统一测试运行器 ⭐
+├── 📄 README.md                 # 本文件
+│
+├── 📂 unit/                     # 单元测试 (~1300个测试)
+│   ├── providers/               # 数据提供商 (Tushare, AkShare)
+│   ├── features/                # 特征工程 (125+因子)
+│   ├── models/                  # 机器学习模型 (LightGBM, Ridge, GRU)
+│   ├── strategies/              # 交易策略 (动量、均值回归、多因子)
+│   ├── backtest/                # 回测引擎
+│   ├── risk_management/         # 风险管理 (VaR, 回撤控制)
+│   ├── analysis/                # 因子分析 (IC, 分层测试)
+│   ├── optimization/            # 参数优化 (网格搜索、贝叶斯)
+│   ├── config/                  # 配置管理
+│   ├── utils/                   # 工具函数
+│   └── api/                     # API接口
+│
+├── 📂 integration/              # 集成测试 (~134个测试, 174秒)
+│   ├── providers/               # 外部API集成 (慢速: 4-5秒/测试)
+│   ├── test_end_to_end_workflow.py         # 端到端工作流
+│   ├── test_multi_data_source.py           # 多数据源切换
+│   ├── test_database_*.py                  # 数据库集成
+│   ├── test_gpu_integration.py             # GPU训练集成
+│   ├── test_parallel_ic_calculation.py     # 并行IC计算
+│   └── test_phase*.py                      # 阶段集成测试
+│
+├── 📂 performance/              # 性能测试 (~100个测试)
+│   ├── test_feature_calculation_benchmarks.py
+│   └── test_performance_*.py
+│
+├── 📂 visualization/            # 可视化测试
+├── 📂 cli/                      # CLI命令行工具测试
+├── 📂 config/                   # 配置测试fixtures
+├── 📂 data/                     # 测试数据
+├── 📂 reports/                  # 测试报告输出目录
+└── 📂 logs/                     # 测试日志
+```
+
+---
+
+## 📊 测试统计
+
+### 总体概览
+
+| 测试类型 | 文件数 | 测试数 | 通过率 | 耗时 (实测) |
+|---------|--------|--------|--------|-------------|
+| 单元测试 (全部) | ~80 | ~2665 | 98% | ~80秒 (排除GRU) |
+| 单元测试 (快速) | ~76 | ~2582 | 99% | **~38秒** ⚡ |
+| 集成测试 (全部) | 23 | 134 | 97% | ~175秒 (3分钟) |
+| 集成测试 (快速) | ~15 | ~80 | 99% | **~30秒** ⚡ |
+| 集成测试 (中速) | ~18 | ~100 | 98% | ~120秒 (2分钟) |
+| 性能测试 | ~10 | ~100 | 95% | ~3秒 |
+| **所有测试** | **~113** | **~2899** | **98%** | **~260秒 (4.5分钟)** |
+
+> ⚡ 快速模式自动排除: GRU模型测试、因子分析器测试、并行回测测试、并行执行器测试、外部API测试
+
+### 单元测试详细分类
+
+| 功能层 | 测试文件 | 测试用例 | 预计耗时 | 状态 |
+|--------|---------|---------|---------|------|
+| 数据层 (data + providers) | ~15 | ~200 | ~8秒 | ✅ |
+| 特征层 (features) | ~12 | ~300 | ~15秒 | ✅ |
+| 模型层 (models, 排除GRU) | ~8 | ~150 | ~20秒 | ✅ |
+| 回测层 (backtest) | ~6 | ~120 | ~8秒 | ✅ |
+| 策略层 (strategies) | ~7 | ~108 | ~5秒 | ✅ |
+| 风控层 (risk_management) | ~3 | ~41 | ~2秒 | ✅ |
+| 因子分析层 (analysis) | ~7 | ~80 | ~4秒 | ✅ |
+| 参数优化层 (optimization) | ~4 | ~50 | ~3秒 | ✅ |
+| 配置层 (config) | ~6 | ~70 | ~2秒 | ✅ |
+| 其他 (utils, api) | ~12 | ~180 | ~5秒 | ✅ |
+
+### 集成测试详细分类
+
+| 测试类别 | 文件数 | 测试用例 | 平均耗时/测试 | 总耗时 | 速度 |
+|---------|--------|---------|--------------|--------|------|
+| 外部API (Tushare, AkShare) | 4 | ~30 | **4-5秒** | ~120秒 | 🐢 慢 |
+| 端到端工作流 | 1 | 3 | **4-5秒** | ~14秒 | 🐢 慢 |
+| 多数据源切换 | 1 | ~10 | **4-5秒** | ~40秒 | 🐢 慢 |
+| 数据库集成 | 2 | ~15 | 0.1-2秒 | ~10秒 | 🚶 中 |
+| GPU/模型训练 | 2 | ~20 | 0.1-3秒 | ~15秒 | 🚶 中 |
+| 并行IC计算 | 1 | ~12 | 0.1-4秒 | ~20秒 | 🚶 中 |
+| 阶段测试 (phase2-4) | 3 | ~15 | 0.01-0.04秒 | ~1秒 | ⚡ 快 |
+| 回测成本分析 | 1 | ~20 | 0.01-0.03秒 | ~0.5秒 | ⚡ 快 |
+| 特征存储 | 1 | ~15 | 0.01-0.3秒 | ~1秒 | ⚡ 快 |
+| 其他集成测试 | ~7 | ~24 | <0.1秒 | ~2秒 | ⚡ 快 |
+
+> 💡 **速度分级说明**:
+> - ⚡ 快速 (<0.1秒/测试): 适合频繁运行
+> - 🚶 中速 (0.1-2秒/测试): 适合提交前运行
+> - 🐢 慢速 (>3秒/测试): 仅CI/CD或发布前运行
+
+---
+
+## 🎯 运行测试
+
+### 交互式菜单
 
 ```bash
-# macOS
-open htmlcov/index.html
-
-# Linux
-xdg-open htmlcov/index.html
-
-# Windows
-start htmlcov/index.html
+python run_tests.py
 ```
+
+菜单选项:
+
+```
+[快速测试 - 推荐日常使用]
+  [2] 快速单元测试 (排除慢速测试: GRU/因子分析/并行) [~38秒] ⚡
+  [Q] 快速集成测试 (排除外部API) [~30秒] ⚡
+  [X] 快速诊断 (只运行失败过的测试) [<10秒] ⚡
+
+[完整测试]
+  [1] 运行所有测试 (单元+集成, 带覆盖率) [~260秒 (4.5分钟)]
+  [3] 所有单元测试 (排除GRU) [~80秒]
+  [4] 所有集成测试 [~175秒 (3分钟)]
+  [5] 性能测试 [~3秒]
+
+[集成测试分类 - 按速度]
+  [I1] 快速集成测试 (排除外部API) [~30秒] ⚡
+  [I2] 中速集成测试 (含数据库/不含API) [~120秒]
+  [I3] 完整集成测试 (含外部API) [~175秒]
+
+[单元测试 - 按功能层]
+  [D] 数据层 (data + providers) [~8秒]
+  [F] 特征层 (features) [~15秒]
+  [M] 模型层 (models, 排除GRU) [~20秒]
+  [B] 回测层 (backtest) [~8秒]
+  [S] 策略层 (strategies) [~5秒]
+  [R] 风控层 (risk_management) [~2秒]
+  [A] 因子分析层 (analysis) [~4秒]
+  [O] 参数优化层 (optimization) [~3秒]
+
+[其他选项]
+  [6] 运行特定模块测试
+  [L] 按层级查看所有可用测试模块
+  [P] 切换并行模式 (加速测试执行)
+  [T] 查看测试统计信息
+  [0] 退出
+```
+
+### 命令行模式
+
+#### 快速测试（日常开发）
+
+```bash
+# 快速单元测试 (~38秒)
+python run_tests.py --fast
+
+# 快速单元测试 + 并行加速 (~20秒)
+python run_tests.py --fast --parallel
+```
+
+#### 完整测试
+
+```bash
+# 运行所有测试
+python run_tests.py --all
+
+# 运行所有测试 + 覆盖率报告
+python run_tests.py --all --coverage
+
+# 运行所有单元测试
+python run_tests.py --unit
+
+# 运行所有集成测试
+python run_tests.py --integration
+
+# 运行性能测试
+python run_tests.py --performance
+```
+
+#### 按功能层运行
+
+```bash
+# 数据层测试
+python run_tests.py --layer data
+
+# 特征层测试
+python run_tests.py --layer features
+
+# 模型层测试
+python run_tests.py --layer models
+
+# 回测层测试
+python run_tests.py --layer backtest
+
+# 策略层测试
+python run_tests.py --layer strategies
+
+# 风控层测试
+python run_tests.py --layer risk_management
+
+# 因子分析层测试
+python run_tests.py --layer analysis
+
+# 参数优化层测试
+python run_tests.py --layer optimization
+```
+
+#### 运行特定模块
+
+```bash
+# 运行特定文件
+python run_tests.py --module unit/test_data_loader.py
+
+# 运行特定目录
+python run_tests.py --module unit/strategies/
+
+# 优先运行失败的测试
+python run_tests.py --failed-first
+```
+
+#### 并行测试（加速）
+
+```bash
+# 并行运行所有测试 (使用4个工作进程)
+python run_tests.py --all --parallel
+
+# 并行运行快速测试
+python run_tests.py --fast --parallel
+
+# 自定义工作进程数
+python run_tests.py --all --parallel --workers 8
+```
+
+#### 覆盖率要求
+
+```bash
+# 要求最低覆盖率80%
+python run_tests.py --all --min-coverage 80
+
+# 不生成覆盖率报告 (更快)
+python run_tests.py --all --no-coverage
+```
+
+#### 查看信息
+
+```bash
+# 列出所有可用测试模块
+python run_tests.py --list-modules
+
+# 查看帮助
+python run_tests.py --help
+```
+
+### 直接使用 pytest
+
+```bash
+# 运行所有测试
+pytest tests/ -v
+
+# 运行单元测试
+pytest tests/unit/ -v
+
+# 运行集成测试
+pytest tests/integration/ -v
+
+# 生成覆盖率报告
+pytest tests/ --cov=src --cov-report=html --cov-report=term
+
+# 显示测试耗时
+pytest tests/ --durations=20
+
+# 并行运行
+pytest tests/ -n 4
+```
+
+---
 
 ## ⚡ 性能优化建议
 
-**GRU模型测试很慢？需要跳过外部API测试？**
+### 为什么快速模式这么快？
 
-快速模式会自动排除：
-- GRU深度学习模型测试（每个测试约30-60秒）
-- 外部API集成测试（AkShare、Tushare，需要网络连接和API token）
+快速模式自动排除以下耗时测试:
 
-推荐使用快速模式：
+#### 单元测试排除项
+- ❌ **GRU模型测试** (2个文件, 会导致段错误)
+  - `test_gru_model.py`
+  - `test_gru_model_comprehensive.py`
 
+- ❌ **耗时的单元测试** (3个文件, 共节省~42秒)
+  - `test_factor_analyzer.py` - 因子分析器测试 (最慢测试5.28秒)
+  - `test_parallel_backtester.py` - 并行回测器测试 (多个1秒+测试)
+  - `test_parallel_executor.py` - 并行执行器测试 (多个1秒+测试)
+
+#### 集成测试排除项
+- ❌ **外部API测试** (~120秒)
+  - `tests/integration/providers/` - Tushare, AkShare API调用
+  - `test_multi_data_source.py` - 多数据源切换 (4-5秒/测试)
+  - `test_end_to_end_workflow.py` - 端到端工作流 (4-5秒/测试)
+
+- ❌ **慢速集成测试** (仅在I1快速模式)
+  - `test_database_security_and_concurrency.py` - 数据库并发测试
+  - `test_database_manager_refactored.py` - 数据库管理测试
+  - `test_parallel_ic_calculation.py` - 并行IC计算 (4-5秒/测试)
+  - `test_gpu_integration.py` - GPU集成测试
+  - `test_model_trainer_integration.py` - 模型训练集成
+
+### 推荐工作流
+
+#### 日常开发
 ```bash
-python3 run_tests.py --fast
+# 第一步: 快速单元测试 (~38秒)
+python run_tests.py --fast
+
+# 第二步: 运行你修改的模块测试
+python run_tests.py --layer features  # 如果你修改了特征层
+
+# 或者并行加速 (~20秒)
+python run_tests.py --fast --parallel
 ```
 
-或手动排除：
+#### 提交前检查
 ```bash
-pytest tests/ --cov=src --cov-report=html \
-  --ignore=tests/unit/models/test_gru_model.py \
-  --ignore=tests/integration/providers/akshare/ \
-  --ignore=tests/integration/providers/test_tushare_provider.py -v
+# 运行快速集成测试 (~30秒)
+python run_tests.py --fast
+python run_tests.py --layer data --parallel
+
+# 或运行中速集成测试 (~120秒)
+python run_tests.py --integration --fast
 ```
 
-## 📈 测试统计
+#### CI/CD 或发布前
+```bash
+# 运行所有测试 + 覆盖率检查
+python run_tests.py --all --min-coverage 80
+```
 
-- **总测试数量**: ~1550个测试用例
-- **单元测试**: ~1050个（含108个策略测试 + 41个风控测试）
-- **集成测试**: ~400个
-- **性能测试**: ~100个
-- **测试通过率**: 99%+ ✅
-- **预计运行时间**:
-  - 所有测试: ~60分钟
-  - 快速模式（排除GRU和外部API）: ~27秒
-  - 只运行单元测试: ~60分钟
-  - 只运行策略测试: ~5分钟
-  - 只运行风控测试: ~1秒 ⭐ NEW
+---
 
-### 策略测试详情 ⭐
+## 📈 查看测试报告
 
-- **测试文件**: 7个
-- **测试用例**: 108个
-- **覆盖策略**:
-  - MomentumStrategy（动量策略）- 15个测试
-  - MeanReversionStrategy（均值回归）- 17个测试
-  - MultiFactorStrategy（多因子）- 17个测试
-  - MLStrategy（机器学习）- 15个测试（6个跳过）
-  - StrategyCombiner（策略组合）- 19个测试
-  - SignalGenerator（信号生成）- 25个测试
-- **通过率**: 100% ✅
+### 覆盖率报告
 
-### 风控测试详情 ⭐ NEW
+测试完成后会生成HTML覆盖率报告:
 
-- **测试文件**: 3个
-- **测试用例**: 41个
-- **覆盖模块**:
-  - VaRCalculator（VaR计算器）- 15个测试
-  - DrawdownController（回撤控制器）- 14个测试
-  - PositionSizer（仓位管理器）- 12个测试
-- **通过率**: 100% ✅
+```bash
+# macOS
+open tests/reports/htmlcov/index.html
+
+# Linux
+xdg-open tests/reports/htmlcov/index.html
+
+# Windows
+start tests/reports/htmlcov/index.html
+```
+
+### 测试统计信息
+
+```bash
+# 查看详细的测试统计
+python run_tests.py
+# 然后选择 [T] 查看测试统计信息
+```
+
+---
 
 ## 🔧 常见问题
 
-**Q: 测试卡住了怎么办？**
+### Q: 测试运行很慢怎么办？
 
-A: 通常是GRU模型测试导致的。终止测试（Ctrl+C），然后使用快速模式：
+**A**: 使用快速模式:
 ```bash
-python3 run_tests.py --fast
+python run_tests.py --fast
 ```
 
-**Q: 如何只运行我修改过的模块的测试？**
-
-A: 使用 `--module` 参数：
+或者并行运行:
 ```bash
-python3 run_tests.py --module unit/test_data_loader.py
+python run_tests.py --fast --parallel
 ```
 
-**Q: 覆盖率报告在哪里？**
+### Q: 测试卡住不动了？
 
-A: 生成在 `htmlcov/index.html`，用浏览器打开查看。
-
-## 📝 更多详细说明
-
-查看统一测试运行器的帮助信息：
+**A**: 可能是GRU模型测试导致段错误。终止测试 (Ctrl+C)，然后使用快速模式:
 ```bash
-python3 run_tests.py --help
+python run_tests.py --fast
 ```
+
+### Q: 集成测试失败怎么办？
+
+**A**: 集成测试依赖外部API和数据库:
+
+1. **Tushare测试失败**: 检查是否设置了 `TUSHARE_TOKEN` 环境变量
+2. **AkShare测试失败**: 检查网络连接
+3. **数据库测试失败**: 检查 TimescaleDB 是否运行
+4. **GPU测试失败**: 正常，大多数机器没有GPU
+
+快速模式会自动跳过这些测试。
+
+### Q: 如何只运行我修改的模块？
+
+**A**: 使用 `--layer` 或 `--module` 参数:
+```bash
+# 按层运行
+python run_tests.py --layer features
+
+# 按文件运行
+python run_tests.py --module unit/features/test_alpha_factors.py
+```
+
+### Q: 覆盖率报告在哪里？
+
+**A**:
+- HTML报告: `tests/reports/htmlcov/index.html`
+- XML报告: `tests/reports/coverage.xml`
+- 终端输出: 运行测试时会显示
+
+### Q: 如何调试失败的测试？
+
+**A**: 使用 pytest 的调试选项:
+```bash
+# 显示详细输出
+pytest tests/unit/test_xxx.py -v -s
+
+# 在失败处进入调试器
+pytest tests/unit/test_xxx.py --pdb
+
+# 只运行失败的测试
+pytest tests/unit/test_xxx.py --lf
+```
+
+### Q: 并行测试报错怎么办？
+
+**A**: 某些测试可能不支持并行 (如数据库测试)。尝试:
+```bash
+# 减少工作进程数
+python run_tests.py --all --parallel --workers 2
+
+# 或不使用并行
+python run_tests.py --all
+```
+
+---
+
+## 📚 详细文档
+
+### 子目录文档
+
+- [单元测试 - Providers](unit/providers/tushare/README.md) - Tushare数据提供商测试
+- [单元测试 - Providers](unit/providers/akshare/README.md) - AkShare数据提供商测试
+- [CLI测试](cli/README.md) - 命令行工具测试
+- [配置测试](config/README.md) - 配置管理测试
+- [集成测试](integration/README.md) - 集成测试文档
+- [性能测试](performance/README.md) - 性能基准测试
+- [测试报告](reports/README.md) - 报告说明
+
+### 相关文档
+
+- [开发路线图](../DEVELOPMENT_ROADMAP.md)
+- [重构计划](../REFACTORING_PLAN.md)
+- [项目架构说明](../docs/ARCHITECTURE.md)
+
+---
+
+## 📝 维护说明
+
+### 添加新测试
+
+1. **单元测试**: 放在 `tests/unit/` 对应的功能层目录
+2. **集成测试**: 放在 `tests/integration/`
+3. **性能测试**: 放在 `tests/performance/`
+
+### 测试命名规范
+
+- 测试文件: `test_*.py`
+- 测试类: `Test*`
+- 测试方法: `test_*`
+
+### 慢速测试标记
+
+如果添加了慢速测试 (>3秒)，请在 `run_tests.py` 的快速模式中排除:
+
+```python
+# 在 build_pytest_cmd 函数中添加
+if exclude_slow:
+    cmd.append('--ignore=tests/your/slow/test.py')
+```
+
+---
+
+## 🎉 总结
+
+- ✅ **2900+测试用例** 覆盖所有核心功能
+- ✅ **98%+通过率** 确保代码质量
+- ✅ **快速模式38秒** 支持敏捷开发 (并行模式20秒)
+- ✅ **分层测试** 精确定位问题
+- ✅ **并行支持** 加速测试执行
+- ✅ **交互式菜单** 简单易用
+
+**Happy Testing! 🚀**
