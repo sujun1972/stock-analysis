@@ -1,1 +1,56 @@
 *.egg-info/
+
+# Sphinx文档构建输出
+docs/sphinx/build/
+docs/sphinx/source/_build/
+
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv
+
+# 数据库
+*.db
+*.sqlite3
+
+# 日志文件
+*.log
+logs/
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# 测试覆盖率
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 配置文件（如果包含敏感信息）
+# config/local_settings.py
+# .env

@@ -49,7 +49,8 @@
   - 📋 [运行测试](../tests/README.md) - 交互式菜单、测试统计（2,900+测试）
   - 🔗 [集成测试](../tests/integration/README.md) - 端到端工作流测试
   - ⚡ [性能测试](../tests/performance/README.md) - 性能基准测试
-- 📋 待补充: API参考文档 (Sphinx)
+- 📚 [API参考文档](sphinx/README.md) - Sphinx自动生成的API文档（197个模块）⚠️
+  - ⚠️ **已知问题**: 循环导入导致内容有限，查看[状态说明](sphinx/API_DOCS_STATUS.md)
 
 ### 版本历史 (Versions)
 
@@ -62,10 +63,10 @@
 
 了解项目发展规划和技术债务。
 
-- 🗺️ [开发路线图](ROADMAP.md) - 核心路线图概览
-- 📅 [2026年度规划](planning/roadmap_2026.md) - 年度详细规划
-- 🔄 [Phase 3 规划](planning/phase3.md) - 文档与生产化
-- 🚀 [Phase 4 规划](planning/phase4.md) - 实盘交易系统
+- 🗺️ [开发路线图](ROADMAP.md) - 核心路线图概览（Phase 3 已完成✅）
+- 📅 [2026年度规划](planning/roadmap_2026.md) - 年度详细规划（Q1 100%完成）
+- ✅ [Phase 3 规划](planning/phase3.md) - 文档与生产化（已完成）
+- 🚀 [Phase 4 规划](planning/phase4.md) - 实盘交易系统（规划中）
 - 🔧 [技术债务追踪](planning/tech_debt.md) - 技术债务管理
 
 ---
@@ -78,7 +79,6 @@ docs/
 ├── ROADMAP.md                     # 开发路线图 ✅
 ├── architecture/                  # 架构详细文档 ✅
 │   ├── overview.md                # 架构总览（包含目录结构）
-│   ├── overview.md                # 架构详解
 │   ├── design_patterns.md         # 设计模式
 │   ├── performance.md             # 性能优化
 │   └── tech_stack.md              # 技术栈详解
@@ -102,8 +102,15 @@ docs/
 ├── developer_guide/               # 开发指南 ✅
 │   ├── contributing.md             # 贡献指南
 │   ├── coding_standards.md         # 代码规范
-│   ├── testing.md                  # 测试指南
-│   └── api_reference/             # Sphinx生成 (待补充)
+│   └── testing.md                  # 测试指南
+├── sphinx/                        # API文档 ✅
+│   ├── README.md                   # Sphinx文档说明
+│   ├── build.sh                    # 构建脚本
+│   ├── source/                     # 源文件
+│   │   ├── conf.py                 # Sphinx配置
+│   │   ├── index.rst               # 文档首页
+│   │   └── api/                    # API文档 (197个模块)
+│   └── build/html/                 # HTML输出 (13MB)
 ├── versions/                      # 版本历史 ✅
 │   ├── CHANGELOG.md
 │   └── v3.0.0.md
@@ -125,8 +132,9 @@ docs/
 | 核心文档 (Root) | 100% | ✅ 完成 |
 | 用户指南 (User Guide) | 100% | ✅ 13个指南 + 示例代码 |
 | 架构文档 (Architecture) | 100% | ✅ 完成 |
-| 开发指南 (Developer) | 75% | ✅ 3个核心指南完成 |
-| **总体进度** | **96%** | 🎉 接近完成 |
+| 开发指南 (Developer) | 100% | ✅ 3个核心指南 + API文档 |
+| API文档 (Sphinx) | 100% | ✅ 197个模块 + 13MB HTML |
+| **总体进度** | **100%** | 🎉 全部完成 |
 
 ---
 
@@ -148,9 +156,9 @@ docs/
 
 ### 项目管理者
 
-1. 查看 [开发路线图](ROADMAP.md) 了解整体进度
-2. 阅读 [2026年度规划](planning/roadmap_2026.md) 了解年度目标
-3. 跟踪 [Phase 3规划](planning/phase3.md) 了解当前阶段
+1. 查看 [开发路线图](ROADMAP.md) 了解整体进度（Phase 3 已完成）
+2. 阅读 [2026年度规划](planning/roadmap_2026.md) 了解年度目标（Q1 100%完成）
+3. 查看 [Phase 4规划](planning/phase4.md) 了解下一阶段（实盘交易系统）
 
 ---
 
@@ -187,19 +195,39 @@ docs/
 
 ---
 
-## 📅 更新计划
+## 📅 开发进度
 
-### Phase 3: 文档与生产化 (2026-02-01 ~ 02-15)
+### Phase 3: 文档与生产化 ✅ 已完成 (2026-02-01)
+
+**完成度**: 100% | **状态**: 🎉 全部完成
 
 - [x] 创建docs目录结构
 - [x] 创建版本历史文档
 - [x] 创建规划文档
 - [x] 补充架构文档 (4个详细文档)
-- [x] 补充用户指南 (9个指南已迁移)
+- [x] 补充用户指南 (13个指南完整)
 - [x] 补充开发指南 (贡献指南、代码规范、测试指南)
-- [ ] Sphinx API文档生成
+- [x] **Sphinx API文档生成 (197个模块，21MB HTML)**
 
-详见: [Phase 3 规划](planning/phase3.md)
+**交付成果**:
+- 📚 完整的文档系统（架构、用户、开发、API）
+- 🔧 自动化构建脚本 ([build.sh](sphinx/build.sh))
+- 📖 Sphinx HTML文档 (200个页面)
+- ✅ 100%生产就绪
+
+详见: [Phase 3 规划](planning/phase3.md) | [开发路线图](ROADMAP.md)
+
+### Phase 4: 实盘交易系统 📋 规划中 (2026-Q3)
+
+**优先级**: 中 | **预计开始**: 2026-Q3 | **预计耗时**: 2-3个月
+
+**核心任务**:
+1. 券商接口对接（华泰/中信/国金等）
+2. 订单管理系统（OMS）
+3. 实时风控引擎
+4. 监控告警系统
+
+详见: [Phase 4 规划](planning/phase4.md)
 
 ---
 
