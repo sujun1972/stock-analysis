@@ -26,7 +26,7 @@ from .ic_calculator import ICCalculator, ICResult
 from .layering_test import LayeringTest
 from .factor_correlation import FactorCorrelation
 from .factor_optimizer import FactorOptimizer, OptimizationResult
-from utils.response import Response, ResponseStatus
+from src.utils.response import Response, ResponseStatus
 
 # 导入异常类
 try:

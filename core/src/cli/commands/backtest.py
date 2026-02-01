@@ -24,7 +24,7 @@ from cli.utils.output import (
     format_number,
 )
 from cli.utils.progress import create_progress_bar
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 from config.settings import get_settings
 
 logger = get_logger(__name__)

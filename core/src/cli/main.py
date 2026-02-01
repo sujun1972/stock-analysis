@@ -21,7 +21,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from cli.utils.output import create_console, print_info
-from utils.logger import setup_logger, get_logger
+from src.utils.logger import setup_logger, get_logger
 
 logger = get_logger(__name__)
 

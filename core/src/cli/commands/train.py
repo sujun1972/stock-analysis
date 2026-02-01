@@ -16,7 +16,7 @@ if str(project_root) not in sys.path:
 
 from cli.utils.output import print_success, print_error, print_info, print_table, print_warning
 from cli.utils.progress import create_progress_bar
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 from config.settings import get_settings
 
 logger = get_logger(__name__)

@@ -46,6 +46,8 @@ from .transform_strategy import (
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from loguru import logger
 
+from src.utils.data_utils import forward_fill_series, backward_fill_series, fill_with_value
+
 
 # ==================== 向后兼容的 FeatureTransformer 类 ====================
 
@@ -300,17 +302,25 @@ class FeatureTransformer:
             处理缺失值后的DataFrame
         """
         if method == 'forward':
-            self.df = self.df.ffill()
+            # 使用通用工具函数
+            for col in self.df.columns:
+                self.df[col] = forward_fill_series(self.df[col])
         elif method == 'backward':
-            self.df = self.df.bfill()
+            # 使用通用工具函数
+            for col in self.df.columns:
+                self.df[col] = backward_fill_series(self.df[col])
         elif method == 'mean':
             self.df = self.df.fillna(self.df.mean())
         elif method == 'median':
             self.df = self.df.fillna(self.df.median())
         elif method == 'zero':
-            self.df = self.df.fillna(0)
+            # 使用通用工具函数
+            for col in self.df.columns:
+                self.df[col] = fill_with_value(self.df[col], value=0)
         elif method == 'value':
-            self.df = self.df.fillna(fill_value)
+            # 使用通用工具函数
+            for col in self.df.columns:
+                self.df[col] = fill_with_value(self.df[col], value=fill_value)
         else:
             raise ValueError(f"不支持的填充方法: {method}")
 

@@ -8,6 +8,7 @@ import numpy as np
 from typing import Tuple
 
 from src.config.trading_rules import DataQualityRules
+from src.utils.data_utils import forward_fill_series, backward_fill_series, fill_with_value
 from loguru import logger
 
 
@@ -104,20 +105,21 @@ class DataCleaner:
         """
         before_missing = df.isnull().sum().sum()
 
-        # 价格列使用前向填充
+        # 价格列使用前向填充和后向填充（使用通用工具函数）
         price_columns = ['open', 'high', 'low', 'close']
         for col in price_columns:
             if col in df.columns:
-                df[col] = df[col].ffill()
+                df[col] = forward_fill_series(df[col])
 
-        # 成交量填充为0
+        # 成交量填充为0（使用通用工具函数）
         volume_columns = ['vol', 'volume', 'amount']
         for col in volume_columns:
             if col in df.columns:
-                df[col] = df[col].fillna(0)
+                df[col] = fill_with_value(df[col], value=0)
 
-        # 其他列前向填充后向填充
-        df = df.ffill().bfill()
+        # 所有列后向填充以处理前导缺失值（使用通用工具函数）
+        for col in df.columns:
+            df[col] = backward_fill_series(df[col])
 
         # 如果还有缺失值，删除这些行
         df = df.dropna()

@@ -18,8 +18,8 @@ from typing import Optional, Dict, List, Any, Tuple
 from loguru import logger
 from datetime import datetime, timedelta
 
-from utils.response import Response
-from exceptions import DataValidationError
+from src.utils.response import Response
+from src.exceptions import DataValidationError
 
 
 class DataValidator:

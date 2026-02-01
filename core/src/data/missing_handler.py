@@ -17,6 +17,13 @@ import numpy as np
 from typing import Optional, Literal, Dict, List, Tuple, Union, Any
 from loguru import logger
 
+from src.utils.data_utils import (
+    forward_fill_series,
+    backward_fill_series,
+    interpolate_series,
+    fill_with_value
+)
+
 
 class MissingHandler:
     """
@@ -171,7 +178,8 @@ class MissingHandler:
 
         for col in cols:
             if col in df_filled.columns:
-                df_filled[col] = df_filled[col].ffill(limit=limit)
+                # 使用通用工具函数
+                df_filled[col] = forward_fill_series(df_filled[col], limit=limit)
 
         filled_count = self.df.isnull().sum().sum() - df_filled.isnull().sum().sum()
         logger.info(f"前向填充完成: 填充={filled_count}个缺失值")
@@ -198,7 +206,8 @@ class MissingHandler:
 
         for col in cols:
             if col in df_filled.columns:
-                df_filled[col] = df_filled[col].bfill(limit=limit)
+                # 使用通用工具函数
+                df_filled[col] = backward_fill_series(df_filled[col], limit=limit)
 
         filled_count = self.df.isnull().sum().sum() - df_filled.isnull().sum().sum()
         logger.info(f"后向填充完成: 填充={filled_count}个缺失值")
@@ -236,20 +245,25 @@ class MissingHandler:
                 continue
 
             try:
+                # 使用通用工具函数
                 if method in ['spline', 'polynomial']:
-                    df_filled[col] = df_filled[col].interpolate(
+                    df_filled[col] = interpolate_series(
+                        df_filled[col],
                         method=method,
                         order=order,
                         limit=limit
                     )
                 else:
-                    df_filled[col] = df_filled[col].interpolate(
+                    # 使用通用工具函数
+                    df_filled[col] = interpolate_series(
+                        df_filled[col],
                         method=method,
                         limit=limit
                     )
             except Exception as e:
                 logger.warning(f"插值失败 [{col}]: {e}，使用线性插值")
-                df_filled[col] = df_filled[col].interpolate(method='linear', limit=limit)
+                # 使用通用工具函数
+                df_filled[col] = interpolate_series(df_filled[col], method='linear', limit=limit)
 
         filled_count = self.df.isnull().sum().sum() - df_filled.isnull().sum().sum()
         logger.info(f"插值填充完成 ({method}): 填充={filled_count}个缺失值")
