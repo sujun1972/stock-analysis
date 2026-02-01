@@ -336,6 +336,54 @@ class ApiResponse(BaseModel, Generic[T]):
             request_id=request_id
         )
 
+    @classmethod
+    def warning(
+        cls,
+        data: Optional[T] = None,
+        message: str = "warning",
+        warning_code: Optional[str] = None,
+        request_id: Optional[str] = None,
+        **metadata
+    ) -> "ApiResponse[T]":
+        """
+        创建警告响应 (206 Partial Content)
+
+        用于操作成功但存在需要注意的情况。
+
+        Args:
+            data: 响应数据
+            message: 警告消息
+            warning_code: 警告代码（可选）
+            request_id: 请求ID
+            **metadata: 其他元数据（会合并到 data 中）
+
+        Returns:
+            ApiResponse: 警告响应对象
+
+        Example:
+            >>> ApiResponse.warning(
+            ...     data={"result": "..."},
+            ...     message="数据处理完成，但质量较低",
+            ...     warning_code="LOW_QUALITY",
+            ...     quality_score=0.75
+            ... )
+        """
+        # 如果 data 是 None，创建空字典
+        response_data = data if data is not None else {}
+
+        # 如果 data 是字典，将 warning_code 和 metadata 合并进去
+        if isinstance(response_data, dict):
+            if warning_code:
+                response_data["warning_code"] = warning_code
+            response_data.update(metadata)
+
+        return cls(
+            code=206,
+            message=message,
+            data=response_data,
+            request_id=request_id
+        )
+
     # ==================== 特殊响应类型 ====================
 
     @classmethod
@@ -433,6 +481,32 @@ def error_response(
         Dict: 响应字典
     """
     return ApiResponse.error(message=message, code=code, data=data).to_dict()
+
+
+def warning_response(
+    data: Optional[Any] = None,
+    message: str = "warning",
+    warning_code: Optional[str] = None,
+    **metadata
+) -> Dict[str, Any]:
+    """
+    快速创建警告响应字典（向后兼容）
+
+    Args:
+        data: 响应数据
+        message: 警告消息
+        warning_code: 警告代码
+        **metadata: 其他元数据
+
+    Returns:
+        Dict: 警告响应字典
+    """
+    return ApiResponse.warning(
+        data=data,
+        message=message,
+        warning_code=warning_code,
+        **metadata
+    ).to_dict()
 
 
 def paginated_response(

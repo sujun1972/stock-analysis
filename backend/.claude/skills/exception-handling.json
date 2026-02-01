@@ -1,0 +1,47 @@
+{
+  "name": "exception-handling",
+  "description": "Backend 统一异常处理系统使用指南 - FastAPI 环境下的异常处理和错误响应规范",
+  "version": "1.0.0",
+  "category": "best-practices",
+  "tags": ["exceptions", "error-handling", "fastapi", "async", "best-practices"],
+  "author": "Stock Analysis Team",
+  "created": "2026-02-01",
+  "applies_to": [
+    "FastAPI 端点开发",
+    "异步服务函数",
+    "数据库操作",
+    "策略执行",
+    "外部 API 调用",
+    "数据验证"
+  ],
+  "examples": {
+    "api_endpoint": "FastAPI 端点中的异常处理",
+    "async_retry": "异步函数重试机制",
+    "data_validation": "数据验证错误处理",
+    "database_error": "数据库操作错误处理",
+    "custom_exception": "创建自定义业务异常"
+  },
+  "quick_reference": {
+    "common_exceptions": [
+      "BadRequestError (400)",
+      "UnauthorizedError (401)",
+      "NotFoundError (404)",
+      "ConflictError (409)",
+      "DataQueryError",
+      "StrategyExecutionError",
+      "ValidationError",
+      "CalculationError"
+    ],
+    "decorators": [
+      "@handle_api_errors",
+      "@handle_api_errors_sync",
+      "retry_async()",
+      "retry_sync()"
+    ],
+    "integration": [
+      "与 ApiResponse 集成",
+      "与 HTTPException 集成",
+      "异步函数支持"
+    ]
+  }
+}

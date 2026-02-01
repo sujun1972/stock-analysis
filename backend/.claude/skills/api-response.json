@@ -1,0 +1,45 @@
+{
+  "name": "api-response",
+  "description": "Backend 统一 API 响应格式使用指南 - 如何正确使用 ApiResponse 类构建标准化 FastAPI 响应",
+  "version": "1.0.0",
+  "category": "best-practices",
+  "tags": ["api", "response", "standardization", "fastapi", "pydantic", "best-practices"],
+  "author": "Stock Analysis Team",
+  "created": "2026-02-01",
+  "applies_to": [
+    "新 API 端点开发",
+    "现有 API 重构",
+    "数据查询接口",
+    "策略执行接口",
+    "回测接口",
+    "数据验证"
+  ],
+  "examples": {
+    "success_response": "如何创建成功响应",
+    "error_response": "如何创建错误响应",
+    "warning_response": "如何创建警告响应",
+    "paginated_response": "如何创建分页响应",
+    "exception_integration": "与异常系统集成"
+  },
+  "quick_reference": {
+    "response_methods": [
+      "ApiResponse.success() - 成功响应 (200)",
+      "ApiResponse.error() - 错误响应 (自定义状态码)",
+      "ApiResponse.warning() - 警告响应 (206)",
+      "ApiResponse.created() - 创建成功 (201)",
+      "ApiResponse.not_found() - 资源不存在 (404)",
+      "ApiResponse.bad_request() - 错误请求 (400)",
+      "ApiResponse.paginated() - 分页响应"
+    ],
+    "convenience_functions": [
+      "success_response()",
+      "error_response()",
+      "paginated_response()"
+    ],
+    "integration": [
+      "与异常处理集成",
+      "Pydantic 模型支持",
+      "泛型数据类型支持"
+    ]
+  }
+}

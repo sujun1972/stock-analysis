@@ -31,7 +31,10 @@
 
 为贡献者提供的开发指南。
 
+- [开发指南总览](developer_guide/README.md) - 开发流程、编码规范、学习路径
+- [API Response 使用指南](developer_guide/api_response_guide.md) - 统一响应格式和最佳实践
 - [贡献指南](developer_guide/contributing.md) - 代码规范、测试、PR 流程
+- [Claude Skills](../.claude/skills/README.md) - AI 辅助开发的最佳实践
 
 ### 部署文档 (Deployment)
 
@@ -45,19 +48,26 @@
 
 ```
 backend/docs/
-├── README.md                      # 本文档
-├── architecture/                  # 架构文档
-│   ├── overview.md                # 架构总览
-│   └── tech_stack.md              # 技术栈详解
-├── api_reference/                 # API 参考
-│   └── README.md                  # API 概览
-├── user_guide/                    # 用户指南
-│   └── quick_start.md             # 快速开始
-├── developer_guide/               # 开发指南
-│   └── contributing.md            # 贡献指南
-├── deployment/                    # 部署文档
-│   └── docker.md                  # Docker 部署
-└── planning/                      # 规划文档（预留）
+├── README.md                          # 本文档
+├── architecture/                      # 架构文档
+│   ├── overview.md                    # 架构总览
+│   └── tech_stack.md                  # 技术栈详解
+├── api_reference/                     # API 参考
+│   └── README.md                      # API 概览
+├── user_guide/                        # 用户指南
+│   └── quick_start.md                 # 快速开始
+├── developer_guide/                   # 开发指南
+│   ├── README.md                      # 开发指南总览
+│   ├── api_response_guide.md          # API 响应使用指南
+│   └── contributing.md                # 贡献指南
+├── deployment/                        # 部署文档
+│   └── docker.md                      # Docker 部署
+└── planning/                          # 规划文档（预留）
+
+backend/.claude/skills/                # Claude Code Skills
+├── README.md                          # Skills 使用指南
+├── exception-handling.json/.md        # 异常处理 Skill
+└── api-response.json/.md              # API 响应 Skill
 ```
 
 ---
