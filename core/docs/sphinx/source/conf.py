@@ -7,7 +7,8 @@ import os
 import sys
 
 # Add the project root directory to the Python path
-sys.path.insert(0, os.path.abspath('../../../src'))
+# 修复: 应该添加包含 src 的项目根目录，而不是 src 本身
+sys.path.insert(0, os.path.abspath('../../..'))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -87,6 +88,7 @@ autodoc_mock_imports = [
     'sklearn',
     'scipy',
     'statsmodels',
+    'imblearn',  # imbalanced-learn
 ]
 
 # Workaround for circular imports: don't execute module-level code

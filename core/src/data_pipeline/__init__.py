@@ -18,9 +18,9 @@ from .data_cleaner import DataCleaner
 from .data_splitter import DataSplitter
 from .feature_cache import FeatureCache
 
-# 从pipeline模块导入编排器类和辅助函数
-# 命名冲突已解决：data_pipeline.py → pipeline.py
-from src.pipeline import DataPipeline, create_pipeline, get_full_training_data
+# 从本地orchestrator模块导入编排器类和辅助函数
+# 解决循环导入：data_pipeline <-> pipeline
+from .orchestrator import DataPipeline, create_pipeline, get_full_training_data
 
 # 向后兼容：从新位置导入配置类
 # 优先从 config.pipeline 导入,保留旧的 pipeline_config 作为备份

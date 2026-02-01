@@ -14,6 +14,7 @@ Submodules
    src.data_pipeline.download_state_manager
    src.data_pipeline.feature_cache
    src.data_pipeline.feature_engineer
+   src.data_pipeline.orchestrator
    src.data_pipeline.pipeline_config
    src.data_pipeline.pooled_data_loader
    src.data_pipeline.pooled_training_pipeline
