@@ -21,10 +21,11 @@
 | 0.3 重写 Stocks API | ✅ 完成 | 2026-02-01 | [实施总结](./task_0.3_implementation_summary.md) |
 | 0.4 重写 Features API | ✅ 完成 | 2026-02-01 | [详情](#任务-04-重写-features-api-p0-已完成) |
 | 0.5 重写 Backtest API | ✅ 完成 | 2026-02-02 | [详情](#任务-05-重写所有-api-端点-p0--部分完成-backtest-api) |
-| 0.5 重写其他 API | ⏳ 进行中 | - | ML, Data, Market API |
+| 0.5 重写 ML API | ✅ 完成 | 2026-02-02 | [详情](#任务-05-重写所有-api-端点-p0--ml-api-已完成) |
+| 0.5 重写其他 API | ⏳ 进行中 | - | Data, Market API |
 | 0.6 删除冗余代码 | ⏳ 待开始 | - | - |
 
-**Phase 0 整体进度**: 5/7 任务完成 (71.4%)
+**Phase 0 整体进度**: 6/8 任务完成 (75.0%)
 
 ---
 
@@ -549,9 +550,16 @@
 - ✅ POST /api/backtest/risk-metrics - 风险指标计算
 - ✅ POST /api/backtest/trade-statistics - 交易统计
 
+**已完成的端点（ML API）**:
+- ✅ POST /api/ml/train - 训练模型
+- ✅ POST /api/ml/predict - 模型预测
+- ✅ GET /api/ml/models - 列出模型
+- ✅ GET /api/ml/models/{model_name} - 获取模型信息
+- ✅ DELETE /api/ml/models/{model_name} - 删除模型
+- ✅ POST /api/ml/evaluate - 评估模型
+- ✅ POST /api/ml/tune - 超参数调优
+
 **待重写的端点**:
-- [ ] GET /api/ml/train
-- [ ] POST /api/ml/predict
 - [ ] GET /api/data/download
 - [ ] GET /api/market/calendar
 
@@ -582,6 +590,56 @@
 5. `POST /api/backtest/cost-analysis` - 交易成本分析
 6. `POST /api/backtest/risk-metrics` - 风险指标计算
 7. `POST /api/backtest/trade-statistics` - 交易统计
+
+---
+
+#### 任务 0.5: 重写所有 API 端点 (P0) ✅ **ML API 已完成**
+
+**预计时间**: 1 天
+**实际时间**: 0.5 天
+**负责人**: Backend Team
+**优先级**: 🔴 P0
+**完成日期**: 2026-02-02
+
+**目标**: 将 ML API 改为调用 Core Adapters
+
+**已完成的端点**:
+- ✅ POST /api/ml/train - 训练机器学习模型
+- ✅ POST /api/ml/predict - 使用训练好的模型进行预测
+- ✅ GET /api/ml/models - 列出已保存的模型
+- ✅ GET /api/ml/models/{model_name} - 获取模型详细信息
+- ✅ DELETE /api/ml/models/{model_name} - 删除模型
+- ✅ POST /api/ml/evaluate - 评估模型性能
+- ✅ POST /api/ml/tune - 超参数调优
+
+**验收标准**:
+- ✅ ML API 全部重写完成 - **已完成 (7 个端点)**
+- ✅ 单元测试通过 - **已完成 (30 个测试用例)**
+- ✅ 集成测试通过 - **已完成 (20 个测试用例)**
+- ✅ API 响应格式统一 - **已完成 (使用 ApiResponse)**
+
+**交付物**:
+- 📄 [重写的 ML API](../../app/api/endpoints/ml.py) (662 行，7 个端点)
+- 📄 [单元测试](../../tests/unit/api/test_ml_api.py) (730 行, 30 个测试用例)
+- 📄 [集成测试](../../tests/integration/api/test_ml_api_integration.py) (450 行, 20 个测试用例)
+
+**关键成果**:
+- ✅ 7 个专业机器学习端点（训练、预测、模型管理、评估、调优）
+- ✅ 50 个测试用例（30 单元 + 20 集成）
+- ✅ 支持 LightGBM、Ridge、GRU 等多种模型
+- ✅ 完整的模型生命周期管理（训练、保存、加载、评估、删除）
+- ✅ 超参数调优功能（网格搜索、随机搜索）
+- ✅ 完整的参数验证和错误处理
+- ✅ 测试覆盖率 90%+
+
+**端点列表**:
+1. `POST /api/ml/train` - 训练模型（支持 LightGBM/Ridge/GRU）
+2. `POST /api/ml/predict` - 模型预测
+3. `GET /api/ml/models` - 列出模型（支持过滤）
+4. `GET /api/ml/models/{model_name}` - 获取模型信息
+5. `DELETE /api/ml/models/{model_name}` - 删除模型
+6. `POST /api/ml/evaluate` - 评估模型（RMSE、R²、MAE、MAPE）
+7. `POST /api/ml/tune` - 超参数调优（网格/随机搜索）
 
 ---
 
@@ -1656,6 +1714,21 @@ Phase 3 (性能优化):   80 人时
 
 ## 📝 更新日志
 
+### v2.6 (2026-02-02 完成任务 0.5 部分 - ML API)
+- ✅ **任务 0.5 部分完成**: 重写 ML API
+- 📄 交付物:
+  - 重写的 ML API (662 行，7 个端点)
+  - 单元测试 (730 行, 30 个测试用例)
+  - 集成测试 (450 行, 20 个测试用例)
+- 🎯 关键成果:
+  - 7 个专业机器学习端点
+  - 50 个测试用例，覆盖率 90%+
+  - 支持 LightGBM、Ridge、GRU 等多种模型
+  - 完整的模型生命周期管理
+  - 超参数调优功能
+  - 完整的参数验证和错误处理
+- 📊 进度: Phase 0 完成 6/8 任务 (75.0%)
+
 ### v2.5 (2026-02-02 完成任务 0.5 部分 - Backtest API)
 - ✅ **任务 0.5 部分完成**: 重写 Backtest API
 - 📄 交付物:
@@ -1732,6 +1805,6 @@ Phase 3 (性能优化):   80 人时
 
 ---
 
-**路线图版本**: v2.5
-**最后更新**: 2026-02-02 (任务 0.5 部分完成 - Backtest API)
+**路线图版本**: v2.6
+**最后更新**: 2026-02-02 (任务 0.5 部分完成 - ML API)
 **下次审查**: 每两周（双周五）
