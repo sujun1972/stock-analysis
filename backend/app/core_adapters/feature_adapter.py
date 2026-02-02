@@ -32,7 +32,7 @@ from src.features.technical_indicators import TechnicalIndicators
 from src.features.alpha_factors import AlphaFactors
 from src.features.feature_transformer import FeatureTransformer
 from src.features.streaming_feature_engine import StreamingFeatureEngine
-from src.exceptions import FeatureEngineeringError
+from src.exceptions import FeatureError, FeatureCalculationError
 
 
 class FeatureAdapter:
@@ -67,7 +67,7 @@ class FeatureAdapter:
             添加了技术指标的 DataFrame
 
         Raises:
-            FeatureEngineeringError: 特征计算错误
+            FeatureCalculationError: 特征计算错误
 
         支持的指标:
             - MA: 移动平均线
@@ -110,7 +110,7 @@ class FeatureAdapter:
             添加了 Alpha 因子的 DataFrame
 
         Raises:
-            FeatureEngineeringError: 特征计算错误
+            FeatureCalculationError: 特征计算错误
 
         支持的因子:
             - 动量因子: momentum, return_5d, return_20d 等
@@ -153,7 +153,7 @@ class FeatureAdapter:
             添加了所有特征的 DataFrame (125+ 列)
 
         Raises:
-            FeatureEngineeringError: 特征计算错误
+            FeatureCalculationError: 特征计算错误
         """
         result_df = df.copy()
 
@@ -186,7 +186,7 @@ class FeatureAdapter:
             转换后的 DataFrame
 
         Raises:
-            FeatureEngineeringError: 特征转换错误
+            FeatureCalculationError: 特征转换错误
 
         支持的转换方法:
             - standardize: 标准化 (均值0, 方差1)
@@ -205,7 +205,7 @@ class FeatureAdapter:
             elif method == "diff":
                 return transformer.diff(columns=columns)
             else:
-                raise FeatureEngineeringError(
+                raise FeatureCalculationError(
                     f"不支持的转换方法: {method}",
                     error_code="INVALID_TRANSFORM_METHOD"
                 )
@@ -244,7 +244,7 @@ class FeatureAdapter:
                     index=X.columns
                 )
             else:
-                raise FeatureEngineeringError(
+                raise FeatureCalculationError(
                     f"不支持的方法: {method}",
                     error_code="INVALID_IMPORTANCE_METHOD"
                 )
@@ -273,7 +273,7 @@ class FeatureAdapter:
             选中的特征列表
 
         Raises:
-            FeatureEngineeringError: 选择错误
+            FeatureCalculationError: 选择错误
         """
         importance = await self.calculate_feature_importance(X, y, method)
         return importance.head(n_features).index.tolist()
@@ -304,10 +304,10 @@ class FeatureAdapter:
             包含实时特征的字典
 
         Raises:
-            FeatureEngineeringError: 流式计算错误
+            FeatureCalculationError: 流式计算错误
         """
         if self.streaming_engine is None:
-            raise FeatureEngineeringError(
+            raise FeatureCalculationError(
                 "流式引擎未初始化，请先调用 init_streaming_engine()",
                 error_code="STREAMING_ENGINE_NOT_INITIALIZED"
             )

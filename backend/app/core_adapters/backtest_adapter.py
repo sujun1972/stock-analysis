@@ -34,7 +34,7 @@ from src.backtest.backtest_executor import BacktestExecutor
 from src.backtest.performance_analyzer import PerformanceAnalyzer
 from src.backtest.parallel_backtester import ParallelBacktester
 from src.backtest.cost_analyzer import TradingCostAnalyzer
-from src.backtest.slippage_models import FixedSlippageModel, VolumeSlippageModel
+from src.backtest.slippage_models import FixedSlippageModel, VolumeBasedSlippageModel
 from src.strategies.base_strategy import BaseStrategy
 from src.exceptions import BacktestError
 

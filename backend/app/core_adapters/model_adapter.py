@@ -33,9 +33,9 @@ from src.models.model_trainer import ModelTrainer
 from src.models.lightgbm_model import LightGBMStockModel
 from src.models.ridge_model import RidgeStockModel
 from src.models.model_evaluator import ModelEvaluator
-from src.models.hyperparameter_tuner import HyperparameterTuner
+from src.models.hyperparameter_tuner import GridSearchTuner, RandomSearchTuner
 from src.models.model_registry import ModelRegistry
-from src.models.ensemble import ModelEnsemble
+from src.models.ensemble import WeightedAverageEnsemble
 from src.exceptions import ModelError, ModelTrainingError
 
 
