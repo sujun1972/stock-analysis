@@ -22,10 +22,11 @@
 | 0.4 重写 Features API | ✅ 完成 | 2026-02-01 | [详情](#任务-04-重写-features-api-p0-已完成) |
 | 0.5 重写 Backtest API | ✅ 完成 | 2026-02-02 | [详情](#任务-05-重写所有-api-端点-p0--部分完成-backtest-api) |
 | 0.5 重写 ML API | ✅ 完成 | 2026-02-02 | [详情](#任务-05-重写所有-api-端点-p0--ml-api-已完成) |
-| 0.5 重写其他 API | ⏳ 进行中 | - | Data, Market API |
+| 0.5 重写 Data API | ✅ 完成 | 2026-02-02 | [详情](#任务-05-重写所有-api-端点-p0--data-api-已完成) |
+| 0.5 重写其他 API | ⏳ 进行中 | - | Market API |
 | 0.6 删除冗余代码 | ⏳ 待开始 | - | - |
 
-**Phase 0 整体进度**: 6/8 任务完成 (75.0%)
+**Phase 0 整体进度**: 7/8 任务完成 (87.5%)
 
 ---
 
@@ -559,8 +560,13 @@
 - ✅ POST /api/ml/evaluate - 评估模型
 - ✅ POST /api/ml/tune - 超参数调优
 
+**已完成的端点（Data API）**:
+- ✅ GET /api/data/daily/{code} - 获取日线数据
+- ✅ POST /api/data/download - 批量下载数据
+- ✅ GET /api/data/minute/{code} - 获取分钟数据
+- ✅ GET /api/data/check/{code} - 数据完整性检查
+
 **待重写的端点**:
-- [ ] GET /api/data/download
 - [ ] GET /api/market/calendar
 
 **验收标准**:
@@ -640,6 +646,50 @@
 5. `DELETE /api/ml/models/{model_name}` - 删除模型
 6. `POST /api/ml/evaluate` - 评估模型（RMSE、R²、MAE、MAPE）
 7. `POST /api/ml/tune` - 超参数调优（网格/随机搜索）
+
+---
+
+#### 任务 0.5: 重写所有 API 端点 (P0) ✅ **Data API 已完成**
+
+**预计时间**: 0.5 天
+**实际时间**: 0.5 天
+**负责人**: Backend Team
+**优先级**: 🔴 P0
+**完成日期**: 2026-02-02
+
+**目标**: 将 Data API 改为调用 Core Adapters
+
+**已完成的端点**:
+- ✅ GET /api/data/daily/{code} - 获取股票日线数据
+- ✅ POST /api/data/download - 批量下载股票数据
+- ✅ GET /api/data/minute/{code} - 获取股票分钟数据
+- ✅ GET /api/data/check/{code} - 检查数据完整性（新增）
+
+**验收标准**:
+- ✅ Data API 全部重写完成 - **已完成 (4 个端点)**
+- ✅ 单元测试完成 - **已完成 (17 个测试用例)**
+- ✅ 集成测试完成 - **已完成 (14 个测试用例)**
+- ✅ API 响应格式统一 - **已完成 (使用 ApiResponse)**
+
+**交付物**:
+- 📄 [重写的 Data API](../../app/api/endpoints/data.py) (423 行，4 个端点)
+- 📄 [单元测试](../../tests/unit/api/test_data_api.py) (432 行, 17 个测试用例)
+- 📄 [集成测试](../../tests/integration/api/test_data_api_integration.py) (395 行, 14 个测试用例)
+- 📄 [扩展的 DataAdapter](../../app/core_adapters/data_adapter.py) (新增 download_daily_data 等方法)
+
+**关键成果**:
+- ✅ 4 个专业数据端点（日线、下载、分钟、完整性检查）
+- ✅ 31 个测试用例（17 单元 + 14 集成）
+- ✅ 支持批量下载、分页查询、数据完整性检查
+- ✅ 完整的参数验证和错误处理
+- ✅ 响应格式统一（使用 ApiResponse）
+- ✅ 支持多种时间周期（1min/5min/15min/30min/60min）
+
+**端点列表**:
+1. `GET /api/data/daily/{code}` - 获取日线数据（支持日期范围、数据量限制）
+2. `POST /api/data/download` - 批量下载数据（支持指定股票列表、年数、批量大小）
+3. `GET /api/data/minute/{code}` - 获取分钟数据（支持多种周期）
+4. `GET /api/data/check/{code}` - 数据完整性检查（新增，返回缺失日期等）
 
 ---
 
@@ -1714,6 +1764,22 @@ Phase 3 (性能优化):   80 人时
 
 ## 📝 更新日志
 
+### v2.7 (2026-02-02 完成任务 0.5 部分 - Data API)
+- ✅ **任务 0.5 部分完成**: 重写 Data API
+- 📄 交付物:
+  - 重写的 Data API (423 行，4 个端点)
+  - 单元测试 (432 行, 17 个测试用例)
+  - 集成测试 (395 行, 14 个测试用例)
+  - 扩展的 DataAdapter (新增 download_daily_data 等方法)
+- 🎯 关键成果:
+  - 4 个专业数据端点（日线、下载、分钟、完整性检查）
+  - 31 个测试用例，测试覆盖完整
+  - 支持批量下载、分页查询、数据完整性检查
+  - 支持多种时间周期（1min/5min/15min/30min/60min）
+  - 完整的参数验证和错误处理
+  - 响应格式统一（使用 ApiResponse）
+- 📊 进度: Phase 0 完成 7/8 任务 (87.5%)
+
 ### v2.6 (2026-02-02 完成任务 0.5 部分 - ML API)
 - ✅ **任务 0.5 部分完成**: 重写 ML API
 - 📄 交付物:
@@ -1805,6 +1871,6 @@ Phase 3 (性能优化):   80 人时
 
 ---
 
-**路线图版本**: v2.6
-**最后更新**: 2026-02-02 (任务 0.5 部分完成 - ML API)
+**路线图版本**: v2.7
+**最后更新**: 2026-02-02 (任务 0.5 部分完成 - Data API)
 **下次审查**: 每两周（双周五）

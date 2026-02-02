@@ -21,6 +21,7 @@ from typing import List, Dict, Optional, Any
 from datetime import date, datetime
 from pathlib import Path
 import pandas as pd
+from loguru import logger
 
 # 添加 core 项目到 Python 路径
 core_path = Path(__file__).parent.parent.parent.parent / "core"
@@ -31,7 +32,18 @@ if str(core_path) not in sys.path:
 from src.database.connection_pool_manager import ConnectionPoolManager
 from src.database.data_query_manager import DataQueryManager
 from src.database.data_insert_manager import DataInsertManager
+from src.data_pipeline.batch_download_coordinator import BatchDownloadCoordinator
 from src.exceptions import DatabaseError
+
+# 延迟导入 Provider 避免循环依赖
+try:
+    from src.providers.tushare_provider import TushareProvider as DataProvider
+except ImportError:
+    try:
+        from src.providers.akshare_provider import AkshareProvider as DataProvider
+    except ImportError:
+        # 如果都不可用，使用 None，在使用时再报错
+        DataProvider = None
 
 
 class DataAdapter:
@@ -52,6 +64,25 @@ class DataAdapter:
         self.pool_manager = ConnectionPoolManager()
         self.query_manager = DataQueryManager(self.pool_manager)
         self.insert_manager = DataInsertManager(self.pool_manager)
+
+        # 初始化 Provider（如果可用）
+        self.provider = None
+        if DataProvider is not None:
+            try:
+                self.provider = DataProvider()
+            except Exception as e:
+                logger.warning(f"无法初始化数据提供者: {e}")
+
+        # 初始化下载协调器（如果 Provider 可用）
+        self.download_coordinator = None
+        if self.provider is not None:
+            try:
+                self.download_coordinator = BatchDownloadCoordinator(
+                    provider=self.provider,
+                    max_workers=3
+                )
+            except Exception as e:
+                logger.warning(f"无法初始化下载协调器: {e}")
 
     async def get_stock_list(
         self,
@@ -260,6 +291,61 @@ class DataAdapter:
             if stock.get('code') == code:
                 return stock
         return None
+
+    async def download_daily_data(
+        self,
+        code: str,
+        start_date: date,
+        end_date: date
+    ) -> Optional[pd.DataFrame]:
+        """
+        异步下载单只股票日线数据
+
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            包含日线数据的 DataFrame，失败时返回 None
+        """
+        if self.provider is None:
+            raise DatabaseError("数据提供者未初始化，无法下载数据")
+
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+
+        try:
+            # 使用 provider 下载数据
+            df = await asyncio.to_thread(
+                self.provider.fetch_daily_data,
+                symbol=code,
+                start_date=start_str,
+                end_date=end_str
+            )
+            return df
+        except Exception as e:
+            logger.error(f"下载股票 {code} 数据失败: {e}")
+            return None
+
+    async def check_data_integrity(
+        self,
+        code: str,
+        start_date: date,
+        end_date: date
+    ) -> Dict[str, Any]:
+        """
+        异步检查数据完整性（别名方法）
+
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            包含完整性信息的字典
+        """
+        return await self.check_data_completeness(code, start_date, end_date)
 
     def __del__(self):
         """清理资源"""
