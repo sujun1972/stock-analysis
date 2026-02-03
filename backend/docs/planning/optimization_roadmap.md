@@ -825,11 +825,13 @@
 
 ### Week 5: 辅助功能 API 测试补充
 
-#### 任务 1.1: ML Training API 测试补充 (P1)
+#### 任务 1.1: ML Training API 测试补充 (P1) ✅ **已完成**
 
 **预计时间**: 2 天
-**负责人**: 后端开发 + QA
+**实际时间**: 1 天
+**负责人**: Backend Team
 **优先级**: 🟡 P1
+**完成日期**: 2026-02-03
 
 **背景**: ML API 使用 MLTrainingService（任务调度、进度跟踪），Phase 0 期间删除了错误的测试文件，需要重新编写正确的测试。
 
@@ -905,9 +907,36 @@
    ```
 
 **验收标准**:
-- ✅ MLTrainingService: 15+ 单元测试
-- ✅ ML API: 10+ 集成测试
-- ✅ 测试覆盖 9 个 ML 端点
+- ✅ MLTrainingService: 15+ 单元测试 - **已完成 (26 个测试，超额 173%)**
+- ✅ ML API: 10+ 集成测试 - **已完成 (19 个测试，超额 190%)**
+- ✅ 测试覆盖 9 个 ML 端点 - **已完成 (9/9，100%)**
+
+**交付物**:
+- 📄 [MLTrainingService 单元测试](../../tests/unit/services/test_ml_training_service.py) (400 行, 26 个测试用例)
+- 📄 [TrainingTaskManager 单元测试](../../tests/unit/services/test_training_task_manager.py) (550 行, 29 个测试用例)
+- 📄 [ML API 集成测试](../../tests/integration/api/test_ml_api_integration.py) (550 行, 19 个测试用例)
+- 📄 [测试摘要文档](../../tests/ML_API_TEST_SUMMARY.md) (完整的测试报告)
+
+**关键成果**:
+- ✅ 26 个 MLTrainingService 单元测试（超额完成 73%）
+- ✅ 29 个 TrainingTaskManager 单元测试（额外贡献）
+- ✅ 19 个 ML API 集成测试（超额完成 90%）
+- ✅ 覆盖所有 9 个 ML API 端点
+- ✅ 完整的测试文档和注释
+- ✅ Mock 策略完善（隔离外部依赖）
+- ✅ 异常处理测试覆盖
+- ✅ 支持单股票训练和池化训练（多股票 + Ridge基准）
+
+**端点覆盖列表**:
+1. `POST /api/ml/train` - 创建训练任务（3 个测试）
+2. `GET /api/ml/tasks/{task_id}` - 获取任务状态（2 个测试）
+3. `GET /api/ml/tasks` - 列出训练任务（2 个测试）
+4. `DELETE /api/ml/tasks/{task_id}` - 删除任务（2 个测试）
+5. `GET /api/ml/tasks/{task_id}/stream` - 流式推送训练进度（2 个测试）
+6. `POST /api/ml/predict` - 模型预测（3 个测试）
+7. `GET /api/ml/models` - 列出可用模型（2 个测试）
+8. `GET /api/ml/features/available` - 获取可用特征列表（1 个测试）
+9. `GET /api/ml/features/snapshot` - 获取特征快照（3 个测试）
 
 ---
 
@@ -1830,6 +1859,24 @@
 
 ## 📝 更新日志
 
+### v2.11 (2026-02-03 完成任务 1.1) ✅ **Phase 1 第一个任务完成** 🎉
+
+- ✅ **任务 1.1 完成**: ML Training API 测试补充
+- 📄 交付物:
+  - MLTrainingService 单元测试 (400 行, 26 个测试用例)
+  - TrainingTaskManager 单元测试 (550 行, 29 个测试用例)
+  - ML API 集成测试 (550 行, 19 个测试用例)
+  - 测试摘要文档 (完整的测试报告)
+- 🎯 关键成果:
+  - 超额完成 73%（26 vs 15 个 MLTrainingService 测试）
+  - 超额完成 90%（19 vs 10 个 ML API 集成测试）
+  - 额外完成 29 个 TrainingTaskManager 测试
+  - 覆盖所有 9 个 ML API 端点（100%）
+  - 支持单股票训练和池化训练（多股票 + Ridge基准）
+  - 完整的异常处理测试覆盖
+- 📊 进度: **Phase 1 完成 1/6 任务 (16.7%)**
+- 🏆 里程碑: **ML API 测试覆盖完成！**
+
 ### v2.10 (2026-02-02 完成任务 0.6) ✅ **Phase 0 全部完成** 🎉
 
 - ✅ **任务 0.6 完成**: 删除冗余代码
@@ -1982,6 +2029,6 @@
 
 ---
 
-**路线图版本**: v2.10
-**最后更新**: 2026-02-02 21:00 (Phase 0 全部完成 🎉)
+**路线图版本**: v2.11
+**最后更新**: 2026-02-03 (Phase 1 任务 1.1 完成 🎉)
 **下次审查**: 每两周（双周五）
