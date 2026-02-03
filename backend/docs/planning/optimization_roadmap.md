@@ -817,355 +817,196 @@
 
 ---
 
-## Phase 1: 安全与测试基础 (Week 5-8)
+## Phase 1: 测试完善与代码质量提升 (Week 5-7)
 
-### Week 1-2: 安全修复 + 测试框架
+> **Phase 0 回顾**: 已完成核心业务 API 重写（6个API，31个端点），创建了 5 个 Core Adapters，编写了 226 个测试用例，核心 API 测试覆盖率达到 90%+。
 
-#### 任务 1.1: 安全漏洞修复 (P0)
+**Phase 1 重点**: 在 Phase 0 已有测试基础上，完善辅助功能 API 测试，统一异常处理，提升整体代码质量。
+
+### Week 5: 辅助功能 API 测试补充
+
+#### 任务 1.1: ML Training API 测试补充 (P1)
+
+**预计时间**: 2 天
+**负责人**: 后端开发 + QA
+**优先级**: 🟡 P1
+
+**背景**: ML API 使用 MLTrainingService（任务调度、进度跟踪），Phase 0 期间删除了错误的测试文件，需要重新编写正确的测试。
+
+**子任务**:
+
+1. **编写 MLTrainingService 单元测试** (1 天)
+   ```python
+   # tests/unit/services/test_ml_training_service.py
+   import pytest
+   from unittest.mock import Mock, AsyncMock, patch
+   from app.services.ml_training_service import MLTrainingService
+
+   class TestMLTrainingService:
+       @pytest.fixture
+       def service(self):
+           return MLTrainingService()
+
+       @pytest.fixture
+       def mock_task_manager(self):
+           """Mock TrainingTaskManager"""
+           with patch('app.services.training_task_manager.TrainingTaskManager') as mock:
+               mock.create_task = AsyncMock(return_value="task_123")
+               mock.get_task_status = AsyncMock(return_value={
+                   'status': 'running',
+                   'progress': 0.5
+               })
+               yield mock
+
+       async def test_start_training_task(self, service, mock_task_manager):
+           """测试启动训练任务"""
+           result = await service.start_training(
+               model_type='lightgbm',
+               stock_codes=['000001'],
+               start_date='2023-01-01',
+               end_date='2023-12-31'
+           )
+           assert result['task_id'] == 'task_123'
+           assert result['status'] == 'created'
+
+       async def test_get_task_status(self, service, mock_task_manager):
+           """测试获取任务状态"""
+           status = await service.get_task_status('task_123')
+           assert status['status'] == 'running'
+           assert status['progress'] == 0.5
+   ```
+
+2. **编写 ML API 集成测试** (1 天)
+   ```python
+   # tests/integration/api/test_ml_api_integration.py
+   import pytest
+   from httpx import AsyncClient
+   from app.main import app
+
+   @pytest.mark.asyncio
+   class TestMLAPIIntegration:
+       async def test_train_endpoint(self):
+           """测试 POST /api/ml/train"""
+           async with AsyncClient(app=app, base_url="http://test") as client:
+               response = await client.post('/api/ml/train', json={
+                   'model_type': 'lightgbm',
+                   'stock_codes': ['000001'],
+                   'start_date': '2023-01-01',
+                   'end_date': '2023-12-31'
+               })
+               assert response.status_code == 200
+               assert 'task_id' in response.json()['data']
+
+       async def test_get_task_status(self):
+           """测试 GET /api/ml/tasks/{task_id}"""
+           async with AsyncClient(app=app, base_url="http://test") as client:
+               response = await client.get('/api/ml/tasks/task_123')
+               assert response.status_code in [200, 404]
+   ```
+
+**验收标准**:
+- ✅ MLTrainingService: 15+ 单元测试
+- ✅ ML API: 10+ 集成测试
+- ✅ 测试覆盖 9 个 ML 端点
+
+---
+
+#### 任务 1.2: Sync 和 Scheduler API 测试补充 (P1)
 
 **预计时间**: 2 天
 **负责人**: 后端开发
-**优先级**: 🔴 P0
+**优先级**: 🟡 P1
 
 **子任务**:
 
-1. **移除硬编码密码** (2 小时)
+1. **Sync Services 单元测试** (1 天)
    ```python
-   # 修改: app/core/config.py
-
-   # ❌ 修改前
-   DATABASE_PASSWORD: str = os.getenv("DATABASE_PASSWORD", "stock_password_123")
-
-   # ✅ 修改后
-   DATABASE_PASSWORD: str = Field(..., description="数据库密码")
-
-   @validator("DATABASE_PASSWORD")
-   def validate_password(cls, v):
-       if not v:
-           raise ValueError("DATABASE_PASSWORD 环境变量必须设置")
-       if len(v) < 12:
-           raise ValueError("密码长度至少 12 位")
-       return v
-   ```
-
-2. **添加 JWT 认证系统** (1 天)
-
-   **步骤**:
-   ```bash
-   # 1. 安装依赖
-   pip install python-jose[cryptography] passlib[bcrypt]
-
-   # 2. 创建安全模块
-   touch app/core/security.py
-   touch app/models/auth.py
-   touch app/api/endpoints/auth.py
-
-   # 3. 实现 JWT 工具函数
-   # 4. 创建登录/注册端点
-   # 5. 添加认证依赖
-   ```
-
-   **代码**:
-   ```python
-   # app/core/security.py
-   from datetime import datetime, timedelta
-   from jose import JWTError, jwt
-   from passlib.context import CryptContext
-
-   SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-   ALGORITHM = "HS256"
-   ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-   pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-   def create_access_token(data: dict) -> str:
-       to_encode = data.copy()
-       expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-       to_encode.update({"exp": expire})
-       return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-   def verify_password(plain_password: str, hashed_password: str) -> bool:
-       return pwd_context.verify(plain_password, hashed_password)
-
-   def get_password_hash(password: str) -> str:
-       return pwd_context.hash(password)
-   ```
-
-3. **SQL 注入审计** (半天)
-   - 检查所有 SQL 查询
-   - 确保使用参数化查询
-   - 添加输入验证
-
-**验收标准**:
-- ✅ 无硬编码密码
-- ✅ JWT 认证可用
-- ✅ 所有 SQL 查询使用参数化
-
----
-
-#### 任务 1.2: 测试框架搭建 (P0)
-
-**预计时间**: 3 天
-**负责人**: 后端开发 + QA
-**优先级**: 🔴 P0
-
-**子任务**:
-
-1. **安装测试依赖** (1 小时)
-   ```bash
-   # 创建 requirements-dev.txt
-   cat > requirements-dev.txt <<EOF
-   # 测试框架
-   pytest>=7.4.0
-   pytest-asyncio>=0.21.0
-   pytest-cov>=4.1.0
-   pytest-mock>=3.11.0
-
-   # HTTP 客户端
-   httpx>=0.25.0
-
-   # 测试数据
-   factory-boy>=3.3.0
-   faker>=19.0.0
-
-   # 代码质量
-   black>=23.0.0
-   flake8>=6.0.0
-   mypy>=1.4.0
-   EOF
-
-   pip install -r requirements-dev.txt
-   ```
-
-2. **创建测试目录结构** (1 小时)
-   ```bash
-   mkdir -p tests/{unit/{services,repositories,utils},integration/api,e2e}
-   touch tests/__init__.py
-   touch tests/conftest.py
-   touch tests/unit/__init__.py
-   touch tests/integration/__init__.py
-   touch tests/e2e/__init__.py
-   ```
-
-3. **编写测试配置** (2 小时)
-   ```python
-   # tests/conftest.py
+   # tests/unit/services/test_sync_services.py
    import pytest
-   import asyncio
-   from typing import AsyncGenerator
-   from httpx import AsyncClient
-   from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-   from app.main import app
-   from app.core.config import settings
+   from unittest.mock import AsyncMock, patch
+   from app.services.daily_sync_service import DailySyncService
+   from app.services.stock_list_sync_service import StockListSyncService
 
-   @pytest.fixture(scope="session")
-   def event_loop():
-       """创建事件循环"""
-       loop = asyncio.get_event_loop_policy().new_event_loop()
-       yield loop
-       loop.close()
-
-   @pytest.fixture
-   async def client() -> AsyncGenerator[AsyncClient, None]:
-       """HTTP 测试客户端"""
-       async with AsyncClient(app=app, base_url="http://test") as ac:
-           yield ac
-
-   @pytest.fixture
-   async def db_session() -> AsyncGenerator[AsyncSession, None]:
-       """数据库测试会话"""
-       engine = create_async_engine(settings.TEST_DATABASE_URL)
-       async with AsyncSession(engine) as session:
-           yield session
-           await session.rollback()
-   ```
-
-4. **编写第一个测试** (1 天)
-   ```python
-   # tests/unit/services/test_database_service.py
-   import pytest
-   from unittest.mock import Mock, AsyncMock
-   from app.services.database_service import DatabaseService
-
-   class TestDatabaseService:
+   class TestDailySyncService:
        @pytest.fixture
-       def mock_db(self):
-           db = Mock()
-           db.execute_query = AsyncMock()
-           return db
+       def service(self):
+           return DailySyncService()
 
-       @pytest.fixture
-       def service(self, mock_db):
-           return DatabaseService(db=mock_db)
-
-       async def test_get_stock_list_success(self, service, mock_db):
-           # Arrange
-           mock_db.execute_query.return_value = {
-               'total': 100,
-               'data': [{'code': '000001', 'name': '平安银行'}]
-           }
-
-           # Act
-           result = await service.get_stock_list(limit=10)
-
-           # Assert
-           assert result['total'] == 100
-           assert len(result['data']) == 1
+       async def test_sync_daily_data_success(self, service):
+           """测试同步日线数据"""
+           with patch.object(service, '_download_data', new=AsyncMock(return_value=100)):
+               result = await service.sync_stock_data('000001', '2023-01-01', '2023-12-31')
+               assert result['downloaded'] == 100
+               assert result['status'] == 'success'
    ```
 
-5. **配置 pytest** (半天)
-   ```ini
-   # pytest.ini
-   [pytest]
-   testpaths = tests
-   python_files = test_*.py
-   python_classes = Test*
-   python_functions = test_*
-   asyncio_mode = auto
-
-   # 覆盖率配置
-   addopts =
-       --cov=app
-       --cov-report=html
-       --cov-report=term-missing
-       --cov-fail-under=30
-       -v
-   ```
+2. **Scheduler & Config API 测试** (1 天)
+   - ConfigService 测试
+   - Scheduler API 端点测试
 
 **验收标准**:
-- ✅ 测试框架可运行
-- ✅ 至少 5 个单元测试通过
-- ✅ 测试覆盖率报告可生成
+- ✅ Sync Services: 20+ 测试
+- ✅ Scheduler API: 8+ 测试
+- ✅ Config API: 6+ 测试
 
 ---
 
-### Week 3-4: 测试编写 + 异常处理统一
+### Week 6: 异常处理统一与代码质量提升
 
-#### 任务 1.3: 核心服务测试 (P0)
-
-**预计时间**: 1 周
-**目标覆盖率**: 30%
-
-**测试优先级**:
-
-1. **DatabaseService** (高优先级)
-   - `get_stock_list()`
-   - `get_stock_daily_data()`
-   - `insert_stock_data()`
-
-2. **BacktestService** (高优先级)
-   - `run_backtest()`
-   - `calculate_metrics()`
-
-3. **FeatureService** (中优先级)
-   - `calculate_features()`
-   - `get_feature_data()`
-
-**测试模板**:
-```python
-# tests/unit/services/test_backtest_service.py
-import pytest
-from app.services.backtest_service import BacktestService
-
-class TestBacktestService:
-    @pytest.fixture
-    def service(self):
-        return BacktestService()
-
-    async def test_run_backtest_success(self, service):
-        # Arrange
-        strategy_params = {
-            'strategy_type': 'ma_cross',
-            'short_window': 5,
-            'long_window': 20
-        }
-
-        # Act
-        result = await service.run_backtest(
-            stock_codes=['000001'],
-            start_date='2023-01-01',
-            end_date='2023-12-31',
-            strategy_params=strategy_params
-        )
-
-        # Assert
-        assert 'total_return' in result
-        assert 'sharpe_ratio' in result
-        assert result['total_return'] is not None
-
-    async def test_run_backtest_invalid_stock_code(self, service):
-        # Act & Assert
-        with pytest.raises(DataNotFoundError):
-            await service.run_backtest(
-                stock_codes=['999999'],  # 不存在的股票
-                start_date='2023-01-01',
-                end_date='2023-12-31'
-            )
-```
-
-**验收标准**:
-- ✅ DatabaseService: 10+ 测试
-- ✅ BacktestService: 8+ 测试
-- ✅ FeatureService: 6+ 测试
-- ✅ 测试覆盖率达到 30%
-
----
-
-#### 任务 1.4: 统一异常处理 (P0)
+#### 任务 1.3: 统一异常处理 (P0)
 
 **预计时间**: 3 天
 **负责人**: 后端开发
+**优先级**: 🔴 P0
+
+**背景**: 当前代码中存在 116 处 `except Exception` 通用异常捕获，需要替换为具体异常类型。
 
 **子任务**:
 
-1. **替换通用异常捕获** (2 天)
-
-   **目标**: 将 134 处 `except Exception` 替换为具体异常
-
-   **步骤**:
+1. **审计和分类异常捕获** (半天)
    ```bash
-   # 1. 找出所有使用 except Exception 的文件
-   grep -r "except Exception" app/ --include="*.py" > exception_audit.txt
+   # 找出所有使用 except Exception 的位置
+   grep -rn "except Exception" app/ --include="*.py" > exception_audit.txt
 
-   # 2. 逐个文件修改
-   # 3. 运行测试确保没有破坏功能
+   # 分类统计
+   # - API 层: ~30 处
+   # - Services 层: ~50 处
+   # - Adapters 层: ~20 处
+   # - Utils 层: ~16 处
    ```
 
-   **修改示例**:
+2. **替换 API 层异常捕获** (1 天)
    ```python
    # ❌ 修改前
-   try:
-       stock_data = await fetch_stock_data(code)
-   except Exception as e:
-       logger.error(f"错误: {e}")
-       raise
+   @router.get("/{code}")
+   async def get_stock_data(code: str):
+       try:
+           data = await data_adapter.get_daily_data(code)
+           return ApiResponse.success(data=data)
+       except Exception as e:
+           logger.error(f"错误: {e}")
+           raise
 
    # ✅ 修改后
-   try:
-       stock_data = await fetch_stock_data(code)
-   except DataNotFoundError as e:
-       logger.warning(f"股票数据不存在: {e}")
-       raise ApiResponse.not_found(
-           message=e.message,
-           data=e.to_dict()
-       )
-   except ExternalAPIError as e:
-       logger.error(f"API 调用失败: {e}")
-       raise ApiResponse.error(
-           message=e.message,
-           code=503,
-           data=e.to_dict()
-       )
-   except Exception as e:
-       logger.exception(f"未预期的错误: {e}")
-       raise ApiResponse.internal_error(
-           message="系统内部错误"
-       )
+   @router.get("/{code}")
+   async def get_stock_data(code: str):
+       try:
+           data = await data_adapter.get_daily_data(code)
+           return ApiResponse.success(data=data)
+       except DataNotFoundError as e:
+           logger.warning(f"股票数据不存在: {code}")
+           return ApiResponse.not_found(message=f"股票 {code} 数据不存在")
+       except DatabaseError as e:
+           logger.error(f"数据库查询失败: {e}")
+           return ApiResponse.error(message="数据查询失败", code=500)
+       except Exception as e:
+           logger.exception(f"未预期的错误: {e}")
+           return ApiResponse.internal_error(message="系统内部错误")
    ```
 
-2. **添加全局异常处理器** (1 天)
+3. **增强全局异常处理器** (1 天)
    ```python
-   # app/api/error_handler.py (增强版)
+   # app/api/error_handler.py
    from fastapi import Request, status
    from fastapi.responses import JSONResponse
    from app.core.exceptions import (
@@ -1177,226 +1018,222 @@ class TestBacktestService:
    )
    from app.models.api_response import ApiResponse
 
-   async def backend_error_handler(request: Request, exc: BackendError):
-       """处理业务异常"""
-       return JSONResponse(
-           status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-           content=ApiResponse.error(
-               message=exc.message,
-               code=500,
-               data=exc.to_dict()
-           ).dict()
-       )
-
    async def data_not_found_handler(request: Request, exc: DataNotFoundError):
        """处理数据不存在异常"""
        return JSONResponse(
            status_code=status.HTTP_404_NOT_FOUND,
            content=ApiResponse.not_found(
                message=exc.message,
-               data=exc.to_dict()
-           ).dict()
+               data={'error_type': 'DataNotFound', 'details': str(exc)}
+           ).to_dict()
        )
 
-   async def validation_error_handler(request: Request, exc: ValidationError):
-       """处理验证异常"""
+   async def database_error_handler(request: Request, exc: DatabaseError):
+       """处理数据库异常"""
+       logger.error(f"数据库错误: {exc}", exc_info=True)
        return JSONResponse(
-           status_code=status.HTTP_400_BAD_REQUEST,
-           content=ApiResponse.bad_request(
-               message=exc.message,
-               data=exc.to_dict()
-           ).dict()
+           status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+           content=ApiResponse.error(
+               message="数据库操作失败",
+               code=500,
+               data={'error_type': 'DatabaseError'}
+           ).to_dict()
        )
 
-   # 在 main.py 中注册
-   from app.api.error_handler import (
-       backend_error_handler,
-       data_not_found_handler,
-       validation_error_handler
-   )
-
-   app.add_exception_handler(BackendError, backend_error_handler)
+   # 在 main.py 中注册所有异常处理器
    app.add_exception_handler(DataNotFoundError, data_not_found_handler)
+   app.add_exception_handler(DatabaseError, database_error_handler)
    app.add_exception_handler(ValidationError, validation_error_handler)
+   app.add_exception_handler(ExternalAPIError, external_api_error_handler)
+   ```
+
+4. **添加异常处理测试** (半天)
+   ```python
+   # tests/unit/api/test_error_handling.py
+   import pytest
+   from app.core.exceptions import DataNotFoundError
+
+   @pytest.mark.asyncio
+   async def test_data_not_found_returns_404(client, monkeypatch):
+       """测试 DataNotFoundError 返回 404"""
+       async def mock_get_data(*args, **kwargs):
+           raise DataNotFoundError("股票不存在")
+
+       monkeypatch.setattr('app.core_adapters.data_adapter.DataAdapter.get_daily_data',
+                          mock_get_data)
+
+       response = await client.get('/api/data/daily/999999')
+       assert response.status_code == 404
+       assert '不存在' in response.json()['message']
    ```
 
 **验收标准**:
-- ✅ 所有 `except Exception` 被精确异常替换
-- ✅ 全局异常处理器已注册
+- ✅ 116 处通用异常捕获优化为具体异常类型
+- ✅ 全局异常处理器覆盖所有自定义异常
+- ✅ 异常处理单元测试 10+ 个
 - ✅ API 返回统一的错误格式
 
 ---
 
-## Phase 2: 架构重构 (Week 5-8)
+#### 任务 1.4: 代码质量工具集成 (P1)
 
-### Week 5-6: 数据访问层重构
-
-#### 任务 2.1: SQLAlchemy ORM 模型定义 (P0)
-
-**预计时间**: 1 周
-**负责人**: 后端开发
+**预计时间**: 2 天
+**负责人**: 后端开发 + DevOps
+**优先级**: 🟡 P1
 
 **子任务**:
 
-1. **定义基础模型** (2 天)
-   ```python
-   # app/models/db_models.py
-   from datetime import datetime, date
-   from sqlalchemy import Column, String, Float, Integer, Date, DateTime, Boolean
-   from sqlalchemy.ext.asyncio import AsyncAttrs
-   from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+1. **配置代码格式化工具** (半天)
+   ```bash
+   # 安装依赖
+   pip install black isort flake8 mypy
 
-   class Base(AsyncAttrs, DeclarativeBase):
-       """异步 ORM 基类"""
-       pass
+   # pyproject.toml
+   [tool.black]
+   line-length = 100
+   target-version = ['py310']
 
-   class StockBasic(Base):
-       """股票基本信息"""
-       __tablename__ = "stock_basic"
+   [tool.isort]
+   profile = "black"
+   line_length = 100
 
-       code: Mapped[str] = mapped_column(String(10), primary_key=True)
-       name: Mapped[str] = mapped_column(String(50))
-       market: Mapped[str] = mapped_column(String(20))
-       industry: Mapped[str] = mapped_column(String(50), nullable=True)
-       area: Mapped[str] = mapped_column(String(50), nullable=True)
-       list_date: Mapped[date] = mapped_column(Date, nullable=True)
-       status: Mapped[str] = mapped_column(String(20), default="正常")
-       created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-       updated_at: Mapped[datetime] = mapped_column(
-           DateTime,
-           default=datetime.utcnow,
-           onupdate=datetime.utcnow
-       )
-
-   class StockDaily(Base):
-       """股票日线数据"""
-       __tablename__ = "stock_daily"
-
-       code: Mapped[str] = mapped_column(String(10), primary_key=True)
-       date: Mapped[date] = mapped_column(Date, primary_key=True)
-       open: Mapped[float] = mapped_column(Float)
-       high: Mapped[float] = mapped_column(Float)
-       low: Mapped[float] = mapped_column(Float)
-       close: Mapped[float] = mapped_column(Float)
-       volume: Mapped[float] = mapped_column(Float)
-       amount: Mapped[float] = mapped_column(Float, nullable=True)
+   [tool.mypy]
+   python_version = "3.10"
+   warn_return_any = true
+   warn_unused_configs = true
+   disallow_untyped_defs = false
    ```
 
-2. **创建异步数据库引擎** (1 天)
-   ```python
-   # app/core/database.py
-   from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-   from app.core.config import settings
-
-   # 创建异步引擎
-   engine = create_async_engine(
-       settings.DATABASE_URL_ASYNC,
-       echo=settings.ENVIRONMENT == "development",
-       pool_size=20,
-       max_overflow=40
-   )
-
-   # 创建会话工厂
-   async_session_maker = async_sessionmaker(
-       engine,
-       class_=AsyncSession,
-       expire_on_commit=False
-   )
-
-   async def get_db() -> AsyncGenerator[AsyncSession, None]:
-       """依赖注入：获取数据库会话"""
-       async with async_session_maker() as session:
-           try:
-               yield session
-               await session.commit()
-           except Exception:
-               await session.rollback()
-               raise
+2. **配置 Linter** (半天)
+   ```ini
+   # .flake8
+   [flake8]
+   max-line-length = 100
+   extend-ignore = E203, W503
+   exclude = .git,__pycache__,.venv,build,dist
    ```
 
-3. **更新配置** (半天)
-   ```python
-   # app/core/config.py
-   @property
-   def DATABASE_URL_ASYNC(self) -> str:
-       """异步数据库连接 URL"""
-       return (
-           f"postgresql+asyncpg://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}"
-           f"@{self.DATABASE_HOST}:{self.DATABASE_PORT}/{self.DATABASE_NAME}"
-       )
+3. **集成到 CI/CD** (1 天)
+   ```yaml
+   # .github/workflows/code-quality.yml
+   name: Code Quality
+   on: [push, pull_request]
+   jobs:
+     quality:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v3
+         - name: Set up Python
+           uses: actions/setup-python@v4
+           with:
+             python-version: '3.10'
+         - name: Install dependencies
+           run: pip install black isort flake8 mypy pytest pytest-cov
+         - name: Check formatting
+           run: |
+             black --check app/ tests/
+             isort --check app/ tests/
+         - name: Lint
+           run: flake8 app/ tests/
+         - name: Run tests
+           run: pytest tests/ --cov=app --cov-report=xml
    ```
 
 **验收标准**:
-- ✅ 所有表的 ORM 模型已定义
-- ✅ 异步引擎配置正确
-- ✅ 依赖注入 `get_db()` 可用
+- ✅ 所有代码通过 black 格式化
+- ✅ 所有代码通过 flake8 检查
+- ✅ CI/CD 流水线集成代码质量检查
+- ✅ 代码质量评分 > 8.0/10
 
 ---
 
-#### 任务 2.2: 完善 Repository 层 (P1)
+### Week 7: 安全审计与文档完善
 
-**预计时间**: 1 周
-**负责人**: 后端开发
+#### 任务 1.5: 安全审计 (P0)
 
-**目标**: 创建 10+ 个 Repository
-
-**Repository 列表**:
-
-1. **StockRepository** (必须)
-   ```python
-   # app/repositories/stock_repository.py
-   from typing import List, Optional
-   from sqlalchemy import select
-   from sqlalchemy.ext.asyncio import AsyncSession
-   from app.models.db_models import StockBasic
-   from app.repositories.base_repository import BaseRepository
-
-   class StockRepository(BaseRepository[StockBasic]):
-       """股票数据仓库"""
-
-       def __init__(self, session: AsyncSession):
-           super().__init__(StockBasic, session)
-
-       async def get_by_market(self, market: str) -> List[StockBasic]:
-           """按市场查询"""
-           result = await self.session.execute(
-               select(StockBasic).where(StockBasic.market == market)
-           )
-           return result.scalars().all()
-
-       async def search(self, keyword: str) -> List[StockBasic]:
-           """搜索股票"""
-           result = await self.session.execute(
-               select(StockBasic).where(
-                   (StockBasic.code.like(f"%{keyword}%")) |
-                   (StockBasic.name.like(f"%{keyword}%"))
-               )
-           )
-           return result.scalars().all()
-   ```
-
-2. **MarketDataRepository** (必须)
-3. **FeatureRepository** (必须)
-4. **StrategyRepository** (应该)
-5. **MLModelRepository** (应该)
-
-**验收标准**:
-- ✅ 10+ Repository 已创建
-- ✅ 所有 Repository 有单元测试
-- ✅ Service 层已更新使用 Repository
-
----
-
-### Week 7-8: Redis 缓存 + 依赖注入
-
-#### 任务 2.3: 实现 Redis 缓存 (P1)
-
-**预计时间**: 1 周
-**负责人**: 后端开发
+**预计时间**: 2 天
+**负责人**: 后端开发 + 安全工程师
+**优先级**: 🔴 P0
 
 **子任务**:
 
-1. **创建 CacheManager** (2 天)
+1. **审计敏感信息** (半天)
+   ```bash
+   # 检查是否有硬编码密码
+   grep -r "password.*=" app/ --include="*.py" | grep -v "password_hash"
+
+   # 检查是否有硬编码密钥
+   grep -r "secret.*=" app/ --include="*.py" | grep -v "SECRET_KEY.*getenv"
+   ```
+
+2. **SQL 注入审计** (1 天)
+   - 检查所有数据库查询
+   - 确认 Core 项目使用参数化查询
+   - 确认 Adapters 不拼接 SQL
+
+3. **依赖安全扫描** (半天)
+   ```bash
+   pip install safety bandit
+   safety check -r requirements.txt
+   bandit -r app/ -f json -o bandit-report.json
+   ```
+
+**验收标准**:
+- ✅ 无硬编码密码、密钥、Token
+- ✅ 所有数据库查询使用参数化
+- ✅ 依赖库无已知高危漏洞
+- ✅ Bandit 扫描无高危问题
+
+---
+
+#### 任务 1.6: API 文档完善 (P1)
+
+**预计时间**: 2 天
+**负责人**: 后端开发
+**优先级**: 🟡 P1
+
+**子任务**:
+
+1. **完善 OpenAPI 文档** (1 天)
+   - 为所有端点添加详细描述
+   - 添加请求/响应示例
+   - 添加错误码说明
+
+2. **生成 API 使用指南** (1 天)
+   - 常见使用场景示例
+   - 认证流程说明
+   - 错误处理指南
+
+**验收标准**:
+- ✅ 所有 API 端点有完整文档
+- ✅ Swagger UI 文档可访问
+- ✅ API 使用指南完成
+
+---
+
+## Phase 2: 性能优化与缓存 (Week 8-10)
+
+> **前提条件**: Phase 0 已完成架构修正，Backend 通过 Core Adapters 调用 Core 业务逻辑。Core 项目已经有完整的数据访问实现，无需 Backend 再实现 ORM 或 Repository 层。
+
+**Phase 2 重点**: 实现 Redis 缓存、优化查询性能、添加性能监控。
+
+**⚠️ 重要说明**:
+- ❌ 不需要 SQLAlchemy ORM 迁移（Core 已有完整实现）
+- ❌ 不需要 Repository 层（Backend 通过 Adapters 调用 Core）
+- ❌ 不需要依赖注入容器（架构已清晰）
+- ✅ 专注于性能优化和缓存实现
+
+### Week 8: Redis 缓存实现
+
+#### 任务 2.1: 实现 Redis 缓存层 (P1)
+
+**预计时间**: 3 天
+**负责人**: 后端开发
+**优先级**: 🟡 P1
+
+**子任务**:
+
+1. **创建 CacheManager** (1.5 天)
    ```python
    # app/core/cache.py
    import json
@@ -1420,27 +1257,17 @@ class TestBacktestService:
 
        async def set(self, key: str, value: Any, ttl: int = 300):
            """设置缓存"""
-           await self.redis.setex(
-               key,
-               ttl,
-               json.dumps(value, default=str)
-           )
+           await self.redis.setex(key, ttl, json.dumps(value, default=str))
 
        async def delete(self, key: str):
            """删除缓存"""
            await self.redis.delete(key)
 
-       async def get_or_set(
-           self,
-           key: str,
-           factory: Callable,
-           ttl: int = 300
-       ) -> Any:
+       async def get_or_set(self, key: str, factory: Callable, ttl: int = 300) -> Any:
            """获取或设置缓存"""
            cached = await self.get(key)
            if cached is not None:
                return cached
-
            value = await factory()
            await self.set(key, value, ttl)
            return value
@@ -1450,18 +1277,11 @@ class TestBacktestService:
            def decorator(func):
                @wraps(func)
                async def wrapper(*args, **kwargs):
-                   # 生成缓存 key
                    key = f"{key_prefix}:{func.__name__}:{args}:{kwargs}"
-
-                   # 尝试从缓存获取
                    cached = await self.get(key)
                    if cached is not None:
                        return cached
-
-                   # 调用原函数
                    result = await func(*args, **kwargs)
-
-                   # 写入缓存
                    await self.set(key, result, ttl)
                    return result
                return wrapper
@@ -1471,189 +1291,162 @@ class TestBacktestService:
    cache = CacheManager()
    ```
 
-2. **应用缓存到 Service** (2 天)
+2. **应用缓存到 Core Adapters** (1 天)
    ```python
-   # app/services/stock_service.py
+   # app/core_adapters/data_adapter.py (增强版)
    from app.core.cache import cache
 
-   class StockService:
+   class DataAdapter:
        @cache.cached(ttl=300, key_prefix="stock_list")
-       async def get_stock_list(self, market: Optional[str] = None):
+       async def get_stock_list(self, market: Optional[str] = None, status: str = "正常"):
            """获取股票列表（带缓存）"""
-           return await self.stock_repo.get_by_market(market)
+           return await asyncio.to_thread(
+               self.query_manager.get_stock_list,
+               market=market,
+               status=status
+           )
+
+       @cache.cached(ttl=3600, key_prefix="daily_data")
+       async def get_daily_data(self, code: str, start_date: date, end_date: date):
+           """获取日线数据（带缓存）"""
+           return await asyncio.to_thread(
+               self.query_manager.get_daily_data,
+               code=code,
+               start_date=start_date,
+               end_date=end_date
+           )
    ```
 
-3. **缓存失效策略** (1 天)
+3. **缓存失效策略** (半天)
    ```python
    # 数据更新时清除缓存
-   async def update_stock_data(self, code: str, data: dict):
-       # 更新数据
-       await self.stock_repo.update(code, data)
+   async def download_daily_data(self, code: str, ...):
+       # 下载数据
+       result = await asyncio.to_thread(...)
 
        # 清除相关缓存
+       await cache.delete(f"daily_data:*:{code}:*")
        await cache.delete(f"stock_list:*")
-       await cache.delete(f"stock_detail:{code}")
+
+       return result
    ```
 
 **缓存场景**:
 
-| 数据类型 | TTL | Key 格式 |
-|---------|-----|----------|
-| 股票列表 | 5 分钟 | `stock_list:{market}` |
-| 股票详情 | 10 分钟 | `stock_detail:{code}` |
-| 技术指标 | 1 小时 | `indicator:{code}:{date}` |
-| 回测结果 | 24 小时 | `backtest:{hash}` |
-| 市场日历 | 24 小时 | `market_calendar:{year}` |
+| 数据类型 | TTL | Key 格式 | 说明 |
+|---------|-----|----------|------|
+| 股票列表 | 5 分钟 | `stock_list:{market}:{status}` | 基本信息不常变 |
+| 日线数据 | 1 小时 | `daily_data:{code}:{start}:{end}` | 历史数据不变 |
+| 技术指标 | 30 分钟 | `features:{code}:{type}:{date}` | 计算密集 |
+| 市场状态 | 1 分钟 | `market:status` | 实时性要求高 |
+| 回测结果 | 24 小时 | `backtest:{hash}` | 参数相同结果一致 |
 
 **验收标准**:
 - ✅ CacheManager 可用
-- ✅ 至少 5 个 Service 使用缓存
+- ✅ 5+ 个 Adapter 方法使用缓存
 - ✅ 缓存命中率 > 60%
+- ✅ 缓存单元测试完成
 
 ---
 
-#### 任务 2.4: 依赖注入容器 (P1)
+### Week 9: 性能优化
 
-**预计时间**: 1 周
-**负责人**: 后端开发
+#### 任务 2.2: 数据库查询优化 (P1)
+
+**预计时间**: 3 天
+**负责人**: 后端开发 + DBA
+**优先级**: 🟡 P1
+
+**背景**: Core 项目负责数据库访问，但可以通过添加索引和优化查询来提升整体性能。
 
 **子任务**:
 
-1. **安装依赖注入框架** (1 小时)
-   ```bash
-   pip install dependency-injector
+1. **慢查询分析** (1 天)
+   ```sql
+   -- 启用慢查询日志
+   ALTER SYSTEM SET log_min_duration_statement = 100;
+
+   -- 分析最慢的 10 个查询
+   SELECT query, mean_exec_time, calls
+   FROM pg_stat_statements
+   ORDER BY mean_exec_time DESC
+   LIMIT 10;
    ```
 
-2. **创建容器** (2 天)
-   ```python
-   # app/core/container.py
-   from dependency_injector import containers, providers
-   from app.core.database import async_session_maker
-   from app.core.cache import CacheManager
-   from app.repositories.stock_repository import StockRepository
-   from app.services.stock_service import StockService
+2. **添加必要索引** (1 天)
+   ```sql
+   -- 股票基本信息表
+   CREATE INDEX IF NOT EXISTS idx_stock_basic_market ON stock_basic(market);
+   CREATE INDEX IF NOT EXISTS idx_stock_basic_status ON stock_basic(status);
 
-   class Container(containers.DeclarativeContainer):
-       """依赖注入容器"""
+   -- 日线数据表
+   CREATE INDEX IF NOT EXISTS idx_stock_daily_code_date ON stock_daily(code, date DESC);
+   CREATE INDEX IF NOT EXISTS idx_stock_daily_date ON stock_daily(date DESC);
 
-       # 配置
-       config = providers.Configuration()
-
-       # 基础设施
-       db_session = providers.Factory(async_session_maker)
-       cache = providers.Singleton(CacheManager)
-
-       # Repository 层
-       stock_repository = providers.Factory(
-           StockRepository,
-           session=db_session.provided
-       )
-
-       # Service 层
-       stock_service = providers.Factory(
-           StockService,
-           stock_repo=stock_repository,
-           cache=cache
-       )
+   -- 特征数据表
+   CREATE INDEX IF NOT EXISTS idx_features_code_date ON features(code, date DESC);
    ```
 
-3. **集成到 FastAPI** (2 天)
+3. **优化复杂查询** (1 天)
+   - 使用 EXPLAIN ANALYZE 分析执行计划
+   - 优化 JOIN 查询
+   - 添加物化视图（如需要）
+
+**验收标准**:
+- ✅ P95 查询时间 < 50ms
+- ✅ 慢查询数量减少 80%
+- ✅ 关键表已添加索引
+
+---
+
+#### 任务 2.3: 并发性能优化 (P1)
+
+**预计时间**: 2 天
+**负责人**: 后端开发
+**优先级**: 🟡 P1
+
+**子任务**:
+
+1. **优化异步并发** (1 天)
    ```python
-   # app/main.py
-   from dependency_injector.wiring import Provide, inject
-   from app.core.container import Container
+   # 批量获取股票数据（并发优化）
+   async def get_multiple_stocks_data(codes: List[str]):
+       tasks = [data_adapter.get_daily_data(code) for code in codes]
+       results = await asyncio.gather(*tasks, return_exceptions=True)
+       return results
+   ```
 
-   # 创建容器
-   container = Container()
-   container.wire(modules=[
-       "app.api.endpoints.stocks",
-       "app.api.endpoints.backtest",
-       # ... 其他模块
-   ])
-
-   # 在端点中使用
-   # app/api/endpoints/stocks.py
-   @router.get("/")
-   @inject
-   async def get_stocks(
-       stock_service: StockService = Depends(Provide[Container.stock_service])
-   ):
-       return await stock_service.get_stock_list()
+2. **连接池优化** (1 天)
+   ```python
+   # 检查 Core 项目的连接池配置
+   # 确保 pool_size 和 max_overflow 合理
+   # 建议配置：
+   # - pool_size: 20
+   # - max_overflow: 40
+   # - pool_recycle: 3600
    ```
 
 **验收标准**:
-- ✅ 容器配置完成
-- ✅ 所有端点使用 DI
-- ✅ 测试可以注入 Mock
+- ✅ 并发 100 请求响应时间 < 500ms
+- ✅ 连接池无泄漏
+- ✅ 压力测试通过
 
 ---
 
-## Phase 3: 性能优化 (Week 9-12)
+### Week 10: 监控与告警
 
-### Week 9-10: 异步驱动迁移
+#### 任务 2.4: 添加性能监控 (P2)
 
-#### 任务 3.1: 迁移到 asyncpg (P0)
-
-**预计时间**: 2 周
-**负责人**: 后端开发
-
-**子任务**:
-
-1. **更新依赖** (1 小时)
-   ```bash
-   # requirements.txt
-   # psycopg2-binary>=2.9.0  # ❌ 移除
-   asyncpg>=0.29.0          # ✅ 新增
-   ```
-
-2. **迁移所有查询** (1.5 周)
-   - 更新 DatabaseService
-   - 更新所有 Repository
-   - 移除 `asyncio.to_thread()`
-
-3. **性能测试** (2 天)
-   ```python
-   # tests/performance/test_database_performance.py
-   import pytest
-   import time
-
-   async def test_concurrent_queries_performance():
-       """测试并发查询性能"""
-       start = time.time()
-
-       tasks = [
-           stock_service.get_stock_list()
-           for _ in range(100)
-       ]
-       await asyncio.gather(*tasks)
-
-       elapsed = time.time() - start
-       assert elapsed < 2.0  # 100 个并发查询 < 2 秒
-   ```
-
-**预期收益**:
-- 并发能力提升 3-5 倍
-- 响应时间减少 30-50%
-
-**验收标准**:
-- ✅ 所有查询使用 asyncpg
-- ✅ 性能测试通过
-- ✅ 无功能回归
-
----
-
-### Week 11-12: 监控与优化
-
-#### 任务 3.2: 添加监控系统 (P2)
-
-**预计时间**: 1 周
+**预计时间**: 3 天
+**负责人**: 后端开发 + DevOps
+**优先级**: 🟢 P2
 
 **子任务**:
 
-1. **Prometheus 指标导出** (3 天)
+1. **集成 Prometheus 指标** (1.5 天)
    ```python
    # app/middleware/metrics.py
-   from prometheus_client import Counter, Histogram, generate_latest
+   from prometheus_client import Counter, Histogram, Gauge
 
    REQUEST_COUNT = Counter(
        'http_requests_total',
@@ -1666,140 +1459,342 @@ class TestBacktestService:
        'HTTP request duration',
        ['method', 'endpoint']
    )
+
+   CACHE_HIT_RATE = Gauge(
+       'cache_hit_rate',
+       'Cache hit rate'
+   )
+
+   # 中间件
+   @app.middleware("http")
+   async def metrics_middleware(request: Request, call_next):
+       start_time = time.time()
+       response = await call_next(request)
+       duration = time.time() - start_time
+
+       REQUEST_COUNT.labels(
+           method=request.method,
+           endpoint=request.url.path,
+           status=response.status_code
+       ).inc()
+
+       REQUEST_DURATION.labels(
+           method=request.method,
+           endpoint=request.url.path
+       ).observe(duration)
+
+       return response
    ```
 
-2. **性能优化** (4 天)
-   - 添加数据库索引
-   - 优化慢查询
-   - 代码性能分析
+2. **配置 Grafana 仪表板** (1 天)
+   - API 请求量、响应时间
+   - 缓存命中率
+   - 数据库连接池状态
+   - 错误率
+
+3. **添加告警规则** (半天)
+   ```yaml
+   # prometheus/alerts.yml
+   groups:
+     - name: backend_alerts
+       rules:
+         - alert: HighErrorRate
+           expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+           annotations:
+             summary: "Error rate > 5%"
+
+         - alert: SlowResponse
+           expr: histogram_quantile(0.95, http_request_duration_seconds) > 1
+           annotations:
+             summary: "P95 response time > 1s"
+   ```
 
 **验收标准**:
 - ✅ Prometheus 指标可用
-- ✅ API P95 响应时间 < 100ms
-- ✅ 数据库查询优化完成
+- ✅ Grafana 仪表板配置完成
+- ✅ 告警规则已设置
+
+---
+
+## Phase 3: 高级特性与生产就绪 (Week 11-12)
+
+> **目标**: 实现高级特性，确保系统生产就绪。
+
+### Week 11: 高级特性实现
+
+#### 任务 3.1: 请求限流与熔断 (P1)
+
+**预计时间**: 2 天
+**负责人**: 后端开发
+**优先级**: 🟡 P1
+
+**子任务**:
+
+1. **实现 Rate Limiting** (1 天)
+   ```python
+   # app/middleware/rate_limiter.py
+   from slowapi import Limiter, _rate_limit_exceeded_handler
+   from slowapi.util import get_remote_address
+   from slowapi.errors import RateLimitExceeded
+
+   limiter = Limiter(key_func=get_remote_address)
+
+   app.state.limiter = limiter
+   app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+   # 应用到端点
+   @router.get("/api/data/daily/{code}")
+   @limiter.limit("100/minute")
+   async def get_daily_data(request: Request, code: str):
+       ...
+   ```
+
+2. **实现熔断器** (1 天)
+   ```python
+   # app/core/circuit_breaker.py
+   from pybreaker import CircuitBreaker
+
+   db_breaker = CircuitBreaker(
+       fail_max=5,
+       timeout_duration=60
+   )
+
+   @db_breaker
+   async def query_with_breaker(*args, **kwargs):
+       return await data_adapter.get_daily_data(*args, **kwargs)
+   ```
+
+**验收标准**:
+- ✅ Rate limiter 正常工作
+- ✅ 熔断器在故障时触发
+- ✅ 限流/熔断日志完整
+
+---
+
+#### 任务 3.2: 日志系统增强 (P1)
+
+**预计时间**: 2 天
+**负责人**: 后端开发
+**优先级**: 🟡 P1
+
+**子任务**:
+
+1. **结构化日志** (1 天)
+   ```python
+   # app/core/logging_config.py
+   import structlog
+
+   structlog.configure(
+       processors=[
+           structlog.stdlib.add_log_level,
+           structlog.stdlib.add_logger_name,
+           structlog.processors.TimeStamper(fmt="iso"),
+           structlog.processors.JSONRenderer()
+       ],
+       logger_factory=structlog.stdlib.LoggerFactory(),
+   )
+
+   logger = structlog.get_logger()
+
+   # 使用
+   logger.info("stock_data_fetched",
+               code="000001",
+               rows=1000,
+               duration_ms=50)
+   ```
+
+2. **集成 ELK Stack** (1 天)
+   - 配置 Filebeat 收集日志
+   - Elasticsearch 存储
+   - Kibana 可视化
+
+**验收标准**:
+- ✅ 所有日志结构化输出
+- ✅ ELK Stack 集成完成
+- ✅ Kibana 可查询日志
+
+---
+
+### Week 12: 生产就绪检查
+
+#### 任务 3.3: 生产环境配置 (P0)
+
+**预计时间**: 2 天
+**负责人**: 后端开发 + DevOps
+**优先级**: 🔴 P0
+
+**子任务**:
+
+1. **环境配置管理** (1 天)
+   ```python
+   # app/core/config.py
+   class Settings(BaseSettings):
+       ENVIRONMENT: str = Field(..., env="ENVIRONMENT")
+
+       @property
+       def is_production(self) -> bool:
+           return self.ENVIRONMENT == "production"
+
+       @property
+       def log_level(self) -> str:
+           return "INFO" if self.is_production else "DEBUG"
+   ```
+
+2. **健康检查端点** (1 天)
+   ```python
+   @router.get("/health")
+   async def health_check():
+       """健康检查"""
+       checks = {
+           "database": await check_database(),
+           "redis": await check_redis(),
+           "core": await check_core_availability()
+       }
+
+       all_healthy = all(checks.values())
+       status_code = 200 if all_healthy else 503
+
+       return JSONResponse(
+           status_code=status_code,
+           content={
+               "status": "healthy" if all_healthy else "unhealthy",
+               "checks": checks
+           }
+       )
+   ```
+
+**验收标准**:
+- ✅ 多环境配置完成
+- ✅ 健康检查端点可用
+- ✅ 生产环境部署文档完成
+
+---
+
+#### 任务 3.4: 性能基准测试 (P0)
+
+**预计时间**: 2 天
+**负责人**: QA + 后端开发
+**优先级**: 🔴 P0
+
+**子任务**:
+
+1. **编写压力测试脚本** (1 天)
+   ```python
+   # tests/performance/test_load.py
+   from locust import HttpUser, task, between
+
+   class APIUser(HttpUser):
+       wait_time = between(1, 3)
+
+       @task(3)
+       def get_stock_list(self):
+           self.client.get("/api/stocks/list?page=1&page_size=20")
+
+       @task(2)
+       def get_daily_data(self):
+           self.client.get("/api/data/daily/000001?start_date=2023-01-01")
+
+       @task(1)
+       def get_features(self):
+           self.client.get("/api/features/000001?feature_type=technical")
+   ```
+
+2. **执行基准测试** (1 天)
+   ```bash
+   # 运行压力测试
+   locust -f tests/performance/test_load.py \
+          --headless \
+          --users 100 \
+          --spawn-rate 10 \
+          --run-time 5m \
+          --host http://localhost:8000
+
+   # 目标指标
+   # - RPS: > 500
+   # - P95 响应时间: < 100ms
+   # - 错误率: < 0.1%
+   ```
+
+**验收标准**:
+- ✅ 压力测试脚本完成
+- ✅ 性能指标达标
+- ✅ 性能测试报告完成
 
 ---
 
 ## 关键里程碑
 
-### Milestone 1: 安全与测试就绪 (Week 4)
+### Milestone 1: 测试与质量完成 (Week 7)
 
 **目标**:
-- ✅ 安全问题修复完成
-- ✅ 测试覆盖率达到 30%
+- ✅ 辅助功能 API 测试完成
 - ✅ 异常处理统一
+- ✅ 代码质量工具集成
+- ✅ 安全审计通过
 
 **验收**:
-- 安全审计通过
-- CI 测试通过
-- 代码质量评分 > 7.0
+- 整体测试覆盖率 > 75%
+- 代码质量评分 > 8.0
+- 无已知安全漏洞
 
 ---
 
-### Milestone 2: 架构重构完成 (Week 8)
+### Milestone 2: 性能优化完成 (Week 10)
 
 **目标**:
-- ✅ SQLAlchemy ORM 迁移完成
-- ✅ Repository 层完善
 - ✅ Redis 缓存实现
-- ✅ 依赖注入完成
+- ✅ 数据库查询优化
+- ✅ 性能监控上线
 
 **验收**:
-- 架构评分 > 8.5
-- 代码耦合度降低 50%
-- API 响应时间减少 30%
+- 缓存命中率 > 60%
+- P95 响应时间 < 100ms
+- Prometheus + Grafana 可用
 
 ---
 
 ### Milestone 3: 生产就绪 (Week 12)
 
 **目标**:
-- ✅ 异步驱动迁移完成
-- ✅ 测试覆盖率 > 60%
-- ✅ 监控系统上线
-- ✅ 性能目标达成
+- ✅ 限流熔断实现
+- ✅ 日志系统增强
+- ✅ 生产环境配置
+- ✅ 性能基准测试通过
 
 **验收**:
 - 生产就绪度 9/10
-- 性能测试通过
-- 安全审计通过
+- 性能测试达标
+- 所有文档完成
 
 ---
-
-## 资源分配
-
-### 人力资源
-
-| 角色 | 投入 | 职责 |
-|------|------|------|
-| 后端开发 | 100% | 代码重构、功能开发 |
-| QA 工程师 | 50% | 测试编写、质量保证 |
-| DevOps | 20% | CI/CD、监控配置 |
-
-### 时间分配
-
-```
-总工时估算: 约 300 人时 (12 周 × 5 天 × 5 小时)
-
-Phase 1 (安全与测试): 100 人时
-Phase 2 (架构重构):   120 人时
-Phase 3 (性能优化):   80 人时
-```
-
----
-
-## 风险管理
-
-### 高风险项
-
-| 风险 | 概率 | 影响 | 缓解措施 |
-|------|------|------|---------|
-| 异步驱动迁移失败 | 中 | 高 | 充分测试，保留回滚方案 |
-| 性能优化效果不达标 | 中 | 中 | 提前性能基准测试 |
-| 测试编写进度滞后 | 高 | 中 | 优先核心功能测试 |
-
----
-
-## 成功指标
-
-### 量化指标
-
-| 指标 | 当前 | 目标 (Week 12) | 测量方式 |
-|------|------|---------------|---------|
-| 测试覆盖率 | 0% | 60%+ | pytest-cov |
-| API P95 响应时间 | 200ms | <100ms | Locust 压测 |
-| 并发支持 | 100 QPS | 500+ QPS | Locust 压测 |
-| 代码质量评分 | 6.5/10 | 8.5/10 | SonarQube |
 | 生产就绪度 | 6/10 | 9/10 | 人工评估 |
 
 ---
 
 ## 下一步行动
 
-### 本周 (Week 1)
+### 本周 (Week 5)
 
-1. ✅ **任务 0.1 完成**: 审计 Core 功能清单 - **已完成 (2026-02-01)**
-   - ✅ 生成了完整的审计报告
-   - ✅ 识别了 1,797 行完全重复代码
-   - ✅ 验证了架构修正的必要性
+1. 🔴 **任务 1.1**: 编写 ML Training API 测试 (预计 2 天)
+   - 编写 MLTrainingService 单元测试
+   - 编写 ML API 集成测试
 
-2. 🔴 **下一步**: 开始任务 0.2 - 创建 Core Adapters (预计 3 天)
-   - 创建 `data_adapter.py`
-   - 创建 `feature_adapter.py`
-   - 创建 `backtest_adapter.py`
-   - 创建 `model_adapter.py`
+2. 🔴 **任务 1.2**: 编写 Sync/Scheduler API 测试 (预计 2 天)
+   - Sync Services 单元测试
+   - Scheduler & Config API 测试
 
-### 本周剩余时间 (Week 1)
+### 本月 (Month 2)
 
-- [ ] 开始 Adapter 开发
-- [ ] 编写 Adapter 单元测试
-- [ ] 准备 API 重写计划
+1. 🔴 完成 Phase 1 所有任务 (Week 5-7)
+   - 辅助功能 API 测试补充
+   - 统一异常处理
+   - 代码质量工具集成
+   - 安全审计
+   - API 文档完善
 
-### 本月 (Month 1)
-
-1. ✅ 完成 Phase 0 所有任务 - **已完成 (2026-02-02)**
-2. 🔴 **下一步**: 开始任务 0.6 - 删除冗余代码
-3. ✅ API 端点全部重写完成 - **已完成 (2026-02-02)**
+2. 🟡 开始 Phase 2 (Week 8)
+   - Redis 缓存实现
+   - 数据库性能优化
 
 ### 🎉 Phase 0 完成总结
 
