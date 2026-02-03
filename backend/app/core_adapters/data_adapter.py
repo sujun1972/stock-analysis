@@ -33,7 +33,8 @@ from src.database.connection_pool_manager import ConnectionPoolManager
 from src.database.data_query_manager import DataQueryManager
 from src.database.data_insert_manager import DataInsertManager
 from src.data_pipeline.batch_download_coordinator import BatchDownloadCoordinator
-from src.exceptions import DatabaseError
+from src.exceptions import DatabaseError as CoreDatabaseError
+from app.core.exceptions import ExternalAPIError, DataQueryError
 
 # 延迟导入 Provider 避免循环依赖
 try:
@@ -70,7 +71,7 @@ class DataAdapter:
         if DataProvider is not None:
             try:
                 self.provider = DataProvider()
-            except Exception as e:
+            except (ImportError, ValueError, KeyError) as e:
                 logger.warning(f"无法初始化数据提供者: {e}")
 
         # 初始化下载协调器（如果 Provider 可用）
@@ -81,7 +82,7 @@ class DataAdapter:
                     provider=self.provider,
                     max_workers=3
                 )
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logger.warning(f"无法初始化下载协调器: {e}")
 
     async def get_stock_list(
@@ -310,7 +311,7 @@ class DataAdapter:
             包含日线数据的 DataFrame，失败时返回 None
         """
         if self.provider is None:
-            raise DatabaseError("数据提供者未初始化，无法下载数据")
+            raise DataQueryError("数据提供者未初始化，无法下载数据")
 
         start_str = start_date.strftime("%Y-%m-%d")
         end_str = end_date.strftime("%Y-%m-%d")
@@ -324,9 +325,23 @@ class DataAdapter:
                 end_date=end_str
             )
             return df
-        except Exception as e:
-            logger.error(f"下载股票 {code} 数据失败: {e}")
-            return None
+        except (ConnectionError, TimeoutError) as e:
+            logger.error(f"数据源API连接失败: {code} - {e}")
+            raise ExternalAPIError(
+                "数据源API调用失败",
+                error_code="API_CONNECTION_ERROR",
+                api_name="data_provider",
+                stock_code=code,
+                reason=str(e)
+            )
+        except (ValueError, KeyError) as e:
+            logger.error(f"数据源返回数据格式错误: {code} - {e}")
+            raise DataQueryError(
+                "数据下载失败",
+                error_code="DATA_DOWNLOAD_FAILED",
+                stock_code=code,
+                reason=str(e)
+            )
 
     async def check_data_integrity(
         self,
@@ -352,5 +367,6 @@ class DataAdapter:
         if hasattr(self, 'pool_manager'):
             try:
                 self.pool_manager.close_all()
-            except Exception:
+            except (AttributeError, RuntimeError):
+                # 忽略清理时的错误（对象可能已被销毁）
                 pass

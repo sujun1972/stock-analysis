@@ -11,6 +11,7 @@ from src.database.db_manager import DatabaseManager
 from app.repositories.config_repository import ConfigRepository
 from app.services.data_source_manager import DataSourceManager
 from app.services.sync_status_manager import SyncStatusManager
+from app.core.exceptions import DatabaseError, ConfigError
 
 
 class ConfigService:
@@ -51,9 +52,17 @@ class ConfigService:
                 self.config_repo.get_config_value,
                 key
             )
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"获取配置失败 ({key}): {e}")
-            raise
+            raise ConfigError(
+                f"配置获取失败: {key}",
+                error_code="CONFIG_FETCH_FAILED",
+                key=key,
+                reason=str(e)
+            )
 
     async def get_all_configs(self) -> Dict[str, str]:
         """
@@ -66,9 +75,16 @@ class ConfigService:
             return await asyncio.to_thread(
                 self.config_repo.get_all_configs
             )
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"获取所有配置失败: {e}")
-            raise
+            raise ConfigError(
+                "所有配置获取失败",
+                error_code="ALL_CONFIG_FETCH_FAILED",
+                reason=str(e)
+            )
 
     async def set_config(self, key: str, value: str) -> bool:
         """
@@ -88,9 +104,18 @@ class ConfigService:
                 value
             )
             return rows > 0
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"设置配置失败 ({key}): {e}")
-            raise
+            raise ConfigError(
+                f"配置设置失败: {key}",
+                error_code="CONFIG_SET_FAILED",
+                key=key,
+                value=value,
+                reason=str(e)
+            )
 
     # ==================== 数据源配置接口 ====================
 

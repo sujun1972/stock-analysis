@@ -471,6 +471,44 @@ class ConfigValidationError(ConfigError):
     pass
 
 
+# ==================== 数据同步相关异常 ====================
+
+
+class DataSyncError(BackendError):
+    """
+    数据同步错误
+
+    用于数据同步失败、同步任务执行失败等场景。
+
+    Examples:
+        >>> raise DataSyncError(
+        ...     "股票数据同步失败",
+        ...     error_code="SYNC_FAILED",
+        ...     stock_code="000001",
+        ...     sync_type="daily",
+        ...     reason="数据源无响应"
+        ... )
+    """
+    pass
+
+
+class SyncTaskError(DataSyncError):
+    """
+    同步任务执行失败
+
+    继承自 DataSyncError。
+
+    Examples:
+        >>> raise SyncTaskError(
+        ...     "定时同步任务失败",
+        ...     error_code="SYNC_TASK_FAILED",
+        ...     task_name="daily_sync",
+        ...     error_message="超时"
+        ... )
+    """
+    pass
+
+
 # ==================== 权限相关异常 ====================
 
 
@@ -520,6 +558,11 @@ def raise_api_error(message: str, **context) -> None:
     raise ExternalAPIError(message, **context)
 
 
+def raise_sync_error(message: str, **context) -> None:
+    """快捷抛出数据同步异常"""
+    raise DataSyncError(message, **context)
+
+
 # ==================== 异常类型映射 ====================
 
 # 用于根据场景快速选择异常类型
@@ -557,6 +600,10 @@ EXCEPTION_MAP = {
     # 配置相关
     'config': ConfigError,
     'config_validation': ConfigValidationError,
+
+    # 同步相关
+    'sync': DataSyncError,
+    'sync_task': SyncTaskError,
 
     # 权限相关
     'permission': PermissionError,

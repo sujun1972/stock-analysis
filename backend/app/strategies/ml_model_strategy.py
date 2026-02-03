@@ -17,6 +17,7 @@ if str(core_path) not in sys.path:
 
 from src.config.trading_rules import TradingCosts
 from .base_strategy import BaseStrategy, StrategyParameter, ParameterType
+from app.core.exceptions import StrategyExecutionError, CalculationError, DataQueryError
 
 
 class MLModelStrategy(BaseStrategy):
@@ -240,10 +241,16 @@ class MLModelStrategy(BaseStrategy):
             logger.info(f"从数据库找到 {len(options)} 个可用的ML模型")
             return options
 
-        except Exception as e:
-            logger.error(f"获取可用模型列表失败: {e}")
-            # 发生错误时也返回空列表
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"获取可用模型列表失败 - 数据格式错误: {e}")
             return []
+        except Exception as e:
+            logger.exception(f"获取可用模型列表时发生未预期错误: {e}")
+            raise DataQueryError(
+                "获取ML模型列表失败",
+                error_code="MODEL_LIST_QUERY_FAILED",
+                reason=str(e)
+            )
 
     def generate_signals(self, data: pd.DataFrame) -> pd.Series:
         """
@@ -305,10 +312,25 @@ class MLModelStrategy(BaseStrategy):
             # 重新抛出我们自定义的错误，让上层处理
             logger.error(f"ML模型策略执行失败: {e}")
             raise
+        except (KeyError, TypeError) as e:
+            # 数据格式错误
+            logger.error(f"数据格式错误: {e}")
+            raise CalculationError(
+                "ML模型信号生成失败 - 数据格式错误",
+                error_code="ML_DATA_FORMAT_ERROR",
+                model_id=self.model_id,
+                reason=str(e)
+            )
         except Exception as e:
-            # 其他未预期的错误也抛出，不使用回退策略
-            logger.error(f"生成ML信号时发生未预期错误: {e}")
-            raise RuntimeError(f"ML模型策略执行失败: {str(e)}")
+            # 其他未预期的错误
+            logger.exception(f"生成ML信号时发生未预期错误: {e}")
+            raise StrategyExecutionError(
+                "ML模型策略执行失败",
+                error_code="ML_STRATEGY_EXECUTION_FAILED",
+                strategy="ml_model",
+                model_id=self.model_id,
+                reason=str(e)
+            )
 
     def _load_model_from_disk(self):
         """
@@ -380,9 +402,20 @@ class MLModelStrategy(BaseStrategy):
 
             return model
 
-        except Exception as e:
-            logger.error(f"加载模型失败: {e}", exc_info=True)
+        except (FileNotFoundError, IOError) as e:
+            logger.error(f"模型文件不存在或无法读取: {e}")
             return None
+        except (ValueError, KeyError) as e:
+            logger.error(f"模型配置数据格式错误: {e}")
+            return None
+        except Exception as e:
+            logger.exception(f"加载模型时发生未预期错误: {e}")
+            raise StrategyExecutionError(
+                "加载ML模型失败",
+                error_code="ML_MODEL_LOAD_FAILED",
+                model_id=self.model_id,
+                reason=str(e)
+            )
 
     def _generate_predictions(self, model, data: pd.DataFrame) -> Optional[pd.Series]:
         """
@@ -570,9 +603,32 @@ class MLModelStrategy(BaseStrategy):
 
             return predictions_aligned
 
+        except (ImportError, ModuleNotFoundError) as e:
+            logger.error(f"缺少必要的依赖库: {e}")
+            raise StrategyExecutionError(
+                "ML模型预测失败 - 缺少依赖",
+                error_code="ML_MISSING_DEPENDENCY",
+                model_id=self.model_id,
+                reason=str(e)
+            )
+        except (ValueError, KeyError, IndexError) as e:
+            logger.error(f"特征数据格式错误: {e}")
+            raise CalculationError(
+                "ML模型预测失败 - 特征计算错误",
+                error_code="ML_FEATURE_ERROR",
+                model_id=self.model_id,
+                model_type=self.model_type,
+                reason=str(e)
+            )
         except Exception as e:
-            logger.error(f"模型预测失败: {e}", exc_info=True)
-            return None
+            logger.exception(f"模型预测时发生未预期错误: {e}")
+            raise StrategyExecutionError(
+                "ML模型预测失败",
+                error_code="ML_PREDICTION_FAILED",
+                model_id=self.model_id,
+                model_type=self.model_type,
+                reason=str(e)
+            )
 
     def _generate_fallback_signals(self, data: pd.DataFrame) -> pd.Series:
         """

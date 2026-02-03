@@ -18,6 +18,7 @@ from loguru import logger
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
+from app.core.exceptions import DataNotFoundError, DataSyncError, ExternalAPIError
 
 router = APIRouter()
 
@@ -119,8 +120,10 @@ async def get_daily_data(
             message=f"获取股票 {code} 日线数据成功"
         ).to_dict()
 
+    except DataNotFoundError:
+        raise
     except Exception as e:
-        logger.error(f"获取日线数据失败 {code}: {e}")
+        logger.exception(f"未预期的错误 {code}: {e}")
         return ApiResponse.internal_error(
             message=f"获取日线数据失败: {str(e)}",
             data={"code": code, "error": str(e)}
@@ -223,6 +226,10 @@ async def download_data(
                         failed_codes.append(code)
                         logger.warning(f"⚠️  {code}: 无数据")
 
+                except ExternalAPIError as e:
+                    failed += 1
+                    failed_codes.append(code)
+                    logger.error(f"❌ {code}: 数据源API错误 - {e}")
                 except Exception as e:
                     failed += 1
                     failed_codes.append(code)
@@ -246,8 +253,14 @@ async def download_data(
             message=f"数据下载完成，成功率: {success/total*100:.1f}%"
         ).to_dict()
 
+    except DataSyncError as e:
+        logger.error(f"数据同步失败: {e}")
+        return ApiResponse.internal_error(
+            message=f"数据下载失败: {str(e)}",
+            data={"error": str(e)}
+        ).to_dict()
     except Exception as e:
-        logger.error(f"数据下载失败: {e}")
+        logger.exception(f"未预期的错误: {e}")
         return ApiResponse.internal_error(
             message=f"数据下载失败: {str(e)}",
             data={"error": str(e)}
@@ -354,8 +367,10 @@ async def get_minute_data(
             message=f"获取股票 {code} 分钟数据成功"
         ).to_dict()
 
+    except DataNotFoundError:
+        raise
     except Exception as e:
-        logger.error(f"获取分钟数据失败 {code}: {e}")
+        logger.exception(f"未预期的错误 {code}: {e}")
         return ApiResponse.internal_error(
             message=f"获取分钟数据失败: {str(e)}",
             data={"code": code, "error": str(e)}
@@ -414,8 +429,10 @@ async def check_data_integrity(
             message=f"数据完整性检查完成"
         ).to_dict()
 
+    except DataNotFoundError:
+        raise
     except Exception as e:
-        logger.error(f"数据完整性检查失败 {code}: {e}")
+        logger.exception(f"未预期的错误 {code}: {e}")
         return ApiResponse.internal_error(
             message=f"数据完整性检查失败: {str(e)}",
             data={"code": code, "error": str(e)}

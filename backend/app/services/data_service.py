@@ -12,6 +12,7 @@ import pandas as pd
 import akshare as ak
 # 使用docker-compose挂载的/app/src目录
 from src.database.db_manager import DatabaseManager
+from app.core.exceptions import ExternalAPIError, DatabaseError, DataSyncError
 
 
 class DataDownloadService:
@@ -74,9 +75,24 @@ class DataDownloadService:
                 "message": f"成功下载 {count} 只股票信息"
             }
 
-        except Exception as e:
-            logger.error(f"下载股票列表失败: {e}")
+        except ValueError as e:
+            # 数据为空
+            raise ExternalAPIError(
+                "股票列表数据获取失败",
+                error_code="STOCK_LIST_EMPTY",
+                reason=str(e)
+            )
+        except DatabaseError:
+            # 数据库异常直接向上传播
             raise
+        except Exception as e:
+            # 其他未预期错误
+            logger.error(f"下载股票列表失败: {e}")
+            raise DataSyncError(
+                "股票列表同步失败",
+                error_code="STOCK_LIST_SYNC_FAILED",
+                reason=str(e)
+            )
 
     async def download_single_stock(
         self,
@@ -143,9 +159,31 @@ class DataDownloadService:
             logger.info(f"  ✓ {code}: {count} 条记录")
             return count
 
-        except Exception as e:
-            logger.error(f"  ✗ {code}: {e}")
+        except (ConnectionError, TimeoutError) as e:
+            # 网络相关错误
+            logger.error(f"  ✗ {code}: 数据获取超时或网络错误")
+            raise ExternalAPIError(
+                f"股票 {code} 数据获取失败",
+                error_code="DATA_FETCH_TIMEOUT",
+                stock_code=code,
+                reason=str(e)
+            )
+        except ValueError as e:
+            # 数据为空
+            logger.warning(f"  {code}: 无数据")
             return None
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
+        except Exception as e:
+            # 其他未预期错误
+            logger.error(f"  ✗ {code}: {e}")
+            raise DataSyncError(
+                f"股票 {code} 数据同步失败",
+                error_code="DAILY_DATA_SYNC_FAILED",
+                stock_code=code,
+                reason=str(e)
+            )
 
     async def download_batch(
         self,
@@ -206,6 +244,17 @@ class DataDownloadService:
                 "total": total
             }
 
-        except Exception as e:
-            logger.error(f"批量下载失败: {e}")
+        except DatabaseError:
+            # 数据库错误向上传播
             raise
+        except Exception as e:
+            # 其他未预期错误
+            logger.error(f"批量下载失败: {e}")
+            raise DataSyncError(
+                "批量下载失败",
+                error_code="BATCH_DOWNLOAD_FAILED",
+                total=total,
+                success=success_count,
+                failed=failed_count,
+                reason=str(e)
+            )

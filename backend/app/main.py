@@ -9,6 +9,7 @@ from loguru import logger
 
 from app.core.config import settings
 from app.api import router as api_router
+from app.api.exception_handlers import register_exception_handlers
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -28,6 +29,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 注册全局异常处理器
+register_exception_handlers(app)
 
 # 注册路由
 app.include_router(api_router, prefix="/api")

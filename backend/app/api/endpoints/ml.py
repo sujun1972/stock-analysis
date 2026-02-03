@@ -20,6 +20,7 @@ from app.services.ml_training_service import MLTrainingService
 from app.utils.data_cleaning import sanitize_float_values
 from app.services.experiment_service import ExperimentService
 from app.api.error_handler import handle_api_errors
+from app.core.exceptions import DataNotFoundError, DatabaseError, ValidationError
 
 router = APIRouter()
 
@@ -41,20 +42,16 @@ async def create_training_task(
     - **model_type**: 模型类型 (lightgbm/gru)
     - **target_period**: 预测周期（天数）
     """
-    try:
-        # 创建任务
-        task_id = await ml_service.create_task(request.dict())
+    # 创建任务
+    task_id = await ml_service.create_task(request.dict())
 
-        # 后台启动训练
-        background_tasks.add_task(ml_service.start_training, task_id)
+    # 后台启动训练
+    background_tasks.add_task(ml_service.start_training, task_id)
 
-        # 返回任务信息
-        task = ml_service.get_task(task_id)
+    # 返回任务信息
+    task = ml_service.get_task(task_id)
 
-        return MLTrainingTaskResponse(**task)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return MLTrainingTaskResponse(**task)
 
 
 @router.get("/tasks/{task_id}", response_model=MLTrainingTaskResponse)
@@ -198,8 +195,12 @@ async def predict(request: MLPredictionRequest):
 
         return MLPredictionResponse(**result)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except DataNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except DatabaseError as e:
+        raise HTTPException(status_code=500, detail=f"数据库错误: {str(e)}")
 
 
 @router.get("/models")
@@ -376,9 +377,11 @@ async def list_models(
             "models": models
         }
 
+    except DatabaseError as e:
+        logger.exception(f"数据库查询失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"未预期的错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
 
 
@@ -515,7 +518,10 @@ async def get_feature_snapshot(
 
     except HTTPException:
         raise
+    except DataNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"未预期的错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))

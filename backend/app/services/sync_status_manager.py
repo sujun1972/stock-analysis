@@ -10,6 +10,7 @@ from loguru import logger
 
 from src.database.db_manager import DatabaseManager
 from app.repositories.config_repository import ConfigRepository
+from app.core.exceptions import DatabaseError, ConfigError
 
 
 class SyncStatusManager:
@@ -64,9 +65,16 @@ class SyncStatusManager:
                 'completed': int(configs.get('sync_completed') or 0)
             }
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"获取同步状态失败: {e}")
-            raise
+            raise ConfigError(
+                "同步状态获取失败",
+                error_code="SYNC_STATUS_FETCH_FAILED",
+                reason=str(e)
+            )
 
     async def update_sync_status(
         self,
@@ -115,9 +123,16 @@ class SyncStatusManager:
 
             return await self.get_sync_status()
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"更新同步状态失败: {e}")
-            raise
+            raise ConfigError(
+                "同步状态更新失败",
+                error_code="SYNC_STATUS_UPDATE_FAILED",
+                reason=str(e)
+            )
 
     async def reset_sync_status(self) -> Dict:
         """
@@ -150,9 +165,17 @@ class SyncStatusManager:
             )
             logger.info(f"同步中止标志已设置为: {abort}")
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"设置同步中止标志失败: {e}")
-            raise
+            raise ConfigError(
+                "同步中止标志设置失败",
+                error_code="SYNC_ABORT_FLAG_SET_FAILED",
+                abort=abort,
+                reason=str(e)
+            )
 
     async def check_sync_abort_flag(self) -> bool:
         """
@@ -168,7 +191,12 @@ class SyncStatusManager:
             )
             return flag == 'true'
 
+        except (DatabaseError, ConfigError) as e:
+            # 配置读取失败，为安全起见返回False（不中止）
+            logger.error(f"检查同步中止标志失败: {e}")
+            return False
         except Exception as e:
+            # 其他未预期错误，为安全起见返回False（不中止）
             logger.error(f"检查同步中止标志失败: {e}")
             return False
 
@@ -237,9 +265,17 @@ class SyncStatusManager:
                     'completed_at': ''
                 }
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"获取模块同步状态失败 ({module}): {e}")
-            raise
+            raise DatabaseError(
+                f"模块同步状态查询失败: {module}",
+                error_code="MODULE_SYNC_STATUS_QUERY_FAILED",
+                module=module,
+                reason=str(e)
+            )
 
     # ==================== 同步任务管理 ====================
 
@@ -272,9 +308,18 @@ class SyncStatusManager:
 
             logger.info(f"✓ 创建同步任务: {task_id} ({module})")
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"创建同步任务失败: {e}")
-            raise
+            raise DatabaseError(
+                "同步任务创建失败",
+                error_code="SYNC_TASK_CREATE_FAILED",
+                task_id=task_id,
+                module=module,
+                reason=str(e)
+            )
 
     async def update_sync_task(
         self,
@@ -348,9 +393,17 @@ class SyncStatusManager:
                 tuple(params)
             )
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"更新同步任务失败: {e}")
-            raise
+            raise DatabaseError(
+                "同步任务更新失败",
+                error_code="SYNC_TASK_UPDATE_FAILED",
+                task_id=task_id,
+                reason=str(e)
+            )
 
     async def get_sync_task(self, task_id: str) -> Optional[Dict]:
         """
@@ -398,6 +451,14 @@ class SyncStatusManager:
                 'duration_seconds': row[12]
             }
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"获取同步任务失败: {e}")
-            raise
+            raise DatabaseError(
+                "同步任务查询失败",
+                error_code="SYNC_TASK_QUERY_FAILED",
+                task_id=task_id,
+                reason=str(e)
+            )

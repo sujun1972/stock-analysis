@@ -21,6 +21,7 @@ import pandas as pd
 from app.core_adapters.backtest_adapter import BacktestAdapter
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
+from app.core.exceptions import BacktestError, DataNotFoundError, ValidationError, CalculationError
 
 router = APIRouter()
 

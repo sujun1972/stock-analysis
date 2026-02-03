@@ -83,7 +83,7 @@ async def retry_async(
 
             logger.warning(
                 f"执行失败 (尝试 {retry_count}/{max_retries})，"
-                f"{delay:.1f}秒后重试: {e}"
+                f"{delay:.1f}秒后重试 | 异常类型: {type(e).__name__} | 错误: {e}"
             )
 
             # 调用重试回调
@@ -91,7 +91,12 @@ async def retry_async(
                 try:
                     await on_retry(retry_count, max_retries, e)
                 except Exception as callback_error:
-                    logger.error(f"重试回调函数执行失败: {callback_error}")
+                    # 回调函数执行失败不应影响重试逻辑，记录错误但继续
+                    logger.error(
+                        f"重试回调函数执行失败 | "
+                        f"回调错误类型: {type(callback_error).__name__} | "
+                        f"错误: {callback_error}"
+                    )
 
             # 等待后重试
             await asyncio.sleep(delay)
@@ -169,7 +174,7 @@ def retry_sync(
 
             logger.warning(
                 f"执行失败 (尝试 {retry_count}/{max_retries})，"
-                f"{delay:.1f}秒后重试: {e}"
+                f"{delay:.1f}秒后重试 | 异常类型: {type(e).__name__} | 错误: {e}"
             )
 
             # 调用重试回调
@@ -177,7 +182,12 @@ def retry_sync(
                 try:
                     on_retry(retry_count, max_retries, e)
                 except Exception as callback_error:
-                    logger.error(f"重试回调函数执行失败: {callback_error}")
+                    # 回调函数执行失败不应影响重试逻辑，记录错误但继续
+                    logger.error(
+                        f"重试回调函数执行失败 | "
+                        f"回调错误类型: {type(callback_error).__name__} | "
+                        f"错误: {callback_error}"
+                    )
 
             # 等待后重试
             time.sleep(delay)

@@ -334,8 +334,12 @@ class ICValidator:
             with open(log_file, 'w') as f:
                 json.dump(log_data, f, indent=2, ensure_ascii=False)
 
-        except Exception as e:
-            print(f"⚠️  告警日志保存失败: {e}")
+        except (IOError, OSError, PermissionError) as e:
+            # 文件系统错误不应中断主流程
+            print(f"⚠️  告警日志保存失败 - 文件系统错误: {e}")
+        except (TypeError, ValueError) as e:
+            # JSON序列化错误
+            print(f"⚠️  告警日志保存失败 - 数据序列化错误: {e}")
 
     def print_alerts(self, alerts: List[ICAlert]):
         """打印告警信息"""

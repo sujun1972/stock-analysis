@@ -11,6 +11,7 @@ import asyncio
 from src.providers import DataProviderFactory
 from app.services.config_service import ConfigService
 from app.services.data_service import DataDownloadService
+from app.core.exceptions import DataSyncError, ExternalAPIError, DatabaseError
 
 
 class DailySyncService:
@@ -253,7 +254,16 @@ class DailySyncService:
                 # 请求间隔
                 await asyncio.sleep(0.3)
 
+            except asyncio.TimeoutError:
+                # 超时错误（已在代码中捕获，这里不会触发）
+                logger.error(f"  ✗ {code}: 超时")
+                failed_count += 1
+            except (ExternalAPIError, DatabaseError) as e:
+                # API或数据库错误，记录但继续处理其他股票
+                logger.error(f"  ✗ {code}: {e.message if hasattr(e, 'message') else str(e)}")
+                failed_count += 1
             except Exception as e:
+                # 其他未预期错误，记录但继续处理其他股票
                 logger.error(f"  ✗ {code}: {e}")
                 failed_count += 1
 

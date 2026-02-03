@@ -7,6 +7,8 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 from .base_repository import BaseRepository
 from loguru import logger
+from psycopg2 import OperationalError, InterfaceError, DatabaseError as PsycopgDatabaseError
+from app.core.exceptions import DatabaseError
 
 
 class BatchRepository(BaseRepository):
@@ -168,9 +170,15 @@ class BatchRepository(BaseRepository):
                 'batches_deleted': batches_deleted,
                 'experiments_deleted': experiments_deleted
             }
-        except Exception as e:
+        except (OperationalError, InterfaceError, PsycopgDatabaseError) as e:
             logger.error(f"删除批次失败 {batch_id}: {e}")
-            raise
+            raise DatabaseError(
+                "级联删除批次失败",
+                error_code="DB_DELETE_BATCH_FAILED",
+                batch_id=batch_id,
+                operation="cascade_delete",
+                reason=str(e)
+            )
 
     def update_batch_status(self, batch_id: int, status: str, **kwargs) -> int:
         """

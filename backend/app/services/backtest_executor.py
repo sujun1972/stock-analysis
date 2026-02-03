@@ -10,6 +10,7 @@ from loguru import logger
 
 from src.backtest import BacktestEngine, PerformanceAnalyzer
 from src.features import AlphaFactors
+from app.core.exceptions import BacktestExecutionError, CalculationError
 
 
 class BacktestExecutor:
@@ -229,8 +230,17 @@ class BacktestExecutor:
                 # 综合信号(简单平均)
                 signal = (momentum + mean_reversion) / 2
                 signals_dict[symbol] = signal
+            except CalculationError:
+                # 计算错误向上传播
+                raise
             except Exception as e:
                 logger.error(f"计算 {symbol} Alpha因子失败: {e}")
+                raise CalculationError(
+                    f"Alpha因子计算失败: {symbol}",
+                    error_code="ALPHA_CALCULATION_FAILED",
+                    symbol=symbol,
+                    reason=str(e)
+                )
 
         return pd.DataFrame(signals_dict)
 

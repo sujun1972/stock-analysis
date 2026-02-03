@@ -6,6 +6,8 @@ Base Repository
 from typing import Any, List, Dict, Optional, Tuple
 from src.database.db_manager import DatabaseManager
 from loguru import logger
+from psycopg2 import OperationalError, InterfaceError, DatabaseError as PsycopgDatabaseError
+from app.core.exceptions import DatabaseError, QueryError
 
 
 class BaseRepository:
@@ -38,9 +40,14 @@ class BaseRepository:
         """
         try:
             return self.db._execute_query(query, params or ())
-        except Exception as e:
-            logger.error(f"查询执行失败: {query[:100]}... - {e}")
-            raise
+        except (OperationalError, InterfaceError, PsycopgDatabaseError) as e:
+            logger.error(f"数据库查询失败: {query[:100]}... - {e}")
+            raise QueryError(
+                "数据库查询执行失败",
+                error_code="DB_QUERY_FAILED",
+                query_preview=query[:100],
+                reason=str(e)
+            )
 
     def execute_update(self, query: str, params: Optional[Tuple] = None) -> int:
         """
@@ -64,9 +71,15 @@ class BaseRepository:
                 return affected_rows
             finally:
                 self.db.release_connection(conn)
-        except Exception as e:
-            logger.error(f"更新执行失败: {query[:100]}... - {e}")
-            raise
+        except (OperationalError, InterfaceError, PsycopgDatabaseError) as e:
+            logger.error(f"数据库更新失败: {query[:100]}... - {e}")
+            raise DatabaseError(
+                "数据库更新操作失败",
+                error_code="DB_UPDATE_FAILED",
+                operation="update",
+                query_preview=query[:100],
+                reason=str(e)
+            )
 
     def execute_insert(self, query: str, params: Optional[Tuple] = None) -> int:
         """
@@ -90,9 +103,15 @@ class BaseRepository:
                 return last_id
             finally:
                 self.db.release_connection(conn)
-        except Exception as e:
-            logger.error(f"插入执行失败: {query[:100]}... - {e}")
-            raise
+        except (OperationalError, InterfaceError, PsycopgDatabaseError) as e:
+            logger.error(f"数据库插入失败: {query[:100]}... - {e}")
+            raise DatabaseError(
+                "数据库插入操作失败",
+                error_code="DB_INSERT_FAILED",
+                operation="insert",
+                query_preview=query[:100],
+                reason=str(e)
+            )
 
     def find_by_id(self, table: str, id_value: Any, id_column: str = 'id') -> Optional[Tuple]:
         """

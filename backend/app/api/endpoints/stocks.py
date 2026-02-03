@@ -18,6 +18,7 @@ from loguru import logger
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
+from app.core.exceptions import DataQueryError, DatabaseError
 
 router = APIRouter()
 
@@ -60,42 +61,36 @@ async def get_stock_list(
         }
     }
     """
-    try:
-        # 1. 调用 Core Adapter（业务逻辑在 Core）
-        stocks = await data_adapter.get_stock_list(
-            market=market,
-            status=status_filter
-        )
+    # 直接调用，让异常传播到全局处理器
+    # 1. 调用 Core Adapter（业务逻辑在 Core）
+    stocks = await data_adapter.get_stock_list(
+        market=market,
+        status=status_filter
+    )
 
-        # 2. Backend 职责：搜索过滤（前端功能）
-        if search:
-            search_lower = search.lower()
-            stocks = [
-                stock for stock in stocks
-                if search_lower in stock.get('code', '').lower()
-                or search_lower in stock.get('name', '').lower()
-            ]
+    # 2. Backend 职责：搜索过滤（前端功能）
+    if search:
+        search_lower = search.lower()
+        stocks = [
+            stock for stock in stocks
+            if search_lower in stock.get('code', '').lower()
+            or search_lower in stock.get('name', '').lower()
+        ]
 
-        # 3. Backend 职责：分页
-        total = len(stocks)
-        start = (page - 1) * page_size
-        end = start + page_size
-        items = stocks[start:end]
+    # 3. Backend 职责：分页
+    total = len(stocks)
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = stocks[start:end]
 
-        # 4. Backend 职责：响应格式化
-        return ApiResponse.paginated(
-            items=items,
-            total=total,
-            page=page,
-            page_size=page_size,
-            message="获取股票列表成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"获取股票列表失败: {e}")
-        return ApiResponse.internal_error(
-            message=f"获取股票列表失败: {str(e)}"
-        ).to_dict()
+    # 4. Backend 职责：响应格式化
+    return ApiResponse.paginated(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        message="获取股票列表成功"
+    ).to_dict()
 
 
 @router.get("/{code}")
@@ -121,25 +116,18 @@ async def get_stock_info(code: str):
         }
     }
     """
-    try:
-        # 调用 Core Adapter
-        stock_info = await data_adapter.get_stock_info(code)
+    # 调用 Core Adapter
+    stock_info = await data_adapter.get_stock_info(code)
 
-        if stock_info is None:
-            return ApiResponse.not_found(
-                message=f"股票 {code} 不存在"
-            ).to_dict()
-
-        return ApiResponse.success(
-            data=stock_info,
-            message="获取股票信息成功"
+    if stock_info is None:
+        return ApiResponse.not_found(
+            message=f"股票 {code} 不存在"
         ).to_dict()
 
-    except Exception as e:
-        logger.error(f"获取股票信息失败 {code}: {e}")
-        return ApiResponse.internal_error(
-            message=f"获取股票信息失败: {str(e)}"
-        ).to_dict()
+    return ApiResponse.success(
+        data=stock_info,
+        message="获取股票信息成功"
+    ).to_dict()
 
 
 @router.get("/{code}/daily")
@@ -175,44 +163,38 @@ async def get_stock_daily_data(
         # 1. 参数转换
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
-
-        # 2. 调用 Core Adapter
-        df = await data_adapter.get_daily_data(
-            code=code,
-            start_date=start_dt,
-            end_date=end_dt
-        )
-
-        if df.empty:
-            return ApiResponse.not_found(
-                message=f"股票 {code} 无日线数据"
-            ).to_dict()
-
-        # 3. 限制返回记录数
-        if len(df) > limit:
-            df = df.tail(limit)
-
-        # 4. 转换为响应格式
-        records = df.to_dict('records')
-
-        return ApiResponse.success(
-            data={
-                "code": code,
-                "records": records,
-                "record_count": len(records)
-            },
-            message="获取日线数据成功"
-        ).to_dict()
-
     except ValueError as e:
         return ApiResponse.bad_request(
             message=f"日期格式错误: {str(e)}"
         ).to_dict()
-    except Exception as e:
-        logger.error(f"获取日线数据失败 {code}: {e}")
-        return ApiResponse.internal_error(
-            message=f"获取日线数据失败: {str(e)}"
+
+    # 2. 调用 Core Adapter
+    df = await data_adapter.get_daily_data(
+        code=code,
+        start_date=start_dt,
+        end_date=end_dt
+    )
+
+    if df.empty:
+        return ApiResponse.not_found(
+            message=f"股票 {code} 无日线数据"
         ).to_dict()
+
+    # 3. 限制返回记录数
+    if len(df) > limit:
+        df = df.tail(limit)
+
+    # 4. 转换为响应格式
+    records = df.to_dict('records')
+
+    return ApiResponse.success(
+        data={
+            "code": code,
+            "records": records,
+            "record_count": len(records)
+        },
+        message="获取日线数据成功"
+    ).to_dict()
 
 
 @router.post("/update")
@@ -270,52 +252,46 @@ async def get_minute_data(
             trade_date_dt = datetime.now().date()
         else:
             trade_date_dt = datetime.strptime(trade_date, "%Y-%m-%d").date()
-
-        # 2. 检查是否为交易日
-        is_trading = await data_adapter.is_trading_day(trade_date_dt)
-        if not is_trading:
-            return ApiResponse.success(
-                data={
-                    "code": code,
-                    "date": trade_date_dt.strftime("%Y-%m-%d"),
-                    "records": [],
-                    "is_trading_day": False
-                },
-                message="非交易日"
-            ).to_dict()
-
-        # 3. 调用 Core Adapter 获取分时数据
-        df = await data_adapter.get_minute_data(
-            code=code,
-            period=period,
-            trade_date=trade_date_dt
-        )
-
-        if df.empty:
-            return ApiResponse.not_found(
-                message=f"{code} {trade_date_dt} 无分时数据"
-            ).to_dict()
-
-        # 4. 转换为响应格式
-        records = df.to_dict('records')
-
-        return ApiResponse.success(
-            data={
-                "code": code,
-                "date": trade_date_dt.strftime("%Y-%m-%d"),
-                "period": period,
-                "records": records,
-                "record_count": len(records)
-            },
-            message="获取分时数据成功"
-        ).to_dict()
-
     except ValueError as e:
         return ApiResponse.bad_request(
             message=f"日期格式错误: {str(e)}"
         ).to_dict()
-    except Exception as e:
-        logger.error(f"获取分时数据失败 {code}: {e}")
-        return ApiResponse.internal_error(
-            message=f"获取分时数据失败: {str(e)}"
+
+    # 2. 检查是否为交易日
+    is_trading = await data_adapter.is_trading_day(trade_date_dt)
+    if not is_trading:
+        return ApiResponse.success(
+            data={
+                "code": code,
+                "date": trade_date_dt.strftime("%Y-%m-%d"),
+                "records": [],
+                "is_trading_day": False
+            },
+            message="非交易日"
         ).to_dict()
+
+    # 3. 调用 Core Adapter 获取分时数据
+    df = await data_adapter.get_minute_data(
+        code=code,
+        period=period,
+        trade_date=trade_date_dt
+    )
+
+    if df.empty:
+        return ApiResponse.not_found(
+            message=f"{code} {trade_date_dt} 无分时数据"
+        ).to_dict()
+
+    # 4. 转换为响应格式
+    records = df.to_dict('records')
+
+    return ApiResponse.success(
+        data={
+            "code": code,
+            "date": trade_date_dt.strftime("%Y-%m-%d"),
+            "period": period,
+            "records": records,
+            "record_count": len(records)
+        },
+        message="获取分时数据成功"
+    ).to_dict()

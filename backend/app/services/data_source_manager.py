@@ -9,6 +9,7 @@ from loguru import logger
 from src.database.db_manager import DatabaseManager
 
 from app.repositories.config_repository import ConfigRepository
+from app.core.exceptions import DatabaseError, ConfigError
 
 
 class DataSourceManager:
@@ -63,9 +64,16 @@ class DataSourceManager:
                 'tushare_token': configs.get('tushare_token') or ''
             }
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"获取数据源配置失败: {e}")
-            raise
+            raise ConfigError(
+                "数据源配置获取失败",
+                error_code="DATA_SOURCE_CONFIG_FETCH_FAILED",
+                reason=str(e)
+            )
 
     async def get_data_source(self) -> str:
         """
@@ -218,9 +226,24 @@ class DataSourceManager:
 
             return await self.get_data_source_config()
 
+        except ValueError as e:
+            # 验证错误（不支持的数据源、Token缺失等）
+            raise ConfigError(
+                str(e),
+                error_code="DATA_SOURCE_VALIDATION_FAILED",
+                data_source=data_source
+            )
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"更新数据源配置失败: {e}")
-            raise
+            raise ConfigError(
+                "数据源配置更新失败",
+                error_code="DATA_SOURCE_UPDATE_FAILED",
+                data_source=data_source,
+                reason=str(e)
+            )
 
     async def set_data_source(self, source: str) -> Dict:
         """
@@ -255,9 +278,16 @@ class DataSourceManager:
 
             return await self.get_data_source_config()
 
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             logger.error(f"设置 Tushare Token 失败: {e}")
-            raise
+            raise ConfigError(
+                "Tushare Token 设置失败",
+                error_code="TUSHARE_TOKEN_UPDATE_FAILED",
+                reason=str(e)
+            )
 
     # ==================== 便捷方法 ====================
 

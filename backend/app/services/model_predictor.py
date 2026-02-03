@@ -15,6 +15,7 @@ from src.data_pipeline import DataPipeline
 from src.models.model_trainer import ModelTrainer
 from src.database.db_manager import DatabaseManager
 from app.utils.data_cleaning import sanitize_float_values
+from app.core.exceptions import DataQueryError, DataNotFoundError, BackendError
 
 
 class ModelPredictor:
@@ -323,7 +324,12 @@ class ModelPredictor:
 
                     # 样本数
                     metrics['samples'] = len(valid_pairs)
+            except (ValueError, ZeroDivisionError) as e:
+                # 计算错误（如除零）
+                logger.warning(f"计算指标失败 (数值错误): {e}")
+                metrics = {'samples': len(pred_list)}
             except Exception as e:
+                # 其他错误
                 logger.warning(f"计算指标失败: {e}")
                 metrics = {'samples': len(pred_list)}
 
@@ -427,8 +433,21 @@ class ModelPredictor:
                 with open(model_path, 'rb') as f:
                     model = pickle.load(f)
                 logger.info(f"✓ 已加载模型: {model_path}")
+            except (pickle.UnpicklingError, EOFError) as e:
+                raise BackendError(
+                    f"模型文件损坏: {model_path}",
+                    error_code="MODEL_FILE_CORRUPTED",
+                    model_path=str(model_path),
+                    reason=str(e)
+                )
             except Exception as e:
-                raise ValueError(f"不支持的模型文件格式: {model_path.suffix}，错误: {e}")
+                raise BackendError(
+                    f"不支持的模型文件格式: {model_path.suffix}",
+                    error_code="MODEL_FILE_FORMAT_UNSUPPORTED",
+                    model_path=str(model_path),
+                    file_suffix=model_path.suffix,
+                    reason=str(e)
+                )
 
         # 加载scaler
         scaler_path = model_path.with_name(model_path.stem + '_scaler.pkl')
@@ -444,6 +463,9 @@ class ModelPredictor:
                     logger.info(f"✓ 已加载scaler: {scaler_path}")
                 else:
                     logger.warning(f"⚠️ Scaler文件损坏（内容为None）: {scaler_path}")
+            except (pickle.UnpicklingError, EOFError) as e:
+                logger.error(f"加载scaler失败 (文件损坏): {e}")
+                scaler = None
             except Exception as e:
                 logger.error(f"加载scaler失败: {e}")
                 scaler = None
@@ -489,11 +511,21 @@ class ModelPredictor:
                     experiment_id=experiment_id
                 )
                 results.append(result)
-            except Exception as e:
-                logger.error(f"预测失败 {symbol}: {e}")
+            except (DataQueryError, DataNotFoundError, BackendError) as e:
+                # 已知业务异常
+                logger.error(f"预测失败 {symbol} (业务异常): {e}")
                 errors.append({
                     'symbol': symbol,
-                    'error': str(e)
+                    'error': str(e),
+                    'error_code': e.error_code if hasattr(e, 'error_code') else 'UNKNOWN'
+                })
+            except Exception as e:
+                # 未预期错误
+                logger.error(f"预测失败 {symbol} (未预期错误): {e}")
+                errors.append({
+                    'symbol': symbol,
+                    'error': str(e),
+                    'error_code': 'UNKNOWN'
                 })
 
         return {

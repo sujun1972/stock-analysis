@@ -11,6 +11,7 @@ import asyncio
 from src.providers import DataProviderFactory
 from app.services.config_service import ConfigService
 from app.services.data_service import DataDownloadService
+from app.core.exceptions import DataSyncError, ExternalAPIError, DatabaseError
 
 
 class RealtimeSyncService:
@@ -159,7 +160,11 @@ class RealtimeSyncService:
             try:
                 self.data_service.db.save_realtime_quote_single(quote, realtime_source)
                 saved_count += 1
+            except DatabaseError as e:
+                # 数据库错误记录但不中断
+                logger.warning(f"增量保存 {quote.get('code', 'Unknown')} 失败 (数据库错误): {e.message if hasattr(e, 'message') else str(e)}")
             except Exception as e:
+                # 其他错误记录但不中断（保证增量保存的容错性）
                 logger.warning(f"增量保存 {quote.get('code', 'Unknown')} 失败: {e}")
 
         # 获取实时行情（使用增量保存回调）

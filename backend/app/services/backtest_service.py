@@ -13,6 +13,7 @@ from app.strategies.strategy_manager import strategy_manager
 from app.services.backtest_data_loader import BacktestDataLoader
 from app.services.backtest_executor import BacktestExecutor
 from app.services.backtest_result_formatter import BacktestResultFormatter
+from app.core.exceptions import BacktestError, DataQueryError
 
 
 class BacktestService:
@@ -111,9 +112,28 @@ class BacktestService:
             logger.info(f"回测任务 {task_id} 完成")
             return result
 
+        except (DataQueryError, BacktestError):
+            # 已知的业务异常向上传播
+            raise
+        except ValueError as e:
+            # 参数验证错误
+            logger.error(f"回测任务 {task_id} 参数错误: {e}")
+            raise BacktestError(
+                f"回测参数错误: {str(e)}",
+                error_code="BACKTEST_INVALID_PARAMS",
+                task_id=task_id,
+                symbols=symbols,
+                reason=str(e)
+            )
         except Exception as e:
             logger.error(f"回测任务 {task_id} 失败: {e}")
-            raise
+            raise BacktestError(
+                "回测执行失败",
+                error_code="BACKTEST_EXECUTION_FAILED",
+                task_id=task_id,
+                symbols=symbols,
+                reason=str(e)
+            )
 
     async def _run_single_stock_backtest(
         self,

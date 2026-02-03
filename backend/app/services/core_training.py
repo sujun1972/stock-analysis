@@ -18,6 +18,7 @@ from loguru import logger
 from src.data_pipeline import DataPipeline, get_full_training_data
 from src.models.model_trainer import ModelTrainer
 from app.utils.ic_validator import ICValidator
+from app.core.exceptions import BackendError, CalculationError, DataQueryError
 
 
 class CoreTrainingService:
@@ -312,7 +313,11 @@ class CoreTrainingService:
                             importance_df['feature'].tolist(),
                             importance_df['gain'].tolist()
                         ))
+                except AttributeError as e:
+                    # 模型不支持特征重要性
+                    logger.warning(f"[CoreTraining] 模型不支持特征重要性: {e}")
                 except Exception as e:
+                    # 其他错误
                     logger.warning(f"[CoreTraining] 获取特征重要性失败: {e}")
 
             if config['model_type'] == 'gru' and save_training_history:
@@ -350,9 +355,28 @@ class CoreTrainingService:
 
             return result
 
-        except Exception as e:
-            logger.error(f"[CoreTraining] ❌ 训练失败: {e}", exc_info=True)
+        except (DataQueryError, CalculationError, BackendError):
+            # 已知业务异常向上传播
             raise
+        except ValueError as e:
+            # 参数验证错误
+            logger.error(f"[CoreTraining] ❌ 训练失败 (参数错误): {e}")
+            raise BackendError(
+                "训练参数错误",
+                error_code="TRAINING_INVALID_PARAMS",
+                symbol=config.get('symbol'),
+                model_type=config.get('model_type'),
+                reason=str(e)
+            )
+        except Exception as e:
+            logger.error(f"[CoreTraining] ❌ 训练失败 (未预期错误): {e}", exc_info=True)
+            raise BackendError(
+                "模型训练失败",
+                error_code="TRAINING_FAILED",
+                symbol=config.get('symbol'),
+                model_type=config.get('model_type'),
+                reason=str(e)
+            )
 
     def _validate_and_fix_params(self, config: Dict[str, Any]) -> None:
         """

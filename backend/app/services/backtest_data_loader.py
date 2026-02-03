@@ -9,6 +9,7 @@ from loguru import logger
 import asyncio
 
 from src.database.db_manager import DatabaseManager
+from app.core.exceptions import DataQueryError, DataNotFoundError
 
 
 class BacktestDataLoader:
@@ -120,8 +121,13 @@ class BacktestDataLoader:
                 else:
                     logger.warning(f"股票 {symbol} 无数据,跳过")
 
+            except DataQueryError:
+                # 数据查询错误向上传播
+                raise
             except Exception as e:
                 logger.error(f"获取股票 {symbol} 数据失败: {e}")
+                # 对于多股回测，单个股票失败不影响整体，所以记录错误但不抛出
+                # 如果需要严格模式，可以改为 raise
 
         if len(prices_dict) == 0:
             raise ValueError("所有股票均无有效数据")
@@ -168,8 +174,13 @@ class BacktestDataLoader:
 
             return df
 
+        except DataQueryError:
+            # 数据查询错误记录日志，但返回None（基准数据不是必需的）
+            logger.warning(f"获取基准数据失败: 数据查询错误")
+            return None
         except Exception as e:
             logger.error(f"获取基准数据失败: {e}")
+            # 基准数据不是必需的，返回None而不抛出异常
             return None
 
     def _standardize_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:

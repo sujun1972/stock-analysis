@@ -12,6 +12,7 @@ from psycopg2.extras import Json
 from src.database.db_manager import DatabaseManager
 from app.services.parameter_grid import ParameterGrid
 from app.repositories.batch_repository import BatchRepository
+from app.core.exceptions import DatabaseError
 
 
 class BatchManager:
@@ -154,7 +155,12 @@ class BatchManager:
             except Exception as e:
                 conn.rollback()
                 logger.error(f"创建批次记录失败: {e}")
-                raise
+                raise DatabaseError(
+                    "批次记录创建失败",
+                    error_code="BATCH_RECORD_CREATE_FAILED",
+                    batch_name=batch_name,
+                    reason=str(e)
+                )
             finally:
                 self.db.release_connection(conn)
 

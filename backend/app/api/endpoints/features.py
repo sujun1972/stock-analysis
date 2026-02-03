@@ -21,6 +21,7 @@ import numpy as np
 from app.core_adapters.feature_adapter import FeatureAdapter
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
+from app.core.exceptions import DataNotFoundError, CalculationError, ValidationError
 
 router = APIRouter()
 
@@ -73,73 +74,67 @@ async def get_features(
         # 1. 参数转换
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
-
-        # 2. 调用 Core Adapter 获取日线数据
-        df = await data_adapter.get_daily_data(
-            code=code,
-            start_date=start_dt,
-            end_date=end_dt
-        )
-
-        if df.empty:
-            return ApiResponse.not_found(
-                message=f"股票 {code} 无日线数据"
-            ).to_dict()
-
-        # 3. 调用 Core Adapter 计算特征
-        if feature_type == "technical":
-            df_with_features = await feature_adapter.add_technical_indicators(df)
-        elif feature_type == "alpha":
-            df_with_features = await feature_adapter.add_alpha_factors(df)
-        else:  # all 或 None
-            df_with_features = await feature_adapter.add_all_features(df)
-
-        # 4. Backend 职责：数据处理和格式化
-        # 重置索引
-        df_reset = df_with_features.reset_index()
-
-        # 替换 Inf 和 NaN 为 None（JSON 序列化）
-        df_reset = df_reset.replace([np.inf, -np.inf], np.nan)
-
-        # 按日期降序排列（从新到旧）
-        if 'date' in df_reset.columns:
-            df_reset = df_reset.sort_values('date', ascending=False)
-
-        # 获取总数
-        total_count = len(df_reset)
-
-        # 限制返回数量
-        df_limited = df_reset.head(limit)
-
-        # 转换为字典列表，将 NaN 转为 None
-        data_list = [
-            {k: (None if pd.isna(v) else v) for k, v in record.items()}
-            for record in df_limited.to_dict('records')
-        ]
-
-        # 5. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data={
-                "code": code,
-                "feature_type": feature_type or "all",
-                "total": total_count,
-                "returned": len(data_list),
-                "has_more": total_count > limit,
-                "columns": list(df_with_features.columns),
-                "data": data_list
-            },
-            message="获取特征数据成功"
-        ).to_dict()
-
     except ValueError as e:
         return ApiResponse.bad_request(
             message=f"日期格式错误: {str(e)}"
         ).to_dict()
-    except Exception as e:
-        logger.error(f"获取特征数据失败 {code}: {e}")
-        return ApiResponse.internal_error(
-            message=f"获取特征数据失败: {str(e)}"
+
+    # 2. 调用 Core Adapter 获取日线数据
+    df = await data_adapter.get_daily_data(
+        code=code,
+        start_date=start_dt,
+        end_date=end_dt
+    )
+
+    if df.empty:
+        return ApiResponse.not_found(
+            message=f"股票 {code} 无日线数据"
         ).to_dict()
+
+    # 3. 调用 Core Adapter 计算特征
+    if feature_type == "technical":
+        df_with_features = await feature_adapter.add_technical_indicators(df)
+    elif feature_type == "alpha":
+        df_with_features = await feature_adapter.add_alpha_factors(df)
+    else:  # all 或 None
+        df_with_features = await feature_adapter.add_all_features(df)
+
+    # 4. Backend 职责：数据处理和格式化
+    # 重置索引
+    df_reset = df_with_features.reset_index()
+
+    # 替换 Inf 和 NaN 为 None（JSON 序列化）
+    df_reset = df_reset.replace([np.inf, -np.inf], np.nan)
+
+    # 按日期降序排列（从新到旧）
+    if 'date' in df_reset.columns:
+        df_reset = df_reset.sort_values('date', ascending=False)
+
+    # 获取总数
+    total_count = len(df_reset)
+
+    # 限制返回数量
+    df_limited = df_reset.head(limit)
+
+    # 转换为字典列表，将 NaN 转为 None
+    data_list = [
+        {k: (None if pd.isna(v) else v) for k, v in record.items()}
+        for record in df_limited.to_dict('records')
+    ]
+
+    # 5. Backend 职责：响应格式化
+    return ApiResponse.success(
+        data={
+            "code": code,
+            "feature_type": feature_type or "all",
+            "total": total_count,
+            "returned": len(data_list),
+            "has_more": total_count > limit,
+            "columns": list(df_with_features.columns),
+            "data": data_list
+        },
+        message="获取特征数据成功"
+    ).to_dict()
 
 
 @router.post("/calculate/{code}")
@@ -183,60 +178,54 @@ async def calculate_features(
         # 1. 参数转换
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
-
-        # 2. 调用 Core Adapter 获取日线数据
-        df = await data_adapter.get_daily_data(
-            code=code,
-            start_date=start_dt,
-            end_date=end_dt
-        )
-
-        if df.empty:
-            return ApiResponse.not_found(
-                message=f"股票 {code} 无日线数据"
-            ).to_dict()
-
-        # 3. 调用 Core Adapter 计算特征
-        df_with_features = await feature_adapter.add_all_features(
-            df,
-            include_indicators="technical" in feature_types,
-            include_factors="alpha" in feature_types,
-            include_transforms=include_transforms
-        )
-
-        # 4. 准备响应数据
-        df_reset = df_with_features.reset_index()
-        df_reset = df_reset.replace([np.inf, -np.inf], np.nan)
-
-        # 取前 10 条作为样本
-        sample_data = [
-            {k: (None if pd.isna(v) else v) for k, v in record.items()}
-            for record in df_reset.head(10).to_dict('records')
-        ]
-
-        # 5. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data={
-                "code": code,
-                "record_count": len(df_with_features),
-                "feature_count": len(df_with_features.columns),
-                "feature_types": feature_types,
-                "include_transforms": include_transforms,
-                "columns": list(df_with_features.columns),
-                "sample_data": sample_data
-            },
-            message="特征计算成功"
-        ).to_dict()
-
     except ValueError as e:
         return ApiResponse.bad_request(
             message=f"参数错误: {str(e)}"
         ).to_dict()
-    except Exception as e:
-        logger.error(f"计算特征失败 {code}: {e}")
-        return ApiResponse.internal_error(
-            message=f"计算特征失败: {str(e)}"
+
+    # 2. 调用 Core Adapter 获取日线数据
+    df = await data_adapter.get_daily_data(
+        code=code,
+        start_date=start_dt,
+        end_date=end_dt
+    )
+
+    if df.empty:
+        return ApiResponse.not_found(
+            message=f"股票 {code} 无日线数据"
         ).to_dict()
+
+    # 3. 调用 Core Adapter 计算特征
+    df_with_features = await feature_adapter.add_all_features(
+        df,
+        include_indicators="technical" in feature_types,
+        include_factors="alpha" in feature_types,
+        include_transforms=include_transforms
+    )
+
+    # 4. 准备响应数据
+    df_reset = df_with_features.reset_index()
+    df_reset = df_reset.replace([np.inf, -np.inf], np.nan)
+
+    # 取前 10 条作为样本
+    sample_data = [
+        {k: (None if pd.isna(v) else v) for k, v in record.items()}
+        for record in df_reset.head(10).to_dict('records')
+    ]
+
+    # 5. Backend 职责：响应格式化
+    return ApiResponse.success(
+        data={
+            "code": code,
+            "record_count": len(df_with_features),
+            "feature_count": len(df_with_features.columns),
+            "feature_types": feature_types,
+            "include_transforms": include_transforms,
+            "columns": list(df_with_features.columns),
+            "sample_data": sample_data
+        },
+        message="特征计算成功"
+    ).to_dict()
 
 
 @router.get("/names")
@@ -262,30 +251,23 @@ async def get_feature_names():
         }
     }
     """
-    try:
-        # 调用 Core Adapter 获取特征名称
-        feature_names = await feature_adapter.get_feature_names()
+    # 调用 Core Adapter 获取特征名称
+    feature_names = await feature_adapter.get_feature_names()
 
-        # 统计数量
-        total_count = {
-            "technical_indicators": len(feature_names.get("technical_indicators", [])),
-            "alpha_factors": len(feature_names.get("alpha_factors", [])),
-            "transforms": len(feature_names.get("transforms", []))
-        }
+    # 统计数量
+    total_count = {
+        "technical_indicators": len(feature_names.get("technical_indicators", [])),
+        "alpha_factors": len(feature_names.get("alpha_factors", [])),
+        "transforms": len(feature_names.get("transforms", []))
+    }
 
-        return ApiResponse.success(
-            data={
-                **feature_names,
-                "total_count": total_count
-            },
-            message="获取特征名称成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"获取特征名称失败: {e}")
-        return ApiResponse.internal_error(
-            message=f"获取特征名称失败: {str(e)}"
-        ).to_dict()
+    return ApiResponse.success(
+        data={
+            **feature_names,
+            "total_count": total_count
+        },
+        message="获取特征名称成功"
+    ).to_dict()
 
 
 @router.post("/{code}/select")
@@ -327,73 +309,67 @@ async def select_features(
         # 1. 参数转换
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
-
-        # 2. 调用 Core Adapter 获取日线数据
-        df = await data_adapter.get_daily_data(
-            code=code,
-            start_date=start_dt,
-            end_date=end_dt
-        )
-
-        if df.empty:
-            return ApiResponse.not_found(
-                message=f"股票 {code} 无日线数据"
-            ).to_dict()
-
-        # 3. 计算所有特征
-        df_with_features = await feature_adapter.add_all_features(df)
-
-        # 4. 准备特征矩阵和目标变量
-        if target_column not in df_with_features.columns:
-            return ApiResponse.bad_request(
-                message=f"目标列 '{target_column}' 不存在"
-            ).to_dict()
-
-        # 移除非数值列和目标列
-        feature_columns = [
-            col for col in df_with_features.columns
-            if col != target_column and df_with_features[col].dtype in ['float64', 'int64']
-        ]
-
-        X = df_with_features[feature_columns].fillna(0)
-        y = df_with_features[target_column]
-
-        # 5. 调用 Core Adapter 进行特征选择
-        selected_features = await feature_adapter.select_features(
-            X=X,
-            y=y,
-            n_features=n_features,
-            method=method
-        )
-
-        # 6. 计算重要性分数
-        importance = await feature_adapter.calculate_feature_importance(
-            X=X[selected_features],
-            y=y,
-            method=method
-        )
-
-        importance_scores = importance.to_dict()
-
-        # 7. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data={
-                "code": code,
-                "method": method,
-                "n_features": len(selected_features),
-                "total_features": len(feature_columns),
-                "selected_features": selected_features,
-                "importance_scores": importance_scores
-            },
-            message="特征选择成功"
-        ).to_dict()
-
     except ValueError as e:
         return ApiResponse.bad_request(
             message=f"参数错误: {str(e)}"
         ).to_dict()
-    except Exception as e:
-        logger.error(f"特征选择失败 {code}: {e}")
-        return ApiResponse.internal_error(
-            message=f"特征选择失败: {str(e)}"
+
+    # 2. 调用 Core Adapter 获取日线数据
+    df = await data_adapter.get_daily_data(
+        code=code,
+        start_date=start_dt,
+        end_date=end_dt
+    )
+
+    if df.empty:
+        return ApiResponse.not_found(
+            message=f"股票 {code} 无日线数据"
         ).to_dict()
+
+    # 3. 计算所有特征
+    df_with_features = await feature_adapter.add_all_features(df)
+
+    # 4. 准备特征矩阵和目标变量
+    if target_column not in df_with_features.columns:
+        return ApiResponse.bad_request(
+            message=f"目标列 '{target_column}' 不存在"
+        ).to_dict()
+
+    # 移除非数值列和目标列
+    feature_columns = [
+        col for col in df_with_features.columns
+        if col != target_column and df_with_features[col].dtype in ['float64', 'int64']
+    ]
+
+    X = df_with_features[feature_columns].fillna(0)
+    y = df_with_features[target_column]
+
+    # 5. 调用 Core Adapter 进行特征选择
+    selected_features = await feature_adapter.select_features(
+        X=X,
+        y=y,
+        n_features=n_features,
+        method=method
+    )
+
+    # 6. 计算重要性分数
+    importance = await feature_adapter.calculate_feature_importance(
+        X=X[selected_features],
+        y=y,
+        method=method
+    )
+
+    importance_scores = importance.to_dict()
+
+    # 7. Backend 职责：响应格式化
+    return ApiResponse.success(
+        data={
+            "code": code,
+            "method": method,
+            "n_features": len(selected_features),
+            "total_features": len(feature_columns),
+            "selected_features": selected_features,
+            "importance_scores": importance_scores
+        },
+        message="特征选择成功"
+    ).to_dict()

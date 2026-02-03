@@ -13,6 +13,7 @@ from loguru import logger
 
 from src.database.db_manager import DatabaseManager
 from app.services.core_training import CoreTrainingService
+from app.core.exceptions import BackendError, DatabaseError
 
 
 class TrainingTaskManager:
@@ -52,7 +53,12 @@ class TrainingTaskManager:
                 with open(self.metadata_file, 'r') as f:
                     self.tasks = json.load(f)
                 logger.info(f"✓ 加载了 {len(self.tasks)} 个历史任务")
+            except (json.JSONDecodeError, IOError) as e:
+                # 文件损坏或不存在
+                logger.warning(f"元数据文件加载失败，使用空字典: {e}")
+                self.tasks = {}
             except Exception as e:
+                # 其他未预期错误
                 logger.error(f"加载元数据失败: {e}")
                 self.tasks = {}
 
@@ -61,7 +67,11 @@ class TrainingTaskManager:
         try:
             with open(self.metadata_file, 'w') as f:
                 json.dump(self.tasks, f, indent=2, default=str)
+        except (IOError, OSError) as e:
+            # 文件写入失败
+            logger.error(f"保存元数据失败 (文件写入错误): {e}")
         except Exception as e:
+            # 其他未预期错误
             logger.error(f"保存元数据失败: {e}")
 
     async def create_task(self, config: Dict[str, Any]) -> str:
@@ -129,16 +139,29 @@ class TrainingTaskManager:
 
             logger.info(f"✓ 训练任务完成: {task_id}")
 
-        except Exception as e:
-            # 训练失败
+        except BackendError as e:
+            # 已知业务异常
             task['status'] = 'failed'
             task['error'] = str(e)
             task['error_message'] = str(e)
             task['failed_at'] = datetime.now().isoformat()
 
-            logger.error(f"✗ 训练任务失败: {task_id} - {e}")
+            logger.error(f"✗ 训练任务失败 (业务异常): {task_id} - {e}")
             raise
+        except Exception as e:
+            # 未预期错误
+            task['status'] = 'failed'
+            task['error'] = str(e)
+            task['error_message'] = str(e)
+            task['failed_at'] = datetime.now().isoformat()
 
+            logger.error(f"✗ 训练任务失败 (未预期错误): {task_id} - {e}")
+            raise BackendError(
+                f"训练任务执行失败: {task_id}",
+                error_code="TRAINING_TASK_FAILED",
+                task_id=task_id,
+                reason=str(e)
+            )
         finally:
             self._save_metadata()
 
@@ -545,6 +568,10 @@ class TrainingTaskManager:
             finally:
                 self.db.release_connection(conn)
 
+        except DatabaseError as e:
+            logger.error(f"✗ 保存池化训练结果到数据库时出错 (数据库错误): {e}")
+            # 不抛出异常，避免影响训练流程
+            return None
         except Exception as e:
             logger.error(f"✗ 保存池化训练结果到数据库时出错: {e}")
             # 不抛出异常，避免影响训练流程
@@ -590,6 +617,9 @@ class TrainingTaskManager:
             finally:
                 self.db.release_connection(conn)
 
+        except DatabaseError as e:
+            logger.error(f"✗ 更新池化训练回测结果时出错 (数据库错误): {e}")
+            # 不抛出异常，避免影响训练流程
         except Exception as e:
             logger.error(f"✗ 更新池化训练回测结果时出错: {e}")
             # 不抛出异常，避免影响训练流程
@@ -625,6 +655,9 @@ class TrainingTaskManager:
             finally:
                 self.db.release_connection(conn)
 
+        except DatabaseError as e:
+            logger.error(f"✗ 更新综合评分时出错 (数据库错误): {e}")
+            # 不抛出异常，避免影响训练流程
         except Exception as e:
             logger.error(f"✗ 更新综合评分时出错: {e}")
             # 不抛出异常，避免影响训练流程

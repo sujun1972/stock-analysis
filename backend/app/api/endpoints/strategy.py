@@ -9,6 +9,7 @@ from loguru import logger
 
 from app.strategies.strategy_manager import strategy_manager
 from app.api.error_handler import handle_api_errors
+from app.core.exceptions import StrategyExecutionError, ValidationError
 
 router = APIRouter()
 
@@ -33,15 +34,11 @@ async def list_strategies() -> Dict[str, Any]:
             ]
         }
     """
-    try:
-        strategies = strategy_manager.list_strategies()
-        return {
-            "status": "success",
-            "data": strategies
-        }
-    except Exception as e:
-        logger.error(f"获取策略列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    strategies = strategy_manager.list_strategies()
+    return {
+        "status": "success",
+        "data": strategies
+    }
 
 
 @router.get("/metadata")
@@ -86,9 +83,6 @@ async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"获取策略元数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/validate")
@@ -132,6 +126,6 @@ async def validate_strategy_params(
                     "message": "参数验证失败"
                 }
             }
-    except Exception as e:
-        logger.error(f"参数验证异常: {e}")
+    except ValueError as e:
+        logger.error(f"参数验证失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))

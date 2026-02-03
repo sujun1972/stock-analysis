@@ -13,6 +13,7 @@ from src.providers import DataProviderFactory
 from app.services.config_service import ConfigService
 from app.services.data_service import DataDownloadService
 from app.utils.retry import retry_async
+from app.core.exceptions import DataSyncError, ExternalAPIError, DatabaseError
 
 
 class StockListSyncService:
@@ -111,6 +112,31 @@ class StockListSyncService:
 
             return {"total": count}
 
+        except ExternalAPIError as e:
+            # API调用失败
+            error_msg = str(e)
+            logger.error(f"同步股票列表失败: {error_msg}")
+
+            # 更新任务状态为失败
+            await self.config_service.update_sync_task(
+                task_id=task_id,
+                status='failed',
+                error_message=error_msg
+            )
+
+            # 同时更新全局状态（兼容旧接口）
+            await self.config_service.update_sync_status(status='failed')
+
+            raise DataSyncError(
+                "股票列表同步失败: 数据源API调用失败",
+                error_code="STOCK_LIST_SYNC_API_FAILED",
+                task_id=task_id,
+                data_source=config['data_source'],
+                reason=error_msg
+            )
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             error_msg = str(e)
             logger.error(f"同步股票列表失败: {error_msg}")
@@ -125,7 +151,12 @@ class StockListSyncService:
             # 同时更新全局状态（兼容旧接口）
             await self.config_service.update_sync_status(status='failed')
 
-            raise
+            raise DataSyncError(
+                "股票列表同步失败",
+                error_code="STOCK_LIST_SYNC_FAILED",
+                task_id=task_id,
+                reason=error_msg
+            )
 
     async def sync_new_stocks(self, days: int = 30) -> Dict:
         """
@@ -201,6 +232,28 @@ class StockListSyncService:
 
             return {"total": count}
 
+        except ExternalAPIError as e:
+            # API调用失败
+            error_msg = str(e)
+            logger.error(f"同步新股列表失败: {error_msg}")
+
+            await self.config_service.update_sync_task(
+                task_id=task_id,
+                status='failed',
+                error_message=error_msg
+            )
+
+            raise DataSyncError(
+                "新股列表同步失败: 数据源API调用失败",
+                error_code="NEW_STOCKS_SYNC_API_FAILED",
+                task_id=task_id,
+                data_source=config['data_source'],
+                days=days,
+                reason=error_msg
+            )
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             error_msg = str(e)
             logger.error(f"同步新股列表失败: {error_msg}")
@@ -211,7 +264,13 @@ class StockListSyncService:
                 error_message=error_msg
             )
 
-            raise
+            raise DataSyncError(
+                "新股列表同步失败",
+                error_code="NEW_STOCKS_SYNC_FAILED",
+                task_id=task_id,
+                days=days,
+                reason=error_msg
+            )
 
     async def sync_delisted_stocks(self) -> Dict:
         """
@@ -277,8 +336,12 @@ class StockListSyncService:
                         config['data_source']
                     )
                     count += 1
+                except DatabaseError:
+                    # 数据库错误向上传播
+                    raise
                 except Exception as e:
                     logger.warning(f"更新退市股票 {code} 失败: {e}")
+                    # 单个股票失败不影响整体，继续处理下一个
 
             # 更新任务状态为完成
             await self.config_service.update_sync_task(
@@ -295,6 +358,27 @@ class StockListSyncService:
 
             return {"total": count}
 
+        except ExternalAPIError as e:
+            # API调用失败
+            error_msg = str(e)
+            logger.error(f"同步退市股票列表失败: {error_msg}")
+
+            await self.config_service.update_sync_task(
+                task_id=task_id,
+                status='failed',
+                error_message=error_msg
+            )
+
+            raise DataSyncError(
+                "退市股票列表同步失败: 数据源API调用失败",
+                error_code="DELISTED_STOCKS_SYNC_API_FAILED",
+                task_id=task_id,
+                data_source=config['data_source'],
+                reason=error_msg
+            )
+        except DatabaseError:
+            # 数据库错误向上传播
+            raise
         except Exception as e:
             error_msg = str(e)
             logger.error(f"同步退市股票列表失败: {error_msg}")
@@ -305,4 +389,9 @@ class StockListSyncService:
                 error_message=error_msg
             )
 
-            raise
+            raise DataSyncError(
+                "退市股票列表同步失败",
+                error_code="DELISTED_STOCKS_SYNC_FAILED",
+                task_id=task_id,
+                reason=error_msg
+            )

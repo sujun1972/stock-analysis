@@ -15,6 +15,7 @@ from app.services.core_training import CoreTrainingService
 from app.services.backtest_service import BacktestService
 from app.services.training_task_manager import TrainingTaskManager
 from app.repositories.experiment_repository import ExperimentRepository
+from app.core.exceptions import DatabaseError, BackendError
 
 
 class ExperimentRunner:
@@ -109,10 +110,19 @@ class ExperimentRunner:
 
             logger.info(f"✅ 批次 {batch_id} 完成")
 
+        except (DatabaseError, BackendError):
+            # 已知业务异常向上传播
+            await self._update_batch_status(batch_id, 'failed')
+            raise
         except Exception as e:
             logger.error(f"批次 {batch_id} 执行失败: {e}")
             await self._update_batch_status(batch_id, 'failed')
-            raise
+            raise BackendError(
+                f"批次执行失败: {batch_id}",
+                error_code="BATCH_EXECUTION_FAILED",
+                batch_id=batch_id,
+                reason=str(e)
+            )
 
     async def _experiment_worker(
         self,
@@ -156,8 +166,14 @@ class ExperimentRunner:
             except asyncio.CancelledError:
                 logger.info(f"🛑 Worker-{worker_id} 停止")
                 break
+            except (DatabaseError, BackendError) as e:
+                # 已知业务异常
+                logger.error(f"[Worker-{worker_id}] ❌ 实验失败 (业务异常): {e}")
+                await self._mark_experiment_failed(exp_id, str(e))
+                await self._increment_batch_counter(batch_id, 'failed')
             except Exception as e:
-                logger.error(f"[Worker-{worker_id}] ❌ 实验失败: {e}")
+                # 未预期错误
+                logger.error(f"[Worker-{worker_id}] ❌ 实验失败 (未预期错误): {e}")
                 await self._mark_experiment_failed(exp_id, str(e))
                 await self._increment_batch_counter(batch_id, 'failed')
             finally:
@@ -233,10 +249,19 @@ class ExperimentRunner:
                 total_duration_seconds=int(total_duration)
             )
 
+        except (DatabaseError, BackendError):
+            # 已知业务异常向上传播
+            raise
         except Exception as e:
             logger.error(f"[Worker-{worker_id}] 实验 {exp_id} 失败: {e}")
             await self._mark_experiment_failed(exp_id, str(e))
-            raise
+            raise BackendError(
+                f"实验执行失败: {exp_id}",
+                error_code="EXPERIMENT_EXECUTION_FAILED",
+                exp_id=exp_id,
+                worker_id=worker_id,
+                reason=str(e)
+            )
 
     async def _train_model_async(self, config: Dict) -> tuple:
         """

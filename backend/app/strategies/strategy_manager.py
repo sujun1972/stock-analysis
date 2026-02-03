@@ -9,6 +9,7 @@ from loguru import logger
 from .base_strategy import BaseStrategy
 from .complex_indicator_strategy import ComplexIndicatorStrategy
 from .ml_model_strategy import MLModelStrategy
+from app.core.exceptions import ValidationError
 
 
 class StrategyManager:
@@ -139,9 +140,14 @@ class StrategyManager:
         try:
             self.get_strategy(strategy_id, params)
             return True
-        except Exception as e:
-            logger.error(f"参数验证失败: {e}")
-            return False
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"策略参数验证失败 - 参数格式错误: {e}")
+            raise ValidationError(
+                "策略参数验证失败",
+                error_code="STRATEGY_PARAMS_INVALID",
+                strategy_id=strategy_id,
+                reason=str(e)
+            )
 
 
 # 全局单例

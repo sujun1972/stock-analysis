@@ -12,6 +12,7 @@ import asyncio
 
 from app.services.config_service import ConfigService
 from app.api.error_handler import handle_api_errors
+from app.core.exceptions import DatabaseError, ValidationError
 
 router = APIRouter()
 
@@ -95,8 +96,11 @@ async def get_scheduled_tasks():
             "message": "success",
             "data": tasks
         }
+    except DatabaseError as e:
+        logger.error(f"数据库查询失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        logger.error(f"获取定时任务列表失败: {e}")
+        logger.exception(f"未预期的错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
