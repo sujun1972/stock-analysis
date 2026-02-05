@@ -3,13 +3,15 @@ Stock Analysis Backend API
 主应用入口
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api import router as api_router
 from app.api.exception_handlers import register_exception_handlers
 from app.core.config import settings
+from app.middleware.metrics import metrics_middleware
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -29,6 +31,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 添加 Prometheus 指标中间件
+app.middleware("http")(metrics_middleware)
 
 # 注册全局异常处理器
 register_exception_handlers(app)
@@ -76,6 +81,12 @@ async def root():
 async def health_check():
     """健康检查"""
     return {"status": "healthy", "environment": settings.ENVIRONMENT}
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus 指标端点"""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 if __name__ == "__main__":

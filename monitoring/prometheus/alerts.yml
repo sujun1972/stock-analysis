@@ -1,0 +1,154 @@
+# Prometheus 告警规则配置
+# 用于监控 Stock Analysis 项目的性能和健康状况
+
+groups:
+  # Backend API 告警规则
+  - name: backend_alerts
+    interval: 30s
+    rules:
+      # 高错误率告警
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "Backend API 错误率过高"
+          description: "Backend API 的 5xx 错误率超过 5% (当前值: {{ $value | humanizePercentage }})"
+
+      # 响应时间慢告警
+      - alert: SlowResponseTime
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "Backend API 响应时间过慢"
+          description: "Backend API 的 P95 响应时间超过 1 秒 (当前值: {{ $value }}s)"
+
+      # 极慢响应时间告警
+      - alert: VerySlowResponseTime
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 3
+        for: 2m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Backend API 响应时间严重过慢"
+          description: "Backend API 的 P95 响应时间超过 3 秒 (当前值: {{ $value }}s)"
+
+      # 请求量异常告警
+      - alert: HighRequestRate
+        expr: |
+          rate(http_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: info
+          service: backend
+        annotations:
+          summary: "Backend API 请求量异常高"
+          description: "Backend API 的请求量超过 100 req/s (当前值: {{ $value }} req/s)"
+
+      # 低请求量告警（可能服务异常）
+      - alert: LowRequestRate
+        expr: |
+          rate(http_requests_total[10m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "Backend API 请求量异常低"
+          description: "Backend API 的请求量低于 0.1 req/s，可能服务异常"
+
+  # 缓存性能告警
+  - name: cache_alerts
+    interval: 30s
+    rules:
+      # 缓存命中率低告警
+      - alert: LowCacheHitRate
+        expr: |
+          cache_hit_rate < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "Redis 缓存命中率过低"
+          description: "缓存命中率低于 50% (当前值: {{ $value | humanizePercentage }})"
+
+      # 缓存未使用告警
+      - alert: CacheNotUsed
+        expr: |
+          rate(cache_hits_total[10m]) + rate(cache_misses_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "Redis 缓存未被使用"
+          description: "缓存在过去 10 分钟内没有任何读取操作"
+
+  # 数据库连接池告警
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # 数据库连接池使用率高告警
+      - alert: HighDatabaseConnectionUsage
+        expr: |
+          database_connection_pool_in_use / database_connection_pool_size > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "数据库连接池使用率过高"
+          description: "数据库连接池使用率超过 80% (当前: {{ $value | humanizePercentage }})"
+
+      # 数据库查询慢告警
+      - alert: SlowDatabaseQuery
+        expr: |
+          histogram_quantile(0.95,
+            rate(database_query_duration_seconds_bucket[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "数据库查询响应时间过慢"
+          description: "数据库查询的 P95 响应时间超过 2 秒 (当前值: {{ $value }}s)"
+
+  # 服务健康状态告警
+  - name: health_alerts
+    interval: 30s
+    rules:
+      # 服务宕机告警
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "服务宕机"
+          description: "{{ $labels.job }} 服务无法访问，已宕机超过 1 分钟"
+
+      # 服务健康检查失败
+      - alert: HealthCheckFailed
+        expr: |
+          rate(health_check_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "健康检查失败率过高"
+          description: "{{ $labels.service }} 的健康检查失败率超过 10%"

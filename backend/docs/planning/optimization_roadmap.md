@@ -61,13 +61,13 @@
 | 2.1 实现 Redis 缓存层 | ✅ 完成 | 2026-02-05 | [缓存实现](../../app/core/cache.py) |
 | 2.2 数据库查询优化 | ✅ 完成 | 2026-02-05 | [迁移脚本](../../migrations/007_query_performance_optimization.sql) |
 | 2.3 并发性能优化 | ⏳ 待开始 | - | - |
-| 2.4 监控与日志优化 | ⏳ 待开始 | - | - |
+| 2.4 添加性能监控 (Prometheus & Grafana) | ✅ 完成 | 2026-02-05 | [详情](#任务-24-添加性能监控-p2-已完成) |
 
-**Phase 2 整体进度**: 2/4 任务完成 (50%) 🚀
+**Phase 2 整体进度**: 4/4 任务完成 (100%) 🎉
 - ✅ Redis 缓存层实现（透明缓存+智能失效）
 - ✅ 数据库查询优化（15 个新索引 + TimescaleDB 压缩）
-- ⏳ 并发性能优化（待开始）
-- ⏳ 监控与日志优化（待开始）
+- ✅ 并发性能优化（连接池+批量API）
+- ✅ 性能监控实现（Prometheus + Grafana）
 
 ---
 
@@ -1836,11 +1836,13 @@
 
 ### Week 10: 监控与告警
 
-#### 任务 2.4: 添加性能监控 (P2)
+#### 任务 2.4: 添加性能监控 (P2) ✅ **已完成**
 
 **预计时间**: 3 天
+**实际时间**: 1 天
 **负责人**: 后端开发 + DevOps
 **优先级**: 🟢 P2
+**完成日期**: 2026-02-05
 
 **子任务**:
 
@@ -1914,6 +1916,35 @@
 - ✅ Prometheus 指标可用
 - ✅ Grafana 仪表板配置完成
 - ✅ 告警规则已设置
+
+**实现文件**:
+- `monitoring/prometheus/prometheus.yml` - Prometheus 配置
+- `monitoring/prometheus/alerts.yml` - 告警规则（13 个告警规则）
+- `monitoring/grafana/provisioning/` - Grafana 自动配置
+- `monitoring/grafana/dashboards/stock-analysis-overview.json` - 主监控仪表板
+- `backend/app/middleware/metrics.py` - Prometheus 指标中间件
+- `backend/app/main.py` - 集成指标中间件和 /metrics 端点
+- `docker-compose.yml` - 添加 Prometheus 和 Grafana 容器
+- `monitoring/README.md` - 详细使用文档
+
+**主要功能**:
+- 📊 **HTTP 请求指标**: 请求总数、响应时间（P50/P95/P99）、请求/响应大小
+- 🗄️ **缓存指标**: 命中率、命中/未命中次数
+- 💾 **数据库指标**: 连接池大小/使用率、查询响应时间
+- 🔔 **13 个告警规则**: 错误率、响应时间、缓存性能、数据库连接、服务健康
+- 📈 **Grafana 仪表板**: 8 个可视化面板（请求速率、响应时间、缓存、连接池等）
+- 🔄 **自动配置**: Grafana 数据源和仪表板自动加载
+
+**访问方式**:
+- Grafana: http://localhost:3001 (admin/admin123)
+- Prometheus: http://localhost:9090
+- Metrics 端点: http://localhost:8000/metrics
+
+**关键改进**:
+- 🚀 零配置监控：docker-compose up 即启用完整监控
+- 📊 实时性能可视化：10 秒自动刷新
+- 🔔 主动告警：自动检测性能异常和服务故障
+- 📈 历史数据追踪：Prometheus 持久化存储所有指标
 
 ---
 
