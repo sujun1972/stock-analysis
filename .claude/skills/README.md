@@ -8,6 +8,7 @@
 |---------|------|------|--------|
 | 数据库健康检查 | `/db-health-check` | 检查 TimescaleDB 连接、表结构和数据完整性 | ⭐⭐⭐⭐⭐ |
 | 完整测试流水线 | `/run-all-tests` | 运行所有单元测试和集成测试 | ⭐⭐⭐⭐⭐ |
+| 性能基准测试 | `/performance-benchmark` | 执行 Locust 压力测试和并发性能测试 | ⭐⭐⭐⭐⭐ |
 | 安全审计 | `/security-audit` | 检查敏感信息、SQL注入、依赖漏洞和代码安全 (P0) | ⭐⭐⭐⭐⭐ |
 | 股票数据下载 | `/download-stock-data` | 从 AkShare 下载股票数据到数据库 | ⭐⭐⭐⭐ |
 | 特征工程 | `/calculate-features` | 计算技术指标和 Alpha 因子（125+特征） | ⭐⭐⭐⭐ |
