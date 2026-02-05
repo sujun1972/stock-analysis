@@ -5,15 +5,20 @@ Stock Analysis Backend API
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
-from loguru import logger
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 
 from app.api import router as api_router
 from app.api.exception_handlers import register_exception_handlers
 from app.core.config import settings
+from app.core.logging_config import get_logger, setup_logging
+from app.middleware.logging import LoggingMiddleware
 from app.middleware.metrics import metrics_middleware
 from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
+
+# 初始化日志系统
+setup_logging()
+logger = get_logger()
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -37,6 +42,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 添加日志中间件（应该在其他中间件之前，以便记录所有请求）
+app.add_middleware(LoggingMiddleware)
 
 # 添加 Prometheus 指标中间件
 app.middleware("http")(metrics_middleware)

@@ -76,13 +76,13 @@
 | 任务 | 状态 | 完成日期 | 交付物 |
 |-----|------|---------|--------|
 | 3.1 请求限流与熔断 | ✅ 完成 | 2026-02-05 | [详情](#任务-31-请求限流与熔断-p1-已完成) |
-| 3.2 日志系统增强 | ⏳ 待开始 | - | - |
+| 3.2 日志系统增强 | ✅ 完成 | 2026-02-05 | [详情](#任务-32-日志系统增强-p1-已完成) |
 | 3.3 生产环境配置 | ⏳ 待开始 | - | - |
 | 3.4 性能基准测试 | ⏳ 待开始 | - | - |
 
-**Phase 3 整体进度**: 1/4 任务完成 (25%)
+**Phase 3 整体进度**: 2/4 任务完成 (50%)
 - ✅ 请求限流与熔断（slowapi + pybreaker）
-- ⏳ 日志系统增强
+- ✅ 日志系统增强（Loguru + 结构化日志）
 - ⏳ 生产环境配置
 - ⏳ 性能基准测试
 
@@ -2024,47 +2024,77 @@ pybreaker>=1.0.0
 
 ---
 
-#### 任务 3.2: 日志系统增强 (P1)
+#### 任务 3.2: 日志系统增强 (P1) [已完成]
 
-**预计时间**: 2 天
+**完成时间**: 2026-02-05
+**实际用时**: 1 天
 **负责人**: 后端开发
 **优先级**: 🟡 P1
 
-**子任务**:
+**实现内容**:
 
-1. **结构化日志** (1 天)
-   ```python
-   # app/core/logging_config.py
-   import structlog
+1. **结构化日志配置** ✅
+   - ✅ 创建 `app/core/logging_config.py` 模块
+   - ✅ 使用 Loguru 的 `serialize=True` 实现 JSON 格式日志输出
+   - ✅ 配置日志轮转（每天午夜）和自动压缩（.gz格式）
+   - ✅ 实现多文件日志策略：
+     - `app_*.json`: 所有日志（保留30天）
+     - `errors_*.json`: WARNING及以上级别（保留30天）
+     - `performance_*.json`: 性能相关日志（保留7天）
+   - ✅ 支持开发/生产环境不同配置
 
-   structlog.configure(
-       processors=[
-           structlog.stdlib.add_log_level,
-           structlog.stdlib.add_logger_name,
-           structlog.processors.TimeStamper(fmt="iso"),
-           structlog.processors.JSONRenderer()
-       ],
-       logger_factory=structlog.stdlib.LoggerFactory(),
-   )
+2. **HTTP请求日志中间件** ✅
+   - ✅ 创建 `app/middleware/logging.py` 模块
+   - ✅ 实现 `LoggingMiddleware` 类
+   - ✅ 自动记录所有HTTP请求/响应
+   - ✅ 捕获请求上下文（IP、User-Agent、Request ID等）
+   - ✅ 记录响应时间和状态码
+   - ✅ 慢请求警告（>1秒）
+   - ✅ 错误请求自动记录到错误日志
 
-   logger = structlog.get_logger()
+3. **单元测试** ✅
+   - ✅ 日志配置测试（10个测试用例）
+   - ✅ 日志中间件测试（7个测试用例）
+   - ✅ 所有测试通过
 
-   # 使用
-   logger.info("stock_data_fetched",
-               code="000001",
-               rows=1000,
-               duration_ms=50)
-   ```
+**代码示例**:
 
-2. **集成 ELK Stack** (1 天)
-   - 配置 Filebeat 收集日志
-   - Elasticsearch 存储
-   - Kibana 可视化
+```python
+# app/core/logging_config.py
+from loguru import logger
 
-**验收标准**:
-- ✅ 所有日志结构化输出
-- ✅ ELK Stack 集成完成
-- ✅ Kibana 可查询日志
+logger.add(
+    "logs/app_{time:YYYY-MM-DD}.json",
+    serialize=True,  # JSON格式
+    rotation="00:00",  # 每天轮转
+    retention="30 days",  # 保留30天
+    compression="gz",  # 压缩
+    level=settings.LOG_LEVEL,
+    enqueue=True,  # 异步写入
+)
+
+# 使用结构化日志
+logger.bind(code="000001", rows=1000, duration_ms=50).info("Stock data fetched")
+```
+
+**验收标准** (全部完成):
+- ✅ 所有日志结构化输出（JSON 格式）
+- ✅ 日志自动轮转和压缩
+- ✅ 可使用 jq 等工具查询分析
+- ✅ 错误日志单独文件记录
+- ✅ HTTP请求自动日志记录
+- ✅ 性能日志单独追踪
+- ✅ 支持中文日志
+- ✅ 完整的单元测试覆盖
+
+**技术债务**:
+- 无
+
+**未来扩展** (暂不实施):
+- 集成 ELK Stack (Elasticsearch + Logstash + Kibana) 或 OpenSearch
+  - 适用场景：日志量超过 10GB/天，需要实时监控仪表板
+  - 资源需求：额外 2-4GB RAM
+  - 预计时间：1-2 天
 
 ---
 
