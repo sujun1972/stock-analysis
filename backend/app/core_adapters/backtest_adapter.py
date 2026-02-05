@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 
 # 添加 core 项目到 Python 路径
 core_path = Path(__file__).parent.parent.parent.parent / "core"
@@ -136,16 +137,36 @@ class BacktestAdapter:
             # BacktestEngine 需要 signals 和 prices 数据
             # 在测试环境中，如果没有真实数据，返回模拟结果
             try:
-                from src.data.data_loader import DataLoader
+                from src.data_pipeline.data_loader import DataLoader
 
-                # 尝试加载数据
+                # 尝试加载数据（DataLoader.load_data 只支持单个股票）
                 loader = data_loader or DataLoader()
-                prices = loader.load_stock_data(
-                    stock_codes=stock_codes,
-                    start_date=start_date.strftime("%Y-%m-%d"),
-                    end_date=end_date.strftime("%Y-%m-%d"),
-                    fields=["close"]
+
+                # 加载第一个股票的数据（回测引擎暂时只支持单股票）
+                if len(stock_codes) == 0:
+                    raise ValueError("stock_codes 不能为空")
+
+                # 格式化日期为 YYYYMMDD
+                start_date_str = start_date.strftime("%Y%m%d")
+                end_date_str = end_date.strftime("%Y%m%d")
+
+                # 处理股票代码：数据库中不包含交易所后缀（如 .SH, .SZ），需要移除
+                # 但前端需要完整代码，因此保存原始代码用于返回
+                original_symbol = stock_codes[0]
+                symbol = original_symbol.split('.')[0] if '.' in original_symbol else original_symbol
+
+                # 加载数据
+                prices_df = loader.load_data(
+                    symbol=symbol,
+                    start_date=start_date_str,
+                    end_date=end_date_str
                 )
+
+                # 提取收盘价
+                if 'close' in prices_df.columns:
+                    prices = prices_df[['close']]
+                else:
+                    raise ValueError("数据中缺少 'close' 列")
 
                 if prices is None or prices.empty:
                     # 返回空结果而不是异常
@@ -172,13 +193,47 @@ class BacktestAdapter:
 
                 if result.is_success():
                     data = result.data
+
+                    # === 数据格式转换：Backend -> Frontend ===
+                    # Core 引擎返回的是 pandas 数据结构，前端需要 JSON 格式
+
+                    # 1. 转换资产曲线数据为前端格式
+                    equity_curve = self._convert_equity_curve(data.get("portfolio_value", pd.DataFrame()))
+
+                    # 2. 生成K线数据（用于价格走势图）
+                    kline_data = self._generate_kline_data(prices_df)
+
+                    # 3. 提取买卖信号点（用于在图表上标记交易点）
+                    trades = data.get("trades", [])
+                    positions = data.get("positions", [])
+                    signal_points = self._extract_signal_points(trades, positions, prices_df)
+
+                    # 4. 计算绩效指标（收益率、夏普比率、最大回撤等）
+                    metrics = self._calculate_metrics(data.get("daily_returns", pd.Series()), equity_curve, data.get("cost_metrics", {}))
+
                     # 确保返回格式正确并清理 NaN 值
                     return sanitize_float_values({
+                        # 前端必需字段
+                        "mode": "single",  # 单股票模式
+                        "strategy_name": strategy_params.get("strategy_name", "回测策略"),
+                        "symbol": original_symbol,  # 使用原始股票代码（带交易所后缀）
+                        "start_date": start_date.strftime("%Y-%m-%d"),
+                        "end_date": end_date.strftime("%Y-%m-%d"),
+                        "initial_cash": self.initial_capital,
+
+                        # 图表数据
+                        "equity_curve": equity_curve,
+                        "kline_data": kline_data,
+                        "signal_points": signal_points,
+                        "benchmark_curve": [],  # 暂时为空，后续可以添加基准数据
+
+                        # 回测结果数据
                         "portfolio_value": data.get("portfolio_value", pd.DataFrame()).to_dict("records") if hasattr(data.get("portfolio_value"), "to_dict") else [],
                         "positions": data.get("positions", []),
-                        "trades": data.get("trades", []),
-                        "metrics": data.get("cost_metrics", {}),
-                        "daily_returns": data.get("daily_returns", pd.Series()).tolist() if hasattr(data.get("daily_returns"), "tolist") else []
+                        "trades": trades,
+                        "metrics": metrics,
+                        "daily_returns": data.get("daily_returns", pd.Series()).tolist() if hasattr(data.get("daily_returns"), "tolist") else [],
+                        "total_trades": len(signal_points["buy"]) + len(signal_points["sell"])  # 使用信号点数量
                     })
                 else:
                     return {
@@ -564,3 +619,198 @@ class BacktestAdapter:
             return best_result
 
         return await asyncio.to_thread(_optimize)
+
+    def _convert_equity_curve(self, portfolio_df: pd.DataFrame) -> list:
+        """
+        将 portfolio_value DataFrame 转换为前端所需的 equity_curve 格式
+
+        Args:
+            portfolio_df: 包含 cash, holdings, total 列的 DataFrame，索引为日期
+
+        Returns:
+            equity_curve 列表，每个元素包含 date, value, cash, holdings
+        """
+        equity_curve = []
+        if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty:
+            for date_idx, row in portfolio_df.iterrows():
+                equity_curve.append({
+                    "date": date_idx.strftime("%Y-%m-%d") if hasattr(date_idx, "strftime") else str(date_idx),
+                    "value": float(row.get("total", 0)),
+                    "cash": float(row.get("cash", 0)),
+                    "holdings": float(row.get("holdings", 0))
+                })
+        return equity_curve
+
+    def _generate_kline_data(self, prices_df: pd.DataFrame) -> list:
+        """
+        从价格数据生成 K线数据
+
+        Args:
+            prices_df: 价格 DataFrame，包含 open, high, low, close, volume 列
+
+        Returns:
+            kline_data 列表，每个元素包含 date, open, high, low, close, volume
+        """
+        kline_data = []
+        if prices_df is not None and not prices_df.empty:
+            for date_idx, row in prices_df.iterrows():
+                kline_item = {
+                    "date": date_idx.strftime("%Y-%m-%d") if hasattr(date_idx, "strftime") else str(date_idx),
+                    "close": float(row.get("close", 0))
+                }
+                # 添加可选的 OHLC 和成交量数据
+                if "open" in row.index:
+                    kline_item["open"] = float(row.get("open", 0))
+                if "high" in row.index:
+                    kline_item["high"] = float(row.get("high", 0))
+                if "low" in row.index:
+                    kline_item["low"] = float(row.get("low", 0))
+                if "volume" in row.index:
+                    kline_item["volume"] = float(row.get("volume", 0))
+                kline_data.append(kline_item)
+        return kline_data
+
+    def _extract_signal_points(self, trades: list, positions: list, prices_df: pd.DataFrame) -> dict:
+        """
+        从交易记录或持仓记录中提取买卖信号点
+
+        优先从 trades 提取，如果 trades 为空则从 positions 推断
+
+        Args:
+            trades: 交易记录列表
+            positions: 持仓记录列表
+            prices_df: 价格 DataFrame，用于获取卖出价格
+
+        Returns:
+            包含 buy 和 sell 两个列表的字典，每个信号点包含 date 和 price
+        """
+        signal_points = {"buy": [], "sell": []}
+
+        # 方法1: 从 trades 提取信号点
+        if isinstance(trades, list) and len(trades) > 0:
+            for trade in trades:
+                if isinstance(trade, dict):
+                    point = {
+                        "date": trade.get("date", ""),
+                        "price": float(trade.get("price", 0))
+                    }
+                    if trade.get("action") == "buy" or trade.get("type") == "buy":
+                        signal_points["buy"].append(point)
+                    elif trade.get("action") == "sell" or trade.get("type") == "sell":
+                        signal_points["sell"].append(point)
+
+        # 方法2: 如果 trades 为空，从 positions 推断买卖点
+        elif isinstance(positions, list) and len(positions) > 0:
+            prev_positions = {}
+            for pos_record in positions:
+                if not isinstance(pos_record, dict):
+                    continue
+
+                # 标准化日期格式
+                date_str = self._normalize_date(pos_record.get("date", ""))
+                if not date_str:
+                    continue
+
+                current_positions = pos_record.get("positions", {})
+
+                # 检测新开仓（买入信号）
+                for symbol, pos_info in current_positions.items():
+                    if isinstance(pos_info, dict) and symbol not in prev_positions:
+                        entry_price = pos_info.get("entry_price", 0)
+                        if entry_price > 0:
+                            signal_points["buy"].append({
+                                "date": date_str,
+                                "price": float(entry_price)
+                            })
+
+                # 检测平仓（卖出信号）
+                for symbol in prev_positions:
+                    if symbol not in current_positions:
+                        # 使用收盘价作为卖出价格
+                        sell_price = self._get_close_price(date_str, prices_df)
+                        if sell_price:
+                            signal_points["sell"].append({
+                                "date": date_str,
+                                "price": float(sell_price)
+                            })
+
+                prev_positions = current_positions.copy()
+
+        return signal_points
+
+    def _normalize_date(self, date_value: Any) -> str:
+        """
+        标准化日期格式为 YYYY-MM-DD
+
+        Args:
+            date_value: 日期值（datetime 对象或字符串）
+
+        Returns:
+            格式化的日期字符串，失败返回空字符串
+        """
+        if hasattr(date_value, "strftime"):
+            return date_value.strftime("%Y-%m-%d")
+        elif isinstance(date_value, str):
+            # 移除时间戳部分（如果存在）
+            return date_value.split("T")[0] if "T" in date_value else date_value
+        return ""
+
+    def _get_close_price(self, date_str: str, prices_df: pd.DataFrame) -> float:
+        """
+        获取指定日期的收盘价
+
+        Args:
+            date_str: 日期字符串（YYYY-MM-DD 格式）
+            prices_df: 价格 DataFrame
+
+        Returns:
+            收盘价，获取失败返回 None
+        """
+        try:
+            if prices_df is not None and not prices_df.empty:
+                date_index = pd.to_datetime(date_str)
+                if date_index in prices_df.index:
+                    return float(prices_df.loc[date_index, "close"])
+        except Exception as e:
+            logger.warning(f"无法获取收盘价: {date_str}, {e}")
+        return None
+
+    def _calculate_metrics(self, daily_returns: pd.Series, equity_curve: list, cost_metrics: dict) -> dict:
+        """
+        计算绩效指标
+
+        优先使用 PerformanceAnalyzer 计算完整指标，失败则使用简单计算作为备用
+
+        Args:
+            daily_returns: 日收益率序列
+            equity_curve: 资产曲线数据
+            cost_metrics: 成本指标
+
+        Returns:
+            绩效指标字典
+        """
+        metrics = {}
+
+        if isinstance(daily_returns, pd.Series) and not daily_returns.empty:
+            try:
+                # 使用 PerformanceAnalyzer 计算所有指标
+                analyzer = PerformanceAnalyzer(returns=daily_returns)
+                metrics_result = analyzer.calculate_all_metrics()
+
+                # 提取指标数据
+                if hasattr(metrics_result, 'data'):
+                    metrics = metrics_result.data
+                elif isinstance(metrics_result, dict):
+                    metrics = metrics_result
+            except Exception as e:
+                logger.warning(f"计算绩效指标失败: {e}")
+                # 使用备用的简单计算
+                if len(equity_curve) > 0:
+                    total_return = (equity_curve[-1]["value"] / equity_curve[0]["value"] - 1)
+                    metrics = {"total_return": total_return}
+
+        # 如果 metrics 还是空的，使用 cost_metrics
+        if not metrics:
+            metrics = cost_metrics
+
+        return metrics

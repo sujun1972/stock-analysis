@@ -300,11 +300,17 @@ function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPan
       setProgress('正在计算绩效指标...')
 
       if (response.data) {
+        // 检查后端是否返回了错误
+        if (response.data.error) {
+          throw new Error(`回测执行失败: ${response.data.error}`)
+        }
+
         setProgress('回测完成！')
         // 显示成功 toast
+        const strategyName = response.data.strategy_name || selectedStrategyId || '未知策略'
         toast({
           title: "回测完成",
-          description: `策略 ${response.data.strategy_name} 回测成功`,
+          description: `策略 ${strategyName} 回测成功`,
         })
         // 将结果传递给父组件
         if (onBacktestComplete) {
@@ -315,7 +321,23 @@ function BacktestPanelContent({ onBacktestComplete, initialConfig }: BacktestPan
       }
     } catch (err: any) {
       console.error('回测错误:', err)
-      const errorMsg = err.response?.data?.detail || err.message || '回测失败，请检查参数'
+
+      // 处理 FastAPI 验证错误格式
+      let errorMsg = '回测失败，请检查参数'
+      const detail = err.response?.data?.detail
+
+      if (Array.isArray(detail)) {
+        // FastAPI 验证错误：detail 是一个数组
+        errorMsg = detail.map((e: any) => {
+          const field = e.loc?.slice(1).join('.') || '未知字段'
+          return `${field}: ${e.msg}`
+        }).join('; ')
+      } else if (typeof detail === 'string') {
+        errorMsg = detail
+      } else if (err.message) {
+        errorMsg = err.message
+      }
+
       setError(errorMsg)
       // 显示错误 toast
       toast({

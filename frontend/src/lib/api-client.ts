@@ -407,7 +407,21 @@ class ApiClient {
     strategy_id?: string
     strategy_params?: Record<string, any>
   }): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.post('/api/backtest/run', params)
+    // 适配后端 API：symbols → stock_codes
+    // 确保 stock_codes 始终是数组
+    const stockCodes = Array.isArray(params.symbols)
+      ? params.symbols
+      : [params.symbols]
+
+    const backendParams = {
+      stock_codes: stockCodes,
+      start_date: params.start_date,
+      end_date: params.end_date,
+      initial_capital: params.initial_cash, // Backend expects initial_capital
+      strategy_id: params.strategy_id,
+      strategy_params: params.strategy_params,
+    }
+    const response = await axiosInstance.post('/api/backtest/run', backendParams)
     return response.data
   }
 

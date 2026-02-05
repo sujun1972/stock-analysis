@@ -127,7 +127,6 @@ function BacktestContent() {
   }, [searchParams])
 
   const handleBacktestComplete = (result: any) => {
-    console.log('回测完成:', result)
     setBacktestResult(result)
 
     // 保存到历史记录
