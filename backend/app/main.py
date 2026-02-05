@@ -7,11 +7,13 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from slowapi.errors import RateLimitExceeded
 
 from app.api import router as api_router
 from app.api.exception_handlers import register_exception_handlers
 from app.core.config import settings
 from app.middleware.metrics import metrics_middleware
+from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -22,6 +24,10 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+
+# 配置限流器
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # CORS中间件配置
 app.add_middleware(
@@ -80,7 +86,15 @@ async def root():
 @app.get("/health")
 async def health_check():
     """健康检查"""
-    return {"status": "healthy", "environment": settings.ENVIRONMENT}
+    from app.core.circuit_breaker import get_all_breakers_status
+
+    breakers_status = get_all_breakers_status()
+
+    return {
+        "status": "healthy",
+        "environment": settings.ENVIRONMENT,
+        "circuit_breakers": breakers_status,
+    }
 
 
 @app.get("/metrics")

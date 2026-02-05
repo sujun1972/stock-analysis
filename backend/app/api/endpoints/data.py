@@ -14,13 +14,15 @@
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from loguru import logger
 
 from app.core.exceptions import DataNotFoundError, DataSyncError, ExternalAPIError
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
 from app.services.concurrent_data_service import ConcurrentDataService
+from app.middleware.rate_limiter import limiter, normal_limit
+from app.core.circuit_breaker import db_breaker, with_circuit_breaker
 
 router = APIRouter()
 
@@ -32,7 +34,9 @@ concurrent_service = ConcurrentDataService(max_concurrent=50)
 
 
 @router.get("/daily/{code}")
+@limiter.limit("100/minute")  # 应用限流：每分钟100次请求
 async def get_daily_data(
+    request: Request,
     code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
@@ -82,8 +86,10 @@ async def get_daily_data(
         if not start_date:
             start_date = end_date - timedelta(days=365)
 
-        # 2. 调用 Core Adapter（业务逻辑在 Core）
-        df = await data_adapter.get_daily_data(code=code, start_date=start_date, end_date=end_date)
+        # 2. 调用 Core Adapter（业务逻辑在 Core）+ 熔断器保护
+        df = await db_breaker.call_async(
+            data_adapter.get_daily_data, code=code, start_date=start_date, end_date=end_date
+        )
 
         # 3. Backend 职责：数据验证
         if df is None or df.empty:
