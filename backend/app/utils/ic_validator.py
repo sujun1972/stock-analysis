@@ -3,25 +3,27 @@ IC异常检测与告警模块
 用于检测模型训练中的数据泄露和过拟合问题
 """
 
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-from enum import Enum
 import json
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 
 class AlertLevel(Enum):
     """告警级别"""
+
     CRITICAL = "critical"  # 严重：明确的数据泄露
-    WARNING = "warning"    # 警告：可疑的高IC
-    INFO = "info"          # 信息：需要注意
-    OK = "ok"              # 正常
+    WARNING = "warning"  # 警告：可疑的高IC
+    INFO = "info"  # 信息：需要注意
+    OK = "ok"  # 正常
 
 
 @dataclass
 class ICAlert:
     """IC告警"""
+
     level: AlertLevel
     message: str
     ic_value: float
@@ -38,26 +40,26 @@ class ICValidator:
 
     # IC阈值配置
     THRESHOLDS = {
-        'test_ic': {
-            'critical': 0.5,    # >0.5 严重异常，几乎确定数据泄露
-            'warning': 0.3,     # >0.3 警告，高度可疑
-            'caution': 0.2,     # >0.2 需要注意
-            'excellent': 0.15,  # 0.10-0.15 优秀
-            'good': 0.1,        # 0.05-0.10 良好
-            'acceptable': 0.05  # 0.01-0.05 可接受
+        "test_ic": {
+            "critical": 0.5,  # >0.5 严重异常，几乎确定数据泄露
+            "warning": 0.3,  # >0.3 警告，高度可疑
+            "caution": 0.2,  # >0.2 需要注意
+            "excellent": 0.15,  # 0.10-0.15 优秀
+            "good": 0.1,  # 0.05-0.10 良好
+            "acceptable": 0.05,  # 0.01-0.05 可接受
         },
-        'train_ic': {
-            'critical': 0.8,    # >0.8 严重过拟合
-            'warning': 0.6,     # >0.6 警告
-            'caution': 0.4,     # >0.4 需要注意
-            'normal': 0.3       # <0.3 正常
+        "train_ic": {
+            "critical": 0.8,  # >0.8 严重过拟合
+            "warning": 0.6,  # >0.6 警告
+            "caution": 0.4,  # >0.4 需要注意
+            "normal": 0.3,  # <0.3 正常
         },
-        'ic_gap': {
-            'critical': 0.6,    # Train-Test > 0.6 严重
-            'warning': 0.4,     # Train-Test > 0.4 警告
-            'caution': 0.25,    # Train-Test > 0.25 需要注意
-            'normal': 0.15      # Train-Test < 0.15 正常
-        }
+        "ic_gap": {
+            "critical": 0.6,  # Train-Test > 0.6 严重
+            "warning": 0.4,  # Train-Test > 0.4 警告
+            "caution": 0.25,  # Train-Test > 0.25 需要注意
+            "normal": 0.15,  # Train-Test < 0.15 正常
+        },
     }
 
     def __init__(self, alert_log_dir: str = "logs/ic_alerts"):
@@ -78,7 +80,7 @@ class ICValidator:
         train_r2: Optional[float] = None,
         test_r2: Optional[float] = None,
         model_id: Optional[str] = None,
-        symbol: Optional[str] = None
+        symbol: Optional[str] = None,
     ) -> Tuple[bool, List[ICAlert]]:
         """
         执行全面的IC验证
@@ -125,12 +127,12 @@ class ICValidator:
 
         # 保存告警日志
         if alerts:
-            self._log_alerts(alerts, model_id, symbol, {
-                'train_ic': train_ic,
-                'valid_ic': valid_ic,
-                'test_ic': test_ic,
-                'ic_gap': ic_gap
-            })
+            self._log_alerts(
+                alerts,
+                model_id,
+                symbol,
+                {"train_ic": train_ic, "valid_ic": valid_ic, "test_ic": test_ic, "ic_gap": ic_gap},
+            )
 
         return is_valid, alerts
 
@@ -139,33 +141,39 @@ class ICValidator:
         alerts = []
         abs_ic = abs(test_ic)
 
-        if abs_ic > self.THRESHOLDS['test_ic']['critical']:
-            alerts.append(ICAlert(
-                level=AlertLevel.CRITICAL,
-                message=f"Test IC={test_ic:.4f} 严重异常（>0.5）",
-                ic_value=test_ic,
-                dataset='test',
-                check_type='test_ic',
-                suggestion="几乎确定存在数据泄露！请立即检查：1) 特征是否包含未来信息 2) 特征是否包含绝对价格 3) Target计算是否正确"
-            ))
-        elif abs_ic > self.THRESHOLDS['test_ic']['warning']:
-            alerts.append(ICAlert(
-                level=AlertLevel.WARNING,
-                message=f"Test IC={test_ic:.4f} 过高（>0.3）",
-                ic_value=test_ic,
-                dataset='test',
-                check_type='test_ic',
-                suggestion="高度可疑！建议：1) 检查特征去价格化是否完整 2) 检查模型复杂度是否过高 3) 考虑多股票池化测试验证"
-            ))
-        elif abs_ic > self.THRESHOLDS['test_ic']['caution']:
-            alerts.append(ICAlert(
-                level=AlertLevel.INFO,
-                message=f"Test IC={test_ic:.4f} 偏高（>0.2）",
-                ic_value=test_ic,
-                dataset='test',
-                check_type='test_ic',
-                suggestion="需要注意。建议：1) 降低模型复杂度 2) 检查是否有小样本统计巧合 3) 验证特征合理性"
-            ))
+        if abs_ic > self.THRESHOLDS["test_ic"]["critical"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.CRITICAL,
+                    message=f"Test IC={test_ic:.4f} 严重异常（>0.5）",
+                    ic_value=test_ic,
+                    dataset="test",
+                    check_type="test_ic",
+                    suggestion="几乎确定存在数据泄露！请立即检查：1) 特征是否包含未来信息 2) 特征是否包含绝对价格 3) Target计算是否正确",
+                )
+            )
+        elif abs_ic > self.THRESHOLDS["test_ic"]["warning"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.WARNING,
+                    message=f"Test IC={test_ic:.4f} 过高（>0.3）",
+                    ic_value=test_ic,
+                    dataset="test",
+                    check_type="test_ic",
+                    suggestion="高度可疑！建议：1) 检查特征去价格化是否完整 2) 检查模型复杂度是否过高 3) 考虑多股票池化测试验证",
+                )
+            )
+        elif abs_ic > self.THRESHOLDS["test_ic"]["caution"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.INFO,
+                    message=f"Test IC={test_ic:.4f} 偏高（>0.2）",
+                    ic_value=test_ic,
+                    dataset="test",
+                    check_type="test_ic",
+                    suggestion="需要注意。建议：1) 降低模型复杂度 2) 检查是否有小样本统计巧合 3) 验证特征合理性",
+                )
+            )
 
         return alerts
 
@@ -174,33 +182,39 @@ class ICValidator:
         alerts = []
         abs_ic = abs(train_ic)
 
-        if abs_ic > self.THRESHOLDS['train_ic']['critical']:
-            alerts.append(ICAlert(
-                level=AlertLevel.CRITICAL,
-                message=f"Train IC={train_ic:.4f} 严重过拟合（>0.8）",
-                ic_value=train_ic,
-                dataset='train',
-                check_type='train_ic',
-                suggestion="模型在死记硬背训练数据！必须：1) 大幅降低模型复杂度（max_depth<=3, num_leaves<=10）2) 增加正则化 3) 检查是否有数据泄露"
-            ))
-        elif abs_ic > self.THRESHOLDS['train_ic']['warning']:
-            alerts.append(ICAlert(
-                level=AlertLevel.WARNING,
-                message=f"Train IC={train_ic:.4f} 过拟合严重（>0.6）",
-                ic_value=train_ic,
-                dataset='train',
-                check_type='train_ic',
-                suggestion="过拟合明显。建议：1) 降低模型复杂度 2) 增加正则化（reg_alpha, reg_lambda）3) 减少特征数量"
-            ))
-        elif abs_ic > self.THRESHOLDS['train_ic']['caution']:
-            alerts.append(ICAlert(
-                level=AlertLevel.INFO,
-                message=f"Train IC={train_ic:.4f} 存在过拟合（>0.4）",
-                ic_value=train_ic,
-                dataset='train',
-                check_type='train_ic',
-                suggestion="轻度过拟合。建议：1) 适当降低模型复杂度 2) 监控IC Gap"
-            ))
+        if abs_ic > self.THRESHOLDS["train_ic"]["critical"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.CRITICAL,
+                    message=f"Train IC={train_ic:.4f} 严重过拟合（>0.8）",
+                    ic_value=train_ic,
+                    dataset="train",
+                    check_type="train_ic",
+                    suggestion="模型在死记硬背训练数据！必须：1) 大幅降低模型复杂度（max_depth<=3, num_leaves<=10）2) 增加正则化 3) 检查是否有数据泄露",
+                )
+            )
+        elif abs_ic > self.THRESHOLDS["train_ic"]["warning"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.WARNING,
+                    message=f"Train IC={train_ic:.4f} 过拟合严重（>0.6）",
+                    ic_value=train_ic,
+                    dataset="train",
+                    check_type="train_ic",
+                    suggestion="过拟合明显。建议：1) 降低模型复杂度 2) 增加正则化（reg_alpha, reg_lambda）3) 减少特征数量",
+                )
+            )
+        elif abs_ic > self.THRESHOLDS["train_ic"]["caution"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.INFO,
+                    message=f"Train IC={train_ic:.4f} 存在过拟合（>0.4）",
+                    ic_value=train_ic,
+                    dataset="train",
+                    check_type="train_ic",
+                    suggestion="轻度过拟合。建议：1) 适当降低模型复杂度 2) 监控IC Gap",
+                )
+            )
 
         return alerts
 
@@ -208,33 +222,39 @@ class ICValidator:
         """检查Train-Test IC Gap"""
         alerts = []
 
-        if ic_gap > self.THRESHOLDS['ic_gap']['critical']:
-            alerts.append(ICAlert(
-                level=AlertLevel.CRITICAL,
-                message=f"IC Gap={ic_gap:.4f} 过大（>0.6）",
-                ic_value=ic_gap,
-                dataset='gap',
-                check_type='ic_gap',
-                suggestion=f"Train IC={train_ic:.4f}, Test IC={test_ic:.4f}，差距过大！说明模型严重过拟合或存在数据泄露"
-            ))
-        elif ic_gap > self.THRESHOLDS['ic_gap']['warning']:
-            alerts.append(ICAlert(
-                level=AlertLevel.WARNING,
-                message=f"IC Gap={ic_gap:.4f} 较大（>0.4）",
-                ic_value=ic_gap,
-                dataset='gap',
-                check_type='ic_gap',
-                suggestion=f"Train IC={train_ic:.4f}, Test IC={test_ic:.4f}，泛化能力不足"
-            ))
-        elif ic_gap > self.THRESHOLDS['ic_gap']['caution']:
-            alerts.append(ICAlert(
-                level=AlertLevel.INFO,
-                message=f"IC Gap={ic_gap:.4f} 需要注意（>0.25）",
-                ic_value=ic_gap,
-                dataset='gap',
-                check_type='ic_gap',
-                suggestion=f"Train IC={train_ic:.4f}, Test IC={test_ic:.4f}，建议降低模型复杂度"
-            ))
+        if ic_gap > self.THRESHOLDS["ic_gap"]["critical"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.CRITICAL,
+                    message=f"IC Gap={ic_gap:.4f} 过大（>0.6）",
+                    ic_value=ic_gap,
+                    dataset="gap",
+                    check_type="ic_gap",
+                    suggestion=f"Train IC={train_ic:.4f}, Test IC={test_ic:.4f}，差距过大！说明模型严重过拟合或存在数据泄露",
+                )
+            )
+        elif ic_gap > self.THRESHOLDS["ic_gap"]["warning"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.WARNING,
+                    message=f"IC Gap={ic_gap:.4f} 较大（>0.4）",
+                    ic_value=ic_gap,
+                    dataset="gap",
+                    check_type="ic_gap",
+                    suggestion=f"Train IC={train_ic:.4f}, Test IC={test_ic:.4f}，泛化能力不足",
+                )
+            )
+        elif ic_gap > self.THRESHOLDS["ic_gap"]["caution"]:
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.INFO,
+                    message=f"IC Gap={ic_gap:.4f} 需要注意（>0.25）",
+                    ic_value=ic_gap,
+                    dataset="gap",
+                    check_type="ic_gap",
+                    suggestion=f"Train IC={train_ic:.4f}, Test IC={test_ic:.4f}，建议降低模型复杂度",
+                )
+            )
 
         return alerts
 
@@ -244,34 +264,40 @@ class ICValidator:
 
         # Valid IC异常低或为负
         if valid_ic < -0.1:
-            alerts.append(ICAlert(
-                level=AlertLevel.WARNING,
-                message=f"Valid IC={valid_ic:.4f} 为负值且较大",
-                ic_value=valid_ic,
-                dataset='valid',
-                check_type='valid_ic',
-                suggestion="验证集预测方向相反！可能：1) 过度正则化 2) Valid Set特殊时期 3) 特征工程bug"
-            ))
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.WARNING,
+                    message=f"Valid IC={valid_ic:.4f} 为负值且较大",
+                    ic_value=valid_ic,
+                    dataset="valid",
+                    check_type="valid_ic",
+                    suggestion="验证集预测方向相反！可能：1) 过度正则化 2) Valid Set特殊时期 3) 特征工程bug",
+                )
+            )
         elif abs(valid_ic) < 0.01 and abs(train_ic) > 0.3:
-            alerts.append(ICAlert(
-                level=AlertLevel.INFO,
-                message=f"Valid IC={valid_ic:.4f} 接近0，但Train IC={train_ic:.4f}较高",
-                ic_value=valid_ic,
-                dataset='valid',
-                check_type='valid_ic',
-                suggestion="验证集无预测能力。可能：1) 模型过拟合 2) Valid Set数据质量问题"
-            ))
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.INFO,
+                    message=f"Valid IC={valid_ic:.4f} 接近0，但Train IC={train_ic:.4f}较高",
+                    ic_value=valid_ic,
+                    dataset="valid",
+                    check_type="valid_ic",
+                    suggestion="验证集无预测能力。可能：1) 模型过拟合 2) Valid Set数据质量问题",
+                )
+            )
 
         # Valid IC远高于Test IC（可疑）
         if abs(valid_ic) > abs(test_ic) * 2 and abs(valid_ic) > 0.3:
-            alerts.append(ICAlert(
-                level=AlertLevel.INFO,
-                message=f"Valid IC={valid_ic:.4f} 远高于 Test IC={test_ic:.4f}",
-                ic_value=valid_ic,
-                dataset='valid',
-                check_type='valid_ic_high',
-                suggestion="验证集表现异常好。可能：1) Valid Set样本特殊 2) 模型过度拟合Valid Set"
-            ))
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.INFO,
+                    message=f"Valid IC={valid_ic:.4f} 远高于 Test IC={test_ic:.4f}",
+                    ic_value=valid_ic,
+                    dataset="valid",
+                    check_type="valid_ic_high",
+                    suggestion="验证集表现异常好。可能：1) Valid Set样本特殊 2) 模型过度拟合Valid Set",
+                )
+            )
 
         return alerts
 
@@ -281,57 +307,57 @@ class ICValidator:
 
         # R²异常高（>0.9通常不正常）
         if test_r2 > 0.9:
-            alerts.append(ICAlert(
-                level=AlertLevel.CRITICAL,
-                message=f"Test R²={test_r2:.4f} 异常高（>0.9）",
-                ic_value=test_r2,
-                dataset='test',
-                check_type='r2',
-                suggestion="R²>0.9在金融预测中几乎不可能！极可能存在数据泄露"
-            ))
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.CRITICAL,
+                    message=f"Test R²={test_r2:.4f} 异常高（>0.9）",
+                    ic_value=test_r2,
+                    dataset="test",
+                    check_type="r2",
+                    suggestion="R²>0.9在金融预测中几乎不可能！极可能存在数据泄露",
+                )
+            )
         elif test_r2 > 0.7:
-            alerts.append(ICAlert(
-                level=AlertLevel.WARNING,
-                message=f"Test R²={test_r2:.4f} 过高（>0.7）",
-                ic_value=test_r2,
-                dataset='test',
-                check_type='r2',
-                suggestion="R²过高，需要检查是否有数据泄露"
-            ))
+            alerts.append(
+                ICAlert(
+                    level=AlertLevel.WARNING,
+                    message=f"Test R²={test_r2:.4f} 过高（>0.7）",
+                    ic_value=test_r2,
+                    dataset="test",
+                    check_type="r2",
+                    suggestion="R²过高，需要检查是否有数据泄露",
+                )
+            )
 
         return alerts
 
     def _log_alerts(
-        self,
-        alerts: List[ICAlert],
-        model_id: Optional[str],
-        symbol: Optional[str],
-        metrics: Dict
+        self, alerts: List[ICAlert], model_id: Optional[str], symbol: Optional[str], metrics: Dict
     ):
         """保存告警日志"""
         try:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file = self.alert_log_dir / f"ic_alert_{timestamp}_{model_id or 'unknown'}.json"
 
             log_data = {
-                'timestamp': timestamp,
-                'model_id': model_id,
-                'symbol': symbol,
-                'metrics': metrics,
-                'alerts': [
+                "timestamp": timestamp,
+                "model_id": model_id,
+                "symbol": symbol,
+                "metrics": metrics,
+                "alerts": [
                     {
-                        'level': alert.level.value,
-                        'message': alert.message,
-                        'ic_value': alert.ic_value,
-                        'dataset': alert.dataset,
-                        'check_type': alert.check_type,
-                        'suggestion': alert.suggestion
+                        "level": alert.level.value,
+                        "message": alert.message,
+                        "ic_value": alert.ic_value,
+                        "dataset": alert.dataset,
+                        "check_type": alert.check_type,
+                        "suggestion": alert.suggestion,
                     }
                     for alert in alerts
-                ]
+                ],
             }
 
-            with open(log_file, 'w') as f:
+            with open(log_file, "w") as f:
                 json.dump(log_data, f, indent=2, ensure_ascii=False)
 
         except (IOError, OSError, PermissionError) as e:

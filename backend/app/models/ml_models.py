@@ -4,12 +4,14 @@
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel
 
 
 class MLTrainingTaskCreate(BaseModel):
     """训练任务创建请求"""
+
     # 支持单股票或多股票池化训练
     symbol: Optional[str] = None  # 单股票（向后兼容）
     symbols: Optional[list[str]] = None  # 多股票列表（新增）
@@ -23,7 +25,7 @@ class MLTrainingTaskCreate(BaseModel):
 
     # 池化训练配置（新增）
     enable_pooled_training: bool = False  # 是否启用池化训练
-    enable_ridge_baseline: bool = True    # 是否启用Ridge基准对比
+    enable_ridge_baseline: bool = True  # 是否启用Ridge基准对比
 
     # 特征选择
     use_technical_indicators: bool = True
@@ -31,9 +33,9 @@ class MLTrainingTaskCreate(BaseModel):
     selected_features: Optional[list[str]] = None
 
     # 数据处理
-    scaler_type: str = 'robust'
+    scaler_type: str = "robust"
     balance_samples: bool = False
-    balance_method: str = 'undersample'
+    balance_method: str = "undersample"
 
     # 模型参数
     model_params: Optional[Dict[str, Any]] = None
@@ -59,6 +61,7 @@ class MLTrainingTaskCreate(BaseModel):
 
 class MLTrainingTaskResponse(BaseModel):
     """训练任务响应"""
+
     task_id: str
     status: str  # 'pending', 'running', 'completed', 'failed'
     created_at: datetime
@@ -70,7 +73,7 @@ class MLTrainingTaskResponse(BaseModel):
 
     # 进度信息
     progress: float = 0.0  # 0-100
-    current_step: str = ''
+    current_step: str = ""
 
     # 训练结果
     metrics: Optional[Dict[str, float]] = None
@@ -92,6 +95,7 @@ class MLTrainingTaskResponse(BaseModel):
 
 class MLModelMetadata(BaseModel):
     """模型元数据"""
+
     model_id: str
     task_id: str
     symbol: str
@@ -127,6 +131,7 @@ class MLModelMetadata(BaseModel):
 
 class MLPredictionRequest(BaseModel):
     """预测请求"""
+
     model_id: Optional[str] = None  # 兼容旧版：模型名称
     experiment_id: Optional[int] = None  # 新版：实验ID（experiments表主键）
     symbol: str
@@ -136,5 +141,6 @@ class MLPredictionRequest(BaseModel):
 
 class MLPredictionResponse(BaseModel):
     """预测响应"""
+
     predictions: list[Dict[str, Any]]  # [{date, prediction, actual}, ...]
     metrics: Dict[str, float]

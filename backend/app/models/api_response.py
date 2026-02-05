@@ -3,12 +3,12 @@
 提供一致的响应格式和工具函数
 """
 
-from typing import TypeVar, Generic, Optional, Any, Dict
-from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Any, Dict, Generic, Optional, TypeVar
 
+from pydantic import BaseModel, Field
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ApiResponse(BaseModel, Generic[T]):
@@ -41,8 +41,7 @@ class ApiResponse(BaseModel, Generic[T]):
     message: str = Field(..., description="响应消息")
     data: Optional[T] = Field(None, description="响应数据")
     timestamp: str = Field(
-        default_factory=lambda: datetime.now().isoformat(),
-        description="响应时间戳"
+        default_factory=lambda: datetime.now().isoformat(), description="响应时间戳"
     )
     request_id: Optional[str] = Field(None, description="请求ID")
 
@@ -53,7 +52,7 @@ class ApiResponse(BaseModel, Generic[T]):
                 "message": "success",
                 "data": {"key": "value"},
                 "timestamp": "2024-01-26T12:00:00",
-                "request_id": "req_123456"
+                "request_id": "req_123456",
             }
         }
 
@@ -61,10 +60,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
     @classmethod
     def success(
-        cls,
-        data: Optional[T] = None,
-        message: str = "success",
-        request_id: Optional[str] = None
+        cls, data: Optional[T] = None, message: str = "success", request_id: Optional[str] = None
     ) -> "ApiResponse[T]":
         """
         创建成功响应
@@ -77,12 +73,7 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 成功响应对象
         """
-        return cls(
-            code=200,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=200, message=message, data=data, request_id=request_id)
 
     @classmethod
     def error(
@@ -90,7 +81,7 @@ class ApiResponse(BaseModel, Generic[T]):
         message: str,
         code: int = 500,
         data: Optional[T] = None,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> "ApiResponse[T]":
         """
         创建错误响应
@@ -104,19 +95,11 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 错误响应对象
         """
-        return cls(
-            code=code,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=code, message=message, data=data, request_id=request_id)
 
     @classmethod
     def created(
-        cls,
-        data: Optional[T] = None,
-        message: str = "created",
-        request_id: Optional[str] = None
+        cls, data: Optional[T] = None, message: str = "created", request_id: Optional[str] = None
     ) -> "ApiResponse[T]":
         """
         创建资源创建成功响应 (201)
@@ -129,18 +112,11 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 创建成功响应对象
         """
-        return cls(
-            code=201,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=201, message=message, data=data, request_id=request_id)
 
     @classmethod
     def no_content(
-        cls,
-        message: str = "no content",
-        request_id: Optional[str] = None
+        cls, message: str = "no content", request_id: Optional[str] = None
     ) -> "ApiResponse[None]":
         """
         创建无内容响应 (204)
@@ -152,19 +128,14 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 无内容响应对象
         """
-        return cls(
-            code=204,
-            message=message,
-            data=None,
-            request_id=request_id
-        )
+        return cls(code=204, message=message, data=None, request_id=request_id)
 
     @classmethod
     def partial_content(
         cls,
         data: Optional[T] = None,
         message: str = "partial content",
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> "ApiResponse[T]":
         """
         创建部分内容响应 (206)
@@ -179,19 +150,14 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 部分内容响应对象
         """
-        return cls(
-            code=206,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=206, message=message, data=data, request_id=request_id)
 
     @classmethod
     def bad_request(
         cls,
         message: str = "bad request",
         data: Optional[T] = None,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> "ApiResponse[T]":
         """
         创建错误请求响应 (400)
@@ -204,19 +170,14 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 错误请求响应对象
         """
-        return cls(
-            code=400,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=400, message=message, data=data, request_id=request_id)
 
     @classmethod
     def unauthorized(
         cls,
         message: str = "unauthorized",
         data: Optional[T] = None,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> "ApiResponse[T]":
         """
         创建未授权响应 (401)
@@ -229,19 +190,11 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 未授权响应对象
         """
-        return cls(
-            code=401,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=401, message=message, data=data, request_id=request_id)
 
     @classmethod
     def forbidden(
-        cls,
-        message: str = "forbidden",
-        data: Optional[T] = None,
-        request_id: Optional[str] = None
+        cls, message: str = "forbidden", data: Optional[T] = None, request_id: Optional[str] = None
     ) -> "ApiResponse[T]":
         """
         创建禁止访问响应 (403)
@@ -254,19 +207,11 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 禁止访问响应对象
         """
-        return cls(
-            code=403,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=403, message=message, data=data, request_id=request_id)
 
     @classmethod
     def not_found(
-        cls,
-        message: str = "not found",
-        data: Optional[T] = None,
-        request_id: Optional[str] = None
+        cls, message: str = "not found", data: Optional[T] = None, request_id: Optional[str] = None
     ) -> "ApiResponse[T]":
         """
         创建资源不存在响应 (404)
@@ -279,19 +224,11 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 资源不存在响应对象
         """
-        return cls(
-            code=404,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=404, message=message, data=data, request_id=request_id)
 
     @classmethod
     def conflict(
-        cls,
-        message: str = "conflict",
-        data: Optional[T] = None,
-        request_id: Optional[str] = None
+        cls, message: str = "conflict", data: Optional[T] = None, request_id: Optional[str] = None
     ) -> "ApiResponse[T]":
         """
         创建资源冲突响应 (409)
@@ -304,19 +241,14 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 资源冲突响应对象
         """
-        return cls(
-            code=409,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=409, message=message, data=data, request_id=request_id)
 
     @classmethod
     def internal_error(
         cls,
         message: str = "internal server error",
         data: Optional[T] = None,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> "ApiResponse[T]":
         """
         创建服务器内部错误响应 (500)
@@ -329,12 +261,7 @@ class ApiResponse(BaseModel, Generic[T]):
         Returns:
             ApiResponse: 服务器错误响应对象
         """
-        return cls(
-            code=500,
-            message=message,
-            data=data,
-            request_id=request_id
-        )
+        return cls(code=500, message=message, data=data, request_id=request_id)
 
     @classmethod
     def warning(
@@ -343,7 +270,7 @@ class ApiResponse(BaseModel, Generic[T]):
         message: str = "warning",
         warning_code: Optional[str] = None,
         request_id: Optional[str] = None,
-        **metadata
+        **metadata,
     ) -> "ApiResponse[T]":
         """
         创建警告响应 (206 Partial Content)
@@ -377,12 +304,7 @@ class ApiResponse(BaseModel, Generic[T]):
                 response_data["warning_code"] = warning_code
             response_data.update(metadata)
 
-        return cls(
-            code=206,
-            message=message,
-            data=response_data,
-            request_id=request_id
-        )
+        return cls(code=206, message=message, data=response_data, request_id=request_id)
 
     # ==================== 特殊响应类型 ====================
 
@@ -394,7 +316,7 @@ class ApiResponse(BaseModel, Generic[T]):
         page: int = 1,
         page_size: int = 20,
         message: str = "success",
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> "ApiResponse[Dict[str, Any]]":
         """
         创建分页响应
@@ -418,9 +340,9 @@ class ApiResponse(BaseModel, Generic[T]):
                 "total": total,
                 "page": page,
                 "page_size": page_size,
-                "total_pages": (total + page_size - 1) // page_size
+                "total_pages": (total + page_size - 1) // page_size,
             },
-            request_id=request_id
+            request_id=request_id,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -434,7 +356,7 @@ class ApiResponse(BaseModel, Generic[T]):
             "code": self.code,
             "message": self.message,
             "data": self.data,
-            "success": self.code < 400  # 状态码 < 400 表示成功
+            "success": self.code < 400,  # 状态码 < 400 表示成功
         }
 
         if self.request_id:
@@ -448,10 +370,8 @@ class ApiResponse(BaseModel, Generic[T]):
 
 # ==================== 便捷函数 ====================
 
-def success_response(
-    data: Optional[Any] = None,
-    message: str = "success"
-) -> Dict[str, Any]:
+
+def success_response(data: Optional[Any] = None, message: str = "success") -> Dict[str, Any]:
     """
     快速创建成功响应字典（向后兼容）
 
@@ -465,11 +385,7 @@ def success_response(
     return ApiResponse.success(data=data, message=message).to_dict()
 
 
-def error_response(
-    message: str,
-    code: int = 500,
-    data: Optional[Any] = None
-) -> Dict[str, Any]:
+def error_response(message: str, code: int = 500, data: Optional[Any] = None) -> Dict[str, Any]:
     """
     快速创建错误响应字典（向后兼容）
 
@@ -488,7 +404,7 @@ def warning_response(
     data: Optional[Any] = None,
     message: str = "warning",
     warning_code: Optional[str] = None,
-    **metadata
+    **metadata,
 ) -> Dict[str, Any]:
     """
     快速创建警告响应字典（向后兼容）
@@ -503,18 +419,12 @@ def warning_response(
         Dict: 警告响应字典
     """
     return ApiResponse.warning(
-        data=data,
-        message=message,
-        warning_code=warning_code,
-        **metadata
+        data=data, message=message, warning_code=warning_code, **metadata
     ).to_dict()
 
 
 def paginated_response(
-    items: list,
-    total: int,
-    page: int = 1,
-    page_size: int = 20
+    items: list, total: int, page: int = 1, page_size: int = 20
 ) -> Dict[str, Any]:
     """
     快速创建分页响应字典（向后兼容）
@@ -528,9 +438,4 @@ def paginated_response(
     Returns:
         Dict: 分页响应字典
     """
-    return ApiResponse.paginated(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size
-    ).to_dict()
+    return ApiResponse.paginated(items=items, total=total, page=page, page_size=page_size).to_dict()

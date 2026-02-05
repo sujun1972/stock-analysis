@@ -3,14 +3,14 @@
 使用 BatchManager 和 ExperimentRunner 提供统一接口
 """
 
-from typing import List, Dict, Any, Optional
-from loguru import logger
+from typing import Any, Dict, List, Optional
 
 from src.database.db_manager import DatabaseManager
+
+from app.repositories.experiment_repository import ExperimentRepository
 from app.services.batch_manager import BatchManager
 from app.services.experiment_runner import ExperimentRunner
 from app.services.model_ranker import ModelRanker
-from app.repositories.experiment_repository import ExperimentRepository
 
 
 class ExperimentService:
@@ -39,11 +39,11 @@ class ExperimentService:
         self,
         batch_name: str,
         param_space: Dict[str, Any],
-        strategy: str = 'grid',
+        strategy: str = "grid",
         max_experiments: Optional[int] = None,
         description: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
-        tags: Optional[list] = None
+        tags: Optional[list] = None,
     ) -> int:
         """
         创建实验批次
@@ -67,14 +67,11 @@ class ExperimentService:
             max_experiments=max_experiments,
             description=description,
             config=config,
-            tags=tags
+            tags=tags,
         )
 
     async def run_batch(
-        self,
-        batch_id: int,
-        max_workers: Optional[int] = None,
-        auto_backtest: bool = True
+        self, batch_id: int, max_workers: Optional[int] = None, auto_backtest: bool = True
     ):
         """
         运行批次实验
@@ -85,9 +82,7 @@ class ExperimentService:
             auto_backtest: 是否自动回测
         """
         await self.experiment_runner.run_batch(
-            batch_id=batch_id,
-            max_workers=max_workers,
-            auto_backtest=auto_backtest
+            batch_id=batch_id, max_workers=max_workers, auto_backtest=auto_backtest
         )
 
     async def get_batch_info(self, batch_id: int) -> Optional[Dict]:
@@ -102,11 +97,7 @@ class ExperimentService:
         """
         return await self.batch_manager.get_batch_info(batch_id)
 
-    async def list_batches(
-        self,
-        limit: int = 100,
-        status: Optional[str] = None
-    ) -> List[Dict]:
+    async def list_batches(self, limit: int = 100, status: Optional[str] = None) -> List[Dict]:
         """
         列出批次
 
@@ -117,18 +108,12 @@ class ExperimentService:
         Returns:
             批次列表
         """
-        return await self.batch_manager.list_batches(
-            limit=limit,
-            status=status
-        )
+        return await self.batch_manager.list_batches(limit=limit, status=status)
 
     # ==================== 实验查询接口 ====================
 
     async def get_batch_experiments(
-        self,
-        batch_id: int,
-        status: Optional[str] = None,
-        limit: int = 500
+        self, batch_id: int, status: Optional[str] = None, limit: int = 500
     ) -> List[Dict]:
         """
         获取批次下的实验列表
@@ -142,11 +127,12 @@ class ExperimentService:
             实验列表
         """
         import asyncio
+
         return await asyncio.to_thread(
             self.experiment_repo.find_experiments_by_batch,
             batch_id=batch_id,
             status=status,
-            limit=limit
+            limit=limit,
         )
 
     async def get_top_models(
@@ -157,7 +143,7 @@ class ExperimentService:
         max_drawdown: Optional[float] = None,
         min_annual_return: Optional[float] = None,
         min_win_rate: Optional[float] = None,
-        min_ic: Optional[float] = None
+        min_ic: Optional[float] = None,
     ) -> List[Dict]:
         """
         获取Top模型
@@ -182,5 +168,5 @@ class ExperimentService:
             min_annual_return=min_annual_return,
             min_win_rate=min_win_rate,
             min_ic=min_ic,
-            top_n=top_n
+            top_n=top_n,
         )

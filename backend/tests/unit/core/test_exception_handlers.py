@@ -3,58 +3,60 @@
 测试全局异常处理器的正确性
 """
 
-import pytest
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
-
-from app.core.exceptions import (
-    DataNotFoundError,
-    DataQueryError,
-    InsufficientDataError,
-    ValidationError,
-    StrategyExecutionError,
-    SignalGenerationError,
-    BacktestError,
-    CalculationError,
-    FeatureCalculationError,
-    DatabaseError,
-    DatabaseConnectionError,
-    QueryError,
-    ExternalAPIError,
-    APIRateLimitError,
-    APITimeoutError,
-    ConfigError,
-    DataSyncError,
-    SyncTaskError,
-    PermissionError,
-    BackendError,
-)
+import os
 
 # 直接导入异常处理器函数，避免导入整个 app
 import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.core.exceptions import (
+    APIRateLimitError,
+    APITimeoutError,
+    BackendError,
+    BacktestError,
+    CalculationError,
+    ConfigError,
+    DatabaseConnectionError,
+    DatabaseError,
+    DataNotFoundError,
+    DataQueryError,
+    DataSyncError,
+    ExternalAPIError,
+    FeatureCalculationError,
+    InsufficientDataError,
+    PermissionError,
+    QueryError,
+    SignalGenerationError,
+    StrategyExecutionError,
+    SyncTaskError,
+    ValidationError,
+)
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 
 from app.api.exception_handlers import (
-    data_not_found_handler,
-    data_query_error_handler,
-    insufficient_data_handler,
-    validation_error_handler,
-    strategy_execution_error_handler,
-    signal_generation_error_handler,
-    backtest_error_handler,
-    calculation_error_handler,
-    feature_calculation_error_handler,
-    database_error_handler,
-    database_connection_error_handler,
-    query_error_handler,
-    external_api_error_handler,
     api_rate_limit_error_handler,
     api_timeout_error_handler,
-    config_error_handler,
-    data_sync_error_handler,
-    permission_error_handler,
     backend_error_handler,
+    backtest_error_handler,
+    calculation_error_handler,
+    config_error_handler,
+    data_not_found_handler,
+    data_query_error_handler,
+    data_sync_error_handler,
+    database_connection_error_handler,
+    database_error_handler,
+    external_api_error_handler,
+    feature_calculation_error_handler,
+    insufficient_data_handler,
+    permission_error_handler,
+    query_error_handler,
+    signal_generation_error_handler,
+    strategy_execution_error_handler,
+    validation_error_handler,
 )
 
 
@@ -101,13 +103,10 @@ class TestDataExceptionHandlers:
 
     def test_data_not_found_returns_404(self, app, client):
         """测试 DataNotFoundError 返回 404"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise DataNotFoundError(
-                "股票不存在",
-                error_code="STOCK_NOT_FOUND",
-                stock_code="000001"
-            )
+            raise DataNotFoundError("股票不存在", error_code="STOCK_NOT_FOUND", stock_code="000001")
 
         response = client.get("/test")
         assert response.status_code == 404
@@ -119,13 +118,10 @@ class TestDataExceptionHandlers:
 
     def test_data_query_error_returns_400(self, app, client):
         """测试 DataQueryError 返回 400"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise DataQueryError(
-                "查询参数错误",
-                error_code="INVALID_QUERY",
-                field="date_range"
-            )
+            raise DataQueryError("查询参数错误", error_code="INVALID_QUERY", field="date_range")
 
         response = client.get("/test")
         assert response.status_code == 400
@@ -135,13 +131,10 @@ class TestDataExceptionHandlers:
 
     def test_insufficient_data_returns_400(self, app, client):
         """测试 InsufficientDataError 返回 400"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise InsufficientDataError(
-                "数据点不足",
-                required_points=20,
-                actual_points=10
-            )
+            raise InsufficientDataError("数据点不足", required_points=20, actual_points=10)
 
         response = client.get("/test")
         assert response.status_code == 400
@@ -155,13 +148,14 @@ class TestValidationExceptionHandler:
 
     def test_validation_error_returns_400(self, app, client):
         """测试 ValidationError 返回 400"""
+
         @app.get("/test")
         async def test_endpoint():
             raise ValidationError(
                 "股票代码格式错误",
                 error_code="INVALID_STOCK_CODE",
                 stock_code="ABC",
-                expected_format="6位数字"
+                expected_format="6位数字",
             )
 
         response = client.get("/test")
@@ -177,12 +171,11 @@ class TestStrategyExceptionHandlers:
 
     def test_strategy_execution_error_returns_500(self, app, client):
         """测试 StrategyExecutionError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
             raise StrategyExecutionError(
-                "策略执行失败",
-                strategy_name="动量策略",
-                reason="信号生成异常"
+                "策略执行失败", strategy_name="动量策略", reason="信号生成异常"
             )
 
         response = client.get("/test")
@@ -192,12 +185,10 @@ class TestStrategyExceptionHandlers:
 
     def test_signal_generation_error_returns_500(self, app, client):
         """测试 SignalGenerationError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise SignalGenerationError(
-                "信号生成失败",
-                signal_type="buy"
-            )
+            raise SignalGenerationError("信号生成失败", signal_type="buy")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -208,12 +199,10 @@ class TestBacktestExceptionHandler:
 
     def test_backtest_error_returns_500(self, app, client):
         """测试 BacktestError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise BacktestError(
-                "回测失败",
-                strategy="动量策略"
-            )
+            raise BacktestError("回测失败", strategy="动量策略")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -224,24 +213,20 @@ class TestCalculationExceptionHandlers:
 
     def test_calculation_error_returns_500(self, app, client):
         """测试 CalculationError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise CalculationError(
-                "夏普比率计算失败",
-                indicator="sharpe_ratio"
-            )
+            raise CalculationError("夏普比率计算失败", indicator="sharpe_ratio")
 
         response = client.get("/test")
         assert response.status_code == 500
 
     def test_feature_calculation_error_returns_500(self, app, client):
         """测试 FeatureCalculationError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise FeatureCalculationError(
-                "特征计算失败",
-                feature_name="MA_20"
-            )
+            raise FeatureCalculationError("特征计算失败", feature_name="MA_20")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -252,12 +237,10 @@ class TestDatabaseExceptionHandlers:
 
     def test_database_error_returns_500(self, app, client):
         """测试 DatabaseError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise DatabaseError(
-                "数据库错误",
-                operation="insert"
-            )
+            raise DatabaseError("数据库错误", operation="insert")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -266,12 +249,10 @@ class TestDatabaseExceptionHandlers:
 
     def test_database_connection_error_returns_503(self, app, client):
         """测试 DatabaseConnectionError 返回 503"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise DatabaseConnectionError(
-                "无法连接到数据库",
-                host="localhost"
-            )
+            raise DatabaseConnectionError("无法连接到数据库", host="localhost")
 
         response = client.get("/test")
         assert response.status_code == 503
@@ -280,12 +261,10 @@ class TestDatabaseExceptionHandlers:
 
     def test_query_error_returns_500(self, app, client):
         """测试 QueryError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise QueryError(
-                "SQL查询错误",
-                table="stock_daily"
-            )
+            raise QueryError("SQL查询错误", table="stock_daily")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -296,24 +275,20 @@ class TestExternalAPIExceptionHandlers:
 
     def test_external_api_error_returns_502(self, app, client):
         """测试 ExternalAPIError 返回 502"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise ExternalAPIError(
-                "AkShare API 失败",
-                api_name="akshare"
-            )
+            raise ExternalAPIError("AkShare API 失败", api_name="akshare")
 
         response = client.get("/test")
         assert response.status_code == 502
 
     def test_api_rate_limit_error_returns_429(self, app, client):
         """测试 APIRateLimitError 返回 429 并包含 Retry-After header"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise APIRateLimitError(
-                "API频率限制",
-                retry_after=60
-            )
+            raise APIRateLimitError("API频率限制", retry_after=60)
 
         response = client.get("/test")
         assert response.status_code == 429
@@ -323,12 +298,10 @@ class TestExternalAPIExceptionHandlers:
 
     def test_api_timeout_error_returns_504(self, app, client):
         """测试 APITimeoutError 返回 504"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise APITimeoutError(
-                "API请求超时",
-                timeout=30
-            )
+            raise APITimeoutError("API请求超时", timeout=30)
 
         response = client.get("/test")
         assert response.status_code == 504
@@ -339,12 +312,10 @@ class TestConfigExceptionHandler:
 
     def test_config_error_returns_500(self, app, client):
         """测试 ConfigError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise ConfigError(
-                "配置文件错误",
-                config_file="config.yaml"
-            )
+            raise ConfigError("配置文件错误", config_file="config.yaml")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -355,24 +326,20 @@ class TestSyncExceptionHandlers:
 
     def test_data_sync_error_returns_500(self, app, client):
         """测试 DataSyncError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise DataSyncError(
-                "数据同步失败",
-                stock_code="000001"
-            )
+            raise DataSyncError("数据同步失败", stock_code="000001")
 
         response = client.get("/test")
         assert response.status_code == 500
 
     def test_sync_task_error_returns_500(self, app, client):
         """测试 SyncTaskError 返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise SyncTaskError(
-                "同步任务失败",
-                task_name="daily_sync"
-            )
+            raise SyncTaskError("同步任务失败", task_name="daily_sync")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -383,13 +350,10 @@ class TestPermissionExceptionHandler:
 
     def test_permission_error_returns_403(self, app, client):
         """测试 PermissionError 返回 403"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise PermissionError(
-                "权限不足",
-                user_id=123,
-                required_role="admin"
-            )
+            raise PermissionError("权限不足", user_id=123, required_role="admin")
 
         response = client.get("/test")
         assert response.status_code == 403
@@ -402,12 +366,10 @@ class TestBackendErrorHandler:
 
     def test_backend_error_returns_500(self, app, client):
         """测试 BackendError 基类返回 500"""
+
         @app.get("/test")
         async def test_endpoint():
-            raise BackendError(
-                "未知业务错误",
-                error_code="UNKNOWN_ERROR"
-            )
+            raise BackendError("未知业务错误", error_code="UNKNOWN_ERROR")
 
         response = client.get("/test")
         assert response.status_code == 500
@@ -420,13 +382,14 @@ class TestExceptionContext:
 
     def test_exception_context_preserved(self, app, client):
         """测试异常的 context 信息被正确传递到响应中"""
+
         @app.get("/test")
         async def test_endpoint():
             raise DataNotFoundError(
                 "股票不存在",
                 stock_code="000001",
                 date_range="2024-01-01 to 2024-12-31",
-                table="stock_daily"
+                table="stock_daily",
             )
 
         response = client.get("/test")
@@ -437,6 +400,7 @@ class TestExceptionContext:
 
     def test_error_code_auto_generated(self, app, client):
         """测试 error_code 自动生成"""
+
         @app.get("/test")
         async def test_endpoint():
             # 不指定 error_code

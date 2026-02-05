@@ -16,23 +16,24 @@
 
 import asyncio
 import sys
-from typing import List, Dict, Optional, Any
-from datetime import date
 from pathlib import Path
-import pandas as pd
+from typing import Any, Dict, List, Optional
+
 import numpy as np
+import pandas as pd
 
 # 添加 core 项目到 Python 路径
 core_path = Path(__file__).parent.parent.parent.parent / "core"
 if str(core_path) not in sys.path:
     sys.path.insert(0, str(core_path))
 
-# 导入 Core 模块
-from src.features.technical_indicators import TechnicalIndicators
+from src.exceptions import FeatureCalculationError
 from src.features.alpha_factors import AlphaFactors
 from src.features.feature_transformer import FeatureTransformer
 from src.features.streaming_feature_engine import StreamingFeatureEngine
-from src.exceptions import FeatureError, FeatureCalculationError
+
+# 导入 Core 模块
+from src.features.technical_indicators import TechnicalIndicators
 
 
 class FeatureAdapter:
@@ -52,9 +53,7 @@ class FeatureAdapter:
         self.streaming_engine = None
 
     async def add_technical_indicators(
-        self,
-        df: pd.DataFrame,
-        indicators: Optional[List[str]] = None
+        self, df: pd.DataFrame, indicators: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
         异步添加技术指标
@@ -80,6 +79,7 @@ class FeatureAdapter:
             - OBV: 能量潮
             等 50+ 指标
         """
+
         def _compute():
             ti = TechnicalIndicators(df.copy())
             if indicators is None:
@@ -87,7 +87,7 @@ class FeatureAdapter:
             else:
                 result_df = df.copy()
                 for indicator in indicators:
-                    method = getattr(ti, f'add_{indicator}', None)
+                    method = getattr(ti, f"add_{indicator}", None)
                     if method:
                         result_df = method()
                 return result_df
@@ -95,9 +95,7 @@ class FeatureAdapter:
         return await asyncio.to_thread(_compute)
 
     async def add_alpha_factors(
-        self,
-        df: pd.DataFrame,
-        factors: Optional[List[str]] = None
+        self, df: pd.DataFrame, factors: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
         异步添加 Alpha 因子
@@ -119,16 +117,17 @@ class FeatureAdapter:
             - 价量因子: price_volume_corr, volume_price_trend 等
             等 30+ 因子
         """
+
         def _compute():
             af = AlphaFactors(df.copy())
             if factors is None:
                 result = af.add_all_alpha_factors()
                 # Core 返回 Response 对象，提取 data
-                return result.data if hasattr(result, 'data') else result
+                return result.data if hasattr(result, "data") else result
             else:
                 result_df = df.copy()
                 for factor in factors:
-                    method = getattr(af, f'add_{factor}', None)
+                    method = getattr(af, f"add_{factor}", None)
                     if method:
                         result_df = method()
                 return result_df
@@ -140,7 +139,7 @@ class FeatureAdapter:
         df: pd.DataFrame,
         include_indicators: bool = True,
         include_factors: bool = True,
-        include_transforms: bool = False
+        include_transforms: bool = False,
     ) -> pd.DataFrame:
         """
         异步添加所有特征 (技术指标 + Alpha 因子)
@@ -171,10 +170,7 @@ class FeatureAdapter:
         return result_df
 
     async def transform_features(
-        self,
-        df: pd.DataFrame,
-        method: str = "standardize",
-        columns: Optional[List[str]] = None
+        self, df: pd.DataFrame, method: str = "standardize", columns: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
         异步特征转换
@@ -196,19 +192,24 @@ class FeatureAdapter:
             - log: 对数变换
             - diff: 差分
         """
+
         def _compute():
             transformer = FeatureTransformer(df.copy())
-            feature_cols = columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+            feature_cols = (
+                columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+            )
             if method == "standardize":
                 # Core 使用 normalize_features 并指定 method='standard'
-                return transformer.normalize_features(feature_cols=feature_cols, method='standard')
+                return transformer.normalize_features(feature_cols=feature_cols, method="standard")
             elif method == "normalize":
                 # Core 使用 normalize_features 并指定 method='minmax'
-                return transformer.normalize_features(feature_cols=feature_cols, method='minmax')
+                return transformer.normalize_features(feature_cols=feature_cols, method="minmax")
             elif method == "log":
                 # Core 没有 log_transform，使用 rank_transform 或直接应用 np.log
                 result_df = df.copy()
-                cols_to_transform = columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+                cols_to_transform = (
+                    columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+                )
                 for col in cols_to_transform:
                     if col in result_df.columns:
                         result_df[col] = np.log1p(result_df[col].clip(lower=0))
@@ -216,24 +217,22 @@ class FeatureAdapter:
             elif method == "diff":
                 # 使用 pandas diff
                 result_df = df.copy()
-                cols_to_transform = columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+                cols_to_transform = (
+                    columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+                )
                 for col in cols_to_transform:
                     if col in result_df.columns:
                         result_df[col] = result_df[col].diff()
                 return result_df
             else:
                 raise FeatureCalculationError(
-                    f"不支持的转换方法: {method}",
-                    error_code="INVALID_TRANSFORM_METHOD"
+                    f"不支持的转换方法: {method}", error_code="INVALID_TRANSFORM_METHOD"
                 )
 
         return await asyncio.to_thread(_compute)
 
     async def calculate_feature_importance(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series,
-        method: str = "correlation"
+        self, X: pd.DataFrame, y: pd.Series, method: str = "correlation"
     ) -> pd.Series:
         """
         异步计算特征重要性
@@ -249,6 +248,7 @@ class FeatureAdapter:
         Raises:
             FeatureEngineeringError: 计算错误
         """
+
         def _compute():
             if method == "correlation":
                 # 计算相关系数
@@ -256,14 +256,11 @@ class FeatureAdapter:
             elif method == "mutual_info":
                 # 计算互信息
                 from sklearn.feature_selection import mutual_info_regression
-                importance = pd.Series(
-                    mutual_info_regression(X, y),
-                    index=X.columns
-                )
+
+                importance = pd.Series(mutual_info_regression(X, y), index=X.columns)
             else:
                 raise FeatureCalculationError(
-                    f"不支持的方法: {method}",
-                    error_code="INVALID_IMPORTANCE_METHOD"
+                    f"不支持的方法: {method}", error_code="INVALID_IMPORTANCE_METHOD"
                 )
 
             return importance.sort_values(ascending=False)
@@ -271,11 +268,7 @@ class FeatureAdapter:
         return await asyncio.to_thread(_compute)
 
     async def select_features(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series,
-        n_features: int = 50,
-        method: str = "correlation"
+        self, X: pd.DataFrame, y: pd.Series, n_features: int = 50, method: str = "correlation"
     ) -> List[str]:
         """
         异步特征选择
@@ -303,15 +296,13 @@ class FeatureAdapter:
             config: StreamingConfig配置对象（可选）
             output_dir: 输出目录路径（可选）
         """
+
         def _init():
             return StreamingFeatureEngine(config=config, output_dir=output_dir)
 
         self.streaming_engine = await asyncio.to_thread(_init)
 
-    async def update_streaming_features(
-        self,
-        new_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def update_streaming_features(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         异步更新流式特征
 
@@ -327,13 +318,10 @@ class FeatureAdapter:
         if self.streaming_engine is None:
             raise FeatureCalculationError(
                 "流式引擎未初始化，请先调用 init_streaming_engine()",
-                error_code="STREAMING_ENGINE_NOT_INITIALIZED"
+                error_code="STREAMING_ENGINE_NOT_INITIALIZED",
             )
 
-        return await asyncio.to_thread(
-            self.streaming_engine.update,
-            new_data=new_data
-        )
+        return await asyncio.to_thread(self.streaming_engine.update, new_data=new_data)
 
     async def get_feature_names(self) -> Dict[str, List[str]]:
         """
@@ -342,27 +330,34 @@ class FeatureAdapter:
         Returns:
             包含各类特征名称的字典
         """
+
         def _get_names():
             # 创建示例 DataFrame
-            example_df = pd.DataFrame({
-                'open': [100.0],
-                'high': [102.0],
-                'low': [99.0],
-                'close': [101.0],
-                'volume': [1000000.0]
-            })
+            example_df = pd.DataFrame(
+                {
+                    "open": [100.0],
+                    "high": [102.0],
+                    "low": [99.0],
+                    "close": [101.0],
+                    "volume": [1000000.0],
+                }
+            )
 
             ti = TechnicalIndicators(example_df)
             af = AlphaFactors(example_df)
 
             # 获取方法列表
-            indicator_methods = [m for m in dir(ti) if m.startswith('add_') and not m.startswith('add_all')]
-            factor_methods = [m for m in dir(af) if m.startswith('add_') and not m.startswith('add_all')]
+            indicator_methods = [
+                m for m in dir(ti) if m.startswith("add_") and not m.startswith("add_all")
+            ]
+            factor_methods = [
+                m for m in dir(af) if m.startswith("add_") and not m.startswith("add_all")
+            ]
 
             return {
-                'technical_indicators': [m.replace('add_', '') for m in indicator_methods],
-                'alpha_factors': [m.replace('add_', '') for m in factor_methods],
-                'transforms': ['standardize', 'normalize', 'log', 'diff']
+                "technical_indicators": [m.replace("add_", "") for m in indicator_methods],
+                "alpha_factors": [m.replace("add_", "") for m in factor_methods],
+                "transforms": ["standardize", "normalize", "log", "diff"],
             }
 
         return await asyncio.to_thread(_get_names)

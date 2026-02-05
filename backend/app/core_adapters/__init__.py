@@ -17,16 +17,16 @@ Core Adapters - 异步适配器层
 版本: 1.0.0
 """
 
+from .backtest_adapter import BacktestAdapter
 from .data_adapter import DataAdapter
 from .feature_adapter import FeatureAdapter
-from .backtest_adapter import BacktestAdapter
 from .model_adapter import ModelAdapter
 
 __all__ = [
-    'DataAdapter',
-    'FeatureAdapter',
-    'BacktestAdapter',
-    'ModelAdapter',
+    "DataAdapter",
+    "FeatureAdapter",
+    "BacktestAdapter",
+    "ModelAdapter",
 ]
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"

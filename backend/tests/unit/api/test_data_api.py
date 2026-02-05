@@ -8,18 +8,20 @@ Data API 单元测试
 版本: 1.0.0
 """
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from datetime import date, datetime, timedelta
+from datetime import date
+from unittest.mock import AsyncMock, patch
+
 import pandas as pd
+import pytest
 from fastapi import status
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
 async def client():
     """创建测试客户端"""
     from app.main import app
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -37,28 +39,26 @@ class TestGetDailyData:
         end_date = date(2023, 12, 31)
 
         # Mock DataFrame
-        mock_df = pd.DataFrame({
-            'date': pd.date_range(start='2023-01-03', periods=5, freq='D'),
-            'open': [13.50, 13.60, 13.55, 13.70, 13.65],
-            'high': [13.80, 13.90, 13.85, 14.00, 13.95],
-            'low': [13.40, 13.50, 13.45, 13.60, 13.55],
-            'close': [13.75, 13.85, 13.80, 13.95, 13.90],
-            'volume': [1000000, 1100000, 1050000, 1200000, 1150000],
-            'amount': [13750000, 15235000, 14490000, 16740000, 15985000]
-        })
-        mock_df.set_index('date', inplace=True)
+        mock_df = pd.DataFrame(
+            {
+                "date": pd.date_range(start="2023-01-03", periods=5, freq="D"),
+                "open": [13.50, 13.60, 13.55, 13.70, 13.65],
+                "high": [13.80, 13.90, 13.85, 14.00, 13.95],
+                "low": [13.40, 13.50, 13.45, 13.60, 13.55],
+                "close": [13.75, 13.85, 13.80, 13.95, 13.90],
+                "volume": [1000000, 1100000, 1050000, 1200000, 1150000],
+                "amount": [13750000, 15235000, 14490000, 16740000, 15985000],
+            }
+        )
+        mock_df.set_index("date", inplace=True)
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
 
             # Act
             response = await client.get(
                 f"/api/data/daily/{code}",
-                params={
-                    "start_date": str(start_date),
-                    "end_date": str(end_date),
-                    "limit": 500
-                }
+                params={"start_date": str(start_date), "end_date": str(end_date), "limit": 500},
             )
 
         # Assert
@@ -77,7 +77,7 @@ class TestGetDailyData:
         code = "999999.SZ"
         mock_df = pd.DataFrame()  # 空 DataFrame
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
 
             # Act
@@ -95,20 +95,19 @@ class TestGetDailyData:
         # Arrange
         code = "000001.SZ"
         # 创建 1000 条数据
-        mock_df = pd.DataFrame({
-            'date': pd.date_range(start='2020-01-01', periods=1000, freq='D'),
-            'close': [13.50] * 1000
-        })
-        mock_df.set_index('date', inplace=True)
+        mock_df = pd.DataFrame(
+            {
+                "date": pd.date_range(start="2020-01-01", periods=1000, freq="D"),
+                "close": [13.50] * 1000,
+            }
+        )
+        mock_df.set_index("date", inplace=True)
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
 
             # Act
-            response = await client.get(
-                f"/api/data/daily/{code}",
-                params={"limit": 100}
-            )
+            response = await client.get(f"/api/data/daily/{code}", params={"limit": 100})
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -120,13 +119,12 @@ class TestGetDailyData:
         """测试默认日期范围（最近一年）"""
         # Arrange
         code = "000001.SZ"
-        mock_df = pd.DataFrame({
-            'date': pd.date_range(start='2024-01-01', periods=10, freq='D'),
-            'close': [13.50] * 10
-        })
-        mock_df.set_index('date', inplace=True)
+        mock_df = pd.DataFrame(
+            {"date": pd.date_range(start="2024-01-01", periods=10, freq="D"), "close": [13.50] * 10}
+        )
+        mock_df.set_index("date", inplace=True)
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
 
             # Act
@@ -137,8 +135,8 @@ class TestGetDailyData:
         # 验证调用了 adapter，并且日期范围约为一年
         mock_adapter.get_daily_data.assert_called_once()
         call_args = mock_adapter.get_daily_data.call_args
-        start_date = call_args.kwargs['start_date']
-        end_date = call_args.kwargs['end_date']
+        start_date = call_args.kwargs["start_date"]
+        end_date = call_args.kwargs["end_date"]
         assert (end_date - start_date).days >= 360
 
     @pytest.mark.asyncio
@@ -147,7 +145,7 @@ class TestGetDailyData:
         # Arrange
         code = "000001.SZ"
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_daily_data = AsyncMock(
                 side_effect=Exception("Database connection failed")
             )
@@ -170,23 +168,17 @@ class TestDownloadData:
         """测试成功下载数据"""
         # Arrange
         codes = ["000001.SZ", "000002.SZ"]
-        mock_df = pd.DataFrame({
-            'date': pd.date_range(start='2023-01-01', periods=5, freq='D'),
-            'close': [13.50] * 5
-        })
+        mock_df = pd.DataFrame(
+            {"date": pd.date_range(start="2023-01-01", periods=5, freq="D"), "close": [13.50] * 5}
+        )
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.download_daily_data = AsyncMock(return_value=mock_df)
             mock_adapter.insert_daily_data = AsyncMock(return_value=True)
 
             # Act
             response = await client.post(
-                "/api/data/download",
-                params={
-                    "codes": codes,
-                    "years": 1,
-                    "batch_size": 50
-                }
+                "/api/data/download", params={"codes": codes, "years": 1, "batch_size": 50}
             )
 
         # Assert
@@ -203,19 +195,18 @@ class TestDownloadData:
         # Arrange
         mock_stock_list = [
             {"code": "000001.SZ", "name": "平安银行"},
-            {"code": "000002.SZ", "name": "万科A"}
+            {"code": "000002.SZ", "name": "万科A"},
         ]
-        mock_df = pd.DataFrame({'close': [13.50]})
+        mock_df = pd.DataFrame({"close": [13.50]})
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_stock_list = AsyncMock(return_value=mock_stock_list)
             mock_adapter.download_daily_data = AsyncMock(return_value=mock_df)
             mock_adapter.insert_daily_data = AsyncMock(return_value=True)
 
             # Act
             response = await client.post(
-                "/api/data/download",
-                params={"max_stocks": 2, "batch_size": 10}
+                "/api/data/download", params={"max_stocks": 2, "batch_size": 10}
             )
 
         # Assert
@@ -228,16 +219,15 @@ class TestDownloadData:
         """测试限制下载数量"""
         # Arrange
         codes = [f"00000{i}.SZ" for i in range(1, 101)]  # 100 只股票
-        mock_df = pd.DataFrame({'close': [13.50]})
+        mock_df = pd.DataFrame({"close": [13.50]})
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.download_daily_data = AsyncMock(return_value=mock_df)
             mock_adapter.insert_daily_data = AsyncMock(return_value=True)
 
             # Act
             response = await client.post(
-                "/api/data/download",
-                params={"codes": codes, "max_stocks": 10}
+                "/api/data/download", params={"codes": codes, "max_stocks": 10}
             )
 
         # Assert
@@ -252,20 +242,16 @@ class TestDownloadData:
         codes = ["000001.SZ"]
         start_date = date(2023, 1, 1)
         end_date = date(2023, 12, 31)
-        mock_df = pd.DataFrame({'close': [13.50]})
+        mock_df = pd.DataFrame({"close": [13.50]})
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.download_daily_data = AsyncMock(return_value=mock_df)
             mock_adapter.insert_daily_data = AsyncMock(return_value=True)
 
             # Act
             response = await client.post(
                 "/api/data/download",
-                params={
-                    "codes": codes,
-                    "start_date": str(start_date),
-                    "end_date": str(end_date)
-                }
+                params={"codes": codes, "start_date": str(start_date), "end_date": str(end_date)},
             )
 
         # Assert
@@ -279,17 +265,14 @@ class TestDownloadData:
         """测试使用年数参数下载"""
         # Arrange
         codes = ["000001.SZ"]
-        mock_df = pd.DataFrame({'close': [13.50]})
+        mock_df = pd.DataFrame({"close": [13.50]})
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.download_daily_data = AsyncMock(return_value=mock_df)
             mock_adapter.insert_daily_data = AsyncMock(return_value=True)
 
             # Act
-            response = await client.post(
-                "/api/data/download",
-                params={"codes": codes, "years": 5}
-            )
+            response = await client.post("/api/data/download", params={"codes": codes, "years": 5})
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -305,17 +288,14 @@ class TestDownloadData:
         async def mock_download(code, start_date, end_date):
             if code == "999999.SZ":
                 raise Exception("Stock not found")
-            return pd.DataFrame({'close': [13.50]})
+            return pd.DataFrame({"close": [13.50]})
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.download_daily_data = AsyncMock(side_effect=mock_download)
             mock_adapter.insert_daily_data = AsyncMock(return_value=True)
 
             # Act
-            response = await client.post(
-                "/api/data/download",
-                params={"codes": codes}
-            )
+            response = await client.post("/api/data/download", params={"codes": codes})
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -335,20 +315,21 @@ class TestGetMinuteData:
         code = "000001.SZ"
         trade_date = date(2023, 12, 29)
 
-        mock_df = pd.DataFrame({
-            'time': pd.date_range(start='09:31:00', periods=5, freq='1min'),
-            'open': [13.50, 13.51, 13.52, 13.53, 13.54],
-            'close': [13.51, 13.52, 13.53, 13.54, 13.55]
-        })
-        mock_df.set_index('time', inplace=True)
+        mock_df = pd.DataFrame(
+            {
+                "time": pd.date_range(start="09:31:00", periods=5, freq="1min"),
+                "open": [13.50, 13.51, 13.52, 13.53, 13.54],
+                "close": [13.51, 13.52, 13.53, 13.54, 13.55],
+            }
+        )
+        mock_df.set_index("time", inplace=True)
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_minute_data = AsyncMock(return_value=mock_df)
 
             # Act
             response = await client.get(
-                f"/api/data/minute/{code}",
-                params={"trade_date": str(trade_date), "period": "1min"}
+                f"/api/data/minute/{code}", params={"trade_date": str(trade_date), "period": "1min"}
             )
 
         # Assert
@@ -365,10 +346,7 @@ class TestGetMinuteData:
         code = "000001.SZ"
 
         # Act
-        response = await client.get(
-            f"/api/data/minute/{code}",
-            params={"period": "invalid"}
-        )
+        response = await client.get(f"/api/data/minute/{code}", params={"period": "invalid"})
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -383,7 +361,7 @@ class TestGetMinuteData:
         code = "000001.SZ"
         mock_df = pd.DataFrame()
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.get_minute_data = AsyncMock(return_value=mock_df)
 
             # Act
@@ -411,10 +389,10 @@ class TestCheckDataIntegrity:
             "actual_data_count": 242,
             "missing_count": 2,
             "data_completeness": 99.18,
-            "missing_dates": ["2023-03-15", "2023-08-22"]
+            "missing_dates": ["2023-03-15", "2023-08-22"],
         }
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.check_data_integrity = AsyncMock(return_value=mock_result)
 
             # Act
@@ -436,19 +414,16 @@ class TestCheckDataIntegrity:
         mock_result = {
             "expected_trading_days": 122,
             "actual_data_count": 122,
-            "data_completeness": 100.0
+            "data_completeness": 100.0,
         }
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
             mock_adapter.check_data_integrity = AsyncMock(return_value=mock_result)
 
             # Act
             response = await client.get(
                 f"/api/data/check/{code}",
-                params={
-                    "start_date": str(start_date),
-                    "end_date": str(end_date)
-                }
+                params={"start_date": str(start_date), "end_date": str(end_date)},
             )
 
         # Assert
@@ -462,10 +437,8 @@ class TestCheckDataIntegrity:
         # Arrange
         code = "000001.SZ"
 
-        with patch('app.api.endpoints.data.data_adapter') as mock_adapter:
-            mock_adapter.check_data_integrity = AsyncMock(
-                side_effect=Exception("Database error")
-            )
+        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
+            mock_adapter.check_data_integrity = AsyncMock(side_effect=Exception("Database error"))
 
             # Act
             response = await client.get(f"/api/data/check/{code}")

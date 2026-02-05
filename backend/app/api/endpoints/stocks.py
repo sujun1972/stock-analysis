@@ -11,14 +11,13 @@
 版本: 2.0.0 (架构修正版)
 """
 
-from fastapi import APIRouter, Query
-from typing import Optional
 from datetime import datetime
-from loguru import logger
+from typing import Optional
+
+from fastapi import APIRouter, Query
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
-from app.core.exceptions import DataQueryError, DatabaseError
 
 router = APIRouter()
 
@@ -32,7 +31,7 @@ async def get_stock_list(
     status_filter: str = Query("正常", description="股票状态", alias="status"),
     search: Optional[str] = Query(None, description="搜索关键词（股票代码或名称）"),
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=100, description="每页记录数")
+    page_size: int = Query(20, ge=1, le=100, description="每页记录数"),
 ):
     """
     获取股票列表
@@ -63,18 +62,16 @@ async def get_stock_list(
     """
     # 直接调用，让异常传播到全局处理器
     # 1. 调用 Core Adapter（业务逻辑在 Core）
-    stocks = await data_adapter.get_stock_list(
-        market=market,
-        status=status_filter
-    )
+    stocks = await data_adapter.get_stock_list(market=market, status=status_filter)
 
     # 2. Backend 职责：搜索过滤（前端功能）
     if search:
         search_lower = search.lower()
         stocks = [
-            stock for stock in stocks
-            if search_lower in stock.get('code', '').lower()
-            or search_lower in stock.get('name', '').lower()
+            stock
+            for stock in stocks
+            if search_lower in stock.get("code", "").lower()
+            or search_lower in stock.get("name", "").lower()
         ]
 
     # 3. Backend 职责：分页
@@ -85,11 +82,7 @@ async def get_stock_list(
 
     # 4. Backend 职责：响应格式化
     return ApiResponse.paginated(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        message="获取股票列表成功"
+        items=items, total=total, page=page, page_size=page_size, message="获取股票列表成功"
     ).to_dict()
 
 
@@ -120,14 +113,9 @@ async def get_stock_info(code: str):
     stock_info = await data_adapter.get_stock_info(code)
 
     if stock_info is None:
-        return ApiResponse.not_found(
-            message=f"股票 {code} 不存在"
-        ).to_dict()
+        return ApiResponse.not_found(message=f"股票 {code} 不存在").to_dict()
 
-    return ApiResponse.success(
-        data=stock_info,
-        message="获取股票信息成功"
-    ).to_dict()
+    return ApiResponse.success(data=stock_info, message="获取股票信息成功").to_dict()
 
 
 @router.get("/{code}/daily")
@@ -135,7 +123,7 @@ async def get_stock_daily_data(
     code: str,
     start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
-    limit: int = Query(100, ge=1, le=1000, description="最大记录数")
+    limit: int = Query(100, ge=1, le=1000, description="最大记录数"),
 ):
     """
     获取股票日线数据
@@ -164,36 +152,24 @@ async def get_stock_daily_data(
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
     except ValueError as e:
-        return ApiResponse.bad_request(
-            message=f"日期格式错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"日期格式错误: {str(e)}").to_dict()
 
     # 2. 调用 Core Adapter
-    df = await data_adapter.get_daily_data(
-        code=code,
-        start_date=start_dt,
-        end_date=end_dt
-    )
+    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
 
     if df.empty:
-        return ApiResponse.not_found(
-            message=f"股票 {code} 无日线数据"
-        ).to_dict()
+        return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()
 
     # 3. 限制返回记录数
     if len(df) > limit:
         df = df.tail(limit)
 
     # 4. 转换为响应格式
-    records = df.to_dict('records')
+    records = df.to_dict("records")
 
     return ApiResponse.success(
-        data={
-            "code": code,
-            "records": records,
-            "record_count": len(records)
-        },
-        message="获取日线数据成功"
+        data={"code": code, "records": records, "record_count": len(records)},
+        message="获取日线数据成功",
     ).to_dict()
 
 
@@ -212,8 +188,7 @@ async def update_stock_list():
     }
     """
     return ApiResponse.error(
-        message="此功能暂未实现，请使用 Core 的数据下载功能",
-        code=501
+        message="此功能暂未实现，请使用 Core 的数据下载功能", code=501
     ).to_dict()
 
 
@@ -221,7 +196,7 @@ async def update_stock_list():
 async def get_minute_data(
     code: str,
     trade_date: Optional[str] = Query(None, description="交易日期 (YYYY-MM-DD)，默认今天"),
-    period: str = Query("1min", description="分钟周期 (1min/5min/15min/30min/60min)")
+    period: str = Query("1min", description="分钟周期 (1min/5min/15min/30min/60min)"),
 ):
     """
     获取股票分时数据
@@ -253,9 +228,7 @@ async def get_minute_data(
         else:
             trade_date_dt = datetime.strptime(trade_date, "%Y-%m-%d").date()
     except ValueError as e:
-        return ApiResponse.bad_request(
-            message=f"日期格式错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"日期格式错误: {str(e)}").to_dict()
 
     # 2. 检查是否为交易日
     is_trading = await data_adapter.is_trading_day(trade_date_dt)
@@ -265,22 +238,18 @@ async def get_minute_data(
                 "code": code,
                 "date": trade_date_dt.strftime("%Y-%m-%d"),
                 "records": [],
-                "is_trading_day": False
+                "is_trading_day": False,
             },
-            message="非交易日"
+            message="非交易日",
         ).to_dict()
 
     # 3. 调用 Core Adapter 获取分时数据
-    df = await data_adapter.get_minute_data(
-        code=code,
-        period=period,
-        trade_date=trade_date_dt
-    )
+    df = await data_adapter.get_minute_data(code=code, period=period, trade_date=trade_date_dt)
 
     # 4. 转换为响应格式
     # 即使无数据也返回200状态码和空列表，而不是404
     # 这样前端可以统一处理，区分"接口调用成功但无数据"和"接口调用失败"
-    records = df.to_dict('records') if not df.empty else []
+    records = df.to_dict("records") if not df.empty else []
 
     return ApiResponse.success(
         data={
@@ -288,7 +257,7 @@ async def get_minute_data(
             "date": trade_date_dt.strftime("%Y-%m-%d"),
             "period": period,
             "records": records,
-            "record_count": len(records)
+            "record_count": len(records),
         },
-        message="获取分时数据成功" if records else "暂无分时数据"
+        message="获取分时数据成功" if records else "暂无分时数据",
     ).to_dict()

@@ -16,24 +16,23 @@ Scheduler API 集成测试
 版本: 1.0.0
 """
 
-import pytest
-from unittest.mock import AsyncMock, patch, Mock
-from fastapi import HTTPException
 from datetime import datetime
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+from fastapi import HTTPException
 
 from app.api.endpoints.scheduler import (
-    get_scheduled_tasks,
-    get_scheduled_task,
-    create_scheduled_task,
-    update_scheduled_task,
-    delete_scheduled_task,
-    toggle_scheduled_task,
-    get_task_execution_history,
-    get_recent_execution_history
-)
-from app.api.endpoints.scheduler import (
     ScheduledTaskCreate,
-    ScheduledTaskUpdate
+    ScheduledTaskUpdate,
+    create_scheduled_task,
+    delete_scheduled_task,
+    get_recent_execution_history,
+    get_scheduled_task,
+    get_scheduled_tasks,
+    get_task_execution_history,
+    toggle_scheduled_task,
+    update_scheduled_task,
 )
 
 
@@ -45,15 +44,44 @@ class TestGetScheduledTasks:
         """测试成功获取定时任务列表"""
         # Arrange
         mock_rows = [
-            (1, 'daily_sync', 'daily', '每日同步', '0 0 * * *', True, {},
-             datetime(2023, 1, 1, 10, 0), datetime(2023, 1, 2, 0, 0),
-             'completed', None, 10, datetime(2023, 1, 1, 0, 0), datetime(2023, 1, 1, 9, 0)),
-            (2, 'stock_list_sync', 'stock_list', '股票列表同步', '0 8 * * 1', False, {},
-             None, None, None, None, 0, datetime(2023, 1, 1, 0, 0), datetime(2023, 1, 1, 0, 0))
+            (
+                1,
+                "daily_sync",
+                "daily",
+                "每日同步",
+                "0 0 * * *",
+                True,
+                {},
+                datetime(2023, 1, 1, 10, 0),
+                datetime(2023, 1, 2, 0, 0),
+                "completed",
+                None,
+                10,
+                datetime(2023, 1, 1, 0, 0),
+                datetime(2023, 1, 1, 9, 0),
+            ),
+            (
+                2,
+                "stock_list_sync",
+                "stock_list",
+                "股票列表同步",
+                "0 8 * * 1",
+                False,
+                {},
+                None,
+                None,
+                None,
+                None,
+                0,
+                datetime(2023, 1, 1, 0, 0),
+                datetime(2023, 1, 1, 0, 0),
+            ),
         ]
 
-        with patch('app.api.endpoints.scheduler.ConfigService') as mock_config_service, \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=mock_rows)):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService") as mock_config_service,
+            patch("asyncio.to_thread", new=AsyncMock(return_value=mock_rows)),
+        ):
 
             mock_service = Mock()
             mock_config_service.return_value = mock_service
@@ -62,26 +90,28 @@ class TestGetScheduledTasks:
             response = await get_scheduled_tasks()
 
             # Assert
-            assert response['code'] == 200
-            assert response['message'] == 'success'
-            assert len(response['data']) == 2
-            assert response['data'][0]['task_name'] == 'daily_sync'
-            assert response['data'][0]['enabled'] is True
-            assert response['data'][1]['enabled'] is False
+            assert response["code"] == 200
+            assert response["message"] == "success"
+            assert len(response["data"]) == 2
+            assert response["data"][0]["task_name"] == "daily_sync"
+            assert response["data"][0]["enabled"] is True
+            assert response["data"][1]["enabled"] is False
 
     @pytest.mark.asyncio
     async def test_get_scheduled_tasks_empty(self):
         """测试获取空任务列表"""
         # Arrange
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=[])):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=[])),
+        ):
 
             # Act
             response = await get_scheduled_tasks()
 
             # Assert
-            assert response['code'] == 200
-            assert len(response['data']) == 0
+            assert response["code"] == 200
+            assert len(response["data"]) == 0
 
 
 class TestGetScheduledTask:
@@ -93,22 +123,35 @@ class TestGetScheduledTask:
         # Arrange
         task_id = 1
         mock_row = (
-            1, 'daily_sync', 'daily', '每日同步', '0 0 * * *', True, {},
-            datetime(2023, 1, 1, 10, 0), datetime(2023, 1, 2, 0, 0),
-            'completed', None, 10, datetime(2023, 1, 1, 0, 0), datetime(2023, 1, 1, 9, 0)
+            1,
+            "daily_sync",
+            "daily",
+            "每日同步",
+            "0 0 * * *",
+            True,
+            {},
+            datetime(2023, 1, 1, 10, 0),
+            datetime(2023, 1, 2, 0, 0),
+            "completed",
+            None,
+            10,
+            datetime(2023, 1, 1, 0, 0),
+            datetime(2023, 1, 1, 9, 0),
         )
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=[mock_row])):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=[mock_row])),
+        ):
 
             # Act
             response = await get_scheduled_task(task_id=task_id)
 
             # Assert
-            assert response['code'] == 200
-            assert response['data']['id'] == 1
-            assert response['data']['task_name'] == 'daily_sync'
-            assert response['data']['enabled'] is True
+            assert response["code"] == 200
+            assert response["data"]["id"] == 1
+            assert response["data"]["task_name"] == "daily_sync"
+            assert response["data"]["enabled"] is True
 
     @pytest.mark.asyncio
     async def test_get_scheduled_task_not_found(self):
@@ -116,15 +159,17 @@ class TestGetScheduledTask:
         # Arrange
         task_id = 999
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=[])):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=[])),
+        ):
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_scheduled_task(task_id=task_id)
 
             assert exc_info.value.status_code == 404
-            assert '不存在' in str(exc_info.value.detail)
+            assert "不存在" in str(exc_info.value.detail)
 
 
 class TestCreateScheduledTask:
@@ -135,57 +180,60 @@ class TestCreateScheduledTask:
         """测试成功创建定时任务"""
         # Arrange
         request = ScheduledTaskCreate(
-            task_name='test_task',
-            module='stock_list',
-            description='测试任务',
-            cron_expression='0 0 * * *',
+            task_name="test_task",
+            module="stock_list",
+            description="测试任务",
+            cron_expression="0 0 * * *",
             enabled=False,
-            params={}
+            params={},
         )
 
         # Mock check for existing task (returns empty)
         # Mock insert returning new task_id
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', side_effect=[
-                 AsyncMock(return_value=[])(),  # check query
-                 AsyncMock(return_value=[(123,)])()  # insert query
-             ]):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch(
+                "asyncio.to_thread",
+                side_effect=[
+                    AsyncMock(return_value=[])(),  # check query
+                    AsyncMock(return_value=[(123,)])(),  # insert query
+                ],
+            ),
+        ):
 
             # Act
             response = await create_scheduled_task(request)
 
             # Assert
-            assert response['code'] == 200
-            assert response['data']['id'] == 123
+            assert response["code"] == 200
+            assert response["data"]["id"] == 123
 
     @pytest.mark.asyncio
     async def test_create_scheduled_task_duplicate_name(self):
         """测试创建重名任务"""
         # Arrange
         request = ScheduledTaskCreate(
-            task_name='existing_task',
-            module='stock_list',
-            cron_expression='0 0 * * *'
+            task_name="existing_task", module="stock_list", cron_expression="0 0 * * *"
         )
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=[(1,)])):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=[(1,)])),
+        ):
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await create_scheduled_task(request)
 
             assert exc_info.value.status_code == 400
-            assert '已存在' in str(exc_info.value.detail)
+            assert "已存在" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
     async def test_create_scheduled_task_invalid_module(self):
         """测试无效模块名称"""
         # Arrange
         request = ScheduledTaskCreate(
-            task_name='test_task',
-            module='invalid_module',
-            cron_expression='0 0 * * *'
+            task_name="test_task", module="invalid_module", cron_expression="0 0 * * *"
         )
 
         # Act & Assert
@@ -193,7 +241,7 @@ class TestCreateScheduledTask:
             await create_scheduled_task(request)
 
         assert exc_info.value.status_code == 400
-        assert '无效的模块名称' in str(exc_info.value.detail)
+        assert "无效的模块名称" in str(exc_info.value.detail)
 
 
 class TestUpdateScheduledTask:
@@ -204,20 +252,19 @@ class TestUpdateScheduledTask:
         """测试成功更新定时任务"""
         # Arrange
         task_id = 1
-        request = ScheduledTaskUpdate(
-            description='更新后的描述',
-            enabled=True
-        )
+        request = ScheduledTaskUpdate(description="更新后的描述", enabled=True)
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock()):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock()),
+        ):
 
             # Act
             response = await update_scheduled_task(task_id=task_id, request=request)
 
             # Assert
-            assert response['code'] == 200
-            assert response['data']['id'] == task_id
+            assert response["code"] == 200
+            assert response["data"]["id"] == task_id
 
     @pytest.mark.asyncio
     async def test_update_scheduled_task_no_fields(self):
@@ -231,7 +278,7 @@ class TestUpdateScheduledTask:
             await update_scheduled_task(task_id=task_id, request=request)
 
         assert exc_info.value.status_code == 400
-        assert '没有需要更新的字段' in str(exc_info.value.detail)
+        assert "没有需要更新的字段" in str(exc_info.value.detail)
 
 
 class TestDeleteScheduledTask:
@@ -243,15 +290,17 @@ class TestDeleteScheduledTask:
         # Arrange
         task_id = 1
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock()):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock()),
+        ):
 
             # Act
             response = await delete_scheduled_task(task_id=task_id)
 
             # Assert
-            assert response['code'] == 200
-            assert response['data']['id'] == task_id
+            assert response["code"] == 200
+            assert response["data"]["id"] == task_id
 
 
 class TestToggleScheduledTask:
@@ -263,18 +312,23 @@ class TestToggleScheduledTask:
         # Arrange
         task_id = 1
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', side_effect=[
-                 AsyncMock(return_value=[(False,)])(),  # get current status
-                 AsyncMock(return_value=None)()  # update status
-             ]):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch(
+                "asyncio.to_thread",
+                side_effect=[
+                    AsyncMock(return_value=[(False,)])(),  # get current status
+                    AsyncMock(return_value=None)(),  # update status
+                ],
+            ),
+        ):
 
             # Act
             response = await toggle_scheduled_task(task_id=task_id)
 
             # Assert
-            assert response['code'] == 200
-            assert response['data']['enabled'] is True
+            assert response["code"] == 200
+            assert response["data"]["enabled"] is True
 
     @pytest.mark.asyncio
     async def test_toggle_scheduled_task_disable(self):
@@ -282,18 +336,23 @@ class TestToggleScheduledTask:
         # Arrange
         task_id = 1
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', side_effect=[
-                 AsyncMock(return_value=[(True,)])(),  # get current status
-                 AsyncMock(return_value=None)()  # update status
-             ]):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch(
+                "asyncio.to_thread",
+                side_effect=[
+                    AsyncMock(return_value=[(True,)])(),  # get current status
+                    AsyncMock(return_value=None)(),  # update status
+                ],
+            ),
+        ):
 
             # Act
             response = await toggle_scheduled_task(task_id=task_id)
 
             # Assert
-            assert response['code'] == 200
-            assert response['data']['enabled'] is False
+            assert response["code"] == 200
+            assert response["data"]["enabled"] is False
 
     @pytest.mark.asyncio
     async def test_toggle_scheduled_task_not_found(self):
@@ -301,8 +360,10 @@ class TestToggleScheduledTask:
         # Arrange
         task_id = 999
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=[])):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=[])),
+        ):
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -322,25 +383,43 @@ class TestGetTaskExecutionHistory:
         limit = 20
 
         mock_rows = [
-            (1, 'daily_sync', 'daily', 'completed',
-             datetime(2023, 1, 1, 10, 0), datetime(2023, 1, 1, 10, 30),
-             1800, {'success': 100}, None),
-            (2, 'daily_sync', 'daily', 'failed',
-             datetime(2023, 1, 1, 9, 0), datetime(2023, 1, 1, 9, 5),
-             300, None, '数据源错误')
+            (
+                1,
+                "daily_sync",
+                "daily",
+                "completed",
+                datetime(2023, 1, 1, 10, 0),
+                datetime(2023, 1, 1, 10, 30),
+                1800,
+                {"success": 100},
+                None,
+            ),
+            (
+                2,
+                "daily_sync",
+                "daily",
+                "failed",
+                datetime(2023, 1, 1, 9, 0),
+                datetime(2023, 1, 1, 9, 5),
+                300,
+                None,
+                "数据源错误",
+            ),
         ]
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=mock_rows)):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=mock_rows)),
+        ):
 
             # Act
             response = await get_task_execution_history(task_id=task_id, limit=limit)
 
             # Assert
-            assert response['code'] == 200
-            assert len(response['data']) == 2
-            assert response['data'][0]['status'] == 'completed'
-            assert response['data'][1]['status'] == 'failed'
+            assert response["code"] == 200
+            assert len(response["data"]) == 2
+            assert response["data"][0]["status"] == "completed"
+            assert response["data"][1]["status"] == "failed"
 
     @pytest.mark.asyncio
     async def test_get_task_execution_history_empty(self):
@@ -348,15 +427,17 @@ class TestGetTaskExecutionHistory:
         # Arrange
         task_id = 1
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=[])):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=[])),
+        ):
 
             # Act
             response = await get_task_execution_history(task_id=task_id)
 
             # Assert
-            assert response['code'] == 200
-            assert len(response['data']) == 0
+            assert response["code"] == 200
+            assert len(response["data"]) == 0
 
 
 class TestGetRecentExecutionHistory:
@@ -369,28 +450,57 @@ class TestGetRecentExecutionHistory:
         limit = 50
 
         mock_rows = [
-            (1, 'daily_sync', 'daily', 'completed',
-             datetime(2023, 1, 2, 10, 0), datetime(2023, 1, 2, 10, 30),
-             1800, {'success': 100}, None, '0 0 * * *'),
-            (2, 'stock_list_sync', 'stock_list', 'completed',
-             datetime(2023, 1, 2, 8, 0), datetime(2023, 1, 2, 8, 5),
-             300, {'total': 5000}, None, '0 8 * * 1'),
-            (3, 'realtime_sync', 'realtime', 'failed',
-             datetime(2023, 1, 2, 15, 0), datetime(2023, 1, 2, 15, 2),
-             120, None, '网络超时', '*/5 * * * *')
+            (
+                1,
+                "daily_sync",
+                "daily",
+                "completed",
+                datetime(2023, 1, 2, 10, 0),
+                datetime(2023, 1, 2, 10, 30),
+                1800,
+                {"success": 100},
+                None,
+                "0 0 * * *",
+            ),
+            (
+                2,
+                "stock_list_sync",
+                "stock_list",
+                "completed",
+                datetime(2023, 1, 2, 8, 0),
+                datetime(2023, 1, 2, 8, 5),
+                300,
+                {"total": 5000},
+                None,
+                "0 8 * * 1",
+            ),
+            (
+                3,
+                "realtime_sync",
+                "realtime",
+                "failed",
+                datetime(2023, 1, 2, 15, 0),
+                datetime(2023, 1, 2, 15, 2),
+                120,
+                None,
+                "网络超时",
+                "*/5 * * * *",
+            ),
         ]
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=mock_rows)):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=mock_rows)),
+        ):
 
             # Act
             response = await get_recent_execution_history(limit=limit)
 
             # Assert
-            assert response['code'] == 200
-            assert len(response['data']) == 3
-            assert response['data'][0]['task_name'] == 'daily_sync'
-            assert response['data'][2]['status'] == 'failed'
+            assert response["code"] == 200
+            assert len(response["data"]) == 3
+            assert response["data"][0]["task_name"] == "daily_sync"
+            assert response["data"][2]["status"] == "failed"
 
     @pytest.mark.asyncio
     async def test_get_recent_execution_history_with_limit(self):
@@ -398,16 +508,30 @@ class TestGetRecentExecutionHistory:
         # Arrange
         limit = 10
 
-        mock_rows = [(i, f'task_{i}', 'daily', 'completed',
-                     datetime(2023, 1, 1, 10, 0), datetime(2023, 1, 1, 10, 30),
-                     1800, {}, None, '0 0 * * *') for i in range(10)]
+        mock_rows = [
+            (
+                i,
+                f"task_{i}",
+                "daily",
+                "completed",
+                datetime(2023, 1, 1, 10, 0),
+                datetime(2023, 1, 1, 10, 30),
+                1800,
+                {},
+                None,
+                "0 0 * * *",
+            )
+            for i in range(10)
+        ]
 
-        with patch('app.api.endpoints.scheduler.ConfigService'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=mock_rows)):
+        with (
+            patch("app.api.endpoints.scheduler.ConfigService"),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=mock_rows)),
+        ):
 
             # Act
             response = await get_recent_execution_history(limit=limit)
 
             # Assert
-            assert response['code'] == 200
-            assert len(response['data']) == 10
+            assert response["code"] == 200
+            assert len(response["data"]) == 10

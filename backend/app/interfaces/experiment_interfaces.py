@@ -3,7 +3,7 @@
 使用 Protocol 提供结构化类型约束
 """
 
-from typing import Protocol, Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional, Protocol
 
 
 class IBatchManager(Protocol):
@@ -17,9 +17,9 @@ class IBatchManager(Protocol):
         self,
         batch_name: str,
         param_space: Dict[str, Any],
-        strategy: str = 'grid',
+        strategy: str = "grid",
         max_experiments: Optional[int] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> int:
         """
         创建实验批次
@@ -40,11 +40,7 @@ class IBatchManager(Protocol):
         """获取批次详细信息"""
         ...
 
-    async def list_batches(
-        self,
-        limit: int = 100,
-        status: Optional[str] = None
-    ) -> List[Dict]:
+    async def list_batches(self, limit: int = 100, status: Optional[str] = None) -> List[Dict]:
         """列出批次"""
         ...
 
@@ -57,10 +53,7 @@ class IExperimentRunner(Protocol):
     """
 
     async def run_batch(
-        self,
-        batch_id: int,
-        max_workers: Optional[int] = None,
-        auto_backtest: bool = True
+        self, batch_id: int, max_workers: Optional[int] = None, auto_backtest: bool = True
     ) -> None:
         """
         运行批次实验
@@ -86,18 +79,15 @@ class IExperimentService(Protocol):
         self,
         batch_name: str,
         param_space: Dict[str, Any],
-        strategy: str = 'grid',
+        strategy: str = "grid",
         max_experiments: Optional[int] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> int:
         """创建实验批次"""
         ...
 
     async def run_batch(
-        self,
-        batch_id: int,
-        max_workers: Optional[int] = None,
-        auto_backtest: bool = True
+        self, batch_id: int, max_workers: Optional[int] = None, auto_backtest: bool = True
     ) -> None:
         """运行批次实验"""
         ...
@@ -106,21 +96,14 @@ class IExperimentService(Protocol):
         """获取批次详细信息"""
         ...
 
-    async def list_batches(
-        self,
-        limit: int = 100,
-        status: Optional[str] = None
-    ) -> List[Dict]:
+    async def list_batches(self, limit: int = 100, status: Optional[str] = None) -> List[Dict]:
         """列出批次"""
         ...
 
     # ==================== 实验查询接口 ====================
 
     async def get_batch_experiments(
-        self,
-        batch_id: int,
-        status: Optional[str] = None,
-        limit: int = 500
+        self, batch_id: int, status: Optional[str] = None, limit: int = 500
     ) -> List[Dict]:
         """获取批次下的实验列表"""
         ...
@@ -133,7 +116,7 @@ class IExperimentService(Protocol):
         max_drawdown: Optional[float] = None,
         min_annual_return: Optional[float] = None,
         min_win_rate: Optional[float] = None,
-        min_ic: Optional[float] = None
+        min_ic: Optional[float] = None,
     ) -> List[Dict]:
         """获取Top模型"""
         ...

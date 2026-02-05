@@ -17,11 +17,12 @@
 
 import asyncio
 import sys
-from typing import List, Dict, Optional, Any
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-import pandas as pd
+from typing import Any, Dict, List, Optional
+
 import numpy as np
+import pandas as pd
 
 # 添加 core 项目到 Python 路径
 core_path = Path(__file__).parent.parent.parent.parent / "core"
@@ -30,13 +31,9 @@ if str(core_path) not in sys.path:
 
 # 导入 Core 模块
 from src.backtest.backtest_engine import BacktestEngine
-from src.backtest.backtest_executor import BacktestExecutor
-from src.backtest.performance_analyzer import PerformanceAnalyzer
-from src.backtest.parallel_backtester import ParallelBacktester
 from src.backtest.cost_analyzer import TradingCostAnalyzer
-from src.backtest.slippage_models import FixedSlippageModel, VolumeBasedSlippageModel
-from src.strategies.base_strategy import BaseStrategy
-from src.exceptions import BacktestError
+from src.backtest.parallel_backtester import ParallelBacktester
+from src.backtest.performance_analyzer import PerformanceAnalyzer
 
 
 class BacktestAdapter:
@@ -62,7 +59,7 @@ class BacktestAdapter:
         stamp_tax_rate: float = 0.001,
         min_commission: float = 5.0,
         slippage: float = 0.0,
-        verbose: bool = True
+        verbose: bool = True,
     ):
         """
         初始化回测适配器
@@ -94,7 +91,7 @@ class BacktestAdapter:
             stamp_tax_rate=self.stamp_tax_rate,
             min_commission=self.min_commission,
             slippage=self.slippage,
-            verbose=self.verbose
+            verbose=self.verbose,
         )
 
     async def run_backtest(
@@ -103,7 +100,7 @@ class BacktestAdapter:
         strategy_params: Dict[str, Any],
         start_date: date,
         end_date: date,
-        data_loader: Optional[Any] = None
+        data_loader: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         异步运行回测
@@ -126,25 +123,23 @@ class BacktestAdapter:
         Raises:
             BacktestError: 回测执行错误
         """
+
         def _run():
             # 这里需要根据 strategy_params 构建策略实例
             # 简化实现，实际使用中需要策略工厂
-            strategy_type = strategy_params.get('type', 'ma_cross')
+            strategy_params.get("type", "ma_cross")
 
             return self.engine.run(
                 stock_codes=stock_codes,
                 strategy=None,  # 需要策略实例
                 start_date=start_date.strftime("%Y-%m-%d"),
-                end_date=end_date.strftime("%Y-%m-%d")
+                end_date=end_date.strftime("%Y-%m-%d"),
             )
 
         return await asyncio.to_thread(_run)
 
     async def calculate_metrics(
-        self,
-        portfolio_value: pd.Series,
-        positions: pd.DataFrame,
-        trades: pd.DataFrame
+        self, portfolio_value: pd.Series, positions: pd.DataFrame, trades: pd.DataFrame
     ) -> Dict[str, float]:
         """
         异步计算绩效指标
@@ -167,6 +162,7 @@ class BacktestAdapter:
         Raises:
             BacktestError: 指标计算错误
         """
+
         def _calculate():
             # PerformanceAnalyzer 接受 returns 或包含 daily_returns 的字典
             # 从 portfolio_value 计算 daily_returns
@@ -174,12 +170,14 @@ class BacktestAdapter:
                 daily_returns = portfolio_value.pct_change().dropna()
             else:
                 # 如果是DataFrame，尝试获取value列
-                daily_returns = portfolio_value['value'].pct_change().dropna() if 'value' in portfolio_value.columns else portfolio_value.iloc[:, 0].pct_change().dropna()
+                daily_returns = (
+                    portfolio_value["value"].pct_change().dropna()
+                    if "value" in portfolio_value.columns
+                    else portfolio_value.iloc[:, 0].pct_change().dropna()
+                )
 
             analyzer = PerformanceAnalyzer(
-                returns=daily_returns,
-                benchmark_returns=None,
-                risk_free_rate=0.03
+                returns=daily_returns, benchmark_returns=None, risk_free_rate=0.03
             )
             return analyzer.calculate_all_metrics()
 
@@ -191,7 +189,7 @@ class BacktestAdapter:
         strategy_params_list: List[Dict[str, Any]],
         start_date: date,
         end_date: date,
-        n_processes: int = 4
+        n_processes: int = 4,
     ) -> List[Dict[str, Any]]:
         """
         异步并行回测 (多策略/多参数)
@@ -209,12 +207,13 @@ class BacktestAdapter:
         Raises:
             BacktestError: 并行回测错误
         """
+
         def _run_parallel():
             parallel_backtester = ParallelBacktester(
                 n_processes=n_processes,
                 initial_capital=self.initial_capital,
                 commission_rate=self.commission_rate,
-                stamp_tax_rate=self.stamp_tax_rate
+                stamp_tax_rate=self.stamp_tax_rate,
             )
 
             results = []
@@ -223,7 +222,7 @@ class BacktestAdapter:
                     stock_codes=stock_codes,
                     strategy_params=params,
                     start_date=start_date.strftime("%Y-%m-%d"),
-                    end_date=end_date.strftime("%Y-%m-%d")
+                    end_date=end_date.strftime("%Y-%m-%d"),
                 )
                 results.append(result)
 
@@ -231,10 +230,7 @@ class BacktestAdapter:
 
         return await asyncio.to_thread(_run_parallel)
 
-    async def analyze_trading_costs(
-        self,
-        trades: pd.DataFrame
-    ) -> Dict[str, Any]:
+    async def analyze_trading_costs(self, trades: pd.DataFrame) -> Dict[str, Any]:
         """
         异步分析交易成本
 
@@ -252,6 +248,7 @@ class BacktestAdapter:
         Raises:
             BacktestError: 成本分析错误
         """
+
         def _analyze():
             cost_analyzer = TradingCostAnalyzer()
             # 添加交易记录
@@ -266,9 +263,7 @@ class BacktestAdapter:
         return await asyncio.to_thread(_analyze)
 
     async def calculate_risk_metrics(
-        self,
-        returns: pd.Series,
-        positions: pd.DataFrame
+        self, returns: pd.Series, positions: pd.DataFrame
     ) -> Dict[str, float]:
         """
         异步计算风险指标
@@ -288,6 +283,7 @@ class BacktestAdapter:
         Raises:
             BacktestError: 风险计算错误
         """
+
         def _calculate():
             # 波动率
             volatility = returns.std() * np.sqrt(252)
@@ -299,19 +295,16 @@ class BacktestAdapter:
             cvar_95 = returns[returns <= var_95].mean()
 
             return {
-                'volatility': volatility,
-                'annual_volatility': volatility,
-                'var_95': var_95,
-                'cvar_95': cvar_95,
-                'downside_volatility': returns[returns < 0].std() * np.sqrt(252)
+                "volatility": volatility,
+                "annual_volatility": volatility,
+                "var_95": var_95,
+                "cvar_95": cvar_95,
+                "downside_volatility": returns[returns < 0].std() * np.sqrt(252),
             }
 
         return await asyncio.to_thread(_calculate)
 
-    async def get_trade_statistics(
-        self,
-        trades: pd.DataFrame
-    ) -> Dict[str, Any]:
+    async def get_trade_statistics(self, trades: pd.DataFrame) -> Dict[str, Any]:
         """
         异步获取交易统计
 
@@ -331,45 +324,46 @@ class BacktestAdapter:
         Raises:
             BacktestError: 统计计算错误
         """
+
         def _calculate():
             if trades.empty:
                 return {
-                    'total_trades': 0,
-                    'winning_trades': 0,
-                    'losing_trades': 0,
-                    'win_rate': 0.0,
-                    'avg_profit': 0.0,
-                    'avg_loss': 0.0,
-                    'profit_factor': 0.0
+                    "total_trades": 0,
+                    "winning_trades": 0,
+                    "losing_trades": 0,
+                    "win_rate": 0.0,
+                    "avg_profit": 0.0,
+                    "avg_loss": 0.0,
+                    "profit_factor": 0.0,
                 }
 
             # 计算盈亏
-            trades['pnl'] = trades['sell_price'] - trades['buy_price']
-            winning_trades = trades[trades['pnl'] > 0]
-            losing_trades = trades[trades['pnl'] < 0]
+            trades["pnl"] = trades["sell_price"] - trades["buy_price"]
+            winning_trades = trades[trades["pnl"] > 0]
+            losing_trades = trades[trades["pnl"] < 0]
 
             total_trades = len(trades)
             n_winning = len(winning_trades)
             n_losing = len(losing_trades)
             win_rate = n_winning / total_trades if total_trades > 0 else 0.0
 
-            avg_profit = winning_trades['pnl'].mean() if n_winning > 0 else 0.0
-            avg_loss = losing_trades['pnl'].mean() if n_losing > 0 else 0.0
+            avg_profit = winning_trades["pnl"].mean() if n_winning > 0 else 0.0
+            avg_loss = losing_trades["pnl"].mean() if n_losing > 0 else 0.0
 
-            total_profit = winning_trades['pnl'].sum() if n_winning > 0 else 0.0
-            total_loss = abs(losing_trades['pnl'].sum()) if n_losing > 0 else 0.0
+            total_profit = winning_trades["pnl"].sum() if n_winning > 0 else 0.0
+            total_loss = abs(losing_trades["pnl"].sum()) if n_losing > 0 else 0.0
             profit_factor = total_profit / total_loss if total_loss > 0 else 0.0
 
             return {
-                'total_trades': total_trades,
-                'winning_trades': n_winning,
-                'losing_trades': n_losing,
-                'win_rate': win_rate,
-                'avg_profit': avg_profit,
-                'avg_loss': avg_loss,
-                'profit_factor': profit_factor,
-                'total_profit': total_profit,
-                'total_loss': total_loss
+                "total_trades": total_trades,
+                "winning_trades": n_winning,
+                "losing_trades": n_losing,
+                "win_rate": win_rate,
+                "avg_profit": avg_profit,
+                "avg_loss": avg_loss,
+                "profit_factor": profit_factor,
+                "total_profit": total_profit,
+                "total_loss": total_loss,
             }
 
         return await asyncio.to_thread(_calculate)
@@ -380,7 +374,7 @@ class BacktestAdapter:
         param_grid: Dict[str, List[Any]],
         start_date: date,
         end_date: date,
-        metric: str = 'sharpe_ratio'
+        metric: str = "sharpe_ratio",
     ) -> Dict[str, Any]:
         """
         异步优化策略参数
@@ -398,32 +392,30 @@ class BacktestAdapter:
         Raises:
             BacktestError: 优化错误
         """
+
         def _optimize():
             # 生成所有参数组合
             from itertools import product
+
             keys = param_grid.keys()
             values = param_grid.values()
             param_combinations = [dict(zip(keys, v)) for v in product(*values)]
 
             best_result = None
-            best_metric_value = float('-inf')
+            best_metric_value = float("-inf")
 
             for params in param_combinations:
                 result = self.engine.run(
                     stock_codes=stock_codes,
                     strategy_params=params,
                     start_date=start_date.strftime("%Y-%m-%d"),
-                    end_date=end_date.strftime("%Y-%m-%d")
+                    end_date=end_date.strftime("%Y-%m-%d"),
                 )
 
-                metric_value = result['metrics'].get(metric, float('-inf'))
+                metric_value = result["metrics"].get(metric, float("-inf"))
                 if metric_value > best_metric_value:
                     best_metric_value = metric_value
-                    best_result = {
-                        'params': params,
-                        'result': result,
-                        'metric_value': metric_value
-                    }
+                    best_result = {"params": params, "result": result, "metric_value": metric_value}
 
             return best_result
 

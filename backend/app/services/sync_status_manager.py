@@ -5,12 +5,12 @@
 
 import asyncio
 from typing import Dict, Optional
-from datetime import datetime
-from loguru import logger
 
+from loguru import logger
 from src.database.db_manager import DatabaseManager
+
+from app.core.exceptions import ConfigError, DatabaseError
 from app.repositories.config_repository import ConfigRepository
-from app.core.exceptions import DatabaseError, ConfigError
 
 
 class SyncStatusManager:
@@ -45,24 +45,21 @@ class SyncStatusManager:
         """
         try:
             keys = [
-                'sync_status',
-                'last_sync_date',
-                'sync_progress',
-                'sync_total',
-                'sync_completed'
+                "sync_status",
+                "last_sync_date",
+                "sync_progress",
+                "sync_total",
+                "sync_completed",
             ]
 
-            configs = await asyncio.to_thread(
-                self.config_repo.get_configs_by_keys,
-                keys
-            )
+            configs = await asyncio.to_thread(self.config_repo.get_configs_by_keys, keys)
 
             return {
-                'status': configs.get('sync_status') or 'idle',
-                'last_sync_date': configs.get('last_sync_date') or '',
-                'progress': int(configs.get('sync_progress') or 0),
-                'total': int(configs.get('sync_total') or 0),
-                'completed': int(configs.get('sync_completed') or 0)
+                "status": configs.get("sync_status") or "idle",
+                "last_sync_date": configs.get("last_sync_date") or "",
+                "progress": int(configs.get("sync_progress") or 0),
+                "total": int(configs.get("sync_total") or 0),
+                "completed": int(configs.get("sync_completed") or 0),
             }
 
         except DatabaseError:
@@ -71,9 +68,7 @@ class SyncStatusManager:
         except Exception as e:
             logger.error(f"获取同步状态失败: {e}")
             raise ConfigError(
-                "同步状态获取失败",
-                error_code="SYNC_STATUS_FETCH_FAILED",
-                reason=str(e)
+                "同步状态获取失败", error_code="SYNC_STATUS_FETCH_FAILED", reason=str(e)
             )
 
     async def update_sync_status(
@@ -82,7 +77,7 @@ class SyncStatusManager:
         last_sync_date: Optional[str] = None,
         progress: Optional[int] = None,
         total: Optional[int] = None,
-        completed: Optional[int] = None
+        completed: Optional[int] = None,
     ) -> Dict:
         """
         更新全局同步状态
@@ -101,25 +96,22 @@ class SyncStatusManager:
             updates = {}
 
             if status is not None:
-                updates['sync_status'] = status
+                updates["sync_status"] = status
 
             if last_sync_date is not None:
-                updates['last_sync_date'] = last_sync_date
+                updates["last_sync_date"] = last_sync_date
 
             if progress is not None:
-                updates['sync_progress'] = str(progress)
+                updates["sync_progress"] = str(progress)
 
             if total is not None:
-                updates['sync_total'] = str(total)
+                updates["sync_total"] = str(total)
 
             if completed is not None:
-                updates['sync_completed'] = str(completed)
+                updates["sync_completed"] = str(completed)
 
             if updates:
-                await asyncio.to_thread(
-                    self.config_repo.set_configs_batch,
-                    updates
-                )
+                await asyncio.to_thread(self.config_repo.set_configs_batch, updates)
 
             return await self.get_sync_status()
 
@@ -129,9 +121,7 @@ class SyncStatusManager:
         except Exception as e:
             logger.error(f"更新同步状态失败: {e}")
             raise ConfigError(
-                "同步状态更新失败",
-                error_code="SYNC_STATUS_UPDATE_FAILED",
-                reason=str(e)
+                "同步状态更新失败", error_code="SYNC_STATUS_UPDATE_FAILED", reason=str(e)
             )
 
     async def reset_sync_status(self) -> Dict:
@@ -141,12 +131,7 @@ class SyncStatusManager:
         Returns:
             Dict: 重置后的同步状态
         """
-        return await self.update_sync_status(
-            status='idle',
-            progress=0,
-            total=0,
-            completed=0
-        )
+        return await self.update_sync_status(status="idle", progress=0, total=0, completed=0)
 
     # ==================== 中止标志管理 ====================
 
@@ -159,9 +144,7 @@ class SyncStatusManager:
         """
         try:
             await asyncio.to_thread(
-                self.config_repo.set_config_value,
-                'sync_abort_flag',
-                'true' if abort else 'false'
+                self.config_repo.set_config_value, "sync_abort_flag", "true" if abort else "false"
             )
             logger.info(f"同步中止标志已设置为: {abort}")
 
@@ -174,7 +157,7 @@ class SyncStatusManager:
                 "同步中止标志设置失败",
                 error_code="SYNC_ABORT_FLAG_SET_FAILED",
                 abort=abort,
-                reason=str(e)
+                reason=str(e),
             )
 
     async def check_sync_abort_flag(self) -> bool:
@@ -185,11 +168,8 @@ class SyncStatusManager:
             bool: True表示应该中止，False表示继续
         """
         try:
-            flag = await asyncio.to_thread(
-                self.config_repo.get_config_value,
-                'sync_abort_flag'
-            )
-            return flag == 'true'
+            flag = await asyncio.to_thread(self.config_repo.get_config_value, "sync_abort_flag")
+            return flag == "true"
 
         except (DatabaseError, ConfigError) as e:
             # 配置读取失败，为安全起见返回False（不中止）
@@ -234,35 +214,31 @@ class SyncStatusManager:
                 LIMIT 1
             """
 
-            result = await asyncio.to_thread(
-                self.db._execute_query,
-                query,
-                (module,)
-            )
+            result = await asyncio.to_thread(self.db._execute_query, query, (module,))
 
             if result and len(result) > 0:
                 row = result[0]
                 return {
-                    'status': row[0] or 'idle',
-                    'total': row[1] or 0,
-                    'success': row[2] or 0,
-                    'failed': row[3] or 0,
-                    'progress': row[4] or 0,
-                    'error_message': row[5] or '',
-                    'started_at': row[6].strftime('%Y-%m-%d %H:%M:%S') if row[6] else '',
-                    'completed_at': row[7].strftime('%Y-%m-%d %H:%M:%S') if row[7] else ''
+                    "status": row[0] or "idle",
+                    "total": row[1] or 0,
+                    "success": row[2] or 0,
+                    "failed": row[3] or 0,
+                    "progress": row[4] or 0,
+                    "error_message": row[5] or "",
+                    "started_at": row[6].strftime("%Y-%m-%d %H:%M:%S") if row[6] else "",
+                    "completed_at": row[7].strftime("%Y-%m-%d %H:%M:%S") if row[7] else "",
                 }
             else:
                 # 没有记录，返回空闲状态
                 return {
-                    'status': 'idle',
-                    'total': 0,
-                    'success': 0,
-                    'failed': 0,
-                    'progress': 0,
-                    'error_message': '',
-                    'started_at': '',
-                    'completed_at': ''
+                    "status": "idle",
+                    "total": 0,
+                    "success": 0,
+                    "failed": 0,
+                    "progress": 0,
+                    "error_message": "",
+                    "started_at": "",
+                    "completed_at": "",
                 }
 
         except DatabaseError:
@@ -274,17 +250,12 @@ class SyncStatusManager:
                 f"模块同步状态查询失败: {module}",
                 error_code="MODULE_SYNC_STATUS_QUERY_FAILED",
                 module=module,
-                reason=str(e)
+                reason=str(e),
             )
 
     # ==================== 同步任务管理 ====================
 
-    async def create_sync_task(
-        self,
-        task_id: str,
-        module: str,
-        data_source: str
-    ) -> None:
+    async def create_sync_task(self, task_id: str, module: str, data_source: str) -> None:
         """
         创建同步任务记录
 
@@ -301,9 +272,7 @@ class SyncStatusManager:
             """
 
             await asyncio.to_thread(
-                self.db._execute_update,
-                query,
-                (task_id, 'manual', module, data_source, 'running')
+                self.db._execute_update, query, (task_id, "manual", module, data_source, "running")
             )
 
             logger.info(f"✓ 创建同步任务: {task_id} ({module})")
@@ -318,7 +287,7 @@ class SyncStatusManager:
                 error_code="SYNC_TASK_CREATE_FAILED",
                 task_id=task_id,
                 module=module,
-                reason=str(e)
+                reason=str(e),
             )
 
     async def update_sync_task(
@@ -329,7 +298,7 @@ class SyncStatusManager:
         success_count: Optional[int] = None,
         failed_count: Optional[int] = None,
         progress: Optional[int] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> None:
         """
         更新同步任务状态
@@ -373,9 +342,11 @@ class SyncStatusManager:
                 params.append(error_message)
 
             # 如果状态是完成或失败，设置完成时间和持续时间
-            if status in ['completed', 'failed']:
+            if status in ["completed", "failed"]:
                 updates.append("completed_at = CURRENT_TIMESTAMP")
-                updates.append("duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER")
+                updates.append(
+                    "duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER"
+                )
 
             if not updates:
                 return
@@ -387,11 +358,7 @@ class SyncStatusManager:
             """
             params.append(task_id)
 
-            await asyncio.to_thread(
-                self.db._execute_update,
-                query,
-                tuple(params)
-            )
+            await asyncio.to_thread(self.db._execute_update, query, tuple(params))
 
         except DatabaseError:
             # 数据库错误向上传播
@@ -402,7 +369,7 @@ class SyncStatusManager:
                 "同步任务更新失败",
                 error_code="SYNC_TASK_UPDATE_FAILED",
                 task_id=task_id,
-                reason=str(e)
+                reason=str(e),
             )
 
     async def get_sync_task(self, task_id: str) -> Optional[Dict]:
@@ -425,30 +392,26 @@ class SyncStatusManager:
                 WHERE task_id = %s
             """
 
-            result = await asyncio.to_thread(
-                self.db._execute_query,
-                query,
-                (task_id,)
-            )
+            result = await asyncio.to_thread(self.db._execute_query, query, (task_id,))
 
             if not result:
                 return None
 
             row = result[0]
             return {
-                'task_id': row[0],
-                'task_type': row[1],
-                'data_type': row[2],
-                'data_source': row[3],
-                'status': row[4],
-                'total_count': row[5],
-                'success_count': row[6],
-                'failed_count': row[7],
-                'progress': row[8],
-                'error_message': row[9],
-                'started_at': row[10].isoformat() if row[10] else None,
-                'completed_at': row[11].isoformat() if row[11] else None,
-                'duration_seconds': row[12]
+                "task_id": row[0],
+                "task_type": row[1],
+                "data_type": row[2],
+                "data_source": row[3],
+                "status": row[4],
+                "total_count": row[5],
+                "success_count": row[6],
+                "failed_count": row[7],
+                "progress": row[8],
+                "error_message": row[9],
+                "started_at": row[10].isoformat() if row[10] else None,
+                "completed_at": row[11].isoformat() if row[11] else None,
+                "duration_seconds": row[12],
             }
 
         except DatabaseError:
@@ -460,5 +423,5 @@ class SyncStatusManager:
                 "同步任务查询失败",
                 error_code="SYNC_TASK_QUERY_FAILED",
                 task_id=task_id,
-                reason=str(e)
+                reason=str(e),
             )

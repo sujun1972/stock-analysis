@@ -11,17 +11,16 @@
 版本: 2.0.0 (架构修正版)
 """
 
-from fastapi import APIRouter, Query
-from typing import Optional, List
 from datetime import datetime
-from loguru import logger
-import pandas as pd
-import numpy as np
+from typing import List, Optional
 
-from app.core_adapters.feature_adapter import FeatureAdapter
+import numpy as np
+import pandas as pd
+from fastapi import APIRouter
+
 from app.core_adapters.data_adapter import DataAdapter
+from app.core_adapters.feature_adapter import FeatureAdapter
 from app.models.api_response import ApiResponse
-from app.core.exceptions import DataNotFoundError, CalculationError, ValidationError
 
 router = APIRouter()
 
@@ -36,7 +35,7 @@ async def get_features(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     feature_type: Optional[str] = None,
-    limit: int = 500
+    limit: int = 500,
 ):
     """
     获取股票特征数据（支持懒加载）
@@ -75,21 +74,13 @@ async def get_features(
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
     except ValueError as e:
-        return ApiResponse.bad_request(
-            message=f"日期格式错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"日期格式错误: {str(e)}").to_dict()
 
     # 2. 调用 Core Adapter 获取日线数据
-    df = await data_adapter.get_daily_data(
-        code=code,
-        start_date=start_dt,
-        end_date=end_dt
-    )
+    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
 
     if df.empty:
-        return ApiResponse.not_found(
-            message=f"股票 {code} 无日线数据"
-        ).to_dict()
+        return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()
 
     # 3. 调用 Core Adapter 计算特征
     if feature_type == "technical":
@@ -107,8 +98,8 @@ async def get_features(
     df_reset = df_reset.replace([np.inf, -np.inf], np.nan)
 
     # 按日期降序排列（从新到旧）
-    if 'date' in df_reset.columns:
-        df_reset = df_reset.sort_values('date', ascending=False)
+    if "date" in df_reset.columns:
+        df_reset = df_reset.sort_values("date", ascending=False)
 
     # 获取总数
     total_count = len(df_reset)
@@ -119,7 +110,7 @@ async def get_features(
     # 转换为字典列表，将 NaN 转为 None
     data_list = [
         {k: (None if pd.isna(v) else v) for k, v in record.items()}
-        for record in df_limited.to_dict('records')
+        for record in df_limited.to_dict("records")
     ]
 
     # 5. Backend 职责：响应格式化
@@ -131,9 +122,9 @@ async def get_features(
             "returned": len(data_list),
             "has_more": total_count > limit,
             "columns": list(df_with_features.columns),
-            "data": data_list
+            "data": data_list,
         },
-        message="获取特征数据成功"
+        message="获取特征数据成功",
     ).to_dict()
 
 
@@ -143,7 +134,7 @@ async def calculate_features(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     feature_types: List[str] = ["technical", "alpha"],
-    include_transforms: bool = False
+    include_transforms: bool = False,
 ):
     """
     计算股票特征（支持批量计算）
@@ -176,28 +167,20 @@ async def calculate_features(
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
     except ValueError as e:
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     # 2. 调用 Core Adapter 获取日线数据
-    df = await data_adapter.get_daily_data(
-        code=code,
-        start_date=start_dt,
-        end_date=end_dt
-    )
+    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
 
     if df.empty:
-        return ApiResponse.not_found(
-            message=f"股票 {code} 无日线数据"
-        ).to_dict()
+        return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()
 
     # 3. 调用 Core Adapter 计算特征
     df_with_features = await feature_adapter.add_all_features(
         df,
         include_indicators="technical" in feature_types,
         include_factors="alpha" in feature_types,
-        include_transforms=include_transforms
+        include_transforms=include_transforms,
     )
 
     # 4. 准备响应数据
@@ -207,7 +190,7 @@ async def calculate_features(
     # 取前 10 条作为样本
     sample_data = [
         {k: (None if pd.isna(v) else v) for k, v in record.items()}
-        for record in df_reset.head(10).to_dict('records')
+        for record in df_reset.head(10).to_dict("records")
     ]
 
     # 5. Backend 职责：响应格式化
@@ -219,9 +202,9 @@ async def calculate_features(
             "feature_types": feature_types,
             "include_transforms": include_transforms,
             "columns": list(df_with_features.columns),
-            "sample_data": sample_data
+            "sample_data": sample_data,
         },
-        message="特征计算成功"
+        message="特征计算成功",
     ).to_dict()
 
 
@@ -255,15 +238,11 @@ async def get_feature_names():
     total_count = {
         "technical_indicators": len(feature_names.get("technical_indicators", [])),
         "alpha_factors": len(feature_names.get("alpha_factors", [])),
-        "transforms": len(feature_names.get("transforms", []))
+        "transforms": len(feature_names.get("transforms", [])),
     }
 
     return ApiResponse.success(
-        data={
-            **feature_names,
-            "total_count": total_count
-        },
-        message="获取特征名称成功"
+        data={**feature_names, "total_count": total_count}, message="获取特征名称成功"
     ).to_dict()
 
 
@@ -274,7 +253,7 @@ async def select_features(
     end_date: Optional[str] = None,
     target_column: str = "close",
     n_features: int = 50,
-    method: str = "correlation"
+    method: str = "correlation",
 ):
     """
     特征选择（基于重要性）
@@ -307,35 +286,26 @@ async def select_features(
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
     except ValueError as e:
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     # 2. 调用 Core Adapter 获取日线数据
-    df = await data_adapter.get_daily_data(
-        code=code,
-        start_date=start_dt,
-        end_date=end_dt
-    )
+    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
 
     if df.empty:
-        return ApiResponse.not_found(
-            message=f"股票 {code} 无日线数据"
-        ).to_dict()
+        return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()
 
     # 3. 计算所有特征
     df_with_features = await feature_adapter.add_all_features(df)
 
     # 4. 准备特征矩阵和目标变量
     if target_column not in df_with_features.columns:
-        return ApiResponse.bad_request(
-            message=f"目标列 '{target_column}' 不存在"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"目标列 '{target_column}' 不存在").to_dict()
 
     # 移除非数值列和目标列
     feature_columns = [
-        col for col in df_with_features.columns
-        if col != target_column and df_with_features[col].dtype in ['float64', 'int64']
+        col
+        for col in df_with_features.columns
+        if col != target_column and df_with_features[col].dtype in ["float64", "int64"]
     ]
 
     X = df_with_features[feature_columns].fillna(0)
@@ -343,17 +313,12 @@ async def select_features(
 
     # 5. 调用 Core Adapter 进行特征选择
     selected_features = await feature_adapter.select_features(
-        X=X,
-        y=y,
-        n_features=n_features,
-        method=method
+        X=X, y=y, n_features=n_features, method=method
     )
 
     # 6. 计算重要性分数
     importance = await feature_adapter.calculate_feature_importance(
-        X=X[selected_features],
-        y=y,
-        method=method
+        X=X[selected_features], y=y, method=method
     )
 
     importance_scores = importance.to_dict()
@@ -366,7 +331,7 @@ async def select_features(
             "n_features": len(selected_features),
             "total_features": len(feature_columns),
             "selected_features": selected_features,
-            "importance_scores": importance_scores
+            "importance_scores": importance_scores,
         },
-        message="特征选择成功"
+        message="特征选择成功",
     ).to_dict()

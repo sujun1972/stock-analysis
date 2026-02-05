@@ -6,28 +6,28 @@
 import pytest
 
 from app.core.exceptions import (
+    APIRateLimitError,
+    APITimeoutError,
     BackendError,
-    DataQueryError,
-    DataNotFoundError,
-    InsufficientDataError,
-    ValidationError,
-    StrategyExecutionError,
-    SignalGenerationError,
     BacktestError,
     BacktestExecutionError,
     CalculationError,
-    FeatureCalculationError,
-    DatabaseError,
-    DatabaseConnectionError,
-    QueryError,
-    ExternalAPIError,
-    APIRateLimitError,
-    APITimeoutError,
     ConfigError,
     ConfigValidationError,
+    DatabaseConnectionError,
+    DatabaseError,
+    DataNotFoundError,
+    DataQueryError,
     DataSyncError,
-    SyncTaskError,
+    ExternalAPIError,
+    FeatureCalculationError,
+    InsufficientDataError,
     PermissionError,
+    QueryError,
+    SignalGenerationError,
+    StrategyExecutionError,
+    SyncTaskError,
+    ValidationError,
     get_exception_class,
 )
 
@@ -50,22 +50,13 @@ class TestBackendError:
 
     def test_exception_with_context(self):
         """测试带上下文的异常"""
-        exc = BackendError(
-            "测试错误",
-            error_code="TEST_ERROR",
-            user_id=123,
-            operation="test"
-        )
+        exc = BackendError("测试错误", error_code="TEST_ERROR", user_id=123, operation="test")
         assert exc.context["user_id"] == 123
         assert exc.context["operation"] == "test"
 
     def test_to_dict(self):
         """测试 to_dict 方法"""
-        exc = BackendError(
-            "测试错误",
-            error_code="TEST_ERROR",
-            user_id=123
-        )
+        exc = BackendError("测试错误", error_code="TEST_ERROR", user_id=123)
         result = exc.to_dict()
         assert result["message"] == "测试错误"
         assert result["error_code"] == "TEST_ERROR"
@@ -73,11 +64,7 @@ class TestBackendError:
 
     def test_str_representation(self):
         """测试字符串表示"""
-        exc = BackendError(
-            "测试错误",
-            error_code="TEST_ERROR",
-            stock_code="000001"
-        )
+        exc = BackendError("测试错误", error_code="TEST_ERROR", stock_code="000001")
         result = str(exc)
         assert "[TEST_ERROR]" in result
         assert "测试错误" in result
@@ -120,31 +107,20 @@ class TestDataExceptions:
 
     def test_data_query_error(self):
         """测试 DataQueryError"""
-        exc = DataQueryError(
-            "查询失败",
-            stock_code="000001",
-            table="stock_daily"
-        )
+        exc = DataQueryError("查询失败", stock_code="000001", table="stock_daily")
         assert exc.message == "查询失败"
         assert exc.context["stock_code"] == "000001"
         assert exc.context["table"] == "stock_daily"
 
     def test_data_not_found_error(self):
         """测试 DataNotFoundError"""
-        exc = DataNotFoundError(
-            "股票不存在",
-            stock_code="999999"
-        )
+        exc = DataNotFoundError("股票不存在", stock_code="999999")
         assert exc.message == "股票不存在"
         assert exc.context["stock_code"] == "999999"
 
     def test_insufficient_data_error(self):
         """测试 InsufficientDataError"""
-        exc = InsufficientDataError(
-            "数据不足",
-            required_points=20,
-            actual_points=10
-        )
+        exc = InsufficientDataError("数据不足", required_points=20, actual_points=10)
         assert exc.context["required_points"] == 20
         assert exc.context["actual_points"] == 10
 
@@ -154,12 +130,7 @@ class TestValidationError:
 
     def test_validation_error(self):
         """测试 ValidationError"""
-        exc = ValidationError(
-            "参数错误",
-            field="stock_code",
-            expected="6位数字",
-            actual="ABC"
-        )
+        exc = ValidationError("参数错误", field="stock_code", expected="6位数字", actual="ABC")
         assert exc.context["field"] == "stock_code"
         assert exc.context["expected"] == "6位数字"
 
@@ -169,19 +140,12 @@ class TestStrategyExceptions:
 
     def test_strategy_execution_error(self):
         """测试 StrategyExecutionError"""
-        exc = StrategyExecutionError(
-            "策略执行失败",
-            strategy_name="动量策略",
-            reason="数据不足"
-        )
+        exc = StrategyExecutionError("策略执行失败", strategy_name="动量策略", reason="数据不足")
         assert exc.context["strategy_name"] == "动量策略"
 
     def test_signal_generation_error(self):
         """测试 SignalGenerationError"""
-        exc = SignalGenerationError(
-            "信号生成失败",
-            signal_type="buy"
-        )
+        exc = SignalGenerationError("信号生成失败", signal_type="buy")
         assert exc.context["signal_type"] == "buy"
 
 
@@ -190,18 +154,12 @@ class TestBacktestExceptions:
 
     def test_backtest_error(self):
         """测试 BacktestError"""
-        exc = BacktestError(
-            "回测失败",
-            strategy="动量策略"
-        )
+        exc = BacktestError("回测失败", strategy="动量策略")
         assert exc.context["strategy"] == "动量策略"
 
     def test_backtest_execution_error(self):
         """测试 BacktestExecutionError"""
-        exc = BacktestExecutionError(
-            "回测引擎失败",
-            error_message="内存不足"
-        )
+        exc = BacktestExecutionError("回测引擎失败", error_message="内存不足")
         assert exc.context["error_message"] == "内存不足"
 
 
@@ -210,18 +168,12 @@ class TestCalculationExceptions:
 
     def test_calculation_error(self):
         """测试 CalculationError"""
-        exc = CalculationError(
-            "计算失败",
-            indicator="sharpe_ratio"
-        )
+        exc = CalculationError("计算失败", indicator="sharpe_ratio")
         assert exc.context["indicator"] == "sharpe_ratio"
 
     def test_feature_calculation_error(self):
         """测试 FeatureCalculationError"""
-        exc = FeatureCalculationError(
-            "特征计算失败",
-            feature_name="MA_20"
-        )
+        exc = FeatureCalculationError("特征计算失败", feature_name="MA_20")
         assert exc.context["feature_name"] == "MA_20"
 
 
@@ -230,30 +182,18 @@ class TestDatabaseExceptions:
 
     def test_database_error(self):
         """测试 DatabaseError"""
-        exc = DatabaseError(
-            "数据库错误",
-            operation="insert",
-            table="stock_daily"
-        )
+        exc = DatabaseError("数据库错误", operation="insert", table="stock_daily")
         assert exc.context["operation"] == "insert"
 
     def test_database_connection_error(self):
         """测试 DatabaseConnectionError"""
-        exc = DatabaseConnectionError(
-            "连接失败",
-            host="localhost",
-            port=5432
-        )
+        exc = DatabaseConnectionError("连接失败", host="localhost", port=5432)
         assert exc.context["host"] == "localhost"
         assert exc.context["port"] == 5432
 
     def test_query_error(self):
         """测试 QueryError"""
-        exc = QueryError(
-            "SQL错误",
-            table="stock_daily",
-            error_message="语法错误"
-        )
+        exc = QueryError("SQL错误", table="stock_daily", error_message="语法错误")
         assert exc.context["table"] == "stock_daily"
 
 
@@ -262,37 +202,23 @@ class TestExternalAPIExceptions:
 
     def test_external_api_error(self):
         """测试 ExternalAPIError"""
-        exc = ExternalAPIError(
-            "API失败",
-            api_name="akshare",
-            endpoint="/stock/hist"
-        )
+        exc = ExternalAPIError("API失败", api_name="akshare", endpoint="/stock/hist")
         assert exc.context["api_name"] == "akshare"
 
     def test_api_rate_limit_error(self):
         """测试 APIRateLimitError"""
-        exc = APIRateLimitError(
-            "频率限制",
-            retry_after=60
-        )
+        exc = APIRateLimitError("频率限制", retry_after=60)
         assert exc.retry_after == 60
         assert exc.context["retry_after"] == 60
 
     def test_api_rate_limit_custom_retry(self):
         """测试 APIRateLimitError 自定义重试时间"""
-        exc = APIRateLimitError(
-            "频率限制",
-            retry_after=120,
-            api_name="test"
-        )
+        exc = APIRateLimitError("频率限制", retry_after=120, api_name="test")
         assert exc.retry_after == 120
 
     def test_api_timeout_error(self):
         """测试 APITimeoutError"""
-        exc = APITimeoutError(
-            "请求超时",
-            timeout=30
-        )
+        exc = APITimeoutError("请求超时", timeout=30)
         assert exc.context["timeout"] == 30
 
 
@@ -301,20 +227,12 @@ class TestConfigExceptions:
 
     def test_config_error(self):
         """测试 ConfigError"""
-        exc = ConfigError(
-            "配置错误",
-            config_file="config.yaml"
-        )
+        exc = ConfigError("配置错误", config_file="config.yaml")
         assert exc.context["config_file"] == "config.yaml"
 
     def test_config_validation_error(self):
         """测试 ConfigValidationError"""
-        exc = ConfigValidationError(
-            "配置验证失败",
-            field="port",
-            expected="1-65535",
-            actual=0
-        )
+        exc = ConfigValidationError("配置验证失败", field="port", expected="1-65535", actual=0)
         assert exc.context["field"] == "port"
 
 
@@ -323,20 +241,13 @@ class TestSyncExceptions:
 
     def test_data_sync_error(self):
         """测试 DataSyncError"""
-        exc = DataSyncError(
-            "同步失败",
-            stock_code="000001",
-            sync_type="daily"
-        )
+        exc = DataSyncError("同步失败", stock_code="000001", sync_type="daily")
         assert exc.context["stock_code"] == "000001"
         assert exc.context["sync_type"] == "daily"
 
     def test_sync_task_error(self):
         """测试 SyncTaskError"""
-        exc = SyncTaskError(
-            "任务失败",
-            task_name="daily_sync"
-        )
+        exc = SyncTaskError("任务失败", task_name="daily_sync")
         assert exc.context["task_name"] == "daily_sync"
 
 
@@ -345,11 +256,7 @@ class TestPermissionError:
 
     def test_permission_error(self):
         """测试 PermissionError"""
-        exc = PermissionError(
-            "权限不足",
-            user_id=123,
-            required_role="admin"
-        )
+        exc = PermissionError("权限不足", user_id=123, required_role="admin")
         assert exc.context["user_id"] == 123
         assert exc.context["required_role"] == "admin"
 

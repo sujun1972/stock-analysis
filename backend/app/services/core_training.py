@@ -7,18 +7,19 @@
 import asyncio
 import pickle
 import time
-from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 import pandas as pd
 from loguru import logger
 
 # 导入 core 模块（已通过 setup.py 安装为可导入包）
-from src.data_pipeline import DataPipeline, get_full_training_data
+from src.data_pipeline import get_full_training_data
 from src.models.model_trainer import ModelTrainer
-from app.utils.ic_validator import ICValidator
+
 from app.core.exceptions import BackendError, CalculationError, DataQueryError
+from app.utils.ic_validator import ICValidator
 
 
 class CoreTrainingService:
@@ -33,7 +34,7 @@ class CoreTrainingService:
     5. 元数据保存
     """
 
-    def __init__(self, models_dir: str = '/data/models/ml_models'):
+    def __init__(self, models_dir: str = "/data/models/ml_models"):
         self.models_dir = Path(models_dir)
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.ic_validator = ICValidator()
@@ -44,8 +45,8 @@ class CoreTrainingService:
         model_id: Optional[str] = None,
         save_features: bool = True,
         save_training_history: bool = True,
-        evaluate_on: str = 'test',  # 'train', 'valid', 'test'
-        use_async: bool = True  # 是否使用异步训练
+        evaluate_on: str = "test",  # 'train', 'valid', 'test'
+        use_async: bool = True,  # 是否使用异步训练
     ) -> Dict[str, Any]:
         """
         统一的训练流程
@@ -106,36 +107,38 @@ class CoreTrainingService:
             if use_async:
                 result = await asyncio.to_thread(
                     get_full_training_data,
-                    symbol=config['symbol'],
-                    start_date=config['start_date'],
-                    end_date=config['end_date'],
-                    target_period=config.get('target_period', 5),
-                    train_ratio=config.get('train_ratio', 0.7),
-                    valid_ratio=config.get('valid_ratio', 0.15),
-                    scale_features=config.get('scale_features', True),
-                    balance_samples=config.get('balance_samples', False),
-                    scaler_type=config.get('scaler_type', 'robust')
+                    symbol=config["symbol"],
+                    start_date=config["start_date"],
+                    end_date=config["end_date"],
+                    target_period=config.get("target_period", 5),
+                    train_ratio=config.get("train_ratio", 0.7),
+                    valid_ratio=config.get("valid_ratio", 0.15),
+                    scale_features=config.get("scale_features", True),
+                    balance_samples=config.get("balance_samples", False),
+                    scaler_type=config.get("scaler_type", "robust"),
                 )
             else:
                 result = get_full_training_data(
-                    symbol=config['symbol'],
-                    start_date=config['start_date'],
-                    end_date=config['end_date'],
-                    target_period=config.get('target_period', 5),
-                    train_ratio=config.get('train_ratio', 0.7),
-                    valid_ratio=config.get('valid_ratio', 0.15),
-                    scale_features=config.get('scale_features', True),
-                    balance_samples=config.get('balance_samples', False),
-                    scaler_type=config.get('scaler_type', 'robust')
+                    symbol=config["symbol"],
+                    start_date=config["start_date"],
+                    end_date=config["end_date"],
+                    target_period=config.get("target_period", 5),
+                    train_ratio=config.get("train_ratio", 0.7),
+                    valid_ratio=config.get("valid_ratio", 0.15),
+                    scale_features=config.get("scale_features", True),
+                    balance_samples=config.get("balance_samples", False),
+                    scaler_type=config.get("scaler_type", "robust"),
                 )
 
             X_train, y_train, X_valid, y_valid, X_test, y_test, pipeline = result
 
-            logger.info(f"[CoreTraining] 数据准备完成: train={len(X_train)}, valid={len(X_valid)}, test={len(X_test)}")
+            logger.info(
+                f"[CoreTraining] 数据准备完成: train={len(X_train)}, valid={len(X_valid)}, test={len(X_test)}"
+            )
 
             # 特征选择（如果指定）
-            if config.get('selected_features'):
-                selected = config['selected_features']
+            if config.get("selected_features"):
+                selected = config["selected_features"]
                 X_train = X_train[selected]
                 X_valid = X_valid[selected]
                 X_test = X_test[selected]
@@ -143,9 +146,9 @@ class CoreTrainingService:
 
             # ======== 步骤2: 创建训练器 ========
             trainer = ModelTrainer(
-                model_type=config['model_type'],
-                model_params=config.get('model_params', {}),
-                output_dir=str(self.models_dir)
+                model_type=config["model_type"],
+                model_params=config.get("model_params", {}),
+                output_dir=str(self.models_dir),
             )
 
             # ======== 步骤3: 训练模型 ========
@@ -153,41 +156,39 @@ class CoreTrainingService:
 
             if use_async:
                 # 异步训练（手动训练服务）
-                if config['model_type'] == 'lightgbm':
+                if config["model_type"] == "lightgbm":
                     await asyncio.to_thread(
                         trainer.train,
-                        X_train, y_train,
-                        X_valid, y_valid,
-                        early_stopping_rounds=config.get('early_stopping_rounds', 50),
-                        verbose_eval=50
+                        X_train,
+                        y_train,
+                        X_valid,
+                        y_valid,
+                        early_stopping_rounds=config.get("early_stopping_rounds", 50),
+                        verbose_eval=50,
                     )
-                elif config['model_type'] == 'gru':
+                elif config["model_type"] == "gru":
                     await asyncio.to_thread(
                         trainer.train,
-                        X_train, y_train,
-                        X_valid, y_valid,
-                        seq_length=config.get('seq_length', 20),
-                        batch_size=config.get('batch_size', 64),
-                        epochs=config.get('epochs', 100),
-                        early_stopping_patience=10
+                        X_train,
+                        y_train,
+                        X_valid,
+                        y_valid,
+                        seq_length=config.get("seq_length", 20),
+                        batch_size=config.get("batch_size", 64),
+                        epochs=config.get("epochs", 100),
+                        early_stopping_patience=10,
                     )
                 else:
                     raise ValueError(f"不支持的模型类型: {config['model_type']}")
             else:
                 # 同步训练（自动实验服务）
-                if config['model_type'] == 'lightgbm':
+                if config["model_type"] == "lightgbm":
                     trainer.train_lightgbm(
-                        X_train=X_train,
-                        y_train=y_train,
-                        X_valid=X_valid,
-                        y_valid=y_valid
+                        X_train=X_train, y_train=y_train, X_valid=X_valid, y_valid=y_valid
                     )
-                elif config['model_type'] == 'gru':
+                elif config["model_type"] == "gru":
                     trainer.train_gru(
-                        X_train=X_train,
-                        y_train=y_train,
-                        X_valid=X_valid,
-                        y_valid=y_valid
+                        X_train=X_train, y_train=y_train, X_valid=X_valid, y_valid=y_valid
                     )
                 else:
                     raise ValueError(f"不支持的模型类型: {config['model_type']}")
@@ -198,36 +199,46 @@ class CoreTrainingService:
             # 在所有三个数据集上评估
             if use_async:
                 train_metrics = await asyncio.to_thread(
-                    trainer.evaluate, X_train, y_train, dataset_name='train', verbose=False
+                    trainer.evaluate, X_train, y_train, dataset_name="train", verbose=False
                 )
                 valid_metrics = await asyncio.to_thread(
-                    trainer.evaluate, X_valid, y_valid, dataset_name='valid', verbose=False
+                    trainer.evaluate, X_valid, y_valid, dataset_name="valid", verbose=False
                 )
                 test_metrics = await asyncio.to_thread(
-                    trainer.evaluate, X_test, y_test, dataset_name='test', verbose=False
+                    trainer.evaluate, X_test, y_test, dataset_name="test", verbose=False
                 )
             else:
-                train_metrics = trainer.evaluate(X_train, y_train, dataset_name='train', verbose=False)
-                valid_metrics = trainer.evaluate(X_valid, y_valid, dataset_name='valid', verbose=False)
-                test_metrics = trainer.evaluate(X_test, y_test, dataset_name='test', verbose=False)
+                train_metrics = trainer.evaluate(
+                    X_train, y_train, dataset_name="train", verbose=False
+                )
+                valid_metrics = trainer.evaluate(
+                    X_valid, y_valid, dataset_name="valid", verbose=False
+                )
+                test_metrics = trainer.evaluate(X_test, y_test, dataset_name="test", verbose=False)
 
             # 输出评估结果摘要
             logger.info(f"\n{'='*80}")
             logger.info(f"📊 模型评估结果")
             logger.info(f"{'='*80}")
-            logger.info(f"Train  - IC: {train_metrics.get('ic', 0):>7.4f}, Rank IC: {train_metrics.get('rank_ic', 0):>7.4f}, R²: {train_metrics.get('r2', 0):>7.4f}")
-            logger.info(f"Valid  - IC: {valid_metrics.get('ic', 0):>7.4f}, Rank IC: {valid_metrics.get('rank_ic', 0):>7.4f}, R²: {valid_metrics.get('r2', 0):>7.4f}")
-            logger.info(f"Test   - IC: {test_metrics.get('ic', 0):>7.4f}, Rank IC: {test_metrics.get('rank_ic', 0):>7.4f}, R²: {test_metrics.get('r2', 0):>7.4f}")
+            logger.info(
+                f"Train  - IC: {train_metrics.get('ic', 0):>7.4f}, Rank IC: {train_metrics.get('rank_ic', 0):>7.4f}, R²: {train_metrics.get('r2', 0):>7.4f}"
+            )
+            logger.info(
+                f"Valid  - IC: {valid_metrics.get('ic', 0):>7.4f}, Rank IC: {valid_metrics.get('rank_ic', 0):>7.4f}, R²: {valid_metrics.get('r2', 0):>7.4f}"
+            )
+            logger.info(
+                f"Test   - IC: {test_metrics.get('ic', 0):>7.4f}, Rank IC: {test_metrics.get('rank_ic', 0):>7.4f}, R²: {test_metrics.get('r2', 0):>7.4f}"
+            )
 
             # IC异常检测 - 防止数据泄露模型进入生产环境
             is_valid, alerts = self.ic_validator.validate_all(
-                train_ic=train_metrics.get('ic', 0),
-                valid_ic=valid_metrics.get('ic', 0),
-                test_ic=test_metrics.get('ic', 0),
-                train_r2=train_metrics.get('r2'),
-                test_r2=test_metrics.get('r2'),
+                train_ic=train_metrics.get("ic", 0),
+                valid_ic=valid_metrics.get("ic", 0),
+                test_ic=test_metrics.get("ic", 0),
+                train_r2=train_metrics.get("r2"),
+                test_r2=test_metrics.get("r2"),
                 model_id=model_id,
-                symbol=config.get('symbol')
+                symbol=config.get("symbol"),
             )
 
             # 打印告警信息
@@ -242,20 +253,20 @@ class CoreTrainingService:
             metrics = test_metrics.copy()
 
             # 添加分层指标到结果中
-            metrics['train_ic'] = train_metrics.get('ic', 0)
-            metrics['train_rank_ic'] = train_metrics.get('rank_ic', 0)
-            metrics['train_r2'] = train_metrics.get('r2', 0)
-            metrics['valid_ic'] = valid_metrics.get('ic', 0)
-            metrics['valid_rank_ic'] = valid_metrics.get('rank_ic', 0)
-            metrics['valid_r2'] = valid_metrics.get('r2', 0)
+            metrics["train_ic"] = train_metrics.get("ic", 0)
+            metrics["train_rank_ic"] = train_metrics.get("rank_ic", 0)
+            metrics["train_r2"] = train_metrics.get("r2", 0)
+            metrics["valid_ic"] = valid_metrics.get("ic", 0)
+            metrics["valid_rank_ic"] = valid_metrics.get("rank_ic", 0)
+            metrics["valid_r2"] = valid_metrics.get("r2", 0)
 
             # 添加IC验证状态
             if not is_valid:
-                metrics['validation_failed'] = True
-                metrics['validation_summary'] = validation_summary
+                metrics["validation_failed"] = True
+                metrics["validation_summary"] = validation_summary
                 logger.warning(f"⚠️  模型IC验证失败: {model_id}")
             else:
-                metrics['validation_failed'] = False
+                metrics["validation_failed"] = False
 
             # ======== 步骤5: 生成模型ID ========
             if model_id is None:
@@ -265,26 +276,19 @@ class CoreTrainingService:
             logger.info(f"[CoreTraining] 保存模型: {model_id}")
 
             if use_async:
-                await asyncio.to_thread(
-                    trainer.save_model,
-                    model_id,
-                    save_metrics=True
-                )
+                await asyncio.to_thread(trainer.save_model, model_id, save_metrics=True)
             else:
-                trainer.save_model(
-                    model_name=model_id,
-                    save_metrics=True
-                )
+                trainer.save_model(model_name=model_id, save_metrics=True)
 
             # 确定模型文件路径
-            if config['model_type'] == 'lightgbm':
+            if config["model_type"] == "lightgbm":
                 model_path = self.models_dir / f"{model_id}.txt"
             else:
                 model_path = self.models_dir / f"{model_id}.pth"
 
             # ======== 步骤7: 保存Scaler ========
             scaler_path = self.models_dir / f"{model_id}_scaler.pkl"
-            with open(scaler_path, 'wb') as f:
+            with open(scaler_path, "wb") as f:
                 pickle.dump(pipeline.get_scaler(), f)
             logger.info(f"[CoreTraining] ✅ Scaler已保存: {scaler_path}")
 
@@ -296,23 +300,24 @@ class CoreTrainingService:
                 y_all = pd.concat([y_train, y_valid, y_test]).sort_index()
 
                 features_path = self.models_dir / f"{model_id}_features.pkl"
-                with open(features_path, 'wb') as f:
-                    pickle.dump({'X': X_all, 'y': y_all}, f)
+                with open(features_path, "wb") as f:
+                    pickle.dump({"X": X_all, "y": y_all}, f)
                 logger.info(f"[CoreTraining] ✅ 特征数据已保存: {len(X_all)} 条记录")
 
             # ======== 步骤9: 提取可视化数据 ========
             feature_importance = None
             training_history = None
 
-            if config['model_type'] == 'lightgbm' and hasattr(trainer.model, 'get_feature_importance'):
+            if config["model_type"] == "lightgbm" and hasattr(
+                trainer.model, "get_feature_importance"
+            ):
                 # LightGBM: 特征重要性
                 try:
-                    importance_df = trainer.model.get_feature_importance('gain', top_n=20)
+                    importance_df = trainer.model.get_feature_importance("gain", top_n=20)
                     if importance_df is not None and not importance_df.empty:
-                        feature_importance = dict(zip(
-                            importance_df['feature'].tolist(),
-                            importance_df['gain'].tolist()
-                        ))
+                        feature_importance = dict(
+                            zip(importance_df["feature"].tolist(), importance_df["gain"].tolist())
+                        )
                 except AttributeError as e:
                     # 模型不支持特征重要性
                     logger.warning(f"[CoreTraining] 模型不支持特征重要性: {e}")
@@ -320,13 +325,13 @@ class CoreTrainingService:
                     # 其他错误
                     logger.warning(f"[CoreTraining] 获取特征重要性失败: {e}")
 
-            if config['model_type'] == 'gru' and save_training_history:
+            if config["model_type"] == "gru" and save_training_history:
                 # GRU: 训练历史
                 history = trainer.training_history
-                if history and 'train_loss' in history:
+                if history and "train_loss" in history:
                     training_history = {
-                        'train_loss': [float(loss) for loss in history['train_loss']],
-                        'valid_loss': [float(loss) for loss in history.get('valid_loss', [])]
+                        "train_loss": [float(loss) for loss in history["train_loss"]],
+                        "valid_loss": [float(loss) for loss in history.get("valid_loss", [])],
                     }
 
             # ======== 步骤10: 计算训练耗时 ========
@@ -335,23 +340,25 @@ class CoreTrainingService:
 
             # ======== 返回结果 ========
             result = {
-                'model_id': model_id,
-                'model_name': model_id,  # 兼容旧接口
-                'model_path': str(model_path),
-                'scaler_path': str(scaler_path),
-                'features_path': str(features_path) if features_path else None,
-                'metrics': metrics,
-                'feature_importance': feature_importance,
-                'training_history': training_history,
-                'train_duration': int(train_duration),
-                'train_samples': len(X_train),
-                'valid_samples': len(X_valid),
-                'test_samples': len(X_test),
-                'feature_count': len(X_train.columns),
-                'trained_at': end_time.isoformat()
+                "model_id": model_id,
+                "model_name": model_id,  # 兼容旧接口
+                "model_path": str(model_path),
+                "scaler_path": str(scaler_path),
+                "features_path": str(features_path) if features_path else None,
+                "metrics": metrics,
+                "feature_importance": feature_importance,
+                "training_history": training_history,
+                "train_duration": int(train_duration),
+                "train_samples": len(X_train),
+                "valid_samples": len(X_valid),
+                "test_samples": len(X_test),
+                "feature_count": len(X_train.columns),
+                "trained_at": end_time.isoformat(),
             }
 
-            logger.info(f"[CoreTraining] ✅ 训练完成! IC={metrics.get('ic', 0):.4f}, 耗时={train_duration:.1f}秒")
+            logger.info(
+                f"[CoreTraining] ✅ 训练完成! IC={metrics.get('ic', 0):.4f}, 耗时={train_duration:.1f}秒"
+            )
 
             return result
 
@@ -364,18 +371,18 @@ class CoreTrainingService:
             raise BackendError(
                 "训练参数错误",
                 error_code="TRAINING_INVALID_PARAMS",
-                symbol=config.get('symbol'),
-                model_type=config.get('model_type'),
-                reason=str(e)
+                symbol=config.get("symbol"),
+                model_type=config.get("model_type"),
+                reason=str(e),
             )
         except Exception as e:
             logger.error(f"[CoreTraining] ❌ 训练失败 (未预期错误): {e}", exc_info=True)
             raise BackendError(
                 "模型训练失败",
                 error_code="TRAINING_FAILED",
-                symbol=config.get('symbol'),
-                model_type=config.get('model_type'),
-                reason=str(e)
+                symbol=config.get("symbol"),
+                model_type=config.get("model_type"),
+                reason=str(e),
             )
 
     def _validate_and_fix_params(self, config: Dict[str, Any]) -> None:
@@ -383,54 +390,54 @@ class CoreTrainingService:
         验证并自动修正训练参数，防止使用过时或危险的参数
         主要针对LightGBM过拟合风险参数进行检查
         """
-        if config.get('model_type') != 'lightgbm':
+        if config.get("model_type") != "lightgbm":
             return
 
-        model_params = config.get('model_params', {})
+        model_params = config.get("model_params", {})
         fixed = False
 
         # 检查1: max_depth=-1（无限制深度）
-        if model_params.get('max_depth', 4) == -1:
+        if model_params.get("max_depth", 4) == -1:
             logger.warning(f"⚠️  [参数修正] max_depth=-1会导致严重过拟合，自动修正为4")
-            model_params['max_depth'] = 4
+            model_params["max_depth"] = 4
             fixed = True
 
         # 检查2: max_depth过大
-        elif model_params.get('max_depth', 4) > 10:
-            old_val = model_params['max_depth']
-            model_params['max_depth'] = 5
+        elif model_params.get("max_depth", 4) > 10:
+            old_val = model_params["max_depth"]
+            model_params["max_depth"] = 5
             logger.warning(f"⚠️  [参数修正] max_depth={old_val}过大，自动修正为5")
             fixed = True
 
         # 检查3: num_leaves过大
-        if model_params.get('num_leaves', 15) > 31:
-            old_val = model_params['num_leaves']
-            model_params['num_leaves'] = 15
+        if model_params.get("num_leaves", 15) > 31:
+            old_val = model_params["num_leaves"]
+            model_params["num_leaves"] = 15
             logger.warning(f"⚠️  [参数修正] num_leaves={old_val}会导致过拟合，自动修正为15")
             fixed = True
 
         # 检查4: n_estimators过小
-        if model_params.get('n_estimators', 500) < 200:
-            old_val = model_params['n_estimators']
-            model_params['n_estimators'] = 500
+        if model_params.get("n_estimators", 500) < 200:
+            old_val = model_params["n_estimators"]
+            model_params["n_estimators"] = 500
             logger.warning(f"⚠️  [参数修正] n_estimators={old_val}过小，自动修正为500")
             fixed = True
 
         # 检查5: 缺失正则化参数
-        if 'reg_alpha' not in model_params:
-            model_params['reg_alpha'] = 0.1
+        if "reg_alpha" not in model_params:
+            model_params["reg_alpha"] = 0.1
             logger.info(f"ℹ️  [参数补充] 添加L1正则化 reg_alpha=0.1")
             fixed = True
 
-        if 'reg_lambda' not in model_params:
-            model_params['reg_lambda'] = 0.1
+        if "reg_lambda" not in model_params:
+            model_params["reg_lambda"] = 0.1
             logger.info(f"ℹ️  [参数补充] 添加L2正则化 reg_lambda=0.1")
             fixed = True
 
         # 注意：min_gain_to_split已在LightGBMStockModel内部设置，不需要通过model_params传入
 
         # 更新配置
-        config['model_params'] = model_params
+        config["model_params"] = model_params
 
         if fixed:
             logger.info(f"✅ [参数验证] 参数已自动修正，当前配置: {model_params}")
@@ -441,10 +448,10 @@ class CoreTrainingService:
 
         格式: {symbol}_{model_type}_T{target_period}_{scaler_type}_{timestamp}
         """
-        symbol = config['symbol']
-        model_type = config['model_type']
-        target_period = config.get('target_period', 5)
-        scaler_type = config.get('scaler_type', 'robust')
+        symbol = config["symbol"]
+        model_type = config["model_type"]
+        target_period = config.get("target_period", 5)
+        scaler_type = config.get("scaler_type", "robust")
         timestamp = int(time.time() * 1000)  # 毫秒级时间戳
 
         return f"{symbol}_{model_type}_T{target_period}_{scaler_type}_{timestamp}"

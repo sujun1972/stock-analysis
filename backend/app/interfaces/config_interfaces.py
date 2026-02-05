@@ -3,7 +3,7 @@
 使用 Protocol 提供结构化类型约束
 """
 
-from typing import Protocol, Dict, Optional
+from typing import Dict, Optional, Protocol
 
 
 class IDataSourceManager(Protocol):
@@ -37,11 +37,7 @@ class IDataSourceManager(Protocol):
         """验证数据源是否支持"""
         ...
 
-    async def validate_tushare_config(
-        self,
-        data_source: str,
-        token: Optional[str] = None
-    ) -> bool:
+    async def validate_tushare_config(self, data_source: str, token: Optional[str] = None) -> bool:
         """验证 Tushare 配置"""
         ...
 
@@ -50,7 +46,7 @@ class IDataSourceManager(Protocol):
         data_source: str,
         minute_data_source: Optional[str] = None,
         realtime_data_source: Optional[str] = None,
-        tushare_token: Optional[str] = None
+        tushare_token: Optional[str] = None,
     ) -> Dict:
         """更新数据源配置"""
         ...
@@ -97,7 +93,7 @@ class ISyncStatusManager(Protocol):
         last_sync_date: Optional[str] = None,
         progress: Optional[int] = None,
         total: Optional[int] = None,
-        completed: Optional[int] = None
+        completed: Optional[int] = None,
     ) -> Dict:
         """更新全局同步状态"""
         ...
@@ -122,12 +118,7 @@ class ISyncStatusManager(Protocol):
         """获取特定模块的同步状态"""
         ...
 
-    async def create_sync_task(
-        self,
-        task_id: str,
-        module: str,
-        data_source: str
-    ) -> None:
+    async def create_sync_task(self, task_id: str, module: str, data_source: str) -> None:
         """创建同步任务记录"""
         ...
 
@@ -139,7 +130,7 @@ class ISyncStatusManager(Protocol):
         success_count: Optional[int] = None,
         failed_count: Optional[int] = None,
         progress: Optional[int] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> None:
         """更新同步任务状态"""
         ...
@@ -177,7 +168,7 @@ class IConfigService(Protocol):
         data_source: str,
         minute_data_source: Optional[str] = None,
         realtime_data_source: Optional[str] = None,
-        tushare_token: Optional[str] = None
+        tushare_token: Optional[str] = None,
     ) -> Dict:
         """更新数据源配置"""
         ...
@@ -194,7 +185,7 @@ class IConfigService(Protocol):
         last_sync_date: Optional[str] = None,
         progress: Optional[int] = None,
         total: Optional[int] = None,
-        completed: Optional[int] = None
+        completed: Optional[int] = None,
     ) -> Dict:
         """更新全局同步状态"""
         ...
@@ -221,12 +212,7 @@ class IConfigService(Protocol):
         """获取特定模块的同步状态"""
         ...
 
-    async def create_sync_task(
-        self,
-        task_id: str,
-        module: str,
-        data_source: str
-    ) -> None:
+    async def create_sync_task(self, task_id: str, module: str, data_source: str) -> None:
         """创建同步任务记录"""
         ...
 
@@ -238,7 +224,7 @@ class IConfigService(Protocol):
         success_count: Optional[int] = None,
         failed_count: Optional[int] = None,
         progress: Optional[int] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> None:
         """更新同步任务状态"""
         ...

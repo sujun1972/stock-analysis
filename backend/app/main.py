@@ -7,9 +7,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.core.config import settings
 from app.api import router as api_router
 from app.api.exception_handlers import register_exception_handlers
+from app.core.config import settings
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -18,7 +18,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
 )
 
 # CORS中间件配置
@@ -48,13 +48,13 @@ async def startup_event():
     # 重置遗留的同步状态（如果容器重启导致状态卡在running）
     try:
         from app.services.config_service import ConfigService
+
         config_service = ConfigService()
         status = await config_service.get_sync_status()
-        if status.get('status') == 'running':
+        if status.get("status") == "running":
             logger.warning("⚠️ 检测到遗留的running状态，重置为failed")
             await config_service.update_sync_status(
-                status='failed',
-                progress=status.get('progress', 0)
+                status="failed", progress=status.get("progress", 0)
             )
     except Exception as e:
         logger.error(f"重置同步状态失败: {e}")
@@ -69,27 +69,16 @@ async def shutdown_event():
 @app.get("/")
 async def root():
     """根路径"""
-    return {
-        "message": "Stock Analysis Backend API",
-        "version": "1.0.0",
-        "docs": "/api/docs"
-    }
+    return {"message": "Stock Analysis Backend API", "version": "1.0.0", "docs": "/api/docs"}
 
 
 @app.get("/health")
 async def health_check():
     """健康检查"""
-    return {
-        "status": "healthy",
-        "environment": settings.ENVIRONMENT
-    }
+    return {"status": "healthy", "environment": settings.ENVIRONMENT}
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

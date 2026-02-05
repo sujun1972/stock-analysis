@@ -3,13 +3,14 @@
 负责加载和准备回测所需的数据
 """
 
+import asyncio
 from typing import Dict, List, Optional
+
 import pandas as pd
 from loguru import logger
-import asyncio
-
 from src.database.db_manager import DatabaseManager
-from app.core.exceptions import DataQueryError, DataNotFoundError
+
+from app.core.exceptions import DataQueryError
 
 
 class BacktestDataLoader:
@@ -43,15 +44,12 @@ class BacktestDataLoader:
         Returns:
             标准化后的股票代码
         """
-        if '.' in symbol:
-            return symbol.split('.')[0]
+        if "." in symbol:
+            return symbol.split(".")[0]
         return symbol
 
     async def load_single_stock_data(
-        self,
-        symbol: str,
-        start_date: str,
-        end_date: str
+        self, symbol: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
         """
         加载单只股票的日线数据
@@ -72,10 +70,7 @@ class BacktestDataLoader:
 
         # 加载数据
         df = await asyncio.to_thread(
-            self.db.load_daily_data,
-            normalized_symbol,
-            start_date=start_date,
-            end_date=end_date
+            self.db.load_daily_data, normalized_symbol, start_date=start_date, end_date=end_date
         )
 
         if df is None or len(df) == 0:
@@ -85,10 +80,7 @@ class BacktestDataLoader:
         return self._standardize_dataframe(df)
 
     async def load_multi_stock_data(
-        self,
-        symbols: List[str],
-        start_date: str,
-        end_date: str
+        self, symbols: List[str], start_date: str, end_date: str
     ) -> Dict[str, pd.DataFrame]:
         """
         加载多只股票的日线数据
@@ -113,7 +105,7 @@ class BacktestDataLoader:
                     self.db.load_daily_data,
                     normalized_symbol,
                     start_date=start_date,
-                    end_date=end_date
+                    end_date=end_date,
                 )
 
                 if df is not None and len(df) > 0:
@@ -135,10 +127,7 @@ class BacktestDataLoader:
         return prices_dict
 
     async def load_benchmark_data(
-        self,
-        start_date: str,
-        end_date: str,
-        benchmark_code: str = '000300'
+        self, start_date: str, end_date: str, benchmark_code: str = "000300"
     ) -> Optional[pd.DataFrame]:
         """
         加载基准数据（默认沪深300）
@@ -153,10 +142,7 @@ class BacktestDataLoader:
         """
         try:
             df = await asyncio.to_thread(
-                self.db.load_daily_data,
-                benchmark_code,
-                start_date=start_date,
-                end_date=end_date
+                self.db.load_daily_data, benchmark_code, start_date=start_date, end_date=end_date
             )
 
             if df is None or len(df) == 0:
@@ -167,10 +153,10 @@ class BacktestDataLoader:
             df = self._standardize_dataframe(df)
 
             # 计算收益率
-            df['returns'] = df['close'].pct_change()
+            df["returns"] = df["close"].pct_change()
 
             # 归一化为净值曲线(初始值=1)
-            df['total'] = (1 + df['returns']).cumprod()
+            df["total"] = (1 + df["returns"]).cumprod()
 
             return df
 

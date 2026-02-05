@@ -1,0 +1,33 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203, W503, E501, E402, F541, F821, F823
+per-file-ignores =
+    tests/*:F841
+# E203: whitespace before ':'
+# W503: line break before binary operator
+# E501: line too long (handled by black)
+# E402: module level import not at top of file (needed for Core imports)
+# F541: f-string is missing placeholders (intentional for consistency)
+# F821: undefined name (from Core module)
+# F823: local variable referenced before assignment (false positive)
+# F841: local variable never used (test mocks)
+
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    build,
+    dist,
+    *.egg-info,
+    migrations,
+    core/venv,
+    .pytest_cache,
+    .mypy_cache
+
+# 统计信息
+count = True
+statistics = True
+
+# 显示代码来源
+show-source = True

@@ -11,17 +11,17 @@
 版本: 2.0.0 (架构修正版)
 """
 
-from fastapi import APIRouter, Query, Body
-from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field
-from datetime import datetime, date
-from loguru import logger
+from datetime import datetime
+from typing import Any, Dict, List
+
 import pandas as pd
+from fastapi import APIRouter, Body
+from loguru import logger
+from pydantic import BaseModel, Field
 
 from app.core_adapters.backtest_adapter import BacktestAdapter
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
-from app.core.exceptions import BacktestError, DataNotFoundError, ValidationError, CalculationError
 
 router = APIRouter()
 
@@ -32,15 +32,14 @@ data_adapter = DataAdapter()
 
 # ==================== Pydantic 模型 ====================
 
+
 class BacktestRequest(BaseModel):
     """回测请求模型"""
+
     stock_codes: List[str] = Field(..., description="股票代码列表", min_items=1)
     start_date: str = Field(..., description="开始日期 (YYYY-MM-DD)")
     end_date: str = Field(..., description="结束日期 (YYYY-MM-DD)")
-    strategy_params: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="策略参数"
-    )
+    strategy_params: Dict[str, Any] = Field(default_factory=dict, description="策略参数")
     initial_capital: float = Field(1000000.0, gt=0, description="初始资金")
     commission_rate: float = Field(0.0003, ge=0, le=0.01, description="佣金费率")
     stamp_tax_rate: float = Field(0.001, ge=0, le=0.01, description="印花税率")
@@ -58,19 +57,16 @@ class BacktestRequest(BaseModel):
                 "commission_rate": 0.0003,
                 "stamp_tax_rate": 0.001,
                 "min_commission": 5.0,
-                "slippage": 0.0
+                "slippage": 0.0,
             }
         }
 
 
 class ParallelBacktestRequest(BaseModel):
     """并行回测请求模型"""
+
     stock_codes: List[str] = Field(..., description="股票代码列表", min_items=1)
-    strategy_params_list: List[Dict[str, Any]] = Field(
-        ...,
-        description="策略参数列表",
-        min_items=1
-    )
+    strategy_params_list: List[Dict[str, Any]] = Field(..., description="策略参数列表", min_items=1)
     start_date: str = Field(..., description="开始日期 (YYYY-MM-DD)")
     end_date: str = Field(..., description="结束日期 (YYYY-MM-DD)")
     initial_capital: float = Field(1000000.0, gt=0, description="初始资金")
@@ -79,6 +75,7 @@ class ParallelBacktestRequest(BaseModel):
 
 class OptimizeParamsRequest(BaseModel):
     """参数优化请求模型"""
+
     stock_codes: List[str] = Field(..., description="股票代码列表", min_items=1)
     param_grid: Dict[str, List[Any]] = Field(..., description="参数网格")
     start_date: str = Field(..., description="开始日期 (YYYY-MM-DD)")
@@ -90,19 +87,17 @@ class OptimizeParamsRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "stock_codes": ["000001"],
-                "param_grid": {
-                    "short_window": [5, 10, 20],
-                    "long_window": [20, 40, 60]
-                },
+                "param_grid": {"short_window": [5, 10, 20], "long_window": [20, 40, 60]},
                 "start_date": "2023-01-01",
                 "end_date": "2023-12-31",
                 "initial_capital": 1000000.0,
-                "metric": "sharpe_ratio"
+                "metric": "sharpe_ratio",
             }
         }
 
 
 # ==================== API 端点 ====================
+
 
 @router.post("/run")
 async def run_backtest(request: BacktestRequest):
@@ -147,7 +142,9 @@ async def run_backtest(request: BacktestRequest):
     }
     """
     try:
-        logger.info(f"收到回测请求: codes={request.stock_codes}, period={request.start_date}~{request.end_date}")
+        logger.info(
+            f"收到回测请求: codes={request.stock_codes}, period={request.start_date}~{request.end_date}"
+        )
 
         # 1. 参数转换
         start_dt = datetime.strptime(request.start_date, "%Y-%m-%d").date()
@@ -155,9 +152,7 @@ async def run_backtest(request: BacktestRequest):
 
         # 2. 验证日期
         if start_dt >= end_dt:
-            return ApiResponse.bad_request(
-                message="开始日期必须小于结束日期"
-            ).to_dict()
+            return ApiResponse.bad_request(message="开始日期必须小于结束日期").to_dict()
 
         # 3. 创建回测适配器（使用请求参数）
         adapter = BacktestAdapter(
@@ -165,7 +160,7 @@ async def run_backtest(request: BacktestRequest):
             commission_rate=request.commission_rate,
             stamp_tax_rate=request.stamp_tax_rate,
             min_commission=request.min_commission,
-            slippage=request.slippage
+            slippage=request.slippage,
         )
 
         # 4. 调用 Core Adapter 运行回测
@@ -173,26 +168,19 @@ async def run_backtest(request: BacktestRequest):
             stock_codes=request.stock_codes,
             strategy_params=request.strategy_params,
             start_date=start_dt,
-            end_date=end_dt
+            end_date=end_dt,
         )
 
         # 5. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data=backtest_result,
-            message="回测完成"
-        ).to_dict()
+        return ApiResponse.success(data=backtest_result, message="回测完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        return ApiResponse.internal_error(
-            message=f"回测执行失败: {str(e)}"
-        ).to_dict()
+        return ApiResponse.internal_error(message=f"回测执行失败: {str(e)}").to_dict()
 
 
 @router.post("/metrics")
@@ -200,7 +188,7 @@ async def calculate_metrics(
     portfolio_value: List[float] = Body(..., description="投资组合价值序列"),
     dates: List[str] = Body(..., description="日期序列"),
     trades: List[Dict[str, Any]] = Body(default_factory=list, description="交易记录"),
-    positions: List[Dict[str, Any]] = Body(default_factory=list, description="持仓记录")
+    positions: List[Dict[str, Any]] = Body(default_factory=list, description="持仓记录"),
 ):
     """
     计算回测绩效指标
@@ -238,38 +226,26 @@ async def calculate_metrics(
         logger.info(f"计算绩效指标: {len(portfolio_value)} 个数据点")
 
         # 1. 转换为 pandas 数据结构
-        portfolio_series = pd.Series(
-            portfolio_value,
-            index=pd.to_datetime(dates)
-        )
+        portfolio_series = pd.Series(portfolio_value, index=pd.to_datetime(dates))
 
         trades_df = pd.DataFrame(trades) if trades else pd.DataFrame()
         positions_df = pd.DataFrame(positions) if positions else pd.DataFrame()
 
         # 2. 调用 Core Adapter 计算指标
         metrics = await backtest_adapter.calculate_metrics(
-            portfolio_value=portfolio_series,
-            positions=positions_df,
-            trades=trades_df
+            portfolio_value=portfolio_series, positions=positions_df, trades=trades_df
         )
 
         # 3. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data=metrics,
-            message="指标计算完成"
-        ).to_dict()
+        return ApiResponse.success(data=metrics, message="指标计算完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"指标计算失败: {e}", exc_info=True)
-        return ApiResponse.internal_error(
-            message=f"指标计算失败: {str(e)}"
-        ).to_dict()
+        return ApiResponse.internal_error(message=f"指标计算失败: {str(e)}").to_dict()
 
 
 @router.post("/parallel")
@@ -324,19 +300,19 @@ async def run_parallel_backtest(request: ParallelBacktestRequest):
             strategy_params_list=request.strategy_params_list,
             start_date=start_dt,
             end_date=end_dt,
-            n_processes=request.n_processes
+            n_processes=request.n_processes,
         )
 
         # 3. Backend 职责：结果汇总和格式化
-        successful_runs = [r for r in results if r.get('error') is None]
-        failed_runs = [r for r in results if r.get('error') is not None]
+        successful_runs = [r for r in results if r.get("error") is None]
+        failed_runs = [r for r in results if r.get("error") is not None]
 
         # 找出最佳结果
         best_result = None
         if successful_runs:
             best_result = max(
                 successful_runs,
-                key=lambda x: x.get('metrics', {}).get('sharpe_ratio', float('-inf'))
+                key=lambda x: x.get("metrics", {}).get("sharpe_ratio", float("-inf")),
             )
 
         response_data = {
@@ -344,25 +320,20 @@ async def run_parallel_backtest(request: ParallelBacktestRequest):
             "successful_runs": len(successful_runs),
             "failed_runs": len(failed_runs),
             "results": results,
-            "best_result": best_result
+            "best_result": best_result,
         }
 
         return ApiResponse.success(
-            data=response_data,
-            message=f"并行回测完成: {len(successful_runs)}/{len(results)} 成功"
+            data=response_data, message=f"并行回测完成: {len(successful_runs)}/{len(results)} 成功"
         ).to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"并行回测失败: {e}", exc_info=True)
-        return ApiResponse.internal_error(
-            message=f"并行回测失败: {str(e)}"
-        ).to_dict()
+        return ApiResponse.internal_error(message=f"并行回测失败: {str(e)}").to_dict()
 
 
 @router.post("/optimize")
@@ -413,26 +384,19 @@ async def optimize_strategy_params(request: OptimizeParamsRequest):
             param_grid=request.param_grid,
             start_date=start_dt,
             end_date=end_dt,
-            metric=request.metric
+            metric=request.metric,
         )
 
         # 3. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data=optimization_result,
-            message="参数优化完成"
-        ).to_dict()
+        return ApiResponse.success(data=optimization_result, message="参数优化完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"参数优化失败: {e}", exc_info=True)
-        return ApiResponse.internal_error(
-            message=f"参数优化失败: {str(e)}"
-        ).to_dict()
+        return ApiResponse.internal_error(message=f"参数优化失败: {str(e)}").to_dict()
 
 
 @router.post("/cost-analysis")
@@ -470,37 +434,28 @@ async def analyze_trading_costs(
         trades_df = pd.DataFrame(trades)
 
         if trades_df.empty:
-            return ApiResponse.bad_request(
-                message="交易记录不能为空"
-            ).to_dict()
+            return ApiResponse.bad_request(message="交易记录不能为空").to_dict()
 
         # 2. 调用 Core Adapter 分析成本
         cost_analysis = await backtest_adapter.analyze_trading_costs(trades_df)
 
         # 3. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data=cost_analysis,
-            message="成本分析完成"
-        ).to_dict()
+        return ApiResponse.success(data=cost_analysis, message="成本分析完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"成本分析失败: {e}", exc_info=True)
-        return ApiResponse.internal_error(
-            message=f"成本分析失败: {str(e)}"
-        ).to_dict()
+        return ApiResponse.internal_error(message=f"成本分析失败: {str(e)}").to_dict()
 
 
 @router.post("/risk-metrics")
 async def calculate_risk_metrics(
     returns: List[float] = Body(..., description="收益率序列"),
     dates: List[str] = Body(..., description="日期序列"),
-    positions: List[Dict[str, Any]] = Body(default_factory=list, description="持仓记录")
+    positions: List[Dict[str, Any]] = Body(default_factory=list, description="持仓记录"),
 ):
     """
     计算风险指标
@@ -536,27 +491,19 @@ async def calculate_risk_metrics(
 
         # 2. 调用 Core Adapter 计算风险指标
         risk_metrics = await backtest_adapter.calculate_risk_metrics(
-            returns=returns_series,
-            positions=positions_df
+            returns=returns_series, positions=positions_df
         )
 
         # 3. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data=risk_metrics,
-            message="风险指标计算完成"
-        ).to_dict()
+        return ApiResponse.success(data=risk_metrics, message="风险指标计算完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"风险指标计算失败: {e}", exc_info=True)
-        return ApiResponse.internal_error(
-            message=f"风险指标计算失败: {str(e)}"
-        ).to_dict()
+        return ApiResponse.internal_error(message=f"风险指标计算失败: {str(e)}").to_dict()
 
 
 @router.post("/trade-statistics")
@@ -600,19 +547,12 @@ async def get_trade_statistics(
         trade_stats = await backtest_adapter.get_trade_statistics(trades_df)
 
         # 3. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data=trade_stats,
-            message="交易统计完成"
-        ).to_dict()
+        return ApiResponse.success(data=trade_stats, message="交易统计完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
-        return ApiResponse.bad_request(
-            message=f"参数错误: {str(e)}"
-        ).to_dict()
+        return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"交易统计失败: {e}", exc_info=True)
-        return ApiResponse.internal_error(
-            message=f"交易统计失败: {str(e)}"
-        ).to_dict()
+        return ApiResponse.internal_error(message=f"交易统计失败: {str(e)}").to_dict()

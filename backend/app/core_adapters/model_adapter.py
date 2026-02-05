@@ -17,26 +17,24 @@
 
 import asyncio
 import sys
-from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 from pathlib import Path
-import pandas as pd
+from typing import Any, Dict, List, Optional
+
 import numpy as np
+import pandas as pd
 
 # 添加 core 项目到 Python 路径
 core_path = Path(__file__).parent.parent.parent.parent / "core"
 if str(core_path) not in sys.path:
     sys.path.insert(0, str(core_path))
 
+from src.exceptions import ModelError
+from src.models.model_evaluator import ModelEvaluator
+from src.models.model_registry import ModelRegistry
+
 # 导入 Core 模块
 from src.models.model_trainer import ModelTrainer
-from src.models.lightgbm_model import LightGBMStockModel
-from src.models.ridge_model import RidgeStockModel
-from src.models.model_evaluator import ModelEvaluator
-from src.models.hyperparameter_tuner import GridSearchTuner, RandomSearchTuner
-from src.models.model_registry import ModelRegistry
-from src.models.ensemble import WeightedAverageEnsemble
-from src.exceptions import ModelError, ModelTrainingError
 
 
 class ModelAdapter:
@@ -76,10 +74,10 @@ class ModelAdapter:
         y_train: pd.Series,
         X_test: Optional[pd.DataFrame] = None,
         y_test: Optional[pd.Series] = None,
-        model_type: str = 'LightGBM',
+        model_type: str = "LightGBM",
         model_params: Optional[Dict[str, Any]] = None,
         save_model: bool = True,
-        model_name: Optional[str] = None
+        model_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         异步训练模型
@@ -105,11 +103,9 @@ class ModelAdapter:
         Raises:
             ModelTrainingError: 模型训练错误
         """
+
         def _train():
-            trainer = ModelTrainer(
-                model_type=model_type,
-                model_params=model_params or {}
-            )
+            trainer = ModelTrainer(model_type=model_type, model_params=model_params or {})
 
             # 训练模型
             start_time = datetime.now()
@@ -124,10 +120,9 @@ class ModelAdapter:
 
             # 获取特征重要性 (如果支持)
             feature_importance = None
-            if hasattr(model, 'feature_importances_'):
+            if hasattr(model, "feature_importances_"):
                 feature_importance = pd.Series(
-                    model.feature_importances_,
-                    index=X_train.columns
+                    model.feature_importances_, index=X_train.columns
                 ).sort_values(ascending=False)
 
             # 保存模型
@@ -144,26 +139,22 @@ class ModelAdapter:
                     model_type=model_type,
                     model_path=str(model_path),
                     metrics=test_metrics or train_metrics,
-                    params=model_params
+                    params=model_params,
                 )
 
             return {
-                'model': model,
-                'model_name': model_name,
-                'model_path': str(model_path) if model_path else None,
-                'train_metrics': train_metrics,
-                'test_metrics': test_metrics,
-                'feature_importance': feature_importance,
-                'training_time': training_time
+                "model": model,
+                "model_name": model_name,
+                "model_path": str(model_path) if model_path else None,
+                "train_metrics": train_metrics,
+                "test_metrics": test_metrics,
+                "feature_importance": feature_importance,
+                "training_time": training_time,
             }
 
         return await asyncio.to_thread(_train)
 
-    async def predict(
-        self,
-        model: Any,
-        X: pd.DataFrame
-    ) -> np.ndarray:
+    async def predict(self, model: Any, X: pd.DataFrame) -> np.ndarray:
         """
         异步模型预测
 
@@ -177,21 +168,16 @@ class ModelAdapter:
         Raises:
             ModelError: 预测错误
         """
+
         def _predict():
-            if hasattr(model, 'predict'):
+            if hasattr(model, "predict"):
                 return model.predict(X)
             else:
-                raise ModelError(
-                    "模型没有 predict 方法",
-                    error_code="INVALID_MODEL"
-                )
+                raise ModelError("模型没有 predict 方法", error_code="INVALID_MODEL")
 
         return await asyncio.to_thread(_predict)
 
-    async def load_model(
-        self,
-        model_name: str
-    ) -> Any:
+    async def load_model(self, model_name: str) -> Any:
         """
         异步加载模型
 
@@ -211,13 +197,10 @@ class ModelAdapter:
         def _load():
             model_info = self.registry.get_model(model_name)
             if model_info is None:
-                raise ModelError(
-                    f"模型不存在: {model_name}",
-                    error_code="MODEL_NOT_FOUND"
-                )
+                raise ModelError(f"模型不存在: {model_name}", error_code="MODEL_NOT_FOUND")
 
-            model_path = model_info['model_path']
-            trainer = ModelTrainer(model_type=model_info['model_type'])
+            model_path = model_info["model_path"]
+            trainer = ModelTrainer(model_type=model_info["model_type"])
             model = trainer.load_model(model_path)
 
             # 缓存模型
@@ -226,12 +209,7 @@ class ModelAdapter:
 
         return await asyncio.to_thread(_load)
 
-    async def evaluate_model(
-        self,
-        model: Any,
-        X: pd.DataFrame,
-        y: pd.Series
-    ) -> Dict[str, float]:
+    async def evaluate_model(self, model: Any, X: pd.DataFrame, y: pd.Series) -> Dict[str, float]:
         """
         异步模型评估
 
@@ -252,6 +230,7 @@ class ModelAdapter:
         Raises:
             ModelError: 评估错误
         """
+
         def _evaluate():
             evaluator = ModelEvaluator(model)
             return evaluator.evaluate(X, y)
@@ -264,10 +243,10 @@ class ModelAdapter:
         y_train: pd.Series,
         X_val: pd.DataFrame,
         y_val: pd.Series,
-        model_type: str = 'LightGBM',
+        model_type: str = "LightGBM",
         param_space: Optional[Dict[str, Any]] = None,
         n_trials: int = 50,
-        metric: str = 'rmse'
+        metric: str = "rmse",
     ) -> Dict[str, Any]:
         """
         异步超参数调优
@@ -292,11 +271,9 @@ class ModelAdapter:
         Raises:
             ModelError: 调优错误
         """
+
         def _tune():
-            tuner = HyperparameterTuner(
-                model_type=model_type,
-                param_space=param_space
-            )
+            tuner = HyperparameterTuner(model_type=model_type, param_space=param_space)
 
             result = tuner.tune(
                 X_train=X_train,
@@ -304,7 +281,7 @@ class ModelAdapter:
                 X_val=X_val,
                 y_val=y_val,
                 n_trials=n_trials,
-                metric=metric
+                metric=metric,
             )
 
             return result
@@ -312,10 +289,7 @@ class ModelAdapter:
         return await asyncio.to_thread(_tune)
 
     async def create_ensemble(
-        self,
-        models: List[Any],
-        method: str = 'voting',
-        weights: Optional[List[float]] = None
+        self, models: List[Any], method: str = "voting", weights: Optional[List[float]] = None
     ) -> Any:
         """
         异步创建集成模型
@@ -331,12 +305,9 @@ class ModelAdapter:
         Raises:
             ModelError: 集成创建错误
         """
+
         def _create():
-            ensemble = ModelEnsemble(
-                models=models,
-                method=method,
-                weights=weights
-            )
+            ensemble = ModelEnsemble(models=models, method=method, weights=weights)
             return ensemble
 
         return await asyncio.to_thread(_create)
@@ -345,9 +316,9 @@ class ModelAdapter:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        model_type: str = 'LightGBM',
+        model_type: str = "LightGBM",
         model_params: Optional[Dict[str, Any]] = None,
-        n_folds: int = 5
+        n_folds: int = 5,
     ) -> Dict[str, Any]:
         """
         异步交叉验证
@@ -369,8 +340,10 @@ class ModelAdapter:
         Raises:
             ModelError: 交叉验证错误
         """
+
         def _cross_validate():
             from sklearn.model_selection import KFold
+
             kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
 
             fold_scores = []
@@ -382,22 +355,19 @@ class ModelAdapter:
                 X_val_fold = X.iloc[val_idx]
                 y_val_fold = y.iloc[val_idx]
 
-                trainer = ModelTrainer(
-                    model_type=model_type,
-                    model_params=model_params or {}
-                )
+                trainer = ModelTrainer(model_type=model_type, model_params=model_params or {})
 
                 model = trainer.train(X_train_fold, y_train_fold)
                 metrics = trainer.evaluate(model, X_val_fold, y_val_fold)
 
-                fold_scores.append(metrics.get('rmse', 0.0))
+                fold_scores.append(metrics.get("rmse", 0.0))
                 models.append(model)
 
             return {
-                'mean_score': np.mean(fold_scores),
-                'std_score': np.std(fold_scores),
-                'fold_scores': fold_scores,
-                'models': models
+                "mean_score": np.mean(fold_scores),
+                "std_score": np.std(fold_scores),
+                "fold_scores": fold_scores,
+                "models": models,
             }
 
         return await asyncio.to_thread(_cross_validate)
@@ -409,6 +379,7 @@ class ModelAdapter:
         Returns:
             模型列表
         """
+
         def _list():
             return self.registry.list_models()
 
@@ -424,6 +395,7 @@ class ModelAdapter:
         Returns:
             是否删除成功
         """
+
         def _delete():
             # 从缓存中移除
             if model_name in self._loaded_models:
@@ -444,6 +416,7 @@ class ModelAdapter:
         Returns:
             模型信息字典
         """
+
         def _get_info():
             return self.registry.get_model(model_name)
 

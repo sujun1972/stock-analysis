@@ -5,11 +5,12 @@
 
 import asyncio
 from typing import Dict, Optional
+
 from loguru import logger
 from src.database.db_manager import DatabaseManager
 
+from app.core.exceptions import ConfigError, DatabaseError
 from app.repositories.config_repository import ConfigRepository
-from app.core.exceptions import DatabaseError, ConfigError
 
 
 class DataSourceManager:
@@ -24,7 +25,7 @@ class DataSourceManager:
     """
 
     # 支持的数据源列表
-    SUPPORTED_SOURCES = ['akshare', 'tushare']
+    SUPPORTED_SOURCES = ["akshare", "tushare"]
 
     def __init__(self, db: Optional[DatabaseManager] = None):
         """
@@ -45,23 +46,15 @@ class DataSourceManager:
             Dict: 包含 data_source、minute_data_source、realtime_data_source 和 tushare_token
         """
         try:
-            keys = [
-                'data_source',
-                'minute_data_source',
-                'realtime_data_source',
-                'tushare_token'
-            ]
+            keys = ["data_source", "minute_data_source", "realtime_data_source", "tushare_token"]
 
-            configs = await asyncio.to_thread(
-                self.config_repo.get_configs_by_keys,
-                keys
-            )
+            configs = await asyncio.to_thread(self.config_repo.get_configs_by_keys, keys)
 
             return {
-                'data_source': configs.get('data_source') or 'akshare',
-                'minute_data_source': configs.get('minute_data_source') or 'akshare',
-                'realtime_data_source': configs.get('realtime_data_source') or 'akshare',
-                'tushare_token': configs.get('tushare_token') or ''
+                "data_source": configs.get("data_source") or "akshare",
+                "minute_data_source": configs.get("minute_data_source") or "akshare",
+                "realtime_data_source": configs.get("realtime_data_source") or "akshare",
+                "tushare_token": configs.get("tushare_token") or "",
             }
 
         except DatabaseError:
@@ -70,9 +63,7 @@ class DataSourceManager:
         except Exception as e:
             logger.error(f"获取数据源配置失败: {e}")
             raise ConfigError(
-                "数据源配置获取失败",
-                error_code="DATA_SOURCE_CONFIG_FETCH_FAILED",
-                reason=str(e)
+                "数据源配置获取失败", error_code="DATA_SOURCE_CONFIG_FETCH_FAILED", reason=str(e)
             )
 
     async def get_data_source(self) -> str:
@@ -83,7 +74,7 @@ class DataSourceManager:
             数据源名称
         """
         config = await self.get_data_source_config()
-        return config['data_source']
+        return config["data_source"]
 
     async def get_minute_data_source(self) -> str:
         """
@@ -93,7 +84,7 @@ class DataSourceManager:
             数据源名称
         """
         config = await self.get_data_source_config()
-        return config['minute_data_source']
+        return config["minute_data_source"]
 
     async def get_realtime_data_source(self) -> str:
         """
@@ -103,7 +94,7 @@ class DataSourceManager:
             数据源名称
         """
         config = await self.get_data_source_config()
-        return config['realtime_data_source']
+        return config["realtime_data_source"]
 
     async def get_tushare_token(self) -> str:
         """
@@ -113,7 +104,7 @@ class DataSourceManager:
             Token 字符串
         """
         config = await self.get_data_source_config()
-        return config['tushare_token']
+        return config["tushare_token"]
 
     # ==================== 数据源验证 ====================
 
@@ -131,14 +122,12 @@ class DataSourceManager:
             ValueError: 不支持的数据源
         """
         if source not in self.SUPPORTED_SOURCES:
-            raise ValueError(f"不支持的数据源: {source}，支持的数据源: {', '.join(self.SUPPORTED_SOURCES)}")
+            raise ValueError(
+                f"不支持的数据源: {source}，支持的数据源: {', '.join(self.SUPPORTED_SOURCES)}"
+            )
         return True
 
-    async def validate_tushare_config(
-        self,
-        data_source: str,
-        token: Optional[str] = None
-    ) -> bool:
+    async def validate_tushare_config(self, data_source: str, token: Optional[str] = None) -> bool:
         """
         验证 Tushare 配置
 
@@ -152,7 +141,7 @@ class DataSourceManager:
         Raises:
             ValueError: Tushare 配置无效
         """
-        if data_source == 'tushare':
+        if data_source == "tushare":
             if not token:
                 # 检查是否已有 Token
                 current_token = await self.get_tushare_token()
@@ -167,7 +156,7 @@ class DataSourceManager:
         data_source: str,
         minute_data_source: Optional[str] = None,
         realtime_data_source: Optional[str] = None,
-        tushare_token: Optional[str] = None
+        tushare_token: Optional[str] = None,
     ) -> Dict:
         """
         更新数据源配置
@@ -200,22 +189,19 @@ class DataSourceManager:
             await self.validate_tushare_config(data_source, tushare_token)
 
             # 准备更新
-            updates = {'data_source': data_source}
+            updates = {"data_source": data_source}
 
             if minute_data_source:
-                updates['minute_data_source'] = minute_data_source
+                updates["minute_data_source"] = minute_data_source
 
             if realtime_data_source:
-                updates['realtime_data_source'] = realtime_data_source
+                updates["realtime_data_source"] = realtime_data_source
 
             if tushare_token:
-                updates['tushare_token'] = tushare_token
+                updates["tushare_token"] = tushare_token
 
             # 批量更新
-            await asyncio.to_thread(
-                self.config_repo.set_configs_batch,
-                updates
-            )
+            await asyncio.to_thread(self.config_repo.set_configs_batch, updates)
 
             logger.info(
                 f"✓ 数据源已更新: "
@@ -229,9 +215,7 @@ class DataSourceManager:
         except ValueError as e:
             # 验证错误（不支持的数据源、Token缺失等）
             raise ConfigError(
-                str(e),
-                error_code="DATA_SOURCE_VALIDATION_FAILED",
-                data_source=data_source
+                str(e), error_code="DATA_SOURCE_VALIDATION_FAILED", data_source=data_source
             )
         except DatabaseError:
             # 数据库错误向上传播
@@ -242,7 +226,7 @@ class DataSourceManager:
                 "数据源配置更新失败",
                 error_code="DATA_SOURCE_UPDATE_FAILED",
                 data_source=data_source,
-                reason=str(e)
+                reason=str(e),
             )
 
     async def set_data_source(self, source: str) -> Dict:
@@ -268,11 +252,7 @@ class DataSourceManager:
             更新后的配置
         """
         try:
-            await asyncio.to_thread(
-                self.config_repo.set_config_value,
-                'tushare_token',
-                token
-            )
+            await asyncio.to_thread(self.config_repo.set_config_value, "tushare_token", token)
 
             logger.info("✓ Tushare Token 已更新")
 
@@ -284,9 +264,7 @@ class DataSourceManager:
         except Exception as e:
             logger.error(f"设置 Tushare Token 失败: {e}")
             raise ConfigError(
-                "Tushare Token 设置失败",
-                error_code="TUSHARE_TOKEN_UPDATE_FAILED",
-                reason=str(e)
+                "Tushare Token 设置失败", error_code="TUSHARE_TOKEN_UPDATE_FAILED", reason=str(e)
             )
 
     # ==================== 便捷方法 ====================
@@ -299,7 +277,7 @@ class DataSourceManager:
             是否使用 Tushare
         """
         source = await self.get_data_source()
-        return source == 'tushare'
+        return source == "tushare"
 
     async def is_using_akshare(self) -> bool:
         """
@@ -309,7 +287,7 @@ class DataSourceManager:
             是否使用 AkShare
         """
         source = await self.get_data_source()
-        return source == 'akshare'
+        return source == "akshare"
 
     async def switch_to_tushare(self, token: str) -> Dict:
         """
@@ -321,10 +299,7 @@ class DataSourceManager:
         Returns:
             更新后的配置
         """
-        return await self.update_data_source(
-            data_source='tushare',
-            tushare_token=token
-        )
+        return await self.update_data_source(data_source="tushare", tushare_token=token)
 
     async def switch_to_akshare(self) -> Dict:
         """
@@ -333,4 +308,4 @@ class DataSourceManager:
         Returns:
             更新后的配置
         """
-        return await self.update_data_source(data_source='akshare')
+        return await self.update_data_source(data_source="akshare")

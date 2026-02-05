@@ -7,11 +7,11 @@ Backtest API 集成测试
 创建日期: 2026-02-02
 """
 
-import pytest
-from httpx import AsyncClient
-from datetime import datetime, date
 import sys
 from pathlib import Path
+
+import pytest
+from httpx import AsyncClient
 
 # 添加项目路径
 backend_path = Path(__file__).parent.parent.parent.parent
@@ -38,16 +38,12 @@ class TestBacktestAPIIntegration:
             "stock_codes": ["000001"],
             "start_date": "2023-01-01",
             "end_date": "2023-03-31",
-            "strategy_params": {
-                "type": "ma_cross",
-                "short_window": 5,
-                "long_window": 20
-            },
+            "strategy_params": {"type": "ma_cross", "short_window": 5, "long_window": 20},
             "initial_capital": 1000000.0,
             "commission_rate": 0.0003,
             "stamp_tax_rate": 0.001,
             "min_commission": 5.0,
-            "slippage": 0.0
+            "slippage": 0.0,
         }
 
         # Act
@@ -71,7 +67,7 @@ class TestBacktestAPIIntegration:
             "portfolio_value": [1000000, 1020000, 1015000, 1030000],
             "dates": ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"],
             "trades": [],
-            "positions": []
+            "positions": [],
         }
 
         # Act
@@ -100,15 +96,15 @@ class TestBacktestAPIIntegration:
                     "action": "buy",
                     "price": 10.0,
                     "quantity": 1000,
-                    "date": "2023-01-01"
+                    "date": "2023-01-01",
                 },
                 {
                     "code": "000001",
                     "action": "sell",
                     "price": 11.0,
                     "quantity": 1000,
-                    "date": "2023-01-05"
-                }
+                    "date": "2023-01-05",
+                },
             ]
         }
 
@@ -128,7 +124,7 @@ class TestBacktestAPIIntegration:
         payload = {
             "returns": [0.01, -0.005, 0.015, -0.01, 0.02],
             "dates": ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04", "2023-01-05"],
-            "positions": []
+            "positions": [],
         }
 
         # Act
@@ -148,7 +144,7 @@ class TestBacktestAPIIntegration:
             "trades": [
                 {"code": "000001", "buy_price": 10.0, "sell_price": 11.0, "quantity": 100},
                 {"code": "000002", "buy_price": 20.0, "sell_price": 21.5, "quantity": 100},
-                {"code": "000003", "buy_price": 15.0, "sell_price": 14.0, "quantity": 100}
+                {"code": "000003", "buy_price": 15.0, "sell_price": 14.0, "quantity": 100},
             ]
         }
 
@@ -176,7 +172,7 @@ class TestBacktestAPIIntegration:
             "start_date": "2023-12-31",  # 晚于结束日期
             "end_date": "2023-01-01",
             "strategy_params": {},
-            "initial_capital": 1000000.0
+            "initial_capital": 1000000.0,
         }
 
         # Act
@@ -211,12 +207,12 @@ class TestBacktestAPIIntegration:
             "stock_codes": ["000001"],
             "strategy_params_list": [
                 {"type": "ma_cross", "short_window": 5, "long_window": 20},
-                {"type": "ma_cross", "short_window": 10, "long_window": 40}
+                {"type": "ma_cross", "short_window": 10, "long_window": 40},
             ],
             "start_date": "2023-01-01",
             "end_date": "2023-03-31",
             "initial_capital": 1000000.0,
-            "n_processes": 2
+            "n_processes": 2,
         }
 
         # Act
@@ -234,14 +230,11 @@ class TestBacktestAPIIntegration:
         # Arrange
         payload = {
             "stock_codes": ["000001"],
-            "param_grid": {
-                "short_window": [5, 10],
-                "long_window": [20, 40]
-            },
+            "param_grid": {"short_window": [5, 10], "long_window": [20, 40]},
             "start_date": "2023-01-01",
             "end_date": "2023-03-31",
             "initial_capital": 1000000.0,
-            "metric": "sharpe_ratio"
+            "metric": "sharpe_ratio",
         }
 
         # Act
@@ -264,7 +257,7 @@ class TestBacktestAPIValidation:
         payload = {
             "stock_codes": ["000001"],
             # 缺少 start_date 和 end_date
-            "strategy_params": {}
+            "strategy_params": {},
         }
 
         # Act
@@ -282,7 +275,7 @@ class TestBacktestAPIValidation:
             "start_date": "2023-01-01",
             "end_date": "2023-12-31",
             "strategy_params": {},
-            "initial_capital": -1000.0  # 负数
+            "initial_capital": -1000.0,  # 负数
         }
 
         # Act
@@ -301,7 +294,7 @@ class TestBacktestAPIValidation:
             "end_date": "2023-12-31",
             "strategy_params": {},
             "initial_capital": 1000000.0,
-            "commission_rate": 0.05  # 超过上限 0.01
+            "commission_rate": 0.05,  # 超过上限 0.01
         }
 
         # Act
@@ -319,7 +312,7 @@ class TestBacktestAPIValidation:
             "start_date": "2023-01-01",
             "end_date": "2023-12-31",
             "strategy_params": {},
-            "initial_capital": 1000000.0
+            "initial_capital": 1000000.0,
         }
 
         # Act
@@ -336,10 +329,7 @@ class TestBacktestAPIResponseFormat:
     async def test_response_has_standard_format(self, client):
         """测试响应具有标准格式"""
         # Arrange
-        payload = {
-            "returns": [0.01, -0.005],
-            "dates": ["2023-01-01", "2023-01-02"]
-        }
+        payload = {"returns": [0.01, -0.005], "dates": ["2023-01-01", "2023-01-02"]}
 
         # Act
         response = await client.post("/api/backtest/risk-metrics", json=payload)
@@ -364,7 +354,7 @@ class TestBacktestAPIResponseFormat:
             "start_date": "2023-12-31",
             "end_date": "2023-01-01",  # 无效日期范围
             "strategy_params": {},
-            "initial_capital": 1000000.0
+            "initial_capital": 1000000.0,
         }
 
         # Act
@@ -377,5 +367,5 @@ class TestBacktestAPIResponseFormat:
         assert len(data["message"]) > 0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

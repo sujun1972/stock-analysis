@@ -7,12 +7,12 @@ FeatureAdapter 单元测试
 创建日期: 2026-02-01
 """
 
-import pytest
-from unittest.mock import Mock, patch
-import pandas as pd
-import numpy as np
 import sys
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
 
 # 添加项目路径
 backend_path = Path(__file__).parent.parent.parent.parent
@@ -24,13 +24,15 @@ from app.core_adapters.feature_adapter import FeatureAdapter
 @pytest.fixture
 def sample_df():
     """创建示例 DataFrame"""
-    return pd.DataFrame({
-        'open': [100.0, 101.0, 102.0, 103.0, 104.0],
-        'high': [102.0, 103.0, 104.0, 105.0, 106.0],
-        'low': [99.0, 100.0, 101.0, 102.0, 103.0],
-        'close': [101.0, 102.0, 103.0, 104.0, 105.0],
-        'volume': [1000000, 1100000, 1200000, 1300000, 1400000]
-    })
+    return pd.DataFrame(
+        {
+            "open": [100.0, 101.0, 102.0, 103.0, 104.0],
+            "high": [102.0, 103.0, 104.0, 105.0, 106.0],
+            "low": [99.0, 100.0, 101.0, 102.0, 103.0],
+            "close": [101.0, 102.0, 103.0, 104.0, 105.0],
+            "volume": [1000000, 1100000, 1200000, 1300000, 1400000],
+        }
+    )
 
 
 @pytest.fixture
@@ -58,10 +60,7 @@ class TestFeatureAdapter:
     async def test_add_technical_indicators_specific(self, feature_adapter, sample_df):
         """测试添加特定技术指标"""
         # Act
-        result = await feature_adapter.add_technical_indicators(
-            sample_df,
-            indicators=['ma', 'rsi']
-        )
+        result = await feature_adapter.add_technical_indicators(sample_df, indicators=["ma", "rsi"])
 
         # Assert
         assert isinstance(result, pd.DataFrame)
@@ -82,8 +81,7 @@ class TestFeatureAdapter:
         """测试添加特定 Alpha 因子"""
         # Act
         result = await feature_adapter.add_alpha_factors(
-            sample_df,
-            factors=['momentum', 'volatility']
+            sample_df, factors=["momentum", "volatility"]
         )
 
         # Assert
@@ -94,10 +92,7 @@ class TestFeatureAdapter:
         """测试添加所有特征"""
         # Act
         result = await feature_adapter.add_all_features(
-            sample_df,
-            include_indicators=True,
-            include_factors=True,
-            include_transforms=False
+            sample_df, include_indicators=True, include_factors=True, include_transforms=False
         )
 
         # Assert
@@ -111,9 +106,7 @@ class TestFeatureAdapter:
         """测试特征标准化"""
         # Act
         result = await feature_adapter.transform_features(
-            sample_df,
-            method="standardize",
-            columns=['close', 'volume']
+            sample_df, method="standardize", columns=["close", "volume"]
         )
 
         # Assert
@@ -124,10 +117,7 @@ class TestFeatureAdapter:
     async def test_transform_features_normalize(self, feature_adapter, sample_df):
         """测试特征归一化"""
         # Act
-        result = await feature_adapter.transform_features(
-            sample_df,
-            method="normalize"
-        )
+        result = await feature_adapter.transform_features(sample_df, method="normalize")
 
         # Assert
         assert isinstance(result, pd.DataFrame)
@@ -136,10 +126,7 @@ class TestFeatureAdapter:
     async def test_transform_features_log(self, feature_adapter, sample_df):
         """测试对数变换"""
         # Act
-        result = await feature_adapter.transform_features(
-            sample_df,
-            method="log"
-        )
+        result = await feature_adapter.transform_features(sample_df, method="log")
 
         # Assert
         assert isinstance(result, pd.DataFrame)
@@ -149,20 +136,19 @@ class TestFeatureAdapter:
         """测试无效的转换方法"""
         # Act & Assert
         with pytest.raises(Exception):  # 应该抛出 FeatureEngineeringError
-            await feature_adapter.transform_features(
-                sample_df,
-                method="invalid_method"
-            )
+            await feature_adapter.transform_features(sample_df, method="invalid_method")
 
     @pytest.mark.asyncio
     async def test_calculate_feature_importance(self, feature_adapter):
         """测试计算特征重要性"""
         # Arrange
-        X = pd.DataFrame({
-            'feature1': np.random.randn(100),
-            'feature2': np.random.randn(100),
-            'feature3': np.random.randn(100)
-        })
+        X = pd.DataFrame(
+            {
+                "feature1": np.random.randn(100),
+                "feature2": np.random.randn(100),
+                "feature3": np.random.randn(100),
+            }
+        )
         y = pd.Series(np.random.randn(100))
 
         # Act
@@ -177,13 +163,15 @@ class TestFeatureAdapter:
     async def test_select_features(self, feature_adapter):
         """测试特征选择"""
         # Arrange
-        X = pd.DataFrame({
-            'feature1': np.random.randn(100),
-            'feature2': np.random.randn(100),
-            'feature3': np.random.randn(100),
-            'feature4': np.random.randn(100),
-            'feature5': np.random.randn(100)
-        })
+        X = pd.DataFrame(
+            {
+                "feature1": np.random.randn(100),
+                "feature2": np.random.randn(100),
+                "feature3": np.random.randn(100),
+                "feature4": np.random.randn(100),
+                "feature5": np.random.randn(100),
+            }
+        )
         y = pd.Series(np.random.randn(100))
 
         # Act
@@ -207,13 +195,7 @@ class TestFeatureAdapter:
     async def test_update_streaming_features_without_init(self, feature_adapter):
         """测试未初始化时更新流式特征"""
         # Arrange
-        new_data = {
-            'open': 100.0,
-            'high': 102.0,
-            'low': 99.0,
-            'close': 101.0,
-            'volume': 1000000
-        }
+        new_data = {"open": 100.0, "high": 102.0, "low": 99.0, "close": 101.0, "volume": 1000000}
 
         # Act & Assert
         with pytest.raises(Exception):  # 应该抛出 FeatureEngineeringError
@@ -227,13 +209,13 @@ class TestFeatureAdapter:
 
         # Assert
         assert isinstance(result, dict)
-        assert 'technical_indicators' in result
-        assert 'alpha_factors' in result
-        assert 'transforms' in result
-        assert isinstance(result['technical_indicators'], list)
-        assert isinstance(result['alpha_factors'], list)
-        assert len(result['transforms']) == 4  # standardize, normalize, log, diff
+        assert "technical_indicators" in result
+        assert "alpha_factors" in result
+        assert "transforms" in result
+        assert isinstance(result["technical_indicators"], list)
+        assert isinstance(result["alpha_factors"], list)
+        assert len(result["transforms"]) == 4  # standardize, normalize, log, diff
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

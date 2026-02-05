@@ -11,15 +11,14 @@
 版本: 2.0.0 (架构修正版)
 """
 
-from fastapi import APIRouter, Query
-from typing import Optional, List
 from datetime import datetime
-from loguru import logger
+from typing import List, Optional
 
-from app.core_adapters.market_adapter import MarketAdapter
+from fastapi import APIRouter, Query
+
 from app.core_adapters.data_adapter import DataAdapter
+from app.core_adapters.market_adapter import MarketAdapter
 from app.models.api_response import ApiResponse
-from app.core.exceptions import DataQueryError
 
 router = APIRouter()
 
@@ -61,7 +60,7 @@ async def get_market_status():
     status, description = await market_adapter.get_market_status()
 
     # 2. 判断是否交易时段
-    is_trading = status in ['trading', 'call_auction']
+    is_trading = status in ["trading", "call_auction"]
 
     # 3. 获取下一个交易时段
     next_time, next_desc = await market_adapter.get_next_trading_session()
@@ -73,16 +72,16 @@ async def get_market_status():
             "description": description,
             "is_trading": is_trading,
             "should_refresh": is_trading,
-            "next_session_time": next_time.strftime('%Y-%m-%d %H:%M:%S') if next_time else None,
+            "next_session_time": next_time.strftime("%Y-%m-%d %H:%M:%S") if next_time else None,
             "next_session_desc": next_desc,
             "trading_hours": {
-                "morning_open": market_adapter.MORNING_OPEN.strftime('%H:%M:%S'),
-                "morning_close": market_adapter.MORNING_CLOSE.strftime('%H:%M:%S'),
-                "afternoon_open": market_adapter.AFTERNOON_OPEN.strftime('%H:%M:%S'),
-                "afternoon_close": market_adapter.AFTERNOON_CLOSE.strftime('%H:%M:%S')
-            }
+                "morning_open": market_adapter.MORNING_OPEN.strftime("%H:%M:%S"),
+                "morning_close": market_adapter.MORNING_CLOSE.strftime("%H:%M:%S"),
+                "afternoon_open": market_adapter.AFTERNOON_OPEN.strftime("%H:%M:%S"),
+                "afternoon_close": market_adapter.AFTERNOON_CLOSE.strftime("%H:%M:%S"),
+            },
         },
-        message="获取市场状态成功"
+        message="获取市场状态成功",
     ).to_dict()
 
 
@@ -134,32 +133,32 @@ async def get_trading_info():
             "is_trading_day": is_trading_day,
             "is_trading_time": is_trading_time,
             "is_call_auction": is_call_auction,
-            "current_time": now.strftime('%Y-%m-%d %H:%M:%S'),
+            "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
             "market_status": status,
             "market_description": description,
             "trading_sessions": {
                 "call_auction": {
-                    "start": market_adapter.CALL_AUCTION_START.strftime('%H:%M:%S'),
-                    "end": market_adapter.CALL_AUCTION_END.strftime('%H:%M:%S')
+                    "start": market_adapter.CALL_AUCTION_START.strftime("%H:%M:%S"),
+                    "end": market_adapter.CALL_AUCTION_END.strftime("%H:%M:%S"),
                 },
                 "morning": {
-                    "start": market_adapter.MORNING_OPEN.strftime('%H:%M:%S'),
-                    "end": market_adapter.MORNING_CLOSE.strftime('%H:%M:%S')
+                    "start": market_adapter.MORNING_OPEN.strftime("%H:%M:%S"),
+                    "end": market_adapter.MORNING_CLOSE.strftime("%H:%M:%S"),
                 },
                 "afternoon": {
-                    "start": market_adapter.AFTERNOON_OPEN.strftime('%H:%M:%S'),
-                    "end": market_adapter.AFTERNOON_CLOSE.strftime('%H:%M:%S')
-                }
-            }
+                    "start": market_adapter.AFTERNOON_OPEN.strftime("%H:%M:%S"),
+                    "end": market_adapter.AFTERNOON_CLOSE.strftime("%H:%M:%S"),
+                },
+            },
         },
-        message="获取交易信息成功"
+        message="获取交易信息成功",
     ).to_dict()
 
 
 @router.get("/refresh-check")
 async def check_refresh_needed(
     codes: Optional[List[str]] = Query(None, description="股票代码列表（可选）"),
-    force: bool = Query(False, description="是否强制刷新")
+    force: bool = Query(False, description="是否强制刷新"),
 ):
     """
     检查是否需要刷新数据
@@ -198,8 +197,7 @@ async def check_refresh_needed(
 
     # 3. 调用 Core Adapter 判断是否需要刷新
     should_refresh, reason = await market_adapter.should_refresh_realtime_data(
-        last_update=last_update,
-        force=force
+        last_update=last_update, force=force
     )
 
     # 4. 计算距离上次更新的时间
@@ -215,12 +213,12 @@ async def check_refresh_needed(
             "reason": reason,
             "market_status": status,
             "market_description": description,
-            "last_update": last_update.strftime('%Y-%m-%d %H:%M:%S') if last_update else None,
+            "last_update": last_update.strftime("%Y-%m-%d %H:%M:%S") if last_update else None,
             "codes_count": len(codes) if codes else None,
             "time_since_last_update_seconds": time_since_update,
-            "force": force
+            "force": force,
         },
-        message="数据新鲜度检查完成"
+        message="数据新鲜度检查完成",
     ).to_dict()
 
 
@@ -261,12 +259,12 @@ async def get_next_session():
     # 4. Backend 职责：响应格式化
     return ApiResponse.success(
         data={
-            "next_session_time": next_time.strftime('%Y-%m-%d %H:%M:%S') if next_time else None,
+            "next_session_time": next_time.strftime("%Y-%m-%d %H:%M:%S") if next_time else None,
             "next_session_desc": next_desc,
-            "current_time": now.strftime('%Y-%m-%d %H:%M:%S'),
+            "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
             "wait_minutes": wait_minutes,
             "market_status": status,
-            "market_description": description
+            "market_description": description,
         },
-        message="获取下一交易时段成功"
+        message="获取下一交易时段成功",
     ).to_dict()

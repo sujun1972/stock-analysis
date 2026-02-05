@@ -3,7 +3,7 @@
 使用 Protocol 提供结构化类型约束
 """
 
-from typing import Protocol, Dict, List, Optional
+from typing import Dict, List, Optional, Protocol
 
 
 class IStockListSyncService(Protocol):
@@ -69,7 +69,7 @@ class IDailySyncService(Protocol):
         codes: Optional[List[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        years: Optional[int] = None
+        years: Optional[int] = None,
     ) -> Dict:
         """
         批量同步日线数据
@@ -93,12 +93,7 @@ class IRealtimeSyncService(Protocol):
     定义实时行情和分时数据同步的标准契约
     """
 
-    async def sync_minute_data(
-        self,
-        code: str,
-        period: str = "5",
-        days: int = 5
-    ) -> Dict:
+    async def sync_minute_data(self, code: str, period: str = "5", days: int = 5) -> Dict:
         """
         同步分时数据
 
@@ -116,7 +111,7 @@ class IRealtimeSyncService(Protocol):
         self,
         codes: Optional[List[str]] = None,
         batch_size: Optional[int] = 100,
-        update_oldest: bool = False
+        update_oldest: bool = False,
     ) -> Dict:
         """
         同步实时行情

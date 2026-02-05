@@ -4,16 +4,17 @@
 """
 
 import asyncio
-import uuid
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-from loguru import logger
+from typing import Any, Dict, Optional
 
+from loguru import logger
 from src.database.db_manager import DatabaseManager
-from app.services.core_training import CoreTrainingService
+
 from app.core.exceptions import BackendError, DatabaseError
+from app.services.core_training import CoreTrainingService
 
 
 class TrainingTaskManager:
@@ -36,7 +37,7 @@ class TrainingTaskManager:
             db: DatabaseManager 实例（可选，用于依赖注入）
         """
         self.tasks: Dict[str, Dict[str, Any]] = {}  # 内存中的任务状态
-        self.models_dir = models_dir or Path('/data/models/ml_models')
+        self.models_dir = models_dir or Path("/data/models/ml_models")
 
         # 尝试创建目录，如果失败则警告但不中断
         try:
@@ -45,7 +46,7 @@ class TrainingTaskManager:
             logger.warning(f"无法创建模型目录 {self.models_dir}: {e}，某些功能可能受限")
 
         # 任务元数据存储
-        self.metadata_file = self.models_dir / 'tasks_metadata.json'
+        self.metadata_file = self.models_dir / "tasks_metadata.json"
         self._load_metadata()
 
         # 数据库连接
@@ -55,7 +56,7 @@ class TrainingTaskManager:
         """加载任务元数据"""
         if self.metadata_file.exists():
             try:
-                with open(self.metadata_file, 'r') as f:
+                with open(self.metadata_file, "r") as f:
                     self.tasks = json.load(f)
                 logger.info(f"✓ 加载了 {len(self.tasks)} 个历史任务")
             except (json.JSONDecodeError, IOError) as e:
@@ -70,7 +71,7 @@ class TrainingTaskManager:
     def _save_metadata(self):
         """保存任务元数据"""
         try:
-            with open(self.metadata_file, 'w') as f:
+            with open(self.metadata_file, "w") as f:
                 json.dump(self.tasks, f, indent=2, default=str)
         except (IOError, OSError) as e:
             # 文件写入失败
@@ -92,21 +93,21 @@ class TrainingTaskManager:
         task_id = str(uuid.uuid4())
 
         task = {
-            'task_id': task_id,
-            'status': 'pending',
-            'created_at': datetime.now().isoformat(),
-            'config': config,
-            'progress': 0,
-            'current_step': '准备训练...',
-            'metrics': {},
-            'error': None,
-            'error_message': None,
-            'has_baseline': False,
-            'baseline_metrics': None,
-            'comparison_result': None,
-            'recommendation': None,
-            'total_samples': None,
-            'successful_symbols': None
+            "task_id": task_id,
+            "status": "pending",
+            "created_at": datetime.now().isoformat(),
+            "config": config,
+            "progress": 0,
+            "current_step": "准备训练...",
+            "metrics": {},
+            "error": None,
+            "error_message": None,
+            "has_baseline": False,
+            "baseline_metrics": None,
+            "comparison_result": None,
+            "recommendation": None,
+            "total_samples": None,
+            "successful_symbols": None,
         }
 
         self.tasks[task_id] = task
@@ -128,8 +129,8 @@ class TrainingTaskManager:
         task = self.tasks[task_id]
 
         # 更新任务状态
-        task['status'] = 'running'
-        task['started_at'] = datetime.now().isoformat()
+        task["status"] = "running"
+        task["started_at"] = datetime.now().isoformat()
         self._save_metadata()
 
         logger.info(f"🚀 开始训练任务: {task_id}")
@@ -138,34 +139,34 @@ class TrainingTaskManager:
             await self._run_training(task_id)
 
             # 训练成功
-            task['status'] = 'completed'
-            task['completed_at'] = datetime.now().isoformat()
-            task['progress'] = 100
+            task["status"] = "completed"
+            task["completed_at"] = datetime.now().isoformat()
+            task["progress"] = 100
 
             logger.info(f"✓ 训练任务完成: {task_id}")
 
         except BackendError as e:
             # 已知业务异常
-            task['status'] = 'failed'
-            task['error'] = str(e)
-            task['error_message'] = str(e)
-            task['failed_at'] = datetime.now().isoformat()
+            task["status"] = "failed"
+            task["error"] = str(e)
+            task["error_message"] = str(e)
+            task["failed_at"] = datetime.now().isoformat()
 
             logger.error(f"✗ 训练任务失败 (业务异常): {task_id} - {e}")
             raise
         except Exception as e:
             # 未预期错误
-            task['status'] = 'failed'
-            task['error'] = str(e)
-            task['error_message'] = str(e)
-            task['failed_at'] = datetime.now().isoformat()
+            task["status"] = "failed"
+            task["error"] = str(e)
+            task["error_message"] = str(e)
+            task["failed_at"] = datetime.now().isoformat()
 
             logger.error(f"✗ 训练任务失败 (未预期错误): {task_id} - {e}")
             raise BackendError(
                 f"训练任务执行失败: {task_id}",
                 error_code="TRAINING_TASK_FAILED",
                 task_id=task_id,
-                reason=str(e)
+                reason=str(e),
             )
         finally:
             self._save_metadata()
@@ -178,11 +179,11 @@ class TrainingTaskManager:
             task_id: 任务ID
         """
         task = self.tasks[task_id]
-        config = task['config']
+        config = task["config"]
 
         # 检测是否启用池化训练
-        enable_pooled = config.get('enable_pooled_training', False)
-        symbols = config.get('symbols', [])
+        enable_pooled = config.get("enable_pooled_training", False)
+        symbols = config.get("symbols", [])
 
         if enable_pooled and len(symbols) > 1:
             # 使用池化训练Pipeline
@@ -199,46 +200,43 @@ class TrainingTaskManager:
             task_id: 任务ID
         """
         task = self.tasks[task_id]
-        config = task['config']
+        config = task["config"]
 
         # 使用 CoreTrainingService 统一训练流程
         core_service = CoreTrainingService()
 
         # 准备训练配置
         training_config = {
-            'symbol': config.get('symbol') or (config.get('symbols', [None])[0]),
-            'start_date': config.get('start_date'),
-            'end_date': config.get('end_date'),
-            'model_type': config.get('model_type', 'lightgbm'),
-            'target_period': config.get('target_period', 5),
-            'scaler_type': config.get('scaler_type', 'robust'),
-            'balance_samples': config.get('balance_samples', False),
-            'model_params': config.get('model_params', {}),
-            'use_async': True  # 使用异步模式
+            "symbol": config.get("symbol") or (config.get("symbols", [None])[0]),
+            "start_date": config.get("start_date"),
+            "end_date": config.get("end_date"),
+            "model_type": config.get("model_type", "lightgbm"),
+            "target_period": config.get("target_period", 5),
+            "scaler_type": config.get("scaler_type", "robust"),
+            "balance_samples": config.get("balance_samples", False),
+            "model_params": config.get("model_params", {}),
+            "use_async": True,  # 使用异步模式
         }
 
         # 添加可选参数
-        if 'seq_length' in config:
-            training_config['seq_length'] = config['seq_length']
-        if 'epochs' in config:
-            training_config['epochs'] = config['epochs']
+        if "seq_length" in config:
+            training_config["seq_length"] = config["seq_length"]
+        if "epochs" in config:
+            training_config["epochs"] = config["epochs"]
 
         logger.info(f"[单股票训练] 配置: {training_config}")
 
         # 执行训练
-        result = await asyncio.to_thread(
-            core_service.train_model,
-            **training_config
-        )
+        result = await asyncio.to_thread(core_service.train_model, **training_config)
 
         # 保存训练结果
-        task['metrics'] = result.get('metrics', {})
-        task['model_path'] = str(result.get('model_path', ''))
-        task['feature_importance'] = result.get('feature_importance', {})
-        task['has_baseline'] = False
+        task["metrics"] = result.get("metrics", {})
+        task["model_path"] = str(result.get("model_path", ""))
+        task["feature_importance"] = result.get("feature_importance", {})
+        task["has_baseline"] = False
 
         # 更新进度
-        task['progress'] = 100
+        task["progress"] = 100
 
         logger.info(f"✓ 单股票训练完成，模型路径: {task['model_path']}")
 
@@ -252,7 +250,7 @@ class TrainingTaskManager:
             task_id: 任务ID
         """
         task = self.tasks[task_id]
-        config = task['config']
+        config = task["config"]
 
         logger.info(f"[池化训练] 开始多股票池化训练")
 
@@ -260,37 +258,39 @@ class TrainingTaskManager:
         from src.data_pipeline.pooled_training_pipeline import PooledTrainingPipeline
 
         # 准备参数
-        symbol_list = config.get('symbols', [])
-        start_date = config.get('start_date')
-        end_date = config.get('end_date')
-        target_period = config.get('target_period', 10)
-        model_type = config.get('model_type', 'lightgbm')
-        enable_ridge_baseline = config.get('enable_ridge_baseline', True)
+        symbol_list = config.get("symbols", [])
+        start_date = config.get("start_date")
+        end_date = config.get("end_date")
+        target_period = config.get("target_period", 10)
+        config.get("model_type", "lightgbm")
+        enable_ridge_baseline = config.get("enable_ridge_baseline", True)
 
         # 模型参数
-        lightgbm_params = config.get('model_params', {
-            'max_depth': 3,
-            'num_leaves': 7,
-            'n_estimators': 200,
-            'learning_rate': 0.03,
-            'min_child_samples': 100,
-            'reg_alpha': 2.0,
-            'reg_lambda': 2.0
-        })
+        lightgbm_params = config.get(
+            "model_params",
+            {
+                "max_depth": 3,
+                "num_leaves": 7,
+                "n_estimators": 200,
+                "learning_rate": 0.03,
+                "min_child_samples": 100,
+                "reg_alpha": 2.0,
+                "reg_lambda": 2.0,
+            },
+        )
 
-        ridge_params = config.get('ridge_params', {'alpha': 1.0})
+        ridge_params = config.get("ridge_params", {"alpha": 1.0})
 
         logger.info(f"[池化训练] 股票数: {len(symbol_list)}, Ridge基准: {enable_ridge_baseline}")
 
         # 更新进度
-        task['progress'] = 10
-        task['current_step'] = f"加载 {len(symbol_list)} 只股票数据..."
+        task["progress"] = 10
+        task["current_step"] = f"加载 {len(symbol_list)} 只股票数据..."
         self._save_metadata()
 
         # 创建Pipeline
         pipeline = PooledTrainingPipeline(
-            scaler_type=config.get('scaler_type', 'robust'),
-            verbose=True
+            scaler_type=config.get("scaler_type", "robust"), verbose=True
         )
 
         # 执行完整Pipeline
@@ -302,33 +302,33 @@ class TrainingTaskManager:
             target_period=target_period,
             lightgbm_params=lightgbm_params,
             ridge_params=ridge_params,
-            enable_ridge_baseline=enable_ridge_baseline
+            enable_ridge_baseline=enable_ridge_baseline,
         )
 
         # 保存结果
-        task['metrics'] = {
-            'ic': result['lgb_metrics']['test_ic'],
-            'rank_ic': result['lgb_metrics']['test_rank_ic'],
-            'mae': result['lgb_metrics']['test_mae'],
-            'r2': result['lgb_metrics']['test_r2'],
-            'train_ic': result['lgb_metrics']['train_ic'],
-            'valid_ic': result['lgb_metrics']['valid_ic']
+        task["metrics"] = {
+            "ic": result["lgb_metrics"]["test_ic"],
+            "rank_ic": result["lgb_metrics"]["test_rank_ic"],
+            "mae": result["lgb_metrics"]["test_mae"],
+            "r2": result["lgb_metrics"]["test_r2"],
+            "train_ic": result["lgb_metrics"]["train_ic"],
+            "valid_ic": result["lgb_metrics"]["valid_ic"],
         }
 
-        task['has_baseline'] = result.get('has_baseline', False)
-        task['baseline_metrics'] = result.get('ridge_metrics', {})
-        task['comparison_result'] = result.get('comparison_result', {})
-        task['recommendation'] = result.get('recommendation', '')
-        task['total_samples'] = result.get('total_samples', 0)
-        task['successful_symbols'] = result.get('successful_symbols', [])
-        task['feature_importance'] = result.get('feature_importance', {})
+        task["has_baseline"] = result.get("has_baseline", False)
+        task["baseline_metrics"] = result.get("ridge_metrics", {})
+        task["comparison_result"] = result.get("comparison_result", {})
+        task["recommendation"] = result.get("recommendation", "")
+        task["total_samples"] = result.get("total_samples", 0)
+        task["successful_symbols"] = result.get("successful_symbols", [])
+        task["feature_importance"] = result.get("feature_importance", {})
 
         # 模型路径（取LightGBM的路径）
-        task['model_path'] = str(result.get('lgb_model_path', ''))
+        task["model_path"] = str(result.get("lgb_model_path", ""))
 
         # 更新进度
-        task['progress'] = 100
-        task['current_step'] = "训练完成"
+        task["progress"] = 100
+        task["current_step"] = "训练完成"
 
         logger.info(f"✓ 池化训练完成，推荐: {task['recommendation']}")
 
@@ -340,60 +340,67 @@ class TrainingTaskManager:
         # 执行回测（与单股票训练一致）
         if experiment_id:
             logger.info(f"[池化训练] 开始回测...")
-            task['current_step'] = "回测中..."
-            task['progress'] = 95
+            task["current_step"] = "回测中..."
+            task["progress"] = 95
             self._save_metadata()
 
             try:
                 from app.services.backtest_service import BacktestService
+
                 backtest_service = BacktestService(self.db)
 
                 # 使用第一个成功的股票代码进行回测（池化模型可以用于任意股票）
-                symbol_for_backtest = task['successful_symbols'][0] if task['successful_symbols'] else config.get('symbols', [])[0]
+                symbol_for_backtest = (
+                    task["successful_symbols"][0]
+                    if task["successful_symbols"]
+                    else config.get("symbols", [])[0]
+                )
 
                 # 执行回测（注意：BacktestService.run_backtest是async方法）
                 # 使用ML模型策略进行回测，而不是默认的技术指标策略
                 backtest_result_full = await backtest_service.run_backtest(
                     symbols=symbol_for_backtest,  # 参数名是 symbols
-                    start_date=config.get('start_date'),
-                    end_date=config.get('end_date'),
-                    strategy_id='ml_model',  # ✅ 使用ML模型策略
+                    start_date=config.get("start_date"),
+                    end_date=config.get("end_date"),
+                    strategy_id="ml_model",  # ✅ 使用ML模型策略
                     strategy_params={
-                        'model_id': task_id,  # 传入训练生成的model_id
-                        'buy_threshold': 0.15,  # 预测收益率超过0.15%时买入
-                        'sell_threshold': -0.3,  # 预测收益率低于-0.3%时卖出
-                    }
+                        "model_id": task_id,  # 传入训练生成的model_id
+                        "buy_threshold": 0.15,  # 预测收益率超过0.15%时买入
+                        "sell_threshold": -0.3,  # 预测收益率低于-0.3%时卖出
+                    },
                 )
 
                 # 提取 metrics 部分作为回测指标
-                backtest_result = backtest_result_full.get('metrics', {})
+                backtest_result = backtest_result_full.get("metrics", {})
 
                 # 更新数据库中的回测结果
                 await self._update_pooled_backtest_result(experiment_id, backtest_result)
 
                 # 计算并更新综合评分
                 from app.services.model_ranker import ModelRanker
+
                 ranker = ModelRanker(self.db)
                 rank_score = ranker.calculate_rank_score(
-                    train_metrics=task.get('metrics', {}),
-                    backtest_metrics=backtest_result
+                    train_metrics=task.get("metrics", {}), backtest_metrics=backtest_result
                 )
                 await self._update_rank_score(experiment_id, rank_score)
 
                 # 更新任务状态
-                task['backtest_metrics'] = backtest_result
-                task['rank_score'] = rank_score
-                task['current_step'] = "回测完成"
-                task['progress'] = 100
+                task["backtest_metrics"] = backtest_result
+                task["rank_score"] = rank_score
+                task["current_step"] = "回测完成"
+                task["progress"] = 100
 
-                logger.info(f"✓ 池化训练回测完成，年化收益: {backtest_result.get('annualized_return', 0):.2%}, 评分: {rank_score:.2f}")
+                logger.info(
+                    f"✓ 池化训练回测完成，年化收益: {backtest_result.get('annualized_return', 0):.2%}, 评分: {rank_score:.2f}"
+                )
 
             except Exception as e:
                 logger.error(f"✗ 池化训练回测失败: {e}")
                 # 回测失败不影响训练结果
-                task['backtest_error'] = str(e)
-                task['current_step'] = "训练完成（回测失败）"
-                task['progress'] = 100
+                task["backtest_error"] = str(e)
+                task["current_step"] = "训练完成（回测失败）"
+                task["progress"] = 100
 
         self._save_metadata()
 
@@ -402,10 +409,7 @@ class TrainingTaskManager:
         return self.tasks.get(task_id)
 
     def list_tasks(
-        self,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
+        self, status: Optional[str] = None, limit: int = 100, offset: int = 0
     ) -> Dict[str, Any]:
         """
         列出任务
@@ -421,25 +425,17 @@ class TrainingTaskManager:
         # 过滤任务
         filtered_tasks = []
         for task in self.tasks.values():
-            if status is None or task.get('status') == status:
+            if status is None or task.get("status") == status:
                 filtered_tasks.append(task)
 
         # 排序（按创建时间倒序）
-        filtered_tasks.sort(
-            key=lambda x: x.get('created_at', ''),
-            reverse=True
-        )
+        filtered_tasks.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
         # 分页
         total = len(filtered_tasks)
-        paginated_tasks = filtered_tasks[offset:offset + limit]
+        paginated_tasks = filtered_tasks[offset : offset + limit]
 
-        return {
-            'tasks': paginated_tasks,
-            'total': total,
-            'limit': limit,
-            'offset': offset
-        }
+        return {"tasks": paginated_tasks, "total": total, "limit": limit, "offset": offset}
 
     def cancel_task(self, task_id: str):
         """
@@ -453,11 +449,11 @@ class TrainingTaskManager:
 
         task = self.tasks[task_id]
 
-        if task['status'] not in ['pending', 'running']:
+        if task["status"] not in ["pending", "running"]:
             raise ValueError(f"任务无法取消，当前状态: {task['status']}")
 
-        task['status'] = 'cancelled'
-        task['cancelled_at'] = datetime.now().isoformat()
+        task["status"] = "cancelled"
+        task["cancelled_at"] = datetime.now().isoformat()
         self._save_metadata()
 
         logger.info(f"✓ 任务已取消: {task_id}")
@@ -478,10 +474,7 @@ class TrainingTaskManager:
         logger.info(f"✓ 任务已删除: {task_id}")
 
     async def _save_pooled_experiment_to_db(
-        self,
-        task_id: str,
-        result: Dict[str, Any],
-        config: Dict[str, Any]
+        self, task_id: str, result: Dict[str, Any], config: Dict[str, Any]
     ) -> Optional[int]:
         """
         保存池化训练结果到数据库的 experiments 表
@@ -498,42 +491,46 @@ class TrainingTaskManager:
 
         try:
             # 生成模型名称：POOLED_symbols_modeltype_period
-            symbols = config.get('symbols', [])
-            symbols_str = '_'.join(symbols[:3]) + (f'_plus{len(symbols)-3}' if len(symbols) > 3 else '')
-            model_type = config.get('model_type', 'lightgbm')
-            target_period = config.get('target_period', 10)
+            symbols = config.get("symbols", [])
+            symbols_str = "_".join(symbols[:3]) + (
+                f"_plus{len(symbols)-3}" if len(symbols) > 3 else ""
+            )
+            model_type = config.get("model_type", "lightgbm")
+            target_period = config.get("target_period", 10)
             experiment_name = f"POOLED_{symbols_str}_{model_type}_{target_period}d"
 
             # 准备插入数据
             # 扩展config，添加训练结果中的关键信息
             extended_config = config.copy()
-            extended_config['feature_cols'] = result.get('feature_cols', [])
-            extended_config['scaler_path'] = result.get('scaler_path', '')
-            extended_config['feature_count'] = result.get('feature_count', 0)
+            extended_config["feature_cols"] = result.get("feature_cols", [])
+            extended_config["scaler_path"] = result.get("scaler_path", "")
+            extended_config["feature_count"] = result.get("feature_count", 0)
 
             insert_data = {
-                'batch_id': None,  # 手动训练不属于批次
-                'experiment_name': experiment_name,
-                'model_id': task_id,  # 使用task_id作为model_id
-                'model_path': result.get('lgb_model_path', ''),
-                'config': Json(extended_config),
-                'train_metrics': Json({
-                    'ic': result['lgb_metrics']['test_ic'],
-                    'rank_ic': result['lgb_metrics']['test_rank_ic'],
-                    'mae': result['lgb_metrics']['test_mae'],
-                    'r2': result['lgb_metrics']['test_r2'],
-                    'rmse': result['lgb_metrics'].get('test_rmse', 0),
-                    'train_ic': result['lgb_metrics']['train_ic'],
-                    'valid_ic': result['lgb_metrics']['valid_ic'],
-                    'test_ic': result['lgb_metrics']['test_ic']
-                }),
-                'status': 'completed',
-                'has_baseline': result.get('has_baseline', False),
-                'baseline_metrics': Json(result.get('ridge_metrics', {})),
-                'comparison_result': Json(result.get('comparison_result', {})),
-                'recommendation': result.get('recommendation', ''),
-                'total_samples': result.get('total_samples', 0),
-                'successful_symbols': result.get('successful_symbols', [])
+                "batch_id": None,  # 手动训练不属于批次
+                "experiment_name": experiment_name,
+                "model_id": task_id,  # 使用task_id作为model_id
+                "model_path": result.get("lgb_model_path", ""),
+                "config": Json(extended_config),
+                "train_metrics": Json(
+                    {
+                        "ic": result["lgb_metrics"]["test_ic"],
+                        "rank_ic": result["lgb_metrics"]["test_rank_ic"],
+                        "mae": result["lgb_metrics"]["test_mae"],
+                        "r2": result["lgb_metrics"]["test_r2"],
+                        "rmse": result["lgb_metrics"].get("test_rmse", 0),
+                        "train_ic": result["lgb_metrics"]["train_ic"],
+                        "valid_ic": result["lgb_metrics"]["valid_ic"],
+                        "test_ic": result["lgb_metrics"]["test_ic"],
+                    }
+                ),
+                "status": "completed",
+                "has_baseline": result.get("has_baseline", False),
+                "baseline_metrics": Json(result.get("ridge_metrics", {})),
+                "comparison_result": Json(result.get("comparison_result", {})),
+                "recommendation": result.get("recommendation", ""),
+                "total_samples": result.get("total_samples", 0),
+                "successful_symbols": result.get("successful_symbols", []),
             }
 
             # 执行插入
@@ -582,11 +579,7 @@ class TrainingTaskManager:
             # 不抛出异常，避免影响训练流程
             return None
 
-    async def _update_pooled_backtest_result(
-        self,
-        exp_id: int,
-        backtest_metrics: Dict[str, Any]
-    ):
+    async def _update_pooled_backtest_result(self, exp_id: int, backtest_metrics: Dict[str, Any]):
         """
         更新池化训练实验的回测结果
 
@@ -594,8 +587,9 @@ class TrainingTaskManager:
             exp_id: 实验ID
             backtest_metrics: 回测指标
         """
-        from psycopg2.extras import Json
         from datetime import datetime
+
+        from psycopg2.extras import Json
 
         try:
             query = """
@@ -606,11 +600,7 @@ class TrainingTaskManager:
                 WHERE id = %s
             """
 
-            params = (
-                Json(backtest_metrics) if backtest_metrics else None,
-                datetime.now(),
-                exp_id
-            )
+            params = (Json(backtest_metrics) if backtest_metrics else None, datetime.now(), exp_id)
 
             # 使用连接池执行更新
             conn = self.db.get_connection()
@@ -629,11 +619,7 @@ class TrainingTaskManager:
             logger.error(f"✗ 更新池化训练回测结果时出错: {e}")
             # 不抛出异常，避免影响训练流程
 
-    async def _update_rank_score(
-        self,
-        exp_id: int,
-        rank_score: float
-    ):
+    async def _update_rank_score(self, exp_id: int, rank_score: float):
         """
         更新实验的综合评分
 
@@ -656,7 +642,9 @@ class TrainingTaskManager:
                 with conn.cursor() as cur:
                     cur.execute(query, params)
                     conn.commit()
-                    logger.info(f"✓ 综合评分已更新到数据库，实验ID: {exp_id}, 评分: {rank_score:.2f}")
+                    logger.info(
+                        f"✓ 综合评分已更新到数据库，实验ID: {exp_id}, 评分: {rank_score:.2f}"
+                    )
             finally:
                 self.db.release_connection(conn)
 

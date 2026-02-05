@@ -13,11 +13,10 @@ Stocks API 集成测试
 版本: 1.0.0
 """
 
-import pytest
-from datetime import datetime, date
 import asyncio
+from datetime import datetime
 
-
+import pytest
 
 # ==================== 测试配置 ====================
 
@@ -34,13 +33,11 @@ def test_stock_code():
 @pytest.fixture
 def test_date_range():
     """测试日期范围"""
-    return {
-        "start": "2024-01-01",
-        "end": "2024-01-31"
-    }
+    return {"start": "2024-01-01", "end": "2024-01-31"}
 
 
 # ==================== 集成测试 ====================
+
 
 class TestStocksAPIIntegration:
     """Stocks API 集成测试套件"""
@@ -57,13 +54,7 @@ class TestStocksAPIIntegration:
         3. Core Adapter 正常工作
         """
         # Act
-        response = await client.get(
-            f"{API_PREFIX}/list",
-            params={
-                "page": 1,
-                "page_size": 10
-            }
-        )
+        response = await client.get(f"{API_PREFIX}/list", params={"page": 1, "page_size": 10})
 
         # Assert
         assert response.status_code == 200
@@ -94,12 +85,7 @@ class TestStocksAPIIntegration:
         # Act: 测试市场过滤
         response = await client.get(
             f"{API_PREFIX}/list",
-            params={
-                "market": "主板",
-                "status": "正常",
-                "page": 1,
-                "page_size": 20
-            }
+            params={"market": "主板", "status": "正常", "page": 1, "page_size": 20},
         )
 
         # Assert
@@ -122,12 +108,7 @@ class TestStocksAPIIntegration:
         """
         # Act: 搜索股票代码
         response = await client.get(
-            f"{API_PREFIX}/list",
-            params={
-                "search": "000001",
-                "page": 1,
-                "page_size": 20
-            }
+            f"{API_PREFIX}/list", params={"search": "000001", "page": 1, "page_size": 20}
         )
 
         # Assert
@@ -138,8 +119,7 @@ class TestStocksAPIIntegration:
         # 验证搜索结果
         if data["data"]["total"] > 0:
             assert any(
-                "000001" in item.get("code", "") or
-                "000001" in item.get("name", "")
+                "000001" in item.get("code", "") or "000001" in item.get("name", "")
                 for item in data["data"]["items"]
             )
 
@@ -150,16 +130,10 @@ class TestStocksAPIIntegration:
         集成测试：分页功能
         """
         # Act: 获取第 1 页
-        response1 = await client.get(
-            f"{API_PREFIX}/list",
-            params={"page": 1, "page_size": 5}
-        )
+        response1 = await client.get(f"{API_PREFIX}/list", params={"page": 1, "page_size": 5})
 
         # Act: 获取第 2 页
-        response2 = await client.get(
-            f"{API_PREFIX}/list",
-            params={"page": 2, "page_size": 5}
-        )
+        response2 = await client.get(f"{API_PREFIX}/list", params={"page": 2, "page_size": 5})
 
         # Assert
         assert response1.status_code == 200
@@ -225,8 +199,8 @@ class TestStocksAPIIntegration:
             params={
                 "start_date": test_date_range["start"],
                 "end_date": test_date_range["end"],
-                "limit": 100
-            }
+                "limit": 100,
+            },
         )
 
         # Assert
@@ -248,10 +222,7 @@ class TestStocksAPIIntegration:
         集成测试：日线数据限制
         """
         # Act: 限制 10 条
-        response = await client.get(
-            f"{API_PREFIX}/{test_stock_code}/daily",
-            params={"limit": 10}
-        )
+        response = await client.get(f"{API_PREFIX}/{test_stock_code}/daily", params={"limit": 10})
 
         # Assert
         if response.status_code == 200:
@@ -268,10 +239,7 @@ class TestStocksAPIIntegration:
         # Act
         response = await client.get(
             f"{API_PREFIX}/{test_stock_code}/minute",
-            params={
-                "trade_date": "2024-01-15",
-                "period": "1min"
-            }
+            params={"trade_date": "2024-01-15", "period": "1min"},
         )
 
         # Assert
@@ -303,6 +271,7 @@ class TestStocksAPIIntegration:
 
 
 # ==================== 性能测试 ====================
+
 
 class TestStocksAPIPerformance:
     """Stocks API 性能测试"""
@@ -348,10 +317,7 @@ class TestStocksAPIPerformance:
         验证单个请求的响应时间
         """
         start_time = datetime.now()
-        response = await client.get(
-            f"{API_PREFIX}/list",
-            params={"page": 1, "page_size": 20}
-        )
+        response = await client.get(f"{API_PREFIX}/list", params={"page": 1, "page_size": 20})
         end_time = datetime.now()
 
         elapsed = (end_time - start_time).total_seconds()
@@ -364,6 +330,7 @@ class TestStocksAPIPerformance:
 
 # ==================== 边界测试 ====================
 
+
 class TestStocksAPIBoundary:
     """Stocks API 边界测试"""
 
@@ -372,10 +339,7 @@ class TestStocksAPIBoundary:
     async def test_large_page_size(self, client):
         """边界测试：超大页面大小"""
         # Act: 请求最大允许的页面大小
-        response = await client.get(
-            f"{API_PREFIX}/list",
-            params={"page": 1, "page_size": 100}
-        )
+        response = await client.get(f"{API_PREFIX}/list", params={"page": 1, "page_size": 100})
 
         # Assert
         assert response.status_code == 200
@@ -388,10 +352,7 @@ class TestStocksAPIBoundary:
     async def test_invalid_page_number(self, client):
         """边界测试：无效页码"""
         # Act: 页码为 0（无效）
-        response = await client.get(
-            f"{API_PREFIX}/list",
-            params={"page": 0, "page_size": 20}
-        )
+        response = await client.get(f"{API_PREFIX}/list", params={"page": 0, "page_size": 20})
 
         # Assert: 应该被 FastAPI 验证拦截
         assert response.status_code == 422
@@ -401,10 +362,7 @@ class TestStocksAPIBoundary:
     async def test_oversized_page_size(self, client):
         """边界测试：超过限制的页面大小"""
         # Act: 页面大小为 200（超过限制 100）
-        response = await client.get(
-            f"{API_PREFIX}/list",
-            params={"page": 1, "page_size": 200}
-        )
+        response = await client.get(f"{API_PREFIX}/list", params={"page": 1, "page_size": 200})
 
         # Assert: 应该被 FastAPI 验证拦截
         assert response.status_code == 422
@@ -416,10 +374,7 @@ class TestStocksAPIBoundary:
         # Act
         response = await client.get(
             f"{API_PREFIX}/000001/daily",
-            params={
-                "start_date": "invalid-date",
-                "end_date": "2024-01-31"
-            }
+            params={"start_date": "invalid-date", "end_date": "2024-01-31"},
         )
 
         # Assert
@@ -429,6 +384,7 @@ class TestStocksAPIBoundary:
 
 
 # ==================== 测试辅助函数 ====================
+
 
 @pytest.fixture(scope="session")
 def event_loop():

@@ -7,42 +7,41 @@ Backtest API 单元测试
 创建日期: 2026-02-02
 """
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, date
-import pandas as pd
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 # 添加项目路径
 backend_path = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(backend_path))
 
 from app.api.endpoints.backtest import (
-    run_backtest,
-    calculate_metrics,
-    run_parallel_backtest,
-    optimize_strategy_params,
+    BacktestRequest,
+    OptimizeParamsRequest,
+    ParallelBacktestRequest,
     analyze_trading_costs,
+    calculate_metrics,
     calculate_risk_metrics,
     get_trade_statistics,
-    BacktestRequest,
-    ParallelBacktestRequest,
-    OptimizeParamsRequest
+    optimize_strategy_params,
+    run_backtest,
+    run_parallel_backtest,
 )
 
 
 @pytest.fixture
 def mock_backtest_adapter():
     """创建模拟的 BacktestAdapter"""
-    with patch('app.api.endpoints.backtest.backtest_adapter') as mock:
+    with patch("app.api.endpoints.backtest.backtest_adapter") as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_data_adapter():
     """创建模拟的 DataAdapter"""
-    with patch('app.api.endpoints.backtest.data_adapter') as mock:
+    with patch("app.api.endpoints.backtest.data_adapter") as mock:
         yield mock
 
 
@@ -58,7 +57,7 @@ def sample_backtest_request():
         commission_rate=0.0003,
         stamp_tax_rate=0.001,
         min_commission=5.0,
-        slippage=0.0
+        slippage=0.0,
     )
 
 
@@ -74,8 +73,8 @@ def sample_backtest_result():
             "annual_return": 0.15,
             "sharpe_ratio": 1.5,
             "max_drawdown": -0.05,
-            "win_rate": 0.65
-        }
+            "win_rate": 0.65,
+        },
     }
 
 
@@ -86,7 +85,7 @@ class TestRunBacktest:
     async def test_run_backtest_success(self, sample_backtest_request, sample_backtest_result):
         """测试成功运行回测"""
         # Arrange
-        with patch('app.api.endpoints.backtest.BacktestAdapter') as MockAdapter:
+        with patch("app.api.endpoints.backtest.BacktestAdapter") as MockAdapter:
             mock_instance = MockAdapter.return_value
             mock_instance.run_backtest = AsyncMock(return_value=sample_backtest_result)
 
@@ -108,7 +107,7 @@ class TestRunBacktest:
             start_date="2023-12-31",  # 开始日期晚于结束日期
             end_date="2023-01-01",
             strategy_params={},
-            initial_capital=1000000.0
+            initial_capital=1000000.0,
         )
 
         # Act
@@ -127,7 +126,7 @@ class TestRunBacktest:
             start_date="2023/01/01",  # 错误的日期格式
             end_date="2023-12-31",
             strategy_params={},
-            initial_capital=1000000.0
+            initial_capital=1000000.0,
         )
 
         # Act
@@ -141,11 +140,9 @@ class TestRunBacktest:
     async def test_run_backtest_adapter_error(self, sample_backtest_request):
         """测试适配器执行错误"""
         # Arrange
-        with patch('app.api.endpoints.backtest.BacktestAdapter') as MockAdapter:
+        with patch("app.api.endpoints.backtest.BacktestAdapter") as MockAdapter:
             mock_instance = MockAdapter.return_value
-            mock_instance.run_backtest = AsyncMock(
-                side_effect=Exception("回测引擎错误")
-            )
+            mock_instance.run_backtest = AsyncMock(side_effect=Exception("回测引擎错误"))
 
             # Act
             result = await run_backtest(sample_backtest_request)
@@ -167,19 +164,12 @@ class TestCalculateMetrics:
         trades = [{"code": "000001", "action": "buy"}]
         positions = [{"code": "000001", "quantity": 100}]
 
-        expected_metrics = {
-            "total_return": 0.015,
-            "sharpe_ratio": 1.5,
-            "max_drawdown": -0.05
-        }
+        expected_metrics = {"total_return": 0.015, "sharpe_ratio": 1.5, "max_drawdown": -0.05}
         mock_backtest_adapter.calculate_metrics = AsyncMock(return_value=expected_metrics)
 
         # Act
         result = await calculate_metrics(
-            portfolio_value=portfolio_value,
-            dates=dates,
-            trades=trades,
-            positions=positions
+            portfolio_value=portfolio_value, dates=dates, trades=trades, positions=positions
         )
 
         # Assert
@@ -196,10 +186,7 @@ class TestCalculateMetrics:
         dates = []
 
         # Act
-        result = await calculate_metrics(
-            portfolio_value=portfolio_value,
-            dates=dates
-        )
+        result = await calculate_metrics(portfolio_value=portfolio_value, dates=dates)
 
         # Assert
         # 空数据应该导致错误
@@ -217,17 +204,17 @@ class TestRunParallelBacktest:
             stock_codes=["000001"],
             strategy_params_list=[
                 {"short_window": 5, "long_window": 20},
-                {"short_window": 10, "long_window": 40}
+                {"short_window": 10, "long_window": 40},
             ],
             start_date="2023-01-01",
             end_date="2023-12-31",
             initial_capital=1000000.0,
-            n_processes=2
+            n_processes=2,
         )
 
         mock_results = [
             {"params": {"short_window": 5}, "metrics": {"sharpe_ratio": 1.5}},
-            {"params": {"short_window": 10}, "metrics": {"sharpe_ratio": 1.8}}
+            {"params": {"short_window": 10}, "metrics": {"sharpe_ratio": 1.8}},
         ]
         mock_backtest_adapter.run_parallel_backtest = AsyncMock(return_value=mock_results)
 
@@ -249,16 +236,16 @@ class TestRunParallelBacktest:
             stock_codes=["000001"],
             strategy_params_list=[
                 {"short_window": 5, "long_window": 20},
-                {"short_window": 10, "long_window": 40}
+                {"short_window": 10, "long_window": 40},
             ],
             start_date="2023-01-01",
             end_date="2023-12-31",
-            initial_capital=1000000.0
+            initial_capital=1000000.0,
         )
 
         mock_results = [
             {"params": {"short_window": 5}, "metrics": {"sharpe_ratio": 1.5}},
-            {"params": {"short_window": 10}, "error": "数据不足"}
+            {"params": {"short_window": 10}, "error": "数据不足"},
         ]
         mock_backtest_adapter.run_parallel_backtest = AsyncMock(return_value=mock_results)
 
@@ -280,24 +267,21 @@ class TestOptimizeStrategyParams:
         # Arrange
         request = OptimizeParamsRequest(
             stock_codes=["000001"],
-            param_grid={
-                "short_window": [5, 10],
-                "long_window": [20, 40]
-            },
+            param_grid={"short_window": [5, 10], "long_window": [20, 40]},
             start_date="2023-01-01",
             end_date="2023-12-31",
             initial_capital=1000000.0,
-            metric="sharpe_ratio"
+            metric="sharpe_ratio",
         )
 
         expected_result = {
             "best_params": {"short_window": 10, "long_window": 40},
             "best_metric_value": 1.85,
             "metric": "sharpe_ratio",
-            "total_combinations": 4
+            "total_combinations": 4,
         }
 
-        with patch('app.api.endpoints.backtest.BacktestAdapter') as MockAdapter:
+        with patch("app.api.endpoints.backtest.BacktestAdapter") as MockAdapter:
             mock_instance = MockAdapter.return_value
             mock_instance.optimize_strategy_params = AsyncMock(return_value=expected_result)
 
@@ -318,10 +302,10 @@ class TestOptimizeStrategyParams:
             param_grid={},  # 空参数网格
             start_date="2023-01-01",
             end_date="2023-12-31",
-            initial_capital=1000000.0
+            initial_capital=1000000.0,
         )
 
-        with patch('app.api.endpoints.backtest.BacktestAdapter') as MockAdapter:
+        with patch("app.api.endpoints.backtest.BacktestAdapter") as MockAdapter:
             mock_instance = MockAdapter.return_value
             mock_instance.optimize_strategy_params = AsyncMock(
                 side_effect=ValueError("参数网格不能为空")
@@ -343,14 +327,14 @@ class TestAnalyzeTradingCosts:
         # Arrange
         trades = [
             {"code": "000001", "action": "buy", "price": 10.0, "quantity": 100},
-            {"code": "000001", "action": "sell", "price": 11.0, "quantity": 100}
+            {"code": "000001", "action": "sell", "price": 11.0, "quantity": 100},
         ]
 
         expected_analysis = {
             "total_commission": 15.0,
             "total_stamp_tax": 11.0,
             "total_cost": 26.0,
-            "cost_ratio": 0.0026
+            "cost_ratio": 0.0026,
         }
         mock_backtest_adapter.analyze_trading_costs = AsyncMock(return_value=expected_analysis)
 
@@ -384,19 +368,11 @@ class TestCalculateRiskMetrics:
         dates = ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]
         positions = []
 
-        expected_metrics = {
-            "volatility": 0.18,
-            "var_95": -0.025,
-            "cvar_95": -0.035
-        }
+        expected_metrics = {"volatility": 0.18, "var_95": -0.025, "cvar_95": -0.035}
         mock_backtest_adapter.calculate_risk_metrics = AsyncMock(return_value=expected_metrics)
 
         # Act
-        result = await calculate_risk_metrics(
-            returns=returns,
-            dates=dates,
-            positions=positions
-        )
+        result = await calculate_risk_metrics(returns=returns, dates=dates, positions=positions)
 
         # Assert
         assert result["code"] == 200
@@ -413,7 +389,7 @@ class TestGetTradeStatistics:
         # Arrange
         trades = [
             {"code": "000001", "buy_price": 10.0, "sell_price": 11.0},
-            {"code": "000002", "buy_price": 20.0, "sell_price": 19.0}
+            {"code": "000002", "buy_price": 20.0, "sell_price": 19.0},
         ]
 
         expected_stats = {
@@ -421,7 +397,7 @@ class TestGetTradeStatistics:
             "winning_trades": 1,
             "losing_trades": 1,
             "win_rate": 0.5,
-            "profit_factor": 1.0
+            "profit_factor": 1.0,
         }
         mock_backtest_adapter.get_trade_statistics = AsyncMock(return_value=expected_stats)
 
@@ -438,10 +414,7 @@ class TestGetTradeStatistics:
     async def test_get_trade_statistics_empty(self, mock_backtest_adapter):
         """测试空交易统计"""
         # Arrange
-        expected_stats = {
-            "total_trades": 0,
-            "win_rate": 0.0
-        }
+        expected_stats = {"total_trades": 0, "win_rate": 0.0}
         mock_backtest_adapter.get_trade_statistics = AsyncMock(return_value=expected_stats)
 
         # Act
@@ -463,7 +436,7 @@ class TestBacktestRequestValidation:
             start_date="2023-01-01",
             end_date="2023-12-31",
             strategy_params={},
-            initial_capital=1000000.0
+            initial_capital=1000000.0,
         )
 
         # Assert
@@ -478,7 +451,7 @@ class TestBacktestRequestValidation:
                 start_date="2023-01-01",
                 end_date="2023-12-31",
                 strategy_params={},
-                initial_capital=-1000.0  # 负数资金
+                initial_capital=-1000.0,  # 负数资金
             )
 
     def test_backtest_request_empty_stock_codes(self):
@@ -489,9 +462,9 @@ class TestBacktestRequestValidation:
                 start_date="2023-01-01",
                 end_date="2023-12-31",
                 strategy_params={},
-                initial_capital=1000000.0
+                initial_capital=1000000.0,
             )
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

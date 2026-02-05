@@ -6,5 +6,5 @@ Services层
 from .data_service import DataDownloadService
 
 __all__ = [
-    'DataDownloadService',
+    "DataDownloadService",
 ]

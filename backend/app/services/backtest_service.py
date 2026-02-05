@@ -3,17 +3,18 @@
 使用 Facade 模式委托给专门的服务类
 """
 
-from typing import Dict, List, Optional, Union
-from datetime import datetime
-from loguru import logger
 import uuid
+from datetime import datetime
+from typing import Dict, List, Optional, Union
 
+from loguru import logger
 from src.database.db_manager import DatabaseManager
-from app.strategies.strategy_manager import strategy_manager
+
+from app.core.exceptions import BacktestError, DataQueryError
 from app.services.backtest_data_loader import BacktestDataLoader
 from app.services.backtest_executor import BacktestExecutor
 from app.services.backtest_result_formatter import BacktestResultFormatter
-from app.core.exceptions import BacktestError, DataQueryError
+from app.strategies.strategy_manager import strategy_manager
 
 
 class BacktestService:
@@ -46,7 +47,7 @@ class BacktestService:
         end_date: str,
         initial_cash: float = 1000000.0,
         strategy_params: Optional[Dict] = None,
-        strategy_id: str = "complex_indicator"
+        strategy_id: str = "complex_indicator",
     ) -> Dict:
         """
         运行回测任务
@@ -84,7 +85,7 @@ class BacktestService:
                     start_date=start_date,
                     end_date=end_date,
                     initial_cash=initial_cash,
-                    strategy=strategy
+                    strategy=strategy,
                 )
             else:
                 result = await self._run_multi_stock_backtest(
@@ -92,19 +93,19 @@ class BacktestService:
                     start_date=start_date,
                     end_date=end_date,
                     initial_cash=initial_cash,
-                    strategy=strategy
+                    strategy=strategy,
                 )
 
             # 添加任务元信息
-            result['task_id'] = task_id
-            result['symbols'] = symbols
-            result['start_date'] = start_date
-            result['end_date'] = end_date
-            result['initial_cash'] = initial_cash
-            result['strategy_id'] = strategy_id
-            result['strategy_name'] = strategy.name
-            result['strategy_params'] = strategy.params
-            result['created_at'] = datetime.now().isoformat()
+            result["task_id"] = task_id
+            result["symbols"] = symbols
+            result["start_date"] = start_date
+            result["end_date"] = end_date
+            result["initial_cash"] = initial_cash
+            result["strategy_id"] = strategy_id
+            result["strategy_name"] = strategy.name
+            result["strategy_params"] = strategy.params
+            result["created_at"] = datetime.now().isoformat()
 
             # 缓存结果
             self._running_tasks[task_id] = result
@@ -123,7 +124,7 @@ class BacktestService:
                 error_code="BACKTEST_INVALID_PARAMS",
                 task_id=task_id,
                 symbols=symbols,
-                reason=str(e)
+                reason=str(e),
             )
         except Exception as e:
             logger.error(f"回测任务 {task_id} 失败: {e}")
@@ -132,16 +133,11 @@ class BacktestService:
                 error_code="BACKTEST_EXECUTION_FAILED",
                 task_id=task_id,
                 symbols=symbols,
-                reason=str(e)
+                reason=str(e),
             )
 
     async def _run_single_stock_backtest(
-        self,
-        symbol: str,
-        start_date: str,
-        end_date: str,
-        initial_cash: float,
-        strategy
+        self, symbol: str, start_date: str, end_date: str, initial_cash: float, strategy
     ) -> Dict:
         """
         单股回测模式
@@ -159,29 +155,21 @@ class BacktestService:
         logger.info(f"运行单股回测: {symbol}, 策略: {strategy.name}")
 
         # 1. 加载数据
-        price_data = await self.data_loader.load_single_stock_data(
-            symbol, start_date, end_date
-        )
-        benchmark_data = await self.data_loader.load_benchmark_data(
-            start_date, end_date
-        )
+        price_data = await self.data_loader.load_single_stock_data(symbol, start_date, end_date)
+        benchmark_data = await self.data_loader.load_benchmark_data(start_date, end_date)
 
         # 2. 执行回测
         backtest_result = self.executor.execute_single_stock_backtest(
             df=price_data,
             strategy=strategy,
             initial_cash=initial_cash,
-            benchmark_data=benchmark_data
+            benchmark_data=benchmark_data,
         )
 
         # 3. 格式化结果
         kline_data = self.formatter.optimize_kline_data(price_data)
-        signal_points = self.formatter.extract_signal_points(
-            backtest_result['trades']
-        )
-        equity_data = self.formatter.optimize_equity_curve(
-            backtest_result['equity_curve']
-        )
+        signal_points = self.formatter.extract_signal_points(backtest_result["trades"])
+        equity_data = self.formatter.optimize_equity_curve(backtest_result["equity_curve"])
 
         # 基准净值曲线
         benchmark_equity = None
@@ -189,24 +177,19 @@ class BacktestService:
             benchmark_equity = self.formatter.optimize_equity_curve(benchmark_data)
 
         return {
-            'mode': 'single',
-            'symbol': symbol,
-            'kline_data': kline_data,
-            'signal_points': signal_points,
-            'equity_curve': equity_data,
-            'benchmark_curve': benchmark_equity,
-            'metrics': backtest_result['metrics'],
-            'trades': backtest_result['trades'][:100],  # 只返回最近100笔交易
-            'total_trades': len(backtest_result['trades'])
+            "mode": "single",
+            "symbol": symbol,
+            "kline_data": kline_data,
+            "signal_points": signal_points,
+            "equity_curve": equity_data,
+            "benchmark_curve": benchmark_equity,
+            "metrics": backtest_result["metrics"],
+            "trades": backtest_result["trades"][:100],  # 只返回最近100笔交易
+            "total_trades": len(backtest_result["trades"]),
         }
 
     async def _run_multi_stock_backtest(
-        self,
-        symbols: List[str],
-        start_date: str,
-        end_date: str,
-        initial_cash: float,
-        strategy
+        self, symbols: List[str], start_date: str, end_date: str, initial_cash: float, strategy
     ) -> Dict:
         """
         多股组合回测模式
@@ -224,25 +207,19 @@ class BacktestService:
         logger.info(f"运行多股组合回测: {len(symbols)}只股票, 策略: {strategy.name}")
 
         # 1. 加载数据
-        prices_dict = await self.data_loader.load_multi_stock_data(
-            symbols, start_date, end_date
-        )
-        benchmark_data = await self.data_loader.load_benchmark_data(
-            start_date, end_date
-        )
+        prices_dict = await self.data_loader.load_multi_stock_data(symbols, start_date, end_date)
+        benchmark_data = await self.data_loader.load_benchmark_data(start_date, end_date)
 
         # 2. 执行回测
         backtest_result = self.executor.execute_multi_stock_backtest(
             prices_dict=prices_dict,
             strategy=strategy,
             initial_cash=initial_cash,
-            benchmark_data=benchmark_data
+            benchmark_data=benchmark_data,
         )
 
         # 3. 格式化结果
-        equity_data = self.formatter.format_portfolio_value(
-            backtest_result['portfolio_value']
-        )
+        equity_data = self.formatter.format_portfolio_value(backtest_result["portfolio_value"])
 
         # 基准数据
         benchmark_equity = None
@@ -250,12 +227,12 @@ class BacktestService:
             benchmark_equity = self.formatter.optimize_equity_curve(benchmark_data)
 
         return {
-            'mode': 'multi',
-            'symbols': symbols,
-            'equity_curve': equity_data,
-            'benchmark_curve': benchmark_equity,
-            'metrics': backtest_result['metrics'],
-            'positions_count': len(backtest_result['positions'])
+            "mode": "multi",
+            "symbols": symbols,
+            "equity_curve": equity_data,
+            "benchmark_curve": benchmark_equity,
+            "metrics": backtest_result["metrics"],
+            "positions_count": len(backtest_result["positions"]),
         }
 
     def get_task_result(self, task_id: str) -> Optional[Dict]:

@@ -4,6 +4,7 @@
 """
 
 from typing import Dict, List
+
 import pandas as pd
 
 
@@ -20,13 +21,8 @@ class BacktestResultFormatter:
 
     def __init__(self):
         """初始化格式化器"""
-        pass
 
-    def optimize_kline_data(
-        self,
-        df: pd.DataFrame,
-        max_points: int = 1000
-    ) -> List[Dict]:
+    def optimize_kline_data(self, df: pd.DataFrame, max_points: int = 1000) -> List[Dict]:
         """
         优化K线数据传输（降采样）
 
@@ -45,11 +41,7 @@ class BacktestResultFormatter:
         sampled = df.tail(max_points)
         return self._df_to_kline_list(sampled)
 
-    def optimize_equity_curve(
-        self,
-        df: pd.DataFrame,
-        max_points: int = 500
-    ) -> List[Dict]:
+    def optimize_equity_curve(self, df: pd.DataFrame, max_points: int = 500) -> List[Dict]:
         """
         优化净值曲线数据传输
 
@@ -63,10 +55,7 @@ class BacktestResultFormatter:
         # 如果数据量小于阈值，直接返回
         if len(df) <= max_points:
             return [
-                {
-                    'date': idx.strftime('%Y-%m-%d'),
-                    'value': float(row['total'])
-                }
+                {"date": idx.strftime("%Y-%m-%d"), "value": float(row["total"])}
                 for idx, row in df.iterrows()
             ]
 
@@ -75,10 +64,7 @@ class BacktestResultFormatter:
         sampled = df.iloc[::step]
 
         return [
-            {
-                'date': idx.strftime('%Y-%m-%d'),
-                'value': float(row['total'])
-            }
+            {"date": idx.strftime("%Y-%m-%d"), "value": float(row["total"])}
             for idx, row in sampled.iterrows()
         ]
 
@@ -96,26 +82,14 @@ class BacktestResultFormatter:
         sell_points = []
 
         for trade in trades:
-            if trade['type'] == 'buy':
-                buy_points.append({
-                    'date': trade['date'],
-                    'price': trade['price']
-                })
-            elif trade['type'] == 'sell':
-                sell_points.append({
-                    'date': trade['date'],
-                    'price': trade['price']
-                })
+            if trade["type"] == "buy":
+                buy_points.append({"date": trade["date"], "price": trade["price"]})
+            elif trade["type"] == "sell":
+                sell_points.append({"date": trade["date"], "price": trade["price"]})
 
-        return {
-            'buy': buy_points,
-            'sell': sell_points
-        }
+        return {"buy": buy_points, "sell": sell_points}
 
-    def format_portfolio_value(
-        self,
-        portfolio_value: pd.DataFrame
-    ) -> List[Dict]:
+    def format_portfolio_value(self, portfolio_value: pd.DataFrame) -> List[Dict]:
         """
         格式化组合净值数据
 
@@ -125,12 +99,15 @@ class BacktestResultFormatter:
         Returns:
             格式化后的净值列表
         """
-        return [{
-            'date': idx.strftime('%Y-%m-%d'),
-            'total': float(row['total']),
-            'cash': float(row['cash']),
-            'holdings': float(row['holdings'])
-        } for idx, row in portfolio_value.iterrows()]
+        return [
+            {
+                "date": idx.strftime("%Y-%m-%d"),
+                "total": float(row["total"]),
+                "cash": float(row["cash"]),
+                "holdings": float(row["holdings"]),
+            }
+            for idx, row in portfolio_value.iterrows()
+        ]
 
     def _df_to_kline_list(self, df: pd.DataFrame) -> List[Dict]:
         """
@@ -145,21 +122,31 @@ class BacktestResultFormatter:
         result = []
         for idx, row in df.iterrows():
             item = {
-                'date': idx.strftime('%Y-%m-%d'),
-                'open': float(row['open']),
-                'high': float(row['high']),
-                'low': float(row['low']),
-                'close': float(row['close']),
-                'volume': float(row.get('volume', 0))
+                "date": idx.strftime("%Y-%m-%d"),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row.get("volume", 0)),
             }
 
             # 添加技术指标（如果存在）
             indicator_columns = [
-                'MA5', 'MA20', 'MA60',
-                'MACD', 'MACD_SIGNAL', 'MACD_HIST',
-                'KDJ_K', 'KDJ_D', 'KDJ_J',
-                'RSI6', 'RSI12', 'RSI24',
-                'BOLL_UPPER', 'BOLL_MIDDLE', 'BOLL_LOWER'
+                "MA5",
+                "MA20",
+                "MA60",
+                "MACD",
+                "MACD_SIGNAL",
+                "MACD_HIST",
+                "KDJ_K",
+                "KDJ_D",
+                "KDJ_J",
+                "RSI6",
+                "RSI12",
+                "RSI24",
+                "BOLL_UPPER",
+                "BOLL_MIDDLE",
+                "BOLL_LOWER",
             ]
 
             for col in indicator_columns:

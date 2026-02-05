@@ -3,12 +3,15 @@ Batch Repository
 管理实验批次的数据访问
 """
 
-from typing import List, Dict, Optional, Any
-from datetime import datetime
-from .base_repository import BaseRepository
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
-from psycopg2 import OperationalError, InterfaceError, DatabaseError as PsycopgDatabaseError
+from psycopg2 import DatabaseError as PsycopgDatabaseError
+from psycopg2 import InterfaceError, OperationalError
+
 from app.core.exceptions import DatabaseError
+
+from .base_repository import BaseRepository
 
 
 class BatchRepository(BaseRepository):
@@ -20,7 +23,7 @@ class BatchRepository(BaseRepository):
         strategy: Optional[str] = None,
         order_by: str = "created_at DESC",
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """
         查询批次列表（包含统计信息）
@@ -95,32 +98,30 @@ class BatchRepository(BaseRepository):
         # 转换为字典列表
         batches = []
         for row in results:
-            batches.append({
-                'batch_id': row[0],
-                'batch_name': row[1],
-                'strategy': row[2],
-                'status': row[3],
-                'total_experiments': row[4],
-                'completed_experiments': row[5],
-                'failed_experiments': row[6],
-                'running_experiments': row[7],
-                'success_rate_pct': float(row[8]) if row[8] else 0,
-                'created_at': row[9].isoformat() if row[9] else None,
-                'started_at': row[10].isoformat() if row[10] else None,
-                'completed_at': row[11].isoformat() if row[11] else None,
-                'duration_hours': float(row[12]) if row[12] else None,
-                'avg_rank_score': float(row[13]) if row[13] else None,
-                'max_rank_score': float(row[14]) if row[14] else None,
-                'top_model_id': row[15]
-            })
+            batches.append(
+                {
+                    "batch_id": row[0],
+                    "batch_name": row[1],
+                    "strategy": row[2],
+                    "status": row[3],
+                    "total_experiments": row[4],
+                    "completed_experiments": row[5],
+                    "failed_experiments": row[6],
+                    "running_experiments": row[7],
+                    "success_rate_pct": float(row[8]) if row[8] else 0,
+                    "created_at": row[9].isoformat() if row[9] else None,
+                    "started_at": row[10].isoformat() if row[10] else None,
+                    "completed_at": row[11].isoformat() if row[11] else None,
+                    "duration_hours": float(row[12]) if row[12] else None,
+                    "avg_rank_score": float(row[13]) if row[13] else None,
+                    "max_rank_score": float(row[14]) if row[14] else None,
+                    "top_model_id": row[15],
+                }
+            )
 
         return batches
 
-    def count_batches(
-        self,
-        status: Optional[str] = None,
-        strategy: Optional[str] = None
-    ) -> int:
+    def count_batches(self, status: Optional[str] = None, strategy: Optional[str] = None) -> int:
         """
         统计批次数量
 
@@ -164,12 +165,11 @@ class BatchRepository(BaseRepository):
             delete_batch_query = "DELETE FROM experiment_batches WHERE id = %s"
             batches_deleted = self.execute_update(delete_batch_query, (batch_id,))
 
-            logger.info(f"✓ 删除批次 {batch_id}: 批次 {batches_deleted} 个, 实验 {experiments_deleted} 个")
+            logger.info(
+                f"✓ 删除批次 {batch_id}: 批次 {batches_deleted} 个, 实验 {experiments_deleted} 个"
+            )
 
-            return {
-                'batches_deleted': batches_deleted,
-                'experiments_deleted': experiments_deleted
-            }
+            return {"batches_deleted": batches_deleted, "experiments_deleted": experiments_deleted}
         except (OperationalError, InterfaceError, PsycopgDatabaseError) as e:
             logger.error(f"删除批次失败 {batch_id}: {e}")
             raise DatabaseError(
@@ -177,7 +177,7 @@ class BatchRepository(BaseRepository):
                 error_code="DB_DELETE_BATCH_FAILED",
                 batch_id=batch_id,
                 operation="cascade_delete",
-                reason=str(e)
+                reason=str(e),
             )
 
     def update_batch_status(self, batch_id: int, status: str, **kwargs) -> int:
@@ -266,25 +266,25 @@ class BatchRepository(BaseRepository):
 
         row = results[0]
         return {
-            'batch_id': row[0],
-            'batch_name': row[1],
-            'description': row[2],
-            'strategy': row[3],
-            'param_space': row[4],  # JSONB
-            'status': row[5],
-            'total_experiments': row[6],
-            'completed_experiments': row[7],
-            'failed_experiments': row[8],
-            'running_experiments': row[9],
-            'success_rate_pct': float(row[10]) if row[10] else 0.0,
-            'config': row[11],  # JSONB
-            'created_at': row[12].isoformat() if row[12] else None,
-            'started_at': row[13].isoformat() if row[13] else None,
-            'completed_at': row[14].isoformat() if row[14] else None,
-            'created_by': row[15],
-            'tags': row[16] if row[16] else [],
-            'duration_hours': float(row[17]) if row[17] else None,
-            'avg_rank_score': float(row[18]) if row[18] else None,
-            'max_rank_score': float(row[19]) if row[19] else None,
-            'top_model_id': row[20]
+            "batch_id": row[0],
+            "batch_name": row[1],
+            "description": row[2],
+            "strategy": row[3],
+            "param_space": row[4],  # JSONB
+            "status": row[5],
+            "total_experiments": row[6],
+            "completed_experiments": row[7],
+            "failed_experiments": row[8],
+            "running_experiments": row[9],
+            "success_rate_pct": float(row[10]) if row[10] else 0.0,
+            "config": row[11],  # JSONB
+            "created_at": row[12].isoformat() if row[12] else None,
+            "started_at": row[13].isoformat() if row[13] else None,
+            "completed_at": row[14].isoformat() if row[14] else None,
+            "created_by": row[15],
+            "tags": row[16] if row[16] else [],
+            "duration_hours": float(row[17]) if row[17] else None,
+            "avg_rank_score": float(row[18]) if row[18] else None,
+            "max_rank_score": float(row[19]) if row[19] else None,
+            "top_model_id": row[20],
         }

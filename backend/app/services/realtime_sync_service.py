@@ -3,15 +3,16 @@
 负责实时行情数据的同步
 """
 
-from typing import Dict, List, Optional
-from datetime import datetime, timedelta
-from loguru import logger
 import asyncio
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
+from loguru import logger
 from src.providers import DataProviderFactory
+
+from app.core.exceptions import DatabaseError
 from app.services.config_service import ConfigService
 from app.services.data_service import DataDownloadService
-from app.core.exceptions import DataSyncError, ExternalAPIError, DatabaseError
 
 
 class RealtimeSyncService:
@@ -30,12 +31,7 @@ class RealtimeSyncService:
         self.config_service = ConfigService()
         self.data_service = DataDownloadService()
 
-    async def sync_minute_data(
-        self,
-        code: str,
-        period: str = "5",
-        days: int = 5
-    ) -> Dict:
+    async def sync_minute_data(self, code: str, period: str = "5", days: int = 5) -> Dict:
         """
         同步分时数据
 
@@ -52,13 +48,12 @@ class RealtimeSyncService:
 
         # 创建数据提供者（使用分时数据源配置）
         provider = DataProviderFactory.create_provider(
-            source=config['minute_data_source'],
-            token=config.get('tushare_token', '')
+            source=config["minute_data_source"], token=config.get("tushare_token", "")
         )
 
         # 计算日期范围
-        end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d 09:30:00')
+        end_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d 09:30:00")
 
         logger.info(f"同步 {code} {period}分钟数据")
 
@@ -68,7 +63,7 @@ class RealtimeSyncService:
             code=code,
             period=period,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
         )
 
         if df.empty:
@@ -83,17 +78,13 @@ class RealtimeSyncService:
 
         logger.info(f"✓ {code}: {len(df)} 条分时记录")
 
-        return {
-            "code": code,
-            "period": period,
-            "records": len(df)
-        }
+        return {"code": code, "period": period, "records": len(df)}
 
     async def sync_realtime_quotes(
         self,
         codes: Optional[List[str]] = None,
         batch_size: Optional[int] = 100,
-        update_oldest: bool = False
+        update_oldest: bool = False,
     ) -> Dict:
         """
         更新实时行情
@@ -110,12 +101,11 @@ class RealtimeSyncService:
         config = await self.config_service.get_data_source_config()
 
         # 实时行情使用专门的实时数据源配置（默认为 AkShare，因为 Tushare 有访问限制）
-        realtime_source = config.get('realtime_data_source', 'akshare')
+        realtime_source = config.get("realtime_data_source", "akshare")
 
         # 创建数据提供者
         provider = DataProviderFactory.create_provider(
-            source=realtime_source,
-            token=config.get('tushare_token', '')
+            source=realtime_source, token=config.get("tushare_token", "")
         )
 
         logger.info("更新实时行情...")
@@ -130,8 +120,7 @@ class RealtimeSyncService:
             logger.info(f"渐进式更新模式：获取最早更新的 {batch_size_val} 只股票...")
 
             codes_to_update = await asyncio.to_thread(
-                self.data_service.db.get_oldest_realtime_stocks,
-                limit=batch_size_val
+                self.data_service.db.get_oldest_realtime_stocks, limit=batch_size_val
             )
 
             logger.info(f"将更新 {len(codes_to_update)} 只股票的实时行情")
@@ -148,7 +137,7 @@ class RealtimeSyncService:
         else:
             # 全量更新，10分钟超时
             timeout = 600.0
-            if realtime_source.lower() == 'akshare':
+            if realtime_source.lower() == "akshare":
                 logger.warning("AkShare全量实时行情获取需要3-5分钟，请耐心等待...")
 
         # 增量保存计数器
@@ -162,7 +151,9 @@ class RealtimeSyncService:
                 saved_count += 1
             except DatabaseError as e:
                 # 数据库错误记录但不中断
-                logger.warning(f"增量保存 {quote.get('code', 'Unknown')} 失败 (数据库错误): {e.message if hasattr(e, 'message') else str(e)}")
+                logger.warning(
+                    f"增量保存 {quote.get('code', 'Unknown')} 失败 (数据库错误): {e.message if hasattr(e, 'message') else str(e)}"
+                )
             except Exception as e:
                 # 其他错误记录但不中断（保证增量保存的容错性）
                 logger.warning(f"增量保存 {quote.get('code', 'Unknown')} 失败: {e}")
@@ -171,17 +162,15 @@ class RealtimeSyncService:
         try:
             df = await asyncio.wait_for(
                 asyncio.to_thread(
-                    provider.get_realtime_quotes,
-                    codes=codes_to_update,
-                    save_callback=save_callback
+                    provider.get_realtime_quotes, codes=codes_to_update, save_callback=save_callback
                 ),
-                timeout=timeout
+                timeout=timeout,
             )
         except asyncio.TimeoutError:
             # 超时时，部分数据已经通过回调保存
             error_msg = f"实时行情获取超时（{timeout:.0f}秒）"
 
-            if realtime_source.lower() == 'akshare':
+            if realtime_source.lower() == "akshare":
                 if codes_to_update and len(codes_to_update) <= 500:
                     error_msg += f"\n\n批量获取 {len(codes_to_update)} 只股票超时（预期{len(codes_to_update) * 0.3:.0f}秒）。"
                     if saved_count > 0:
@@ -192,7 +181,9 @@ class RealtimeSyncService:
                         f"3. 在交易时段使用"
                     )
                 else:
-                    error_msg += "\n\nAkShare说明：全量获取需要分58个批次爬取数据，耗时较长且容易超时。"
+                    error_msg += (
+                        "\n\nAkShare说明：全量获取需要分58个批次爬取数据，耗时较长且容易超时。"
+                    )
                     if saved_count > 0:
                         error_msg += f"\n\n✓ 已成功保存 {saved_count} 只股票的数据（增量保存）"
                     error_msg += (
@@ -209,10 +200,10 @@ class RealtimeSyncService:
                     "requested": len(codes_to_update) if codes_to_update else "all",
                     "batch_size": batch_size or "all",
                     "update_mode": "oldest_first" if update_oldest else "full",
-                    "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "timeout": True,
                     "timeout_message": error_msg,
-                    "partial_success": True
+                    "partial_success": True,
                 }
             else:
                 raise TimeoutError(error_msg)
@@ -227,6 +218,6 @@ class RealtimeSyncService:
             "total": saved_count,
             "batch_size": batch_size or "all",
             "update_mode": "oldest_first" if update_oldest else "full",
-            "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "incremental_save": True
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "incremental_save": True,
         }

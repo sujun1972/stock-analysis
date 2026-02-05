@@ -3,9 +3,11 @@ Config Repository
 管理系统配置的数据访问
 """
 
-from typing import List, Dict, Optional, Any
-from .base_repository import BaseRepository
+from typing import Dict, List, Optional
+
 from loguru import logger
+
+from .base_repository import BaseRepository
 
 
 class ConfigRepository(BaseRepository):
@@ -51,10 +53,7 @@ class ConfigRepository(BaseRepository):
 
         configs = {}
         for row in result:
-            configs[row[0]] = {
-                'value': row[1],
-                'description': row[2]
-            }
+            configs[row[0]] = {"value": row[1], "description": row[2]}
 
         return configs
 
@@ -95,7 +94,7 @@ class ConfigRepository(BaseRepository):
         if not keys:
             return {}
 
-        placeholders = ', '.join(['%s'] * len(keys))
+        placeholders = ", ".join(["%s"] * len(keys))
         query = f"""
             SELECT config_key, config_value
             FROM system_config
@@ -142,8 +141,4 @@ class ConfigRepository(BaseRepository):
         Returns:
             是否存在
         """
-        return self.exists(
-            table='system_config',
-            where='config_key = %s',
-            params=(key,)
-        )
+        return self.exists(table="system_config", where="config_key = %s", params=(key,))

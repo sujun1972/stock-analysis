@@ -45,12 +45,7 @@ class BackendError(Exception):
         ... )
     """
 
-    def __init__(
-        self,
-        message: str,
-        error_code: Optional[str] = None,
-        **context: Any
-    ):
+    def __init__(self, message: str, error_code: Optional[str] = None, **context: Any):
         """
         初始化业务异常
 
@@ -76,13 +71,14 @@ class BackendError(Exception):
             ValidationError -> VALIDATION_ERROR
         """
         import re
+
         class_name = self.__class__.__name__
         # 移除 Error 后缀
-        if class_name.endswith('Error'):
+        if class_name.endswith("Error"):
             class_name = class_name[:-5]
         # 转换驼峰为下划线
-        code = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', class_name)
-        code = re.sub('([a-z0-9])([A-Z])', r'\1_\2', code)
+        code = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", class_name)
+        code = re.sub("([a-z0-9])([A-Z])", r"\1_\2", code)
         return code.upper()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -92,11 +88,7 @@ class BackendError(Exception):
         Returns:
             包含 message、error_code 和 context 的字典
         """
-        return {
-            "message": self.message,
-            "error_code": self.error_code,
-            **self.context
-        }
+        return {"message": self.message, "error_code": self.error_code, **self.context}
 
     def __str__(self) -> str:
         """字符串表示"""
@@ -131,7 +123,6 @@ class DataQueryError(BackendError):
         ...     table="stock_daily"
         ... )
     """
-    pass
 
 
 class DataNotFoundError(DataQueryError):
@@ -147,7 +138,6 @@ class DataNotFoundError(DataQueryError):
         ...     stock_code="000001"
         ... )
     """
-    pass
 
 
 class InsufficientDataError(DataQueryError):
@@ -164,7 +154,6 @@ class InsufficientDataError(DataQueryError):
         ...     actual_points=10
         ... )
     """
-    pass
 
 
 # ==================== 验证相关异常 ====================
@@ -184,7 +173,6 @@ class ValidationError(BackendError):
         ...     expected_format="6位数字"
         ... )
     """
-    pass
 
 
 # ==================== 策略相关异常 ====================
@@ -204,7 +192,6 @@ class StrategyExecutionError(BackendError):
         ...     reason="信号生成异常"
         ... )
     """
-    pass
 
 
 class SignalGenerationError(StrategyExecutionError):
@@ -221,7 +208,6 @@ class SignalGenerationError(StrategyExecutionError):
         ...     stock_code="000001"
         ... )
     """
-    pass
 
 
 # ==================== 回测相关异常 ====================
@@ -241,7 +227,6 @@ class BacktestError(BackendError):
         ...     reason="数据不足"
         ... )
     """
-    pass
 
 
 class BacktestExecutionError(BacktestError):
@@ -257,7 +242,6 @@ class BacktestExecutionError(BacktestError):
         ...     error_message="内存不足"
         ... )
     """
-    pass
 
 
 # ==================== 计算相关异常 ====================
@@ -277,7 +261,6 @@ class CalculationError(BackendError):
         ...     reason="收益率标准差为零"
         ... )
     """
-    pass
 
 
 class FeatureCalculationError(CalculationError):
@@ -294,7 +277,6 @@ class FeatureCalculationError(CalculationError):
         ...     reason="数据点不足"
         ... )
     """
-    pass
 
 
 # ==================== 数据库相关异常 ====================
@@ -315,7 +297,6 @@ class DatabaseError(BackendError):
         ...     database="stock_analysis"
         ... )
     """
-    pass
 
 
 class DatabaseConnectionError(DatabaseError):
@@ -332,7 +313,6 @@ class DatabaseConnectionError(DatabaseError):
         ...     timeout=30
         ... )
     """
-    pass
 
 
 class QueryError(DatabaseError):
@@ -349,7 +329,6 @@ class QueryError(DatabaseError):
         ...     error_message="语法错误"
         ... )
     """
-    pass
 
 
 # ==================== 外部 API 相关异常 ====================
@@ -370,7 +349,6 @@ class ExternalAPIError(BackendError):
         ...     status_code=500
         ... )
     """
-    pass
 
 
 class APIRateLimitError(ExternalAPIError):
@@ -392,11 +370,7 @@ class APIRateLimitError(ExternalAPIError):
     """
 
     def __init__(
-        self,
-        message: str,
-        error_code: Optional[str] = None,
-        retry_after: int = 60,
-        **context: Any
+        self, message: str, error_code: Optional[str] = None, retry_after: int = 60, **context: Any
     ):
         """
         初始化频率限制异常
@@ -407,13 +381,13 @@ class APIRateLimitError(ExternalAPIError):
             retry_after: 建议重试的秒数
             **context: 其他上下文
         """
-        context['retry_after'] = retry_after
+        context["retry_after"] = retry_after
         super().__init__(message, error_code=error_code, **context)
 
     @property
     def retry_after(self) -> int:
         """向后兼容属性"""
-        return self.context.get('retry_after', 60)
+        return self.context.get("retry_after", 60)
 
 
 class APITimeoutError(ExternalAPIError):
@@ -430,7 +404,6 @@ class APITimeoutError(ExternalAPIError):
         ...     timeout=30
         ... )
     """
-    pass
 
 
 # ==================== 配置相关异常 ====================
@@ -450,7 +423,6 @@ class ConfigError(BackendError):
         ...     reason="缺少必需字段 database.host"
         ... )
     """
-    pass
 
 
 class ConfigValidationError(ConfigError):
@@ -468,7 +440,6 @@ class ConfigValidationError(ConfigError):
         ...     actual=0
         ... )
     """
-    pass
 
 
 # ==================== 数据同步相关异常 ====================
@@ -489,7 +460,6 @@ class DataSyncError(BackendError):
         ...     reason="数据源无响应"
         ... )
     """
-    pass
 
 
 class SyncTaskError(DataSyncError):
@@ -506,7 +476,6 @@ class SyncTaskError(DataSyncError):
         ...     error_message="超时"
         ... )
     """
-    pass
 
 
 # ==================== 权限相关异常 ====================
@@ -527,7 +496,6 @@ class PermissionError(BackendError):
         ...     required_role="admin"
         ... )
     """
-    pass
 
 
 # ==================== 便捷函数 ====================
@@ -568,45 +536,36 @@ def raise_sync_error(message: str, **context) -> None:
 # 用于根据场景快速选择异常类型
 EXCEPTION_MAP = {
     # 数据相关
-    'data_query': DataQueryError,
-    'data_not_found': DataNotFoundError,
-    'insufficient_data': InsufficientDataError,
-
+    "data_query": DataQueryError,
+    "data_not_found": DataNotFoundError,
+    "insufficient_data": InsufficientDataError,
     # 验证相关
-    'validation': ValidationError,
-
+    "validation": ValidationError,
     # 策略相关
-    'strategy': StrategyExecutionError,
-    'signal': SignalGenerationError,
-
+    "strategy": StrategyExecutionError,
+    "signal": SignalGenerationError,
     # 回测相关
-    'backtest': BacktestError,
-    'backtest_execution': BacktestExecutionError,
-
+    "backtest": BacktestError,
+    "backtest_execution": BacktestExecutionError,
     # 计算相关
-    'calculation': CalculationError,
-    'feature': FeatureCalculationError,
-
+    "calculation": CalculationError,
+    "feature": FeatureCalculationError,
     # 数据库相关
-    'database': DatabaseError,
-    'db_connection': DatabaseConnectionError,
-    'query': QueryError,
-
+    "database": DatabaseError,
+    "db_connection": DatabaseConnectionError,
+    "query": QueryError,
     # API 相关
-    'api': ExternalAPIError,
-    'rate_limit': APIRateLimitError,
-    'timeout': APITimeoutError,
-
+    "api": ExternalAPIError,
+    "rate_limit": APIRateLimitError,
+    "timeout": APITimeoutError,
     # 配置相关
-    'config': ConfigError,
-    'config_validation': ConfigValidationError,
-
+    "config": ConfigError,
+    "config_validation": ConfigValidationError,
     # 同步相关
-    'sync': DataSyncError,
-    'sync_task': SyncTaskError,
-
+    "sync": DataSyncError,
+    "sync_task": SyncTaskError,
     # 权限相关
-    'permission': PermissionError,
+    "permission": PermissionError,
 }
 
 

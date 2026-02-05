@@ -17,9 +17,10 @@
 
 import asyncio
 import sys
-from typing import List, Dict, Optional, Any
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 from loguru import logger
 
@@ -28,14 +29,15 @@ core_path = Path(__file__).parent.parent.parent.parent / "core"
 if str(core_path) not in sys.path:
     sys.path.insert(0, str(core_path))
 
+from src.data_pipeline.batch_download_coordinator import BatchDownloadCoordinator
+
 # 导入 Core 模块
 from src.database.connection_pool_manager import ConnectionPoolManager
-from src.database.data_query_manager import DataQueryManager
 from src.database.data_insert_manager import DataInsertManager
-from src.data_pipeline.batch_download_coordinator import BatchDownloadCoordinator
-from src.exceptions import DatabaseError as CoreDatabaseError
-from app.core.exceptions import ExternalAPIError, DataQueryError
+from src.database.data_query_manager import DataQueryManager
+
 from app.core.config import settings
+from app.core.exceptions import DataQueryError, ExternalAPIError
 
 # 延迟导入 Provider 避免循环依赖
 try:
@@ -65,11 +67,11 @@ class DataAdapter:
         """初始化数据适配器"""
         # 构建数据库配置字典
         db_config = {
-            'host': settings.DATABASE_HOST,
-            'port': settings.DATABASE_PORT,
-            'database': settings.DATABASE_NAME,
-            'user': settings.DATABASE_USER,
-            'password': settings.DATABASE_PASSWORD
+            "host": settings.DATABASE_HOST,
+            "port": settings.DATABASE_PORT,
+            "database": settings.DATABASE_NAME,
+            "user": settings.DATABASE_USER,
+            "password": settings.DATABASE_PASSWORD,
         }
 
         # 延迟初始化：尝试创建连接池，如果失败则警告但不中断
@@ -96,8 +98,7 @@ class DataAdapter:
         if self.provider is not None:
             try:
                 self.download_coordinator = BatchDownloadCoordinator(
-                    provider=self.provider,
-                    max_workers=3
+                    provider=self.provider, max_workers=3
                 )
             except (ValueError, TypeError) as e:
                 logger.warning(f"无法初始化下载协调器: {e}")
@@ -108,13 +109,11 @@ class DataAdapter:
             raise DataQueryError(
                 "数据库连接不可用",
                 error_code="DB_NOT_INITIALIZED",
-                reason="数据库连接在初始化时失败，请检查数据库配置和连接"
+                reason="数据库连接在初始化时失败，请检查数据库配置和连接",
             )
 
     async def get_stock_list(
-        self,
-        market: Optional[str] = None,
-        status: str = "正常"
+        self, market: Optional[str] = None, status: str = "正常"
     ) -> List[Dict[str, Any]]:
         """
         异步获取股票列表
@@ -136,19 +135,14 @@ class DataAdapter:
         """
         self._ensure_connection()
         df = await asyncio.to_thread(
-            self.query_manager.get_stock_list,
-            market=market,
-            status=status
+            self.query_manager.get_stock_list, market=market, status=status
         )
         # 将 DataFrame 转换为列表格式 (orient='records')
         # 从 {'col': {'0': val1, '1': val2}} 转为 [{'col': val1}, {'col': val2}]
-        return df.to_dict(orient='records')
+        return df.to_dict(orient="records")
 
     async def get_daily_data(
-        self,
-        code: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        self, code: str, start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> pd.DataFrame:
         """
         异步获取股票日线数据
@@ -172,14 +166,11 @@ class DataAdapter:
             self.query_manager.load_daily_data,
             stock_code=code,
             start_date=start_str,
-            end_date=end_str
+            end_date=end_str,
         )
 
     async def get_minute_data(
-        self,
-        code: str,
-        period: str = "1min",
-        trade_date: Optional[date] = None
+        self, code: str, period: str = "1min", trade_date: Optional[date] = None
     ) -> pd.DataFrame:
         """
         异步获取分钟数据
@@ -199,10 +190,7 @@ class DataAdapter:
         date_str = trade_date.strftime("%Y-%m-%d") if trade_date else None
 
         return await asyncio.to_thread(
-            self.query_manager.load_minute_data,
-            code=code,
-            period=period,
-            trade_date=date_str
+            self.query_manager.load_minute_data, code=code, period=period, trade_date=date_str
         )
 
     async def insert_stock_list(self, df: pd.DataFrame) -> bool:
@@ -219,10 +207,7 @@ class DataAdapter:
             DatabaseError: 数据库写入错误
         """
         self._ensure_connection()
-        return await asyncio.to_thread(
-            self.insert_manager.insert_stock_list,
-            df=df
-        )
+        return await asyncio.to_thread(self.insert_manager.insert_stock_list, df=df)
 
     async def insert_daily_data(self, df: pd.DataFrame, code: str) -> bool:
         """
@@ -239,18 +224,9 @@ class DataAdapter:
             DatabaseError: 数据库写入错误
         """
         self._ensure_connection()
-        return await asyncio.to_thread(
-            self.insert_manager.insert_daily_data,
-            df=df,
-            code=code
-        )
+        return await asyncio.to_thread(self.insert_manager.insert_daily_data, df=df, code=code)
 
-    async def insert_minute_data(
-        self,
-        df: pd.DataFrame,
-        code: str,
-        period: str = "1min"
-    ) -> bool:
+    async def insert_minute_data(self, df: pd.DataFrame, code: str, period: str = "1min") -> bool:
         """
         异步插入分钟数据
 
@@ -267,17 +243,11 @@ class DataAdapter:
         """
         self._ensure_connection()
         return await asyncio.to_thread(
-            self.insert_manager.insert_minute_data,
-            df=df,
-            code=code,
-            period=period
+            self.insert_manager.insert_minute_data, df=df, code=code, period=period
         )
 
     async def check_data_completeness(
-        self,
-        code: str,
-        start_date: date,
-        end_date: date
+        self, code: str, start_date: date, end_date: date
     ) -> Dict[str, Any]:
         """
         异步检查数据完整性
@@ -298,7 +268,7 @@ class DataAdapter:
             self.query_manager.check_daily_data_completeness,
             stock_code=code,
             start_date=start_str,
-            end_date=end_str
+            end_date=end_str,
         )
 
     async def is_trading_day(self, trade_date: date) -> bool:
@@ -314,10 +284,7 @@ class DataAdapter:
         self._ensure_connection()
         date_str = trade_date.strftime("%Y-%m-%d")
 
-        return await asyncio.to_thread(
-            self.query_manager.is_trading_day,
-            trade_date=date_str
-        )
+        return await asyncio.to_thread(self.query_manager.is_trading_day, trade_date=date_str)
 
     async def get_stock_info(self, code: str) -> Optional[Dict[str, Any]]:
         """
@@ -331,15 +298,12 @@ class DataAdapter:
         """
         stocks = await self.get_stock_list()
         for stock in stocks:
-            if stock.get('code') == code:
+            if stock.get("code") == code:
                 return stock
         return None
 
     async def download_daily_data(
-        self,
-        code: str,
-        start_date: date,
-        end_date: date
+        self, code: str, start_date: date, end_date: date
     ) -> Optional[pd.DataFrame]:
         """
         异步下载单只股票日线数据
@@ -361,10 +325,7 @@ class DataAdapter:
         try:
             # 使用 provider 下载数据
             df = await asyncio.to_thread(
-                self.provider.fetch_daily_data,
-                symbol=code,
-                start_date=start_str,
-                end_date=end_str
+                self.provider.fetch_daily_data, symbol=code, start_date=start_str, end_date=end_str
             )
             return df
         except (ConnectionError, TimeoutError) as e:
@@ -374,22 +335,16 @@ class DataAdapter:
                 error_code="API_CONNECTION_ERROR",
                 api_name="data_provider",
                 stock_code=code,
-                reason=str(e)
+                reason=str(e),
             )
         except (ValueError, KeyError) as e:
             logger.error(f"数据源返回数据格式错误: {code} - {e}")
             raise DataQueryError(
-                "数据下载失败",
-                error_code="DATA_DOWNLOAD_FAILED",
-                stock_code=code,
-                reason=str(e)
+                "数据下载失败", error_code="DATA_DOWNLOAD_FAILED", stock_code=code, reason=str(e)
             )
 
     async def check_data_integrity(
-        self,
-        code: str,
-        start_date: date,
-        end_date: date
+        self, code: str, start_date: date, end_date: date
     ) -> Dict[str, Any]:
         """
         异步检查数据完整性（别名方法）
@@ -406,7 +361,7 @@ class DataAdapter:
 
     def __del__(self):
         """清理资源"""
-        if hasattr(self, 'pool_manager'):
+        if hasattr(self, "pool_manager"):
             try:
                 self.pool_manager.close_all()
             except (AttributeError, RuntimeError):

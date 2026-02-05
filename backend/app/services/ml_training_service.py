@@ -3,11 +3,11 @@
 使用 TrainingTaskManager 和 ModelPredictor 提供统一接口
 """
 
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, Optional
 
-from app.services.training_task_manager import TrainingTaskManager
 from app.services.model_predictor import ModelPredictor
+from app.services.training_task_manager import TrainingTaskManager
 
 
 class MLTrainingService:
@@ -75,10 +75,7 @@ class MLTrainingService:
         return self.task_manager.get_task(task_id)
 
     def list_tasks(
-        self,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
+        self, status: Optional[str] = None, limit: int = 100, offset: int = 0
     ) -> Dict[str, Any]:
         """
         列出任务
@@ -120,7 +117,7 @@ class MLTrainingService:
         end_date: str,
         model_id: Optional[str] = None,
         experiment_id: Optional[int] = None,
-        model_source: Optional[Any] = None
+        model_source: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         统一的预测接口
@@ -146,7 +143,7 @@ class MLTrainingService:
             end_date=end_date,
             model_source=model_source,
             task_id=model_id,
-            experiment_id=experiment_id
+            experiment_id=experiment_id,
         )
 
     async def batch_predict(
@@ -156,7 +153,7 @@ class MLTrainingService:
         end_date: str,
         experiment_id: Optional[int] = None,
         model_id: Optional[str] = None,
-        model_source: Optional[Any] = None
+        model_source: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         批量预测多只股票
@@ -182,17 +179,13 @@ class MLTrainingService:
             end_date=end_date,
             model_source=model_source,
             task_id=model_id,
-            experiment_id=experiment_id
+            experiment_id=experiment_id,
         )
 
     # ==================== 向后兼容方法 ====================
 
     async def predict_from_experiment(
-        self,
-        experiment_id: int,
-        symbol: str,
-        start_date: str,
-        end_date: str
+        self, experiment_id: int, symbol: str, start_date: str, end_date: str
     ) -> Dict[str, Any]:
         """
         向后兼容：使用实验表中的模型进行预测
@@ -207,8 +200,5 @@ class MLTrainingService:
             预测结果
         """
         return await self.predict(
-            symbol=symbol,
-            start_date=start_date,
-            end_date=end_date,
-            experiment_id=experiment_id
+            symbol=symbol, start_date=start_date, end_date=end_date, experiment_id=experiment_id
         )

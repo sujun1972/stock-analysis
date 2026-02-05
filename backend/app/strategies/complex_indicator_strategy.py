@@ -3,13 +3,14 @@
 基于多维度技术指标组合的量化策略
 """
 
-from typing import List, Dict, Any
-import pandas as pd
-import numpy as np
-from loguru import logger
+from typing import List
 
-from .base_strategy import BaseStrategy, StrategyParameter, ParameterType
+import numpy as np
+import pandas as pd
+from loguru import logger
 from src.features import TechnicalIndicators
+
+from .base_strategy import BaseStrategy, ParameterType, StrategyParameter
 
 
 class ComplexIndicatorStrategy(BaseStrategy):
@@ -62,7 +63,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=300,
                 step=10,
                 description="用于判断长期趋势的移动平均线周期",
-                category="趋势"
+                category="趋势",
             ),
             StrategyParameter(
                 name="adx_period",
@@ -73,7 +74,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=30,
                 step=1,
                 description="平均趋向指数计算周期",
-                category="趋势"
+                category="趋势",
             ),
             StrategyParameter(
                 name="adx_threshold",
@@ -84,7 +85,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=40.0,
                 step=1.0,
                 description="ADX > 阈值表示趋势足够强",
-                category="趋势"
+                category="趋势",
             ),
             StrategyParameter(
                 name="supertrend_period",
@@ -95,7 +96,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=20,
                 step=1,
                 description="SuperTrend指标计算周期",
-                category="趋势"
+                category="趋势",
             ),
             StrategyParameter(
                 name="supertrend_multiplier",
@@ -106,9 +107,8 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=5.0,
                 step=0.5,
                 description="SuperTrend的ATR倍数",
-                category="趋势"
+                category="趋势",
             ),
-
             # 超买超卖维度参数
             StrategyParameter(
                 name="rsi_period",
@@ -119,7 +119,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=30,
                 step=1,
                 description="相对强弱指标计算周期",
-                category="超买超卖"
+                category="超买超卖",
             ),
             StrategyParameter(
                 name="rsi_oversold",
@@ -130,7 +130,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=40.0,
                 step=5.0,
                 description="RSI < 超卖线视为超卖",
-                category="超买超卖"
+                category="超买超卖",
             ),
             StrategyParameter(
                 name="rsi_overbought",
@@ -141,9 +141,8 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=80.0,
                 step=5.0,
                 description="RSI > 超买线视为超买",
-                category="超买超卖"
+                category="超买超卖",
             ),
-
             # 量价维度参数
             StrategyParameter(
                 name="use_obv",
@@ -151,7 +150,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 type=ParameterType.BOOLEAN,
                 default=True,
                 description="是否使用能量潮指标",
-                category="量价"
+                category="量价",
             ),
             StrategyParameter(
                 name="mfi_period",
@@ -162,9 +161,8 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=30,
                 step=1,
                 description="资金流量指标计算周期",
-                category="量价"
+                category="量价",
             ),
-
             # 波动维度参数
             StrategyParameter(
                 name="atr_period",
@@ -175,7 +173,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=30,
                 step=1,
                 description="平均真实波幅计算周期",
-                category="波动"
+                category="波动",
             ),
             StrategyParameter(
                 name="stop_loss_atr_multiplier",
@@ -186,9 +184,8 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=5.0,
                 step=0.5,
                 description="动态止损 = 当前价 - ATR × 倍数",
-                category="风险控制"
+                category="风险控制",
             ),
-
             # 信号强度要求
             StrategyParameter(
                 name="min_signal_strength",
@@ -199,7 +196,7 @@ class ComplexIndicatorStrategy(BaseStrategy):
                 max_value=5,
                 step=1,
                 description="至少满足几个条件才产生信号",
-                category="信号过滤"
+                category="信号过滤",
             ),
         ]
 
@@ -243,11 +240,11 @@ class ComplexIndicatorStrategy(BaseStrategy):
         """使用 TechnicalIndicators 计算所有技术指标"""
 
         # 获取参数
-        ma_period = self.params.get('ma_period', 200)
-        rsi_period = self.params.get('rsi_period', 14)
-        adx_period = self.params.get('adx_period', 14)
-        atr_period = self.params.get('atr_period', 14)
-        use_obv = self.params.get('use_obv', True)
+        ma_period = self.params.get("ma_period", 200)
+        rsi_period = self.params.get("rsi_period", 14)
+        adx_period = self.params.get("adx_period", 14)
+        atr_period = self.params.get("atr_period", 14)
+        use_obv = self.params.get("use_obv", True)
 
         # 使用 TechnicalIndicators 类计算指标
         ti = TechnicalIndicators(df)
@@ -260,15 +257,15 @@ class ComplexIndicatorStrategy(BaseStrategy):
         # RSI（注意：add_rsi使用periods列表参数）
         df = ti.add_rsi(periods=[rsi_period])
         # 重命名为通用RSI列名
-        df['RSI'] = df[f'RSI{rsi_period}']
+        df["RSI"] = df[f"RSI{rsi_period}"]
 
         # 3. 量价指标
         # OBV (能量潮) - 指定 volume 列名
         if use_obv:
-            df = ti.add_obv(volume_col='volume')
+            df = ti.add_obv(volume_col="volume")
             # OBV移动平均
-            if 'OBV' in df.columns:
-                df['OBV_MA'] = df['OBV'].rolling(window=20).mean()
+            if "OBV" in df.columns:
+                df["OBV_MA"] = df["OBV"].rolling(window=20).mean()
 
         # 4. 波动指标
         # ATR (平均真实波幅)
@@ -279,25 +276,25 @@ class ComplexIndicatorStrategy(BaseStrategy):
 
         # ADX (趋势强度) - 手动计算简化版
         # 使用价格变动作为趋势强度的代理
-        df['ADX'] = df['close'].pct_change().abs().rolling(window=adx_period).mean() * 100
+        df["ADX"] = df["close"].pct_change().abs().rolling(window=adx_period).mean() * 100
 
         # SuperTrend (简化版 - 使用ATR)
-        atr_col = f'ATR{atr_period}'
+        atr_col = f"ATR{atr_period}"
         if atr_col in df.columns:
-            multiplier = self.params.get('supertrend_multiplier', 3.0)
-            hl_avg = (df['high'] + df['low']) / 2
+            multiplier = self.params.get("supertrend_multiplier", 3.0)
+            hl_avg = (df["high"] + df["low"]) / 2
             upperband = hl_avg + (multiplier * df[atr_col])
             lowerband = hl_avg - (multiplier * df[atr_col])
 
             supertrend = np.zeros(len(df))
             for i in range(1, len(df)):
-                if df['close'].iloc[i] > upperband.iloc[i-1]:
+                if df["close"].iloc[i] > upperband.iloc[i - 1]:
                     supertrend[i] = 1  # 多头
-                elif df['close'].iloc[i] < lowerband.iloc[i-1]:
+                elif df["close"].iloc[i] < lowerband.iloc[i - 1]:
                     supertrend[i] = -1  # 空头
                 else:
-                    supertrend[i] = supertrend[i-1]  # 保持
-            df['SuperTrend'] = supertrend
+                    supertrend[i] = supertrend[i - 1]  # 保持
+            df["SuperTrend"] = supertrend
 
         return df
 
@@ -312,37 +309,37 @@ class ComplexIndicatorStrategy(BaseStrategy):
         4. ADX > threshold (趋势足够强)
         5. SuperTrend = 1 (多头趋势)
         """
-        ma_period = self.params.get('ma_period', 200)
-        rsi_oversold = self.params.get('rsi_oversold', 30.0)
-        adx_threshold = self.params.get('adx_threshold', 25.0)
-        min_strength = self.params.get('min_signal_strength', 3)
+        ma_period = self.params.get("ma_period", 200)
+        rsi_oversold = self.params.get("rsi_oversold", 30.0)
+        adx_threshold = self.params.get("adx_threshold", 25.0)
+        min_strength = self.params.get("min_signal_strength", 3)
 
         # 初始化条件计数器
         conditions_met = pd.Series(0, index=df.index)
 
         # 条件1: 价格在长期均线之上
-        if f'MA{ma_period}' in df.columns:
-            condition1 = df['close'] > df[f'MA{ma_period}']
+        if f"MA{ma_period}" in df.columns:
+            condition1 = df["close"] > df[f"MA{ma_period}"]
             conditions_met += condition1.astype(int)
 
         # 条件2: RSI超卖
-        if 'RSI' in df.columns:
-            condition2 = df['RSI'] < rsi_oversold
+        if "RSI" in df.columns:
+            condition2 = df["RSI"] < rsi_oversold
             conditions_met += condition2.astype(int)
 
         # 条件3: OBV向上（资金流入）
-        if 'OBV' in df.columns and 'OBV_MA' in df.columns:
-            condition3 = df['OBV'] > df['OBV_MA']
+        if "OBV" in df.columns and "OBV_MA" in df.columns:
+            condition3 = df["OBV"] > df["OBV_MA"]
             conditions_met += condition3.astype(int)
 
         # 条件4: ADX足够强
-        if 'ADX' in df.columns:
-            condition4 = df['ADX'] > adx_threshold
+        if "ADX" in df.columns:
+            condition4 = df["ADX"] > adx_threshold
             conditions_met += condition4.astype(int)
 
         # 条件5: SuperTrend多头
-        if 'SuperTrend' in df.columns:
-            condition5 = df['SuperTrend'] == 1
+        if "SuperTrend" in df.columns:
+            condition5 = df["SuperTrend"] == 1
             conditions_met += condition5.astype(int)
 
         # 满足最小信号强度要求
@@ -360,31 +357,31 @@ class ComplexIndicatorStrategy(BaseStrategy):
         3. OBV < OBV_MA (资金流出)
         4. SuperTrend = -1 (空头趋势)
         """
-        ma_period = self.params.get('ma_period', 200)
-        rsi_overbought = self.params.get('rsi_overbought', 70.0)
-        min_strength = self.params.get('min_signal_strength', 3)
+        ma_period = self.params.get("ma_period", 200)
+        rsi_overbought = self.params.get("rsi_overbought", 70.0)
+        min_strength = self.params.get("min_signal_strength", 3)
 
         # 初始化条件计数器
         conditions_met = pd.Series(0, index=df.index)
 
         # 条件1: 价格跌破长期均线
-        if f'MA{ma_period}' in df.columns:
-            condition1 = df['close'] < df[f'MA{ma_period}']
+        if f"MA{ma_period}" in df.columns:
+            condition1 = df["close"] < df[f"MA{ma_period}"]
             conditions_met += condition1.astype(int)
 
         # 条件2: RSI超买
-        if 'RSI' in df.columns:
-            condition2 = df['RSI'] > rsi_overbought
+        if "RSI" in df.columns:
+            condition2 = df["RSI"] > rsi_overbought
             conditions_met += condition2.astype(int)
 
         # 条件3: OBV向下（资金流出）
-        if 'OBV' in df.columns and 'OBV_MA' in df.columns:
-            condition3 = df['OBV'] < df['OBV_MA']
+        if "OBV" in df.columns and "OBV_MA" in df.columns:
+            condition3 = df["OBV"] < df["OBV_MA"]
             conditions_met += condition3.astype(int)
 
         # 条件4: SuperTrend空头
-        if 'SuperTrend' in df.columns:
-            condition4 = df['SuperTrend'] == -1
+        if "SuperTrend" in df.columns:
+            condition4 = df["SuperTrend"] == -1
             conditions_met += condition4.astype(int)
 
         # 满足最小信号强度要求

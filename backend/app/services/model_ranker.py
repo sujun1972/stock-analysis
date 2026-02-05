@@ -3,10 +3,10 @@
 根据多维度指标自动筛选最优模型
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 from loguru import logger
-
 from src.database.db_manager import DatabaseManager
 
 
@@ -19,24 +19,20 @@ class ModelRanker:
         # 默认权重配置
         self.default_weights = {
             # 训练指标权重
-            'ic': 10.0,              # IC (Information Coefficient)
-            'rank_ic': 8.0,          # Rank IC
-            'r2': 5.0,               # R² (拟合优度)
-
+            "ic": 10.0,  # IC (Information Coefficient)
+            "rank_ic": 8.0,  # Rank IC
+            "r2": 5.0,  # R² (拟合优度)
             # 回测指标权重
-            'annual_return': 5.0,    # 年化收益率
-            'sharpe_ratio': 15.0,    # 夏普比率（风险调整后收益）
-            'max_drawdown': -10.0,   # 最大回撤（负权重，越小越好）
-            'win_rate': 3.0,         # 胜率
-            'profit_factor': 5.0,    # 盈亏比
-            'calmar_ratio': 8.0,     # Calmar比率
+            "annual_return": 5.0,  # 年化收益率
+            "sharpe_ratio": 15.0,  # 夏普比率（风险调整后收益）
+            "max_drawdown": -10.0,  # 最大回撤（负权重，越小越好）
+            "win_rate": 3.0,  # 胜率
+            "profit_factor": 5.0,  # 盈亏比
+            "calmar_ratio": 8.0,  # Calmar比率
         }
 
     def calculate_rank_score(
-        self,
-        train_metrics: Dict,
-        backtest_metrics: Dict,
-        weights: Optional[Dict] = None
+        self, train_metrics: Dict, backtest_metrics: Dict, weights: Optional[Dict] = None
     ) -> float:
         """
         计算综合评分
@@ -57,29 +53,29 @@ class ModelRanker:
         score = 0.0
 
         # 训练指标
-        ic = self._safe_float(train_metrics.get('ic', 0))
-        rank_ic = self._safe_float(train_metrics.get('rank_ic', 0))
-        r2 = self._safe_float(train_metrics.get('r2', 0))
+        ic = self._safe_float(train_metrics.get("ic", 0))
+        rank_ic = self._safe_float(train_metrics.get("rank_ic", 0))
+        r2 = self._safe_float(train_metrics.get("r2", 0))
 
-        score += w.get('ic', 0) * ic
-        score += w.get('rank_ic', 0) * rank_ic
-        score += w.get('r2', 0) * max(0, r2)  # R²可能为负，取max(0, r2)
+        score += w.get("ic", 0) * ic
+        score += w.get("rank_ic", 0) * rank_ic
+        score += w.get("r2", 0) * max(0, r2)  # R²可能为负，取max(0, r2)
 
         # 回测指标
-        annual_return = self._safe_float(backtest_metrics.get('annual_return', 0))
-        sharpe_ratio = self._safe_float(backtest_metrics.get('sharpe_ratio', 0))
-        max_drawdown = self._safe_float(backtest_metrics.get('max_drawdown', 0))
-        win_rate = self._safe_float(backtest_metrics.get('win_rate', 0))
-        profit_factor = self._safe_float(backtest_metrics.get('profit_factor', 0))
-        calmar_ratio = self._safe_float(backtest_metrics.get('calmar_ratio', 0))
+        annual_return = self._safe_float(backtest_metrics.get("annual_return", 0))
+        sharpe_ratio = self._safe_float(backtest_metrics.get("sharpe_ratio", 0))
+        max_drawdown = self._safe_float(backtest_metrics.get("max_drawdown", 0))
+        win_rate = self._safe_float(backtest_metrics.get("win_rate", 0))
+        profit_factor = self._safe_float(backtest_metrics.get("profit_factor", 0))
+        calmar_ratio = self._safe_float(backtest_metrics.get("calmar_ratio", 0))
 
         # 归一化并加权
-        score += w.get('annual_return', 0) * (annual_return / 100.0)  # 百分比转小数
-        score += w.get('sharpe_ratio', 0) * sharpe_ratio
-        score += w.get('max_drawdown', 0) * abs(max_drawdown) / 100.0  # 负权重
-        score += w.get('win_rate', 0) * (win_rate / 100.0)
-        score += w.get('profit_factor', 0) * profit_factor
-        score += w.get('calmar_ratio', 0) * calmar_ratio
+        score += w.get("annual_return", 0) * (annual_return / 100.0)  # 百分比转小数
+        score += w.get("sharpe_ratio", 0) * sharpe_ratio
+        score += w.get("max_drawdown", 0) * abs(max_drawdown) / 100.0  # 负权重
+        score += w.get("win_rate", 0) * (win_rate / 100.0)
+        score += w.get("profit_factor", 0) * profit_factor
+        score += w.get("calmar_ratio", 0) * calmar_ratio
 
         return round(score, 4)
 
@@ -100,7 +96,7 @@ class ModelRanker:
         min_annual_return: Optional[float] = None,
         min_win_rate: Optional[float] = None,
         min_ic: Optional[float] = None,
-        top_n: Optional[int] = None
+        top_n: Optional[int] = None,
     ) -> List[Dict]:
         """
         根据条件筛选模型
@@ -167,30 +163,31 @@ class ModelRanker:
 
             # 转换为百分比（前端期望百分比格式，如 2.78 表示 2.78%）
             annual_return_pct = None
-            if backtest_metrics.get('annualized_return') is not None:
-                annual_return_pct = backtest_metrics['annualized_return'] * 100
+            if backtest_metrics.get("annualized_return") is not None:
+                annual_return_pct = backtest_metrics["annualized_return"] * 100
 
             max_drawdown_pct = None
-            if backtest_metrics.get('max_drawdown') is not None:
-                max_drawdown_pct = backtest_metrics['max_drawdown'] * 100
+            if backtest_metrics.get("max_drawdown") is not None:
+                max_drawdown_pct = backtest_metrics["max_drawdown"] * 100
 
-            models.append({
-                'experiment_id': row[0],  # 使用 experiment_id 作为主键
-                'experiment_name': row[1],
-                'model_id': row[2],
-                'config': row[3],
-                'train_metrics': row[4],
-                'backtest_metrics': backtest_metrics,
-                'rank_score': float(row[6]) if row[6] else None,
-                'rank_position': row[7],
-
-                # 扁平化回测指标（前端直接访问，百分比格式）
-                'annual_return': annual_return_pct,  # 百分比（如 2.78 表示 2.78%）
-                'sharpe_ratio': backtest_metrics.get('sharpe_ratio'),  # 比率（不需转换）
-                'max_drawdown': max_drawdown_pct,  # 百分比（如 -30.13 表示 -30.13%）
-                'win_rate': backtest_metrics.get('win_rate'),  # 小数（前端会自行转换）
-                'calmar_ratio': backtest_metrics.get('calmar_ratio')  # 比率（不需转换）
-            })
+            models.append(
+                {
+                    "experiment_id": row[0],  # 使用 experiment_id 作为主键
+                    "experiment_name": row[1],
+                    "model_id": row[2],
+                    "config": row[3],
+                    "train_metrics": row[4],
+                    "backtest_metrics": backtest_metrics,
+                    "rank_score": float(row[6]) if row[6] else None,
+                    "rank_position": row[7],
+                    # 扁平化回测指标（前端直接访问，百分比格式）
+                    "annual_return": annual_return_pct,  # 百分比（如 2.78 表示 2.78%）
+                    "sharpe_ratio": backtest_metrics.get("sharpe_ratio"),  # 比率（不需转换）
+                    "max_drawdown": max_drawdown_pct,  # 百分比（如 -30.13 表示 -30.13%）
+                    "win_rate": backtest_metrics.get("win_rate"),  # 小数（前端会自行转换）
+                    "calmar_ratio": backtest_metrics.get("calmar_ratio"),  # 比率（不需转换）
+                }
+            )
 
         return models
 
@@ -230,7 +227,7 @@ class ModelRanker:
             scores.append(score)
 
             # 提取关键参数
-            for key in ['symbol', 'model_type', 'target_period', 'scaler_type', 'balance_samples']:
+            for key in ["symbol", "model_type", "target_period", "scaler_type", "balance_samples"]:
                 if key in config:
                     if key not in param_values:
                         param_values[key] = []
@@ -250,7 +247,7 @@ class ModelRanker:
 
             # 计算组间方差（ANOVA F-statistic的简化版本）
             group_means = [np.mean(group) for group in groups.values()]
-            overall_mean = np.mean(scores)
+            np.mean(scores)
 
             # Between-group variance
             bg_var = np.var(group_means)
@@ -277,12 +274,12 @@ class ModelRanker:
         logger.info(f"📝 生成批次 {batch_id} 的报告...")
 
         report = {
-            'batch_id': batch_id,
-            'summary': self._get_summary(batch_id),
-            'top_models': self.filter_models(batch_id, top_n=10),
-            'parameter_importance': self.analyze_parameter_importance(batch_id),
-            'performance_distribution': self._get_performance_distribution(batch_id),
-            'best_configurations': self._get_best_configurations(batch_id)
+            "batch_id": batch_id,
+            "summary": self._get_summary(batch_id),
+            "top_models": self.filter_models(batch_id, top_n=10),
+            "parameter_importance": self.analyze_parameter_importance(batch_id),
+            "performance_distribution": self._get_performance_distribution(batch_id),
+            "best_configurations": self._get_best_configurations(batch_id),
         }
 
         return report
@@ -296,16 +293,16 @@ class ModelRanker:
         if result:
             row = result[0]
             return {
-                'batch_name': row[1],
-                'strategy': row[2],
-                'status': row[3],
-                'total_experiments': row[4],
-                'completed_experiments': row[5],
-                'failed_experiments': row[6],
-                'success_rate_pct': float(row[8]) if row[8] else 0,
-                'avg_rank_score': float(row[13]) if row[13] else None,
-                'max_rank_score': float(row[14]) if row[14] else None,
-                'duration_hours': float(row[12]) if row[12] else None
+                "batch_name": row[1],
+                "strategy": row[2],
+                "status": row[3],
+                "total_experiments": row[4],
+                "completed_experiments": row[5],
+                "failed_experiments": row[6],
+                "success_rate_pct": float(row[8]) if row[8] else 0,
+                "avg_rank_score": float(row[13]) if row[13] else None,
+                "max_rank_score": float(row[14]) if row[14] else None,
+                "duration_hours": float(row[12]) if row[12] else None,
             }
 
         return {}
@@ -330,12 +327,12 @@ class ModelRanker:
         if result and result[0][0]:
             row = result[0]
             return {
-                'total_models': row[0],
-                'avg_annual_return': round(float(row[1]), 2) if row[1] else None,
-                'std_annual_return': round(float(row[2]), 2) if row[2] else None,
-                'avg_sharpe_ratio': round(float(row[3]), 2) if row[3] else None,
-                'avg_max_drawdown': round(float(row[4]), 2) if row[4] else None,
-                'avg_ic': round(float(row[5]), 4) if row[5] else None
+                "total_models": row[0],
+                "avg_annual_return": round(float(row[1]), 2) if row[1] else None,
+                "std_annual_return": round(float(row[2]), 2) if row[2] else None,
+                "avg_sharpe_ratio": round(float(row[3]), 2) if row[3] else None,
+                "avg_max_drawdown": round(float(row[4]), 2) if row[4] else None,
+                "avg_ic": round(float(row[5]), 4) if row[5] else None,
             }
 
         return {}
@@ -376,16 +373,26 @@ class ModelRanker:
         best_target_period = result[0] if result else None
 
         return {
-            'best_model_type': {
-                'model_type': best_model_type[0] if best_model_type else None,
-                'avg_score': float(best_model_type[1]) if best_model_type and best_model_type[1] else None,
-                'count': best_model_type[2] if best_model_type else 0
+            "best_model_type": {
+                "model_type": best_model_type[0] if best_model_type else None,
+                "avg_score": (
+                    float(best_model_type[1]) if best_model_type and best_model_type[1] else None
+                ),
+                "count": best_model_type[2] if best_model_type else 0,
             },
-            'best_target_period': {
-                'target_period': int(best_target_period[0]) if best_target_period and best_target_period[0] else None,
-                'avg_score': float(best_target_period[1]) if best_target_period and best_target_period[1] else None,
-                'count': best_target_period[2] if best_target_period else 0
-            }
+            "best_target_period": {
+                "target_period": (
+                    int(best_target_period[0])
+                    if best_target_period and best_target_period[0]
+                    else None
+                ),
+                "avg_score": (
+                    float(best_target_period[1])
+                    if best_target_period and best_target_period[1]
+                    else None
+                ),
+                "count": best_target_period[2] if best_target_period else 0,
+            },
         }
 
 
@@ -400,10 +407,7 @@ class ModelSelector:
         self.ranker = ModelRanker(db_manager)
 
     def select_diverse_portfolio(
-        self,
-        batch_id: int,
-        n_models: int = 5,
-        diversity_weight: float = 0.3
+        self, batch_id: int, n_models: int = 5, diversity_weight: float = 0.3
     ) -> List[Dict]:
         """
         选择多样化的模型组合
@@ -429,21 +433,20 @@ class ModelSelector:
 
         # 贪心选择：每次选择与已选模型差异最大且评分高的模型
         while len(selected) < n_models and remaining:
-            best_score = -float('inf')
+            best_score = -float("inf")
             best_idx = 0
 
             for idx, candidate in enumerate(remaining):
                 # 性能得分
-                performance_score = candidate['rank_score'] or 0
+                performance_score = candidate["rank_score"] or 0
 
                 # 多样性得分（与已选模型的差异）
                 diversity_score = self._calculate_diversity(candidate, selected)
 
                 # 综合得分
                 combined_score = (
-                    (1 - diversity_weight) * performance_score +
-                    diversity_weight * diversity_score * 100  # 缩放到相同量级
-                )
+                    1 - diversity_weight
+                ) * performance_score + diversity_weight * diversity_score * 100  # 缩放到相同量级
 
                 if combined_score > best_score:
                     best_score = combined_score
@@ -465,19 +468,19 @@ class ModelSelector:
             diff = 0
 
             # 模型类型不同 +1
-            if candidate['config'].get('model_type') != selected['config'].get('model_type'):
+            if candidate["config"].get("model_type") != selected["config"].get("model_type"):
                 diff += 1
 
             # 股票不同 +1
-            if candidate['config'].get('symbol') != selected['config'].get('symbol'):
+            if candidate["config"].get("symbol") != selected["config"].get("symbol"):
                 diff += 1
 
             # 预测周期不同 +0.5
-            if candidate['config'].get('target_period') != selected['config'].get('target_period'):
+            if candidate["config"].get("target_period") != selected["config"].get("target_period"):
                 diff += 0.5
 
             # Scaler类型不同 +0.3
-            if candidate['config'].get('scaler_type') != selected['config'].get('scaler_type'):
+            if candidate["config"].get("scaler_type") != selected["config"].get("scaler_type"):
                 diff += 0.3
 
             differences.append(diff)

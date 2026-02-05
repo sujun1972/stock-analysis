@@ -11,14 +11,15 @@
 版本: 2.0.0 (架构修正版)
 """
 
-from fastapi import APIRouter, Query
-from typing import Optional, List
 from datetime import date, datetime, timedelta
+from typing import List, Optional
+
+from fastapi import APIRouter, Query
 from loguru import logger
 
+from app.core.exceptions import DataNotFoundError, DataSyncError, ExternalAPIError
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
-from app.core.exceptions import DataNotFoundError, DataSyncError, ExternalAPIError
 
 router = APIRouter()
 
@@ -31,7 +32,7 @@ async def get_daily_data(
     code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
-    limit: int = Query(500, ge=1, le=5000, description="最大返回记录数")
+    limit: int = Query(500, ge=1, le=5000, description="最大返回记录数"),
 ):
     """
     获取股票日线数据
@@ -78,11 +79,7 @@ async def get_daily_data(
             start_date = end_date - timedelta(days=365)
 
         # 2. 调用 Core Adapter（业务逻辑在 Core）
-        df = await data_adapter.get_daily_data(
-            code=code,
-            start_date=start_date,
-            end_date=end_date
-        )
+        df = await data_adapter.get_daily_data(code=code, start_date=start_date, end_date=end_date)
 
         # 3. Backend 职责：数据验证
         if df is None or df.empty:
@@ -92,8 +89,8 @@ async def get_daily_data(
                     "code": code,
                     "start_date": str(start_date),
                     "end_date": str(end_date),
-                    "count": 0
-                }
+                    "count": 0,
+                },
             ).to_dict()
 
         # 4. Backend 职责：限制返回数量
@@ -105,8 +102,8 @@ async def get_daily_data(
         df_reset = df.reset_index()
 
         # 将日期列转换为字符串格式
-        if 'date' in df_reset.columns:
-            df_reset['date'] = df_reset['date'].astype(str)
+        if "date" in df_reset.columns:
+            df_reset["date"] = df_reset["date"].astype(str)
 
         # 6. Backend 职责：响应格式化
         return ApiResponse.success(
@@ -115,9 +112,9 @@ async def get_daily_data(
                 "start_date": str(start_date),
                 "end_date": str(end_date),
                 "count": len(df),
-                "data": df_reset.to_dict('records')
+                "data": df_reset.to_dict("records"),
             },
-            message=f"获取股票 {code} 日线数据成功"
+            message=f"获取股票 {code} 日线数据成功",
         ).to_dict()
 
     except DataNotFoundError:
@@ -125,8 +122,7 @@ async def get_daily_data(
     except Exception as e:
         logger.exception(f"未预期的错误 {code}: {e}")
         return ApiResponse.internal_error(
-            message=f"获取日线数据失败: {str(e)}",
-            data={"code": code, "error": str(e)}
+            message=f"获取日线数据失败: {str(e)}", data={"code": code, "error": str(e)}
         ).to_dict()
 
 
@@ -137,7 +133,7 @@ async def download_data(
     end_date: Optional[date] = Query(None, description="结束日期"),
     years: Optional[int] = Query(None, ge=1, le=20, description="下载年数（与日期范围二选一）"),
     max_stocks: Optional[int] = Query(None, ge=1, le=10000, description="最大下载数量"),
-    batch_size: int = Query(50, ge=1, le=200, description="批量下载大小")
+    batch_size: int = Query(50, ge=1, le=200, description="批量下载大小"),
 ):
     """
     批量下载股票数据
@@ -186,7 +182,7 @@ async def download_data(
         if not codes:
             # 调用 Core 获取所有股票列表
             stock_list = await data_adapter.get_stock_list(status="正常")
-            codes = [stock['code'] for stock in stock_list]
+            codes = [stock["code"] for stock in stock_list]
             logger.info(f"未指定股票代码，将下载全部 {len(codes)} 只股票")
 
         # 3. 限制下载数量
@@ -204,16 +200,16 @@ async def download_data(
 
         # 批量下载逻辑
         for i in range(0, total, batch_size):
-            batch = codes[i:i + batch_size]
-            logger.info(f"下载批次 {i//batch_size + 1}/{(total + batch_size - 1)//batch_size}: {len(batch)} 只股票")
+            batch = codes[i : i + batch_size]
+            logger.info(
+                f"下载批次 {i//batch_size + 1}/{(total + batch_size - 1)//batch_size}: {len(batch)} 只股票"
+            )
 
             for code in batch:
                 try:
                     # 下载单只股票数据
                     df = await data_adapter.download_daily_data(
-                        code=code,
-                        start_date=start_date,
-                        end_date=end_date
+                        code=code, start_date=start_date, end_date=end_date
                     )
 
                     if df is not None and not df.empty:
@@ -248,22 +244,20 @@ async def download_data(
                 "start_date": str(start_date),
                 "end_date": str(end_date),
                 "failed_codes": failed_codes[:20] if len(failed_codes) > 20 else failed_codes,
-                "message": f"下载完成: 成功 {success}/{total}, 失败 {failed}/{total}"
+                "message": f"下载完成: 成功 {success}/{total}, 失败 {failed}/{total}",
             },
-            message=f"数据下载完成，成功率: {success/total*100:.1f}%"
+            message=f"数据下载完成，成功率: {success/total*100:.1f}%",
         ).to_dict()
 
     except DataSyncError as e:
         logger.error(f"数据同步失败: {e}")
         return ApiResponse.internal_error(
-            message=f"数据下载失败: {str(e)}",
-            data={"error": str(e)}
+            message=f"数据下载失败: {str(e)}", data={"error": str(e)}
         ).to_dict()
     except Exception as e:
         logger.exception(f"未预期的错误: {e}")
         return ApiResponse.internal_error(
-            message=f"数据下载失败: {str(e)}",
-            data={"error": str(e)}
+            message=f"数据下载失败: {str(e)}", data={"error": str(e)}
         ).to_dict()
 
 
@@ -272,7 +266,7 @@ async def get_minute_data(
     code: str,
     trade_date: Optional[date] = Query(None, description="交易日期"),
     period: str = Query("1min", description="周期（1min/5min/15min/30min/60min）"),
-    limit: int = Query(240, ge=1, le=1000, description="最大返回记录数")
+    limit: int = Query(240, ge=1, le=1000, description="最大返回记录数"),
 ):
     """
     获取股票分钟数据
@@ -320,27 +314,17 @@ async def get_minute_data(
         valid_periods = ["1min", "5min", "15min", "30min", "60min"]
         if period not in valid_periods:
             return ApiResponse.bad_request(
-                message=f"无效的周期参数: {period}",
-                data={"valid_periods": valid_periods}
+                message=f"无效的周期参数: {period}", data={"valid_periods": valid_periods}
             ).to_dict()
 
         # 3. 调用 Core Adapter（业务逻辑在 Core）
-        df = await data_adapter.get_minute_data(
-            code=code,
-            period=period,
-            trade_date=trade_date
-        )
+        df = await data_adapter.get_minute_data(code=code, period=period, trade_date=trade_date)
 
         # 4. Backend 职责：数据验证
         if df is None or df.empty:
             return ApiResponse.not_found(
                 message=f"股票 {code} 在 {trade_date} 无分钟数据",
-                data={
-                    "code": code,
-                    "trade_date": str(trade_date),
-                    "period": period,
-                    "count": 0
-                }
+                data={"code": code, "trade_date": str(trade_date), "period": period, "count": 0},
             ).to_dict()
 
         # 5. Backend 职责：限制返回数量
@@ -352,8 +336,8 @@ async def get_minute_data(
         df_reset = df.reset_index()
 
         # 将时间列转换为字符串格式
-        if 'time' in df_reset.columns:
-            df_reset['time'] = df_reset['time'].astype(str)
+        if "time" in df_reset.columns:
+            df_reset["time"] = df_reset["time"].astype(str)
 
         # 7. Backend 职责：响应格式化
         return ApiResponse.success(
@@ -362,9 +346,9 @@ async def get_minute_data(
                 "trade_date": str(trade_date),
                 "period": period,
                 "count": len(df),
-                "data": df_reset.to_dict('records')
+                "data": df_reset.to_dict("records"),
             },
-            message=f"获取股票 {code} 分钟数据成功"
+            message=f"获取股票 {code} 分钟数据成功",
         ).to_dict()
 
     except DataNotFoundError:
@@ -372,8 +356,7 @@ async def get_minute_data(
     except Exception as e:
         logger.exception(f"未预期的错误 {code}: {e}")
         return ApiResponse.internal_error(
-            message=f"获取分钟数据失败: {str(e)}",
-            data={"code": code, "error": str(e)}
+            message=f"获取分钟数据失败: {str(e)}", data={"code": code, "error": str(e)}
         ).to_dict()
 
 
@@ -381,7 +364,7 @@ async def get_minute_data(
 async def check_data_integrity(
     code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
-    end_date: Optional[date] = Query(None, description="结束日期")
+    end_date: Optional[date] = Query(None, description="结束日期"),
 ):
     """
     检查股票数据完整性
@@ -418,22 +401,16 @@ async def check_data_integrity(
 
         # 2. 调用 Core Adapter 检查数据完整性
         integrity_result = await data_adapter.check_data_integrity(
-            code=code,
-            start_date=start_date,
-            end_date=end_date
+            code=code, start_date=start_date, end_date=end_date
         )
 
         # 3. Backend 职责：响应格式化
-        return ApiResponse.success(
-            data=integrity_result,
-            message=f"数据完整性检查完成"
-        ).to_dict()
+        return ApiResponse.success(data=integrity_result, message="数据完整性检查完成").to_dict()
 
     except DataNotFoundError:
         raise
     except Exception as e:
         logger.exception(f"未预期的错误 {code}: {e}")
         return ApiResponse.internal_error(
-            message=f"数据完整性检查失败: {str(e)}",
-            data={"code": code, "error": str(e)}
+            message=f"数据完整性检查失败: {str(e)}", data={"code": code, "error": str(e)}
         ).to_dict()

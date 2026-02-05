@@ -4,14 +4,16 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
 
 class ParameterType(str, Enum):
     """参数类型枚举"""
+
     INTEGER = "integer"
     FLOAT = "float"
     BOOLEAN = "boolean"
@@ -21,16 +23,17 @@ class ParameterType(str, Enum):
 @dataclass
 class StrategyParameter:
     """策略参数定义"""
-    name: str                           # 参数名称
-    label: str                          # 显示标签
-    type: ParameterType                 # 参数类型
-    default: Any                        # 默认值
-    min_value: Optional[float] = None   # 最小值（数值类型）
-    max_value: Optional[float] = None   # 最大值（数值类型）
-    step: Optional[float] = None        # 步长（数值类型）
-    options: Optional[List[Dict]] = None # 选项列表（选择类型）
-    description: str = ""               # 参数说明
-    category: str = "general"           # 参数分类
+
+    name: str  # 参数名称
+    label: str  # 显示标签
+    type: ParameterType  # 参数类型
+    default: Any  # 默认值
+    min_value: Optional[float] = None  # 最小值（数值类型）
+    max_value: Optional[float] = None  # 最大值（数值类型）
+    step: Optional[float] = None  # 步长（数值类型）
+    options: Optional[List[Dict]] = None  # 选项列表（选择类型）
+    description: str = ""  # 参数说明
+    category: str = "general"  # 参数分类
 
 
 class BaseStrategy(ABC):
@@ -53,19 +56,16 @@ class BaseStrategy(ABC):
     @abstractmethod
     def name(self) -> str:
         """策略名称"""
-        pass
 
     @property
     @abstractmethod
     def description(self) -> str:
         """策略描述"""
-        pass
 
     @property
     @abstractmethod
     def version(self) -> str:
         """策略版本"""
-        pass
 
     @classmethod
     @abstractmethod
@@ -76,7 +76,6 @@ class BaseStrategy(ABC):
         返回:
             参数定义列表
         """
-        pass
 
     @abstractmethod
     def generate_signals(self, data: pd.DataFrame) -> pd.Series:
@@ -90,7 +89,6 @@ class BaseStrategy(ABC):
         返回:
             交易信号序列 (1=买入, -1=卖出, 0=持有)
         """
-        pass
 
     def _validate_params(self):
         """验证参数有效性"""
@@ -127,24 +125,24 @@ class BaseStrategy(ABC):
             包含策略信息和参数定义的字典
         """
         return {
-            'name': self.name,
-            'description': self.description,
-            'version': self.version,
-            'parameters': [
+            "name": self.name,
+            "description": self.description,
+            "version": self.version,
+            "parameters": [
                 {
-                    'name': p.name,
-                    'label': p.label,
-                    'type': p.type.value,
-                    'default': p.default,
-                    'min_value': p.min_value,
-                    'max_value': p.max_value,
-                    'step': p.step,
-                    'options': p.options,
-                    'description': p.description,
-                    'category': p.category
+                    "name": p.name,
+                    "label": p.label,
+                    "type": p.type.value,
+                    "default": p.default,
+                    "min_value": p.min_value,
+                    "max_value": p.max_value,
+                    "step": p.step,
+                    "options": p.options,
+                    "description": p.description,
+                    "category": p.category,
                 }
                 for p in self.get_parameters()
-            ]
+            ],
         }
 
     def calculate_stop_loss(self, data: pd.DataFrame, atr_multiplier: float = 2.0) -> pd.Series:
@@ -158,10 +156,10 @@ class BaseStrategy(ABC):
         返回:
             止损价格序列
         """
-        if 'ATR' not in data.columns:
+        if "ATR" not in data.columns:
             return pd.Series(0, index=data.index)
 
-        return data['close'] - (data['ATR'] * atr_multiplier)
+        return data["close"] - (data["ATR"] * atr_multiplier)
 
     def calculate_take_profit(self, data: pd.DataFrame, atr_multiplier: float = 3.0) -> pd.Series:
         """
@@ -174,7 +172,7 @@ class BaseStrategy(ABC):
         返回:
             止盈价格序列
         """
-        if 'ATR' not in data.columns:
-            return pd.Series(float('inf'), index=data.index)
+        if "ATR" not in data.columns:
+            return pd.Series(float("inf"), index=data.index)
 
-        return data['close'] + (data['ATR'] * atr_multiplier)
+        return data["close"] + (data["ATR"] * atr_multiplier)

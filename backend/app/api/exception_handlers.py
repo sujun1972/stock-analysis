@@ -8,31 +8,30 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from app.core.exceptions import (
+    APIRateLimitError,
+    APITimeoutError,
     BackendError,
-    DataQueryError,
-    DataNotFoundError,
-    InsufficientDataError,
-    ValidationError,
-    StrategyExecutionError,
-    SignalGenerationError,
     BacktestError,
     BacktestExecutionError,
     CalculationError,
-    FeatureCalculationError,
-    DatabaseError,
-    DatabaseConnectionError,
-    QueryError,
-    ExternalAPIError,
-    APIRateLimitError,
-    APITimeoutError,
     ConfigError,
     ConfigValidationError,
+    DatabaseConnectionError,
+    DatabaseError,
+    DataNotFoundError,
+    DataQueryError,
     DataSyncError,
-    SyncTaskError,
+    ExternalAPIError,
+    FeatureCalculationError,
+    InsufficientDataError,
     PermissionError,
+    QueryError,
+    SignalGenerationError,
+    StrategyExecutionError,
+    SyncTaskError,
+    ValidationError,
 )
 from app.models.api_response import ApiResponse
-
 
 # ==================== 数据相关异常处理器 ====================
 
@@ -43,9 +42,8 @@ async def data_not_found_handler(request: Request, exc: DataNotFoundError) -> JS
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content=ApiResponse.not_found(
-            message=exc.message,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -55,10 +53,8 @@ async def data_query_error_handler(request: Request, exc: DataQueryError) -> JSO
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=ApiResponse.error(
-            message=exc.message,
-            code=400,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=400, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -68,10 +64,8 @@ async def insufficient_data_handler(request: Request, exc: InsufficientDataError
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=ApiResponse.error(
-            message=exc.message,
-            code=400,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=400, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -84,39 +78,37 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=ApiResponse.error(
-            message=exc.message,
-            code=400,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=400, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
 # ==================== 策略相关异常处理器 ====================
 
 
-async def strategy_execution_error_handler(request: Request, exc: StrategyExecutionError) -> JSONResponse:
+async def strategy_execution_error_handler(
+    request: Request, exc: StrategyExecutionError
+) -> JSONResponse:
     """处理策略执行异常 (500)"""
     logger.error(f"策略执行失败: {exc.message}", extra=exc.context, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
-async def signal_generation_error_handler(request: Request, exc: SignalGenerationError) -> JSONResponse:
+async def signal_generation_error_handler(
+    request: Request, exc: SignalGenerationError
+) -> JSONResponse:
     """处理信号生成异常 (500)"""
     logger.error(f"信号生成失败: {exc.message}", extra=exc.context, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -129,10 +121,8 @@ async def backtest_error_handler(request: Request, exc: BacktestError) -> JSONRe
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -145,23 +135,21 @@ async def calculation_error_handler(request: Request, exc: CalculationError) -> 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
-async def feature_calculation_error_handler(request: Request, exc: FeatureCalculationError) -> JSONResponse:
+async def feature_calculation_error_handler(
+    request: Request, exc: FeatureCalculationError
+) -> JSONResponse:
     """处理特征计算异常 (500)"""
     logger.error(f"特征计算失败: {exc.message}", extra=exc.context, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -174,23 +162,21 @@ async def database_error_handler(request: Request, exc: DatabaseError) -> JSONRe
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message="数据库操作失败",
-            code=500,
-            data={"error_code": exc.error_code}
-        ).to_dict()
+            message="数据库操作失败", code=500, data={"error_code": exc.error_code}
+        ).to_dict(),
     )
 
 
-async def database_connection_error_handler(request: Request, exc: DatabaseConnectionError) -> JSONResponse:
+async def database_connection_error_handler(
+    request: Request, exc: DatabaseConnectionError
+) -> JSONResponse:
     """处理数据库连接异常 (503)"""
     logger.error(f"数据库连接失败: {exc.message}", extra=exc.context, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content=ApiResponse.error(
-            message="数据库连接失败，请稍后重试",
-            code=503,
-            data={"error_code": exc.error_code}
-        ).to_dict()
+            message="数据库连接失败，请稍后重试", code=503, data={"error_code": exc.error_code}
+        ).to_dict(),
     )
 
 
@@ -200,10 +186,8 @@ async def query_error_handler(request: Request, exc: QueryError) -> JSONResponse
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message="数据查询失败",
-            code=500,
-            data={"error_code": exc.error_code}
-        ).to_dict()
+            message="数据查询失败", code=500, data={"error_code": exc.error_code}
+        ).to_dict(),
     )
 
 
@@ -216,10 +200,8 @@ async def external_api_error_handler(request: Request, exc: ExternalAPIError) ->
     return JSONResponse(
         status_code=status.HTTP_502_BAD_GATEWAY,
         content=ApiResponse.error(
-            message=exc.message,
-            code=502,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=502, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -231,8 +213,8 @@ async def api_rate_limit_error_handler(request: Request, exc: APIRateLimitError)
         content=ApiResponse.error(
             message=exc.message,
             code=429,
-            data={"error_code": exc.error_code, "retry_after": exc.retry_after, **exc.context}
-        ).to_dict()
+            data={"error_code": exc.error_code, "retry_after": exc.retry_after, **exc.context},
+        ).to_dict(),
     )
     response.headers["Retry-After"] = str(exc.retry_after)
     return response
@@ -244,10 +226,8 @@ async def api_timeout_error_handler(request: Request, exc: APITimeoutError) -> J
     return JSONResponse(
         status_code=status.HTTP_504_GATEWAY_TIMEOUT,
         content=ApiResponse.error(
-            message=exc.message,
-            code=504,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=504, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -260,10 +240,8 @@ async def config_error_handler(request: Request, exc: ConfigError) -> JSONRespon
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -276,10 +254,8 @@ async def data_sync_error_handler(request: Request, exc: DataSyncError) -> JSONR
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -292,10 +268,8 @@ async def permission_error_handler(request: Request, exc: PermissionError) -> JS
     return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,
         content=ApiResponse.error(
-            message=exc.message,
-            code=403,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=403, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -308,10 +282,8 @@ async def backend_error_handler(request: Request, exc: BackendError) -> JSONResp
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=exc.message,
-            code=500,
-            data={"error_code": exc.error_code, **exc.context}
-        ).to_dict()
+            message=exc.message, code=500, data={"error_code": exc.error_code, **exc.context}
+        ).to_dict(),
     )
 
 
@@ -324,10 +296,8 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiResponse.error(
-            message=f"服务器内部错误: {str(exc)}",
-            code=500,
-            data={"error_type": type(exc).__name__}
-        ).to_dict()
+            message=f"服务器内部错误: {str(exc)}", code=500, data={"error_type": type(exc).__name__}
+        ).to_dict(),
     )
 
 

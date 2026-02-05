@@ -3,22 +3,23 @@
 管理数据同步的定时任务配置和执行历史
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-from loguru import logger
 import asyncio
+from typing import Any, Dict, Optional
 
-from app.services.config_service import ConfigService
+from fastapi import APIRouter, HTTPException
+from loguru import logger
+from pydantic import BaseModel
+
 from app.api.error_handler import handle_api_errors
-from app.core.exceptions import DatabaseError, ValidationError
+from app.core.exceptions import DatabaseError
+from app.services.config_service import ConfigService
 
 router = APIRouter()
 
 
 class ScheduledTaskCreate(BaseModel):
     """创建定时任务请求"""
+
     task_name: str
     module: str
     description: Optional[str] = None
@@ -29,6 +30,7 @@ class ScheduledTaskCreate(BaseModel):
 
 class ScheduledTaskUpdate(BaseModel):
     """更新定时任务请求"""
+
     description: Optional[str] = None
     cron_expression: Optional[str] = None
     enabled: Optional[bool] = None
@@ -67,35 +69,30 @@ async def get_scheduled_tasks():
             ORDER BY id
         """
 
-        result = await asyncio.to_thread(
-            config_service.db._execute_query,
-            query
-        )
+        result = await asyncio.to_thread(config_service.db._execute_query, query)
 
         tasks = []
         for row in result:
-            tasks.append({
-                'id': row[0],
-                'task_name': row[1],
-                'module': row[2],
-                'description': row[3],
-                'cron_expression': row[4],
-                'enabled': row[5],
-                'params': row[6],
-                'last_run_at': row[7].strftime('%Y-%m-%d %H:%M:%S') if row[7] else None,
-                'next_run_at': row[8].strftime('%Y-%m-%d %H:%M:%S') if row[8] else None,
-                'last_status': row[9],
-                'last_error': row[10],
-                'run_count': row[11],
-                'created_at': row[12].strftime('%Y-%m-%d %H:%M:%S') if row[12] else None,
-                'updated_at': row[13].strftime('%Y-%m-%d %H:%M:%S') if row[13] else None
-            })
+            tasks.append(
+                {
+                    "id": row[0],
+                    "task_name": row[1],
+                    "module": row[2],
+                    "description": row[3],
+                    "cron_expression": row[4],
+                    "enabled": row[5],
+                    "params": row[6],
+                    "last_run_at": row[7].strftime("%Y-%m-%d %H:%M:%S") if row[7] else None,
+                    "next_run_at": row[8].strftime("%Y-%m-%d %H:%M:%S") if row[8] else None,
+                    "last_status": row[9],
+                    "last_error": row[10],
+                    "run_count": row[11],
+                    "created_at": row[12].strftime("%Y-%m-%d %H:%M:%S") if row[12] else None,
+                    "updated_at": row[13].strftime("%Y-%m-%d %H:%M:%S") if row[13] else None,
+                }
+            )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": tasks
-        }
+        return {"code": 200, "message": "success", "data": tasks}
     except DatabaseError as e:
         logger.error(f"数据库查询失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -139,38 +136,30 @@ async def get_scheduled_task(task_id: int):
             WHERE id = %s
         """
 
-        result = await asyncio.to_thread(
-            config_service.db._execute_query,
-            query,
-            (task_id,)
-        )
+        result = await asyncio.to_thread(config_service.db._execute_query, query, (task_id,))
 
         if not result:
             raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
         row = result[0]
         task = {
-            'id': row[0],
-            'task_name': row[1],
-            'module': row[2],
-            'description': row[3],
-            'cron_expression': row[4],
-            'enabled': row[5],
-            'params': row[6],
-            'last_run_at': row[7].strftime('%Y-%m-%d %H:%M:%S') if row[7] else None,
-            'next_run_at': row[8].strftime('%Y-%m-%d %H:%M:%S') if row[8] else None,
-            'last_status': row[9],
-            'last_error': row[10],
-            'run_count': row[11],
-            'created_at': row[12].strftime('%Y-%m-%d %H:%M:%S') if row[12] else None,
-            'updated_at': row[13].strftime('%Y-%m-%d %H:%M:%S') if row[13] else None
+            "id": row[0],
+            "task_name": row[1],
+            "module": row[2],
+            "description": row[3],
+            "cron_expression": row[4],
+            "enabled": row[5],
+            "params": row[6],
+            "last_run_at": row[7].strftime("%Y-%m-%d %H:%M:%S") if row[7] else None,
+            "next_run_at": row[8].strftime("%Y-%m-%d %H:%M:%S") if row[8] else None,
+            "last_status": row[9],
+            "last_error": row[10],
+            "run_count": row[11],
+            "created_at": row[12].strftime("%Y-%m-%d %H:%M:%S") if row[12] else None,
+            "updated_at": row[13].strftime("%Y-%m-%d %H:%M:%S") if row[13] else None,
         }
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": task
-        }
+        return {"code": 200, "message": "success", "data": task}
     except HTTPException:
         raise
     except Exception as e:
@@ -194,19 +183,23 @@ async def create_scheduled_task(request: ScheduledTaskCreate):
         config_service = ConfigService()
 
         # 验证模块名称
-        valid_modules = ['stock_list', 'new_stocks', 'delisted_stocks', 'daily', 'minute', 'realtime']
+        valid_modules = [
+            "stock_list",
+            "new_stocks",
+            "delisted_stocks",
+            "daily",
+            "minute",
+            "realtime",
+        ]
         if request.module not in valid_modules:
             raise HTTPException(
-                status_code=400,
-                detail=f"无效的模块名称，支持: {', '.join(valid_modules)}"
+                status_code=400, detail=f"无效的模块名称，支持: {', '.join(valid_modules)}"
             )
 
         # 检查任务名称是否已存在
         check_query = "SELECT id FROM scheduled_tasks WHERE task_name = %s"
         existing = await asyncio.to_thread(
-            config_service.db._execute_query,
-            check_query,
-            (request.task_name,)
+            config_service.db._execute_query, check_query, (request.task_name,)
         )
 
         if existing:
@@ -221,6 +214,7 @@ async def create_scheduled_task(request: ScheduledTaskCreate):
         """
 
         import json
+
         result = await asyncio.to_thread(
             config_service.db._execute_query,
             insert_query,
@@ -230,20 +224,14 @@ async def create_scheduled_task(request: ScheduledTaskCreate):
                 request.description,
                 request.cron_expression,
                 request.enabled,
-                json.dumps(request.params or {})
-            )
+                json.dumps(request.params or {}),
+            ),
         )
 
         task_id = result[0][0]
         logger.info(f"✓ 创建定时任务: {request.task_name} (ID: {task_id})")
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "id": task_id
-            }
-        }
+        return {"code": 200, "message": "success", "data": {"id": task_id}}
     except HTTPException:
         raise
     except Exception as e:
@@ -285,6 +273,7 @@ async def update_scheduled_task(task_id: int, request: ScheduledTaskUpdate):
 
         if request.params is not None:
             import json
+
             updates.append("params = %s::jsonb")
             params.append(json.dumps(request.params))
 
@@ -298,21 +287,11 @@ async def update_scheduled_task(task_id: int, request: ScheduledTaskUpdate):
         """
         params.append(task_id)
 
-        await asyncio.to_thread(
-            config_service.db._execute_update,
-            query,
-            tuple(params)
-        )
+        await asyncio.to_thread(config_service.db._execute_update, query, tuple(params))
 
         logger.info(f"✓ 更新定时任务: {task_id}")
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "id": task_id
-            }
-        }
+        return {"code": 200, "message": "success", "data": {"id": task_id}}
     except HTTPException:
         raise
     except Exception as e:
@@ -337,21 +316,11 @@ async def delete_scheduled_task(task_id: int):
 
         query = "DELETE FROM scheduled_tasks WHERE id = %s"
 
-        await asyncio.to_thread(
-            config_service.db._execute_update,
-            query,
-            (task_id,)
-        )
+        await asyncio.to_thread(config_service.db._execute_update, query, (task_id,))
 
         logger.info(f"✓ 删除定时任务: {task_id}")
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "id": task_id
-            }
-        }
+        return {"code": 200, "message": "success", "data": {"id": task_id}}
     except Exception as e:
         logger.error(f"删除定时任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -374,11 +343,7 @@ async def toggle_scheduled_task(task_id: int):
 
         # 获取当前状态
         query = "SELECT enabled FROM scheduled_tasks WHERE id = %s"
-        result = await asyncio.to_thread(
-            config_service.db._execute_query,
-            query,
-            (task_id,)
-        )
+        result = await asyncio.to_thread(config_service.db._execute_query, query, (task_id,))
 
         if not result:
             raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
@@ -389,20 +354,12 @@ async def toggle_scheduled_task(task_id: int):
         # 更新状态
         update_query = "UPDATE scheduled_tasks SET enabled = %s WHERE id = %s"
         await asyncio.to_thread(
-            config_service.db._execute_update,
-            update_query,
-            (new_enabled, task_id)
+            config_service.db._execute_update, update_query, (new_enabled, task_id)
         )
 
         logger.info(f"✓ 切换定时任务状态: {task_id} -> {new_enabled}")
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "enabled": new_enabled
-            }
-        }
+        return {"code": 200, "message": "success", "data": {"enabled": new_enabled}}
     except HTTPException:
         raise
     except Exception as e:
@@ -443,31 +400,25 @@ async def get_task_execution_history(task_id: int, limit: int = 20):
             LIMIT %s
         """
 
-        result = await asyncio.to_thread(
-            config_service.db._execute_query,
-            query,
-            (task_id, limit)
-        )
+        result = await asyncio.to_thread(config_service.db._execute_query, query, (task_id, limit))
 
         history = []
         for row in result:
-            history.append({
-                'id': row[0],
-                'task_name': row[1],
-                'module': row[2],
-                'status': row[3],
-                'started_at': row[4].strftime('%Y-%m-%d %H:%M:%S') if row[4] else None,
-                'completed_at': row[5].strftime('%Y-%m-%d %H:%M:%S') if row[5] else None,
-                'duration_seconds': row[6],
-                'result_summary': row[7],
-                'error_message': row[8]
-            })
+            history.append(
+                {
+                    "id": row[0],
+                    "task_name": row[1],
+                    "module": row[2],
+                    "status": row[3],
+                    "started_at": row[4].strftime("%Y-%m-%d %H:%M:%S") if row[4] else None,
+                    "completed_at": row[5].strftime("%Y-%m-%d %H:%M:%S") if row[5] else None,
+                    "duration_seconds": row[6],
+                    "result_summary": row[7],
+                    "error_message": row[8],
+                }
+            )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": history
-        }
+        return {"code": 200, "message": "success", "data": history}
     except Exception as e:
         logger.error(f"获取任务执行历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -506,32 +457,26 @@ async def get_recent_execution_history(limit: int = 50):
             LIMIT %s
         """
 
-        result = await asyncio.to_thread(
-            config_service.db._execute_query,
-            query,
-            (limit,)
-        )
+        result = await asyncio.to_thread(config_service.db._execute_query, query, (limit,))
 
         history = []
         for row in result:
-            history.append({
-                'id': row[0],
-                'task_name': row[1],
-                'module': row[2],
-                'status': row[3],
-                'started_at': row[4].strftime('%Y-%m-%d %H:%M:%S') if row[4] else None,
-                'completed_at': row[5].strftime('%Y-%m-%d %H:%M:%S') if row[5] else None,
-                'duration_seconds': row[6],
-                'result_summary': row[7],
-                'error_message': row[8],
-                'cron_expression': row[9]
-            })
+            history.append(
+                {
+                    "id": row[0],
+                    "task_name": row[1],
+                    "module": row[2],
+                    "status": row[3],
+                    "started_at": row[4].strftime("%Y-%m-%d %H:%M:%S") if row[4] else None,
+                    "completed_at": row[5].strftime("%Y-%m-%d %H:%M:%S") if row[5] else None,
+                    "duration_seconds": row[6],
+                    "result_summary": row[7],
+                    "error_message": row[8],
+                    "cron_expression": row[9],
+                }
+            )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": history
-        }
+        return {"code": 200, "message": "success", "data": history}
     except Exception as e:
         logger.error(f"获取最近执行历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

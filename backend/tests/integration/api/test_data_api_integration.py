@@ -8,10 +8,10 @@ Data API 集成测试
 版本: 1.0.0
 """
 
+from datetime import date, timedelta
+
 import pytest
-from datetime import date, datetime, timedelta
 from fastapi import status
-import pandas as pd
 
 
 @pytest.mark.integration
@@ -29,10 +29,7 @@ class TestDataAPIIntegration:
         # Act
         response = await client.get(
             f"/api/data/daily/{code}",
-            params={
-                "start_date": str(start_date),
-                "end_date": str(end_date)
-            }
+            params={"start_date": str(start_date), "end_date": str(end_date)},
         )
 
         # Assert
@@ -73,10 +70,7 @@ class TestDataAPIIntegration:
         for code in codes:
             response = await client.get(
                 f"/api/data/daily/{code}",
-                params={
-                    "start_date": str(start_date),
-                    "end_date": str(end_date)
-                }
+                params={"start_date": str(start_date), "end_date": str(end_date)},
             )
 
             assert response.status_code == status.HTTP_200_OK
@@ -92,10 +86,7 @@ class TestDataAPIIntegration:
 
         # Act & Assert
         for limit in limits:
-            response = await client.get(
-                f"/api/data/daily/{code}",
-                params={"limit": limit}
-            )
+            response = await client.get(f"/api/data/daily/{code}", params={"limit": limit})
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -116,11 +107,7 @@ class TestDataAPIIntegration:
         # Act & Assert
         for period in periods:
             response = await client.get(
-                f"/api/data/minute/{code}",
-                params={
-                    "trade_date": str(trade_date),
-                    "period": period
-                }
+                f"/api/data/minute/{code}", params={"trade_date": str(trade_date), "period": period}
             )
 
             assert response.status_code == status.HTTP_200_OK
@@ -139,12 +126,7 @@ class TestDataAPIIntegration:
 
         # Act
         response = await client.post(
-            "/api/data/download",
-            params={
-                "codes": codes,
-                "years": years,
-                "batch_size": 10
-            }
+            "/api/data/download", params={"codes": codes, "years": years, "batch_size": 10}
         )
 
         # Assert
@@ -177,8 +159,8 @@ class TestDataAPIIntegration:
                 "codes": codes,
                 "start_date": str(start_date),
                 "end_date": str(end_date),
-                "batch_size": 5
-            }
+                "batch_size": 5,
+            },
         )
 
         # Assert
@@ -201,10 +183,7 @@ class TestDataAPIIntegration:
         # Act
         response = await client.get(
             f"/api/data/check/{code}",
-            params={
-                "start_date": str(start_date),
-                "end_date": str(end_date)
-            }
+            params={"start_date": str(start_date), "end_date": str(end_date)},
         )
 
         # Assert
@@ -226,20 +205,12 @@ class TestDataAPIIntegration:
 
         # 1. 先下载数据
         download_response = await client.post(
-            "/api/data/download",
-            params={
-                "codes": [code],
-                "years": 1,
-                "batch_size": 10
-            }
+            "/api/data/download", params={"codes": [code], "years": 1, "batch_size": 10}
         )
         assert download_response.status_code == status.HTTP_200_OK
 
         # 2. 查询日线数据
-        daily_response = await client.get(
-            f"/api/data/daily/{code}",
-            params={"limit": 100}
-        )
+        daily_response = await client.get(f"/api/data/daily/{code}", params={"limit": 100})
         assert daily_response.status_code == status.HTTP_200_OK
 
         # 3. 检查数据完整性
@@ -257,8 +228,7 @@ class TestDataAPIIntegration:
 
         # Test 2: 无效的周期
         response2 = await client.get(
-            "/api/data/minute/000001.SZ",
-            params={"period": "invalid_period"}
+            "/api/data/minute/000001.SZ", params={"period": "invalid_period"}
         )
         assert response2.status_code == status.HTTP_200_OK
         data2 = response2.json()
@@ -273,10 +243,7 @@ class TestDataAPIIntegration:
         codes = ["000001.SZ", "000002.SZ", "600000.SH"]
 
         # Act: 并发请求多只股票数据
-        tasks = [
-            client.get(f"/api/data/daily/{code}", params={"limit": 50})
-            for code in codes
-        ]
+        tasks = [client.get(f"/api/data/daily/{code}", params={"limit": 50}) for code in codes]
         responses = await asyncio.gather(*tasks)
 
         # Assert: 所有请求都应该成功
@@ -293,19 +260,12 @@ class TestDataAPIIntegration:
 
         # Test 1: 正常日期范围
         response1 = await client.get(
-            f"/api/data/daily/{code}",
-            params={
-                "start_date": "2023-01-01",
-                "end_date": "2023-12-31"
-            }
+            f"/api/data/daily/{code}", params={"start_date": "2023-01-01", "end_date": "2023-12-31"}
         )
         assert response1.status_code == status.HTTP_200_OK
 
         # Test 2: 只指定结束日期
-        response2 = await client.get(
-            f"/api/data/daily/{code}",
-            params={"end_date": "2023-12-31"}
-        )
+        response2 = await client.get(f"/api/data/daily/{code}", params={"end_date": "2023-12-31"})
         assert response2.status_code == status.HTTP_200_OK
 
         # Test 3: 都不指定（使用默认值）
@@ -326,11 +286,7 @@ class TestDataAPIIntegration:
         start_time = time.time()
         response = await client.get(
             f"/api/data/daily/{code}",
-            params={
-                "start_date": str(start_date),
-                "end_date": str(end_date),
-                "limit": 5000
-            }
+            params={"start_date": str(start_date), "end_date": str(end_date), "limit": 5000},
         )
         elapsed_time = time.time() - start_time
 
@@ -349,4 +305,3 @@ async def cleanup_test_data():
     """测试后清理测试数据（可选）"""
     yield
     # 清理逻辑（如果需要）
-    pass

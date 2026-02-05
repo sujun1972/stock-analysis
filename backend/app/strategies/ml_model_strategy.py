@@ -3,21 +3,24 @@
 使用训练好的ML模型预测值生成交易信号
 """
 
-from typing import List, Dict, Any, Optional
-import pandas as pd
-import numpy as np
-from loguru import logger
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+import pandas as pd
+from loguru import logger
 
 # 添加 core 模块路径
-core_path = Path(__file__).parent.parent.parent.parent / 'core' / 'src'
+core_path = Path(__file__).parent.parent.parent.parent / "core" / "src"
 if str(core_path) not in sys.path:
     sys.path.insert(0, str(core_path))
 
 from src.config.trading_rules import TradingCosts
-from .base_strategy import BaseStrategy, StrategyParameter, ParameterType
-from app.core.exceptions import StrategyExecutionError, CalculationError, DataQueryError
+
+from app.core.exceptions import CalculationError, DataQueryError, StrategyExecutionError
+
+from .base_strategy import BaseStrategy, ParameterType, StrategyParameter
 
 
 class MLModelStrategy(BaseStrategy):
@@ -47,7 +50,7 @@ class MLModelStrategy(BaseStrategy):
                 type=ParameterType.SELECT,
                 default="",
                 description="使用的机器学习模型ID（必选，如无可用模型请先在AI实验室训练）。模型类型和预测周期由训练时确定。",
-                category="model"
+                category="model",
             ),
             # 注意: model_type 和 target_period 已从参数列表中移除
             # 这些属性在模型训练时已确定，应从模型元数据中获取，而不是作为可配置参数
@@ -60,7 +63,7 @@ class MLModelStrategy(BaseStrategy):
                 max_value=10.0,
                 step=0.05,
                 description="预测收益率超过此值时买入",
-                category="signal"
+                category="signal",
             ),
             StrategyParameter(
                 name="sell_threshold",
@@ -71,7 +74,7 @@ class MLModelStrategy(BaseStrategy):
                 max_value=0.0,
                 step=0.1,
                 description="预测收益率低于此值时卖出",
-                category="signal"
+                category="signal",
             ),
             StrategyParameter(
                 name="commission",
@@ -82,7 +85,7 @@ class MLModelStrategy(BaseStrategy):
                 max_value=TradingCosts.CommissionRates.HIGH_RATE,  # 最高万3
                 step=0.00001,
                 description="交易佣金费率（标准万2.5，低佣万1.8，高佣万3）",
-                category="cost"
+                category="cost",
             ),
             StrategyParameter(
                 name="slippage",
@@ -93,7 +96,7 @@ class MLModelStrategy(BaseStrategy):
                 max_value=0.05,
                 step=0.0001,
                 description="价格滑点费率",
-                category="cost"
+                category="cost",
             ),
             StrategyParameter(
                 name="position_size",
@@ -104,7 +107,7 @@ class MLModelStrategy(BaseStrategy):
                 max_value=1.0,
                 step=0.1,
                 description="每次开仓使用的资金比例",
-                category="risk"
+                category="risk",
             ),
             StrategyParameter(
                 name="stop_loss",
@@ -115,7 +118,7 @@ class MLModelStrategy(BaseStrategy):
                 max_value=0.20,
                 step=0.01,
                 description="止损比例(5%表示下跌5%时止损)",
-                category="risk"
+                category="risk",
             ),
             StrategyParameter(
                 name="take_profit",
@@ -126,7 +129,7 @@ class MLModelStrategy(BaseStrategy):
                 max_value=0.50,
                 step=0.01,
                 description="止盈比例(10%表示上涨10%时止盈)",
-                category="risk"
+                category="risk",
             ),
         ]
 
@@ -134,7 +137,7 @@ class MLModelStrategy(BaseStrategy):
         super().__init__(params)
 
         # 从参数中提取模型ID（必需）
-        self.model_id = self.params.get('model_id', '')
+        self.model_id = self.params.get("model_id", "")
 
         # model_type 和 target_period 不再从参数中获取
         # 而是在需要时从模型的训练任务元数据中动态读取
@@ -143,21 +146,21 @@ class MLModelStrategy(BaseStrategy):
         self.target_period = None  # 延迟加载
 
         # 交易参数
-        self.buy_threshold = self.params.get('buy_threshold', 1.0)
-        self.sell_threshold = self.params.get('sell_threshold', -1.0)
+        self.buy_threshold = self.params.get("buy_threshold", 1.0)
+        self.sell_threshold = self.params.get("sell_threshold", -1.0)
 
         # 成本参数（使用配置类的默认值）
-        self.commission = self.params.get('commission', TradingCosts.CommissionRates.DEFAULT)
-        self.slippage = self.params.get('slippage', 0.001)
+        self.commission = self.params.get("commission", TradingCosts.CommissionRates.DEFAULT)
+        self.slippage = self.params.get("slippage", 0.001)
 
         # 风控参数
-        self.position_size = self.params.get('position_size', 1.0)
-        self.stop_loss = self.params.get('stop_loss', 0.05)
-        self.take_profit = self.params.get('take_profit', 0.10)
+        self.position_size = self.params.get("position_size", 1.0)
+        self.stop_loss = self.params.get("stop_loss", 0.05)
+        self.take_profit = self.params.get("take_profit", 0.10)
 
         # 模型缓存
         self.model = None
-        self.model_dir = Path('data/models/saved')
+        self.model_dir = Path("data/models/saved")
 
         logger.info(
             f"初始化ML模型策略: model_id={self.model_id}, "
@@ -177,9 +180,9 @@ class MLModelStrategy(BaseStrategy):
         available_models = self._get_available_models()
 
         # 为 model_id 参数添加 options
-        for param in metadata['parameters']:
-            if param['name'] == 'model_id':
-                param['options'] = available_models
+        for param in metadata["parameters"]:
+            if param["name"] == "model_id":
+                param["options"] = available_models
                 break
 
         return metadata
@@ -225,18 +228,15 @@ class MLModelStrategy(BaseStrategy):
                 model_id, symbol, model_type, target_period, completed_at = row
 
                 # 格式化
-                symbol = symbol or 'unknown'
-                model_type = (model_type or 'unknown').upper()
+                symbol = symbol or "unknown"
+                model_type = (model_type or "unknown").upper()
                 target_period = target_period or 5
-                date_str = str(completed_at)[:10] if completed_at else 'unknown'
+                date_str = str(completed_at)[:10] if completed_at else "unknown"
 
                 # 构建标签: "000001 - LIGHTGBM - 5日 (2024-01-24)"
                 label = f"{symbol} - {model_type} - {target_period}日 ({date_str})"
 
-                options.append({
-                    "label": label,
-                    "value": model_id  # 使用 model_id 而不是 task_id
-                })
+                options.append({"label": label, "value": model_id})  # 使用 model_id 而不是 task_id
 
             logger.info(f"从数据库找到 {len(options)} 个可用的ML模型")
             return options
@@ -247,9 +247,7 @@ class MLModelStrategy(BaseStrategy):
         except Exception as e:
             logger.exception(f"获取可用模型列表时发生未预期错误: {e}")
             raise DataQueryError(
-                "获取ML模型列表失败",
-                error_code="MODEL_LIST_QUERY_FAILED",
-                reason=str(e)
+                "获取ML模型列表失败", error_code="MODEL_LIST_QUERY_FAILED", reason=str(e)
             )
 
     def generate_signals(self, data: pd.DataFrame) -> pd.Series:
@@ -319,7 +317,7 @@ class MLModelStrategy(BaseStrategy):
                 "ML模型信号生成失败 - 数据格式错误",
                 error_code="ML_DATA_FORMAT_ERROR",
                 model_id=self.model_id,
-                reason=str(e)
+                reason=str(e),
             )
         except Exception as e:
             # 其他未预期的错误
@@ -329,7 +327,7 @@ class MLModelStrategy(BaseStrategy):
                 error_code="ML_STRATEGY_EXECUTION_FAILED",
                 strategy="ml_model",
                 model_id=self.model_id,
-                reason=str(e)
+                reason=str(e),
             )
 
     def _load_model_from_disk(self):
@@ -347,6 +345,7 @@ class MLModelStrategy(BaseStrategy):
         try:
             # 从数据库查询模型的实际文件路径
             from src.database.db_manager import DatabaseManager
+
             db = DatabaseManager()
 
             query = """
@@ -367,15 +366,15 @@ class MLModelStrategy(BaseStrategy):
 
             # 从配置中提取目标周期和其他信息
             if config and isinstance(config, dict):
-                actual_target_period = config.get('target_period', 5)
+                actual_target_period = config.get("target_period", 5)
                 # 从配置中提取模型类型
-                actual_model_type = config.get('model_type', 'lightgbm').lower()
+                actual_model_type = config.get("model_type", "lightgbm").lower()
                 # 提取特征列表和scaler路径（池化训练模型才有）
-                self.trained_feature_cols = config.get('feature_cols', None)
-                self.scaler_path_from_config = config.get('scaler_path', None)
+                self.trained_feature_cols = config.get("feature_cols", None)
+                self.scaler_path_from_config = config.get("scaler_path", None)
             else:
                 actual_target_period = 5
-                actual_model_type = 'lightgbm'
+                actual_model_type = "lightgbm"
                 self.trained_feature_cols = None
                 self.scaler_path_from_config = None
 
@@ -391,12 +390,16 @@ class MLModelStrategy(BaseStrategy):
                 return None
 
             # 根据实际模型类型加载
-            if actual_model_type == 'lightgbm':
+            if actual_model_type == "lightgbm":
                 import lightgbm as lgb
+
                 model = lgb.Booster(model_file=str(model_path))
-                logger.info(f"成功加载 LightGBM 模型: {model_path} (预测周期: {self.target_period}日)")
-            elif actual_model_type == 'gru':
+                logger.info(
+                    f"成功加载 LightGBM 模型: {model_path} (预测周期: {self.target_period}日)"
+                )
+            elif actual_model_type == "gru":
                 import torch
+
                 model = torch.load(str(model_path))
                 logger.info(f"成功加载 GRU 模型: {model_path} (预测周期: {self.target_period}日)")
 
@@ -414,7 +417,7 @@ class MLModelStrategy(BaseStrategy):
                 "加载ML模型失败",
                 error_code="ML_MODEL_LOAD_FAILED",
                 model_id=self.model_id,
-                reason=str(e)
+                reason=str(e),
             )
 
     def _generate_predictions(self, model, data: pd.DataFrame) -> Optional[pd.Series]:
@@ -430,52 +433,56 @@ class MLModelStrategy(BaseStrategy):
         """
         try:
             # core 模块已作为包安装，无需 sys.path 操作
-            from src.data_pipeline import DataPipeline
             import pickle
+
+            from src.data_pipeline import DataPipeline
 
             logger.info(f"开始生成真实预测: model_type={self.model_type}, 数据长度={len(data)}")
 
             # 步骤1: 使用DataPipeline准备特征（与训练时保持一致）
             pipeline = DataPipeline(
                 target_periods=self.target_period,
-                scaler_type='standard',
+                scaler_type="standard",
                 cache_features=False,  # 禁用缓存，确保使用最新特征工程逻辑
-                verbose=False
+                verbose=False,
             )
 
             # 提取股票代码
             # 如果是UUID格式，从config中获取；否则从model_id解析
-            if hasattr(self, 'model_path') and self.model_path:
+            if hasattr(self, "model_path") and self.model_path:
                 # 从数据库config中获取股票代码
                 from src.database.db_manager import DatabaseManager
+
                 db = DatabaseManager()
                 query = "SELECT config FROM experiments WHERE model_id = %s LIMIT 1"
                 result = db._execute_query(query, (self.model_id,))
                 if result and result[0]:
                     config = result[0][0]
                     # 池化训练config中是'symbols'列表，单股票是'symbol'字符串
-                    if isinstance(config.get('symbols'), list) and len(config['symbols']) > 0:
-                        symbol = config['symbols'][0]  # 使用第一只股票
+                    if isinstance(config.get("symbols"), list) and len(config["symbols"]) > 0:
+                        symbol = config["symbols"][0]  # 使用第一只股票
                     else:
-                        symbol = config.get('symbol', self.model_id.split('_')[0])
+                        symbol = config.get("symbol", self.model_id.split("_")[0])
                 else:
                     # 回退：尝试从model_id解析
-                    symbol = self.model_id.split('_')[0] if '_' in self.model_id else '000001'
+                    symbol = self.model_id.split("_")[0] if "_" in self.model_id else "000001"
             else:
                 # 传统格式：000001_lightgbm_xxx -> 000001
-                symbol = self.model_id.split('_')[0]
+                symbol = self.model_id.split("_")[0]
 
             # 准备特征数据（不需要目标变量）
             # 为了获取特征,我们需要提供日期范围
-            start_date = data.index.min().strftime('%Y%m%d')
-            end_date = data.index.max().strftime('%Y%m%d')
+            start_date = data.index.min().strftime("%Y%m%d")
+            end_date = data.index.max().strftime("%Y%m%d")
 
             logger.info(f"准备特征: symbol={symbol}, 日期={start_date}~{end_date}")
 
             # 步骤1.5: 如果模型是池化训练的，需要包含OHLCV+Amount列
-            if hasattr(self, 'trained_feature_cols') and self.trained_feature_cols:
+            if hasattr(self, "trained_feature_cols") and self.trained_feature_cols:
                 # 池化训练模型：直接计算特征，不排除OHLCV+Amount列
-                logger.info(f"检测到池化训练模型，使用保存的特征列表({len(self.trained_feature_cols)}列)")
+                logger.info(
+                    f"检测到池化训练模型，使用保存的特征列表({len(self.trained_feature_cols)}列)"
+                )
                 logger.info("加载原始数据并计算完整特征（包含OHLCV+Amount）...")
 
                 # 加载原始数据
@@ -509,35 +516,30 @@ class MLModelStrategy(BaseStrategy):
 
                 # 创建配置（禁用缓存，不刷新）
                 config = PipelineConfig(
-                    target_period=self.target_period,
-                    use_cache=False,
-                    force_refresh=False
+                    target_period=self.target_period, use_cache=False, force_refresh=False
                 )
 
                 # 获取特征（会自动计算技术指标和Alpha因子）
                 X, _ = pipeline.get_training_data(
-                    symbol=symbol,
-                    start_date=start_date,
-                    end_date=end_date,
-                    config=config
+                    symbol=symbol, start_date=start_date, end_date=end_date, config=config
                 )
 
                 logger.info(f"特征准备完成: shape={X.shape}, features={len(X.columns)}")
 
             # 步骤2: 加载保存的scaler进行特征缩放
             # 优先使用config中的scaler_path，否则使用model_path派生
-            if hasattr(self, 'scaler_path_from_config') and self.scaler_path_from_config:
+            if hasattr(self, "scaler_path_from_config") and self.scaler_path_from_config:
                 scaler_path = Path(self.scaler_path_from_config)
                 logger.info(f"使用config中的scaler路径: {scaler_path}")
-            elif hasattr(self, 'model_path') and self.model_path:
+            elif hasattr(self, "model_path") and self.model_path:
                 # 从实际模型文件路径派生scaler路径
-                scaler_path = self.model_path.with_name(self.model_path.stem + '_scaler.pkl')
+                scaler_path = self.model_path.with_name(self.model_path.stem + "_scaler.pkl")
             else:
                 # 回退到使用 model_id（向后兼容）
-                scaler_path = Path(f'/data/models/ml_models/{self.model_id}_scaler.pkl')
+                scaler_path = Path(f"/data/models/ml_models/{self.model_id}_scaler.pkl")
 
             if scaler_path.exists():
-                with open(scaler_path, 'rb') as f:
+                with open(scaler_path, "rb") as f:
                     scaler = pickle.load(f)
 
                 if scaler is not None:
@@ -553,13 +555,13 @@ class MLModelStrategy(BaseStrategy):
                 X_scaled = X
 
             # 步骤3: 根据模型类型进行预测
-            if self.model_type == 'lightgbm':
+            if self.model_type == "lightgbm":
                 # LightGBM预测
                 predictions_raw = model.predict(X_scaled)
                 predictions = pd.Series(predictions_raw, index=X_scaled.index)
                 logger.info(f"✅ LightGBM预测完成: {len(predictions)} 个预测值")
 
-            elif self.model_type == 'gru':
+            elif self.model_type == "gru":
                 # GRU预测需要序列数据
                 import torch
 
@@ -571,7 +573,7 @@ class MLModelStrategy(BaseStrategy):
                 valid_indices = []
 
                 for i in range(seq_length, len(X_scaled)):
-                    seq = X_scaled.iloc[i-seq_length:i].values
+                    seq = X_scaled.iloc[i - seq_length : i].values
                     X_sequences.append(seq)
                     valid_indices.append(X_scaled.index[i])
 
@@ -588,7 +590,9 @@ class MLModelStrategy(BaseStrategy):
                     predictions_raw = model(X_tensor).cpu().numpy().flatten()
 
                 predictions = pd.Series(predictions_raw, index=valid_indices)
-                logger.info(f"✅ GRU预测完成: {len(predictions)} 个预测值 (损失前{seq_length}个样本)")
+                logger.info(
+                    f"✅ GRU预测完成: {len(predictions)} 个预测值 (损失前{seq_length}个样本)"
+                )
             else:
                 logger.error(f"不支持的模型类型: {self.model_type}")
                 return None
@@ -598,8 +602,10 @@ class MLModelStrategy(BaseStrategy):
             predictions_aligned = predictions.reindex(data.index)
 
             # 统计信息
-            logger.info(f"预测统计: mean={predictions.mean():.4f}%, std={predictions.std():.4f}%, "
-                       f"min={predictions.min():.4f}%, max={predictions.max():.4f}%")
+            logger.info(
+                f"预测统计: mean={predictions.mean():.4f}%, std={predictions.std():.4f}%, "
+                f"min={predictions.min():.4f}%, max={predictions.max():.4f}%"
+            )
 
             return predictions_aligned
 
@@ -609,7 +615,7 @@ class MLModelStrategy(BaseStrategy):
                 "ML模型预测失败 - 缺少依赖",
                 error_code="ML_MISSING_DEPENDENCY",
                 model_id=self.model_id,
-                reason=str(e)
+                reason=str(e),
             )
         except (ValueError, KeyError, IndexError) as e:
             logger.error(f"特征数据格式错误: {e}")
@@ -618,7 +624,7 @@ class MLModelStrategy(BaseStrategy):
                 error_code="ML_FEATURE_ERROR",
                 model_id=self.model_id,
                 model_type=self.model_type,
-                reason=str(e)
+                reason=str(e),
             )
         except Exception as e:
             logger.exception(f"模型预测时发生未预期错误: {e}")
@@ -627,7 +633,7 @@ class MLModelStrategy(BaseStrategy):
                 error_code="ML_PREDICTION_FAILED",
                 model_id=self.model_id,
                 model_type=self.model_type,
-                reason=str(e)
+                reason=str(e),
             )
 
     def _generate_fallback_signals(self, data: pd.DataFrame) -> pd.Series:
@@ -639,8 +645,8 @@ class MLModelStrategy(BaseStrategy):
         signals = pd.Series(0, index=data.index)
 
         # 计算移动平均线
-        ma5 = data['close'].rolling(window=5).mean()
-        ma20 = data['close'].rolling(window=20).mean()
+        ma5 = data["close"].rolling(window=5).mean()
+        ma20 = data["close"].rolling(window=20).mean()
 
         # 金叉：MA5上穿MA20 -> 买入
         golden_cross = (ma5 > ma20) & (ma5.shift(1) <= ma20.shift(1))
@@ -652,11 +658,7 @@ class MLModelStrategy(BaseStrategy):
 
         return signals
 
-    def _apply_risk_management(
-        self,
-        signals: pd.Series,
-        data: pd.DataFrame
-    ) -> pd.Series:
+    def _apply_risk_management(self, signals: pd.Series, data: pd.DataFrame) -> pd.Series:
         """
         应用止损止盈逻辑
 
@@ -674,7 +676,7 @@ class MLModelStrategy(BaseStrategy):
         entry_price = 0.0
 
         for i, date in enumerate(data.index):
-            current_price = data.loc[date, 'close']
+            current_price = data.loc[date, "close"]
 
             # 如果有持仓，检查止损止盈
             if position > 0:

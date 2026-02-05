@@ -4,7 +4,8 @@
 """
 
 import asyncio
-from typing import Callable, Any, Optional, Type
+from typing import Any, Callable, Optional
+
 from loguru import logger
 
 
@@ -13,10 +14,10 @@ async def retry_async(
     *args,
     max_retries: int = 3,
     delay_base: float = 3.0,
-    delay_strategy: str = 'linear',
+    delay_strategy: str = "linear",
     exceptions: tuple = (Exception,),
     on_retry: Optional[Callable] = None,
-    **kwargs
+    **kwargs,
 ) -> Any:
     """
     异步函数重试包装器
@@ -72,11 +73,11 @@ async def retry_async(
                 raise
 
             # 计算延迟时间
-            if delay_strategy == 'linear':
+            if delay_strategy == "linear":
                 delay = delay_base * retry_count
-            elif delay_strategy == 'exponential':
-                delay = delay_base ** retry_count
-            elif delay_strategy == 'constant':
+            elif delay_strategy == "exponential":
+                delay = delay_base**retry_count
+            elif delay_strategy == "constant":
                 delay = delay_base
             else:
                 delay = delay_base * retry_count  # 默认线性
@@ -112,10 +113,10 @@ def retry_sync(
     *args,
     max_retries: int = 3,
     delay_base: float = 3.0,
-    delay_strategy: str = 'linear',
+    delay_strategy: str = "linear",
     exceptions: tuple = (Exception,),
     on_retry: Optional[Callable] = None,
-    **kwargs
+    **kwargs,
 ) -> Any:
     """
     同步函数重试包装器
@@ -163,11 +164,11 @@ def retry_sync(
                 raise
 
             # 计算延迟时间
-            if delay_strategy == 'linear':
+            if delay_strategy == "linear":
                 delay = delay_base * retry_count
-            elif delay_strategy == 'exponential':
-                delay = delay_base ** retry_count
-            elif delay_strategy == 'constant':
+            elif delay_strategy == "exponential":
+                delay = delay_base**retry_count
+            elif delay_strategy == "constant":
                 delay = delay_base
             else:
                 delay = delay_base * retry_count  # 默认线性

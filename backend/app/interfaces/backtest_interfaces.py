@@ -3,7 +3,8 @@
 使用 Protocol 提供结构化类型约束
 """
 
-from typing import Protocol, Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Protocol, Tuple, Union
+
 import pandas as pd
 
 
@@ -19,28 +20,19 @@ class IBacktestDataLoader(Protocol):
         ...
 
     async def load_single_stock_data(
-        self,
-        symbol: str,
-        start_date: str,
-        end_date: str
+        self, symbol: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
         """加载单只股票数据"""
         ...
 
     async def load_multi_stock_data(
-        self,
-        symbols: List[str],
-        start_date: str,
-        end_date: str
+        self, symbols: List[str], start_date: str, end_date: str
     ) -> Dict[str, pd.DataFrame]:
         """加载多只股票数据"""
         ...
 
     async def load_benchmark_data(
-        self,
-        start_date: str,
-        end_date: str,
-        benchmark_code: str = '000300'
+        self, start_date: str, end_date: str, benchmark_code: str = "000300"
     ) -> Optional[pd.DataFrame]:
         """加载基准数据"""
         ...
@@ -58,7 +50,7 @@ class IBacktestExecutor(Protocol):
         df: pd.DataFrame,
         strategy: Any,
         initial_cash: float,
-        benchmark_data: Optional[pd.DataFrame] = None
+        benchmark_data: Optional[pd.DataFrame] = None,
     ) -> Dict:
         """执行单股回测"""
         ...
@@ -68,31 +60,23 @@ class IBacktestExecutor(Protocol):
         prices_dict: Dict[str, pd.DataFrame],
         strategy: Any,
         initial_cash: float,
-        benchmark_data: Optional[pd.DataFrame] = None
+        benchmark_data: Optional[pd.DataFrame] = None,
     ) -> Dict:
         """执行多股组合回测"""
         ...
 
     def simulate_trades(
-        self,
-        df: pd.DataFrame,
-        signals: pd.Series,
-        initial_cash: float
+        self, df: pd.DataFrame, signals: pd.Series, initial_cash: float
     ) -> Tuple[pd.DataFrame, List[Dict]]:
         """模拟交易执行"""
         ...
 
-    def generate_alpha_signals(
-        self,
-        prices_dict: Dict[str, pd.DataFrame]
-    ) -> pd.DataFrame:
+    def generate_alpha_signals(self, prices_dict: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """生成Alpha因子信号"""
         ...
 
     def calculate_metrics(
-        self,
-        equity_curve: pd.DataFrame,
-        benchmark_data: Optional[pd.DataFrame] = None
+        self, equity_curve: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
     ) -> Dict:
         """计算绩效指标"""
         ...
@@ -105,19 +89,11 @@ class IBacktestResultFormatter(Protocol):
     定义回测结果格式化的标准契约
     """
 
-    def optimize_kline_data(
-        self,
-        df: pd.DataFrame,
-        max_points: int = 1000
-    ) -> List[Dict]:
+    def optimize_kline_data(self, df: pd.DataFrame, max_points: int = 1000) -> List[Dict]:
         """优化K线数据"""
         ...
 
-    def optimize_equity_curve(
-        self,
-        df: pd.DataFrame,
-        max_points: int = 500
-    ) -> List[Dict]:
+    def optimize_equity_curve(self, df: pd.DataFrame, max_points: int = 500) -> List[Dict]:
         """优化净值曲线"""
         ...
 
@@ -125,10 +101,7 @@ class IBacktestResultFormatter(Protocol):
         """提取买卖信号点"""
         ...
 
-    def format_portfolio_value(
-        self,
-        portfolio_value: pd.DataFrame
-    ) -> List[Dict]:
+    def format_portfolio_value(self, portfolio_value: pd.DataFrame) -> List[Dict]:
         """格式化组合净值"""
         ...
 
@@ -147,7 +120,7 @@ class IBacktestService(Protocol):
         end_date: str,
         initial_cash: float = 1000000.0,
         strategy_params: Optional[Dict] = None,
-        strategy_id: str = "complex_indicator"
+        strategy_id: str = "complex_indicator",
     ) -> Dict:
         """
         运行回测任务

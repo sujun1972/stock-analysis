@@ -3,10 +3,13 @@ Base Repository
 提供数据访问层的基础功能
 """
 
-from typing import Any, List, Dict, Optional, Tuple
-from src.database.db_manager import DatabaseManager
+from typing import Any, List, Optional, Tuple
+
 from loguru import logger
-from psycopg2 import OperationalError, InterfaceError, DatabaseError as PsycopgDatabaseError
+from psycopg2 import DatabaseError as PsycopgDatabaseError
+from psycopg2 import InterfaceError, OperationalError
+from src.database.db_manager import DatabaseManager
+
 from app.core.exceptions import DatabaseError, QueryError
 
 
@@ -46,7 +49,7 @@ class BaseRepository:
                 "数据库查询执行失败",
                 error_code="DB_QUERY_FAILED",
                 query_preview=query[:100],
-                reason=str(e)
+                reason=str(e),
             )
 
     def execute_update(self, query: str, params: Optional[Tuple] = None) -> int:
@@ -78,7 +81,7 @@ class BaseRepository:
                 error_code="DB_UPDATE_FAILED",
                 operation="update",
                 query_preview=query[:100],
-                reason=str(e)
+                reason=str(e),
             )
 
     def execute_insert(self, query: str, params: Optional[Tuple] = None) -> int:
@@ -110,10 +113,10 @@ class BaseRepository:
                 error_code="DB_INSERT_FAILED",
                 operation="insert",
                 query_preview=query[:100],
-                reason=str(e)
+                reason=str(e),
             )
 
-    def find_by_id(self, table: str, id_value: Any, id_column: str = 'id') -> Optional[Tuple]:
+    def find_by_id(self, table: str, id_value: Any, id_column: str = "id") -> Optional[Tuple]:
         """
         根据 ID 查找单条记录
 
@@ -136,7 +139,7 @@ class BaseRepository:
         params: Optional[Tuple] = None,
         order_by: Optional[str] = None,
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
     ) -> List[Tuple]:
         """
         查找多条记录
@@ -168,12 +171,7 @@ class BaseRepository:
 
         return self.execute_query(query, params)
 
-    def count(
-        self,
-        table: str,
-        where: Optional[str] = None,
-        params: Optional[Tuple] = None
-    ) -> int:
+    def count(self, table: str, where: Optional[str] = None, params: Optional[Tuple] = None) -> int:
         """
         统计记录数
 
@@ -193,12 +191,7 @@ class BaseRepository:
         result = self.execute_query(query, params)
         return result[0][0] if result else 0
 
-    def exists(
-        self,
-        table: str,
-        where: str,
-        params: Optional[Tuple] = None
-    ) -> bool:
+    def exists(self, table: str, where: str, params: Optional[Tuple] = None) -> bool:
         """
         检查记录是否存在
 
@@ -212,7 +205,7 @@ class BaseRepository:
         """
         return self.count(table, where, params) > 0
 
-    def delete_by_id(self, table: str, id_value: Any, id_column: str = 'id') -> int:
+    def delete_by_id(self, table: str, id_value: Any, id_column: str = "id") -> int:
         """
         根据 ID 删除记录
 

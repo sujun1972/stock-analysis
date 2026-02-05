@@ -4,7 +4,31 @@ Backend 项目的 Claude Code Skills 集合，用于指导 AI 助手在开发过
 
 ## 📚 Skills 列表
 
-### 1. [exception-handling](exception-handling.md)
+### 1. [code-quality](code-quality.md)
+**代码质量工具集成指南**
+
+- **适用场景**: 所有 Python 代码开发、代码审查、CI/CD 流程
+- **核心内容**:
+  - Black 代码自动格式化
+  - isort 导入语句排序
+  - Flake8 代码质量检查
+  - MyPy 静态类型检查
+  - pre-commit Git 提交前检查
+  - GitHub Actions CI/CD 自动化
+- **快速开始**:
+  ```bash
+  # 格式化代码
+  ./venv/bin/black app/ tests/
+  ./venv/bin/isort app/ tests/
+
+  # 检查代码质量
+  ./venv/bin/flake8 app/ tests/
+
+  # 安装 pre-commit hooks
+  ./venv/bin/pre-commit install
+  ```
+
+### 2. [exception-handling](exception-handling.md)
 **异常处理系统使用指南**
 
 - **适用场景**: FastAPI 端点开发、异步服务、数据库操作、策略执行
@@ -29,7 +53,7 @@ Backend 项目的 Claude Code Skills 集合，用于指导 AI 助手在开发过
           )
   ```
 
-### 2. [api-response](api-response.md)
+### 3. [api-response](api-response.md)
 **API 响应格式使用指南**
 
 - **适用场景**: 所有 FastAPI 端点、数据查询接口、策略执行接口

@@ -9,18 +9,18 @@ Core Adapters 集成测试
 创建日期: 2026-02-01
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import date, timedelta
 import sys
+from datetime import date, timedelta
 from pathlib import Path
+
+import pandas as pd
+import pytest
 
 # 添加项目路径
 backend_path = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(backend_path))
 
-from app.core_adapters import DataAdapter, FeatureAdapter, BacktestAdapter, ModelAdapter
+from app.core_adapters import DataAdapter, FeatureAdapter, ModelAdapter
 
 
 @pytest.fixture
@@ -53,11 +53,7 @@ class TestAdaptersIntegration:
         start_date, end_date = date_range
 
         try:
-            df = await data_adapter.get_daily_data(
-                sample_stock_code,
-                start_date,
-                end_date
-            )
+            df = await data_adapter.get_daily_data(sample_stock_code, start_date, end_date)
 
             if df.empty:
                 pytest.skip("数据库中无数据，跳过集成测试")
@@ -65,14 +61,12 @@ class TestAdaptersIntegration:
 
             assert isinstance(df, pd.DataFrame)
             assert len(df) > 0
-            assert 'close' in df.columns
+            assert "close" in df.columns
 
             # 2. 特征计算
             feature_adapter = FeatureAdapter()
             df_with_features = await feature_adapter.add_all_features(
-                df,
-                include_indicators=True,
-                include_factors=True
+                df, include_indicators=True, include_factors=True
             )
 
             assert len(df_with_features.columns) > len(df.columns)
@@ -86,14 +80,17 @@ class TestAdaptersIntegration:
                 return
 
             # 分割特征和标签
-            feature_cols = [col for col in df_clean.columns
-                          if col not in ['open', 'high', 'low', 'close', 'volume']]
+            feature_cols = [
+                col
+                for col in df_clean.columns
+                if col not in ["open", "high", "low", "close", "volume"]
+            ]
 
             X = df_clean[feature_cols]
-            y = df_clean['close'].shift(-1).dropna()  # 预测下一日收盘价
+            y = df_clean["close"].shift(-1).dropna()  # 预测下一日收盘价
 
             # 对齐数据
-            X = X.iloc[:len(y)]
+            X = X.iloc[: len(y)]
 
             # 分割训练集和测试集
             split_idx = int(len(X) * 0.8)
@@ -105,18 +102,15 @@ class TestAdaptersIntegration:
             # 4. 模型训练
             model_adapter = ModelAdapter()
             result = await model_adapter.train_model(
-                X_train, y_train,
-                X_test, y_test,
-                model_type='Ridge',
-                save_model=False
+                X_train, y_train, X_test, y_test, model_type="Ridge", save_model=False
             )
 
-            assert 'model' in result
-            assert 'train_metrics' in result
-            assert isinstance(result['train_metrics'], dict)
+            assert "model" in result
+            assert "train_metrics" in result
+            assert isinstance(result["train_metrics"], dict)
 
             # 5. 模型预测
-            predictions = await model_adapter.predict(result['model'], X_test)
+            predictions = await model_adapter.predict(result["model"], X_test)
 
             assert len(predictions) == len(X_test)
             assert all(isinstance(p, (int, float)) for p in predictions)
@@ -136,11 +130,7 @@ class TestAdaptersIntegration:
             end_date = date.today()
             start_date = end_date - timedelta(days=100)
 
-            df = await data_adapter.get_daily_data(
-                sample_stock_code,
-                start_date,
-                end_date
-            )
+            df = await data_adapter.get_daily_data(sample_stock_code, start_date, end_date)
 
             if df.empty:
                 pytest.skip("无数据")
@@ -171,11 +161,7 @@ class TestAdaptersIntegration:
             start_date = end_date - timedelta(days=50)
 
             # 并发获取数据
-            df = await data_adapter.get_daily_data(
-                sample_stock_code,
-                start_date,
-                end_date
-            )
+            df = await data_adapter.get_daily_data(sample_stock_code, start_date, end_date)
 
             if df.empty:
                 pytest.skip("无数据")
@@ -184,7 +170,7 @@ class TestAdaptersIntegration:
             # 并发计算特征
             tasks = [
                 feature_adapter.add_technical_indicators(df.copy()),
-                feature_adapter.add_alpha_factors(df.copy())
+                feature_adapter.add_alpha_factors(df.copy()),
             ]
 
             results = await asyncio.gather(*tasks)
@@ -196,5 +182,5 @@ class TestAdaptersIntegration:
             pytest.skip(f"并发测试失败: {e}")
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '-m', 'integration'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-m", "integration"])

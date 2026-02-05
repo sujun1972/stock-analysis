@@ -5,14 +5,15 @@
 
 import asyncio
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 from psycopg2.extras import Json
-
 from src.database.db_manager import DatabaseManager
-from app.services.parameter_grid import ParameterGrid
-from app.repositories.batch_repository import BatchRepository
+
 from app.core.exceptions import DatabaseError
+from app.repositories.batch_repository import BatchRepository
+from app.services.parameter_grid import ParameterGrid
 
 
 class BatchManager:
@@ -40,11 +41,11 @@ class BatchManager:
         self,
         batch_name: str,
         param_space: Dict[str, Any],
-        strategy: str = 'grid',
+        strategy: str = "grid",
         max_experiments: Optional[int] = None,
         description: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
-        tags: Optional[list] = None
+        tags: Optional[list] = None,
     ) -> int:
         """
         创建实验批次
@@ -65,10 +66,7 @@ class BatchManager:
 
         # 生成参数组合
         grid = ParameterGrid(param_space)
-        configs = grid.generate(
-            strategy=strategy,
-            max_experiments=max_experiments
-        )
+        configs = grid.generate(strategy=strategy, max_experiments=max_experiments)
 
         total_experiments = len(configs)
         logger.info(f"生成了 {total_experiments} 个实验配置")
@@ -81,7 +79,7 @@ class BatchManager:
             total_experiments=total_experiments,
             description=description,
             config=config,
-            tags=tags
+            tags=tags,
         )
 
         # 创建实验记录
@@ -99,7 +97,7 @@ class BatchManager:
         total_experiments: int,
         description: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
-        tags: Optional[list] = None
+        tags: Optional[list] = None,
     ) -> int:
         """
         创建批次记录
@@ -131,15 +129,17 @@ class BatchManager:
             batch_name,
             description,
             strategy,
-            Json(param_space if param_space else {}),  # param_space (JSONB, NOT NULL) - wrap with Json()
-            'pending',
+            Json(
+                param_space if param_space else {}
+            ),  # param_space (JSONB, NOT NULL) - wrap with Json()
+            "pending",
             total_experiments,
             0,  # completed_experiments
             0,  # failed_experiments
             0,  # running_experiments
             Json(config if config else {}),  # config (JSONB) - wrap with Json()
             tags if tags else [],  # tags (VARCHAR[])
-            datetime.now()
+            datetime.now(),
         )
 
         # 使用单独的连接来执行 INSERT ... RETURNING 并提交事务
@@ -159,7 +159,7 @@ class BatchManager:
                     "批次记录创建失败",
                     error_code="BATCH_RECORD_CREATE_FAILED",
                     batch_name=batch_name,
-                    reason=str(e)
+                    reason=str(e),
                 )
             finally:
                 self.db.release_connection(conn)
@@ -190,16 +190,18 @@ class BatchManager:
         experiments = []
         for config in configs:
             experiment_name = self._generate_experiment_name(config)
-            experiment_hash = config.get('experiment_hash', '')
+            experiment_hash = config.get("experiment_hash", "")
 
-            experiments.append((
-                batch_id,
-                experiment_name,
-                experiment_hash,
-                Json(config),  # config (JSONB) - wrap with Json()
-                'pending',
-                datetime.now()
-            ))
+            experiments.append(
+                (
+                    batch_id,
+                    experiment_name,
+                    experiment_hash,
+                    Json(config),  # config (JSONB) - wrap with Json()
+                    "pending",
+                    datetime.now(),
+                )
+            )
 
         # 执行批量插入
         conn = self.db.get_connection()
@@ -214,17 +216,12 @@ class BatchManager:
 
     def _generate_experiment_name(self, config: Dict) -> str:
         """生成实验名称"""
-        symbol = config.get('symbol', 'UNKNOWN')
-        model_type = config.get('model_type', 'UNKNOWN')
-        target_period = config.get('target_period', 0)
+        symbol = config.get("symbol", "UNKNOWN")
+        model_type = config.get("model_type", "UNKNOWN")
+        target_period = config.get("target_period", 0)
         return f"{symbol}_{model_type}_T{target_period}"
 
-    async def update_batch_status(
-        self,
-        batch_id: int,
-        status: str,
-        **kwargs
-    ):
+    async def update_batch_status(self, batch_id: int, status: str, **kwargs):
         """
         更新批次状态
 
@@ -233,18 +230,9 @@ class BatchManager:
             status: 新状态
             **kwargs: 其他要更新的字段
         """
-        await asyncio.to_thread(
-            self.batch_repo.update_batch_status,
-            batch_id,
-            status,
-            **kwargs
-        )
+        await asyncio.to_thread(self.batch_repo.update_batch_status, batch_id, status, **kwargs)
 
-    async def increment_batch_counter(
-        self,
-        batch_id: int,
-        counter_type: str
-    ):
+    async def increment_batch_counter(self, batch_id: int, counter_type: str):
         """
         增加批次计数器
 
@@ -253,9 +241,9 @@ class BatchManager:
             counter_type: 计数器类型 ('completed', 'failed', 'running')
         """
         field_map = {
-            'completed': 'completed_experiments',
-            'failed': 'failed_experiments',
-            'running': 'running_experiments'
+            "completed": "completed_experiments",
+            "failed": "failed_experiments",
+            "running": "running_experiments",
         }
 
         field = field_map.get(counter_type)
@@ -281,10 +269,7 @@ class BatchManager:
         Returns:
             批次信息字典
         """
-        return await asyncio.to_thread(
-            self.batch_repo.get_batch_by_id,
-            batch_id
-        )
+        return await asyncio.to_thread(self.batch_repo.get_batch_by_id, batch_id)
 
     async def get_batch_config(self, batch_id: int) -> Dict:
         """
@@ -302,13 +287,9 @@ class BatchManager:
         if not result:
             raise ValueError(f"批次不存在: {batch_id}")
 
-        return {'strategy': result[0][0]}
+        return {"strategy": result[0][0]}
 
-    async def list_batches(
-        self,
-        limit: int = 100,
-        status: Optional[str] = None
-    ) -> List[Dict]:
+    async def list_batches(self, limit: int = 100, status: Optional[str] = None) -> List[Dict]:
         """
         列出批次
 
@@ -320,10 +301,7 @@ class BatchManager:
             批次列表
         """
         return await asyncio.to_thread(
-            self.batch_repo.find_batches_with_stats,
-            status=status,
-            limit=limit,
-            offset=0
+            self.batch_repo.find_batches_with_stats, status=status, limit=limit, offset=0
         )
 
     async def calculate_rankings(self, batch_id: int):
@@ -371,9 +349,7 @@ class BatchManager:
                 WHERE id = %s
             """
             await asyncio.to_thread(
-                self.db._execute_update,
-                update_query,
-                (score, position, exp_id)
+                self.db._execute_update, update_query, (score, position, exp_id)
             )
 
         logger.info(f"✓ 完成排名计算: {len(scored_experiments)} 个实验")
@@ -392,17 +368,17 @@ class BatchManager:
             return 0.0
 
         # 提取关键指标
-        sharpe_ratio = metrics.get('sharpe_ratio', 0)
-        annual_return = metrics.get('annual_return', 0)
-        max_drawdown = metrics.get('max_drawdown', 0)
-        win_rate = metrics.get('win_rate', 0)
+        sharpe_ratio = metrics.get("sharpe_ratio", 0)
+        annual_return = metrics.get("annual_return", 0)
+        max_drawdown = metrics.get("max_drawdown", 0)
+        win_rate = metrics.get("win_rate", 0)
 
         # 综合评分（可以根据需要调整权重）
         score = (
-            sharpe_ratio * 0.4 +
-            annual_return * 0.3 +
-            (1 - abs(max_drawdown)) * 0.2 +
-            win_rate * 0.1
+            sharpe_ratio * 0.4
+            + annual_return * 0.3
+            + (1 - abs(max_drawdown)) * 0.2
+            + win_rate * 0.1
         )
 
         return score

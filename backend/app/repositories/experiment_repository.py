@@ -3,19 +3,17 @@ Experiment Repository
 管理实验的数据访问
 """
 
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
+
+
 from .base_repository import BaseRepository
-from loguru import logger
 
 
 class ExperimentRepository(BaseRepository):
     """实验数据访问层"""
 
     def find_experiments_by_batch(
-        self,
-        batch_id: int,
-        status: Optional[str] = None,
-        limit: int = 100
+        self, batch_id: int, status: Optional[str] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
         查询批次下的实验列表
@@ -49,18 +47,20 @@ class ExperimentRepository(BaseRepository):
 
         experiments = []
         for row in results:
-            experiments.append({
-                'id': row[0],
-                'experiment_name': row[1],
-                'model_id': row[2],
-                'config': row[3],
-                'train_metrics': row[4],
-                'backtest_metrics': row[5],
-                'rank_score': float(row[6]) if row[6] else None,
-                'rank_position': row[7],
-                'status': row[8],
-                'error_message': row[9]
-            })
+            experiments.append(
+                {
+                    "id": row[0],
+                    "experiment_name": row[1],
+                    "model_id": row[2],
+                    "config": row[3],
+                    "train_metrics": row[4],
+                    "backtest_metrics": row[5],
+                    "rank_score": float(row[6]) if row[6] else None,
+                    "rank_position": row[7],
+                    "status": row[8],
+                    "error_message": row[9],
+                }
+            )
 
         return experiments
 
@@ -91,23 +91,23 @@ class ExperimentRepository(BaseRepository):
 
         row = results[0]
         return {
-            'id': row[0],
-            'batch_id': row[1],
-            'experiment_name': row[2],
-            'model_id': row[3],
-            'model_path': row[4],
-            'config': row[5],
-            'train_metrics': row[6],
-            'backtest_metrics': row[7],
-            'rank_score': float(row[8]) if row[8] else None,
-            'rank_position': row[9],
-            'status': row[10],
-            'error_message': row[11],
-            'created_at': row[12].isoformat() if row[12] else None,
-            'train_started_at': row[13].isoformat() if row[13] else None,
-            'train_completed_at': row[14].isoformat() if row[14] else None,
-            'backtest_started_at': row[15].isoformat() if row[15] else None,
-            'backtest_completed_at': row[16].isoformat() if row[16] else None
+            "id": row[0],
+            "batch_id": row[1],
+            "experiment_name": row[2],
+            "model_id": row[3],
+            "model_path": row[4],
+            "config": row[5],
+            "train_metrics": row[6],
+            "backtest_metrics": row[7],
+            "rank_score": float(row[8]) if row[8] else None,
+            "rank_position": row[9],
+            "status": row[10],
+            "error_message": row[11],
+            "created_at": row[12].isoformat() if row[12] else None,
+            "train_started_at": row[13].isoformat() if row[13] else None,
+            "train_completed_at": row[14].isoformat() if row[14] else None,
+            "backtest_started_at": row[15].isoformat() if row[15] else None,
+            "backtest_completed_at": row[16].isoformat() if row[16] else None,
         }
 
     def delete_experiment(self, experiment_id: int) -> int:
@@ -124,11 +124,7 @@ class ExperimentRepository(BaseRepository):
         return self.execute_update(query, (experiment_id,))
 
     def update_experiment_status(
-        self,
-        experiment_id: int,
-        status: str,
-        error_message: Optional[str] = None,
-        **kwargs
+        self, experiment_id: int, status: str, error_message: Optional[str] = None, **kwargs
     ) -> int:
         """
         更新实验状态
@@ -182,12 +178,7 @@ class ExperimentRepository(BaseRepository):
 
         results = self.execute_query(query, (batch_id,))
 
-        stats = {
-            'pending': 0,
-            'running': 0,
-            'completed': 0,
-            'failed': 0
-        }
+        stats = {"pending": 0, "running": 0, "completed": 0, "failed": 0}
 
         for row in results:
             status = row[0]
@@ -198,10 +189,7 @@ class ExperimentRepository(BaseRepository):
         return stats
 
     def get_top_experiments(
-        self,
-        batch_id: int,
-        top_n: int = 10,
-        min_rank_score: Optional[float] = None
+        self, batch_id: int, top_n: int = 10, min_rank_score: Optional[float] = None
     ) -> List[Dict[str, Any]]:
         """
         获取排名靠前的实验
@@ -237,15 +225,17 @@ class ExperimentRepository(BaseRepository):
 
         experiments = []
         for row in results:
-            experiments.append({
-                'id': row[0],
-                'experiment_name': row[1],
-                'model_id': row[2],
-                'config': row[3],
-                'train_metrics': row[4],
-                'backtest_metrics': row[5],
-                'rank_score': float(row[6]) if row[6] else None,
-                'rank_position': row[7]
-            })
+            experiments.append(
+                {
+                    "id": row[0],
+                    "experiment_name": row[1],
+                    "model_id": row[2],
+                    "config": row[3],
+                    "train_metrics": row[4],
+                    "backtest_metrics": row[5],
+                    "rank_score": float(row[6]) if row[6] else None,
+                    "rank_position": row[7],
+                }
+            )
 
         return experiments

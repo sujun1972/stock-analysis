@@ -16,10 +16,10 @@
 
 import asyncio
 import sys
-from typing import Tuple, Optional
 from datetime import datetime
 from pathlib import Path
-from loguru import logger
+from typing import Optional, Tuple
+
 
 # 添加 core 项目到 Python 路径
 core_path = Path(__file__).parent.parent.parent.parent / "core"
@@ -45,7 +45,6 @@ class MarketAdapter:
     def __init__(self):
         """初始化市场适配器"""
         # MarketUtils 是静态工具类，不需要实例化
-        pass
 
     async def is_trading_day(self, dt: Optional[datetime] = None) -> bool:
         """
@@ -57,10 +56,7 @@ class MarketAdapter:
         Returns:
             是否为交易日
         """
-        return await asyncio.to_thread(
-            MarketUtils.is_trading_day,
-            dt
-        )
+        return await asyncio.to_thread(MarketUtils.is_trading_day, dt)
 
     async def is_trading_time(self, dt: Optional[datetime] = None) -> bool:
         """
@@ -72,10 +68,7 @@ class MarketAdapter:
         Returns:
             是否在交易时段
         """
-        return await asyncio.to_thread(
-            MarketUtils.is_trading_time,
-            dt
-        )
+        return await asyncio.to_thread(MarketUtils.is_trading_time, dt)
 
     async def is_call_auction_time(self, dt: Optional[datetime] = None) -> bool:
         """
@@ -87,10 +80,7 @@ class MarketAdapter:
         Returns:
             是否在集合竞价时段
         """
-        return await asyncio.to_thread(
-            MarketUtils.is_call_auction_time,
-            dt
-        )
+        return await asyncio.to_thread(MarketUtils.is_call_auction_time, dt)
 
     async def get_market_status(self) -> Tuple[str, str]:
         """
@@ -109,14 +99,10 @@ class MarketAdapter:
             >>> print(f"{status}: {description}")
             trading: 交易中（早盘）
         """
-        return await asyncio.to_thread(
-            MarketUtils.get_market_status
-        )
+        return await asyncio.to_thread(MarketUtils.get_market_status)
 
     async def should_refresh_realtime_data(
-        self,
-        last_update: Optional[datetime] = None,
-        force: bool = False
+        self, last_update: Optional[datetime] = None, force: bool = False
     ) -> Tuple[bool, str]:
         """
         异步判断是否应该刷新实时数据
@@ -135,11 +121,7 @@ class MarketAdapter:
             >>> print(f"需要刷新: {should_refresh}, 原因: {reason}")
             需要刷新: True, 原因: 实时行情更新
         """
-        return await asyncio.to_thread(
-            MarketUtils.should_refresh_realtime_data,
-            last_update,
-            force
-        )
+        return await asyncio.to_thread(MarketUtils.should_refresh_realtime_data, last_update, force)
 
     async def get_next_trading_session(self) -> Tuple[Optional[datetime], str]:
         """
@@ -153,9 +135,7 @@ class MarketAdapter:
             >>> print(f"{desc}: {next_time}")
             今日午盘开盘: 2023-12-29 13:00:00
         """
-        return await asyncio.to_thread(
-            MarketUtils.get_next_trading_session
-        )
+        return await asyncio.to_thread(MarketUtils.get_next_trading_session)
 
     # 交易时段常量（方便访问）
     @property

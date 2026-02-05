@@ -3,13 +3,13 @@
 提供策略元数据查询接口
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict
+
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
-from app.strategies.strategy_manager import strategy_manager
 from app.api.error_handler import handle_api_errors
-from app.core.exceptions import StrategyExecutionError, ValidationError
+from app.strategies.strategy_manager import strategy_manager
 
 router = APIRouter()
 
@@ -35,10 +35,7 @@ async def list_strategies() -> Dict[str, Any]:
         }
     """
     strategies = strategy_manager.list_strategies()
-    return {
-        "status": "success",
-        "data": strategies
-    }
+    return {"status": "success", "data": strategies}
 
 
 @router.get("/metadata")
@@ -77,20 +74,14 @@ async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[
     """
     try:
         metadata = strategy_manager.get_strategy_metadata(strategy_id)
-        return {
-            "status": "success",
-            "data": metadata
-        }
+        return {"status": "success", "data": metadata}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/validate")
 @handle_api_errors
-async def validate_strategy_params(
-    strategy_id: str,
-    params: Dict[str, Any]
-) -> Dict[str, Any]:
+async def validate_strategy_params(strategy_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """
     验证策略参数
 
@@ -111,21 +102,9 @@ async def validate_strategy_params(
         is_valid = strategy_manager.validate_strategy_params(strategy_id, params)
 
         if is_valid:
-            return {
-                "status": "success",
-                "data": {
-                    "valid": True,
-                    "message": "参数验证通过"
-                }
-            }
+            return {"status": "success", "data": {"valid": True, "message": "参数验证通过"}}
         else:
-            return {
-                "status": "error",
-                "data": {
-                    "valid": False,
-                    "message": "参数验证失败"
-                }
-            }
+            return {"status": "error", "data": {"valid": False, "message": "参数验证失败"}}
     except ValueError as e:
         logger.error(f"参数验证失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))

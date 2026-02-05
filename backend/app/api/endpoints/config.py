@@ -3,20 +3,21 @@
 管理系统配置、数据源设置等
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Optional, Dict
-from loguru import logger
+from typing import Optional
 
-from app.services.config_service import ConfigService
+from fastapi import APIRouter
+from pydantic import BaseModel
+
 from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
+from app.services.config_service import ConfigService
 
 router = APIRouter()
 
 
 class DataSourceConfigRequest(BaseModel):
     """数据源配置请求"""
+
     data_source: str
     minute_data_source: Optional[str] = None
     realtime_data_source: Optional[str] = None
@@ -61,12 +62,12 @@ async def update_data_source_config(request: DataSourceConfigRequest):
         data_source=request.data_source,
         minute_data_source=request.minute_data_source,
         realtime_data_source=request.realtime_data_source,
-        tushare_token=request.tushare_token
+        tushare_token=request.tushare_token,
     )
 
     return ApiResponse.success(
         data=config,
-        message=f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}"
+        message=f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}",
     )
 
 

@@ -3,15 +3,16 @@
 使用 Facade 模式委托给专门的服务类
 """
 
-from typing import Optional, Dict
-from loguru import logger
 import asyncio
+from typing import Dict, Optional
+
+from loguru import logger
 from src.database.db_manager import DatabaseManager
 
+from app.core.exceptions import ConfigError, DatabaseError
 from app.repositories.config_repository import ConfigRepository
 from app.services.data_source_manager import DataSourceManager
 from app.services.sync_status_manager import SyncStatusManager
-from app.core.exceptions import DatabaseError, ConfigError
 
 
 class ConfigService:
@@ -48,20 +49,14 @@ class ConfigService:
             Optional[str]: 配置值，不存在则返回 None
         """
         try:
-            return await asyncio.to_thread(
-                self.config_repo.get_config_value,
-                key
-            )
+            return await asyncio.to_thread(self.config_repo.get_config_value, key)
         except DatabaseError:
             # 数据库错误向上传播
             raise
         except Exception as e:
             logger.error(f"获取配置失败 ({key}): {e}")
             raise ConfigError(
-                f"配置获取失败: {key}",
-                error_code="CONFIG_FETCH_FAILED",
-                key=key,
-                reason=str(e)
+                f"配置获取失败: {key}", error_code="CONFIG_FETCH_FAILED", key=key, reason=str(e)
             )
 
     async def get_all_configs(self) -> Dict[str, str]:
@@ -72,18 +67,14 @@ class ConfigService:
             Dict[str, str]: 配置字典
         """
         try:
-            return await asyncio.to_thread(
-                self.config_repo.get_all_configs
-            )
+            return await asyncio.to_thread(self.config_repo.get_all_configs)
         except DatabaseError:
             # 数据库错误向上传播
             raise
         except Exception as e:
             logger.error(f"获取所有配置失败: {e}")
             raise ConfigError(
-                "所有配置获取失败",
-                error_code="ALL_CONFIG_FETCH_FAILED",
-                reason=str(e)
+                "所有配置获取失败", error_code="ALL_CONFIG_FETCH_FAILED", reason=str(e)
             )
 
     async def set_config(self, key: str, value: str) -> bool:
@@ -98,11 +89,7 @@ class ConfigService:
             bool: 是否成功
         """
         try:
-            rows = await asyncio.to_thread(
-                self.config_repo.set_config_value,
-                key,
-                value
-            )
+            rows = await asyncio.to_thread(self.config_repo.set_config_value, key, value)
             return rows > 0
         except DatabaseError:
             # 数据库错误向上传播
@@ -114,7 +101,7 @@ class ConfigService:
                 error_code="CONFIG_SET_FAILED",
                 key=key,
                 value=value,
-                reason=str(e)
+                reason=str(e),
             )
 
     # ==================== 数据源配置接口 ====================
@@ -133,7 +120,7 @@ class ConfigService:
         data_source: str,
         minute_data_source: Optional[str] = None,
         realtime_data_source: Optional[str] = None,
-        tushare_token: Optional[str] = None
+        tushare_token: Optional[str] = None,
     ) -> Dict:
         """
         更新数据源配置
@@ -151,7 +138,7 @@ class ConfigService:
             data_source=data_source,
             minute_data_source=minute_data_source,
             realtime_data_source=realtime_data_source,
-            tushare_token=tushare_token
+            tushare_token=tushare_token,
         )
 
     # ==================== 同步状态接口 ====================
@@ -171,7 +158,7 @@ class ConfigService:
         last_sync_date: Optional[str] = None,
         progress: Optional[int] = None,
         total: Optional[int] = None,
-        completed: Optional[int] = None
+        completed: Optional[int] = None,
     ) -> Dict:
         """
         更新全局同步状态
@@ -191,7 +178,7 @@ class ConfigService:
             last_sync_date=last_sync_date,
             progress=progress,
             total=total,
-            completed=completed
+            completed=completed,
         )
 
     async def reset_sync_status(self) -> Dict:
@@ -239,12 +226,7 @@ class ConfigService:
         """
         return await self.sync_status_manager.get_module_sync_status(module)
 
-    async def create_sync_task(
-        self,
-        task_id: str,
-        module: str,
-        data_source: str
-    ) -> None:
+    async def create_sync_task(self, task_id: str, module: str, data_source: str) -> None:
         """
         创建同步任务记录
 
@@ -254,9 +236,7 @@ class ConfigService:
             data_source: 数据源
         """
         await self.sync_status_manager.create_sync_task(
-            task_id=task_id,
-            module=module,
-            data_source=data_source
+            task_id=task_id, module=module, data_source=data_source
         )
 
     async def update_sync_task(
@@ -267,7 +247,7 @@ class ConfigService:
         success_count: Optional[int] = None,
         failed_count: Optional[int] = None,
         progress: Optional[int] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> None:
         """
         更新同步任务状态
@@ -288,5 +268,5 @@ class ConfigService:
             success_count=success_count,
             failed_count=failed_count,
             progress=progress,
-            error_message=error_message
+            error_message=error_message,
         )

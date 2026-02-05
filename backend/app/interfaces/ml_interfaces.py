@@ -3,7 +3,7 @@
 使用 Protocol 提供结构化类型约束
 """
 
-from typing import Protocol, Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional, Protocol
 
 
 class ITrainingTaskManager(Protocol):
@@ -47,10 +47,7 @@ class ITrainingTaskManager(Protocol):
         ...
 
     def list_tasks(
-        self,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
+        self, status: Optional[str] = None, limit: int = 100, offset: int = 0
     ) -> Dict[str, Any]:
         """
         列出任务
@@ -88,7 +85,7 @@ class IModelPredictor(Protocol):
         end_date: str,
         model_source: Optional[Any] = None,
         task_id: Optional[str] = None,
-        experiment_id: Optional[int] = None
+        experiment_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         统一的预测接口
@@ -113,7 +110,7 @@ class IModelPredictor(Protocol):
         end_date: str,
         model_source: Optional[Any] = None,
         task_id: Optional[str] = None,
-        experiment_id: Optional[int] = None
+        experiment_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         批量预测
@@ -154,10 +151,7 @@ class IMLTrainingService(Protocol):
         ...
 
     def list_tasks(
-        self,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
+        self, status: Optional[str] = None, limit: int = 100, offset: int = 0
     ) -> Dict[str, Any]:
         """列出任务"""
         ...
@@ -179,7 +173,7 @@ class IMLTrainingService(Protocol):
         end_date: str,
         model_id: Optional[str] = None,
         experiment_id: Optional[int] = None,
-        model_source: Optional[Any] = None
+        model_source: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """统一的预测接口"""
         ...
@@ -191,7 +185,7 @@ class IMLTrainingService(Protocol):
         end_date: str,
         experiment_id: Optional[int] = None,
         model_id: Optional[str] = None,
-        model_source: Optional[Any] = None
+        model_source: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """批量预测"""
         ...

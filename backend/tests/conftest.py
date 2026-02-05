@@ -8,10 +8,11 @@ Pytest 配置文件
 版本: 1.0.0
 """
 
-import pytest
 import asyncio
 import sys
 from pathlib import Path
+
+import pytest
 
 # 添加项目根目录到 Python 路径
 backend_path = Path(__file__).parent.parent
@@ -26,24 +27,18 @@ if str(core_path) not in sys.path:
 
 # ==================== Pytest 配置 ====================
 
+
 def pytest_configure(config):
     """Pytest 启动配置"""
     # 注册自定义标记
-    config.addinivalue_line(
-        "markers", "unit: 标记为单元测试"
-    )
-    config.addinivalue_line(
-        "markers", "integration: 标记为集成测试"
-    )
-    config.addinivalue_line(
-        "markers", "performance: 标记为性能测试"
-    )
-    config.addinivalue_line(
-        "markers", "slow: 标记为慢速测试"
-    )
+    config.addinivalue_line("markers", "unit: 标记为单元测试")
+    config.addinivalue_line("markers", "integration: 标记为集成测试")
+    config.addinivalue_line("markers", "performance: 标记为性能测试")
+    config.addinivalue_line("markers", "slow: 标记为慢速测试")
 
 
 # ==================== 事件循环配置 ====================
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -59,6 +54,7 @@ def event_loop():
 
 # ==================== 测试数据夹具 ====================
 
+
 @pytest.fixture
 def sample_stock_codes():
     """样例股票代码列表"""
@@ -68,13 +64,11 @@ def sample_stock_codes():
 @pytest.fixture
 def sample_date_range():
     """样例日期范围"""
-    return {
-        "start": "2024-01-01",
-        "end": "2024-01-31"
-    }
+    return {"start": "2024-01-01", "end": "2024-01-31"}
 
 
 # ==================== HTTP Client 夹具 ====================
+
 
 @pytest.fixture
 async def client():
@@ -84,16 +78,15 @@ async def client():
     使用真实的 FastAPI 应用进行测试
     """
     from httpx import ASGITransport, AsyncClient
+
     from app.main import app
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
 # ==================== Mock 夹具 ====================
+
 
 @pytest.fixture
 def mock_stock_list():
@@ -105,7 +98,7 @@ def mock_stock_list():
             "market": "主板",
             "industry": "银行",
             "area": "深圳",
-            "list_date": "1991-04-03"
+            "list_date": "1991-04-03",
         },
         {
             "code": "000002",
@@ -113,7 +106,7 @@ def mock_stock_list():
             "market": "主板",
             "industry": "房地产",
             "area": "深圳",
-            "list_date": "1991-01-29"
+            "list_date": "1991-01-29",
         },
         {
             "code": "300001",
@@ -121,8 +114,8 @@ def mock_stock_list():
             "market": "创业板",
             "industry": "电气设备",
             "area": "青岛",
-            "list_date": "2009-10-30"
-        }
+            "list_date": "2009-10-30",
+        },
     ]
 
 
@@ -136,11 +129,12 @@ def mock_stock_info():
         "industry": "银行",
         "area": "深圳",
         "list_date": "1991-04-03",
-        "status": "正常"
+        "status": "正常",
     }
 
 
 # ==================== 测试环境清理 ====================
+
 
 @pytest.fixture(autouse=True)
 def reset_adapters():
@@ -151,18 +145,14 @@ def reset_adapters():
     """
     yield
     # 测试后清理逻辑（如果需要）
-    pass
 
 
 # ==================== 测试报告钩子 ====================
 
+
 def pytest_report_header(config):
     """测试报告头部信息"""
-    return [
-        "Backend Stocks API Tests",
-        f"Python: {sys.version}",
-        f"Backend Path: {backend_path}"
-    ]
+    return ["Backend Stocks API Tests", f"Python: {sys.version}", f"Backend Path: {backend_path}"]
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)

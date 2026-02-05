@@ -7,9 +7,4 @@ from .base_strategy import BaseStrategy, StrategyParameter
 from .complex_indicator_strategy import ComplexIndicatorStrategy
 from .strategy_manager import StrategyManager
 
-__all__ = [
-    'BaseStrategy',
-    'StrategyParameter',
-    'ComplexIndicatorStrategy',
-    'StrategyManager'
-]
+__all__ = ["BaseStrategy", "StrategyParameter", "ComplexIndicatorStrategy", "StrategyManager"]
