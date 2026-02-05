@@ -3,6 +3,7 @@ Base Repository
 提供数据访问层的基础功能
 """
 
+import re
 from typing import Any, List, Optional, Tuple
 
 from loguru import logger
@@ -29,6 +30,30 @@ class BaseRepository:
             db: DatabaseManager 实例，如果不提供则创建新实例
         """
         self.db = db or DatabaseManager()
+
+    @staticmethod
+    def _validate_identifier(identifier: str, name: str = "identifier") -> str:
+        """
+        验证并清理 SQL 标识符（表名、列名等）以防止 SQL 注入
+
+        Args:
+            identifier: 标识符字符串
+            name: 标识符名称（用于错误消息）
+
+        Returns:
+            验证后的标识符
+
+        Raises:
+            QueryError: 如果标识符无效
+        """
+        # 只允许字母、数字、下划线
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', identifier):
+            raise QueryError(
+                f"无效的 {name}：只允许字母、数字和下划线",
+                error_code="INVALID_IDENTIFIER",
+                identifier=identifier,
+            )
+        return identifier
 
     def execute_query(self, query: str, params: Optional[Tuple] = None) -> List[Tuple]:
         """
@@ -128,6 +153,10 @@ class BaseRepository:
         Returns:
             记录元组，不存在则返回 None
         """
+        # 验证标识符防止 SQL 注入
+        table = self._validate_identifier(table, "table")
+        id_column = self._validate_identifier(id_column, "id_column")
+
         query = f"SELECT * FROM {table} WHERE {id_column} = %s"
         results = self.execute_query(query, (id_value,))
         return results[0] if results else None
@@ -146,28 +175,39 @@ class BaseRepository:
 
         Args:
             table: 表名
-            where: WHERE 子句（不含 WHERE 关键字）
+            where: WHERE 子句（不含 WHERE 关键字，使用参数化查询）
             params: 参数
-            order_by: 排序子句（如 "created_at DESC"）
+            order_by: 排序子句（如 "created_at DESC"，仅限受信任的输入）
             limit: 限制数量
             offset: 偏移量
 
         Returns:
             记录列表
+
+        注意：
+            - where 子句应使用 %s 占位符，不应直接拼接用户输入
+            - order_by 应仅使用受信任的输入（如硬编码的列名）
         """
+        # 验证表名防止 SQL 注入
+        table = self._validate_identifier(table, "table")
+
         query = f"SELECT * FROM {table}"
 
         if where:
             query += f" WHERE {where}"
 
         if order_by:
+            # 验证 order_by 中的列名（支持 "column ASC/DESC" 格式）
+            order_parts = order_by.split()
+            if order_parts:
+                self._validate_identifier(order_parts[0], "order_by column")
             query += f" ORDER BY {order_by}"
 
         if limit is not None:
-            query += f" LIMIT {limit}"
+            query += f" LIMIT {int(limit)}"
 
         if offset is not None:
-            query += f" OFFSET {offset}"
+            query += f" OFFSET {int(offset)}"
 
         return self.execute_query(query, params)
 
@@ -177,12 +217,15 @@ class BaseRepository:
 
         Args:
             table: 表名
-            where: WHERE 子句（不含 WHERE 关键字）
+            where: WHERE 子句（不含 WHERE 关键字，使用参数化查询）
             params: 参数
 
         Returns:
             记录数
         """
+        # 验证表名防止 SQL 注入
+        table = self._validate_identifier(table, "table")
+
         query = f"SELECT COUNT(*) FROM {table}"
 
         if where:
@@ -217,5 +260,9 @@ class BaseRepository:
         Returns:
             删除的行数
         """
+        # 验证标识符防止 SQL 注入
+        table = self._validate_identifier(table, "table")
+        id_column = self._validate_identifier(id_column, "id_column")
+
         query = f"DELETE FROM {table} WHERE {id_column} = %s"
         return self.execute_update(query, (id_value,))

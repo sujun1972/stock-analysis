@@ -1,0 +1,23 @@
+{
+  "name": "security-audit",
+  "description": "全面的安全审计：检查敏感信息泄露、SQL注入、依赖漏洞和代码安全问题 (P0 级别)",
+  "version": "1.0.0",
+  "author": "Stock Analysis Team",
+  "tags": ["security", "audit", "sql-injection", "dependencies", "P0"],
+  "priority": 5,
+  "scope": "project",
+  "requirements": {
+    "python_packages": ["safety", "bandit"],
+    "environment": ["backend"]
+  },
+  "outputs": {
+    "report": "backend/docs/security-audit-report.md",
+    "bandit_json": "backend/bandit-report.json"
+  },
+  "validation_criteria": [
+    "无硬编码密码、密钥、Token",
+    "所有数据库查询使用参数化",
+    "依赖库无已知高危漏洞",
+    "Bandit 扫描无高危问题"
+  ]
+}

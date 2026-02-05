@@ -260,7 +260,8 @@ class ParameterGrid:
         """
         # 排序后序列化，确保哈希一致性
         config_str = json.dumps(config, sort_keys=True)
-        return hashlib.md5(config_str.encode()).hexdigest()
+        # MD5 仅用于配置去重，非安全用途
+        return hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()
 
     def estimate_total_combinations(self) -> int:
         """估算总参数组合数（用于grid策略）"""

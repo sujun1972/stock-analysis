@@ -54,12 +54,13 @@ def compute_features_for_stock(
         db_manager = DatabaseManager()
         table_name = f"stock_daily_{symbol}"
 
-        query = f"SELECT * FROM {table_name}"
+        # 使用参数化查询防止 SQL 注入
         if start_date and end_date:
-            query += f" WHERE trade_date >= '{start_date.date()}' AND trade_date <= '{end_date.date()}'"
-        query += " ORDER BY trade_date"
-
-        df = db_manager.execute_query(query)
+            query = f"SELECT * FROM {table_name} WHERE trade_date >= %s AND trade_date <= %s ORDER BY trade_date"
+            df = db_manager.execute_query(query, params=(start_date.date(), end_date.date()))
+        else:
+            query = f"SELECT * FROM {table_name} ORDER BY trade_date"
+            df = db_manager.execute_query(query)
 
         if df is None or df.empty:
             logger.warning(f"{symbol}: 无数据")
