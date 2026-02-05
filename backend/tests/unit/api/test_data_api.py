@@ -52,14 +52,18 @@ class TestGetDailyData:
         )
         mock_df.set_index("date", inplace=True)
 
-        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
-            mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
+        async def mock_breaker_call(func, **kwargs):
+            """模拟熔断器调用"""
+            result = await func(**kwargs)
+            return result
 
-            # Act
-            response = await client.get(
-                f"/api/data/daily/{code}",
-                params={"start_date": str(start_date), "end_date": str(end_date), "limit": 500},
-            )
+        with patch("app.api.endpoints.data.data_adapter.get_daily_data", new=AsyncMock(return_value=mock_df)):
+            with patch("app.api.endpoints.data.db_breaker.call_async", new=AsyncMock(side_effect=mock_breaker_call)):
+                # Act
+                response = await client.get(
+                    f"/api/data/daily/{code}",
+                    params={"start_date": str(start_date), "end_date": str(end_date), "limit": 500},
+                )
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -77,11 +81,15 @@ class TestGetDailyData:
         code = "999999.SZ"
         mock_df = pd.DataFrame()  # 空 DataFrame
 
-        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
-            mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
+        async def mock_breaker_call(func, **kwargs):
+            """模拟熔断器调用"""
+            result = await func(**kwargs)
+            return result
 
-            # Act
-            response = await client.get(f"/api/data/daily/{code}")
+        with patch("app.api.endpoints.data.data_adapter.get_daily_data", new=AsyncMock(return_value=mock_df)):
+            with patch("app.api.endpoints.data.db_breaker.call_async", new=AsyncMock(side_effect=mock_breaker_call)):
+                # Act
+                response = await client.get(f"/api/data/daily/{code}")
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -103,11 +111,15 @@ class TestGetDailyData:
         )
         mock_df.set_index("date", inplace=True)
 
-        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
-            mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
+        async def mock_breaker_call(func, **kwargs):
+            """模拟熔断器调用"""
+            result = await func(**kwargs)
+            return result
 
-            # Act
-            response = await client.get(f"/api/data/daily/{code}", params={"limit": 100})
+        with patch("app.api.endpoints.data.data_adapter.get_daily_data", new=AsyncMock(return_value=mock_df)):
+            with patch("app.api.endpoints.data.db_breaker.call_async", new=AsyncMock(side_effect=mock_breaker_call)):
+                # Act
+                response = await client.get(f"/api/data/daily/{code}", params={"limit": 100})
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -124,17 +136,22 @@ class TestGetDailyData:
         )
         mock_df.set_index("date", inplace=True)
 
-        with patch("app.api.endpoints.data.data_adapter") as mock_adapter:
-            mock_adapter.get_daily_data = AsyncMock(return_value=mock_df)
+        async def mock_breaker_call(func, **kwargs):
+            """模拟熔断器调用"""
+            result = await func(**kwargs)
+            return result
 
-            # Act
-            response = await client.get(f"/api/data/daily/{code}")
+        mock_get_daily = AsyncMock(return_value=mock_df)
+        with patch("app.api.endpoints.data.data_adapter.get_daily_data", new=mock_get_daily):
+            with patch("app.api.endpoints.data.db_breaker.call_async", new=AsyncMock(side_effect=mock_breaker_call)):
+                # Act
+                response = await client.get(f"/api/data/daily/{code}")
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         # 验证调用了 adapter，并且日期范围约为一年
-        mock_adapter.get_daily_data.assert_called_once()
-        call_args = mock_adapter.get_daily_data.call_args
+        mock_get_daily.assert_called_once()
+        call_args = mock_get_daily.call_args
         start_date = call_args.kwargs["start_date"]
         end_date = call_args.kwargs["end_date"]
         assert (end_date - start_date).days >= 360
