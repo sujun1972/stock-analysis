@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 # 添加项目路径
 backend_path = Path(__file__).parent.parent.parent.parent
@@ -23,7 +23,7 @@ from app.main import app
 @pytest.fixture
 async def client():
     """创建测试客户端"""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 

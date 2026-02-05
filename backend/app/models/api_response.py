@@ -8,6 +8,8 @@ from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
+from app.utils.data_cleaning import sanitize_float_values
+
 T = TypeVar("T")
 
 
@@ -349,13 +351,20 @@ class ApiResponse(BaseModel, Generic[T]):
         """
         转换为字典格式（向后兼容）
 
+        在返回字典前会自动清理 data 中的 NaN/Inf 值，
+        这是防御性编程，确保即使上层忘记清理也不会导致 JSON 序列化错误。
+
         Returns:
-            Dict: 响应字典
+            Dict: 响应字典，其中无效浮点数已被替换为 None
         """
+        # 防御性清理：确保 data 中的 NaN/Inf 值被转换为 None
+        # 这是最后一道防线，防止 JSON 序列化错误
+        clean_data = sanitize_float_values(self.data)
+
         result = {
             "code": self.code,
             "message": self.message,
-            "data": self.data,
+            "data": clean_data,
             "success": self.code < 400,  # 状态码 < 400 表示成功
         }
 

@@ -192,9 +192,9 @@ class TestListTasks:
         """测试列出所有任务"""
         # Arrange
         mock_tasks = [
-            {"task_id": "task_1", "status": "completed", "created_at": datetime.now()},
-            {"task_id": "task_2", "status": "running", "created_at": datetime.now()},
-            {"task_id": "task_3", "status": "pending", "created_at": datetime.now()},
+            {"task_id": "task_1", "status": "completed", "created_at": datetime.now(), "config": {"symbol": "000001"}},
+            {"task_id": "task_2", "status": "running", "created_at": datetime.now(), "config": {"symbol": "000002"}},
+            {"task_id": "task_3", "status": "pending", "created_at": datetime.now(), "config": {"symbol": "000003"}},
         ]
 
         with patch("app.api.endpoints.ml.ml_service") as mock_service:
@@ -213,8 +213,8 @@ class TestListTasks:
         """测试按状态过滤任务"""
         # Arrange
         mock_tasks = [
-            {"task_id": "task_1", "status": "completed", "created_at": datetime.now()},
-            {"task_id": "task_2", "status": "completed", "created_at": datetime.now()},
+            {"task_id": "task_1", "status": "completed", "created_at": datetime.now(), "config": {"symbol": "000001"}},
+            {"task_id": "task_2", "status": "completed", "created_at": datetime.now(), "config": {"symbol": "000002"}},
         ]
 
         with patch("app.api.endpoints.ml.ml_service") as mock_service:
@@ -380,10 +380,10 @@ class TestListModels:
         ]
 
         with (
-            patch("app.api.endpoints.ml.get_database") as mock_get_db,
+            patch("src.database.db_manager.get_database") as mock_get_db,
             patch(
                 "app.api.endpoints.ml.asyncio.to_thread",
-                new=AsyncMock(return_value=[[2], mock_db_results]),
+                new=AsyncMock(side_effect=[[[1]], mock_db_results]),  # 第一次返回count，第二次返回数据
             ),
         ):
             mock_db = Mock()
@@ -403,8 +403,8 @@ class TestListModels:
         """测试使用过滤条件列出模型"""
         # Arrange
         with (
-            patch("app.api.endpoints.ml.get_database") as mock_get_db,
-            patch("app.api.endpoints.ml.asyncio.to_thread", new=AsyncMock(return_value=[[1], []])),
+            patch("src.database.db_manager.get_database") as mock_get_db,
+            patch("app.api.endpoints.ml.asyncio.to_thread", new=AsyncMock(side_effect=[[[0]], []])),  # count=0, 空结果
         ):
             mock_db = Mock()
             mock_get_db.return_value = mock_db
@@ -459,7 +459,7 @@ class TestGetFeatureSnapshot:
     async def test_get_feature_snapshot_model_not_found(self):
         """测试模型文件不存在"""
         # Arrange
-        with patch("app.api.endpoints.ml.Path.exists", return_value=False):
+        with patch("os.path.exists", return_value=False):
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_feature_snapshot(symbol="000001", date="2024-01-01", model_id="task_123")
@@ -489,7 +489,7 @@ class TestGetFeatureSnapshot:
             return mock_features_data
 
         with (
-            patch("app.api.endpoints.ml.Path.exists", return_value=True),
+            patch("os.path.exists", return_value=True),
             patch("builtins.open", MagicMock()),
             patch("pickle.load", side_effect=mock_pickle_load),
         ):

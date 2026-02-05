@@ -14,14 +14,19 @@ def sanitize_float_values(data: Any) -> Any:
     递归清理数据中的无效浮点数值（NaN, Inf, -Inf）
     将无效值转换为 None 以便 JSON 序列化
 
-    此函数用于处理机器学习模型输出中可能出现的特殊浮点值，
+    此函数用于处理机器学习/回测模块输出中可能出现的特殊浮点值，
     这些值无法被 JSON 序列化，会导致 API 响应失败。
 
+    实现说明:
+        - 优先处理 numpy 类型 (np.float64, np.int64 等)，因为它们是 Python float 的子类
+        - 使用 math.isnan/isinf 而非 np.isnan/isinf，确保对 Python 原生类型的一致性
+        - 支持嵌套结构 (dict, list, tuple) 的递归清理
+
     Args:
-        data: 待清理的数据，支持 dict, list, float, int, numpy类型等
+        data: 待清理的数据，支持 dict, list, tuple, float, int, numpy 类型等
 
     Returns:
-        清理后的数据，无效浮点数被替换为 None
+        清理后的数据，无效浮点数 (NaN/Inf/-Inf) 被替换为 None
 
     Examples:
         >>> sanitize_float_values({"a": float('nan'), "b": 1.5})
@@ -29,20 +34,33 @@ def sanitize_float_values(data: Any) -> Any:
 
         >>> sanitize_float_values([1.0, float('inf'), 2.0])
         [1.0, None, 2.0]
+
+        >>> import numpy as np
+        >>> sanitize_float_values({"metric": np.float64(np.nan)})
+        {"metric": None}
     """
+    # 处理容器类型：递归清理
     if isinstance(data, dict):
         return {k: sanitize_float_values(v) for k, v in data.items()}
     elif isinstance(data, list):
         return [sanitize_float_values(item) for item in data]
-    elif isinstance(data, float):
-        if np.isnan(data) or np.isinf(data):
-            return None
-        return data
+    elif isinstance(data, tuple):
+        return tuple(sanitize_float_values(item) for item in data)
+
+    # 处理数值类型：numpy 类型优先 (因为 np.float64 是 float 的子类)
     elif isinstance(data, (np.floating, np.integer)):
         value = float(data)
-        if np.isnan(value) or np.isinf(value):
+        if math.isnan(value) or math.isinf(value):
             return None
         return value
+    elif isinstance(data, float):
+        if math.isnan(data) or math.isinf(data):
+            return None
+        return data
+    elif isinstance(data, int):
+        return data
+
+    # 其他类型：直接返回
     else:
         return data
 

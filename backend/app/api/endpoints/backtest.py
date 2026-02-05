@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from app.core_adapters.backtest_adapter import BacktestAdapter
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
+from app.utils.data_cleaning import sanitize_float_values
 
 router = APIRouter()
 
@@ -94,6 +95,18 @@ class OptimizeParamsRequest(BaseModel):
                 "metric": "sharpe_ratio",
             }
         }
+
+
+class CostAnalysisRequest(BaseModel):
+    """成本分析请求模型"""
+
+    trades: List[Dict[str, Any]] = Field(..., description="交易记录列表")
+
+
+class TradeStatisticsRequest(BaseModel):
+    """交易统计请求模型"""
+
+    trades: List[Dict[str, Any]] = Field(..., description="交易记录列表")
 
 
 # ==================== API 端点 ====================
@@ -236,8 +249,9 @@ async def calculate_metrics(
             portfolio_value=portfolio_series, positions=positions_df, trades=trades_df
         )
 
-        # 3. Backend 职责：响应格式化
-        return ApiResponse.success(data=metrics, message="指标计算完成").to_dict()
+        # 3. Backend 职责：清理 NaN 并响应格式化
+        clean_metrics = sanitize_float_values(metrics)
+        return ApiResponse.success(data=clean_metrics, message="指标计算完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"参数验证失败: {e}")
@@ -400,9 +414,7 @@ async def optimize_strategy_params(request: OptimizeParamsRequest):
 
 
 @router.post("/cost-analysis")
-async def analyze_trading_costs(
-    trades: List[Dict[str, Any]] = Body(..., description="交易记录列表")
-):
+async def analyze_trading_costs(request: CostAnalysisRequest):
     """
     分析交易成本
 
@@ -428,10 +440,10 @@ async def analyze_trading_costs(
     }
     """
     try:
-        logger.info(f"分析交易成本: {len(trades)} 笔交易")
+        logger.info(f"分析交易成本: {len(request.trades)} 笔交易")
 
         # 1. 转换为 DataFrame
-        trades_df = pd.DataFrame(trades)
+        trades_df = pd.DataFrame(request.trades)
 
         if trades_df.empty:
             return ApiResponse.bad_request(message="交易记录不能为空").to_dict()
@@ -507,9 +519,7 @@ async def calculate_risk_metrics(
 
 
 @router.post("/trade-statistics")
-async def get_trade_statistics(
-    trades: List[Dict[str, Any]] = Body(..., description="交易记录列表")
-):
+async def get_trade_statistics(request: TradeStatisticsRequest):
     """
     获取交易统计
 
@@ -538,10 +548,10 @@ async def get_trade_statistics(
     }
     """
     try:
-        logger.info(f"计算交易统计: {len(trades)} 笔交易")
+        logger.info(f"计算交易统计: {len(request.trades)} 笔交易")
 
         # 1. 转换为 DataFrame
-        trades_df = pd.DataFrame(trades)
+        trades_df = pd.DataFrame(request.trades)
 
         # 2. 调用 Core Adapter 获取交易统计
         trade_stats = await backtest_adapter.get_trade_statistics(trades_df)

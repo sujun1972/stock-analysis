@@ -179,8 +179,10 @@ class TestCreateScheduledTask:
     async def test_create_scheduled_task_success(self):
         """测试成功创建定时任务"""
         # Arrange
+        import time
+        unique_task_name = f"test_task_{int(time.time() * 1000)}"
         request = ScheduledTaskCreate(
-            task_name="test_task",
+            task_name=unique_task_name,
             module="stock_list",
             description="测试任务",
             cron_expression="0 0 * * *",
@@ -195,8 +197,8 @@ class TestCreateScheduledTask:
             patch(
                 "asyncio.to_thread",
                 side_effect=[
-                    AsyncMock(return_value=[])(),  # check query
-                    AsyncMock(return_value=[(123,)])(),  # insert query
+                    [],  # check query - 直接返回值而不是协程
+                    [(123,)],  # insert query
                 ],
             ),
         ):
@@ -317,8 +319,8 @@ class TestToggleScheduledTask:
             patch(
                 "asyncio.to_thread",
                 side_effect=[
-                    AsyncMock(return_value=[(False,)])(),  # get current status
-                    AsyncMock(return_value=None)(),  # update status
+                    [(False,)],  # get current status - 直接返回值而不是协程
+                    None,  # update status
                 ],
             ),
         ):
@@ -341,8 +343,8 @@ class TestToggleScheduledTask:
             patch(
                 "asyncio.to_thread",
                 side_effect=[
-                    AsyncMock(return_value=[(True,)])(),  # get current status
-                    AsyncMock(return_value=None)(),  # update status
+                    [(True,)],  # get current status - 直接返回值而不是协程
+                    None,  # update status
                 ],
             ),
         ):

@@ -35,11 +35,12 @@ def mock_pool_manager():
 def mock_query_manager():
     """模拟查询管理器"""
     mock = Mock()
+    # Core 的 get_stock_list 返回 DataFrame，不是列表
     mock.get_stock_list = Mock(
-        return_value=[
+        return_value=pd.DataFrame([
             {"code": "000001", "name": "平安银行", "market": "主板"},
             {"code": "000002", "name": "万科A", "market": "主板"},
-        ]
+        ])
     )
     mock.load_daily_data = Mock(
         return_value=pd.DataFrame(

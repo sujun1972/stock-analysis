@@ -339,7 +339,9 @@ class TestAnalyzeTradingCosts:
         mock_backtest_adapter.analyze_trading_costs = AsyncMock(return_value=expected_analysis)
 
         # Act
-        result = await analyze_trading_costs(trades=trades)
+        from app.api.endpoints.backtest import CostAnalysisRequest
+        request = CostAnalysisRequest(trades=trades)
+        result = await analyze_trading_costs(request)
 
         # Assert
         assert result["code"] == 200
@@ -350,7 +352,9 @@ class TestAnalyzeTradingCosts:
     async def test_analyze_costs_empty_trades(self):
         """测试空交易记录"""
         # Act
-        result = await analyze_trading_costs(trades=[])
+        from app.api.endpoints.backtest import CostAnalysisRequest
+        request = CostAnalysisRequest(trades=[])
+        result = await analyze_trading_costs(request)
 
         # Assert
         assert result["code"] == 400
@@ -402,7 +406,9 @@ class TestGetTradeStatistics:
         mock_backtest_adapter.get_trade_statistics = AsyncMock(return_value=expected_stats)
 
         # Act
-        result = await get_trade_statistics(trades=trades)
+        from app.api.endpoints.backtest import TradeStatisticsRequest
+        request = TradeStatisticsRequest(trades=trades)
+        result = await get_trade_statistics(request)
 
         # Assert
         assert result["code"] == 200
@@ -418,7 +424,9 @@ class TestGetTradeStatistics:
         mock_backtest_adapter.get_trade_statistics = AsyncMock(return_value=expected_stats)
 
         # Act
-        result = await get_trade_statistics(trades=[])
+        from app.api.endpoints.backtest import TradeStatisticsRequest
+        request = TradeStatisticsRequest(trades=[])
+        result = await get_trade_statistics(request)
 
         # Assert
         assert result["code"] == 200

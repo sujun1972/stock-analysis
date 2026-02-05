@@ -10,7 +10,7 @@ Market API 集成测试
 from datetime import datetime, time
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
@@ -21,7 +21,7 @@ class TestMarketStatusIntegration:
 
     async def test_get_market_status_real(self):
         """测试获取真实市场状态"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/status")
 
@@ -57,7 +57,7 @@ class TestMarketStatusIntegration:
 
     async def test_get_market_status_response_format(self):
         """测试市场状态响应格式"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/status")
 
@@ -78,7 +78,7 @@ class TestTradingInfoIntegration:
 
     async def test_get_trading_info_real(self):
         """测试获取真实交易信息"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/trading-info")
 
@@ -104,7 +104,7 @@ class TestTradingInfoIntegration:
 
     async def test_get_trading_info_sessions_format(self):
         """测试交易时段格式"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/trading-info")
 
@@ -135,7 +135,7 @@ class TestTradingInfoIntegration:
 
     async def test_trading_info_consistency(self):
         """测试交易信息一致性"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/trading-info")
 
@@ -157,7 +157,7 @@ class TestRefreshCheckIntegration:
 
     async def test_check_refresh_needed_basic(self):
         """测试基本的刷新检查"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/refresh-check")
 
@@ -179,7 +179,7 @@ class TestRefreshCheckIntegration:
 
     async def test_check_refresh_with_force(self):
         """测试强制刷新"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/refresh-check?force=true")
 
@@ -195,7 +195,7 @@ class TestRefreshCheckIntegration:
 
     async def test_check_refresh_with_codes(self):
         """测试指定股票代码的刷新检查"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get(
                 "/api/market/refresh-check?codes=000001.SZ&codes=600000.SH&codes=600519.SH"
@@ -209,7 +209,7 @@ class TestRefreshCheckIntegration:
 
     async def test_check_refresh_without_force(self):
         """测试非强制刷新"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/refresh-check?force=false")
 
@@ -226,7 +226,7 @@ class TestNextSessionIntegration:
 
     async def test_get_next_session_basic(self):
         """测试获取下一交易时段"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/next-session")
 
@@ -245,7 +245,7 @@ class TestNextSessionIntegration:
 
     async def test_next_session_time_format(self):
         """测试下一交易时段时间格式"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/next-session")
 
@@ -265,7 +265,7 @@ class TestNextSessionIntegration:
 
     async def test_next_session_wait_minutes(self):
         """测试等待时间计算"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/next-session")
 
@@ -284,7 +284,7 @@ class TestNextSessionIntegration:
 
     async def test_next_session_description(self):
         """测试下一交易时段描述"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act
             response = await client.get("/api/market/next-session")
 
@@ -304,7 +304,7 @@ class TestAPIConsistency:
 
     async def test_status_and_trading_info_consistency(self):
         """测试市场状态和交易信息的一致性"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Act - 同时调用两个 API
             status_response = await client.get("/api/market/status")
             info_response = await client.get("/api/market/trading-info")
@@ -319,7 +319,7 @@ class TestAPIConsistency:
 
     async def test_all_endpoints_accessible(self):
         """测试所有端点都可访问"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             endpoints = [
                 "/api/market/status",
                 "/api/market/trading-info",
