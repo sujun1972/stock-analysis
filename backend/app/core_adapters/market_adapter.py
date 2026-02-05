@@ -29,6 +29,9 @@ if str(core_path) not in sys.path:
 # 导入 Core 模块
 from src.utils.market_utils import MarketUtils
 
+from app.core.cache import cache
+from app.core.config import settings
+
 
 class MarketAdapter:
     """
@@ -82,9 +85,10 @@ class MarketAdapter:
         """
         return await asyncio.to_thread(MarketUtils.is_call_auction_time, dt)
 
+    @cache.cached(ttl=settings.CACHE_MARKET_STATUS_TTL, key_prefix="market_status")
     async def get_market_status(self) -> Tuple[str, str]:
         """
-        异步获取当前市场状态
+        异步获取当前市场状态（带缓存）
 
         Returns:
             Tuple[str, str]: (状态码, 状态描述)
@@ -98,6 +102,9 @@ class MarketAdapter:
             >>> status, description = await adapter.get_market_status()
             >>> print(f"{status}: {description}")
             trading: 交易中（早盘）
+
+        Note:
+            缓存TTL: 1分钟（市场状态实时性要求高）
         """
         return await asyncio.to_thread(MarketUtils.get_market_status)
 

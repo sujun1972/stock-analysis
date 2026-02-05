@@ -35,6 +35,9 @@ from src.backtest.cost_analyzer import TradingCostAnalyzer
 from src.backtest.parallel_backtester import ParallelBacktester
 from src.backtest.performance_analyzer import PerformanceAnalyzer
 
+from app.core.cache import cache
+from app.core.config import settings
+
 
 class BacktestAdapter:
     """
@@ -122,6 +125,10 @@ class BacktestAdapter:
 
         Raises:
             BacktestError: 回测执行错误
+
+        Note:
+            回测结果较复杂，暂不使用装饰器缓存
+            可在 API 层根据需要实现缓存
         """
 
         def _run():

@@ -33,6 +33,31 @@ services:
       retries: 3
       start_period: 40s
 
+  # Redis 缓存服务
+  redis:
+    image: redis:7-alpine
+    container_name: stock_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - stock_network
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
   # Backend API 服务
   backend:
     build:
@@ -47,6 +72,9 @@ services:
       - DATABASE_NAME=stock_analysis
       - DATABASE_USER=stock_user
       - DATABASE_PASSWORD=stock_password_123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
       - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
       # Python路径配置：使core/src可直接导入
       - PYTHONPATH=/app/core/src:/app
@@ -64,6 +92,8 @@ services:
       - stock_network
     depends_on:
       timescaledb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -103,6 +133,8 @@ volumes:
       type: none
       device: ./data/timescaledb
       o: bind
+  redis_data:
+    driver: local
 
 networks:
   stock_network:

@@ -48,5 +48,5 @@ loguru>=0.7.0
 # 任务调度
 apscheduler>=3.10.0
 
-# Redis (可选，用于缓存)
-redis>=5.0.0
+# Redis (用于缓存)
+redis[hiredis]>=5.0.0

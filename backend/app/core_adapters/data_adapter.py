@@ -36,6 +36,7 @@ from src.database.connection_pool_manager import ConnectionPoolManager
 from src.database.data_insert_manager import DataInsertManager
 from src.database.data_query_manager import DataQueryManager
 
+from app.core.cache import cache
 from app.core.config import settings
 from app.core.exceptions import DataQueryError, ExternalAPIError
 
@@ -112,11 +113,12 @@ class DataAdapter:
                 reason="数据库连接在初始化时失败，请检查数据库配置和连接",
             )
 
+    @cache.cached(ttl=settings.CACHE_STOCK_LIST_TTL, key_prefix="stock_list")
     async def get_stock_list(
         self, market: Optional[str] = None, status: str = "正常"
     ) -> List[Dict[str, Any]]:
         """
-        异步获取股票列表
+        异步获取股票列表（带缓存）
 
         Args:
             market: 市场类型 (主板/创业板/科创板/北交所)，None 表示所有市场
@@ -132,6 +134,7 @@ class DataAdapter:
         Note:
             Core的query_manager返回DataFrame，此方法转换为列表格式
             以便于JSON序列化和API响应
+            缓存TTL: 5分钟（股票列表变化不频繁）
         """
         self._ensure_connection()
         df = await asyncio.to_thread(
@@ -157,23 +160,45 @@ class DataAdapter:
 
         Raises:
             DatabaseError: 数据库访问错误
+
+        Note:
+            缓存在内部实现，对外接口保持 DataFrame 类型
         """
         self._ensure_connection()
         start_str = start_date.strftime("%Y-%m-%d") if start_date else None
         end_str = end_date.strftime("%Y-%m-%d") if end_date else None
 
-        return await asyncio.to_thread(
+        # 生成缓存键
+        cache_key = f"daily_data:{code}:{start_str}:{end_str}"
+
+        # 尝试从缓存获取
+        cached_data = await cache.get(cache_key)
+        if cached_data is not None:
+            # 从缓存恢复 DataFrame
+            return pd.DataFrame(cached_data) if cached_data else pd.DataFrame()
+
+        # 缓存未命中，从数据库加载
+        df = await asyncio.to_thread(
             self.query_manager.load_daily_data,
             stock_code=code,
             start_date=start_str,
             end_date=end_str,
         )
 
+        # 缓存结果（转换为可序列化格式）
+        await cache.set(
+            cache_key,
+            df.to_dict(orient="records") if not df.empty else [],
+            ttl=settings.CACHE_DAILY_DATA_TTL
+        )
+
+        return df
+
     async def get_minute_data(
         self, code: str, period: str = "1min", trade_date: Optional[date] = None
     ) -> pd.DataFrame:
         """
-        异步获取分钟数据
+        异步获取分钟数据（带缓存）
 
         Args:
             code: 股票代码
@@ -185,17 +210,38 @@ class DataAdapter:
 
         Raises:
             DatabaseError: 数据库访问错误
+
+        Note:
+            缓存TTL: 1分钟（实时性要求较高）
         """
         self._ensure_connection()
         date_str = trade_date.strftime("%Y-%m-%d") if trade_date else None
 
-        return await asyncio.to_thread(
+        # 生成缓存键
+        cache_key = f"minute_data:{code}:{period}:{date_str}"
+
+        # 尝试从缓存获取
+        cached_data = await cache.get(cache_key)
+        if cached_data is not None:
+            return pd.DataFrame(cached_data) if cached_data else pd.DataFrame()
+
+        # 缓存未命中，从数据库加载
+        df = await asyncio.to_thread(
             self.query_manager.load_minute_data, code=code, period=period, trade_date=date_str
         )
 
+        # 缓存结果
+        await cache.set(
+            cache_key,
+            df.to_dict(orient="records") if not df.empty else [],
+            ttl=settings.CACHE_MARKET_STATUS_TTL
+        )
+
+        return df
+
     async def insert_stock_list(self, df: pd.DataFrame) -> bool:
         """
-        异步插入股票列表
+        异步插入股票列表（插入后清除相关缓存）
 
         Args:
             df: 包含股票信息的 DataFrame
@@ -207,11 +253,18 @@ class DataAdapter:
             DatabaseError: 数据库写入错误
         """
         self._ensure_connection()
-        return await asyncio.to_thread(self.insert_manager.insert_stock_list, df=df)
+        result = await asyncio.to_thread(self.insert_manager.insert_stock_list, df=df)
+
+        # 插入成功后清除股票列表缓存
+        if result:
+            await cache.delete_pattern("stock_list:*")
+            logger.info("已清除股票列表缓存")
+
+        return result
 
     async def insert_daily_data(self, df: pd.DataFrame, code: str) -> bool:
         """
-        异步插入日线数据
+        异步插入日线数据（插入后清除相关缓存）
 
         Args:
             df: 包含日线数据的 DataFrame
@@ -224,7 +277,13 @@ class DataAdapter:
             DatabaseError: 数据库写入错误
         """
         self._ensure_connection()
-        return await asyncio.to_thread(self.insert_manager.insert_daily_data, df=df, code=code)
+        result = await asyncio.to_thread(self.insert_manager.insert_daily_data, df=df, code=code)
+
+        # 插入成功后清除相关缓存
+        if result:
+            await self._invalidate_cache_for_stock(code)
+
+        return result
 
     async def insert_minute_data(self, df: pd.DataFrame, code: str, period: str = "1min") -> bool:
         """
@@ -306,7 +365,7 @@ class DataAdapter:
         self, code: str, start_date: date, end_date: date
     ) -> Optional[pd.DataFrame]:
         """
-        异步下载单只股票日线数据
+        异步下载单只股票日线数据（下载后清除相关缓存）
 
         Args:
             code: 股票代码
@@ -327,6 +386,10 @@ class DataAdapter:
             df = await asyncio.to_thread(
                 self.provider.fetch_daily_data, symbol=code, start_date=start_str, end_date=end_str
             )
+
+            # 下载成功后清除相关缓存
+            await self._invalidate_cache_for_stock(code)
+
             return df
         except (ConnectionError, TimeoutError) as e:
             logger.error(f"数据源API连接失败: {code} - {e}")
@@ -342,6 +405,21 @@ class DataAdapter:
             raise DataQueryError(
                 "数据下载失败", error_code="DATA_DOWNLOAD_FAILED", stock_code=code, reason=str(e)
             )
+
+    async def _invalidate_cache_for_stock(self, code: str):
+        """
+        清除指定股票相关的所有缓存
+
+        Args:
+            code: 股票代码
+        """
+        # 清除日线数据缓存
+        await cache.delete_pattern(f"daily_data:*:{code}:*")
+        # 清除分钟数据缓存
+        await cache.delete_pattern(f"minute_data:*:{code}:*")
+        # 清除股票列表缓存（因为可能新增了股票）
+        await cache.delete_pattern("stock_list:*")
+        logger.info(f"已清除股票 {code} 的相关缓存")
 
     async def check_data_integrity(
         self, code: str, start_date: date, end_date: date

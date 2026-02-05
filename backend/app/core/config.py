@@ -46,10 +46,27 @@ class Settings(BaseSettings):
     # 数据源配置
     DEFAULT_DATA_SOURCE: str = os.getenv("DATA_SOURCE", "akshare")
 
-    # Redis配置（可选）
+    # Redis配置
     REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+    REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "true").lower() == "true"
+
+    # 缓存配置
+    CACHE_DEFAULT_TTL: int = int(os.getenv("CACHE_DEFAULT_TTL", "300"))  # 5分钟
+    CACHE_STOCK_LIST_TTL: int = int(os.getenv("CACHE_STOCK_LIST_TTL", "300"))  # 5分钟
+    CACHE_DAILY_DATA_TTL: int = int(os.getenv("CACHE_DAILY_DATA_TTL", "3600"))  # 1小时
+    CACHE_FEATURES_TTL: int = int(os.getenv("CACHE_FEATURES_TTL", "1800"))  # 30分钟
+    CACHE_BACKTEST_TTL: int = int(os.getenv("CACHE_BACKTEST_TTL", "86400"))  # 24小时
+    CACHE_MARKET_STATUS_TTL: int = int(os.getenv("CACHE_MARKET_STATUS_TTL", "60"))  # 1分钟
+
+    @property
+    def REDIS_URL(self) -> str:
+        """Redis连接URL"""
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

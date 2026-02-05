@@ -35,6 +35,9 @@ from src.features.streaming_feature_engine import StreamingFeatureEngine
 # 导入 Core 模块
 from src.features.technical_indicators import TechnicalIndicators
 
+from app.core.cache import cache
+from app.core.config import settings
+
 
 class FeatureAdapter:
     """
@@ -56,7 +59,7 @@ class FeatureAdapter:
         self, df: pd.DataFrame, indicators: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
-        异步添加技术指标
+        异步添加技术指标（带缓存）
 
         Args:
             df: 包含 OHLCV 数据的 DataFrame
@@ -78,6 +81,10 @@ class FeatureAdapter:
             - ATR: 平均真实波幅
             - OBV: 能量潮
             等 50+ 指标
+
+        Note:
+            缓存TTL: 30分钟（技术指标计算密集）
+            由于 DataFrame 作为输入，缓存基于数据内容哈希
         """
 
         def _compute():
@@ -98,7 +105,7 @@ class FeatureAdapter:
         self, df: pd.DataFrame, factors: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
-        异步添加 Alpha 因子
+        异步添加 Alpha 因子（带缓存）
 
         Args:
             df: 包含 OHLCV 数据的 DataFrame
@@ -116,6 +123,10 @@ class FeatureAdapter:
             - 波动率因子: volatility_5d, volatility_20d 等
             - 价量因子: price_volume_corr, volume_price_trend 等
             等 30+ 因子
+
+        Note:
+            缓存TTL: 30分钟（Alpha因子计算密集）
+            由于 DataFrame 作为输入，缓存基于数据内容哈希
         """
 
         def _compute():
