@@ -2146,10 +2146,10 @@ logger.bind(code="000001", rows=1000, duration_ms=50).info("Stock data fetched")
        )
    ```
 
-**验收标准**:
-- ✅ 多环境配置完成
-- ✅ 健康检查端点可用
-- ✅ 生产环境部署文档完成
+**验收标准** (全部完成 ✅ 2026-02-05):
+- ✅ 多环境配置完成 - **已完成**（新增 is_production, is_development, is_testing, log_level 属性）
+- ✅ 健康检查端点可用 - **已完成**（检查 database, redis, core 服务状态）
+- ✅ 生产环境部署文档完成 - **已完成**（更新 docker.md，新增环境配置说明和健康检查示例）
 
 ---
 

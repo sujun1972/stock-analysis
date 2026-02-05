@@ -261,16 +261,37 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--worker
 创建 `.env` 文件配置环境变量：
 
 ```bash
-# 环境
+# 环境配置（development/testing/production）
 ENVIRONMENT=production
 
 # 数据库配置
-DB_USER=stock_user
-DB_PASSWORD=your_secure_password_here
+DATABASE_HOST=timescaledb
+DATABASE_PORT=5432
 DATABASE_NAME=stock_analysis
+DATABASE_USER=stock_user
+DATABASE_PASSWORD=your_secure_password_here
+
+# Redis 配置
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=your_redis_password_here
+REDIS_ENABLED=true
+
+# 缓存配置（秒）
+CACHE_DEFAULT_TTL=300
+CACHE_STOCK_LIST_TTL=300
+CACHE_DAILY_DATA_TTL=3600
+CACHE_FEATURES_TTL=1800
+CACHE_BACKTEST_TTL=86400
+CACHE_MARKET_STATUS_TTL=60
+
+# 日志配置
+LOG_LEVEL=INFO  # 生产环境建议 INFO，开发环境 DEBUG
 
 # API 密钥
 TUSHARE_TOKEN=your_tushare_token_here
+DATA_SOURCE=akshare  # akshare 或 tushare
 
 # 安全密钥
 SECRET_KEY=your_secret_key_here
@@ -278,6 +299,28 @@ SECRET_KEY=your_secret_key_here
 # CORS 配置
 ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
+
+### 环境配置说明
+
+系统支持三种环境模式：
+
+1. **development**: 开发环境
+   - 日志级别: DEBUG
+   - 启用代码热重载
+   - 控制台彩色日志输出
+   - 允许本地跨域访问
+
+2. **testing**: 测试环境
+   - 日志级别: WARNING
+   - 禁用部分外部服务调用
+   - 使用测试数据库
+
+3. **production**: 生产环境
+   - 日志级别: INFO
+   - 启用多 worker 进程
+   - JSON 结构化日志
+   - 严格的 CORS 策略
+   - 资源限制和监控
 
 ### 安全注意事项
 
@@ -430,15 +473,41 @@ logging:
 
 ### 健康检查端点
 
-Backend 提供健康检查端点：
+Backend 提供全面的健康检查端点，检查所有关键服务的状态：
 
 ```bash
 curl http://localhost:8000/health
 
-# 预期输出
+# 健康状态（HTTP 200）
 {
   "status": "healthy",
-  "environment": "production"
+  "environment": "production",
+  "checks": {
+    "database": true,
+    "redis": true,
+    "core": true
+  },
+  "circuit_breakers": {
+    "database": "closed",
+    "external_api": "closed"
+  },
+  "version": "1.0.0"
+}
+
+# 不健康状态（HTTP 503）
+{
+  "status": "unhealthy",
+  "environment": "production",
+  "checks": {
+    "database": false,
+    "redis": true,
+    "core": true
+  },
+  "circuit_breakers": {
+    "database": "open",
+    "external_api": "closed"
+  },
+  "version": "1.0.0"
 }
 ```
 

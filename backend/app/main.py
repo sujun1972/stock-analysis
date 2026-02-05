@@ -93,16 +93,87 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """健康检查"""
-    from app.core.circuit_breaker import get_all_breakers_status
+    """
+    健康检查端点
 
+    检查所有关键服务的健康状态:
+    - 数据库连接
+    - Redis连接
+    - Core服务可用性
+    - 熔断器状态
+
+    Returns:
+        200: 所有服务健康
+        503: 一个或多个服务不健康
+    """
+    from app.core.circuit_breaker import get_all_breakers_status
+    from fastapi.responses import JSONResponse
+
+    checks = {}
+
+    # 1. 检查数据库连接
+    try:
+        # 导入 core 的连接池管理器
+        import sys
+        from pathlib import Path
+        core_path = Path(__file__).parent.parent / "core"
+        if str(core_path) not in sys.path:
+            sys.path.insert(0, str(core_path))
+
+        from src.database.connection_pool_manager import ConnectionPoolManager
+
+        pool_manager = ConnectionPoolManager()
+        pool = pool_manager.get_pool()
+
+        # 执行简单查询测试连接
+        result = await pool.fetchval("SELECT 1")
+        checks["database"] = result == 1
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        checks["database"] = False
+
+    # 2. 检查 Redis 连接
+    try:
+        from app.core.cache import cache
+        redis = await cache._get_redis()
+
+        if redis is not None:
+            # 测试 Redis ping
+            await redis.ping()
+            checks["redis"] = True
+        else:
+            # Redis 未启用或连接失败
+            checks["redis"] = not settings.REDIS_ENABLED  # 如果未启用，则视为正常
+    except Exception as e:
+        logger.error(f"Redis health check failed: {e}")
+        checks["redis"] = False
+
+    # 3. 检查 Core 服务可用性
+    try:
+        # 检查 core 路径是否可访问
+        core_available = core_path.exists() and (core_path / "src").exists()
+        checks["core"] = core_available
+    except Exception as e:
+        logger.error(f"Core service health check failed: {e}")
+        checks["core"] = False
+
+    # 4. 获取熔断器状态
     breakers_status = get_all_breakers_status()
 
-    return {
-        "status": "healthy",
-        "environment": settings.ENVIRONMENT,
-        "circuit_breakers": breakers_status,
-    }
+    # 判断整体健康状态
+    all_healthy = all(checks.values())
+    status_code = 200 if all_healthy else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "healthy" if all_healthy else "unhealthy",
+            "environment": settings.ENVIRONMENT,
+            "checks": checks,
+            "circuit_breakers": breakers_status,
+            "version": settings.VERSION,
+        }
+    )
 
 
 @app.get("/metrics")

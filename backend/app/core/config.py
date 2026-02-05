@@ -71,6 +71,32 @@ class Settings(BaseSettings):
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # 生产环境配置
+    @property
+    def is_production(self) -> bool:
+        """判断是否为生产环境"""
+        return self.ENVIRONMENT == "production"
+
+    @property
+    def is_development(self) -> bool:
+        """判断是否为开发环境"""
+        return self.ENVIRONMENT == "development"
+
+    @property
+    def is_testing(self) -> bool:
+        """判断是否为测试环境"""
+        return self.ENVIRONMENT == "testing"
+
+    @property
+    def log_level(self) -> str:
+        """根据环境自动设置日志级别"""
+        if self.is_production:
+            return "INFO"
+        elif self.is_testing:
+            return "WARNING"
+        else:
+            return "DEBUG"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
