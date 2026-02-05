@@ -387,8 +387,11 @@ class TestGetMinuteData:
             response = await get_minute_data(code="000001", trade_date="2024-01-15", period="1min")
 
             # Assert
-            assert response["code"] == 404
-            assert "无分时数据" in response["message"]
+            # 即使无数据也返回 200，而不是 404
+            # 这样前端可以区分"接口调用成功但无数据"和"接口调用失败"
+            assert response["code"] == 200
+            assert "暂无分时数据" in response["message"]
+            assert response["data"]["record_count"] == 0
 
     @pytest.mark.asyncio
     async def test_get_minute_data_default_date(self):
