@@ -20,11 +20,15 @@ from loguru import logger
 from app.core.exceptions import DataNotFoundError, DataSyncError, ExternalAPIError
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
+from app.services.concurrent_data_service import ConcurrentDataService
 
 router = APIRouter()
 
 # 全局 Data Adapter 实例
 data_adapter = DataAdapter()
+
+# 全局并发数据服务实例
+concurrent_service = ConcurrentDataService(max_concurrent=50)
 
 
 @router.get("/daily/{code}")
@@ -413,4 +417,177 @@ async def check_data_integrity(
         logger.exception(f"未预期的错误 {code}: {e}")
         return ApiResponse.internal_error(
             message=f"数据完整性检查失败: {str(e)}", data={"code": code, "error": str(e)}
+        ).to_dict()
+
+
+@router.post("/batch/daily")
+async def get_batch_daily_data(
+    codes: List[str] = Query(..., description="股票代码列表", min_items=1, max_items=100),
+    start_date: Optional[date] = Query(None, description="开始日期"),
+    end_date: Optional[date] = Query(None, description="结束日期"),
+):
+    """
+    批量获取多只股票的日线数据（并发优化）
+
+    ✅ 任务 2.3: 并发性能优化
+    - 使用 asyncio.gather 并发获取多只股票数据
+    - 支持最多 100 只股票同时查询
+    - 使用信号量控制并发数
+
+    参数:
+    - codes: 股票代码列表（最多 100 只）
+    - start_date: 开始日期（YYYY-MM-DD 格式）
+    - end_date: 结束日期（YYYY-MM-DD 格式）
+
+    返回:
+    {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "total": 10,
+            "success": 9,
+            "failed": 1,
+            "stocks": {
+                "000001.SZ": {
+                    "count": 244,
+                    "data": [...]
+                },
+                "000002.SZ": {
+                    "count": 244,
+                    "data": [...]
+                },
+                ...
+            },
+            "errors": {
+                "600001.SH": "数据不存在"
+            }
+        }
+    }
+    """
+    try:
+        # 1. 参数处理：设置默认日期范围（最近一年）
+        if not end_date:
+            end_date = datetime.now().date()
+        if not start_date:
+            start_date = end_date - timedelta(days=365)
+
+        logger.info(f"批量获取 {len(codes)} 只股票数据 ({start_date} ~ {end_date})")
+
+        # 2. 使用并发服务批量获取数据
+        result = await concurrent_service.get_multiple_stocks_data(
+            codes=codes,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        # 3. 格式化响应数据
+        stocks_data = {}
+        for code, df in result["data"].items():
+            if df is not None and not df.empty:
+                df_reset = df.reset_index()
+                if "date" in df_reset.columns:
+                    df_reset["date"] = df_reset["date"].astype(str)
+                stocks_data[code] = {
+                    "count": len(df),
+                    "data": df_reset.to_dict("records")
+                }
+
+        # 4. Backend 职责：响应格式化
+        return ApiResponse.success(
+            data={
+                "total": result["total"],
+                "success": result["success"],
+                "failed": result["failed"],
+                "stocks": stocks_data,
+                "errors": result["errors"]
+            },
+            message=f"批量获取完成: 成功 {result['success']}/{result['total']}",
+        ).to_dict()
+
+    except Exception as e:
+        logger.exception(f"批量获取失败: {e}")
+        return ApiResponse.internal_error(
+            message=f"批量获取失败: {str(e)}", data={"error": str(e)}
+        ).to_dict()
+
+
+@router.post("/batch/download")
+async def batch_download_data(
+    codes: List[str] = Query(..., description="股票代码列表", min_items=1, max_items=500),
+    start_date: Optional[date] = Query(None, description="开始日期"),
+    end_date: Optional[date] = Query(None, description="结束日期"),
+    years: Optional[int] = Query(None, ge=1, le=20, description="下载年数"),
+    batch_size: int = Query(50, ge=1, le=100, description="批量下载大小"),
+):
+    """
+    批量下载股票数据（并发优化）
+
+    ✅ 任务 2.3: 并发性能优化
+    - 使用 asyncio.gather 并发下载多只股票数据
+    - 支持最多 500 只股票批量下载
+    - 使用信号量控制并发数，避免资源耗尽
+
+    参数:
+    - codes: 股票代码列表（最多 500 只）
+    - start_date: 开始日期（YYYY-MM-DD）
+    - end_date: 结束日期（YYYY-MM-DD）
+    - years: 下载年数（如果指定，则忽略 start_date/end_date）
+    - batch_size: 批量下载大小（默认 50）
+
+    返回:
+    {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "status": "completed",
+            "total": 100,
+            "success": 95,
+            "failed": 5,
+            "duration_seconds": 45.2,
+            "failed_codes": ["600001.SH", "600002.SH"]
+        }
+    }
+    """
+    try:
+        # 1. 参数处理：计算日期范围
+        if years:
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=years * 365)
+            logger.info(f"根据 years={years} 计算日期范围: {start_date} ~ {end_date}")
+        else:
+            if not end_date:
+                end_date = datetime.now().date()
+            if not start_date:
+                start_date = end_date - timedelta(days=365)
+
+        logger.info(f"批量下载 {len(codes)} 只股票数据")
+
+        # 2. 使用并发服务批量下载
+        result = await concurrent_service.download_multiple_stocks(
+            codes=codes,
+            start_date=start_date,
+            end_date=end_date,
+            batch_size=batch_size
+        )
+
+        # 3. Backend 职责：响应格式化
+        return ApiResponse.success(
+            data={
+                "status": "completed",
+                "total": result["total"],
+                "success": result["success"],
+                "failed": result["failed"],
+                "duration_seconds": result["duration_seconds"],
+                "start_date": str(start_date),
+                "end_date": str(end_date),
+                "failed_codes": result["failed_codes"],
+                "message": f"下载完成: 成功 {result['success']}/{result['total']}, 失败 {result['failed']}/{result['total']}",
+            },
+            message=f"批量下载完成，成功率: {result['success']/result['total']*100:.1f}%",
+        ).to_dict()
+
+    except Exception as e:
+        logger.exception(f"批量下载失败: {e}")
+        return ApiResponse.internal_error(
+            message=f"批量下载失败: {str(e)}", data={"error": str(e)}
         ).to_dict()

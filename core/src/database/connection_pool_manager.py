@@ -24,14 +24,18 @@ class ConnectionPoolManager:
     - 管理连接池的生命周期
     """
 
-    def __init__(self, config: Dict[str, Any], min_conn: int = 1, max_conn: int = 10):
+    def __init__(self, config: Dict[str, Any], min_conn: int = 5, max_conn: int = 50):
         """
         初始化连接池管理器
 
+        ✅ 任务 2.3: 并发性能优化
+        - 优化连接池配置：min_conn=5, max_conn=50
+        - 提升并发处理能力
+
         Args:
             config: 数据库配置字典
-            min_conn: 最小连接数
-            max_conn: 最大连接数
+            min_conn: 最小连接数（默认 5）
+            max_conn: 最大连接数（默认 50）
         """
         self.config = config
         self.min_conn = min_conn
