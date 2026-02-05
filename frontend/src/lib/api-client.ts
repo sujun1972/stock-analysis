@@ -85,9 +85,14 @@ class ApiClient {
     status?: string
     skip?: number
     limit?: number
+    search?: string
+    sort_by?: string
+    sort_order?: string
   }): Promise<PaginatedResponse<StockInfo>> {
     const response = await axiosInstance.get('/api/stocks/list', { params })
-    return response.data
+    const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
+    // 返回嵌套在 data 字段中的分页数据
+    return result.data || { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }
   }
 
   // 获取单只股票信息
@@ -96,9 +101,9 @@ class ApiClient {
     const response = await axiosInstance.get(`/api/stocks/list`, {
       params: { search: code, limit: 1 }
     })
-    const data = response.data as PaginatedResponse<StockInfo>
-    if (data.data && data.data.length > 0) {
-      return data.data[0]
+    const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
+    if (result.data?.items && result.data.items.length > 0) {
+      return result.data.items[0]
     }
     throw new Error(`Stock ${code} not found`)
   }
@@ -556,7 +561,7 @@ class ApiClient {
     last_update: string | null
     codes_count: number | null
   }>> {
-    const response = await axiosInstance.post('/api/market/check-freshness', params || {})
+    const response = await axiosInstance.get('/api/market/refresh-check', { params: params || {} })
     return response.data
   }
 

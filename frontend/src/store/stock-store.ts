@@ -44,6 +44,15 @@ export const useStockStore = create<StockState>()(
         partialize: (state) => ({
           selectedStock: state.selectedStock,
         }),
+        // 确保从存储恢复时的状态合并正确
+        merge: (persistedState: any, currentState) => ({
+          ...currentState,
+          ...persistedState,
+          // 确保 stocks 始终是数组
+          stocks: Array.isArray(persistedState?.stocks) ? persistedState.stocks : [],
+          // 确保 dailyData 始终是数组
+          dailyData: Array.isArray(persistedState?.dailyData) ? persistedState.dailyData : [],
+        }),
       }
     ),
     { name: 'StockStore' }

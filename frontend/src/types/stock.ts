@@ -114,10 +114,11 @@ export interface ApiResponse<T> {
   error?: string
 }
 
-// 分页响应类型
+// 分页响应类型（匹配后端 v2.0 格式）
 export interface PaginatedResponse<T> {
-  total: number
-  skip: number
-  limit: number
-  data: T[]
+  items: T[]           // 数据列表
+  total: number        // 总记录数
+  page: number         // 当前页码
+  page_size: number    // 每页大小
+  total_pages: number  // 总页数
 }

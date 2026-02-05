@@ -55,10 +55,12 @@ export default function StocksPage() {
       }
 
       const response = await apiClient.getStockList(params)
-      setStocks(response.data)
-      setTotalStocks(response.total)
+      setStocks(response.items || [])
+      setTotalStocks(response.total ?? 0)
     } catch (err: any) {
       setError(err.message || '加载股票列表失败')
+      setStocks([])
+      setTotalStocks(0)
       console.error('Failed to load stocks:', err)
     } finally {
       setLoading(false)
@@ -67,6 +69,10 @@ export default function StocksPage() {
 
   // 获取当前页面显示的股票代码列表
   const currentPageCodes = useMemo(() => {
+    // 确保 stocks 是数组（防止 persist 中间件恢复状态时的类型错误）
+    if (!Array.isArray(stocks)) {
+      return []
+    }
     return stocks.map(stock => stock.code)
   }, [stocks])
 
@@ -88,7 +94,7 @@ export default function StocksPage() {
     true               // 启用自动刷新
   )
 
-  const totalPages = Math.ceil(totalStocks / pageSize)
+  const totalPages = Math.ceil((totalStocks ?? 0) / pageSize)
 
   return (
     <div className="space-y-6">
@@ -98,7 +104,7 @@ export default function StocksPage() {
           股票列表
         </h1>
         <p className="text-gray-600 dark:text-gray-300 mt-2">
-          共 {totalStocks.toLocaleString()} 只股票
+          共 {(totalStocks ?? 0).toLocaleString()} 只股票
         </p>
       </div>
 
@@ -162,7 +168,7 @@ export default function StocksPage() {
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
               <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
             </div>
-          ) : stocks.length === 0 ? (
+          ) : !Array.isArray(stocks) || stocks.length === 0 ? (
             <div className="text-center py-12">
               <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -216,7 +222,7 @@ export default function StocksPage() {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                {stocks.map((stock) => (
+                {Array.isArray(stocks) && stocks.map((stock) => (
                   <tr key={stock.code} className="table-row">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <a
@@ -266,8 +272,8 @@ export default function StocksPage() {
                   <p className="text-sm text-gray-700 dark:text-gray-300">
                     <span className="md:hidden">第 <span className="font-medium">{currentPage}</span> / {totalPages} 页</span>
                     <span className="hidden md:inline">
-                      显示 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-medium">{Math.min(currentPage * pageSize, totalStocks)}</span>
-                      {' '}共 <span className="font-medium">{totalStocks}</span> 条
+                      显示 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-medium">{Math.min(currentPage * pageSize, totalStocks ?? 0)}</span>
+                      {' '}共 <span className="font-medium">{totalStocks ?? 0}</span> 条
                     </span>
                   </p>
                   <div className="flex items-center gap-2">
