@@ -127,6 +127,37 @@ pytest --cov=app --cov-report=html
 open htmlcov/index.html
 ```
 
+### 清理 Python 缓存
+
+**问题症状**：修改代码后测试仍然失败，或者测试结果与预期不符
+
+**原因**：Python 会缓存编译后的 `.pyc` 文件在 `__pycache__` 目录中。当你修改源代码但缓存未更新时，测试会运行旧版本代码。
+
+**解决方案**：
+
+```bash
+# 方法 1: 使用清理脚本（推荐）
+cd /Volumes/MacDriver/stock-analysis/backend
+./clear_cache.sh
+
+# 方法 2: 手动清理
+find . -type d -name "__pycache__" -exec rm -rf {} +
+find . -type f -name "*.pyc" -delete
+
+# 方法 3: 查看将删除什么（不实际删除）
+./clear_cache.sh --dry-run
+```
+
+**清理后重新运行测试**：
+
+```bash
+# 从 backend/ 目录
+./run_tests.sh integration
+
+# 从 backend/tests/ 目录
+pytest integration/ -v -m integration
+```
+
 ## 📊 测试覆盖范围
 
 ### Stocks API 测试矩阵

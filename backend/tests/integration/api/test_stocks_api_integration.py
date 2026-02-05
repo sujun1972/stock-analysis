@@ -14,17 +14,14 @@ Stocks API 集成测试
 """
 
 import pytest
-from httpx import AsyncClient
 from datetime import datetime, date
 import asyncio
 
-from app.main import app
 
 
 # ==================== 测试配置 ====================
 
 # 测试基础 URL
-BASE_URL = "http://test"
 API_PREFIX = "/api/stocks"
 
 
@@ -50,7 +47,7 @@ class TestStocksAPIIntegration:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_list_integration(self):
+    async def test_get_stock_list_integration(self, client):
         """
         集成测试：获取股票列表
 
@@ -59,260 +56,250 @@ class TestStocksAPIIntegration:
         2. 响应格式符合规范
         3. Core Adapter 正常工作
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act
-            response = await client.get(
-                f"{API_PREFIX}/list",
-                params={
-                    "page": 1,
-                    "page_size": 10
-                }
-            )
+        # Act
+        response = await client.get(
+            f"{API_PREFIX}/list",
+            params={
+                "page": 1,
+                "page_size": 10
+            }
+        )
 
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
 
-            # 验证响应结构
-            assert "code" in data
-            assert "message" in data
-            assert "data" in data
+        # 验证响应结构
+        assert "code" in data
+        assert "message" in data
+        assert "data" in data
 
-            # 验证分页结构
-            assert "items" in data["data"]
-            assert "total" in data["data"]
-            assert "page" in data["data"]
-            assert "page_size" in data["data"]
-            assert "total_pages" in data["data"]
+        # 验证分页结构
+        assert "items" in data["data"]
+        assert "total" in data["data"]
+        assert "page" in data["data"]
+        assert "page_size" in data["data"]
+        assert "total_pages" in data["data"]
 
-            # 验证数据类型
-            assert isinstance(data["data"]["items"], list)
-            assert isinstance(data["data"]["total"], int)
+        # 验证数据类型
+        assert isinstance(data["data"]["items"], list)
+        assert isinstance(data["data"]["total"], int)
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_list_with_filters(self):
+    async def test_get_stock_list_with_filters(self, client):
         """
         集成测试：带过滤条件的股票列表
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act: 测试市场过滤
-            response = await client.get(
-                f"{API_PREFIX}/list",
-                params={
-                    "market": "主板",
-                    "status": "正常",
-                    "page": 1,
-                    "page_size": 20
-                }
-            )
+        # Act: 测试市场过滤
+        response = await client.get(
+            f"{API_PREFIX}/list",
+            params={
+                "market": "主板",
+                "status": "正常",
+                "page": 1,
+                "page_size": 20
+            }
+        )
 
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["code"] == 200
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["code"] == 200
 
-            # 如果有数据，验证市场过滤是否生效
-            if data["data"]["total"] > 0:
-                for item in data["data"]["items"]:
-                    # 注意：这取决于 Core 是否正确过滤
-                    assert "code" in item
-                    assert "name" in item
+        # 如果有数据，验证市场过滤是否生效
+        if data["data"]["total"] > 0:
+            for item in data["data"]["items"]:
+                # 注意：这取决于 Core 是否正确过滤
+                assert "code" in item
+                assert "name" in item
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_list_search(self):
+    async def test_get_stock_list_search(self, client):
         """
         集成测试：股票搜索功能
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act: 搜索股票代码
-            response = await client.get(
-                f"{API_PREFIX}/list",
-                params={
-                    "search": "000001",
-                    "page": 1,
-                    "page_size": 20
-                }
+        # Act: 搜索股票代码
+        response = await client.get(
+            f"{API_PREFIX}/list",
+            params={
+                "search": "000001",
+                "page": 1,
+                "page_size": 20
+            }
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["code"] == 200
+
+        # 验证搜索结果
+        if data["data"]["total"] > 0:
+            assert any(
+                "000001" in item.get("code", "") or
+                "000001" in item.get("name", "")
+                for item in data["data"]["items"]
             )
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["code"] == 200
-
-            # 验证搜索结果
-            if data["data"]["total"] > 0:
-                assert any(
-                    "000001" in item.get("code", "") or
-                    "000001" in item.get("name", "")
-                    for item in data["data"]["items"]
-                )
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_list_pagination(self):
+    async def test_get_stock_list_pagination(self, client):
         """
         集成测试：分页功能
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act: 获取第 1 页
-            response1 = await client.get(
-                f"{API_PREFIX}/list",
-                params={"page": 1, "page_size": 5}
-            )
+        # Act: 获取第 1 页
+        response1 = await client.get(
+            f"{API_PREFIX}/list",
+            params={"page": 1, "page_size": 5}
+        )
 
-            # Act: 获取第 2 页
-            response2 = await client.get(
-                f"{API_PREFIX}/list",
-                params={"page": 2, "page_size": 5}
-            )
+        # Act: 获取第 2 页
+        response2 = await client.get(
+            f"{API_PREFIX}/list",
+            params={"page": 2, "page_size": 5}
+        )
 
-            # Assert
-            assert response1.status_code == 200
-            assert response2.status_code == 200
+        # Assert
+        assert response1.status_code == 200
+        assert response2.status_code == 200
 
-            data1 = response1.json()
-            data2 = response2.json()
+        data1 = response1.json()
+        data2 = response2.json()
 
-            # 如果有足够数据，验证分页
-            if data1["data"]["total"] > 5:
-                items1 = data1["data"]["items"]
-                items2 = data2["data"]["items"]
+        # 如果有足够数据，验证分页
+        if data1["data"]["total"] > 5:
+            items1 = data1["data"]["items"]
+            items2 = data2["data"]["items"]
 
-                # 验证两页数据不同
-                if len(items1) > 0 and len(items2) > 0:
-                    assert items1[0]["code"] != items2[0]["code"]
+            # 验证两页数据不同
+            if len(items1) > 0 and len(items2) > 0:
+                assert items1[0]["code"] != items2[0]["code"]
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_info_integration(self, test_stock_code):
+    async def test_get_stock_info_integration(self, client, test_stock_code):
         """
         集成测试：获取单只股票信息
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act
-            response = await client.get(f"{API_PREFIX}/{test_stock_code}")
+        # Act
+        response = await client.get(f"{API_PREFIX}/{test_stock_code}")
 
-            # Assert
-            # 注意：如果数据库中没有数据，可能返回 404
-            assert response.status_code in [200, 404]
+        # Assert
+        # 注意：如果数据库中没有数据，可能返回 404
+        assert response.status_code in [200, 404]
 
-            data = response.json()
-            assert "code" in data
-            assert "message" in data
+        data = response.json()
+        assert "code" in data
+        assert "message" in data
 
-            if response.status_code == 200:
-                assert "data" in data
-                assert data["data"]["code"] == test_stock_code
-                assert "name" in data["data"]
+        if response.status_code == 200:
+            assert "data" in data
+            assert data["data"]["code"] == test_stock_code
+            assert "name" in data["data"]
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_info_not_found(self):
+    async def test_get_stock_info_not_found(self, client):
         """
         集成测试：获取不存在的股票
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act
-            response = await client.get(f"{API_PREFIX}/999999")
+        # Act
+        response = await client.get(f"{API_PREFIX}/999999")
 
-            # Assert
-            data = response.json()
-            assert data["code"] == 404
-            assert "不存在" in data["message"]
+        # Assert
+        data = response.json()
+        assert data["code"] == 404
+        assert "不存在" in data["message"]
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_daily_data_integration(self, test_stock_code, test_date_range):
+    async def test_get_stock_daily_data_integration(self, client, test_stock_code, test_date_range):
         """
         集成测试：获取日线数据
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act
-            response = await client.get(
-                f"{API_PREFIX}/{test_stock_code}/daily",
-                params={
-                    "start_date": test_date_range["start"],
-                    "end_date": test_date_range["end"],
-                    "limit": 100
-                }
-            )
+        # Act
+        response = await client.get(
+            f"{API_PREFIX}/{test_stock_code}/daily",
+            params={
+                "start_date": test_date_range["start"],
+                "end_date": test_date_range["end"],
+                "limit": 100
+            }
+        )
 
-            # Assert
-            assert response.status_code in [200, 404]
+        # Assert
+        assert response.status_code in [200, 404]
 
-            data = response.json()
-            assert "code" in data
+        data = response.json()
+        assert "code" in data
 
-            if response.status_code == 200:
-                assert data["data"]["code"] == test_stock_code
-                assert "records" in data["data"]
-                assert "record_count" in data["data"]
-                assert isinstance(data["data"]["records"], list)
+        if response.status_code == 200:
+            assert data["data"]["code"] == test_stock_code
+            assert "records" in data["data"]
+            assert "record_count" in data["data"]
+            assert isinstance(data["data"]["records"], list)
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_stock_daily_data_limit(self, test_stock_code):
+    async def test_get_stock_daily_data_limit(self, client, test_stock_code):
         """
         集成测试：日线数据限制
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act: 限制 10 条
-            response = await client.get(
-                f"{API_PREFIX}/{test_stock_code}/daily",
-                params={"limit": 10}
-            )
+        # Act: 限制 10 条
+        response = await client.get(
+            f"{API_PREFIX}/{test_stock_code}/daily",
+            params={"limit": 10}
+        )
 
-            # Assert
-            if response.status_code == 200:
-                data = response.json()
-                # 验证返回记录数不超过限制
-                assert data["data"]["record_count"] <= 10
+        # Assert
+        if response.status_code == 200:
+            data = response.json()
+            # 验证返回记录数不超过限制
+            assert data["data"]["record_count"] <= 10
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_get_minute_data_integration(self, test_stock_code):
+    async def test_get_minute_data_integration(self, client, test_stock_code):
         """
         集成测试：获取分时数据
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act
-            response = await client.get(
-                f"{API_PREFIX}/{test_stock_code}/minute",
-                params={
-                    "trade_date": "2024-01-15",
-                    "period": "1min"
-                }
-            )
+        # Act
+        response = await client.get(
+            f"{API_PREFIX}/{test_stock_code}/minute",
+            params={
+                "trade_date": "2024-01-15",
+                "period": "1min"
+            }
+        )
 
-            # Assert
-            # 可能是交易日（200）或非交易日（200 但无数据）或无数据（404）
-            assert response.status_code == 200
+        # Assert
+        # 可能是交易日（200）或非交易日（200 但无数据）或无数据（404）
+        assert response.status_code == 200
 
-            data = response.json()
-            assert "code" in data
-            assert "data" in data
+        data = response.json()
+        assert "code" in data
+        assert "data" in data
 
-            # 验证响应结构
-            assert "code" in data["data"]
-            assert "date" in data["data"]
-            assert "records" in data["data"]
+        # 验证响应结构
+        assert "code" in data["data"]
+        assert "date" in data["data"]
+        assert "records" in data["data"]
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_update_stock_list_not_implemented(self):
+    async def test_update_stock_list_not_implemented(self, client):
         """
         集成测试：更新股票列表（未实现）
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act
-            response = await client.post(f"{API_PREFIX}/update")
+        # Act
+        response = await client.post(f"{API_PREFIX}/update")
 
-            # Assert
-            data = response.json()
-            assert data["code"] == 501
-            assert "暂未实现" in data["message"]
+        # Assert
+        data = response.json()
+        assert data["code"] == 501
+        assert "暂未实现" in data["message"]
 
 
 # ==================== 性能测试 ====================
@@ -323,58 +310,56 @@ class TestStocksAPIPerformance:
     @pytest.mark.asyncio
     @pytest.mark.performance
     @pytest.mark.skip(reason="性能测试，手动运行")
-    async def test_concurrent_requests(self):
+    async def test_concurrent_requests(self, client):
         """
         性能测试：并发请求
 
         验证 API 能否处理并发请求
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # 创建 10 个并发请求
-            tasks = [
-                client.get(f"{API_PREFIX}/list", params={"page": i, "page_size": 10})
-                for i in range(1, 11)
-            ]
+        # 创建 10 个并发请求
+        tasks = [
+            client.get(f"{API_PREFIX}/list", params={"page": i, "page_size": 10})
+            for i in range(1, 11)
+        ]
 
-            # 并发执行
-            start_time = datetime.now()
-            responses = await asyncio.gather(*tasks)
-            end_time = datetime.now()
+        # 并发执行
+        start_time = datetime.now()
+        responses = await asyncio.gather(*tasks)
+        end_time = datetime.now()
 
-            # 验证所有请求都成功
-            for response in responses:
-                assert response.status_code == 200
+        # 验证所有请求都成功
+        for response in responses:
+            assert response.status_code == 200
 
-            # 计算耗时
-            elapsed = (end_time - start_time).total_seconds()
-            print(f"\n10 个并发请求耗时: {elapsed:.2f} 秒")
+        # 计算耗时
+        elapsed = (end_time - start_time).total_seconds()
+        print(f"\n10 个并发请求耗时: {elapsed:.2f} 秒")
 
-            # 性能断言（可根据实际情况调整）
-            assert elapsed < 5.0, "并发请求耗时过长"
+        # 性能断言（可根据实际情况调整）
+        assert elapsed < 5.0, "并发请求耗时过长"
 
     @pytest.mark.asyncio
     @pytest.mark.performance
     @pytest.mark.skip(reason="性能测试，手动运行")
-    async def test_response_time(self):
+    async def test_response_time(self, client):
         """
         性能测试：响应时间
 
         验证单个请求的响应时间
         """
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            start_time = datetime.now()
-            response = await client.get(
-                f"{API_PREFIX}/list",
-                params={"page": 1, "page_size": 20}
-            )
-            end_time = datetime.now()
+        start_time = datetime.now()
+        response = await client.get(
+            f"{API_PREFIX}/list",
+            params={"page": 1, "page_size": 20}
+        )
+        end_time = datetime.now()
 
-            elapsed = (end_time - start_time).total_seconds()
-            print(f"\n单个请求响应时间: {elapsed*1000:.0f} ms")
+        elapsed = (end_time - start_time).total_seconds()
+        print(f"\n单个请求响应时间: {elapsed*1000:.0f} ms")
 
-            # 响应时间断言
-            assert response.status_code == 200
-            assert elapsed < 1.0, "响应时间过长"
+        # 响应时间断言
+        assert response.status_code == 200
+        assert elapsed < 1.0, "响应时间过长"
 
 
 # ==================== 边界测试 ====================
@@ -384,67 +369,63 @@ class TestStocksAPIBoundary:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_large_page_size(self):
+    async def test_large_page_size(self, client):
         """边界测试：超大页面大小"""
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act: 请求最大允许的页面大小
-            response = await client.get(
-                f"{API_PREFIX}/list",
-                params={"page": 1, "page_size": 100}
-            )
+        # Act: 请求最大允许的页面大小
+        response = await client.get(
+            f"{API_PREFIX}/list",
+            params={"page": 1, "page_size": 100}
+        )
 
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            # 验证返回记录数不超过 100
-            assert len(data["data"]["items"]) <= 100
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        # 验证返回记录数不超过 100
+        assert len(data["data"]["items"]) <= 100
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_invalid_page_number(self):
+    async def test_invalid_page_number(self, client):
         """边界测试：无效页码"""
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act: 页码为 0（无效）
-            response = await client.get(
-                f"{API_PREFIX}/list",
-                params={"page": 0, "page_size": 20}
-            )
+        # Act: 页码为 0（无效）
+        response = await client.get(
+            f"{API_PREFIX}/list",
+            params={"page": 0, "page_size": 20}
+        )
 
-            # Assert: 应该被 FastAPI 验证拦截
-            assert response.status_code == 422
+        # Assert: 应该被 FastAPI 验证拦截
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_oversized_page_size(self):
+    async def test_oversized_page_size(self, client):
         """边界测试：超过限制的页面大小"""
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act: 页面大小为 200（超过限制 100）
-            response = await client.get(
-                f"{API_PREFIX}/list",
-                params={"page": 1, "page_size": 200}
-            )
+        # Act: 页面大小为 200（超过限制 100）
+        response = await client.get(
+            f"{API_PREFIX}/list",
+            params={"page": 1, "page_size": 200}
+        )
 
-            # Assert: 应该被 FastAPI 验证拦截
-            assert response.status_code == 422
+        # Assert: 应该被 FastAPI 验证拦截
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_invalid_date_format(self):
+    async def test_invalid_date_format(self, client):
         """边界测试：无效日期格式"""
-        async with AsyncClient(app=app, base_url=BASE_URL) as client:
-            # Act
-            response = await client.get(
-                f"{API_PREFIX}/000001/daily",
-                params={
-                    "start_date": "invalid-date",
-                    "end_date": "2024-01-31"
-                }
-            )
+        # Act
+        response = await client.get(
+            f"{API_PREFIX}/000001/daily",
+            params={
+                "start_date": "invalid-date",
+                "end_date": "2024-01-31"
+            }
+        )
 
-            # Assert
-            data = response.json()
-            assert data["code"] == 400
-            assert "日期格式错误" in data["message"]
+        # Assert
+        data = response.json()
+        assert data["code"] == 400
+        assert "日期格式错误" in data["message"]
 
 
 # ==================== 测试辅助函数 ====================

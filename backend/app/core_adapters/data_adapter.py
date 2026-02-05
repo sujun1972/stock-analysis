@@ -125,16 +125,24 @@ class DataAdapter:
 
         Returns:
             股票列表，每个元素为字典包含股票信息
+            格式: [{'code': '000001', 'name': '平安银行', ...}, ...]
 
         Raises:
             DatabaseError: 数据库访问错误
+
+        Note:
+            Core的query_manager返回DataFrame，此方法转换为列表格式
+            以便于JSON序列化和API响应
         """
         self._ensure_connection()
-        return await asyncio.to_thread(
+        df = await asyncio.to_thread(
             self.query_manager.get_stock_list,
             market=market,
             status=status
         )
+        # 将 DataFrame 转换为列表格式 (orient='records')
+        # 从 {'col': {'0': val1, '1': val2}} 转为 [{'col': val1}, {'col': val2}]
+        return df.to_dict(orient='records')
 
     async def get_daily_data(
         self,

@@ -74,6 +74,25 @@ def sample_date_range():
     }
 
 
+# ==================== HTTP Client 夹具 ====================
+
+@pytest.fixture
+async def client():
+    """
+    创建异步 HTTP 客户端（用于集成测试）
+
+    使用真实的 FastAPI 应用进行测试
+    """
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test"
+    ) as ac:
+        yield ac
+
+
 # ==================== Mock 夹具 ====================
 
 @pytest.fixture

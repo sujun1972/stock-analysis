@@ -277,13 +277,10 @@ async def get_minute_data(
         trade_date=trade_date_dt
     )
 
-    if df.empty:
-        return ApiResponse.not_found(
-            message=f"{code} {trade_date_dt} 无分时数据"
-        ).to_dict()
-
     # 4. 转换为响应格式
-    records = df.to_dict('records')
+    # 即使无数据也返回200状态码和空列表，而不是404
+    # 这样前端可以统一处理，区分"接口调用成功但无数据"和"接口调用失败"
+    records = df.to_dict('records') if not df.empty else []
 
     return ApiResponse.success(
         data={
@@ -293,5 +290,5 @@ async def get_minute_data(
             "records": records,
             "record_count": len(records)
         },
-        message="获取分时数据成功"
+        message="获取分时数据成功" if records else "暂无分时数据"
     ).to_dict()
