@@ -31,13 +31,18 @@ class TrainingTaskManager:
         """
         初始化任务管理器
 
-            db: DatabaseManager 实例（可选，用于依赖注入）
         Args:
             models_dir: 模型存储目录
+            db: DatabaseManager 实例（可选，用于依赖注入）
         """
         self.tasks: Dict[str, Dict[str, Any]] = {}  # 内存中的任务状态
         self.models_dir = models_dir or Path('/data/models/ml_models')
-        self.models_dir.mkdir(parents=True, exist_ok=True)
+
+        # 尝试创建目录，如果失败则警告但不中断
+        try:
+            self.models_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            logger.warning(f"无法创建模型目录 {self.models_dir}: {e}，某些功能可能受限")
 
         # 任务元数据存储
         self.metadata_file = self.models_dir / 'tasks_metadata.json'

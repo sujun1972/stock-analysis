@@ -122,7 +122,9 @@ class FeatureAdapter:
         def _compute():
             af = AlphaFactors(df.copy())
             if factors is None:
-                return af.add_all_alpha_factors()
+                result = af.add_all_alpha_factors()
+                # Core 返回 Response 对象，提取 data
+                return result.data if hasattr(result, 'data') else result
             else:
                 result_df = df.copy()
                 for factor in factors:
@@ -196,14 +198,29 @@ class FeatureAdapter:
         """
         def _compute():
             transformer = FeatureTransformer(df.copy())
+            feature_cols = columns if columns else list(df.select_dtypes(include=[np.number]).columns)
             if method == "standardize":
-                return transformer.standardize(columns=columns)
+                # Core 使用 normalize_features 并指定 method='standard'
+                return transformer.normalize_features(feature_cols=feature_cols, method='standard')
             elif method == "normalize":
-                return transformer.normalize(columns=columns)
+                # Core 使用 normalize_features 并指定 method='minmax'
+                return transformer.normalize_features(feature_cols=feature_cols, method='minmax')
             elif method == "log":
-                return transformer.log_transform(columns=columns)
+                # Core 没有 log_transform，使用 rank_transform 或直接应用 np.log
+                result_df = df.copy()
+                cols_to_transform = columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+                for col in cols_to_transform:
+                    if col in result_df.columns:
+                        result_df[col] = np.log1p(result_df[col].clip(lower=0))
+                return result_df
             elif method == "diff":
-                return transformer.diff(columns=columns)
+                # 使用 pandas diff
+                result_df = df.copy()
+                cols_to_transform = columns if columns else list(df.select_dtypes(include=[np.number]).columns)
+                for col in cols_to_transform:
+                    if col in result_df.columns:
+                        result_df[col] = result_df[col].diff()
+                return result_df
             else:
                 raise FeatureCalculationError(
                     f"不支持的转换方法: {method}",
@@ -278,15 +295,16 @@ class FeatureAdapter:
         importance = await self.calculate_feature_importance(X, y, method)
         return importance.head(n_features).index.tolist()
 
-    async def init_streaming_engine(self, lookback_window: int = 100):
+    async def init_streaming_engine(self, config=None, output_dir=None):
         """
         异步初始化流式特征引擎
 
         Args:
-            lookback_window: 回看窗口大小
+            config: StreamingConfig配置对象（可选）
+            output_dir: 输出目录路径（可选）
         """
         def _init():
-            return StreamingFeatureEngine(lookback_window=lookback_window)
+            return StreamingFeatureEngine(config=config, output_dir=output_dir)
 
         self.streaming_engine = await asyncio.to_thread(_init)
 

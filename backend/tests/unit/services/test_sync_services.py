@@ -13,6 +13,7 @@ Sync Services 单元测试
 """
 
 import pytest
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, Mock
 from datetime import datetime, timedelta
 import pandas as pd
@@ -63,23 +64,33 @@ class TestSyncSingleStock:
             'volume': [1000000, 1100000]
         })
 
+        # 创建一个side_effect来区分不同的asyncio.to_thread调用
+        # 第一次调用返回DataFrame（get_daily_data），第二次返回整数（save_daily_data）
+        call_count = [0]
+        async def mock_to_thread_side_effect(func, *args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # 第一次调用: provider.get_daily_data
+                return mock_df
+            else:
+                # 第二次调用: db.save_daily_data
+                return 2
+
         with patch.object(service.config_service, 'get_data_source_config', new=AsyncMock(return_value=mock_config)), \
              patch('app.services.daily_sync_service.DataProviderFactory.create_provider') as mock_provider_factory, \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=mock_df)) as mock_to_thread:
+             patch('asyncio.to_thread', new=AsyncMock(side_effect=mock_to_thread_side_effect)):
 
             mock_provider = Mock()
             mock_provider.get_daily_data = Mock(return_value=mock_df)
             mock_provider_factory.return_value = mock_provider
 
-            # Mock save_daily_data to return count
-            with patch.object(service.data_service.db, 'save_daily_data', return_value=2):
-                # Act
-                result = await service.sync_single_stock(code=code, years=years)
+            # Act
+            result = await service.sync_single_stock(code=code, years=years)
 
-                # Assert
-                assert result['code'] == code
-                assert result['records'] == 2
-                mock_provider_factory.assert_called_once_with(source='akshare', token='')
+            # Assert
+            assert result['code'] == code
+            assert result['records'] == 2
+            mock_provider_factory.assert_called_once_with(source='akshare', token='')
 
     @pytest.mark.asyncio
     async def test_sync_single_stock_timeout(self):
@@ -130,13 +141,30 @@ class TestSyncBatch:
         mock_config = {'data_source': 'akshare', 'tushare_token': ''}
         mock_df = pd.DataFrame({'date': ['2023-01-01'], 'close': [10.0]})
 
+        # 创建side_effect来区分不同的asyncio.to_thread调用
+        # 顺序：每只股票依次为 check_completeness, get_daily_data, save_daily_data
+        call_sequence = [
+            # 第一只股票
+            {'is_complete': False, 'has_data': False, 'record_count': 0, 'latest_date': None},  # check_completeness
+            mock_df,  # get_daily_data
+            1,  # save_daily_data
+            # 第二只股票
+            {'is_complete': False, 'has_data': False, 'record_count': 0, 'latest_date': None},  # check_completeness
+            mock_df,  # get_daily_data
+            1,  # save_daily_data
+        ]
+        call_count = [0]
+        async def mock_to_thread_side_effect(func, *args, **kwargs):
+            result = call_sequence[call_count[0]]
+            call_count[0] += 1
+            return result
+
         with patch.object(service.config_service, 'get_data_source_config', new=AsyncMock(return_value=mock_config)), \
              patch.object(service.config_service, 'clear_sync_abort_flag', new=AsyncMock()), \
              patch.object(service.config_service, 'update_sync_status', new=AsyncMock()), \
-             patch.object(service.config_service, 'check_sync_abort', new=AsyncMock(return_value=False)), \
+             patch.object(service.config_service, 'check_sync_abort_flag', new=AsyncMock(return_value=False)), \
              patch('app.services.daily_sync_service.DataProviderFactory.create_provider'), \
-             patch('asyncio.to_thread', new=AsyncMock(return_value=mock_df)), \
-             patch.object(service.data_service.db, 'save_daily_data', return_value=1):
+             patch('asyncio.to_thread', new=AsyncMock(side_effect=mock_to_thread_side_effect)):
 
             # Act
             result = await service.sync_batch(codes=codes, years=5)
@@ -161,7 +189,7 @@ class TestSyncBatch:
         with patch.object(service.config_service, 'get_data_source_config', new=AsyncMock(return_value=mock_config)), \
              patch.object(service.config_service, 'clear_sync_abort_flag', new=AsyncMock()), \
              patch.object(service.config_service, 'update_sync_status', new=AsyncMock()), \
-             patch.object(service.config_service, 'check_sync_abort', new=AsyncMock(side_effect=abort_calls)):
+             patch.object(service.config_service, 'check_sync_abort_flag', new=AsyncMock(side_effect=abort_calls)):
 
             # Act
             result = await service.sync_batch(codes=codes, years=5)
@@ -226,6 +254,8 @@ class TestSyncStockList:
     async def test_sync_stock_list_failure(self):
         """测试同步股票列表失败"""
         # Arrange
+        from app.core.exceptions import DataSyncError
+
         service = StockListSyncService()
 
         mock_config = {'data_source': 'akshare', 'tushare_token': ''}
@@ -235,10 +265,10 @@ class TestSyncStockList:
              patch.object(service.config_service, 'update_sync_task', new=AsyncMock()), \
              patch.object(service.config_service, 'update_sync_status', new=AsyncMock()), \
              patch('app.services.stock_list_sync_service.DataProviderFactory.create_provider'), \
-             patch('app.utils.retry.retry_async', new=AsyncMock(side_effect=Exception("网络错误"))):
+             patch('app.services.stock_list_sync_service.retry_async', new=AsyncMock(side_effect=Exception("网络错误"))):
 
             # Act & Assert
-            with pytest.raises(Exception, match="网络错误"):
+            with pytest.raises(DataSyncError, match="股票列表同步失败"):
                 await service.sync_stock_list()
 
 
@@ -293,7 +323,7 @@ class TestSyncDelistedStocks:
              patch.object(service.config_service, 'update_sync_task', new=AsyncMock()), \
              patch.object(service.config_service, 'update_sync_status', new=AsyncMock()), \
              patch('app.services.stock_list_sync_service.DataProviderFactory.create_provider'), \
-             patch('app.utils.retry.retry_async', new=AsyncMock(return_value=mock_delisted)), \
+             patch('app.services.stock_list_sync_service.retry_async', new=AsyncMock(return_value=mock_delisted)), \
              patch('asyncio.to_thread', new=AsyncMock(return_value=2)):
 
             # Act
@@ -418,15 +448,17 @@ class TestSyncRealtimeQuotes:
 
         mock_config = {'realtime_data_source': 'akshare', 'tushare_token': ''}
 
+        # 使用side_effect来模拟超时，asyncio.wait_for会抛出asyncio.TimeoutError
+        async def mock_wait_for(coro, timeout):
+            raise asyncio.TimeoutError()
+
         with patch.object(service.config_service, 'get_data_source_config', new=AsyncMock(return_value=mock_config)), \
              patch('app.services.realtime_sync_service.DataProviderFactory.create_provider'), \
-             patch('asyncio.wait_for', side_effect=TimeoutError("超时")):
+             patch('asyncio.wait_for', side_effect=mock_wait_for):
 
-            # Act
-            result = await service.sync_realtime_quotes(codes=codes)
-
-            # Assert - 应该返回部分成功结果
-            assert 'partial_success' in result or 'error' in str(result).lower()
+            # Act & Assert - 超时且没有数据保存时应该抛出TimeoutError
+            with pytest.raises(TimeoutError, match="实时行情获取超时"):
+                await service.sync_realtime_quotes(codes=codes)
 
 
 # ==================== SyncStatusManager Tests ====================

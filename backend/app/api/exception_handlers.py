@@ -315,6 +315,22 @@ async def backend_error_handler(request: Request, exc: BackendError) -> JSONResp
     )
 
 
+# ==================== 通用异常处理器（兜底） ====================
+
+
+async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """处理所有未捕获的异常 (500)"""
+    logger.error(f"未处理的异常: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=ApiResponse.error(
+            message=f"服务器内部错误: {str(exc)}",
+            code=500,
+            data={"error_type": type(exc).__name__}
+        ).to_dict()
+    )
+
+
 # ==================== 注册所有异常处理器 ====================
 
 
@@ -372,5 +388,8 @@ def register_exception_handlers(app):
 
     # 基类异常处理器（兜底）
     app.add_exception_handler(BackendError, backend_error_handler)
+
+    # 通用异常处理器（最终兜底）
+    app.add_exception_handler(Exception, generic_exception_handler)
 
     logger.info("✅ 全局异常处理器注册完成")

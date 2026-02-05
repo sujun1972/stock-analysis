@@ -18,6 +18,11 @@ backend_path = Path(__file__).parent.parent
 if str(backend_path) not in sys.path:
     sys.path.insert(0, str(backend_path))
 
+# 添加 core 目录到 Python 路径（用于导入 src.* 模块）
+core_path = backend_path.parent / "core"
+if str(core_path) not in sys.path:
+    sys.path.insert(0, str(core_path))
+
 
 # ==================== Pytest 配置 ====================
 

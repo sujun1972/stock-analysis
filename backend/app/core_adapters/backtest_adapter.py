@@ -168,11 +168,18 @@ class BacktestAdapter:
             BacktestError: 指标计算错误
         """
         def _calculate():
+            # PerformanceAnalyzer 接受 returns 或包含 daily_returns 的字典
+            # 从 portfolio_value 计算 daily_returns
+            if isinstance(portfolio_value, pd.Series):
+                daily_returns = portfolio_value.pct_change().dropna()
+            else:
+                # 如果是DataFrame，尝试获取value列
+                daily_returns = portfolio_value['value'].pct_change().dropna() if 'value' in portfolio_value.columns else portfolio_value.iloc[:, 0].pct_change().dropna()
+
             analyzer = PerformanceAnalyzer(
-                portfolio_value=portfolio_value,
-                positions=positions,
-                trades=trades,
-                initial_capital=self.initial_capital
+                returns=daily_returns,
+                benchmark_returns=None,
+                risk_free_rate=0.03
             )
             return analyzer.calculate_all_metrics()
 
@@ -247,12 +254,14 @@ class BacktestAdapter:
         """
         def _analyze():
             cost_analyzer = TradingCostAnalyzer()
-            return cost_analyzer.analyze(
-                trades=trades,
-                commission_rate=self.commission_rate,
-                stamp_tax_rate=self.stamp_tax_rate,
-                min_commission=self.min_commission
-            )
+            # 添加交易记录
+            for trade in trades:
+                if isinstance(trade, dict):
+                    cost_analyzer.add_trade_from_dict(trade)
+                else:
+                    cost_analyzer.add_trade(trade)
+            # 使用 analyze_all 方法
+            return cost_analyzer.analyze_all()
 
         return await asyncio.to_thread(_analyze)
 

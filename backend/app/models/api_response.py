@@ -433,7 +433,8 @@ class ApiResponse(BaseModel, Generic[T]):
         result = {
             "code": self.code,
             "message": self.message,
-            "data": self.data
+            "data": self.data,
+            "success": self.code < 400  # 状态码 < 400 表示成功
         }
 
         if self.request_id:

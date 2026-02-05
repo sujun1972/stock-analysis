@@ -33,10 +33,10 @@ data_adapter = DataAdapter()
 @router.get("/{code}")
 async def get_features(
     code: str,
-    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
-    feature_type: Optional[str] = Query(None, description="特征类型 (technical/alpha/all)"),
-    limit: int = Query(500, ge=1, le=5000, description="最大记录数")
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    feature_type: Optional[str] = None,
+    limit: int = 500
 ):
     """
     获取股票特征数据（支持懒加载）
@@ -140,13 +140,10 @@ async def get_features(
 @router.post("/calculate/{code}")
 async def calculate_features(
     code: str,
-    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
-    feature_types: List[str] = Query(
-        ["technical", "alpha"],
-        description="特征类型列表 (technical/alpha)"
-    ),
-    include_transforms: bool = Query(False, description="是否包含特征转换")
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    feature_types: List[str] = ["technical", "alpha"],
+    include_transforms: bool = False
 ):
     """
     计算股票特征（支持批量计算）
@@ -273,11 +270,11 @@ async def get_feature_names():
 @router.post("/{code}/select")
 async def select_features(
     code: str,
-    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
-    target_column: str = Query("close", description="目标列（用于计算特征重要性）"),
-    n_features: int = Query(50, ge=1, le=200, description="要选择的特征数量"),
-    method: str = Query("correlation", description="选择方法 (correlation/mutual_info)")
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    target_column: str = "close",
+    n_features: int = 50,
+    method: str = "correlation"
 ):
     """
     特征选择（基于重要性）

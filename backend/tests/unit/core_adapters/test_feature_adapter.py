@@ -198,7 +198,7 @@ class TestFeatureAdapter:
     async def test_init_streaming_engine(self, feature_adapter):
         """测试初始化流式特征引擎"""
         # Act
-        await feature_adapter.init_streaming_engine(lookback_window=50)
+        await feature_adapter.init_streaming_engine()
 
         # Assert
         assert feature_adapter.streaming_engine is not None

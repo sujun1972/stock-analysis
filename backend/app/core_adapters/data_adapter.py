@@ -35,6 +35,7 @@ from src.database.data_insert_manager import DataInsertManager
 from src.data_pipeline.batch_download_coordinator import BatchDownloadCoordinator
 from src.exceptions import DatabaseError as CoreDatabaseError
 from app.core.exceptions import ExternalAPIError, DataQueryError
+from app.core.config import settings
 
 # 延迟导入 Provider 避免循环依赖
 try:
@@ -62,9 +63,25 @@ class DataAdapter:
 
     def __init__(self):
         """初始化数据适配器"""
-        self.pool_manager = ConnectionPoolManager()
-        self.query_manager = DataQueryManager(self.pool_manager)
-        self.insert_manager = DataInsertManager(self.pool_manager)
+        # 构建数据库配置字典
+        db_config = {
+            'host': settings.DATABASE_HOST,
+            'port': settings.DATABASE_PORT,
+            'database': settings.DATABASE_NAME,
+            'user': settings.DATABASE_USER,
+            'password': settings.DATABASE_PASSWORD
+        }
+
+        # 延迟初始化：尝试创建连接池，如果失败则警告但不中断
+        try:
+            self.pool_manager = ConnectionPoolManager(config=db_config)
+            self.query_manager = DataQueryManager(self.pool_manager)
+            self.insert_manager = DataInsertManager(self.pool_manager)
+        except Exception as e:
+            logger.warning(f"数据库连接失败（将在实际使用时重试）: {e}")
+            self.pool_manager = None
+            self.query_manager = None
+            self.insert_manager = None
 
         # 初始化 Provider（如果可用）
         self.provider = None
@@ -85,6 +102,15 @@ class DataAdapter:
             except (ValueError, TypeError) as e:
                 logger.warning(f"无法初始化下载协调器: {e}")
 
+    def _ensure_connection(self):
+        """确保数据库连接可用"""
+        if self.query_manager is None:
+            raise DataQueryError(
+                "数据库连接不可用",
+                error_code="DB_NOT_INITIALIZED",
+                reason="数据库连接在初始化时失败，请检查数据库配置和连接"
+            )
+
     async def get_stock_list(
         self,
         market: Optional[str] = None,
@@ -103,6 +129,7 @@ class DataAdapter:
         Raises:
             DatabaseError: 数据库访问错误
         """
+        self._ensure_connection()
         return await asyncio.to_thread(
             self.query_manager.get_stock_list,
             market=market,
@@ -129,6 +156,7 @@ class DataAdapter:
         Raises:
             DatabaseError: 数据库访问错误
         """
+        self._ensure_connection()
         start_str = start_date.strftime("%Y-%m-%d") if start_date else None
         end_str = end_date.strftime("%Y-%m-%d") if end_date else None
 
@@ -159,6 +187,7 @@ class DataAdapter:
         Raises:
             DatabaseError: 数据库访问错误
         """
+        self._ensure_connection()
         date_str = trade_date.strftime("%Y-%m-%d") if trade_date else None
 
         return await asyncio.to_thread(
@@ -181,6 +210,7 @@ class DataAdapter:
         Raises:
             DatabaseError: 数据库写入错误
         """
+        self._ensure_connection()
         return await asyncio.to_thread(
             self.insert_manager.insert_stock_list,
             df=df
@@ -200,6 +230,7 @@ class DataAdapter:
         Raises:
             DatabaseError: 数据库写入错误
         """
+        self._ensure_connection()
         return await asyncio.to_thread(
             self.insert_manager.insert_daily_data,
             df=df,
@@ -226,6 +257,7 @@ class DataAdapter:
         Raises:
             DatabaseError: 数据库写入错误
         """
+        self._ensure_connection()
         return await asyncio.to_thread(
             self.insert_manager.insert_minute_data,
             df=df,
@@ -250,6 +282,7 @@ class DataAdapter:
         Returns:
             包含完整性信息的字典
         """
+        self._ensure_connection()
         start_str = start_date.strftime("%Y-%m-%d")
         end_str = end_date.strftime("%Y-%m-%d")
 
@@ -270,6 +303,7 @@ class DataAdapter:
         Returns:
             是否为交易日
         """
+        self._ensure_connection()
         date_str = trade_date.strftime("%Y-%m-%d")
 
         return await asyncio.to_thread(
