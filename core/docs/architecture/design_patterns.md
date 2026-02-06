@@ -3,7 +3,7 @@
 **Design Patterns in Stock-Analysis Core**
 
 **版本**: v3.0.0
-**最后更新**: 2026-02-01
+**最后更新**: 2026-02-06
 
 ---
 
@@ -446,6 +446,128 @@ class FeatureStoreProxy:
 
 ---
 
+### 6. 组合模式 (Composite Pattern) - v3.0 核心⭐
+
+**应用场景**: 三层策略架构组合
+
+#### StrategyComposer（策略组合器）
+
+**位置**: `src/strategies/three_layer/base.py`
+
+```python
+class StrategyComposer:
+    """
+    策略组合器 - 组合模式核心实现
+
+    将选股器、入场策略、退出策略三个独立组件组合成完整策略
+    """
+
+    def __init__(
+        self,
+        selector: StockSelector,
+        entry: EntryStrategy,
+        exit_strategy: ExitStrategy,
+        rebalance_freq: str = 'W'
+    ):
+        """
+        组合三层策略
+
+        Args:
+            selector: 选股器（选股层）
+            entry: 入场策略（入场层）
+            exit_strategy: 退出策略（退出层）
+            rebalance_freq: 调仓频率（'D'日/'W'周/'M'月）
+        """
+        self.selector = selector
+        self.entry = entry
+        self.exit = exit_strategy
+        self.rebalance_freq = rebalance_freq
+
+    def get_strategy_name(self) -> str:
+        """生成组合策略名称"""
+        return f"{self.selector.__class__.__name__}_" \
+               f"{self.entry.__class__.__name__}_" \
+               f"{self.exit.__class__.__name__}"
+
+    def validate(self) -> bool:
+        """验证策略组合的有效性"""
+        # 检查各组件是否正确初始化
+        return all([
+            self.selector is not None,
+            self.entry is not None,
+            self.exit is not None
+        ])
+
+# 使用示例 1: 动量选股 + 立即入场 + 固定止损
+from src.strategies.three_layer import (
+    MomentumSelector, ImmediateEntry, FixedStopLossExit
+)
+
+composer = StrategyComposer(
+    selector=MomentumSelector(params={'lookback_period': 20, 'top_n': 50}),
+    entry=ImmediateEntry(),
+    exit_strategy=FixedStopLossExit(params={'stop_loss_pct': -5.0}),
+    rebalance_freq='W'
+)
+
+print(composer.get_strategy_name())
+# 输出: MomentumSelector_ImmediateEntry_FixedStopLossExit
+
+# 使用示例 2: ML 选股 + MA 突破 + ATR 止损
+from src.strategies.three_layer import (
+    MLSelector, MABreakoutEntry, ATRStopLossExit
+)
+
+composer = StrategyComposer(
+    selector=MLSelector(params={
+        'mode': 'lightgbm_ranker',
+        'model_path': './models/stock_ranker.pkl',
+        'top_n': 50
+    }),
+    entry=MABreakoutEntry(params={'ma_window': 20}),
+    exit_strategy=ATRStopLossExit(params={'atr_multiplier': 2.0}),
+    rebalance_freq='M'
+)
+
+# 回测执行
+result = backtest_engine.backtest_three_layer(
+    selector=composer.selector,
+    entry=composer.entry,
+    exit_strategy=composer.exit,
+    prices=prices,
+    start_date='2023-01-01',
+    end_date='2023-12-31'
+)
+```
+
+**组合模式优势**:
+- ✅ **灵活组合**: 3 选股器 × 3 入场策略 × 4 退出策略 = 36+ 种组合
+- ✅ **统一接口**: 所有组合策略使用相同的接口调用
+- ✅ **独立开发**: 各层组件独立开发、测试、维护
+- ✅ **易于扩展**: 新增组件无需修改现有代码
+
+#### 组合层次结构
+
+```
+StrategyComposer（组合根节点）
+├── StockSelector（选股器 - 叶子节点）
+│   ├── MomentumSelector
+│   ├── ReversalSelector
+│   ├── MLSelector ⭐
+│   └── ExternalSelector
+├── EntryStrategy（入场策略 - 叶子节点）
+│   ├── ImmediateEntry
+│   ├── MABreakoutEntry
+│   └── RSIOversoldEntry
+└── ExitStrategy（退出策略 - 叶子节点）
+    ├── FixedPeriodExit
+    ├── FixedStopLossExit
+    ├── ATRStopLossExit
+    └── TrendExitStrategy
+```
+
+---
+
 ## 🎭 行为型模式 (Behavioral Patterns)
 
 ### 7. 策略模式 (Strategy Pattern)
@@ -662,17 +784,66 @@ class CommandInvoker:
 
 ---
 
+## 🎯 三层架构中的设计模式（v3.0 核心）
+
+### 模式协同工作示例
+
+三层架构综合运用了多种设计模式：
+
+```python
+# 1. 工厂模式: 创建选股器
+from src.strategies.three_layer.selectors import SelectorFactory
+
+selector = SelectorFactory.create_selector(
+    selector_type='ml',
+    params={'mode': 'lightgbm_ranker', 'top_n': 50}
+)  # 返回 MLSelector 实例
+
+# 2. 策略模式: 定义选股算法
+class MLSelector(StockSelector):
+    def select_stocks(self, prices, date):
+        # 具体选股算法实现
+        pass
+
+# 3. 组合模式: 组合三层策略
+composer = StrategyComposer(
+    selector=selector,           # 选股器组件
+    entry=ImmediateEntry(),      # 入场策略组件
+    exit_strategy=FixedStopLossExit(params={'stop_loss_pct': -5.0})  # 退出策略组件
+)
+
+# 4. 模板方法: 回测执行流程
+result = backtest_engine.backtest_three_layer(
+    selector=composer.selector,
+    entry=composer.entry,
+    exit_strategy=composer.exit,
+    prices=prices
+)
+
+# 5. 观察者模式: 监控回测过程
+backtest_engine.attach(PerformanceMonitor())
+backtest_engine.attach(RiskMonitor())
+```
+
+---
+
 ## 📊 模式使用统计
 
-| 模式 | 应用场景数 | 代码位置 |
-|------|-----------|---------|
-| 工厂模式 | 3 | models/, data/providers/, strategies/ |
-| 单例模式 | 2 | data/, utils/ |
-| 装饰器模式 | 4 | utils/decorators.py |
-| 策略模式 | 5 | strategies/ |
-| 适配器模式 | 2 | data/providers/ |
-| 模板方法 | 2 | models/, backtest/ |
-| 观察者模式 | 1 | backtest/ |
+| 模式 | 应用场景数 | 代码位置 | v3.0 新增 |
+|------|-----------|---------|----------|
+| 工厂模式 | 3 | models/, data/providers/, strategies/ | - |
+| 单例模式 | 2 | data/, utils/ | - |
+| 装饰器模式 | 4 | utils/decorators.py | - |
+| **组合模式** ⭐ | **1** | **strategies/three_layer/** | **✅ 新增** |
+| 策略模式 | 8 | strategies/, strategies/three_layer/ | +3 |
+| 适配器模式 | 2 | data/providers/ | - |
+| 模板方法 | 3 | models/, backtest/, three_layer/ | +1 |
+| 观察者模式 | 1 | backtest/ | - |
+
+**v3.0 设计模式增强**:
+- ✅ 新增**组合模式**用于三层策略架构
+- ✅ 策略模式应用场景增加 3 个（三层组件）
+- ✅ 模板方法模式应用于三层基类
 
 ---
 
@@ -683,6 +854,44 @@ class CommandInvoker:
 3. **遵循SOLID原则**: 单一职责、开闭原则等
 4. **编写测试**: 模式应该提升可测试性
 5. **文档化**: 说明使用的模式和原因
+
+### v3.0 三层架构设计原则
+
+**单一职责原则 (SRP)**:
+- ✅ 选股器只负责选股，不关心入场时机
+- ✅ 入场策略只负责判断买入时机，不关心选股逻辑
+- ✅ 退出策略只负责判断卖出时机，不关心前两层
+
+**开闭原则 (OCP)**:
+- ✅ 新增选股器无需修改入场/退出策略
+- ✅ 新增入场策略无需修改选股器/退出策略
+- ✅ 扩展功能通过继承基类实现
+
+**里氏替换原则 (LSP)**:
+- ✅ 任何选股器都可以替换 StockSelector 基类
+- ✅ 任何入场策略都可以替换 EntryStrategy 基类
+- ✅ 任何退出策略都可以替换 ExitStrategy 基类
+
+**依赖倒置原则 (DIP)**:
+- ✅ StrategyComposer 依赖抽象基类，不依赖具体实现
+- ✅ BacktestEngine 依赖策略接口，不依赖具体策略
+
+**示例**:
+```python
+# ✅ 好的设计: 依赖抽象
+class StrategyComposer:
+    def __init__(self, selector: StockSelector, entry: EntryStrategy, exit_strategy: ExitStrategy):
+        self.selector = selector  # 依赖抽象基类
+        self.entry = entry
+        self.exit = exit_strategy
+
+# ❌ 坏的设计: 依赖具体类
+class BadComposer:
+    def __init__(self):
+        self.selector = MomentumSelector()  # 硬编码具体类
+        self.entry = ImmediateEntry()
+        self.exit = FixedStopLossExit()
+```
 
 ---
 
@@ -696,4 +905,5 @@ class CommandInvoker:
 
 **文档版本**: v3.0.0
 **维护团队**: Quant Team
-**最后更新**: 2026-02-01
+**最后更新**: 2026-02-06
+**v3.0 核心模式**: 组合模式（StrategyComposer）+ 三层架构设计

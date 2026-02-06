@@ -3,7 +3,7 @@
 **Stock-Analysis Core Architecture Overview**
 
 **版本**: v3.0.0
-**最后更新**: 2026-02-01
+**最后更新**: 2026-02-06
 
 ---
 
@@ -134,7 +134,23 @@ src/
 │   ├── base_strategy.py     # 策略基类
 │   ├── alpha_strategy.py    # Alpha策略
 │   ├── mean_reversion.py    # 均值回归
-│   └── ... (5种策略)
+│   ├── three_layer/         # 三层架构（v3.0新增）⭐
+│   │   ├── base.py          # 三层基类
+│   │   ├── selectors/       # 选股器层
+│   │   │   ├── momentum_selector.py
+│   │   │   ├── reversal_selector.py
+│   │   │   ├── ml_selector.py       # 机器学习选股⭐
+│   │   │   └── external_selector.py
+│   │   ├── entries/         # 入场策略层
+│   │   │   ├── immediate_entry.py
+│   │   │   ├── ma_breakout_entry.py
+│   │   │   └── rsi_oversold_entry.py
+│   │   └── exits/           # 退出策略层
+│   │       ├── fixed_period_exit.py
+│   │       ├── stop_loss_exit.py
+│   │       ├── atr_stop_exit.py
+│   │       └── trend_exit.py
+│   └── ... (5种经典策略)
 │
 ├── backtest/                # 回测层
 │   ├── backtest_engine.py   # 回测引擎
@@ -146,6 +162,112 @@ src/
     ├── exceptions.py        # 异常
     └── response.py          # 统一响应
 ```
+
+---
+
+## 🎯 三层策略架构（v3.0 核心升级）
+
+### 架构设计理念
+
+三层架构是 v3.0 的核心创新，将传统的"策略"概念解耦为三个独立层级：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 1: StockSelector (选股器层)                               │
+│  职责: 从全市场筛选候选股票池                                      │
+│  频率: 周频/月频                                                  │
+│  输出: List[股票代码]                                             │
+└─────────────────┬───────────────────────────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 2: EntryStrategy (入场策略层)                             │
+│  职责: 决定何时买入候选股票                                        │
+│  频率: 日频                                                       │
+│  输出: Dict[股票代码, 买入信号]                                    │
+└─────────────────┬───────────────────────────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 3: ExitStrategy (退出策略层)                              │
+│  职责: 管理持仓，决定何时卖出                                      │
+│  频率: 日频/实时                                                  │
+│  输出: Dict[股票代码, 卖出信号]                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 三层架构组件清单
+
+#### 1. 选股器层 (StockSelector)
+
+| 选股器 | 描述 | 核心参数 |
+|--------|------|---------|
+| **MomentumSelector** | 动量选股 | `lookback_period`, `top_n` |
+| **ReversalSelector** | 反转选股 | `lookback_period`, `top_n` |
+| **MLSelector** ⭐ | 机器学习选股 | `mode`, `features`, `top_n` |
+| **ExternalSelector** | 外部系统集成 | `source`, `config` |
+
+**MLSelector 核心特性**（v3.0 重点）：
+- ✅ **多因子加权模式**: 支持 4 种归一化方法（z_score、min_max、rank、none）
+- ✅ **LightGBM 排序模式**: 5 档智能评分，NDCG@10 优化
+- ✅ **因子库集成**: 125+ Alpha 因子 + 60+ 技术指标
+- ✅ **通配符特征**: 支持 `alpha:*`、`tech:rsi` 等表达式
+
+#### 2. 入场策略层 (EntryStrategy)
+
+| 入场策略 | 描述 | 触发条件 |
+|---------|------|---------|
+| **ImmediateEntry** | 立即入场 | 选中即买入 |
+| **MABreakoutEntry** | 均线突破 | 价格突破 MA20 |
+| **RSIOversoldEntry** | RSI 超卖 | RSI < 30 |
+
+#### 3. 退出策略层 (ExitStrategy)
+
+| 退出策略 | 描述 | 触发条件 |
+|---------|------|---------|
+| **FixedPeriodExit** | 固定持有期 | 持有 N 天后卖出 |
+| **FixedStopLossExit** | 固定止损 | 亏损达到 X% |
+| **ATRStopLossExit** | ATR 动态止损 | 亏损超过 N 倍 ATR |
+| **TrendExitStrategy** | 趋势退出 | MA5 下穿 MA20 |
+
+### 组合示例
+
+三层架构支持 **3×3×4 = 36+ 种策略组合**：
+
+```python
+from src.strategies.three_layer import (
+    MLSelector,
+    ImmediateEntry,
+    FixedStopLossExit,
+    StrategyComposer
+)
+
+# 组合 1: ML 选股 + 立即入场 + 固定止损
+composer = StrategyComposer(
+    selector=MLSelector(params={
+        'mode': 'lightgbm_ranker',
+        'model_path': './models/stock_ranker.pkl',
+        'top_n': 50
+    }),
+    entry=ImmediateEntry(),
+    exit_strategy=FixedStopLossExit(params={'stop_loss_pct': -5.0}),
+    rebalance_freq='W'  # 周度调仓
+)
+
+# 组合 2: 动量选股 + MA 突破 + 趋势退出
+composer = StrategyComposer(
+    selector=MomentumSelector(params={'lookback_period': 20, 'top_n': 50}),
+    entry=MABreakoutEntry(params={'ma_window': 20}),
+    exit_strategy=TrendExitStrategy(params={'fast': 5, 'slow': 20}),
+    rebalance_freq='M'  # 月度调仓
+)
+```
+
+### 架构优势
+
+1. **高度解耦**: 选股、入场、退出逻辑独立开发和测试
+2. **灵活组合**: 3 个选股器 × 3 个入场策略 × 4 个退出策略 = 36+ 种组合
+3. **易于扩展**: 新增策略只需实现对应层的接口
+4. **频率独立**: 选股周频，入场/退出日频，互不干扰
+5. **向后兼容**: 保留原有 BaseStrategy 接口
 
 ---
 
@@ -206,8 +328,13 @@ src/
 │ Step 4: 策略决策 (Business Layer)        │
 │ ┌─────────────┐                         │
 │ │ Strategies  │ → 生成交易信号           │
-│ │(5种策略)    │   (买入/卖出/持有)       │
+│ │(5种经典策略)│   (买入/卖出/持有)       │
 │ └─────────────┘                         │
+│ ┌─────────────────────────────────────┐ │
+│ │ 三层架构 (v3.0)                      │ │
+│ │ Selector → Entry → Exit              │ │
+│ │ (36+ 种组合)                         │ │
+│ └─────────────────────────────────────┘ │
 │ ┌─────────────┐                         │
 │ │Risk Manager │ → 风控检查               │
 │ └─────────────┘                         │
@@ -390,10 +517,14 @@ class BacktestEngine:
 
 | 指标 | 数值 | 说明 |
 |------|------|------|
-| 代码规模 | 147,936行 | 源码67K + 测试80K |
+| 代码规模 | 50,000+行 | 核心代码 + 12,000行三层架构 |
 | 测试覆盖率 | 90%+ | 3,200+测试用例 |
+| 三层架构测试 | 385用例 | 100% 通过 |
+| MLSelector测试 | 120+用例 | 100% 通过 |
 | API一致性 | 95%+ | 统一Response+异常 |
 | 架构评分 | 4.9/5.0 | 生产就绪 |
+| 因子数量 | 125+ Alpha + 60+ 技术指标 | 185+ 总计 |
+| 策略组合 | 36+ 种 | 三层架构灵活组合 |
 
 ---
 
@@ -408,4 +539,5 @@ class BacktestEngine:
 
 **文档版本**: v3.0.0
 **维护团队**: Quant Team
-**最后更新**: 2026-02-01
+**最后更新**: 2026-02-06
+**v3.0 核心升级**: 三层策略架构 + MLSelector 机器学习选股
