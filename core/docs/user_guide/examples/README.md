@@ -3,13 +3,26 @@
 **Code Examples for Stock-Analysis Core**
 
 **版本**: v3.0.0
-**最后更新**: 2026-02-01
+**最后更新**: 2026-02-06
 
 ---
 
 ## 📚 示例目录
 
 本目录包含完整的工作流示例，帮助你快速上手Stock-Analysis Core。
+
+### 三层架构示例（v3.0 核心）⭐
+
+- **[THREE_LAYER_ARCHITECTURE_GUIDE.md](THREE_LAYER_ARCHITECTURE_GUIDE.md)** - 三层架构完整指南
+- [three_layer_architecture_example.py](three_layer_architecture_example.py) - 三层架构基类使用示例
+
+### MLSelector 机器学习选股示例（v3.0 核心）⭐
+
+- **[ML_SELECTOR_GUIDE.md](ML_SELECTOR_GUIDE.md)** - MLSelector 完整使用指南
+- [ml_selector_usage_example.py](ml_selector_usage_example.py) - MLSelector 基础用法（8个示例）
+- [ml_selector_multi_factor_weighted_example.py](ml_selector_multi_factor_weighted_example.py) - 多因子加权深度指南（8个示例）
+- [ml3_lightgbm_ranker_example.py](ml3_lightgbm_ranker_example.py) - LightGBM 排序模型完整流程（5个示例）
+- [ml4_feature_integration_example.py](ml4_feature_integration_example.py) - 特征库集成示例（125+ 因子，8个示例）
 
 ### 数据相关示例
 
@@ -78,6 +91,125 @@ python 02_feature_calculation.py
 ---
 
 ## 示例详解
+
+### 三层架构 (v3.0 核心)
+
+#### three_layer_architecture_example.py
+
+**功能**: 三层架构基类使用示例
+
+**学习内容**:
+- 创建自定义选股器（SimpleTopNSelector）
+- 创建自定义入场策略（SimpleImmediateEntry）
+- 创建自定义退出策略（SimpleFixedStopLossExit）
+- 使用策略组合器（StrategyComposer）
+- 参数验证机制
+
+**运行**:
+```bash
+python three_layer_architecture_example.py
+```
+
+**详细文档**: 查看 [THREE_LAYER_ARCHITECTURE_GUIDE.md](THREE_LAYER_ARCHITECTURE_GUIDE.md)
+
+---
+
+### MLSelector 机器学习选股 (v3.0 核心)
+
+#### ml_selector_usage_example.py
+
+**功能**: MLSelector 基础用法（8个完整示例）
+
+**学习内容**:
+- 示例1: 基础多因子加权选股
+- 示例2: 自定义特征集
+- 示例3: 价格过滤
+- 示例4: 使用默认特征集
+- 示例5: 不同时期选股对比
+- 示例6: 单一特征探索
+- 示例7: LightGBM 模式（无模型回退）
+- 示例8: 三层架构策略集成
+
+**运行**:
+```bash
+python ml_selector_usage_example.py
+```
+
+---
+
+#### ml_selector_multi_factor_weighted_example.py
+
+**功能**: 多因子加权模式深度指南（8个进阶示例）
+
+**学习内容**:
+- 示例1: 基础等权模型
+- 示例2: 自定义因子权重（60% 动量 + 40% RSI）
+- 示例3: 因子分组加权（动量50% + 技术30% + 波动率20%）
+- 示例4: 4种归一化方法对比（z_score, min_max, rank, none）
+- 示例5: 价格过滤 + 多因子加权
+- 示例6: 完整回测流程（周度选股）
+- 示例7: 多策略组合（动量/技术/均衡）
+- 示例8: 参数敏感性分析
+
+**运行**:
+```bash
+python ml_selector_multi_factor_weighted_example.py
+```
+
+**性能**: <15ms (快速模式), <700ms (完整特征库)
+
+---
+
+#### ml3_lightgbm_ranker_example.py
+
+**功能**: LightGBM 排序模型完整流程（5个高级示例）
+
+**学习内容**:
+- 示例1: 训练 LightGBM 排序模型（准备数据、训练、评估、保存）
+- 示例2: 使用训练好的模型进行选股
+- 示例3: 多因子加权 vs LightGBM 对比
+- 示例4: LightGBM 选股器回测（完整三层策略）
+- 示例5: 超参数调优（3组参数配置）
+
+**运行**:
+```bash
+python ml3_lightgbm_ranker_example.py
+```
+
+**性能**:
+- 训练时间: <5秒 (1000样本)
+- 推理时间: <100ms (100只股票)
+- NDCG@10: >0.85
+
+---
+
+#### ml4_feature_integration_example.py
+
+**功能**: 特征库集成示例 - 125+ Alpha 因子 + 60+ 技术指标（8个示例）
+
+**学习内容**:
+- 示例1: 基础用法（完整特征库）
+- 示例2: 使用通配符 `alpha:*`（所有Alpha因子）
+- 示例3: 使用通配符 `tech:*`（所有技术指标）
+- 示例4: 类别选择（alpha:momentum, tech:rsi）
+- 示例5: 混合格式（通配符 + 具体特征）
+- 示例6: 性能对比（快速模式 vs 完整特征库）
+- 示例7: 自定义因子权重
+- 示例8: 查看可用特征分类
+
+**运行**:
+```bash
+python ml4_feature_integration_example.py
+```
+
+**特征统计**:
+- Alpha 因子: 125+（动量20+、反转15+、波动率12+、成交量18+、趋势10+）
+- 技术指标: 60+（MA8+、EMA6+、RSI4+、MACD3+、BB4+、ATR3+、CCI2+）
+- 总计: 185+ 特征
+
+**详细文档**: 查看 [ML_SELECTOR_GUIDE.md](ML_SELECTOR_GUIDE.md)
+
+---
 
 ### 数据相关
 
@@ -405,21 +537,47 @@ python 11_complete_workflow.py --stock 000001.SZ
 
 ## 🎯 学习路径
 
-### 初学者路径（1-3天）
+### v3.0 新手快速上手（1-2天）⭐ 推荐
+
+1. `three_layer_architecture_example.py` - 理解三层架构基础（40分钟）
+2. `ml_selector_usage_example.py` - MLSelector 基础用法（30分钟）
+3. `ml_selector_multi_factor_weighted_example.py` - 多因子加权深度学习（1小时）
+4. `ml4_feature_integration_example.py` - 特征库集成（30分钟）
+
+**总时长**: ~3小时
+**收获**: 掌握 v3.0 核心功能（三层架构 + MLSelector + 125+ 因子）
+
+---
+
+### v3.0 进阶路径（3-4天）⭐ 推荐
+
+5. `ml3_lightgbm_ranker_example.py` - LightGBM 排序模型（2小时）
+6. 组合三层策略进行回测（2小时）
+7. 对比不同策略组合效果（2小时）
+8. 优化策略参数和性能（2小时）
+
+**总时长**: ~8小时
+**收获**: 掌握机器学习选股 + 策略组合 + 回测优化
+
+---
+
+### 传统学习路径
+
+#### 初学者路径（1-3天）
 
 1. `01_data_download.py` - 理解数据获取
 2. `data_quality_demo.py` - 数据质量检查
 3. `backtest_basic_usage.py` - 学习策略回测
 4. `visualization_demo.py` - 生成可视化报告
 
-### 进阶路径（3-5天）
+#### 进阶路径（3-5天）
 
 5. `model_basic_usage.py` - 机器学习建模基础
 6. `model_comparison_demo.py` - 多模型对比
 7. `complete_factor_analysis_example.py` - 深度因子分析
 8. `backtest_comparison_demo.py` - 策略对比
 
-### 专家路径（5-7天）
+#### 专家路径（5-7天）
 
 9. `model_training_pipeline.py` - 完整训练流水线
 10. `ensemble_example.py` - 模型集成
@@ -428,6 +586,14 @@ python 11_complete_workflow.py --stock 000001.SZ
 13. `11_complete_workflow.py` - 端到端工作流
 
 ### 专题学习
+
+**v3.0 三层架构与机器学习选股** ⭐:
+- `three_layer_architecture_example.py` - 三层架构基础
+- `ml_selector_usage_example.py` - MLSelector 基础
+- `ml_selector_multi_factor_weighted_example.py` - 多因子加权
+- `ml3_lightgbm_ranker_example.py` - LightGBM 排序
+- `ml4_feature_integration_example.py` - 特征库集成（125+ 因子）
+- 查看完整文档: [THREE_LAYER_ARCHITECTURE_GUIDE.md](THREE_LAYER_ARCHITECTURE_GUIDE.md) 和 [ML_SELECTOR_GUIDE.md](ML_SELECTOR_GUIDE.md)
 
 **交易成本与滑点**:
 - `backtest_cost_optimization.py`
@@ -558,4 +724,5 @@ python 01_data_download.py --help  # 查看参数说明
 
 **文档版本**: v3.0.0
 **维护团队**: Quant Team
-**最后更新**: 2026-02-01
+**最后更新**: 2026-02-06
+**v3.0 新增**: 三层架构示例 + MLSelector 示例（4个文件 + 2个完整指南）
