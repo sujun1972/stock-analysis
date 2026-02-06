@@ -27,9 +27,10 @@ class TestMLSelectorBasic:
     def test_get_parameters(self):
         """测试参数定义"""
         params = MLSelector.get_parameters()
-        assert len(params) == 7
+        assert len(params) == 11  # 原7个 + 新增4个
 
         param_names = [p.name for p in params]
+        # 原有参数
         assert "mode" in param_names
         assert "top_n" in param_names
         assert "features" in param_names
@@ -37,6 +38,11 @@ class TestMLSelectorBasic:
         assert "filter_min_volume" in param_names
         assert "filter_max_price" in param_names
         assert "filter_min_price" in param_names
+        # 新增参数（ML-2 增强）
+        assert "factor_weights" in param_names
+        assert "normalization_method" in param_names
+        assert "factor_groups" in param_names
+        assert "group_weights" in param_names
 
     def test_default_parameters(self):
         """测试默认参数"""
@@ -802,6 +808,437 @@ class TestMLSelectorRankAndSelect:
 
         # 只能选出2只
         assert len(selected) == 2
+
+
+class TestMLSelectorMultiFactorWeightedEnhanced:
+    """测试多因子加权模型的增强功能"""
+
+    def setup_method(self):
+        """设置测试数据"""
+        dates = pd.date_range(start="2023-01-01", periods=60, freq="D")
+
+        # 创建3只股票
+        stock_a = np.linspace(100, 130, 60)  # 上涨趋势
+        stock_b = 100 + np.sin(np.linspace(0, 4 * np.pi, 60)) * 10  # 震荡
+        stock_c = np.linspace(120, 100, 60)  # 下跌趋势
+
+        self.prices_df = pd.DataFrame({
+            'A': stock_a,
+            'B': stock_b,
+            'C': stock_c
+        }, index=dates)
+
+        self.test_date = dates[-1]
+
+    def test_normalization_z_score(self):
+        """测试 Z-Score 归一化"""
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'normalization_method': 'z_score'
+        })
+
+        # 创建测试特征矩阵
+        feature_matrix = pd.DataFrame({
+            'momentum_20d': [0.1, 0.2, 0.3],
+            'rsi_14d': [40, 50, 60]
+        }, index=['A', 'B', 'C'])
+
+        normalized = selector._normalize_features(feature_matrix, 'z_score')
+
+        # Z-Score 归一化后均值应接近0，标准差接近1
+        for col in normalized.columns:
+            assert abs(normalized[col].mean()) < 0.1
+            assert abs(normalized[col].std() - 1.0) < 0.1 or normalized[col].std() == 0
+
+    def test_normalization_min_max(self):
+        """测试 Min-Max 归一化"""
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'normalization_method': 'min_max'
+        })
+
+        feature_matrix = pd.DataFrame({
+            'momentum_20d': [0.1, 0.2, 0.3],
+            'rsi_14d': [40, 50, 60]
+        }, index=['A', 'B', 'C'])
+
+        normalized = selector._normalize_features(feature_matrix, 'min_max')
+
+        # Min-Max 归一化后应在 [0, 1] 范围内
+        assert (normalized >= 0).all().all()
+        assert (normalized <= 1).all().all()
+
+        # 每列的最小值应接近0，最大值应接近1
+        for col in normalized.columns:
+            assert normalized[col].min() < 0.1
+            assert normalized[col].max() > 0.9
+
+    def test_normalization_rank(self):
+        """测试排名归一化"""
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'normalization_method': 'rank'
+        })
+
+        feature_matrix = pd.DataFrame({
+            'momentum_20d': [0.1, 0.2, 0.3],
+            'rsi_14d': [40, 50, 60]
+        }, index=['A', 'B', 'C'])
+
+        normalized = selector._normalize_features(feature_matrix, 'rank')
+
+        # 排名归一化后应在 [0, 1] 范围内
+        assert (normalized >= 0).all().all()
+        assert (normalized <= 1).all().all()
+
+    def test_normalization_none(self):
+        """测试不归一化"""
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'normalization_method': 'none'
+        })
+
+        feature_matrix = pd.DataFrame({
+            'momentum_20d': [0.1, 0.2, 0.3],
+            'rsi_14d': [40, 50, 60]
+        }, index=['A', 'B', 'C'])
+
+        normalized = selector._normalize_features(feature_matrix, 'none')
+
+        # 不归一化应该与原始值相同
+        pd.testing.assert_frame_equal(normalized, feature_matrix)
+
+    def test_factor_weights_parsing(self):
+        """测试因子权重解析"""
+        import json
+
+        weights_config = json.dumps({
+            "momentum_20d": 0.6,
+            "rsi_14d": 0.4
+        })
+
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'factor_weights': weights_config
+        })
+
+        assert 'momentum_20d' in selector.factor_weights
+        assert 'rsi_14d' in selector.factor_weights
+        assert selector.factor_weights['momentum_20d'] == 0.6
+        assert selector.factor_weights['rsi_14d'] == 0.4
+
+    def test_factor_weights_invalid_json(self):
+        """测试无效的因子权重配置"""
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'factor_weights': 'invalid json'
+        })
+
+        # 解析失败应返回空字典
+        assert selector.factor_weights == {}
+
+    def test_score_with_weights(self):
+        """测试使用因子权重评分"""
+        import json
+
+        weights_config = json.dumps({
+            "feat1": 0.7,
+            "feat2": 0.3
+        })
+
+        selector = MLSelector(params={
+            'features': 'feat1,feat2',
+            'factor_weights': weights_config
+        })
+
+        feature_matrix = pd.DataFrame({
+            'feat1': [1.0, 0.0, -1.0],
+            'feat2': [0.0, 1.0, 0.0]
+        }, index=['A', 'B', 'C'])
+
+        scores = selector._score_with_weights(feature_matrix)
+
+        # 验证加权计算
+        # A: 1.0*0.7 + 0.0*0.3 = 0.7
+        # B: 0.0*0.7 + 1.0*0.3 = 0.3
+        # C: -1.0*0.7 + 0.0*0.3 = -0.7
+        assert abs(scores['A'] - 0.7) < 0.01
+        assert abs(scores['B'] - 0.3) < 0.01
+        assert abs(scores['C'] - (-0.7)) < 0.01
+
+    def test_factor_groups_parsing(self):
+        """测试因子分组解析"""
+        import json
+
+        groups_config = json.dumps({
+            "momentum": ["momentum_5d", "momentum_20d"],
+            "technical": ["rsi_14d", "rsi_28d"]
+        })
+
+        selector = MLSelector(params={
+            'features': 'momentum_5d,momentum_20d,rsi_14d,rsi_28d',
+            'factor_groups': groups_config
+        })
+
+        assert 'momentum' in selector.factor_groups
+        assert 'technical' in selector.factor_groups
+        assert len(selector.factor_groups['momentum']) == 2
+        assert len(selector.factor_groups['technical']) == 2
+
+    def test_group_weights_parsing(self):
+        """测试分组权重解析"""
+        import json
+
+        groups_config = json.dumps({
+            "momentum": ["momentum_5d", "momentum_20d"],
+            "technical": ["rsi_14d", "rsi_28d"]
+        })
+
+        weights_config = json.dumps({
+            "momentum": 0.6,
+            "technical": 0.4
+        })
+
+        selector = MLSelector(params={
+            'features': 'momentum_5d,momentum_20d,rsi_14d,rsi_28d',
+            'factor_groups': groups_config,
+            'group_weights': weights_config
+        })
+
+        assert selector.group_weights['momentum'] == 0.6
+        assert selector.group_weights['technical'] == 0.4
+
+    def test_group_weights_default_equal_weight(self):
+        """测试分组权重默认等权"""
+        import json
+
+        groups_config = json.dumps({
+            "momentum": ["momentum_5d", "momentum_20d"],
+            "technical": ["rsi_14d", "rsi_28d"]
+        })
+
+        selector = MLSelector(params={
+            'features': 'momentum_5d,momentum_20d,rsi_14d,rsi_28d',
+            'factor_groups': groups_config
+        })
+
+        # 没有配置权重，应该等权
+        assert selector.group_weights['momentum'] == 0.5
+        assert selector.group_weights['technical'] == 0.5
+
+    def test_score_with_groups(self):
+        """测试使用因子分组评分"""
+        import json
+
+        groups_config = json.dumps({
+            "group1": ["feat1", "feat2"],
+            "group2": ["feat3"]
+        })
+
+        weights_config = json.dumps({
+            "group1": 0.6,
+            "group2": 0.4
+        })
+
+        selector = MLSelector(params={
+            'features': 'feat1,feat2,feat3',
+            'factor_groups': groups_config,
+            'group_weights': weights_config
+        })
+
+        feature_matrix = pd.DataFrame({
+            'feat1': [1.0, 0.0, -1.0],
+            'feat2': [1.0, 0.0, -1.0],
+            'feat3': [0.0, 2.0, 0.0]
+        }, index=['A', 'B', 'C'])
+
+        scores = selector._score_with_groups(feature_matrix)
+
+        # 验证分组加权计算
+        # group1 = (feat1 + feat2) / 2
+        # group2 = feat3
+        # final = group1 * 0.6 + group2 * 0.4
+        # A: ((1.0+1.0)/2)*0.6 + 0.0*0.4 = 0.6
+        # B: ((0.0+0.0)/2)*0.6 + 2.0*0.4 = 0.8
+        # C: ((-1.0-1.0)/2)*0.6 + 0.0*0.4 = -0.6
+        assert abs(scores['A'] - 0.6) < 0.01
+        assert abs(scores['B'] - 0.8) < 0.01
+        assert abs(scores['C'] - (-0.6)) < 0.01
+
+    def test_integration_multi_factor_with_custom_weights(self):
+        """集成测试：使用自定义权重的多因子选股"""
+        import json
+
+        weights_config = json.dumps({
+            "momentum_20d": 0.6,
+            "rsi_14d": 0.4
+        })
+
+        selector = MLSelector(params={
+            'mode': 'multi_factor_weighted',
+            'features': 'momentum_20d,rsi_14d',
+            'factor_weights': weights_config,
+            'normalization_method': 'z_score',
+            'top_n': 5  # 修改为5，满足最小值要求
+        })
+
+        selected = selector.select(self.test_date, self.prices_df)
+
+        # 应该能正常选股
+        assert isinstance(selected, list)
+        assert len(selected) <= 5  # 对应修改
+
+    def test_integration_multi_factor_with_groups(self):
+        """集成测试：使用因子分组的多因子选股"""
+        import json
+
+        groups_config = json.dumps({
+            "momentum": ["momentum_5d", "momentum_20d"],
+            "technical": ["rsi_14d"]
+        })
+
+        weights_config = json.dumps({
+            "momentum": 0.7,
+            "technical": 0.3
+        })
+
+        selector = MLSelector(params={
+            'mode': 'multi_factor_weighted',
+            'features': 'momentum_5d,momentum_20d,rsi_14d',
+            'factor_groups': groups_config,
+            'group_weights': weights_config,
+            'normalization_method': 'min_max',
+            'top_n': 5  # 修改为5，满足最小值要求
+        })
+
+        selected = selector.select(self.test_date, self.prices_df)
+
+        # 应该能正常选股
+        assert isinstance(selected, list)
+        assert len(selected) <= 5  # 对应修改
+
+    def test_different_normalization_methods_comparison(self):
+        """比较不同归一化方法的效果"""
+        methods = ['z_score', 'min_max', 'rank', 'none']
+        results = {}
+
+        for method in methods:
+            selector = MLSelector(params={
+                'features': 'momentum_20d,rsi_14d',
+                'normalization_method': method,
+                'top_n': 5  # 修改为5，满足最小值要求
+            })
+
+            selected = selector.select(self.test_date, self.prices_df)
+            results[method] = selected
+
+        # 所有方法都应该能返回结果
+        for method, selected in results.items():
+            assert isinstance(selected, list)
+            assert len(selected) <= 5  # 对应修改
+
+    def test_edge_case_single_stock(self):
+        """边界测试：只有一只股票"""
+        import json
+
+        single_stock_df = pd.DataFrame({
+            'A': self.prices_df['A']
+        })
+
+        weights_config = json.dumps({
+            "momentum_20d": 0.6,
+            "rsi_14d": 0.4
+        })
+
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'factor_weights': weights_config,
+            'top_n': 5
+        })
+
+        selected = selector.select(self.test_date, single_stock_df)
+
+        # 只有一只股票，应该选出1只
+        assert len(selected) == 1
+        assert selected[0] == 'A'
+
+    def test_edge_case_all_features_same_value(self):
+        """边界测试：所有特征值相同"""
+        dates = pd.date_range(start="2023-01-01", periods=60, freq="D")
+
+        # 所有股票价格相同
+        same_prices_df = pd.DataFrame({
+            'A': [100] * 60,
+            'B': [100] * 60,
+            'C': [100] * 60
+        }, index=dates)
+
+        selector = MLSelector(params={
+            'features': 'momentum_20d,rsi_14d',
+            'top_n': 5  # 修改为5，满足最小值要求
+        })
+
+        selected = selector.select(dates[-1], same_prices_df)
+
+        # 应该能处理所有特征相同的情况
+        assert isinstance(selected, list)
+
+    def test_parameter_validation_new_params(self):
+        """测试新增参数的验证"""
+        params = MLSelector.get_parameters()
+
+        param_names = [p.name for p in params]
+
+        # 验证新增的参数
+        assert "factor_weights" in param_names
+        assert "normalization_method" in param_names
+        assert "factor_groups" in param_names
+        assert "group_weights" in param_names
+
+    def test_normalization_with_inf_values(self):
+        """测试包含无穷值的归一化"""
+        selector = MLSelector(params={
+            'features': 'momentum_20d',
+            'normalization_method': 'z_score'
+        })
+
+        feature_matrix = pd.DataFrame({
+            'momentum_20d': [1.0, np.inf, -np.inf, 2.0]
+        }, index=['A', 'B', 'C', 'D'])
+
+        normalized = selector._normalize_features(feature_matrix, 'z_score')
+
+        # 无穷值应该被处理（替换为0）
+        assert not np.isinf(normalized).any().any()
+        assert not np.isnan(normalized).any().any()
+
+    def test_weights_normalization(self):
+        """测试权重归一化"""
+        import json
+
+        # 权重和不为1
+        weights_config = json.dumps({
+            "feat1": 3.0,
+            "feat2": 2.0
+        })
+
+        selector = MLSelector(params={
+            'features': 'feat1,feat2',
+            'factor_weights': weights_config
+        })
+
+        feature_matrix = pd.DataFrame({
+            'feat1': [1.0, 0.0],
+            'feat2': [0.0, 1.0]
+        }, index=['A', 'B'])
+
+        scores = selector._score_with_weights(feature_matrix)
+
+        # 权重应该被归一化（3.0/(3.0+2.0)=0.6, 2.0/(3.0+2.0)=0.4）
+        # A: 1.0*0.6 + 0.0*0.4 = 0.6
+        # B: 0.0*0.6 + 1.0*0.4 = 0.4
+        assert abs(scores['A'] - 0.6) < 0.01
+        assert abs(scores['B'] - 0.4) < 0.01
 
 
 if __name__ == '__main__':

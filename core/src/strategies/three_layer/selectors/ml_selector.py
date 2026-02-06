@@ -168,6 +168,10 @@ class MLSelector(StockSelector):
                 - features: 特征列表（逗号分隔）
                 - model_path: 模型文件路径
                 - filter_*: 过滤条件
+                - factor_weights: 因子权重配置（JSON）
+                - normalization_method: 归一化方法
+                - factor_groups: 因子分组配置（JSON）
+                - group_weights: 分组权重配置（JSON）
 
         Raises:
             ValueError: 参数验证失败时抛出
@@ -186,9 +190,17 @@ class MLSelector(StockSelector):
             # 使用默认特征集
             self.features = self._get_default_features()
 
+        # 解析因子权重
+        self.factor_weights = self._parse_factor_weights()
+
+        # 解析因子分组
+        self.factor_groups = self._parse_factor_groups()
+        self.group_weights = self._parse_group_weights()
+
         logger.info(
             f"MLSelector 初始化完成: mode={self.mode}, "
-            f"features={len(self.features)}, top_n={self.params.get('top_n', 50)}"
+            f"features={len(self.features)}, top_n={self.params.get('top_n', 50)}, "
+            f"normalization={self.params.get('normalization_method', 'z_score')}"
         )
 
     def select(
@@ -520,11 +532,11 @@ class MLSelector(StockSelector):
 
     def _score_multi_factor(self, feature_matrix: pd.DataFrame) -> pd.Series:
         """
-        多因子加权评分（基础版）
+        多因子加权评分（增强版）
 
         策略：
-        1. 特征归一化（Z-score）
-        2. 等权平均（可扩展为加权）
+        1. 特征归一化（支持多种方法：Z-score、Min-Max、Rank）
+        2. 加权平均（支持因子权重、分组权重）
         3. 返回综合评分
 
         Args:
@@ -533,34 +545,179 @@ class MLSelector(StockSelector):
         Returns:
             评分序列
 
-        注意：
-            - 特征归一化可以消除量纲影响
-            - 等权平均假设所有特征同等重要
-            - 实际应用中可根据因子有效性调整权重
+        支持的增强功能：
+            - 多种归一化方法（z_score、min_max、rank、none）
+            - 自定义因子权重
+            - 因子分组加权
+            - 分组内等权、组间加权
         """
         if feature_matrix.empty:
             return pd.Series(dtype=float)
 
-        # 归一化特征（Z-score）
-        # (X - mean) / std
-        mean = feature_matrix.mean()
-        std = feature_matrix.std()
+        # 1. 归一化特征
+        normalization_method = self.params.get('normalization_method', 'z_score')
+        normalized = self._normalize_features(feature_matrix, normalization_method)
 
-        # 避免除以零
-        std = std.replace(0, 1)
-
-        normalized = (feature_matrix - mean) / std
-        normalized.fillna(0, inplace=True)
-
-        # 等权平均（所有特征同等权重）
-        scores = normalized.mean(axis=1)
+        # 2. 计算加权评分
+        if self.factor_groups:
+            # 使用因子分组加权
+            scores = self._score_with_groups(normalized)
+        elif self.factor_weights:
+            # 使用因子权重加权
+            scores = self._score_with_weights(normalized)
+        else:
+            # 等权平均（默认）
+            scores = normalized.mean(axis=1)
 
         logger.debug(
-            f"多因子评分范围: [{scores.min():.4f}, {scores.max():.4f}], "
-            f"均值: {scores.mean():.4f}"
+            f"多因子评分完成: 范围=[{scores.min():.4f}, {scores.max():.4f}], "
+            f"均值={scores.mean():.4f}, 方法={normalization_method}"
         )
 
         return scores
+
+    def _normalize_features(
+        self,
+        feature_matrix: pd.DataFrame,
+        method: str
+    ) -> pd.DataFrame:
+        """
+        归一化特征矩阵
+
+        Args:
+            feature_matrix: 原始特征矩阵
+            method: 归一化方法
+                - z_score: Z-Score 标准化 (X - mean) / std
+                - min_max: Min-Max 归一化 (X - min) / (max - min)
+                - rank: 排名归一化（转换为百分位排名）
+                - none: 不归一化
+
+        Returns:
+            归一化后的特征矩阵
+        """
+        if method == 'z_score':
+            # Z-Score 标准化
+            mean = feature_matrix.mean()
+            std = feature_matrix.std()
+            std = std.replace(0, 1)  # 避免除以零
+            normalized = (feature_matrix - mean) / std
+
+        elif method == 'min_max':
+            # Min-Max 归一化到 [0, 1]
+            min_val = feature_matrix.min()
+            max_val = feature_matrix.max()
+            range_val = max_val - min_val
+            range_val = range_val.replace(0, 1)  # 避免除以零
+            normalized = (feature_matrix - min_val) / range_val
+
+        elif method == 'rank':
+            # 排名归一化（百分位）
+            normalized = feature_matrix.rank(pct=True)
+
+        elif method == 'none':
+            # 不归一化
+            normalized = feature_matrix.copy()
+
+        else:
+            logger.warning(f"未知归一化方法: {method}，使用 z_score")
+            mean = feature_matrix.mean()
+            std = feature_matrix.std()
+            std = std.replace(0, 1)
+            normalized = (feature_matrix - mean) / std
+
+        # 处理缺失值和无穷值
+        normalized.replace([np.inf, -np.inf], np.nan, inplace=True)
+        normalized.fillna(0, inplace=True)
+
+        return normalized
+
+    def _score_with_weights(self, feature_matrix: pd.DataFrame) -> pd.Series:
+        """
+        使用因子权重加权评分
+
+        Args:
+            feature_matrix: 归一化后的特征矩阵
+
+        Returns:
+            加权评分序列
+        """
+        # 确保所有特征都有权重
+        weights = {}
+        total_weight = 0.0
+
+        for feature in feature_matrix.columns:
+            weight = self.factor_weights.get(feature, 1.0)
+            weights[feature] = weight
+            total_weight += weight
+
+        # 归一化权重（使权重和为1）
+        if total_weight > 0:
+            weights = {k: v / total_weight for k, v in weights.items()}
+        else:
+            weights = {k: 1.0 / len(weights) for k in weights}
+
+        # 加权求和
+        scores = pd.Series(0.0, index=feature_matrix.index)
+        for feature, weight in weights.items():
+            if feature in feature_matrix.columns:
+                scores += feature_matrix[feature] * weight
+
+        logger.debug(f"因子权重加权: {len(weights)} 个因子")
+
+        return scores
+
+    def _score_with_groups(self, feature_matrix: pd.DataFrame) -> pd.Series:
+        """
+        使用因子分组加权评分
+
+        策略：
+        1. 组内因子等权平均
+        2. 组间加权求和
+
+        Args:
+            feature_matrix: 归一化后的特征矩阵
+
+        Returns:
+            分组加权评分序列
+        """
+        group_scores = {}
+
+        # 计算每个组的评分（组内等权平均）
+        for group_name, feature_list in self.factor_groups.items():
+            # 筛选出该组中存在的特征
+            valid_features = [f for f in feature_list if f in feature_matrix.columns]
+
+            if not valid_features:
+                logger.warning(f"分组 {group_name} 中没有有效特征")
+                continue
+
+            # 组内等权平均
+            group_score = feature_matrix[valid_features].mean(axis=1)
+            group_scores[group_name] = group_score
+
+        if not group_scores:
+            logger.warning("没有有效的因子分组，使用等权平均")
+            return feature_matrix.mean(axis=1)
+
+        # 组间加权求和
+        total_weight = 0.0
+        final_scores = pd.Series(0.0, index=feature_matrix.index)
+
+        for group_name, group_score in group_scores.items():
+            weight = self.group_weights.get(group_name, 1.0)
+            total_weight += weight
+            final_scores += group_score * weight
+
+        # 归一化
+        if total_weight > 0:
+            final_scores = final_scores / total_weight
+
+        logger.debug(
+            f"分组加权评分: {len(group_scores)} 个分组, "
+            f"权重={list(self.group_weights.values())}"
+        )
+
+        return final_scores
 
     def _score_lightgbm(self, feature_matrix: pd.DataFrame) -> pd.Series:
         """
@@ -740,3 +897,113 @@ class MLSelector(StockSelector):
             # ATR（风险指标）
             'atr_14d',
         ]
+
+    def _parse_factor_weights(self) -> Dict[str, float]:
+        """
+        解析因子权重配置
+
+        Returns:
+            因子权重字典 {feature_name: weight}
+
+        示例配置：
+            {"momentum_20d": 0.3, "rsi_14d": 0.2, "volatility_20d": 0.5}
+        """
+        weights_str = self.params.get('factor_weights', '')
+        if not weights_str:
+            return {}
+
+        try:
+            import json
+            weights = json.loads(weights_str)
+
+            # 验证权重格式
+            if not isinstance(weights, dict):
+                logger.warning("因子权重格式错误，应为字典")
+                return {}
+
+            # 转换为浮点数
+            weights = {k: float(v) for k, v in weights.items()}
+
+            logger.info(f"解析因子权重: {len(weights)} 个因子")
+            return weights
+
+        except Exception as e:
+            logger.error(f"解析因子权重失败: {e}")
+            return {}
+
+    def _parse_factor_groups(self) -> Dict[str, List[str]]:
+        """
+        解析因子分组配置
+
+        Returns:
+            因子分组字典 {group_name: [feature1, feature2, ...]}
+
+        示例配置：
+            {
+                "momentum": ["momentum_5d", "momentum_20d"],
+                "technical": ["rsi_14d", "rsi_28d"],
+                "volatility": ["volatility_20d", "atr_14d"]
+            }
+        """
+        groups_str = self.params.get('factor_groups', '')
+        if not groups_str:
+            return {}
+
+        try:
+            import json
+            groups = json.loads(groups_str)
+
+            # 验证分组格式
+            if not isinstance(groups, dict):
+                logger.warning("因子分组格式错误，应为字典")
+                return {}
+
+            # 验证每个分组是列表
+            for group_name, feature_list in groups.items():
+                if not isinstance(feature_list, list):
+                    logger.warning(f"分组 {group_name} 的特征列表格式错误")
+                    return {}
+
+            logger.info(f"解析因子分组: {len(groups)} 个分组")
+            return groups
+
+        except Exception as e:
+            logger.error(f"解析因子分组失败: {e}")
+            return {}
+
+    def _parse_group_weights(self) -> Dict[str, float]:
+        """
+        解析分组权重配置
+
+        Returns:
+            分组权重字典 {group_name: weight}
+
+        示例配置：
+            {"momentum": 0.4, "technical": 0.3, "volatility": 0.3}
+        """
+        weights_str = self.params.get('group_weights', '')
+        if not weights_str:
+            # 如果没有配置，默认等权
+            if self.factor_groups:
+                num_groups = len(self.factor_groups)
+                return {name: 1.0 / num_groups for name in self.factor_groups.keys()}
+            return {}
+
+        try:
+            import json
+            weights = json.loads(weights_str)
+
+            # 验证权重格式
+            if not isinstance(weights, dict):
+                logger.warning("分组权重格式错误，应为字典")
+                return {}
+
+            # 转换为浮点数
+            weights = {k: float(v) for k, v in weights.items()}
+
+            logger.info(f"解析分组权重: {len(weights)} 个分组")
+            return weights
+
+        except Exception as e:
+            logger.error(f"解析分组权重失败: {e}")
+            return {}
