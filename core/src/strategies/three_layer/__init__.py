@@ -58,6 +58,13 @@ from .base import (
     Position,
 )
 
+# 导入选股器实现
+from .selectors import (
+    MomentumSelector,
+    ValueSelector,
+    ExternalSelector,
+)
+
 
 __all__ = [
     # 基类
@@ -68,9 +75,13 @@ __all__ = [
     # 数据类
     "SelectorParameter",
     "Position",
+    # 选股器实现
+    "MomentumSelector",
+    "ValueSelector",
+    "ExternalSelector",
 ]
 
 
 # 版本信息
 __version__ = "3.0.0"
-__status__ = "T1 完成 - 基类已实现"
+__status__ = "T1-T2 完成 - 基类和选股器已实现"
