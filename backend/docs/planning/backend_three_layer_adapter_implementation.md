@@ -613,27 +613,63 @@ ttl = 3600  # 1小时
 
 ---
 
-### 任务 4：实现监控日志
+### 任务 4：实现监控日志 ✅
 
 **文件**: `backend/app/monitoring/three_layer_monitor.py`
 
 **工作量**: 1 天
 
+**状态**: 已完成
+
 **监控指标**:
 
 ```python
 # Prometheus 指标
-three_layer_requests_total = Counter('three_layer_requests_total', 'Total requests', ['endpoint'])
-three_layer_backtest_duration = Histogram('three_layer_backtest_duration_seconds', 'Backtest duration')
+three_layer_requests_total = Counter('three_layer_requests_total', 'Total requests', ['endpoint', 'status'])
+three_layer_backtest_duration = Histogram('three_layer_backtest_duration_seconds', 'Backtest duration', ['selector_type', 'entry_type', 'exit_type'])
 three_layer_cache_hits = Counter('three_layer_cache_hits_total', 'Cache hits', ['cache_type'])
-three_layer_errors = Counter('three_layer_errors_total', 'Errors', ['error_type'])
+three_layer_cache_misses = Counter('three_layer_cache_misses_total', 'Cache misses', ['cache_type'])
+three_layer_cache_hit_rate = Gauge('three_layer_cache_hit_rate', 'Cache hit rate (0-1)', ['cache_type'])
+three_layer_errors = Counter('three_layer_errors_total', 'Errors', ['error_type', 'component'])
+three_layer_data_fetch_duration = Histogram('three_layer_data_fetch_duration_seconds', 'Data fetch duration', ['data_type'])
+three_layer_backtest_stock_count = Histogram('three_layer_backtest_stock_count', 'Number of stocks in backtest')
+three_layer_backtest_trade_count = Histogram('three_layer_backtest_trade_count', 'Number of trades in backtest')
+three_layer_validation_failures = Counter('three_layer_validation_failures_total', 'Validation failures', ['failure_reason'])
 ```
 
 **验收标准**:
-- ✅ Prometheus 指标定义
-- ✅ 日志记录完善
-- ✅ 错误追踪
-- ✅ 性能监控
+- ✅ Prometheus 指标定义（10个指标）
+- ✅ 日志记录完善（集成 loguru）
+- ✅ 错误追踪（分类记录验证/执行/数据错误）
+- ✅ 性能监控（回测时长、数据获取时长）
+- ✅ 单元测试通过（25个测试用例，100%通过）
+
+**实现要点**:
+1. **指标设计**: 10个Prometheus指标覆盖请求、回测、缓存、错误、数据获取等维度
+2. **ThreeLayerMonitor类**: 提供静态方法记录各类指标，支持结构化日志
+3. **上下文管理器**: track_backtest_duration 和 track_data_fetch_duration 自动计时
+4. **装饰器**: monitor_three_layer_request 和 monitor_adapter_method 简化集成
+5. **缓存命中率**: 自动计算并更新缓存命中率指标
+6. **集成完整**: 在 ThreeLayerAdapter 和 API 端点全面集成监控
+
+**已实现功能**:
+- [x] ThreeLayerMonitor 监控类（10个指标 + 工具方法）
+- [x] 在 ThreeLayerAdapter 中集成监控（缓存、错误、数据获取、回测）
+- [x] 在 API 端点中集成监控（5个端点全覆盖）
+- [x] 上下文管理器（track_backtest_duration、track_data_fetch_duration）
+- [x] 装饰器（monitor_three_layer_request、monitor_adapter_method）
+- [x] 缓存命中率自动计算
+
+**测试覆盖**:
+- 指标定义测试：4个
+- ThreeLayerMonitor方法测试：10个
+- 装饰器测试：4个
+- 上下文管理器测试：3个
+- 集成场景测试：3个
+- 其他测试：1个
+- 总计：25个测试用例，100%通过
+
+**测试文件**: `backend/tests/unit/monitoring/test_three_layer_monitor.py`
 
 ---
 
@@ -850,6 +886,7 @@ Content-Type: application/json
 | ThreeLayerAdapter | 18 | ✅ 已实现（11个通过） |
 | API Routes | 24 | ✅ 已实现（24个通过） |
 | Cache Mechanism | 13 | ✅ 已实现（13个通过） |
+| Monitoring System | 25 | ✅ 已实现（25个通过） |
 
 **ThreeLayerAdapter 测试明细**:
 - 元数据查询: 4个（get_selectors, get_entries, get_exits, 缓存）
@@ -886,7 +923,7 @@ Content-Type: application/json
 | ThreeLayerAdapter | 3天 | - | P0 | ✅ 已完成 |
 | REST API 端点 | 2天 | 任务1 | P0 | ✅ 已完成 |
 | 缓存机制 | 1天 | 任务1,2 | P1 | ✅ 已完成 |
-| 监控日志 | 1天 | 任务1,2 | P1 | ⏳ 待实现 |
+| 监控日志 | 1天 | 任务1,2 | P1 | ✅ 已完成 |
 | 集成测试 | 2天 | 任务1,2 | P0 | ⏳ 待实现 |
 
 ### 里程碑
@@ -896,7 +933,7 @@ Content-Type: application/json
 | Day 1 | 2026-02-06 | ThreeLayerAdapter 完成 + 单元测试 | ✅ |
 | Day 3 | 2026-02-06 | 5个API端点完成 + OpenAPI文档 | ✅ |
 | Day 4 | 2026-02-06 | 缓存机制完成 + 专项测试 | ✅ |
-| Day 5 | - | 监控日志完成 | ⏳ |
+| Day 5 | 2026-02-06 | 监控日志完成 + 25个单元测试 | ✅ |
 | Day 7 | - | 所有集成测试通过，功能上线 | ⏳ |
 
 ---

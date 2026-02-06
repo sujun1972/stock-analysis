@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.core_adapters.three_layer_adapter import ThreeLayerAdapter
 from app.models.api_response import ApiResponse
+from app.monitoring.three_layer_monitor import ThreeLayerMonitor
 
 router = APIRouter()
 
@@ -152,9 +153,12 @@ async def get_selectors():
     try:
         logger.info("获取选股器列表")
         selectors = await three_layer_adapter.get_selectors()
+        ThreeLayerMonitor.record_request('selectors', 'success')
         return ApiResponse.success(data=selectors, message="获取选股器列表成功").to_dict()
     except Exception as e:
         logger.error(f"获取选股器列表失败: {e}", exc_info=True)
+        ThreeLayerMonitor.record_request('selectors', 'failed')
+        ThreeLayerMonitor.record_error('execution', 'api', str(e))
         return ApiResponse.internal_error(message=f"获取选股器列表失败: {str(e)}").to_dict()
 
 
@@ -189,9 +193,12 @@ async def get_entries():
     try:
         logger.info("获取入场策略列表")
         entries = await three_layer_adapter.get_entries()
+        ThreeLayerMonitor.record_request('entries', 'success')
         return ApiResponse.success(data=entries, message="获取入场策略列表成功").to_dict()
     except Exception as e:
         logger.error(f"获取入场策略列表失败: {e}", exc_info=True)
+        ThreeLayerMonitor.record_request('entries', 'failed')
+        ThreeLayerMonitor.record_error('execution', 'api', str(e))
         return ApiResponse.internal_error(message=f"获取入场策略列表失败: {str(e)}").to_dict()
 
 
@@ -239,6 +246,8 @@ async def get_exits():
         return ApiResponse.success(data=exits, message="获取���出策略列表成功").to_dict()
     except Exception as e:
         logger.error(f"获取退出策略列表失败: {e}", exc_info=True)
+        ThreeLayerMonitor.record_request('exits', 'failed')
+        ThreeLayerMonitor.record_error('execution', 'api', str(e))
         return ApiResponse.internal_error(message=f"获取退出策略列表失败: {str(e)}").to_dict()
 
 
@@ -298,12 +307,16 @@ async def validate_strategy(request: ValidationRequest):
         if not result.get("valid"):
             errors = result.get("errors", ["未知错误"])
             logger.warning(f"策略验证失败: {errors}")
+            ThreeLayerMonitor.record_request('validate', 'failed')
             return ApiResponse.bad_request(message="策略验证失败", data={"errors": errors}).to_dict()
 
+        ThreeLayerMonitor.record_request('validate', 'success')
         return ApiResponse.success(data={"valid": True}, message="策略组合有效").to_dict()
 
     except Exception as e:
         logger.error(f"策略验证过程出错: {e}", exc_info=True)
+        ThreeLayerMonitor.record_request('validate', 'failed')
+        ThreeLayerMonitor.record_error('validation', 'api', str(e))
         return ApiResponse.internal_error(message=f"策略验证过程出错: {str(e)}").to_dict()
 
 
@@ -389,15 +402,21 @@ async def run_backtest(request: BacktestRequest):
         if not result.get("success"):
             error_msg = result.get("error", "未知错误")
             logger.error(f"回测执行失败: {error_msg}")
+            ThreeLayerMonitor.record_request('backtest', 'failed')
             return ApiResponse.internal_error(message="回测执行失败", data={"error": error_msg}).to_dict()
 
         logger.info("回测执行成功")
+        ThreeLayerMonitor.record_request('backtest', 'success')
         return ApiResponse.success(data=result, message="回测完成").to_dict()
 
     except ValueError as e:
         logger.warning(f"回测参数错误: {e}")
+        ThreeLayerMonitor.record_request('backtest', 'failed')
+        ThreeLayerMonitor.record_error('validation', 'api', str(e))
         return ApiResponse.bad_request(message=f"回测参数错误: {str(e)}").to_dict()
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
+        ThreeLayerMonitor.record_request('backtest', 'failed')
+        ThreeLayerMonitor.record_error('execution', 'api', str(e))
         return ApiResponse.internal_error(message=f"回测执行失败: {str(e)}").to_dict()

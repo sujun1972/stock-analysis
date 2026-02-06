@@ -66,6 +66,9 @@ from app.core.exceptions import BacktestError, DataQueryError
 # 导入数据适配器
 from .data_adapter import DataAdapter
 
+# 导入监控模块
+from app.monitoring.three_layer_monitor import ThreeLayerMonitor
+
 
 class ThreeLayerAdapter:
     """
@@ -133,7 +136,10 @@ class ThreeLayerAdapter:
         cache_key = "three_layer:selectors:metadata"
         cached = await cache.get(cache_key)
         if cached is not None:
+            ThreeLayerMonitor.record_cache_hit('metadata', True)
             return cached
+
+        ThreeLayerMonitor.record_cache_hit('metadata', False)
 
         # 生成元数据
         selectors = []
@@ -201,7 +207,10 @@ class ThreeLayerAdapter:
         cache_key = "three_layer:entries:metadata"
         cached = await cache.get(cache_key)
         if cached is not None:
+            ThreeLayerMonitor.record_cache_hit('metadata', True)
             return cached
+
+        ThreeLayerMonitor.record_cache_hit('metadata', False)
 
         # 生成元数据
         entries = []
@@ -269,7 +278,10 @@ class ThreeLayerAdapter:
         cache_key = "three_layer:exits:metadata"
         cached = await cache.get(cache_key)
         if cached is not None:
+            ThreeLayerMonitor.record_cache_hit('metadata', True)
             return cached
+
+        ThreeLayerMonitor.record_cache_hit('metadata', False)
 
         # 生成元数据
         exits = []
@@ -347,10 +359,13 @@ class ThreeLayerAdapter:
         # 验证 ID
         if selector_id not in self.SELECTOR_REGISTRY:
             errors.append(f"未知的选股器: {selector_id}")
+            ThreeLayerMonitor.record_validation_failure('unknown_selector')
         if entry_id not in self.ENTRY_REGISTRY:
             errors.append(f"未知的入场策略: {entry_id}")
+            ThreeLayerMonitor.record_validation_failure('unknown_entry')
         if exit_id not in self.EXIT_REGISTRY:
             errors.append(f"未知的退出策略: {exit_id}")
+            ThreeLayerMonitor.record_validation_failure('unknown_exit')
 
         # 验证调仓频率
         if rebalance_freq not in ["D", "W", "M"]:
@@ -380,10 +395,13 @@ class ThreeLayerAdapter:
 
         except ValueError as e:
             # 参数验证失败
+            ThreeLayerMonitor.record_validation_failure('invalid_params')
+            ThreeLayerMonitor.record_error('validation', 'adapter', str(e))
             return {"valid": False, "errors": [f"参数验证失败: {str(e)}"]}
         except Exception as e:
             # 其他异常
             logger.error(f"策略组合验证失败: {e}")
+            ThreeLayerMonitor.record_error('validation', 'adapter', str(e))
             return {"valid": False, "errors": [f"验证过程出错: {str(e)}"]}
 
     async def run_backtest(
@@ -441,7 +459,10 @@ class ThreeLayerAdapter:
         cached_result = await cache.get(cache_key)
         if cached_result:
             logger.info(f"回测结果命中缓存: {cache_key[:16]}...")
+            ThreeLayerMonitor.record_cache_hit('backtest', True)
             return cached_result
+
+        ThreeLayerMonitor.record_cache_hit('backtest', False)
 
         # 2. 创建策略组件
         try:
@@ -449,44 +470,58 @@ class ThreeLayerAdapter:
             entry = self.ENTRY_REGISTRY[entry_id](params=entry_params)
             exit_strategy = self.EXIT_REGISTRY[exit_id](params=exit_params)
         except KeyError as e:
+            ThreeLayerMonitor.record_error('execution', 'adapter', f"未知的策略ID: {str(e)}")
             return {"success": False, "error": f"未知的策略ID: {str(e)}"}
         except Exception as e:
+            ThreeLayerMonitor.record_error('execution', 'adapter', f"策略创建失败: {str(e)}")
             return {"success": False, "error": f"策略创建失败: {str(e)}"}
 
         # 3. 获取价格数据
         try:
-            prices = await self._fetch_price_data(
-                stock_codes=stock_codes, start_date=start_date, end_date=end_date
-            )
+            with ThreeLayerMonitor.track_data_fetch_duration('price'):
+                prices = await self._fetch_price_data(
+                    stock_codes=stock_codes, start_date=start_date, end_date=end_date
+                )
 
             if prices.empty:
+                ThreeLayerMonitor.record_error('data', 'adapter', "未找到符合条件的价格数据")
                 return {"success": False, "error": "未找到符合条件的价格数据"}
 
             logger.info(f"加载价格数据: {prices.shape[0]} 天, {prices.shape[1]} 只股票")
 
         except Exception as e:
             logger.error(f"数据获取失败: {e}")
+            ThreeLayerMonitor.record_error('data', 'adapter', str(e))
             return {"success": False, "error": f"数据获取失败: {str(e)}"}
 
         # 4. 执行回测（调用 Core）
         try:
             engine = BacktestEngine(initial_capital=initial_capital)
 
-            # 在线程池中执行回测（避免阻塞）
-            result = await asyncio.to_thread(
-                engine.backtest_three_layer,
-                selector=selector,
-                entry=entry,
-                exit_strategy=exit_strategy,
-                prices=prices,
-                start_date=start_date,
-                end_date=end_date,
-                rebalance_freq=rebalance_freq,
-                initial_capital=initial_capital,
-            )
+            # 在线程池中执行回测（避免阻塞），同时跟踪执行时间
+            with ThreeLayerMonitor.track_backtest_duration(selector_id, entry_id, exit_id):
+                result = await asyncio.to_thread(
+                    engine.backtest_three_layer,
+                    selector=selector,
+                    entry=entry,
+                    exit_strategy=exit_strategy,
+                    prices=prices,
+                    start_date=start_date,
+                    end_date=end_date,
+                    rebalance_freq=rebalance_freq,
+                    initial_capital=initial_capital,
+                )
 
             # 转换 Core 的 Response 对象为字典
             result_dict = self._convert_response_to_dict(result)
+
+            # 记录回测统计
+            if result_dict.get("success") and result_dict.get("data"):
+                data = result_dict["data"]
+                stock_count = prices.shape[1] if not prices.empty else 0
+                trade_count = len(data.get("trades", [])) if isinstance(data.get("trades"), list) else 0
+                metrics = data.get("metrics", {})
+                ThreeLayerMonitor.record_backtest_stats(stock_count, trade_count, metrics)
 
             # 5. 缓存结果
             if result_dict.get("success"):
@@ -497,6 +532,7 @@ class ThreeLayerAdapter:
 
         except Exception as e:
             logger.error(f"回测执行失败: {e}", exc_info=True)
+            ThreeLayerMonitor.record_error('execution', 'adapter', str(e))
             return {"success": False, "error": f"回测执行失败: {str(e)}"}
 
     async def _fetch_price_data(
