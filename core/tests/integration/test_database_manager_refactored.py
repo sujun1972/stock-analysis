@@ -48,8 +48,8 @@ class TestConnectionPoolManager(unittest.TestCase):
         pool_manager = ConnectionPoolManager(self.config)
 
         self.assertIsNotNone(pool_manager)
-        self.assertEqual(pool_manager.min_conn, 1)
-        self.assertEqual(pool_manager.max_conn, 10)
+        self.assertEqual(pool_manager.min_conn, 5)
+        self.assertEqual(pool_manager.max_conn, 50)
         mock_pool.assert_called_once()
 
         print("  ✓ 初始化成功")
