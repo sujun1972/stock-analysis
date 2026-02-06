@@ -15,6 +15,8 @@ class BacktestRecorder:
         """初始化记录器"""
         self.portfolio_values: List[Dict[str, Any]] = []
         self.positions_history: List[Dict[str, Any]] = []
+        self.trades: List[Dict[str, Any]] = []  # 交易记录
+        self.equity_curve: List[Dict[str, Any]] = []  # 净值曲线（简化版）
 
     def record_portfolio_value(
         self,
@@ -156,7 +158,74 @@ class BacktestRecorder:
 
         return summary
 
+    def record_equity(self, date: datetime, equity: float):
+        """
+        记录净值（用于三层架构回测）
+
+        参数:
+            date: 日期
+            equity: 总净值
+        """
+        self.equity_curve.append({
+            'date': date,
+            'equity': equity
+        })
+
+    def record_trade(
+        self,
+        date: datetime,
+        stock_code: str,
+        direction: str,
+        shares: int,
+        price: float
+    ):
+        """
+        记录交易（用于三层架构回测）
+
+        参数:
+            date: 交易日期
+            stock_code: 股票代码
+            direction: 交易方向 ('buy' 或 'sell')
+            shares: 交易数量
+            price: 交易价格
+        """
+        self.trades.append({
+            'date': date,
+            'stock_code': stock_code,
+            'direction': direction,
+            'shares': shares,
+            'price': price,
+            'amount': shares * price
+        })
+
+    def get_equity_curve(self) -> pd.Series:
+        """
+        获取净值曲线（用于三层架构回测）
+
+        返回:
+            净值曲线Series (index=date, values=equity)
+        """
+        if not self.equity_curve:
+            return pd.Series()
+
+        df = pd.DataFrame(self.equity_curve)
+        return df.set_index('date')['equity']
+
+    def get_trades_df(self) -> pd.DataFrame:
+        """
+        获取交易记录DataFrame
+
+        返回:
+            交易记录DataFrame
+        """
+        if not self.trades:
+            return pd.DataFrame()
+
+        return pd.DataFrame(self.trades)
+
     def clear(self):
         """清空所有记录"""
         self.portfolio_values.clear()
         self.positions_history.clear()
+        self.trades.clear()
+        self.equity_curve.clear()

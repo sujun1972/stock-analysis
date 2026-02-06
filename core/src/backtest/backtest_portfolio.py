@@ -298,3 +298,87 @@ class BacktestPortfolio:
         return {
             'positions': self.long_positions.copy()
         }
+
+    def buy(
+        self,
+        stock_code: str,
+        shares: int,
+        price: float,
+        commission_rate: float,
+        date: datetime
+    ):
+        """
+        简化版买入方法（用于三层架构回测）
+
+        参数:
+            stock_code: 股票代码
+            shares: 买入数量
+            price: 买入价格
+            commission_rate: 佣金费率
+            date: 买入日期
+        """
+        cost = shares * price * (1 + commission_rate)
+        if cost > self.cash:
+            logger.warning(f"资金不足：需要 {cost:.2f}，可用 {self.cash:.2f}")
+            return
+
+        self.cash -= cost
+        self.add_long_position(stock_code, shares, price, date)
+
+    def sell(
+        self,
+        stock_code: str,
+        shares: int,
+        price: float,
+        commission_rate: float
+    ):
+        """
+        简化版卖出方法（用于三层架构回测）
+
+        参数:
+            stock_code: 股票代码
+            shares: 卖出数量
+            price: 卖出价格
+            commission_rate: 佣金费率（包含印花税）
+        """
+        if stock_code not in self.long_positions:
+            logger.warning(f"卖出失败：未持有 {stock_code}")
+            return
+
+        amount = shares * price
+        cost = amount * commission_rate
+        net_amount = amount - cost
+
+        self.cash += net_amount
+        self.remove_long_position(stock_code)
+
+    def update_prices(self, current_prices: pd.Series):
+        """
+        更新持仓价格（用于计算浮动盈亏）
+
+        参数:
+            current_prices: 当前价格Series (index=stock_codes)
+        """
+        for stock_code, position in self.long_positions.items():
+            if stock_code in current_prices.index:
+                current_price = current_prices[stock_code]
+                if not pd.isna(current_price):
+                    # 更新浮动盈亏
+                    shares = position['shares']
+                    entry_price = position['entry_price']
+                    position['current_price'] = current_price
+                    position['unrealized_pnl'] = (current_price - entry_price) * shares
+                    position['unrealized_pnl_pct'] = (current_price - entry_price) / entry_price * 100
+
+    def get_total_equity(self) -> float:
+        """
+        获取总资产（现金 + 持仓市值）
+
+        返回:
+            总资产
+        """
+        holdings_value = sum(
+            pos.get('shares', 0) * pos.get('current_price', pos.get('entry_price', 0))
+            for pos in self.long_positions.values()
+        )
+        return self.cash + holdings_value
