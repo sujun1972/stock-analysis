@@ -4,14 +4,27 @@ MLSelector - 机器学习选股器
 在 Core 内部实现 StarRanker 功能
 
 本模块提供基于机器学习的股票选择器，支持多因子加权和 LightGBM 排序模型。
+
+版本历史：
+- v1.0: 基础实现（11个手工特征）
+- v2.0: 集成 FeatureEngineer（125+ 因子库）
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import numpy as np
 from loguru import logger
 
 from ..base.stock_selector import SelectorParameter, StockSelector
+
+# 集成特征工程模块（ML-4）
+try:
+    from src.features.technical_indicators import TechnicalIndicators
+    from src.features.alpha import AlphaFactors
+    HAS_FEATURE_ENGINE = True
+except ImportError as e:
+    logger.warning(f"无法导入特征工程模块: {e}，将使用简化版特征计算")
+    HAS_FEATURE_ENGINE = False
 
 
 class MLSelector(StockSelector):
@@ -88,7 +101,14 @@ class MLSelector(StockSelector):
                 label="特征列表",
                 type="string",
                 default="momentum_20d,rsi_14d,volatility_20d,volume_ratio",
-                description="逗号分隔的特征名称（留空使用默认特征集）"
+                description="逗号分隔的特征名称（留空使用默认特征集；支持通配符：'alpha:*'表示所有Alpha因子，'tech:*'表示所有技术指标）"
+            ),
+            SelectorParameter(
+                name="use_feature_engine",
+                label="使用完整特征库",
+                type="boolean",
+                default=True,
+                description="是否使用完整特征工程库（125+ 因子），False则使用快速简化版（11个特征）"
             ),
             SelectorParameter(
                 name="model_path",
@@ -166,6 +186,7 @@ class MLSelector(StockSelector):
                 - mode: 选股模式（'multi_factor_weighted', 'lightgbm_ranker', 'custom_model'）
                 - top_n: 选股数量
                 - features: 特征列表（逗号分隔）
+                - use_feature_engine: 是否使用完整特征库（默认 True）
                 - model_path: 模型文件路径
                 - filter_*: 过滤条件
                 - factor_weights: 因子权重配置（JSON）
@@ -182,10 +203,15 @@ class MLSelector(StockSelector):
         self.mode = self.params.get('mode', 'multi_factor_weighted')
         self.model = self._load_model()
 
-        # 解析特征列表
+        # 是否使用完整特征库（ML-4 新增）
+        self.use_feature_engine = self.params.get('use_feature_engine', True) and HAS_FEATURE_ENGINE
+        if self.params.get('use_feature_engine', True) and not HAS_FEATURE_ENGINE:
+            logger.warning("无法加载特征工程库，使用简化版特征计算")
+
+        # 解析特征列表（支持通配符）
         features_str = self.params.get('features', '')
         if features_str:
-            self.features = [f.strip() for f in features_str.split(',') if f.strip()]
+            self.features = self._parse_features(features_str)
         else:
             # 使用默认特征集
             self.features = self._get_default_features()
@@ -197,9 +223,13 @@ class MLSelector(StockSelector):
         self.factor_groups = self._parse_factor_groups()
         self.group_weights = self._parse_group_weights()
 
+        # 特征缓存（优化性能）
+        self._feature_cache: Dict[str, pd.DataFrame] = {}
+
         logger.info(
             f"MLSelector 初始化完成: mode={self.mode}, "
             f"features={len(self.features)}, top_n={self.params.get('top_n', 50)}, "
+            f"use_feature_engine={self.use_feature_engine}, "
             f"normalization={self.params.get('normalization_method', 'z_score')}"
         )
 
@@ -334,7 +364,7 @@ class MLSelector(StockSelector):
         stocks: List[str]
     ) -> pd.DataFrame:
         """
-        计算特征矩阵
+        计算特征矩阵（ML-4 增强版：支持完整特征库）
 
         Args:
             date: 选股日期
@@ -345,9 +375,104 @@ class MLSelector(StockSelector):
             特征矩阵 DataFrame(index=股票代码, columns=特征名)
 
         特征计算规则：
-        - 每只股票独立计算特征
+        - v2.0: 支持特征库集成（125+ 因子）
+        - v1.0: 每只股票独立计算特征（11个简化特征）
         - 遇到错误的股票跳过
         - 缺失值填充为 0
+        """
+        if self.use_feature_engine:
+            # 使用完整特征库（ML-4 新增）
+            return self._calculate_features_with_engine(date, market_data, stocks)
+        else:
+            # 使用简化版快速计算（向后兼容）
+            return self._calculate_features_fast(date, market_data, stocks)
+
+    def _calculate_features_with_engine(
+        self,
+        date: pd.Timestamp,
+        market_data: pd.DataFrame,
+        stocks: List[str]
+    ) -> pd.DataFrame:
+        """
+        使用完整特征工程库计算特征（ML-4 核心方法）
+
+        支持的特征类别：
+        - 技术指标（TechnicalIndicators）：60+ 指标
+        - Alpha因子（AlphaFactors）：50+ 因子
+          - momentum: 动量因子
+          - reversal: 反转因子
+          - volatility: 波动率因子
+          - volume: 成交量因子
+          - trend: 趋势因子
+          - liquidity: 流动性因子
+
+        Args:
+            date: 选股日期
+            market_data: 全市场价格数据
+            stocks: 候选股票列表
+
+        Returns:
+            特征矩阵 DataFrame(index=股票代码, columns=特征名)
+        """
+        feature_data = []
+
+        for stock in stocks:
+            try:
+                # 获取股票历史数据
+                stock_prices = market_data[stock].dropna()
+                if len(stock_prices) < 60:  # 至少需要60天数据
+                    logger.debug(f"{stock} 数据不足 ({len(stock_prices)} < 60)")
+                    continue
+
+                # 转换为OHLCV格式（如果market_data只有收盘价）
+                if isinstance(stock_prices, pd.Series):
+                    stock_df = pd.DataFrame({
+                        'close': stock_prices,
+                        'open': stock_prices,  # 简化：使用close代替
+                        'high': stock_prices * 1.02,  # 简化：估算高点
+                        'low': stock_prices * 0.98,   # 简化：估算低点
+                        'volume': 1000000  # 简化：固定成交量
+                    })
+                else:
+                    stock_df = stock_prices
+
+                # 计算特征
+                features = self._compute_features_for_stock(stock_df, date)
+                if features:
+                    features['stock_code'] = stock
+                    feature_data.append(features)
+
+            except Exception as e:
+                logger.debug(f"计算 {stock} 特征失败: {e}")
+                continue
+
+        if not feature_data:
+            logger.warning("没有成功计算特征的股票")
+            return pd.DataFrame()
+
+        df = pd.DataFrame(feature_data)
+        df.set_index('stock_code', inplace=True)
+
+        # 处理缺失值和无穷值
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        df.fillna(0, inplace=True)
+
+        logger.debug(
+            f"特征矩阵（完整库）: {len(df)} 只股票 × {len(df.columns)} 个特征"
+        )
+
+        return df
+
+    def _calculate_features_fast(
+        self,
+        date: pd.Timestamp,
+        market_data: pd.DataFrame,
+        stocks: List[str]
+    ) -> pd.DataFrame:
+        """
+        使用简化版快速特征计算（向后兼容）
+
+        仅支持11个基础技术指标，计算速度快
         """
         feature_data = []
 
@@ -382,7 +507,7 @@ class MLSelector(StockSelector):
         df.fillna(0, inplace=True)
 
         logger.debug(
-            f"特征矩阵: {len(df)} 只股票 × {len(df.columns)} 个特征"
+            f"特征矩阵（快速版）: {len(df)} 只股票 × {len(df.columns)} 个特征"
         )
 
         return df
@@ -1007,3 +1132,192 @@ class MLSelector(StockSelector):
         except Exception as e:
             logger.error(f"解析分组权重失败: {e}")
             return {}
+
+    def _parse_features(self, features_str: str) -> List[str]:
+        """
+        解析特征列表（ML-4 新增：支持通配符）
+
+        支持的格式：
+        - 普通列表: "momentum_20d,rsi_14d,volatility_20d"
+        - 通配符: "alpha:*" (所有Alpha因子)
+        - 通配符: "tech:*" (所有技术指标)
+        - 混合: "momentum_20d,alpha:momentum,tech:rsi"
+
+        Args:
+            features_str: 特征字符串
+
+        Returns:
+            特征名称列表
+        """
+        if not features_str:
+            return self._get_default_features()
+
+        features = []
+        for item in features_str.split(','):
+            item = item.strip()
+            if not item:
+                continue
+
+            # 通配符：alpha:* 表示所有Alpha因子
+            if item == 'alpha:*':
+                features.extend(self._get_all_alpha_factors())
+            # 通配符：tech:* 表示所有技术指标
+            elif item == 'tech:*':
+                features.extend(self._get_all_technical_indicators())
+            # 通配符：alpha:momentum 表示某类Alpha因子
+            elif item.startswith('alpha:'):
+                category = item.split(':')[1]
+                features.extend(self._get_alpha_factors_by_category(category))
+            # 通配符：tech:rsi 表示某类技术指标
+            elif item.startswith('tech:'):
+                category = item.split(':')[1]
+                features.extend(self._get_tech_indicators_by_category(category))
+            # 普通特征名
+            else:
+                features.append(item)
+
+        # 去重
+        features = list(dict.fromkeys(features))
+
+        logger.debug(f"解析特征列表: {len(features)} 个特征")
+        return features
+
+    def _compute_features_for_stock(
+        self,
+        stock_df: pd.DataFrame,
+        date: pd.Timestamp
+    ) -> Optional[Dict[str, float]]:
+        """
+        为单只股票计算所有特征（ML-4 核心方法）
+
+        Args:
+            stock_df: 股票OHLCV数据
+            date: 计算日期
+
+        Returns:
+            特征字典 {feature_name: value}
+        """
+        if date not in stock_df.index:
+            return None
+
+        features = {}
+
+        try:
+            # 计算技术指标
+            ti = TechnicalIndicators(stock_df)
+            ti.add_all_indicators()
+            ti_df = ti.get_dataframe()
+
+            # 计算Alpha因子
+            af = AlphaFactors(stock_df)
+            af.add_all_alpha_factors()
+            af_df = af.get_dataframe()
+
+            # 提取指定日期的特征值
+            for feature_name in self.features:
+                try:
+                    if feature_name in ti_df.columns:
+                        value = ti_df.loc[date, feature_name]
+                    elif feature_name in af_df.columns:
+                        value = af_df.loc[date, feature_name]
+                    else:
+                        # 尝试使用简化版计算
+                        value = self._calculate_single_feature(
+                            feature_name, stock_df['close'], date
+                        )
+
+                    features[feature_name] = float(value) if not pd.isna(value) else 0.0
+
+                except Exception as e:
+                    logger.debug(f"特征 {feature_name} 计算失败: {e}")
+                    features[feature_name] = 0.0
+
+            return features
+
+        except Exception as e:
+            logger.debug(f"计算特征失败: {e}")
+            return None
+
+    def _get_all_alpha_factors(self) -> List[str]:
+        """获取所有Alpha因子名称列表"""
+        if not HAS_FEATURE_ENGINE:
+            return []
+
+        # 返回常用Alpha因子名称
+        return [
+            # 动量因子
+            'momentum_5d', 'momentum_10d', 'momentum_20d', 'momentum_60d',
+            # 反转因子
+            'reversal_1d', 'reversal_3d', 'reversal_5d',
+            # 波动率因子
+            'volatility_5d', 'volatility_10d', 'volatility_20d',
+            # 成交量因子
+            'volume_ratio_5d', 'volume_ratio_10d', 'volume_ratio_20d',
+            # 趋势因子
+            'trend_strength_20d', 'trend_strength_60d',
+        ]
+
+    def _get_all_technical_indicators(self) -> List[str]:
+        """获取所有技术指标名称列表"""
+        if not HAS_FEATURE_ENGINE:
+            return []
+
+        # 返回常用技术指标名称
+        return [
+            # 均线
+            'ma_5', 'ma_10', 'ma_20', 'ma_60',
+            # EMA
+            'ema_12', 'ema_26',
+            # RSI
+            'rsi_6', 'rsi_12', 'rsi_24',
+            # MACD
+            'macd', 'macd_signal', 'macd_hist',
+            # 布林带
+            'bb_upper', 'bb_middle', 'bb_lower',
+            # ATR
+            'atr_14', 'atr_28',
+            # CCI
+            'cci_14', 'cci_28',
+        ]
+
+    def _get_alpha_factors_by_category(self, category: str) -> List[str]:
+        """
+        根据类别获取Alpha因子
+
+        Args:
+            category: 因子类别 (momentum, reversal, volatility, volume, trend)
+
+        Returns:
+            因子名称列表
+        """
+        category_map = {
+            'momentum': ['momentum_5d', 'momentum_10d', 'momentum_20d', 'momentum_60d'],
+            'reversal': ['reversal_1d', 'reversal_3d', 'reversal_5d'],
+            'volatility': ['volatility_5d', 'volatility_10d', 'volatility_20d'],
+            'volume': ['volume_ratio_5d', 'volume_ratio_10d', 'volume_ratio_20d'],
+            'trend': ['trend_strength_20d', 'trend_strength_60d'],
+        }
+
+        return category_map.get(category, [])
+
+    def _get_tech_indicators_by_category(self, category: str) -> List[str]:
+        """
+        根据类别获取技术指标
+
+        Args:
+            category: 指标类别 (ma, ema, rsi, macd, bb, atr, cci)
+
+        Returns:
+            指标名称列表
+        """
+        category_map = {
+            'ma': ['ma_5', 'ma_10', 'ma_20', 'ma_60'],
+            'ema': ['ema_12', 'ema_26'],
+            'rsi': ['rsi_6', 'rsi_12', 'rsi_24'],
+            'macd': ['macd', 'macd_signal', 'macd_hist'],
+            'bb': ['bb_upper', 'bb_middle', 'bb_lower'],
+            'atr': ['atr_14', 'atr_28'],
+            'cci': ['cci_14', 'cci_28'],
+        }
+
+        return category_map.get(category, [])

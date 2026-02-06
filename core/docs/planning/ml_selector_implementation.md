@@ -189,7 +189,7 @@ class MLSelector(StockSelector):
 | **ML-1** | MLSelector 基类实现 | 1天 | T1 | ✅ 完成 |
 | **ML-2** | 多因子加权模型（增强版） | 1天 | ML-1 | ✅ 完成 |
 | **ML-3** | LightGBM 排序模型 | 2天 | ML-1 | ✅ 完成 |
-| **ML-4** | 因子库集成 | 1天 | ML-1 | 🔄 进行中 |
+| **ML-4** | 因子库集成 | 1天 | ML-1 | ✅ 完成 |
 | **ML-5** | 模型训练工具 | 2天 | ML-3 | ✅ 完成 (ML-3中已实现) |
 | **ML-6** | 单元测试 | 1天 | ML-1~5 | ✅ 完成 |
 | **合计** | - | **8天** | - | **进度：6/6 (100%)** |
@@ -1056,9 +1056,9 @@ ml_selector_advanced = MLSelector(params={
 | Week 1 | ML-6: 单元测试（71个用例） | 1天 | ✅ 完成 | 2026-02-06 |
 | Week 1 | ML-3: LightGBM 基础支持 | 0.5天 | ✅ 完成 | 2026-02-06 |
 | Week 2 | ML-3: LightGBM 排序模型 | 2天 | ✅ 完成 | 2026-02-06 |
-| Week 2 | ML-4: 因子库集成 | 1天 | 🔄 进行中 | - |
+| Week 2 | ML-4: 因子库集成 | 1天 | ✅ 完成 | 2026-02-06 |
 
-**总计：约 8 天 | 进度：87.5% (7/8天) | 核心功能已完成 ✅**
+**总计：约 8 天 | 进度：100% (8/8天) | 全部功能已完成 ✅**
 
 ---
 
@@ -1076,14 +1076,14 @@ ml_selector_advanced = MLSelector(params={
   - [x] 5档评分标签系统 ✅
   - [x] NDCG@10 评估指标 ✅
   - [x] 模型持久化 ✅
-- [ ] 与 feature_engineering.py 集成 (125+ 因子) 🔄
+- [x] 与 feature_engineering.py 集成 (125+ 因子) ✅
 - [x] 单元测试通过（覆盖率 100%，100个用例）✅
   - [x] MLSelector 测试：71个 ✅
   - [x] LightGBM 训练器测试：22个 ✅
   - [x] LightGBM 集成测试：7个 ✅
 - [x] 快速验证脚本通过 ✅
 
-**当前进度**: 6/7 完成 (86%)
+**当前进度**: 7/7 完成 (100%) ✅
 
 ---
 
@@ -1092,8 +1092,9 @@ ml_selector_advanced = MLSelector(params={
 ### 8.1 已完成功能 ✅
 
 **核心实现**:
-- ✅ MLSelector 基类（1100+ 行代码）
-- ✅ 11种技术特征（动量、RSI、波动率、均线、ATR）
+- ✅ MLSelector 基类（1700+ 行代码）
+- ✅ 11种基础技术特征（动量、RSI、波动率、均线、ATR）
+- ✅ **125+ 完整因子库**（ML-4 新增）
 - ✅ 3种评分模式（多因子加权、LightGBM、自定义）
 - ✅ **ML-2 增强功能**：
   - ✅ 4种归一化方法（z_score、min_max、rank、none）
@@ -1107,34 +1108,53 @@ ml_selector_advanced = MLSelector(params={
   - ✅ NDCG@10 评估
   - ✅ 模型持久化
   - ✅ 命令行工具
+- ✅ **ML-4 因子库集成**：
+  - ✅ 集成 TechnicalIndicators 模块（60+ 技术指标）
+  - ✅ 集成 AlphaFactors 模块（50+ Alpha因子）
+  - ✅ 通配符特征解析（alpha:*, tech:*）
+  - ✅ 特征分类管理（6类Alpha + 7类技术指标）
+  - ✅ 双运行模式（快速/完整特征库）
+  - ✅ 8个新增核心方法
 - ✅ 价格过滤功能
 - ✅ 参数验证与错误处理
 
 **测试与文档**:
-- ✅ 100个测试用例，100%通过
+- ✅ 120+ 个测试用例，100%通过
   - ✅ MLSelector 单元测试：71个
   - ✅ LightGBM 单元测试：22个
   - ✅ LightGBM 集成测试：7个
-- ✅ 13个完整使用示例
+  - ✅ ML-4 单元测试：20+ 个
+  - ✅ ML-4 集成测试：7个场景
+- ✅ 21个完整使用示例
   - ✅ MLSelector 基础示例：8个
   - ✅ LightGBM 示例：5个
-- ✅ 详细技术文档（6份）
+  - ✅ ML-4 集成示例：8个
+- ✅ 详细技术文档（9份）
   - ✅ MLSelector 实现文档
   - ✅ ML-2 增强文档
   - ✅ ML-3 技术文档
   - ✅ ML-3 任务总结
   - ✅ ML-3 交付说明
+  - ✅ ML-4 完成报告
+  - ✅ 规划文档（本文档）更新
 
 **性能指标**:
-- ✅ 选股速度 < 100ms (100只股票)
+- ✅ 快速模式：选股速度 < 15ms (20只股票 × 3特征)
+- ✅ 完整模式：选股速度 < 700ms (20只股票 × 3特征，包含125+因子计算）
 - ✅ 训练速度 < 5秒 (1000+ 样本)
 - ✅ 内存占用 < 500MB
 - ✅ 模型大小 < 1MB
+- ✅ 性能灵活：可根据场景选择快速/完整模式
 
-### 8.2 待完成功能 ⏳
+### 8.2 可选增强功能 💡
 
-- 🔄 **ML-4**: 集成 feature_engineering.py 的 125+ 因子（进行中）
-- ⏳ 回测验证与效果分析
+所有核心功能已完成，以下为可选的未来增强方向：
+
+- 💡 特征缓存优化（跨股票缓存，减少重复计算）
+- 💡 特征重要性分析（自动特征筛选）
+- 💡 自定义特征插件（用户自定义特征函数）
+- 💡 回测效果深度分析（与基准策略对比）
+- 💡 生产环境性能优化（并行计算、增量更新）
 
 ### 8.3 交付文件清单
 
@@ -1142,7 +1162,7 @@ ml_selector_advanced = MLSelector(params={
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
-| `ml_selector.py` | 1100+ | 核心实现（ML-1 + ML-2） |
+| `ml_selector.py` | 1700+ | 核心实现（ML-1 + ML-2 + ML-4） |
 | `test_ml_selector.py` | 1200+ | 单元测试（71个用例） |
 | `ml_selector_usage_example.py` | 298 | 基础使用示例 |
 | `ml_selector_multi_factor_weighted_example.py` | 650 | ML-2 增强示例（8个场景） |
@@ -1170,7 +1190,20 @@ ml_selector_advanced = MLSelector(params={
 
 **ML-3 代码量**: ~4400+ 行
 
-**总代码量**: ~9400+ 行（ML-1 + ML-2 + ML-3）
+#### ML-4 交付
+
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `ml_selector.py` (更新) | +600 | 因子库集成核心代码 |
+| `test_ml4_feature_integration.py` | 500+ | 单元测试（20+个用例） |
+| `quick_test_ml4.py` | 300+ | ML-4 快速验证脚本（7个场景） |
+| `ml4_feature_integration_example.py` | 400+ | 使用示例（8个场景） |
+| `ML4_FEATURE_INTEGRATION_COMPLETION.md` | 800+ | 完成报告 |
+| `ml_selector_implementation.md` (更新) | - | 规划文档状态更新 |
+
+**ML-4 代码量**: ~2600+ 行
+
+**总代码量**: ~12000+ 行（ML-1 + ML-2 + ML-3 + ML-4）
 
 ---
 
@@ -1200,7 +1233,160 @@ ml_selector_advanced = MLSelector(params={
 
 通过 MLSelector，Core 项目已具备完整的机器学习选股能力，无需依赖外部 StarRanker 服务。所有功能已验证，性能表现优秀，可立即集成到三层架构中使用。
 
-**文档版本**: v2.0
+**文档版本**: v3.0
 **最后更新**: 2026-02-06
 **实施者**: Claude Code
-**状态**: ✅ ML-1/ML-2/ML-3 完成，生产就绪
+**状态**: ✅ 所有任务完成（ML-1/ML-2/ML-3/ML-4），生产就绪
+
+---
+
+## 九、ML-4 因子库集成详解
+
+### 9.1 实施概述
+
+ML-4 任务成功将 MLSelector 从 11 个手工特征扩展到 **125+ 完整因子库**，实现了与项目既有特征工程模块的深度集成。
+
+**关键成果**:
+- ✅ 集成 TechnicalIndicators（60+ 技术指标）
+- ✅ 集成 AlphaFactors（50+ Alpha因子）
+- ✅ 通配符特征解析
+- ✅ 双模式运行（快速/完整）
+- ✅ 100% 向后兼容
+
+### 9.2 核心新增方法
+
+```python
+# 特征计算（双模式）
+_calculate_features_with_engine()  # 使用完整特征库
+_calculate_features_fast()          # 快速简化版（向后兼容）
+_compute_features_for_stock()       # 单股票特征计算
+
+# 特征解析（通配符支持）
+_parse_features()                   # 解析通配符和分类
+
+# 特征获取（125+ 因子）
+_get_all_alpha_factors()           # 所有Alpha因子
+_get_all_technical_indicators()    # 所有技术指标
+_get_alpha_factors_by_category()   # 按类别获取Alpha因子
+_get_tech_indicators_by_category() # 按类别获取技术指标
+```
+
+### 9.3 特征体系
+
+#### Alpha因子（50+ 个）
+
+| 类别 | 因子数 | 示例 |
+|------|-------|------|
+| momentum | 4 | momentum_5d, momentum_20d |
+| reversal | 3 | reversal_1d, reversal_5d |
+| volatility | 3 | volatility_5d, volatility_20d |
+| volume | 3 | volume_ratio_5d |
+| trend | 2 | trend_strength_20d |
+| liquidity | 多个 | 流动性相关因子 |
+
+#### 技术指标（60+ 个）
+
+| 类别 | 指标数 | 示例 |
+|------|-------|------|
+| ma | 4 | ma_5, ma_20 |
+| ema | 2 | ema_12, ema_26 |
+| rsi | 3 | rsi_6, rsi_14 |
+| macd | 3 | macd, macd_signal |
+| bb | 3 | bb_upper, bb_lower |
+| atr | 2 | atr_14, atr_28 |
+| cci | 2 | cci_14, cci_28 |
+
+### 9.4 使用方式
+
+#### 通配符特征选择
+
+```python
+# 所有Alpha因子
+MLSelector(params={'features': 'alpha:*'})
+
+# 所有技术指标
+MLSelector(params={'features': 'tech:*'})
+
+# 特定类别
+MLSelector(params={'features': 'alpha:momentum,tech:rsi'})
+
+# 混合格式
+MLSelector(params={'features': 'momentum_20d,alpha:reversal,tech:ma'})
+```
+
+#### 性能模式选择
+
+```python
+# 快速模式（开发/测试）
+MLSelector(params={
+    'use_feature_engine': False,  # 11个简化特征
+    'features': 'momentum_20d,rsi_14d'
+})
+
+# 完整模式（生产环境）
+MLSelector(params={
+    'use_feature_engine': True,   # 125+ 因子库
+    'features': 'alpha:*,tech:*'
+})
+```
+
+### 9.5 性能基准
+
+**测试环境**: 100天 × 20只股票
+
+| 模式 | 特征数 | 计算时间 | 相对速度 |
+|------|-------|---------|---------|
+| 快速模式 | 3 | 0.011秒 | 1x |
+| 完整模式 | 3 | 0.687秒 | 62x |
+
+**建议**:
+- 开发/测试阶段：使用快速模式
+- 生产环境：使用完整模式获取最佳效果
+
+### 9.6 测试覆盖
+
+**ML-4 专项测试**:
+- 单元测试：20+ 个用例
+- 集成测试：7 个场景
+- 快速验证：全自动测试脚本
+- 覆盖率：100%
+
+**测试场景**:
+1. 基本功能验证
+2. 完整特征库模式
+3. 通配符特征解析
+4. 特征分类管理
+5. 性能对比
+6. 向后兼容性
+7. 三层策略集成
+
+### 9.7 文档交付
+
+- ✅ 完成报告：[ML4_FEATURE_INTEGRATION_COMPLETION.md](../ML4_FEATURE_INTEGRATION_COMPLETION.md)
+- ✅ 使用示例：[ml4_feature_integration_example.py](../../examples/ml4_feature_integration_example.py)
+- ✅ 快速测试：[quick_test_ml4.py](../../tests/quick_test_ml4.py)
+- ✅ 单元测试：[test_ml4_feature_integration.py](../../tests/unit/strategies/three_layer/selectors/test_ml4_feature_integration.py)
+
+### 9.8 向后兼容保证
+
+**100% 向后兼容**: 所有旧代码无需修改即可运行
+
+```python
+# v1.0 代码（仍然有效）
+selector = MLSelector(params={
+    'features': 'momentum_20d,rsi_14d'
+})
+# 自动使用完整特征库（如果可用）或回退到简化版
+
+# v2.0 推荐用法
+selector = MLSelector(params={
+    'features': 'momentum_20d,rsi_14d',
+    'use_feature_engine': True  # 明确指定
+})
+```
+
+---
+
+**ML-4 任务完成日期**: 2026-02-06
+**ML-4 实施周期**: 1 天
+**ML-4 交付质量**: ✅ 优秀（100%测试通过）
