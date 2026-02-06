@@ -641,7 +641,8 @@ class TestThreeLayerRobustness:
         # 模拟停牌（价格不变 + 成交量为0）
         suspended_prices = realistic_price_data.copy()
         # 让所有股票在某段时间停牌
-        suspended_prices.loc['2023-02-10':'2023-02-15', :] = suspended_prices.loc['2023-02-09', :]
+        suspended_price = suspended_prices.loc['2023-02-09', :].values
+        suspended_prices.loc['2023-02-10':'2023-02-15', :] = suspended_price
 
         selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
         entry = ImmediateEntry(params={'max_stocks': 5})
