@@ -246,7 +246,7 @@ class FeatureCache:
 
 ## 已完成债务
 
-详见 [PROJECT_STATUS.md](../architecture/PROJECT_STATUS.md) - 完成的优化项目：
+近期完成的主要优化项目：
 - ✅ Sphinx API 文档生成系统 (2026-02-01)
 - ✅ backtest_engine.py 重构拆分 (2026-02-01)
 - ✅ model_trainer.py 优化重构 (2026-02-01)

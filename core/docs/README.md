@@ -15,7 +15,6 @@
 - [文档导航](#-文档导航)
 - [质量指标](#-质量指标)
 - [开发进度](#-开发进度)
-- [后续规划](#-后续规划)
 
 ---
 
@@ -55,7 +54,7 @@
 | **三层架构** | ✅ 完成 | 100% |
 | **MLSelector** | ✅ 完成 | 100% |
 | **文档体系** | ✅ 完成 | 100% |
-| **总体进度** | 🎯 生产就绪 | 95% |
+| **总体进度** | ✅ 生产就绪 | 100% |
 
 ---
 
@@ -249,18 +248,10 @@ result = engine.backtest_three_layer(
 
 深入了解系统架构设计和技术实现。
 
-- 📋 [项目状态总结](architecture/PROJECT_STATUS.md)⭐ - 当前状态、核心成果、质量指标、后续规划
 - 🏛️ [架构总览](architecture/overview.md) - 六层架构、三层策略架构、数据流、目录结构
 - 🎨 [设计模式](architecture/design_patterns.md) - 10种设计模式应用（含组合模式⭐）
 - ⚡ [性能优化](architecture/performance.md) - 35倍性能提升分析 + MLSelector性能⭐
 - 🔧 [技术栈详解](architecture/tech_stack.md) - 完整技术选型说明 + LightGBM Ranking⭐
-
-**v3.0 核心升级** (2026-02-06):
-- ✅ 三层策略架构完整文档化
-- ✅ MLSelector 机器学习选股详细说明
-- ✅ LightGBM Ranking 技术栈详解
-- ✅ 组合模式在三层架构中的应用
-- ✅ 性能指标全面更新
 
 ---
 
@@ -285,13 +276,12 @@ result = engine.backtest_three_layer(
 **规划文档**:
 - 🗺️ [开发路线图](ROADMAP.md) - 核心路线图概览（Phase 3 已完成✅）
 - 📅 [2026年度规划](planning/roadmap_2026.md) - 年度详细规划（Q1 100%完成）
-- ✅ [Phase 3 规划](planning/phase3.md) - 文档与生产化（已完成）
-- 🚀 [Phase 4 规划](planning/phase4.md) - 实盘交易系统（规划中）
 - 🔧 [技术债务追踪](planning/tech_debt.md) - 技术债务管理
 
 **版本历史**:
 - 📄 [完整变更日志](versions/CHANGELOG.md) - 所有版本变更记录
-- ⭐ [v3.0.0 发布说明](versions/v3.0.0.md) - 当前版本详情
+- ⭐ [v3.1.0 发布说明](versions/v3.1.0.md) - 当前版本详情 (三层架构 + MLSelector)
+- 📋 [v3.0.0 发布说明](versions/v3.0.0.md) - API标准化与测试体系
 
 ---
 
@@ -353,86 +343,13 @@ MLSelector 实现           ████████████████ 100
 | Phase 3 完成 | 2026-02-15 | 2026-02-06 | ✅ 提前完成 |
 | 文档站点上线 | 2026-Q2 | - | 📋 规划中 |
 
-### Phase 3: 文档与生产化 ✅ 已完成
-
-**完成时间**: 2026-02-01 ~ 2026-02-06
-**完成度**: 100% | **状态**: 🎉 全部完成
-
-**核心交付**:
-- ✅ README 简化 (1,369 行 → 412 行, -70%)
-- ✅ ARCHITECTURE 精简 (2,389 行 → 739 行, -69%)
-- ✅ ROADMAP 重组 (436 行 → <200 行, -54%)
-- ✅ Sphinx API 文档生成系统 (99.5% 导入成功率, 197个模块)
-- ✅ backtest_engine.py 重构 (1,275 行 → 488 行, -62%)
-- ✅ model_trainer.py 优化 (1,135 行 → 1,022 行, -10%)
-- ✅ **架构文档完整更新** (overview, tech_stack, performance, design_patterns)
-- ✅ **docs 目录完整结构** (用户指南 13 个 + 架构文档 4 个)
-
 ---
 
 ## 🚀 后续规划
 
-### 短期规划 (2026-Q2)
+### 2026年后续规划
 
-**主题**: 文档完善 + 代码优化
-
-**核心任务**:
-1. **文档生成与部署**
-   - GitHub Pages 部署文档站点
-   - 用户手册与示例完善
-   - 视频教程录制
-
-2. **代码优化（可选）**
-   - 大文件拆分优化
-   - 代码复杂度降低
-   - 性能调优
-
-3. **性能提升（可选）**
-   - 分布式计算支持 (Ray/Dask)
-   - 特征预计算引擎
-   - GPU 加速扩展
-
-**预期成果**:
-- 文档站点上线
-- API 文档覆盖率 100%
-
----
-
-### 中期规划 (2026-Q3)
-
-**主题**: 实盘交易系统开发
-
-**核心任务**:
-1. 券商接口对接（华泰/中信/国金等）
-2. 订单管理系统（OMS）
-3. 实时风控引擎
-4. 监控告警系统
-
-**预期成果**:
-- 支持 3+ 主流券商
-- 完整的订单管理系统
-- 实时风控与告警
-- 模拟盘测试通过
-
-详见: [Phase 4 规划](planning/phase4.md)
-
----
-
-### 长期规划 (2026-Q4)
-
-**主题**: 生产部署 + 实盘验证
-
-**核心任务**:
-1. 实盘测试（小额资金验证）
-2. 生产环境部署（高可用架构）
-3. 监控系统完善
-4. 用户文档与培训
-
-**预期成果**:
-- 实盘系统正式上线
-- 系统可用性 ≥ 99.9%
-- 完整的用户文档
-- 稳定的交易业绩
+详见: [2026年度规划](planning/roadmap_2026.md) 和 [开发路线图](ROADMAP.md)
 
 ---
 
@@ -444,7 +361,6 @@ docs/
 ├── ROADMAP.md                     # 开发路线图
 │
 ├── architecture/                  # 架构详细文档
-│   ├── PROJECT_STATUS.md          # 项目状态总结⭐
 │   ├── overview.md                # 架构总览（六层架构 + 三层策略）
 │   ├── design_patterns.md         # 设计模式（含组合模式⭐）
 │   ├── performance.md             # 性能优化（含MLSelector性能⭐）
@@ -478,11 +394,10 @@ docs/
 │
 ├── versions/                      # 版本历史
 │   ├── CHANGELOG.md               # 完整变更日志
+│   ├── v3.1.0.md                  # v3.1.0 发布说明 (当前)
 │   └── v3.0.0.md                  # v3.0.0 发布说明
 │
 └── planning/                      # 规划文档
-    ├── phase3.md                  # Phase 3 实施计划
-    ├── phase4.md                  # Phase 4 规划
     ├── roadmap_2026.md            # 2026 年度路线图
     └── tech_debt.md               # 技术债务追踪
 ```
@@ -501,7 +416,7 @@ docs/
 
 ### 👨‍💻 开发者路径
 
-1. **了解架构**: [架构总览](architecture/overview.md) → [项目状态](architecture/PROJECT_STATUS.md)
+1. **了解架构**: [架构总览](architecture/overview.md)
 2. **深入技术**: [技术栈](architecture/tech_stack.md) → [设计模式](architecture/design_patterns.md)
 3. **性能优化**: [性能分析](architecture/performance.md)
 4. **参与贡献**: [贡献指南](developer_guide/contributing.md) → [代码规范](developer_guide/coding_standards.md)
@@ -550,17 +465,10 @@ docs/
 
 ## 📅 文档版本信息
 
-**文档版本**: v3.0.0
+**文档版本**: v3.1.0
 **最后更新**: 2026-02-06
 **维护团队**: Quant Team
-**项目状态**: 🎯 生产就绪 (95%)
-
-**v3.0 文档更新亮点** (2026-02-06):
-- ✅ 整合三个核心文档（README + PROJECT_STATUS + architecture/README）
-- ✅ 完整的文档中心结构
-- ✅ 清晰的学习路径（新用户/开发者/架构师）
-- ✅ 全面的质量指标展示
-- ✅ v3.0 核心特性完整说明（三层架构 + MLSelector）
+**项目状态**: 🎯 生产就绪 (100%)
 
 ---
 

@@ -7,6 +7,42 @@
 
 ---
 
+## [3.1.0] - 2026-02-06
+
+### 新增 (Added)
+- **三层策略架构**: 选股层、入场层、退出层独立解耦
+  - 3个选股器: Momentum, Reversal, MLSelector
+  - 3个入场策略: Immediate, MABreakout, RSIOversold
+  - 4个退出策略: FixedPeriod, StopLoss, ATRStop, TrendExit
+  - 支持36+种策略组合
+- **MLSelector机器学习选股器**:
+  - 多因子加权模式 (4种归一化方法)
+  - LightGBM排序模式 (5档评分系统)
+  - 通配符特征支持 (alpha:*, tech:rsi等)
+- **125+ Alpha因子库集成**: 8大类因子完整实现
+- **60+ 技术指标**: 7大类技术指标
+- 385个三层架构单元测试
+- 26个三层架构集成测试
+- 120+ MLSelector专项测试
+
+### 改进 (Changed)
+- 测试用例从 3,200 增加至 3,700+ (+15.6%)
+- 生产就绪度从 95% 提升至 100%
+- 策略架构完全解耦，灵活性大幅提升
+
+### 优化 (Performance)
+- MLSelector推理速度: <100ms (100只股票)
+- 因子完整计算: <700ms (125+因子, 20只股票)
+- 三层架构回测引擎性能优化
+
+### 文档 (Documentation)
+- 新增《三层架构指南》
+- 新增《MLSelector使用指南》
+- 更新架构文档，包含三层架构详解
+- 更新技术栈文档，包含LightGBM Ranking说明
+
+---
+
 ## [3.0.0] - 2026-02-01
 
 ### 新增 (Added)
