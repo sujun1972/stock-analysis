@@ -27,13 +27,14 @@ class TestMLSelectorBasic:
     def test_get_parameters(self):
         """测试参数定义"""
         params = MLSelector.get_parameters()
-        assert len(params) == 11  # 原7个 + 新增4个
+        assert len(params) == 12  # 原7个 + use_feature_engine + 新增4个
 
         param_names = [p.name for p in params]
         # 原有参数
         assert "mode" in param_names
         assert "top_n" in param_names
         assert "features" in param_names
+        assert "use_feature_engine" in param_names
         assert "model_path" in param_names
         assert "filter_min_volume" in param_names
         assert "filter_max_price" in param_names

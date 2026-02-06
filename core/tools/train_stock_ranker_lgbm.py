@@ -416,7 +416,8 @@ class StockRankerTrainer:
             return all_dates[all_dates.dayofweek == 4]
         elif freq == 'M':
             # 每月采样（月末）
-            return all_dates.to_series().resample('M').last().index
+            # 注意：pandas 2.2+ 'M' 已弃用，使用 'ME' (Month End)
+            return all_dates.to_series().resample('ME').last().index
         else:
             logger.warning(f"未知采样频率: {freq}，使用日频")
             return all_dates
