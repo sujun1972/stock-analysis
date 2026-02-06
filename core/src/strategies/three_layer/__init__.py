@@ -72,6 +72,14 @@ from .entries import (
     ImmediateEntry,
 )
 
+# 导入退出策略实现
+from .exits import (
+    ATRStopLossExit,
+    FixedStopLossExit,
+    TimeBasedExit,
+    CombinedExit,
+)
+
 
 __all__ = [
     # 基类
@@ -90,9 +98,14 @@ __all__ = [
     "MABreakoutEntry",
     "RSIOversoldEntry",
     "ImmediateEntry",
+    # 退出策略实现
+    "ATRStopLossExit",
+    "FixedStopLossExit",
+    "TimeBasedExit",
+    "CombinedExit",
 ]
 
 
 # 版本信息
 __version__ = "3.0.0"
-__status__ = "T1-T3 完成 - 基类、选股器和入场策略已实现"
+__status__ = "T1-T4 完成 - 基类、选股器、入场策略和退出策略已实现"
