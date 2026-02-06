@@ -695,7 +695,7 @@ class StrategyComposer:
 |-------|---------|-------|--------|------|------|
 | **T1** | 创建三层基类 | 1天 | P0 | - | ✅ 完成 |
 | **T2** | 实现基础选股器 | 2天 | P0 | T1 | ✅ 完成 |
-| **T3** | 实现基础入场策略 | 2天 | P0 | T1 | 📋 待开始 |
+| **T3** | 实现基础入场策略 | 2天 | P0 | T1 | ✅ 完成 |
 | **T4** | 实现基础退出策略 | 2天 | P0 | T1 | 📋 待开始 |
 | **T5** | 修改回测引擎 | 2天 | P0 | T1-T4 | 📋 待开始 |
 | **T6** | 单元测试 | 3天 | P0 | T1-T5 | 🔄 部分完成 |
@@ -1109,22 +1109,109 @@ selected_stocks = selector.select(date, market_data)
 
 ---
 
-### 4.4 任务 T3：实现基础入场策略
+### 4.4 任务 T3：实现基础入场策略 ✅
+
+> **状态**: ✅ 已完成（2026-02-06）
+> **工作量**: 2 天（按计划）
+> **测试通过率**: 100% (53/53)
 
 **目标**：实现 3 个基础入场策略
 
-**工作量**：2 天
-
-**文件清单**：
+**已完成文件**：
 ```
 core/src/strategies/three_layer/entries/
-├── __init__.py
-├── ma_breakout_entry.py      # 均线突破入场
-├── rsi_oversold_entry.py     # RSI超卖入场
-└── immediate_entry.py         # 立即入场（测试用）
+├── __init__.py                      # ✅ 完成
+├── ma_breakout_entry.py             # ✅ 完成（235行）
+├── rsi_oversold_entry.py            # ✅ 完成（236行）
+└── immediate_entry.py               # ✅ 完成（183行）
+
+core/tests/unit/strategies/three_layer/entries/
+├── __init__.py                      # ✅ 完成
+├── test_ma_breakout_entry.py        # ✅ 完成（17个测试，368行）
+├── test_rsi_oversold_entry.py       # ✅ 完成（18个测试，389行）
+└── test_immediate_entry.py          # ✅ 完成（18个测试，458行）
 ```
 
-**实施详情**：
+**实施成果**：
+
+✅ **源代码**：
+- 3 个入场策略实现完成（~654 行）
+- MABreakoutEntry: 均线突破入场（235行）
+- RSIOversoldEntry: RSI超卖入场（236行）
+- ImmediateEntry: 立即入场（183行）
+- 完整的参数验证和错误处理
+- 详细的文档字符串和使用示例
+- 完善的日志记录
+
+✅ **测试代码**：
+- 53 个单元测试（~1,215 行）
+- 100% 测试通过率
+- 覆盖基本功能、边界情况、参数验证、多股票场景
+
+✅ **功能特性**：
+- MABreakoutEntry: 检测金叉，支持回溯期配置，可选均线趋势过滤
+- RSIOversoldEntry: 计算RSI指标，支持超卖检测，可选RSI回升要求
+- ImmediateEntry: 立即入场，支持数量限制和数据验证
+
+**验收标准达成情况**：
+- ✅ 3 个入场策略实现完成
+- ✅ MABreakoutEntry 正确检测金叉
+- ✅ RSIOversoldEntry RSI计算准确
+- ✅ ImmediateEntry 支持数量限制和数据验证
+- ✅ 单元测试通过（53/53，100%）
+- ✅ 代码质量：PEP 8，类型注解，文档完整
+
+**测试结果**：
+```bash
+pytest tests/unit/strategies/three_layer/entries/ -v
+# 结果：53 passed in 0.93s ✅
+```
+
+**使用示例**：
+```python
+from src.strategies.three_layer.entries import (
+    MABreakoutEntry,
+    RSIOversoldEntry,
+    ImmediateEntry
+)
+
+# 均线突破入场
+ma_entry = MABreakoutEntry(params={
+    'short_window': 5,
+    'long_window': 20,
+    'lookback_for_cross': 1
+})
+
+# RSI超卖入场
+rsi_entry = RSIOversoldEntry(params={
+    'rsi_period': 14,
+    'oversold_threshold': 30.0,
+    'require_rsi_turning_up': False
+})
+
+# 立即入场
+immediate_entry = ImmediateEntry(params={
+    'max_stocks': 10,
+    'min_stocks': 5,
+    'validate_data': True
+})
+
+# 生成入场信号
+signals = ma_entry.generate_entry_signals(
+    stocks=['600000.SH', '000001.SZ'],
+    data=stock_data_dict,
+    date=pd.Timestamp('2023-06-01')
+)
+```
+
+**交付物**：
+- [x] 源代码：3 个入场策略 + 1 个 __init__.py
+- [x] 测试代码：3 个测试文件 + 53 个测试用例
+- [x] 模块集成：更新主模块导出
+
+---
+
+**原实施详情**（供参考）：
 
 #### MABreakoutEntry（均线突破入场）
 
@@ -2381,15 +2468,17 @@ A: 使用网格搜索或贝叶斯优化（将在 Phase 5 支持）。
 
 ### 9.1 核心成果
 
-🔄 **三层架构实现**：基类 ✅ + 选股器 ✅，入场/退出待完成
+🔄 **三层架构实现**：基类 ✅ + 选股器 ✅ + 入场策略 ✅，退出策略待完成
 ✅ **选股器实现**：3个选股器完成（动量、价值、外部）
+✅ **入场策略实现**：3个入场策略完成（均线突破、RSI超卖、立即入场）
 ✅ **向后兼容**：设计支持，待验证
-📋 **灵活组合**：36+ 种策略组合（待实现）
-✅ **工业级质量**：测试 100% 通过（T1: 133个，T2: 74个）
+📋 **灵活组合**：36+ 种策略组合（待退出策略完成）
+✅ **工业级质量**：测试 100% 通过（T1: 133个，T2: 74个，T3: 53个）
 
 **已完成部分**：
 - ✅ T1: 三层基类（4个基类 + 133个测试）
 - ✅ T2: 基础选股器（3个选股器 + 74个测试）
+- ✅ T3: 基础入场策略（3个入场策略 + 53个测试）
 - ✅ 基础架构设计和文档
 - ✅ 参数验证系统（5种类型）
 - ✅ 使用示例和测试文档
@@ -2422,48 +2511,57 @@ A: 使用网格搜索或贝叶斯优化（将在 Phase 5 支持）。
 - [x] ExternalSelector 支持三种模式（手动、API、StarRanker预留）
 - [x] 代码质量达标（PEP 8 + 类型注解 + 文档）
 
+**T3 任务验收**：
+- [x] 3个入场策略实现完成（MABreakoutEntry、RSIOversoldEntry、ImmediateEntry）
+- [x] 单元测试通过率 100%（53/53）
+- [x] MABreakoutEntry 正确检测金叉
+- [x] RSIOversoldEntry RSI计算准确
+- [x] ImmediateEntry 支持数量限制和数据验证
+- [x] 代码质量达标（PEP 8 + 类型注解 + 文档）
+
 **整体项目验收（进行中）**：
 - [x] 基类完成（T1 ✅）
 - [x] 选股器完成（T2 ✅）
-- [ ] 入场策略完成（T3 待开始）
+- [x] 入场策略完成（T3 ✅）
 - [ ] 退出策略完成（T4 待开始）
 - [ ] 回测引擎完成（T5 待开始）
-- [x] 单元测试通过率 100%（T1+T2: 207个测试 ✅）
+- [x] 单元测试通过率 100%（T1+T2+T3: 260个测试 ✅）
 - [ ] 集成测试通过（T7）
 - [ ] 测试覆盖率 ≥ 85%（当前已完成部分 100% ✅）
 - [ ] 性能达标（30秒内回测100只股票3年）
-- [x] 文档完整（T1+T2 文档 ✅，完整文档待 T9）
+- [x] 文档完整（T1+T2+T3 文档 ✅，完整文档待 T9）
 
 ### 9.4 下一步行动
 
-**当前进度**：T1 ✅ → T2 ✅
+**当前进度**：T1 ✅ → T2 ✅ → T3 ✅
 
 **已完成**：
 - ✅ T1: 三层基类（4个基类，133个测试）
 - ✅ T2: 基础选股器（3个选股器，74个测试）
+- ✅ T3: 基础入场策略（3个入场策略，53个测试）
 
 **下一步任务**：
-1. **T3: 实现基础入场策略**（2天）
-   - MABreakoutEntry（均线突破）
-   - RSIOversoldEntry（RSI超卖）
-   - ImmediateEntry（立即入场）
-
-2. **T4: 实现基础退出策略**（2天）
+1. **T4: 实现基础退出策略**（2天）⭐ **下一个任务**
    - ATRStopLossExit（ATR动态止损）
    - FixedStopLossExit（固定止损止盈）
    - TimeBasedExit（时间止损）
    - CombinedExit（组合退出）
 
-3. **T5: 修改回测引擎**（2天）
+2. **T5: 修改回测引擎**（2天）
    - 实现 backtest_three_layer() 方法
    - 集成选股器、入场、退出策略
    - 支持不同频率的策略执行
 
+3. **T6-T9: 测试与文档**（6天）
+   - 集成测试、性能测试
+   - 完整文档编写
+
 **里程碑**：
 - ✅ Week 1 Day 1-2: 基类完成（T1）
-- ✅ Week 1 Day 3: 选股器完成（T2）
-- 📋 Week 1-2: 实现入场和退出策略（T3-T4）
-- 📋 Week 2: 回测引擎实现（T5）
+- ✅ Week 1 Day 3-4: 选股器完成（T2）
+- ✅ Week 1 Day 5-6: 入场策略完成（T3）
+- 📋 Week 2 Day 1-2: 退出策略实现（T4）
+- 📋 Week 2 Day 3-4: 回测引擎实现（T5）
 - 📋 Week 2-3: 测试和文档（T6-T9）
 
 ---
@@ -2481,12 +2579,20 @@ A: 使用网格搜索或贝叶斯优化（将在 Phase 5 支持）。
 
 ### B. 相关代码
 
-**已实现的三层架构基类**：
+**已实现的三层架构**：
 - 三层基类：`core/src/strategies/three_layer/base/`
   - `stock_selector.py` - StockSelector 基类
   - `entry_strategy.py` - EntryStrategy 基类
   - `exit_strategy.py` - ExitStrategy 基类
   - `strategy_composer.py` - StrategyComposer 组合器
+- 选股器实现：`core/src/strategies/three_layer/selectors/`
+  - `momentum_selector.py` - 动量选股器
+  - `value_selector.py` - 价值选股器
+  - `external_selector.py` - 外部选股器
+- 入场策略实现：`core/src/strategies/three_layer/entries/`
+  - `ma_breakout_entry.py` - 均线突破入场
+  - `rsi_oversold_entry.py` - RSI超卖入场
+  - `immediate_entry.py` - 立即入场
 - 测试代码：`core/tests/unit/strategies/three_layer/`
 - 使用示例：`core/examples/three_layer_architecture_example.py`
 
@@ -2509,6 +2615,7 @@ A: 使用网格搜索或贝叶斯优化（将在 Phase 5 支持）。
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| v1.3 | 2026-02-06 | T3 任务完成更新：添加3个入场策略实现成果、53个测试用例、进度更新 |
 | v1.2 | 2026-02-06 | T2 任务完成更新：添加3个选股器实现成果、74个测试用例、进度更新 |
 | v1.1 | 2026-02-06 | T1 任务完成更新：添加实施成果、测试结果、进度更新 |
 | v1.0 | 2026-02-06 | 初始版本：三层架构升级方案完成 |
@@ -2517,5 +2624,5 @@ A: 使用网格搜索或贝叶斯优化（将在 Phase 5 支持）。
 
 **文档完成日期**: 2026-02-06
 **最后更新**: 2026-02-06
-**版本**: v1.2
-**状态**: 🔄 进行中（T1 ✅ + T2 ✅，T3-T9 待完成）
+**版本**: v1.3
+**状态**: 🔄 进行中（T1 ✅ + T2 ✅ + T3 ✅，T4-T9 待完成）

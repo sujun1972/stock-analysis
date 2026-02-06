@@ -65,6 +65,13 @@ from .selectors import (
     ExternalSelector,
 )
 
+# 导入入场策略实现
+from .entries import (
+    MABreakoutEntry,
+    RSIOversoldEntry,
+    ImmediateEntry,
+)
+
 
 __all__ = [
     # 基类
@@ -79,9 +86,13 @@ __all__ = [
     "MomentumSelector",
     "ValueSelector",
     "ExternalSelector",
+    # 入场策略实现
+    "MABreakoutEntry",
+    "RSIOversoldEntry",
+    "ImmediateEntry",
 ]
 
 
 # 版本信息
 __version__ = "3.0.0"
-__status__ = "T1-T2 完成 - 基类和选股器已实现"
+__status__ = "T1-T3 完成 - 基类、选股器和入场策略已实现"
