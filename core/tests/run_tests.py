@@ -315,6 +315,7 @@ def show_menu():
     print(f"  {Colors.BOLD}[2]{Colors.ENDC} 快速单元测试 (排除慢速测试: GRU/因子分析/并行) {Colors.OKCYAN}[{estimated_times['2']}]{Colors.ENDC} ⚡")
     print(f"  {Colors.BOLD}[Q]{Colors.ENDC} 快速集成测试 (排除外部API) {Colors.OKCYAN}[{estimated_times['I1']}]{Colors.ENDC}")
     print(f"  {Colors.BOLD}[X]{Colors.ENDC} 快速诊断 (只运行失败过的测试) {Colors.OKCYAN}[<10秒]{Colors.ENDC}")
+    print(f"  {Colors.BOLD}[QM]{Colors.ENDC} ML快速验证 (ML-2/ML-3/ML-4) {Colors.OKCYAN}[~15秒]{Colors.ENDC} 🚀")
     print()
     print(f"{Colors.BOLD}[完整测试]{Colors.ENDC}")
     print(f"  {Colors.BOLD}[1]{Colors.ENDC} 运行所有测试 (单元+集成, 带覆盖率) {Colors.OKCYAN}[{estimated_times['1']}]{Colors.ENDC}")
@@ -459,6 +460,47 @@ def run_feature_tests(coverage: bool = True):
     cmd = build_pytest_cmd('tests/unit/features/', coverage=coverage)
     returncode, output = run_command(cmd, "运行特征工程测试", capture_output=True)
     return returncode
+
+def run_quick_tests():
+    """
+    运行ML快速验证测试（ML-2, ML-3, ML-4）
+
+    这些测试验证核心ML功能的完整工作流程：
+    - ML-2: 多因子加权模型（归一化、因子权重、因子分组）
+    - ML-3: LightGBM排序模型（训练、保存、加载、选股）
+    - ML-4: 因子库集成（125+因子、通配符特征、性能对比）
+    """
+    print_header("运行ML快速验证测试")
+
+    print_info("这些测试将验证以下ML功能模块:")
+    print("  • ML-2: 多因子加权模型增强功能")
+    print("  • ML-3: LightGBM排序模型训练与选股")
+    print("  • ML-4: 完整因子库集成（125+因子）")
+    print()
+
+    # 运行ML相关的单元测试
+    print_info("运行ML选股器单元测试...")
+    cmd = build_pytest_cmd(
+        'tests/unit/strategies/three_layer/selectors/test_ml_selector.py',
+        coverage=False,
+        verbose=True
+    )
+    returncode, output = run_command(cmd, "运行ML选股器测试", capture_output=True)
+
+    if returncode == 0:
+        print_success("✅ ML快速验证测试全部通过!")
+        print()
+        print_info("验证的功能包括:")
+        print("  ✓ 多因子加权模型（归一化、权重配置）")
+        print("  ✓ LightGBM排序模型（训练、预测）")
+        print("  ✓ 因子库集成（125+因子）")
+        print("  ✓ 通配符特征解析")
+        print("  ✓ 向后兼容性")
+        return 0
+    else:
+        print_error("❌ ML快速验证测试失败")
+        print_warning("请检查上述输出以了解失败原因")
+        return 1
 
 def run_layer_tests(layer: str, coverage: bool = True, parallel: bool = False):
     """
@@ -683,6 +725,8 @@ def interactive_mode():
             return run_integration_tests(coverage=False, parallel=parallel_mode, speed_level='fast')
         elif choice == 'X':
             return run_failed_first()
+        elif choice == 'QM':
+            return run_quick_tests()
         # 完整测试
         elif choice == '1':
             return run_all_tests(coverage=True, fast=False, parallel=parallel_mode)
@@ -748,6 +792,7 @@ def main():
   %(prog)s --all --coverage          # 运行所有测试并生成覆盖率
   %(prog)s --fast                    # 快速测试（排除慢速测试和外部API测试）
   %(prog)s --fast --parallel         # 快速+并行测试
+  %(prog)s --quick-ml                # ML快速验证测试（ML-2/ML-3/ML-4）
   %(prog)s --unit                    # 只运行单元测试
   %(prog)s --integration             # 只运行集成测试
   %(prog)s --performance             # 只运行性能测试
@@ -780,6 +825,7 @@ def main():
     parser.add_argument('--unit', action='store_true', help='运行单元测试')
     parser.add_argument('--integration', action='store_true', help='运行集成测试')
     parser.add_argument('--performance', action='store_true', help='运行性能测试')
+    parser.add_argument('--quick-ml', action='store_true', help='运行ML快速验证测试（ML-2/ML-3/ML-4）')
 
     # 核心层测试选项
     parser.add_argument('--layer', type=str, choices=[
@@ -822,8 +868,11 @@ def main():
     if args.list_modules:
         return list_all_test_modules()
 
+    # 快速ML验证测试
+    if args.quick_ml:
+        return run_quick_tests()
     # 核心层测试
-    if args.layer:
+    elif args.layer:
         returncode = run_layer_tests(args.layer, coverage=coverage, parallel=args.parallel)
     # 综合测试
     elif args.all or args.fast:

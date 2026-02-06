@@ -40,12 +40,16 @@ python run_tests.py
 - **[2] 快速单元测试** (~38秒) ⚡ - 日常开发推荐
 - **[Q] 快速集成测试** (~30秒) - 验证集成无误
 - **[X] 快速诊断** (<10秒) - 只运行失败过的测试
+- **[QM] ML快速验证** (~15秒) 🚀 - 验证ML-2/ML-3/ML-4功能
 
 ### 方法2: 命令行直接运行
 
 ```bash
 # 快速单元测试（推荐日常使用）
 python run_tests.py --fast
+
+# ML快速验证测试
+python run_tests.py --quick-ml
 
 # 运行所有测试
 python run_tests.py --all
@@ -61,7 +65,7 @@ python run_tests.py --help
 ```
 core/tests/
 │
-├── 📄 run_tests.py              # 统一测试运行器 ⭐
+├── 📄 run_tests.py              # 统一测试运行器 ⭐ (含ML快速验证)
 ├── 📄 README.md                 # 本文件
 │
 ├── 📂 unit/                     # 单元测试 (~1300个测试)
