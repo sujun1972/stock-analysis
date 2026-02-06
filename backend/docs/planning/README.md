@@ -29,6 +29,19 @@
 
 本目录包含 Backend 项目的优化规划和实施文档。
 
+### 🎯 三层架构相关文档 ⭐ **最新**
+
+#### [Backend 三层架构实施方案](./backtest_three_layer_architecture_implementation_plan.md) v2.0
+
+   **Core 已完成三层架构，Backend 作为 Adapter 层集成**
+
+   - ✅ Core v3.1.0 已完成 10 个三层架构组件
+   - ✅ Backend 采用 Core Adapter 模式（节省 70% 工作量）
+   - ✅ 详细的架构设计决策和实施计划
+   - 📖 关联文档：
+     - [Core 三层架构实现现状](./core_three_layer_architecture_status.md) - Core 实现详情
+     - [Backend Adapter 实施方案](./backend_three_layer_adapter_implementation.md) - 9天实施计划
+
 ### 📚 核心文档
 
 #### 1. **[Phase 0-3 实施总结](./phase_0_3_implementation_summary.md)** 🎉 **最新完成**

@@ -1,11 +1,29 @@
 # Backend 回测三层架构实施方案
 
-> **版本**: v1.0
+> **版本**: v2.0 ⭐ **重大更新**
 > **日期**: 2026-02-06
 > **作者**: Claude Code
 > **项目**: Stock Analysis Platform - Backend
-> **依据文档**: `/docs/frontend-backtest-improvement-plan.md`
-> **项目状态**: Phase 0-3 已完成，当前为 Phase 4 规划
+> **依据文档**: `/docs/frontend-backtest-improvement-plan.md` + `core/docs/README.md`
+> **项目状态**: 🎯 **Core 三层架构已完成** (v3.1.0)，Backend 作为 Adapter 层集成
+>
+> ---
+>
+> ## ⚠️ 重要变更说明
+>
+> **Core 项目已完成三层架构实现** (v3.1.0, 2026-02-06)：
+> - ✅ 10个三层架构组件（4选股器 + 3入场 + 4退出）
+> - ✅ MLSelector 机器学习选股（LightGBM Ranker + 125+ Alpha因子）
+> - ✅ StrategyComposer 策略组合器
+> - ✅ BacktestEngine 完整支持三层架构
+> - ✅ 385个测试用例，100%通过
+>
+> **Backend 实施策略调整**：
+> - 原计划：在 Backend 重新实现三层架构 ❌
+> - 新策略：Backend 作为 **Core Adapter**，直接调用 Core 的三层架构 ✅
+> - 优势：零业务逻辑重复，保持代码精简，快速上线
+>
+> 📖 **详细了解 Core 实现**: 查看 [Core 三层架构实现现状](./core_three_layer_architecture_status.md)
 
 ---
 
@@ -51,72 +69,130 @@
 - 基于抽象基类 `BaseStrategy` 的扩展机制
 - 完整的参数定义和验证系统
 
-#### 前端改进计划的核心需求
+#### Core 项目三层架构实现现状 ⭐
 
-前端计划引入**三层分离架构**（参考 Zipline Pipeline 设计）：
+**Core v3.1.0 已完整实现三层分离架构**（2026-02-06）：
 
 ```
-Layer 1: 股票选择器 (StockSelector)
-         ↓
-Layer 2: 入场策略 (EntryStrategy)
-         ↓
-Layer 3: 退出策略 (ExitStrategy)
+┌─────────────────────────────────────┐
+│  选股器层 (StockSelector)            │ ✅ 4个实现
+│  - MomentumSelector (动量选股)       │
+│  - ReversalSelector (反转选股)       │
+│  - MLSelector (ML选股) ⭐           │
+│  - ExternalSelector (外部选股)       │
+└─────────────┬───────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│  入场策略层 (EntryStrategy)          │ ✅ 3个实现
+│  - ImmediateEntry (立即入场)         │
+│  - MABreakoutEntry (均线突破)        │
+│  - RSIOversoldEntry (RSI超卖)       │
+└─────────────┬───────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│  退出策略层 (ExitStrategy)           │ ✅ 4个实现
+│  - FixedPeriodExit (固定周期)        │
+│  - FixedStopLossExit (固定止损)      │
+│  - ATRStopLossExit (ATR动态止损)     │
+│  - TrendBasedExit (趋势退出)        │
+└─────────────────────────────────────┘
+              ↓
+        StrategyComposer ✅
+        (36+ 种策略组合)
 ```
 
-**核心价值**：
-1. **解耦选股和交易**：支持 StarRanker 等外部选股系统
-2. **模块化复用**：买入和卖出策略独立配置
-3. **策略组合灵活性**：3选股 × 3入场 × 3退出 = 27种组合
-4. **符合行业最佳实践**：Backtrader、Zipline、聚宽等主流平台均采用此架构
+**Core 实现的核心亮点**：
+1. ✅ **MLSelector 机器学习选股**：支持 LightGBM Ranker + 125+ Alpha 因子
+2. ✅ **ExternalSelector**：支持接入 StarRanker 等外部选股系统
+3. ✅ **StrategyComposer**：灵活组合，支持 4×3×4=48 种组合
+4. ✅ **BacktestEngine 集成**：`backtest_three_layer()` 方法完整支持
+5. ✅ **385个测试用例**：覆盖所有组件和组合场景
+6. ✅ **完整文档**：用户指南 + API文档 + 架构文档
 
-### 1.2 项目目标
+**Backend 需求调整**：
+- ❌ **不需要重新实现**三层架构（避免代码重复）
+- ✅ **需要实现**：FastAPI 封装层（Core Adapter 模式）
+- ✅ **需要实现**：参数验证、格式转换、异步调用
+- ✅ **需要实现**：Redis 缓存、监控日志
 
-#### 核心目标
+### 1.2 项目目标（基于 Core 已有实现）
 
-1. **实现三层分离架构**
-   - 设计并实现 `StockSelector`、`EntryStrategy`、`ExitStrategy` 基类
-   - 提供至少 3 个选股器、3 个入场策略、4 个退出策略的实现
-   - 实现策略组合器 `StrategyComposer`
+#### 核心目标调整
 
-2. **扩展策略库**
-   - 将 Core 项目的 3 个策略（Momentum、MeanReversion、MultiFactor）迁移到 Backend
-   - 将现有 2 个策略适配到三层架构
+**原计划 vs 新方案**：
 
-3. **增强回测引擎**
-   - 修改 `BacktestAdapter` 支持三层架构回测
-   - 保留现有单股回测功能（向后兼容）
-   - 新增策略组合回测功能
+| 任务 | 原计划 | Core现状 | Backend新方案 |
+|------|-------|---------|--------------|
+| **三层基类** | Backend 实现 | ✅ Core 已完成 | Backend 直接调用 Core |
+| **10个组件** | Backend 实现 | ✅ Core 已完成（4+3+4） | Backend 封装 API |
+| **StrategyComposer** | Backend 实现 | ✅ Core 已完成 | Backend 封装 API |
+| **回测引擎** | Backend 扩展 | ✅ Core 已完成 | Backend Adapter 转换 |
+| **MLSelector** | - | ✅ Core 已完成⭐ | Backend 暴露 API |
 
-4. **提供完整 API 支持**
-   - 新增三层架构专用端点（/api/three-layer-strategy）
-   - 保持现有 API 向后兼容
-   - 提供策略元数据查询和验证接口
+**Backend 新目标**：
+
+1. **实现 ThreeLayerAdapter（核心）**
+   - 封装 Core 的三层架构调用
+   - 参数格式转换（API → Core）
+   - 结果格式转换（Core → API）
+   - 异步调用支持
+
+2. **实现 REST API 端点**
+   - `/api/v1/three-layer/selectors` - 查询可用选股器
+   - `/api/v1/three-layer/entries` - 查询可用入场策略
+   - `/api/v1/three-layer/exits` - 查询可用退出策略
+   - `/api/v1/three-layer/backtest` - 执行三层架构回测
+   - `/api/v1/three-layer/validate` - 验证策略组合
+
+3. **实现缓存和监控**
+   - Redis 缓存策略元数据（减少 Core 调用）
+   - Redis 缓存回测结果（TTL=1小时）
+   - 监控日志（回测耗时、成功率、错误率）
+
+4. **编写集成测试**
+   - API 端点测试（参数验证、格式转换）
+   - 缓存机制测试
+   - 错误处理测试
+   - 性能测试（目标：P95 < 300ms）
 
 #### 非功能性目标
 
-| 目标 | 指标 | 当前值 | 目标值 |
-|------|------|--------|--------|
-| **测试覆盖率** | 单元测试 + 集成测试 | 65% | 75% |
-| **API 响应时间** | P95 延迟 | <80ms | <100ms |
+| 目标 | 指标 | 当前值 | 目标值 | 备注 |
+|------|------|--------|--------|------|
+| **测试覆盖率** | 单元测试 + 集成测试 | 65% | 75% | Backend Adapter层测试 |
+| **API 响应时间** | P95 延迟（元数据查询） | <80ms | <50ms | 缓存加速 |
+| **API 响应时间** | P95 延迟（回测请求） | - | <300ms | 依赖 Core 性能 |
 | **并发处理能力** | QPS | 850 | 800+ (保持) |
 | **代码行数增长** | 新增代码 | - | <2000 行 |
 | **文档完整性** | API 文档 + 开发指南 | 90% | 100% |
 
-### 1.3 项目范围
+### 1.3 项目范围（基于 Core Adapter 模式）
 
 #### 包含内容 (In Scope)
 
-- ✅ 三层架构基础类设计与实现
-- ✅ 10 个基础策略模块实现
-- ✅ 回测引擎适配与增强
-- ✅ REST API 端点开发
-- ✅ 数据库 Schema 扩展（策略配置持久化）
-- ✅ 单元测试和集成测试
-- ✅ 完整技术文档
+**Backend 需要实现**：
+- ✅ ThreeLayerAdapter 适配器（封装 Core 调用）
+- ✅ REST API 端点（5个端点）
+- ✅ 参数验证和格式转换
+- ✅ Redis 缓存机制
+- ✅ 异步调用支持
+- ✅ 监控日志和错误处理
+- ✅ API 集成测试（目标：50+用例）
+- ✅ API 文档更新
+
+**Core 已提供**：
+- ✅ 三层架构基础类（StockSelector, EntryStrategy, ExitStrategy）
+- ✅ 10 个策略模块实现（4选股 + 3入场 + 4退出）
+- ✅ StrategyComposer 组合器
+- ✅ BacktestEngine.backtest_three_layer() 回测引擎
+- ✅ MLSelector 机器学习选股⭐
+- ✅ 385个单元测试用例
 
 #### 不包含内容 (Out of Scope)
 
 - ❌ 前端页面开发（由前端团队负责）
+- ❌ 三层架构业务逻辑（Core 已实现）
+- ❌ 回测引擎实现（Core 已实现）
 - ❌ AI 策略生成功能（Phase 5 规划）
 - ❌ 历史记录持久化（前端 Phase 2 任务）
 - ❌ WebSocket 实时推送（Phase 4 可选特性）
@@ -321,17 +397,23 @@ FastAPI 端点
 - 在 `app/strategies/` 下创建子目录 `three_layer/`
 - 提供独立的 API 端点 `/api/three-layer-strategy`
 
-#### 决策 2：延续 Core Adapters 模式
+#### 决策 2：延续 Core Adapters 模式⭐
 
 **原因**：
 - Phase 0-3 验证了 Core Adapters 的有效性
 - 避免重复实现业务逻辑
 - 保持代码精简（<5000 行目标）
+- **Core v3.1.0 已完整实现三层架构**✅
 
 **方案**：
-- 回测逻辑仍委托给 Core 项目（如果 Core 支持）
+- ✅ **Core 已完成**：三层基类、10个组件、StrategyComposer、BacktestEngine
+- ✅ **Backend 职责**：FastAPI 封装层、参数验证、格式转换、异步调用
+- ✅ **优势**：节省 70% 开发时间（9天 vs 30+天）
+
+**实施细节**：
+- Backend 创建 `ThreeLayerAdapter` 适配器类
 - Backend 只负责参数适配和格式转换
-- 如 Core 不支持三层架构，则在 Backend 实现轻量级回测循环
+- 所有业务逻辑调用 Core 实现
 
 #### 决策 3：数据库持久化策略
 
@@ -356,33 +438,96 @@ FastAPI 端点
 
 ---
 
-## 三、详细实施计划
+## 三、详细实施计划（基于 Core Adapter 模式）
 
-### 3.1 Phase 4.0：三层架构基础（P0 - 最高优先级）
+> **重要**: Core 已完成三层架构实现，Backend 只需实现 Adapter 层
+>
+> **参考**: [Core 三层架构实现现状](./core_three_layer_architecture_status.md)
 
-#### 任务 4.0.1：创建三层基类
+### 工作量对比
 
-**目标**：定义三层分离架构的抽象基类
+| 方案 | 工作量 | 状态 |
+|------|--------|------|
+| **原计划**（重新实现） | 30+ 天 | ❌ 已废弃 |
+| **新方案**（Adapter模式） | 9 天 | ✅ 采用 |
+| **节省时间** | **70%** | - |
 
-**工作量**：3 天
+---
 
-**文件结构**：
-```
-backend/app/strategies/three_layer/
-├── __init__.py
-├── base/
-│   ├── __init__.py
-│   ├── stock_selector.py       # StockSelector 基类
-│   ├── entry_strategy.py       # EntryStrategy 基类
-│   ├── exit_strategy.py        # ExitStrategy 基类
-│   └── strategy_composer.py    # StrategyComposer 组合器
-├── selectors/
-│   └── __init__.py
-├── entries/
-│   └── __init__.py
-└── exits/
-    └── __init__.py
-```
+### 3.1 Phase 4.0：ThreeLayerAdapter 实现（P0 - 最高优先级）
+
+> **重要变更**: Core 已完成三层架构，Backend 只需实现 Adapter 层
+>
+> **详细实施计划**: 查看 [Backend 三层架构 Adapter 实施方案](./backend_three_layer_adapter_implementation.md)
+
+#### 实施概要
+
+**不重复实现，只做封装**：
+
+| 组件 | Core 状态 | Backend 工作 |
+|------|----------|-------------|
+| **三层基类** | ✅ 已完成 | ❌ 不需要实现 |
+| **10个策略组件** | ✅ 已完成 | ❌ 不需要实现 |
+| **StrategyComposer** | ✅ 已完成 | ❌ 不需要实现 |
+| **回测引擎** | ✅ 已完成 | ❌ 不需要实现 |
+| **ThreeLayerAdapter** | ❌ 未实现 | ✅ Backend 实现（3天）|
+| **REST API 端点** | ❌ 未实现 | ✅ Backend 实现（2天）|
+| **缓存机制** | ❌ 未实现 | ✅ Backend 实现（1天）|
+| **监控日志** | ❌ 未实现 | ✅ Backend 实现（1天）|
+| **集成测试** | ❌ 未实现 | ✅ Backend 实现（2天）|
+
+**总工作量**: **9 天**（vs 原计划 30+ 天，节省 **70%**）
+
+#### 任务清单
+
+**任务 4.0.1：创建 ThreeLayerAdapter 核心类**（3天）
+
+**文件**: `backend/app/adapters/three_layer_adapter.py`
+
+**功能**:
+- ✅ 封装 Core 的三层架构调用
+- ✅ 参数格式转换（API DTO → Core 对象）
+- ✅ 结果格式转换（Core Response → API JSON）
+- ✅ 异步调用支持
+- ✅ 策略注册表管理
+
+**任务 4.0.2：实现 REST API 端点**（2天）
+
+**文件**: `backend/app/api/routes/three_layer.py`
+
+**端点**:
+- ✅ `GET /api/v1/three-layer/selectors` - 查询选股器
+- ✅ `GET /api/v1/three-layer/entries` - 查询入场策略
+- ✅ `GET /api/v1/three-layer/exits` - 查询退出策略
+- ✅ `POST /api/v1/three-layer/validate` - 验证策略组合
+- ✅ `POST /api/v1/three-layer/backtest` - 执行回测
+
+**任务 4.0.3：实现缓存机制**（1天）
+
+**缓存策略**:
+- ✅ 元数据缓存（TTL=1天）
+- ✅ 回测结果缓存（TTL=1小时）
+
+**任务 4.0.4：实现监控日志**（1天）
+
+**监控指标**:
+- ✅ API 调用次数
+- ✅ 回测平均耗时
+- ✅ 缓存命中率
+- ✅ 错误率
+
+**任务 4.0.5：编写集成测试**（2天）
+
+**测试覆盖**:
+- ✅ 50+ 集成测试用例
+- ✅ 100% API 覆盖率
+- ✅ 性能测试（P95 < 300ms）
+
+---
+
+> **📖 详细说明**: 完整的实施细节、代码示例、API设计，请查看：
+> - [Backend 三层架构 Adapter 实施方案](./backend_three_layer_adapter_implementation.md)
+> - [Core 三层架构实现现状](./core_three_layer_architecture_status.md)
 
 **实施步骤**：
 
