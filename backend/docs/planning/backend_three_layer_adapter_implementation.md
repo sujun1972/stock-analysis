@@ -398,13 +398,13 @@ class ThreeLayerAdapter:
 
 ---
 
-### 任务 2：实现 REST API 端点 ⏳
+### 任务 2：实现 REST API 端点 ✅
 
-**文件**: `backend/app/api/routes/three_layer.py`
+**文件**: `backend/app/api/endpoints/three_layer.py`
 
 **工作量**: 2 天
 
-**状态**: 待实现（依赖任务1已完成）
+**状态**: 已完成
 
 **端点清单**:
 
@@ -533,6 +533,28 @@ async def run_backtest(
 - ✅ 参数验证正确
 - ✅ 错误处理完善
 - ✅ OpenAPI 文档自动生成
+- ✅ 单元测试通过（24个测试用例，100%通过）
+
+**实现要点**:
+1. **API路由**: 在 `backend/app/api/endpoints/three_layer.py` 实现5个端点
+2. **Pydantic模型**: 定义 StrategyConfig, ValidationRequest, BacktestRequest 等模型
+3. **响应格式**: 统一使用 ApiResponse 返回字典格式
+4. **错误处理**: 完整的异常捕获和错误信息返回
+5. **路由注册**: 在 `backend/app/api/__init__.py` 注册为 `/api/three-layer` 前缀
+
+**已实现功能**:
+- [x] GET /api/three-layer/selectors - 获取选股器元数据列表
+- [x] GET /api/three-layer/entries - 获取入场策略元数据列表
+- [x] GET /api/three-layer/exits - 获取退出策略元数据列表
+- [x] POST /api/three-layer/validate - 验证策略组合有效性
+- [x] POST /api/three-layer/backtest - 执行三层架构回测
+
+**测试覆盖**:
+- 元数据查询测试：6个（selectors/entries/exits，成功和错误场景）
+- 策略验证测试：5个（有效/无效ID/无效频率/缺失参数/异常）
+- 回测执行测试：8个（成功/股票池/数据错误/策略错误/参数错误/异常/空数据）
+- 请求验证测试：5个（缺失字段/类型错误/默认值/边界条件）
+- 总计：24个测试用例，100%通过
 
 ---
 
@@ -797,7 +819,7 @@ Content-Type: application/json
 | 模块 | 测试数 | 状态 |
 |------|--------|------|
 | ThreeLayerAdapter | 18 | ✅ 已实现（11个通过） |
-| API Routes | 20 | ⏳ 待实现 |
+| API Routes | 24 | ✅ 已实现（24个通过） |
 
 **ThreeLayerAdapter 测试明细**:
 - 元数据查询: 4个（get_selectors, get_entries, get_exits, 缓存）
@@ -832,7 +854,7 @@ Content-Type: application/json
 | 任务 | 工作量 | 依赖 | 优先级 | 状态 |
 |------|--------|------|--------| ---- |
 | ThreeLayerAdapter | 3天 | - | P0 | ✅ 已完成 |
-| REST API 端点 | 2天 | 任务1 | P0 | ⏳ 待实现 |
+| REST API 端点 | 2天 | 任务1 | P0 | ✅ 已完成 |
 | 缓存机制 | 1天 | 任务1,2 | P1 | ✅ 已集成 |
 | 监控日志 | 1天 | 任务1,2 | P1 | ⏳ 待实现 |
 | 集成测试 | 2天 | 任务1,2 | P0 | ⏳ 待实现 |
@@ -842,8 +864,8 @@ Content-Type: application/json
 | 里程碑 | 日期 | 交付物 | 状态 |
 |--------|------|--------|------|
 | Day 1 | 2026-02-06 | ThreeLayerAdapter 完成 + 单元测试 | ✅ |
-| Day 3 | - | 5个API端点完成 + OpenAPI文档 | ⏳ |
-| Day 4 | - | 缓存机制集成完成 | ✅ |
+| Day 3 | 2026-02-06 | 5个API端点完成 + OpenAPI文档 | ✅ |
+| Day 4 | 2026-02-06 | 缓存机制集成完成 | ✅ |
 | Day 5 | - | 监控日志完成 | ⏳ |
 | Day 7 | - | 所有集成测试通过，功能上线 | ⏳ |
 
