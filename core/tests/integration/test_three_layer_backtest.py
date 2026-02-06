@@ -532,5 +532,523 @@ class TestThreeLayerEdgeCases:
             assert len(buy_trades) == 0
 
 
+class TestThreeLayerRobustness:
+    """测试系统健壮性和错误处理"""
+
+    def test_missing_price_data(self, realistic_price_data):
+        """测试价格数据缺失的情况"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        # 制造缺失数据
+        incomplete_prices = realistic_price_data.copy()
+        incomplete_prices.iloc[10:20, :3] = np.nan  # 某些股票缺失10天数据
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=incomplete_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        # 应该能够处理缺失数据，不会崩溃
+        assert result.is_success()
+
+    def test_extreme_volatility(self, realistic_price_data):
+        """测试极端波动情况"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        # 制造极端波动
+        volatile_prices = realistic_price_data.copy()
+        for stock in volatile_prices.columns[:3]:
+            # 模拟暴涨暴跌
+            volatile_prices.loc['2023-02-01':, stock] *= np.random.choice([0.7, 1.3], size=len(volatile_prices.loc['2023-02-01':]))
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={
+            'stop_loss_pct': -10.0,
+            'take_profit_pct': 20.0
+        })
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=volatile_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+        print(f"\n极端波动测试: 最大回撤={result.data['metrics']['max_drawdown']:.2%}")
+
+    def test_single_stock_available(self, realistic_price_data):
+        """测试只有1只股票可用的情况"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        # 只保留1只股票
+        single_stock_prices = realistic_price_data.iloc[:, :1]
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=single_stock_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+
+    def test_very_short_backtest_period(self, realistic_price_data):
+        """测试非常短的回测周期"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        # 只回测5天
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=realistic_price_data,
+            start_date='2023-02-15',
+            end_date='2023-02-20',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+
+    def test_all_stocks_suspended(self, realistic_price_data):
+        """测试所有股票停牌的情况"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        # 模拟停牌（价格不变 + 成交量为0）
+        suspended_prices = realistic_price_data.copy()
+        # 让所有股票在某段时间停牌
+        suspended_prices.loc['2023-02-10':'2023-02-15', :] = suspended_prices.loc['2023-02-09', :]
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=suspended_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+
+
+class TestThreeLayerPerformance:
+    """测试性能相关场景"""
+
+    def test_large_stock_pool(self):
+        """测试大规模股票池（100只股票）"""
+        np.random.seed(42)
+        dates = pd.date_range('2023-01-01', periods=120, freq='D')
+        stocks = [f'60{i:04d}.SH' for i in range(100)]  # 100只股票
+
+        # 生成价格数据
+        prices = pd.DataFrame(
+            index=dates,
+            columns=stocks
+        )
+
+        for i, stock in enumerate(stocks):
+            trend = np.linspace(10, 12, len(dates))
+            noise = np.random.randn(len(dates)) * 0.5
+            prices[stock] = trend + noise
+
+        engine = BacktestEngine(initial_capital=1000000)
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 10})
+        entry = ImmediateEntry(params={'max_stocks': 10})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        import time
+        start_time = time.time()
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=prices,
+            start_date='2023-01-20',
+            end_date='2023-04-30',
+            rebalance_freq='W'
+        )
+
+        elapsed_time = time.time() - start_time
+
+        assert result.is_success()
+        print(f"\n大规模股票池测试:")
+        print(f"  股票数量: {len(stocks)}")
+        print(f"  回测天数: {len(dates)}")
+        print(f"  耗时: {elapsed_time:.2f}秒")
+        print(f"  交易次数: {result.data['metrics']['n_trades']}")
+
+    def test_daily_rebalance_high_frequency(self, realistic_price_data):
+        """测试日频调仓（高频交易）"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        selector = MomentumSelector(params={'lookback_period': 5, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = TimeBasedExit(params={'holding_period': 3})  # 只持有3天
+
+        import time
+        start_time = time.time()
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=realistic_price_data,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='D'  # 日频调仓
+        )
+
+        elapsed_time = time.time() - start_time
+
+        assert result.is_success()
+        print(f"\n高频交易测试:")
+        print(f"  耗时: {elapsed_time:.2f}秒")
+        print(f"  交易次数: {result.data['metrics']['n_trades']}")
+
+
+class TestThreeLayerDataIntegrity:
+    """测试数据完整性和一致性"""
+
+    def test_trade_records_consistency(self, realistic_price_data):
+        """测试交易记录的一致性"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=realistic_price_data,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W',
+            commission_rate=0.0003
+        )
+
+        assert result.is_success()
+
+        trades = result.data['trades']
+
+        if len(trades) > 0:
+            # 验证交易记录必须字段
+            required_fields = ['stock_code', 'direction', 'price', 'shares', 'date']
+            for field in required_fields:
+                assert field in trades.columns, f"缺少字段: {field}"
+
+            # 验证交易价格和数量为正
+            assert (trades['price'] > 0).all(), "交易价格必须为正"
+            assert (trades['shares'] > 0).all(), "交易数量必须为正"
+
+            # 验证买卖方向
+            assert trades['direction'].isin(['buy', 'sell']).all()
+
+            print(f"\n交易记录一致性测试通过:")
+            print(f"  总交易数: {len(trades)}")
+
+    def test_equity_curve_continuity(self, realistic_price_data):
+        """测试净值曲线的连续性"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=realistic_price_data,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+
+        equity_curve = result.data['equity_curve']
+
+        # 验证净值曲线连续性
+        assert len(equity_curve) > 0
+        assert equity_curve.iloc[0] == pytest.approx(1000000, rel=0.01)
+        assert not equity_curve.isna().any(), "净值曲线不应有缺失值"
+        assert (equity_curve > 0).all(), "净值必须为正"
+
+        print(f"\n净值曲线连续性测试通过:")
+        print(f"  数据点数: {len(equity_curve)}")
+
+    def test_metrics_calculation_accuracy(self, realistic_price_data):
+        """测试指标计算的准确性"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=realistic_price_data,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+
+        metrics = result.data['metrics']
+        equity_curve = result.data['equity_curve']
+
+        # 验证关键指标存在
+        required_metrics = ['total_return', 'sharpe_ratio', 'max_drawdown', 'n_trades']
+        for metric in required_metrics:
+            assert metric in metrics, f"缺少指标: {metric}"
+
+        # 验证总收益率计算
+        expected_return = (equity_curve.iloc[-1] / equity_curve.iloc[0]) - 1
+        assert abs(metrics['total_return'] - expected_return) < 0.01, "总收益率计算不准确"
+
+        # 验证最大回撤为负值或0
+        assert metrics['max_drawdown'] <= 0, "最大回撤应为负值或0"
+
+        print(f"\n指标计算准确性测试通过:")
+        print(f"  总收益率: {metrics['total_return']:.2%}")
+        print(f"  最大回撤: {metrics['max_drawdown']:.2%}")
+
+
+class TestThreeLayerRealWorldScenarios:
+    """测试真实世界场景"""
+
+    def test_bull_market_scenario(self, realistic_price_data):
+        """测试牛市场景"""
+        # 模拟牛市：所有股票上涨
+        bull_prices = realistic_price_data.copy()
+        for stock in bull_prices.columns:
+            bull_prices[stock] = bull_prices[stock] * np.linspace(1.0, 1.3, len(bull_prices))
+
+        engine = BacktestEngine(initial_capital=1000000)
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={
+            'stop_loss_pct': -5.0,
+            'take_profit_pct': 15.0
+        })
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=bull_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+        metrics = result.data['metrics']
+
+        # 牛市应该盈利
+        print(f"\n牛市场景测试:")
+        print(f"  总收益率: {metrics['total_return']:.2%}")
+        print(f"  夏普比率: {metrics['sharpe_ratio']:.2f}")
+
+    def test_bear_market_scenario(self, realistic_price_data):
+        """测试熊市场景"""
+        # 模拟熊市：所有股票下跌
+        bear_prices = realistic_price_data.copy()
+        for stock in bear_prices.columns:
+            bear_prices[stock] = bear_prices[stock] * np.linspace(1.0, 0.8, len(bear_prices))
+
+        engine = BacktestEngine(initial_capital=1000000)
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={
+            'stop_loss_pct': -3.0,  # 严格止损
+            'enable_stop_loss': True
+        })
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=bear_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+        metrics = result.data['metrics']
+
+        print(f"\n熊市场景测试:")
+        print(f"  总收益率: {metrics['total_return']:.2%}")
+        print(f"  最大回撤: {metrics['max_drawdown']:.2%}")
+        print(f"  止损触发次数: {len(result.data['trades'][result.data['trades']['direction']=='sell'])}")
+
+    def test_sideways_market_scenario(self, realistic_price_data):
+        """测试震荡市场景"""
+        # 模拟震荡市：价格来回波动
+        sideways_prices = realistic_price_data.copy()
+        for stock in sideways_prices.columns:
+            # 添加周期性波动
+            wave = np.sin(np.linspace(0, 4*np.pi, len(sideways_prices))) * 0.5
+            sideways_prices[stock] = sideways_prices[stock].iloc[0] + wave
+
+        engine = BacktestEngine(initial_capital=1000000)
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = TimeBasedExit(params={'holding_period': 7})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=sideways_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+        metrics = result.data['metrics']
+
+        print(f"\n震荡市场景测试:")
+        print(f"  总收益率: {metrics['total_return']:.2%}")
+        print(f"  交易次数: {metrics['n_trades']}")
+
+    def test_sector_rotation_scenario(self, realistic_price_data):
+        """测试板块轮动场景"""
+        # 模拟板块轮动：不同时间不同股票表现好
+        rotation_prices = realistic_price_data.copy()
+
+        # 前半段：前5只股票涨
+        rotation_prices.loc[:'2023-02-01', rotation_prices.columns[:5]] *= 1.1
+
+        # 后半段：后5只股票涨
+        rotation_prices.loc['2023-02-01':, rotation_prices.columns[5:]] *= 1.1
+
+        engine = BacktestEngine(initial_capital=1000000)
+        selector = MomentumSelector(params={'lookback_period': 10, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        result = engine.backtest_three_layer(
+            selector=selector,
+            entry=entry,
+            exit_strategy=exit_strategy,
+            prices=rotation_prices,
+            start_date='2023-01-20',
+            end_date='2023-02-28',
+            rebalance_freq='W'
+        )
+
+        assert result.is_success()
+        metrics = result.data['metrics']
+
+        print(f"\n板块轮动场景测试:")
+        print(f"  总收益率: {metrics['total_return']:.2%}")
+        print(f"  换手率: {metrics.get('turnover_rate', 'N/A')}")
+
+
+class TestThreeLayerCommissionAndSlippage:
+    """测试交易成本影响"""
+
+    def test_different_commission_rates(self, realistic_price_data):
+        """测试不同佣金费率的影响"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        commission_rates = [0.0, 0.0001, 0.0003, 0.001]
+        results = {}
+
+        for rate in commission_rates:
+            result = engine.backtest_three_layer(
+                selector=selector,
+                entry=entry,
+                exit_strategy=exit_strategy,
+                prices=realistic_price_data,
+                start_date='2023-01-20',
+                end_date='2023-02-28',
+                rebalance_freq='W',
+                commission_rate=rate
+            )
+
+            assert result.is_success()
+            results[rate] = result.data['metrics']['total_return']
+
+        print(f"\n佣金费率影响测试:")
+        for rate, ret in results.items():
+            print(f"  费率 {rate:.4f}: 收益率 {ret:.2%}")
+
+        # 验证费率越高，收益越低
+        assert results[0.0] >= results[0.001]
+
+    def test_different_slippage_rates(self, realistic_price_data):
+        """测试不同滑点的影响"""
+        engine = BacktestEngine(initial_capital=1000000)
+
+        selector = MomentumSelector(params={'lookback_period': 20, 'top_n': 5})
+        entry = ImmediateEntry(params={'max_stocks': 5})
+        exit_strategy = FixedStopLossExit(params={'stop_loss_pct': -5.0})
+
+        slippage_rates = [0.0, 0.0005, 0.001, 0.002]
+        results = {}
+
+        for rate in slippage_rates:
+            result = engine.backtest_three_layer(
+                selector=selector,
+                entry=entry,
+                exit_strategy=exit_strategy,
+                prices=realistic_price_data,
+                start_date='2023-01-20',
+                end_date='2023-02-28',
+                rebalance_freq='W',
+                slippage_rate=rate
+            )
+
+            assert result.is_success()
+            results[rate] = result.data['metrics']['total_return']
+
+        print(f"\n滑点影响测试:")
+        for rate, ret in results.items():
+            print(f"  滑点 {rate:.4f}: 收益率 {ret:.2%}")
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '--tb=short', '-s'])
