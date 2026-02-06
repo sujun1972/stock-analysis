@@ -492,6 +492,102 @@ class TestTimeBasedExitIntegration:
             else:
                 assert 'A' not in signals, f"不应该在 {date} 触发"
 
+    def test_missing_stock_data_fallback_to_calendar_days(self):
+        """测试股票数据缺失时回退到日历天数"""
+        positions = {
+            'MISSING': Position(
+                stock_code='MISSING',
+                entry_date=pd.Timestamp('2023-01-01'),
+                entry_price=10.0,
+                shares=100,
+                current_price=11.0,
+                unrealized_pnl=100.0,
+                unrealized_pnl_pct=10.0
+            ),
+        }
+
+        exit_strategy = TimeBasedExit(params={
+            'holding_period': 10,
+            'count_trading_days_only': True
+        })
+
+        # 数据中没有MISSING股票
+        data = {}
+
+        # 11天后（日历天数）
+        signals = exit_strategy.generate_exit_signals(
+            positions,
+            data,
+            pd.Timestamp('2023-01-12')
+        )
+
+        # 应该使用日历天数，11天 >= 10天，触发退出
+        assert 'MISSING' in signals
+
+    def test_trading_days_calculation_exception(self, sample_stock_data):
+        """测试交易日计算异常情况"""
+        positions = {
+            'A': Position(
+                stock_code='A',
+                entry_date=pd.Timestamp('2023-01-01'),
+                entry_price=10.0,
+                shares=100,
+                current_price=11.0,
+                unrealized_pnl=100.0,
+                unrealized_pnl_pct=10.0
+            ),
+        }
+
+        # 创建异常数据（无法正常计算mask）
+        bad_data = {
+            'A': pd.DataFrame({
+                'close': [10.0],
+                'open': [10.0],
+                'high': [10.0],
+                'low': [10.0]
+            })  # 没有日期索引
+        }
+
+        exit_strategy = TimeBasedExit(params={
+            'holding_period': 5,
+            'count_trading_days_only': True
+        })
+
+        # 应该捕获异常并回退到日历天数
+        signals = exit_strategy.generate_exit_signals(
+            positions,
+            bad_data,
+            pd.Timestamp('2023-01-10')
+        )
+
+        # 9天日历天数 >= 5天，应该触发
+        assert 'A' in signals
+
+    def test_edge_case_min_holding_period(self):
+        """测试最小持仓期（1天）的边界情况"""
+        positions = {
+            'A': Position(
+                stock_code='A',
+                entry_date=pd.Timestamp('2023-01-01'),
+                entry_price=10.0,
+                shares=100,
+                current_price=11.0,
+                unrealized_pnl=100.0,
+                unrealized_pnl_pct=10.0
+            ),
+        }
+
+        exit_strategy = TimeBasedExit(params={'holding_period': 1})
+
+        # 当天就应该触发（0天 >= 1天会在次日触发）
+        signals = exit_strategy.generate_exit_signals(
+            positions,
+            {},
+            pd.Timestamp('2023-01-02')
+        )
+
+        assert 'A' in signals
+
 
 # ============================================================================
 # 运行测试

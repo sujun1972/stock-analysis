@@ -405,3 +405,142 @@ class TestRSIOversoldEntry:
 
         assert "RSI超卖入场" in repr_str
         assert "rsi_oversold" in repr_str
+
+    def test_rsi_calculation_exception(self):
+        """测试RSI计算异常情况"""
+        dates = pd.date_range('2023-01-01', periods=30, freq='D')
+
+        # 创建全部相同的价格（导致除零或计算异常）
+        stock_data = pd.DataFrame({
+            'close': [100.0] * 30,
+            'open': [100.0] * 30,
+            'high': [100.0] * 30,
+            'low': [100.0] * 30,
+            'volume': [1000000] * 30
+        }, index=dates)
+
+        entry = RSIOversoldEntry(params={'rsi_period': 14})
+
+        signals = entry.generate_entry_signals(
+            stocks=['STOCK_FLAT'],
+            data={'STOCK_FLAT': stock_data},
+            date=dates[-1]
+        )
+
+        # 应该能处理异常，不抛出错误
+        assert isinstance(signals, dict)
+
+    def test_require_turning_up_with_insufficient_history(self):
+        """测试require_rsi_turning_up但历史数据不足"""
+        dates = pd.date_range('2023-01-01', periods=20, freq='D')
+
+        # 创建超卖的股票
+        prices = [100.0 - i * 2 for i in range(20)]  # 持续下跌
+        stock_data = pd.DataFrame({
+            'close': prices,
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'volume': [1000000] * 20
+        }, index=dates)
+
+        entry = RSIOversoldEntry(params={
+            'rsi_period': 14,
+            'oversold_threshold': 35.0,
+            'require_rsi_turning_up': True
+        })
+
+        # 使用第一天（历史数据不足）
+        signals = entry.generate_entry_signals(
+            stocks=['STOCK_FIRST_DAY'],
+            data={'STOCK_FIRST_DAY': stock_data},
+            date=dates[14]  # RSI刚开始有值
+        )
+
+        # 应该能处理，即使没有足够历史
+        assert isinstance(signals, dict)
+
+    def test_prev_rsi_is_nan(self):
+        """测试前一天RSI为NaN的情况"""
+        dates = pd.date_range('2023-01-01', periods=20, freq='D')
+
+        # 创建数据，中间有缺失
+        prices = [100.0 - i * 2 for i in range(20)]
+        stock_data = pd.DataFrame({
+            'close': prices,
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'volume': [1000000] * 20
+        }, index=dates)
+
+        entry = RSIOversoldEntry(params={
+            'rsi_period': 14,
+            'oversold_threshold': 40.0,
+            'require_rsi_turning_up': True
+        })
+
+        signals = entry.generate_entry_signals(
+            stocks=['STOCK_TEST'],
+            data={'STOCK_TEST': stock_data},
+            date=dates[15]
+        )
+
+        # 应该能处理
+        assert isinstance(signals, dict)
+
+    def test_key_error_handling(self):
+        """测试KeyError处理"""
+        dates = pd.date_range('2023-01-01', periods=30, freq='D')
+
+        prices = [100.0 - i for i in range(30)]
+        stock_data = pd.DataFrame({
+            'close': prices,
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'volume': [1000000] * 30
+        }, index=dates)
+
+        entry = RSIOversoldEntry(params={
+            'rsi_period': 14,
+            'oversold_threshold': 35.0
+        })
+
+        # 正常情况应该工作
+        signals = entry.generate_entry_signals(
+            stocks=['STOCK_NORMAL'],
+            data={'STOCK_NORMAL': stock_data},
+            date=dates[-1]
+        )
+
+        assert isinstance(signals, dict)
+
+    def test_rsi_exactly_at_threshold(self):
+        """测试RSI恰好等于阈值的边界情况"""
+        dates = pd.date_range('2023-01-01', periods=30, freq='D')
+
+        # 创建特定价格使RSI接近30
+        prices = [100.0] * 10 + [95.0, 90.0, 85.0, 80.0, 75.0] + [77.0] * 15
+        stock_data = pd.DataFrame({
+            'close': prices,
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'volume': [1000000] * 30
+        }, index=dates)
+
+        entry = RSIOversoldEntry(params={
+            'rsi_period': 14,
+            'oversold_threshold': 30.0,  # 边界值
+            'min_rsi': 0.0
+        })
+
+        signals = entry.generate_entry_signals(
+            stocks=['STOCK_BOUNDARY'],
+            data={'STOCK_BOUNDARY': stock_data},
+            date=dates[-1]
+        )
+
+        # 应该能处理边界情况
+        assert isinstance(signals, dict)

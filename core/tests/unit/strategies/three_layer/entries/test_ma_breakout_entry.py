@@ -374,3 +374,133 @@ class TestMABreakoutEntry:
 
         assert "均线突破入场" in repr_str
         assert "ma_breakout" in repr_str
+
+    def test_rolling_calculation_exception(self, entry_strategy):
+        """测试rolling计算异常情况"""
+        dates = pd.date_range('2023-01-01', periods=30, freq='D')
+
+        # 创建包含NaN的数据导致rolling计算问题
+        close_prices = [100.0] * 30
+        close_prices[15] = np.nan  # 中间插入NaN
+
+        stock_data = pd.DataFrame({
+            'close': close_prices,
+            'open': [100.0] * 30,
+            'high': [101.0] * 30,
+            'low': [99.0] * 30,
+            'volume': [1000000] * 30
+        }, index=dates)
+
+        signals = entry_strategy.generate_entry_signals(
+            stocks=['STOCK_WITH_NAN'],
+            data={'STOCK_WITH_NAN': stock_data},
+            date=dates[-1]
+        )
+
+        # 应该能处理NaN，即使没有信号也不应该抛出异常
+        assert isinstance(signals, dict)
+
+    def test_require_trending_up_parameter(self):
+        """测试require_ma_trending_up参数"""
+        dates = pd.date_range('2023-01-01', periods=40, freq='D')
+
+        # 创建一个金叉但短期均线不向上的情况
+        prices = list(range(100, 85, -1)) + list(range(85, 110))
+        stock_data = pd.DataFrame({
+            'close': prices,
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'volume': [1000000] * 40
+        }, index=dates)
+
+        # 不要求向上趋势
+        entry_no_trend = MABreakoutEntry(params={
+            'short_window': 5,
+            'long_window': 20,
+            'lookback_for_cross': 5,
+            'require_ma_trending_up': False
+        })
+
+        # 要求向上趋势
+        entry_with_trend = MABreakoutEntry(params={
+            'short_window': 5,
+            'long_window': 20,
+            'lookback_for_cross': 5,
+            'require_ma_trending_up': True
+        })
+
+        signals_no_trend = entry_no_trend.generate_entry_signals(
+            stocks=['STOCK_A'],
+            data={'STOCK_A': stock_data},
+            date=dates[-1]
+        )
+
+        signals_with_trend = entry_with_trend.generate_entry_signals(
+            stocks=['STOCK_A'],
+            data={'STOCK_A': stock_data},
+            date=dates[-1]
+        )
+
+        # 两种策略都应该返回dict
+        assert isinstance(signals_no_trend, dict)
+        assert isinstance(signals_with_trend, dict)
+
+    def test_nan_in_ma_values(self):
+        """测试均线计算结果包含NaN的情况"""
+        dates = pd.date_range('2023-01-01', periods=25, freq='D')
+
+        # 创建数据，前面部分不足以计算长期均线
+        prices = [100.0] * 25
+        stock_data = pd.DataFrame({
+            'close': prices,
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'volume': [1000000] * 25
+        }, index=dates)
+
+        entry = MABreakoutEntry(params={
+            'short_window': 5,
+            'long_window': 20,
+            'lookback_for_cross': 3
+        })
+
+        # 使用靠前的日期，此时长期均线可能为NaN
+        signals = entry.generate_entry_signals(
+            stocks=['STOCK_EARLY'],
+            data={'STOCK_EARLY': stock_data},
+            date=dates[22]  # 第23天
+        )
+
+        # 应该能处理NaN情况
+        assert isinstance(signals, dict)
+
+    def test_index_error_handling(self):
+        """测试索引错误处理"""
+        dates = pd.date_range('2023-01-01', periods=10, freq='D')
+
+        prices = list(range(100, 90, -1))
+        stock_data = pd.DataFrame({
+            'close': prices,
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'volume': [1000000] * 10
+        }, index=dates)
+
+        entry = MABreakoutEntry(params={
+            'short_window': 3,
+            'long_window': 7,
+            'lookback_for_cross': 2
+        })
+
+        # 数据量很小，容易触发索引问题
+        signals = entry.generate_entry_signals(
+            stocks=['STOCK_SHORT_DATA'],
+            data={'STOCK_SHORT_DATA': stock_data},
+            date=dates[5]
+        )
+
+        # 应该安全处理，不抛异常
+        assert isinstance(signals, dict)
