@@ -1,9 +1,9 @@
 # 前端回测模块实施方案
 
-> **版本**: v1.2
+> **版本**: v1.3
 > **日期**: 2026-02-07
 > **基于**: frontend-backtest-improvement-plan.md v3.1
-> **状态**: 🎉 阶段零完成（任务 0.1 ✅ + 0.2 ✅ + 0.3 ✅ + 0.4 ✅ 已完成，进度：100%）
+> **状态**: 🎉 阶段零完成 + 阶段一进行中（任务 0.1~0.4 ✅ + 1.1 ✅ + 1.2 ✅ 已完成，阶段一进度：67%）
 
 ---
 
@@ -363,51 +363,68 @@ const exits = await threeLayerApi.getExits()          // 4个
 - ✅ `frontend/TASK_1.1_COMPLETION.md` - 完成报告
 - ✅ `frontend/TASK_1.1_TEST_GUIDE.md` - 测试指南
 
-#### 任务 1.2：策略详情页（1-2天）
+#### 任务 1.2：策略详情页（1-2天）✅ **已完成 2026-02-07**
 
 **目标**：展示组件详细信息
 
 **路由**：`/strategies/[id]`
 
 **交付物**：
-- `frontend/src/app/strategies/[id]/page.tsx`
-- 详情展示组件
-- 参数说明组件
+- ✅ `frontend/src/app/strategies/[id]/page.tsx` - 动态路由页面
+- ✅ `frontend/src/components/strategies/StrategyDetail.tsx` - 主详情组件（220行）
+- ✅ `frontend/src/components/strategies/StrategyOverview.tsx` - 概览展示组件（280行）
+- ✅ `frontend/src/components/strategies/ParametersTable.tsx` - 参数表格组件（240行）
+- ✅ `frontend/src/components/strategies/UsageGuide.tsx` - 使用指南组件（350行）
+- ✅ 更新组件导出文件 `index.ts`
 
 **核心功能**：
-1. **基本信息**
-   - 组件名称
-   - 版本号
-   - 完整描述
-   - 适用场景
-   - 风险提示
+1. **基本信息**（StrategyOverview）
+   - ✅ 组件名称、版本、描述
+   - ✅ 层级标签（选股器/入场/退出）
+   - ✅ 智能风险评估（低/中/中高）
+   - ✅ 适用场景分析（市场环境+投资风格）
+   - ✅ 组件类型说明和典型应用场景
 
-2. **参数说明**（表格形式）
-   - 参数名称
-   - 参数类型
-   - 默认值
-   - 取值范围
-   - 参数说明
+2. **参数说明**（ParametersTable）
+   - ✅ 参数概览卡片（Badge展示）
+   - ✅ 详细参数表格（5列：名称、类型、默认值、范围、说明）
+   - ✅ 参数调优建议（4条）
+   - ✅ 零参数组件特殊处理（友好空状态）
 
-3. **使用示例**
-   ```typescript
-   // 代码示例（可复制）
-   const strategy = {
-     selector: {id: 'momentum', params: {lookback_period: 20}},
-     entry: {id: 'immediate', params: {}},
-     exit: {id: 'fixed_stop_loss', params: {stop_loss_pct: -5.0}}
-   }
-   ```
+3. **使用指南**（UsageGuide）
+   - ✅ 快速开始（3步流程）
+   - ✅ 策略配置代码示例（智能生成+可复制）
+   - ✅ API调用代码示例（可复制）
+   - ✅ 组合建议（推荐搭配组件）
+   - ✅ 常见问题FAQ（4个问答）
 
 4. **Tabs结构**
-   - 概览
-   - 参数配置
-   - 使用指南
+   - ✅ 概览（基本信息+风险评估+适用场景）
+   - ✅ 参数配置（参数表格+调优建议）
+   - ✅ 使用指南（快速开始+代码示例+FAQ）
 
 **验收标准**：
 - ✅ 所有信息完整展示
-- ✅ 代码示例可复制
+- ✅ 代码示例可复制（双示例：策略配置+API调用）
 - ✅ Tabs切换流畅
+- ✅ 响应式设计（移动端/平板/桌面）
+- ✅ 暗色模式支持
+- ✅ 构建成功（npm run build）
+- ✅ TypeScript类型检查通过
+
+**特色功能**：
+- 🎯 智能风险评估系统（根据策略类型自动判定）
+- 🏷️ 适用场景智能匹配（市场环境和投资风格标签）
+- 🔗 组合建议系统（推荐最佳搭配组件）
+- 📋 完善的FAQ系统（4个常见问题）
+- 🎨 零参数组件特殊处理（友好空状态）
+- 📝 双重代码示例（策略配置+API调用，均可复制）
+
+**文档**：
+- ✅ `frontend/TASK_1.2_COMPLETION.md` - 完成报告（详细）
+- ✅ `frontend/TASK_1.2_TEST_GUIDE.md` - 测试指南
+
+**代码量**：~1,114行高质量代码
 
 #### 任务 1.3：导航栏更新（0.5天）
 
