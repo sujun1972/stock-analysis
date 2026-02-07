@@ -100,7 +100,8 @@ class ThreeLayerAdapter:
         "fixed_stop_loss": FixedStopLossExit,
         "atr_stop_loss": ATRStopLossExit,
         "time_based": TimeBasedExit,
-        "combined": CombinedExit,
+        # CombinedExit 需要特殊初始化参数，暂不支持
+        # "combined": CombinedExit,
     }
 
     def __init__(self, data_adapter: Optional[DataAdapter] = None):
@@ -221,23 +222,28 @@ class ThreeLayerAdapter:
                 # 实例化获取名称
                 instance = entry_class(params={})
 
-                # 构建元数据
+                # 构建元数据（参数已经是字典格式）
                 param_list = []
                 for param in parameters:
-                    param_dict = {
-                        "name": param.name,
-                        "label": param.label,
-                        "type": param.type,
-                        "default": param.default,
-                        "description": param.description,
-                    }
-                    if param.min_value is not None:
-                        param_dict["min_value"] = param.min_value
-                    if param.max_value is not None:
-                        param_dict["max_value"] = param.max_value
-                    if param.options is not None:
-                        param_dict["options"] = param.options
-                    param_list.append(param_dict)
+                    # 参数可能是 dict 或 dataclass
+                    if isinstance(param, dict):
+                        param_list.append(param)
+                    else:
+                        # dataclass 格式
+                        param_dict = {
+                            "name": param.name,
+                            "label": param.label,
+                            "type": param.type,
+                            "default": param.default,
+                            "description": param.description,
+                        }
+                        if hasattr(param, 'min_value') and param.min_value is not None:
+                            param_dict["min_value"] = param.min_value
+                        if hasattr(param, 'max_value') and param.max_value is not None:
+                            param_dict["max_value"] = param.max_value
+                        if hasattr(param, 'options') and param.options is not None:
+                            param_dict["options"] = param.options
+                        param_list.append(param_dict)
 
                 entries.append({
                     "id": entry_id,
@@ -292,23 +298,28 @@ class ThreeLayerAdapter:
                 # 实例化获取名称
                 instance = exit_class(params={})
 
-                # 构建元数据
+                # 构建元数据（参数已经是字典格式）
                 param_list = []
                 for param in parameters:
-                    param_dict = {
-                        "name": param.name,
-                        "label": param.label,
-                        "type": param.type,
-                        "default": param.default,
-                        "description": param.description,
-                    }
-                    if param.min_value is not None:
-                        param_dict["min_value"] = param.min_value
-                    if param.max_value is not None:
-                        param_dict["max_value"] = param.max_value
-                    if param.options is not None:
-                        param_dict["options"] = param.options
-                    param_list.append(param_dict)
+                    # 参数可能是 dict 或 dataclass
+                    if isinstance(param, dict):
+                        param_list.append(param)
+                    else:
+                        # dataclass 格式
+                        param_dict = {
+                            "name": param.name,
+                            "label": param.label,
+                            "type": param.type,
+                            "default": param.default,
+                            "description": param.description,
+                        }
+                        if hasattr(param, 'min_value') and param.min_value is not None:
+                            param_dict["min_value"] = param.min_value
+                        if hasattr(param, 'max_value') and param.max_value is not None:
+                            param_dict["max_value"] = param.max_value
+                        if hasattr(param, 'options') and param.options is not None:
+                            param_dict["options"] = param.options
+                        param_list.append(param_dict)
 
                 exits.append({
                     "id": exit_id,
