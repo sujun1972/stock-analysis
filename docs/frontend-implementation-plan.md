@@ -310,16 +310,18 @@ threeLayerApi.clientValidateStrategy()  // 客户端验证策略
 **优先级**：P1
 **依赖**：阶段零完成
 
-#### 任务 1.1：策略列表页（1-2天）
+#### 任务 1.1：策略列表页（1-2天）✅ **已完成 2026-02-07**
 
 **目标**：展示所有可用策略和组件
 
 **路由**：`/strategies`
 
 **交付物**：
-- `frontend/src/app/strategies/page.tsx`
-- 策略卡片组件
-- 搜索和筛选功能
+- ✅ `frontend/src/app/strategies/page.tsx` - 策略列表页面路由
+- ✅ `frontend/src/components/strategies/StrategyList.tsx` - 主列表组件
+- ✅ `frontend/src/components/strategies/StrategyCard.tsx` - 策略卡片组件
+- ✅ `frontend/src/components/strategies/index.ts` - 组件导出
+- ✅ 更新导航栏（桌面端和移动端）
 
 **核心功能**：
 1. **策略展示**
@@ -352,6 +354,14 @@ const exits = await threeLayerApi.getExits()          // 4个
 - ✅ 11个组件全部展示
 - ✅ 搜索实时响应
 - ✅ 筛选功能正常
+- ✅ 响应式设计（移动端/平板/桌面）
+- ✅ 暗色模式支持
+- ✅ 构建成功（npm run build）
+- ✅ TypeScript类型检查通过
+
+**文档**：
+- ✅ `frontend/TASK_1.1_COMPLETION.md` - 完成报告
+- ✅ `frontend/TASK_1.1_TEST_GUIDE.md` - 测试指南
 
 #### 任务 1.2：策略详情页（1-2天）
 
