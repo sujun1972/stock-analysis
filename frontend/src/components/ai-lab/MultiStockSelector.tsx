@@ -71,7 +71,8 @@ export function MultiStockSelector({
   };
 
   const handleQuickAdd = (preset: string[]) => {
-    const newSymbols = [...new Set([...symbols, ...preset])].slice(0, maxSymbols);
+    const combined = [...symbols, ...preset];
+    const newSymbols = Array.from(new Set(combined)).slice(0, maxSymbols);
     onChange(newSymbols);
   };
 

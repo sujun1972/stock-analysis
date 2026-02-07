@@ -19,9 +19,9 @@ export function ModelComparisonTable({ task }: ModelComparisonTableProps) {
     return null;
   }
 
-  const lgbMetrics = task.metrics || {};
-  const ridgeMetrics = task.baseline_metrics || {};
-  const comparison = task.comparison_result || {};
+  const lgbMetrics = task.metrics || {} as any;
+  const ridgeMetrics = task.baseline_metrics || {} as any;
+  const comparison = task.comparison_result || {} as any;
   const recommendation = task.recommendation;
 
   // 对比数据
