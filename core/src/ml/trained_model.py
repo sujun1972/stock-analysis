@@ -157,7 +157,12 @@ class TrainedModel:
 
         # 4. 模型预测
         try:
-            predictions = self.model.predict(features.values)
+            # 尝试使用DataFrame (LightGBMStockModel需要)
+            if hasattr(self.model, 'predict') and hasattr(self.model, 'feature_names'):
+                predictions = self.model.predict(features)
+            else:
+                # 否则使用numpy array
+                predictions = self.model.predict(features.values)
         except Exception as e:
             raise RuntimeError(f"Model prediction failed: {e}")
 

@@ -6,11 +6,11 @@ ML模块 - 机器学习工作流核心组件
 - LabelGenerator: 标签生成器
 - TrainedModel: 训练好的模型包装类
 - TrainingConfig: 训练配置
-- MLEntry: ML入场策略 (待实现)
+- MLEntry: ML入场策略
 - MLStockRanker: 股票评分工具 (待实现)
 
 对齐文档: core/docs/ml/README.md
-版本: v1.1.0
+版本: v1.2.0
 创建时间: 2026-02-08
 最后更新: 2026-02-08
 """
@@ -18,6 +18,7 @@ ML模块 - 机器学习工作流核心组件
 from .feature_engine import FeatureEngine
 from .label_generator import LabelGenerator, LabelType
 from .trained_model import TrainedModel, TrainingConfig
+from .ml_entry import MLEntry
 
 __all__ = [
     'FeatureEngine',
@@ -25,6 +26,7 @@ __all__ = [
     'LabelType',
     'TrainedModel',
     'TrainingConfig',
+    'MLEntry',
 ]
 
-__version__ = '1.1.0'
+__version__ = '1.2.0'
