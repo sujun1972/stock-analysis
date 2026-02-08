@@ -12,7 +12,7 @@ import sys
 # 添加src目录到路径
 # Path already configured in conftest.py
 
-from strategies.multi_factor_strategy import MultiFactorStrategy
+from strategies import MultiFactorStrategy
 from strategies.signal_generator import SignalType
 
 

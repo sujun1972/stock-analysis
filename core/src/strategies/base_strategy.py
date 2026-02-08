@@ -83,6 +83,14 @@ class BaseStrategy(ABC):
         self.config = self._parse_config(config)
         self._signal_cache = {}  # 信号缓存
 
+        # 元信息 (由加载器设置)
+        self._config_id: Optional[int] = None         # 配置ID (方案1)
+        self._strategy_id: Optional[int] = None       # AI策略ID (方案2)
+        self._strategy_type: str = 'predefined'       # 'predefined' | 'configured' | 'dynamic'
+        self._config_version: Optional[int] = None    # 配置版本
+        self._code_hash: Optional[str] = None         # 代码哈希 (方案2)
+        self._risk_level: str = 'safe'                # 风险等级
+
         logger.info(f"初始化策略: {self.name}")
         logger.debug(f"策略配置: {self.config.to_dict()}")
 
@@ -354,9 +362,28 @@ class BaseStrategy(ABC):
         else:
             return response
 
+    def get_metadata(self) -> Dict[str, Any]:
+        """
+        获取策略元信息
+
+        Returns:
+            完整的策略元数据
+        """
+        return {
+            'name': self.name,
+            'class': self.__class__.__name__,
+            'strategy_type': self._strategy_type,
+            'config_id': self._config_id,
+            'strategy_id': self._strategy_id,
+            'config_version': self._config_version,
+            'code_hash': self._code_hash,
+            'risk_level': self._risk_level,
+            'config': self.config.to_dict() if hasattr(self.config, 'to_dict') else self.config,
+        }
+
     def get_strategy_info(self) -> Dict[str, Any]:
         """
-        获取策略信息
+        获取策略信息（保持向后兼容）
 
         Returns:
             策略信息字典

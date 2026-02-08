@@ -22,7 +22,7 @@ except ImportError:
     # 用于测试时的兼容
     DatabaseManager = None
     StrategyLoadError = ValueError
-    StrategySecurityError = SecurityError
+    StrategySecurityError = Exception  # 修复: SecurityError -> Exception
     CodeCompileError = RuntimeError
 
 try:

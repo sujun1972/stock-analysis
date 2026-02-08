@@ -13,8 +13,7 @@ import sys
 # Path already configured in conftest.py
 
 from strategies.strategy_combiner import StrategyCombiner
-from strategies.momentum_strategy import MomentumStrategy
-from strategies.mean_reversion_strategy import MeanReversionStrategy
+from strategies import MomentumStrategy, MeanReversionStrategy
 from strategies.signal_generator import SignalType
 
 

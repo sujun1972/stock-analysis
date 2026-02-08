@@ -12,7 +12,7 @@ import sys
 # 添加src目录到路径
 # Path already configured in conftest.py
 
-from strategies.momentum_strategy import MomentumStrategy
+from strategies import MomentumStrategy
 from strategies.signal_generator import SignalType
 
 

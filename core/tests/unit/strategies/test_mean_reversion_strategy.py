@@ -12,7 +12,7 @@ import sys
 # 添加src目录到路径
 # Path already configured in conftest.py
 
-from strategies.mean_reversion_strategy import MeanReversionStrategy
+from strategies import MeanReversionStrategy
 from strategies.signal_generator import SignalType
 
 
