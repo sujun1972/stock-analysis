@@ -6,7 +6,16 @@
 
 from .strategy_cache import StrategyCache, CodeCache
 
-__all__ = [
-    'StrategyCache',
-    'CodeCache',
-]
+# Optional Redis cache
+try:
+    from .redis_cache import RedisCache
+    __all__ = [
+        'StrategyCache',
+        'CodeCache',
+        'RedisCache',
+    ]
+except ImportError:
+    __all__ = [
+        'StrategyCache',
+        'CodeCache',
+    ]
