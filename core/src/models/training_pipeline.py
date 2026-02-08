@@ -14,9 +14,8 @@ from typing import Optional, Dict, List, Any
 from pathlib import Path
 from loguru import logger
 
-from .model_trainer import (
-    ModelTrainer, TrainingConfig, DataSplitConfig
-)
+from .model_trainer import ModelTrainer, ModelTrainerConfig, DataSplitConfig
+from src.ml.trained_model import TrainingConfig
 from src.utils.response import Response
 
 
@@ -107,11 +106,28 @@ class TrainingPipeline:
             logger.info("="*60)
 
             # 1. 创建配置
+            # 分离 model_params 和 trainer 特定参数
+            trainer_params = {}
+            if 'early_stopping_rounds' in self.training_kwargs:
+                trainer_params['early_stopping_rounds'] = self.training_kwargs['early_stopping_rounds']
+            if 'verbose_eval' in self.training_kwargs:
+                trainer_params['verbose_eval'] = self.training_kwargs['verbose_eval']
+            if 'seq_length' in self.training_kwargs:
+                trainer_params['seq_length'] = self.training_kwargs['seq_length']
+            if 'batch_size' in self.training_kwargs:
+                trainer_params['batch_size'] = self.training_kwargs['batch_size']
+            if 'epochs' in self.training_kwargs:
+                trainer_params['epochs'] = self.training_kwargs['epochs']
+            if 'early_stopping_patience' in self.training_kwargs:
+                trainer_params['early_stopping_patience'] = self.training_kwargs['early_stopping_patience']
+
             training_config = TrainingConfig(
                 model_type=self.model_type,
-                model_params=self.model_params,
+                hyperparameters=self.model_params
+            )
+            trainer_config = ModelTrainerConfig(
                 output_dir=str(self.output_dir),
-                **self.training_kwargs
+                **trainer_params
             )
 
             split_config = DataSplitConfig(
@@ -120,7 +136,7 @@ class TrainingPipeline:
             )
 
             # 2. 创建训练器
-            self.trainer = ModelTrainer(config=training_config)
+            self.trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
             # 3. 准备数据
             logger.info("\n[1/5] 准备数据...")
@@ -260,11 +276,9 @@ class TrainingPipeline:
         """
         try:
             # 创建训练器
-            training_config = TrainingConfig(
-                model_type=self.model_type,
-                output_dir=str(self.output_dir)
-            )
-            self.trainer = ModelTrainer(config=training_config)
+            training_config = TrainingConfig(model_type=self.model_type)
+            trainer_config = ModelTrainerConfig(output_dir=str(self.output_dir))
+            self.trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
             # 加载模型
             logger.info(f"加载模型: {model_name}")

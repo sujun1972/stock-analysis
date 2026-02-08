@@ -11,7 +11,7 @@ except ImportError:
 
 from .ridge_model import RidgeStockModel
 from .model_evaluator import ModelEvaluator, evaluate_model
-from .model_trainer import ModelTrainer
+from .model_trainer import ModelTrainer, ModelTrainerConfig, DataSplitConfig
 from .training_pipeline import TrainingPipeline, train_stock_model
 from .model_validator import (
     TimeSeriesCrossValidator,
@@ -55,6 +55,8 @@ __all__ = [
 
     # 训练
     'ModelTrainer',
+    'ModelTrainerConfig',
+    'DataSplitConfig',
     'TrainingPipeline',
     'train_stock_model',
 

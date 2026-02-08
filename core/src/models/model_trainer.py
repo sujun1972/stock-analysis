@@ -8,12 +8,16 @@
 - 工厂模式: 统一的模型创建接口
 - 统一日志系统: 使用 loguru 替代 print
 - 增强错误处理: 自定义异常类和数据验证
-- 配置管理: 使用 dataclass 管理训练参数
+- 配置管理: 使用 ml.TrainingConfig (Phase 2 对齐)
 
 配套模块:
 - training_pipeline.py: 端到端训练流程管理
 - model_validator.py: 模型验证（交叉验证、稳定性测试）
 - hyperparameter_tuner.py: 超参数调优（网格搜索、随机搜索）
+
+Phase 2 更新 (2026-02-08):
+- 使用 src.ml.TrainingConfig 替代本地 TrainingConfig
+- 添加 ModelTrainerConfig 管理训练器特定参数
 """
 
 import pandas as pd
@@ -39,11 +43,14 @@ except ImportError:
 from .ridge_model import RidgeStockModel
 from .model_evaluator import ModelEvaluator
 
+# 导入 ML 模块的 TrainingConfig
+from src.ml.trained_model import TrainingConfig
+
 
 # ==================== 异常类 ====================
 
 # 导入统一异常系统
-from src.exceptions import ModelError, ModelTrainingError as BaseModelTrainingError, DataValidationError
+from src.exceptions import ModelTrainingError as BaseModelTrainingError
 
 class TrainingError(BaseModelTrainingError):
     """训练过程错误基类（迁移到统一异常系统）
@@ -115,6 +122,8 @@ class InvalidModelTypeError(TrainingError):
 
 # ==================== 配置类 ====================
 
+# TrainingConfig 已从 src.ml.trained_model 导入
+
 @dataclass
 class DataSplitConfig:
     """数据分割配置"""
@@ -136,10 +145,23 @@ class DataSplitConfig:
 
 
 @dataclass
-class TrainingConfig:
-    """训练配置"""
-    model_type: str = 'lightgbm'
-    model_params: Dict[str, Any] = field(default_factory=dict)
+class ModelTrainerConfig:
+    """
+    模型训练器配置 (训练器特定参数)
+
+    该配置管理训练过程的参数，与 ml.TrainingConfig 配合使用:
+    - ml.TrainingConfig: 模型配置 (model_type, hyperparameters, feature_groups, etc.)
+    - ModelTrainerConfig: 训练器配置 (output_dir, early_stopping, batch_size, etc.)
+
+    Attributes:
+        output_dir: 模型保存目录
+        early_stopping_rounds: LightGBM早停轮数
+        verbose_eval: LightGBM日志输出频率
+        seq_length: GRU序列长度
+        batch_size: GRU批次大小
+        epochs: GRU训练轮数
+        early_stopping_patience: GRU早停耐心值
+    """
     output_dir: str = 'data/models/saved'
 
     # LightGBM 特定参数
@@ -154,11 +176,14 @@ class TrainingConfig:
 
     def __post_init__(self):
         """验证配置参数"""
-        valid_types = ['lightgbm', 'ridge', 'gru']
-        if self.model_type not in valid_types:
-            raise ValueError(
-                f"不支持的模型类型: {self.model_type}，支持的类型: {valid_types}"
-            )
+        if self.early_stopping_rounds < 0:
+            raise ValueError(f"early_stopping_rounds must be non-negative, got {self.early_stopping_rounds}")
+        if self.seq_length <= 0:
+            raise ValueError(f"seq_length must be positive, got {self.seq_length}")
+        if self.batch_size <= 0:
+            raise ValueError(f"batch_size must be positive, got {self.batch_size}")
+        if self.epochs <= 0:
+            raise ValueError(f"epochs must be positive, got {self.epochs}")
 
 
 
@@ -294,7 +319,7 @@ class TrainingStrategy(ABC):
         y_train: pd.Series,
         X_valid: Optional[pd.DataFrame],
         y_valid: Optional[pd.Series],
-        config: TrainingConfig
+        trainer_config: ModelTrainerConfig
     ) -> Dict[str, Any]:
         """训练模型"""
         pass
@@ -337,14 +362,14 @@ class LightGBMTrainingStrategy(TrainingStrategy):
         y_train: pd.Series,
         X_valid: Optional[pd.DataFrame],
         y_valid: Optional[pd.Series],
-        config: TrainingConfig
+        trainer_config: ModelTrainerConfig
     ) -> Dict[str, Any]:
         logger.info("训练 LightGBM 模型...")
         history = model.train(
             X_train, y_train,
             X_valid, y_valid,
-            early_stopping_rounds=config.early_stopping_rounds,
-            verbose_eval=config.verbose_eval
+            early_stopping_rounds=trainer_config.early_stopping_rounds,
+            verbose_eval=trainer_config.verbose_eval
         )
         return history
 
@@ -370,7 +395,7 @@ class RidgeTrainingStrategy(TrainingStrategy):
         y_train: pd.Series,
         X_valid: Optional[pd.DataFrame],
         y_valid: Optional[pd.Series],
-        config: TrainingConfig
+        trainer_config: ModelTrainerConfig
     ) -> Dict[str, Any]:
         logger.info("训练 Ridge 模型...")
         history = model.train(X_train, y_train, X_valid, y_valid)
@@ -407,16 +432,16 @@ class GRUTrainingStrategy(TrainingStrategy):
         y_train: pd.Series,
         X_valid: Optional[pd.DataFrame],
         y_valid: Optional[pd.Series],
-        config: TrainingConfig
+        trainer_config: ModelTrainerConfig
     ) -> Dict[str, Any]:
         logger.info("训练 GRU 模型...")
         history = model.train(
             X_train, y_train,
             X_valid, y_valid,
-            seq_length=config.seq_length,
-            batch_size=config.batch_size,
-            epochs=config.epochs,
-            early_stopping_patience=config.early_stopping_patience
+            seq_length=trainer_config.seq_length,
+            batch_size=trainer_config.batch_size,
+            epochs=trainer_config.epochs,
+            early_stopping_patience=trainer_config.early_stopping_patience
         )
         return history
 
@@ -501,23 +526,39 @@ class ModelTrainer:
     统一模型训练器
 
     重构后的主训练器作为协调者，使用策略模式处理不同模型的训练逻辑
+
+    Phase 2 更新:
+    - 使用 ml.TrainingConfig (模型配置)
+    - 使用 ModelTrainerConfig (训练器配置)
     """
 
-    def __init__(self, config: Optional[TrainingConfig] = None):
-        """初始化训练器"""
-        self.config = config or TrainingConfig()
-        self.output_dir = Path(self.config.output_dir)
+    def __init__(
+        self,
+        training_config: Optional[TrainingConfig] = None,
+        trainer_config: Optional[ModelTrainerConfig] = None
+    ):
+        """
+        初始化训练器
+
+        Args:
+            training_config: ML训练配置 (来自 src.ml.trained_model)
+            trainer_config: 训练器配置 (本地配置)
+        """
+        self.training_config = training_config or TrainingConfig()
+        self.trainer_config = trainer_config or ModelTrainerConfig()
+
+        self.output_dir = Path(self.trainer_config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # 创建训练策略
-        self.strategy = StrategyFactory.create_strategy(self.config.model_type)
+        self.strategy = StrategyFactory.create_strategy(self.training_config.model_type)
 
         # 初始化组件
         self.model: Optional[Any] = None
         self.evaluator = ModelEvaluator()
         self.training_history: Dict[str, Any] = {}
 
-        logger.debug(f"初始化 ModelTrainer，模型类型: {self.config.model_type}")
+        logger.debug(f"初始化 ModelTrainer，模型类型: {self.training_config.model_type}")
 
     def prepare_data(
         self,
@@ -610,19 +651,22 @@ class ModelTrainer:
 
         try:
             logger.info(f"\n{'='*60}")
-            logger.info(f"开始训练 {self.config.model_type.upper()} 模型")
+            logger.info(f"开始训练 {self.training_config.model_type.upper()} 模型")
             logger.info(f"{'='*60}")
 
             start_time = time.time()
 
+            # 准备模型参数 (从 hyperparameters 获取)
+            model_params = self.training_config.hyperparameters or {}
+
             # 对于 GRU 模型，需要设置 input_size
-            if self.config.model_type == 'gru':
-                if 'input_size' not in self.config.model_params:
-                    self.config.model_params['input_size'] = len(X_train.columns)
+            if self.training_config.model_type == 'gru':
+                if 'input_size' not in model_params:
+                    model_params['input_size'] = len(X_train.columns)
                     logger.debug(f"自动设置 GRU input_size: {len(X_train.columns)}")
 
             # 创建模型
-            self.model = self.strategy.create_model(self.config.model_params)
+            self.model = self.strategy.create_model(model_params)
             logger.debug(f"模型创建成功: {type(self.model).__name__}")
 
             # 训练模型
@@ -630,7 +674,7 @@ class ModelTrainer:
                 self.model,
                 X_train, y_train,
                 X_valid, y_valid,
-                self.config
+                self.trainer_config
             )
 
             elapsed_time = time.time() - start_time
@@ -642,8 +686,8 @@ class ModelTrainer:
                     'model': self.model,
                     'training_history': self.training_history
                 },
-                message=f"{self.config.model_type.upper()} 模型训练完成",
-                model_type=self.config.model_type,
+                message=f"{self.training_config.model_type.upper()} 模型训练完成",
+                model_type=self.training_config.model_type,
                 n_samples=len(X_train),
                 n_features=len(X_train.columns),
                 elapsed_time=f"{elapsed_time:.2f}s"
@@ -653,20 +697,20 @@ class ModelTrainer:
             return Response.error(
                 error=str(e),
                 error_code=e.error_code if hasattr(e, 'error_code') else "MODEL_CREATION_ERROR",
-                model_type=self.config.model_type
+                model_type=self.training_config.model_type
             )
         except TrainingError as e:
             return Response.error(
                 error=str(e),
                 error_code=e.error_code if hasattr(e, 'error_code') else "TRAINING_ERROR",
-                model_type=self.config.model_type
+                model_type=self.training_config.model_type
             )
         except Exception as e:
             logger.exception(f"训练过程发生异常: {e}")
             return Response.error(
                 error=f"模型训练失败: {str(e)}",
                 error_code="TRAINING_ERROR",
-                model_type=self.config.model_type
+                model_type=self.training_config.model_type
             )
 
     def evaluate(
@@ -703,10 +747,10 @@ class ModelTrainer:
 
             metrics = ModelEvaluationHelper.evaluate_model(
                 self.model,
-                self.config.model_type,
+                self.training_config.model_type,
                 X, y,
                 self.evaluator,
-                seq_length=self.config.seq_length if self.config.model_type == 'gru' else None,
+                seq_length=self.trainer_config.seq_length if self.training_config.model_type == 'gru' else None,
                 dataset_name=dataset_name,
                 verbose=verbose
             )
@@ -717,7 +761,7 @@ class ModelTrainer:
                 data=metrics,
                 message=f"{dataset_name} 集评估完成",
                 dataset_name=dataset_name,
-                model_type=self.config.model_type,
+                model_type=self.training_config.model_type,
                 n_samples=len(X),
                 elapsed_time=f"{elapsed_time:.2f}s"
             )
@@ -728,7 +772,7 @@ class ModelTrainer:
                 error=f"模型评估失败: {str(e)}",
                 error_code="EVALUATION_ERROR",
                 dataset_name=dataset_name,
-                model_type=self.config.model_type
+                model_type=self.training_config.model_type
             )
 
     def save_model(
@@ -765,17 +809,17 @@ class ModelTrainer:
             logger.info(f"保存模型: {model_name}")
 
             # 确定模型文件路径
-            if self.config.model_type == 'lightgbm':
+            if self.training_config.model_type == 'lightgbm':
                 model_path = self.output_dir / f"{model_name}.txt"
-            elif self.config.model_type == 'gru':
+            elif self.training_config.model_type == 'gru':
                 model_path = self.output_dir / f"{model_name}.pth"
-            elif self.config.model_type == 'ridge':
+            elif self.training_config.model_type == 'ridge':
                 model_path = self.output_dir / f"{model_name}.pkl"
             else:
                 return Response.error(
-                    error=f"不支持的模型类型: {self.config.model_type}",
+                    error=f"不支持的模型类型: {self.training_config.model_type}",
                     error_code="UNSUPPORTED_MODEL_TYPE",
-                    model_type=self.config.model_type,
+                    model_type=self.training_config.model_type,
                     model_name=model_name
                 )
 
@@ -788,8 +832,15 @@ class ModelTrainer:
             if save_metrics:
                 meta_path = self.output_dir / f"{model_name}_meta.json"
                 meta_data = {
-                    'model_type': self.config.model_type,
-                    'model_params': self.config.model_params,
+                    'model_type': self.training_config.model_type,
+                    'hyperparameters': self.training_config.hyperparameters,
+                    'training_config': {
+                        'train_start_date': self.training_config.train_start_date,
+                        'train_end_date': self.training_config.train_end_date,
+                        'validation_split': self.training_config.validation_split,
+                        'forward_window': self.training_config.forward_window,
+                        'feature_groups': self.training_config.feature_groups
+                    },
                     'training_history': self.training_history,
                     'evaluation_metrics': self.evaluator.get_metrics()
                 }
@@ -808,7 +859,7 @@ class ModelTrainer:
                 },
                 message="模型保存成功",
                 model_name=model_name,
-                model_type=self.config.model_type,
+                model_type=self.training_config.model_type,
                 elapsed_time=f"{elapsed_time:.2f}s"
             )
 
@@ -818,7 +869,7 @@ class ModelTrainer:
                 error=f"保存模型失败: {str(e)}",
                 error_code="MODEL_SAVE_ERROR",
                 model_name=model_name,
-                model_type=self.config.model_type
+                model_type=self.training_config.model_type
             )
 
     def load_model(self, model_name: str):
@@ -851,22 +902,34 @@ class ModelTrainer:
                 with open(meta_path, 'r', encoding='utf-8') as f:
                     meta_data = json.load(f)
 
-                self.config.model_type = meta_data.get('model_type', self.config.model_type)
-                saved_params = meta_data.get('model_params', {})
+                # 更新配置
+                self.training_config.model_type = meta_data.get('model_type', self.training_config.model_type)
+                saved_hyperparams = meta_data.get('hyperparameters', {})
                 self.training_history = meta_data.get('training_history', {})
 
-                # 合并参数：优先使用元数据中的参数
-                self.config.model_params = {**self.config.model_params, **saved_params}
+                # 合并超参数：优先使用元数据中的参数
+                if self.training_config.hyperparameters is None:
+                    self.training_config.hyperparameters = {}
+                self.training_config.hyperparameters = {**self.training_config.hyperparameters, **saved_hyperparams}
 
-                logger.debug(f"加载元数据: model_type={self.config.model_type}")
+                # 加载训练配置信息
+                if 'training_config' in meta_data:
+                    tc = meta_data['training_config']
+                    self.training_config.train_start_date = tc.get('train_start_date', self.training_config.train_start_date)
+                    self.training_config.train_end_date = tc.get('train_end_date', self.training_config.train_end_date)
+                    self.training_config.validation_split = tc.get('validation_split', self.training_config.validation_split)
+                    self.training_config.forward_window = tc.get('forward_window', self.training_config.forward_window)
+                    self.training_config.feature_groups = tc.get('feature_groups', self.training_config.feature_groups)
+
+                logger.debug(f"加载元数据: model_type={self.training_config.model_type}")
             else:
                 logger.warning(f"元数据文件不存在: {meta_path}")
 
             # 重新创建策略
-            self.strategy = StrategyFactory.create_strategy(self.config.model_type)
+            self.strategy = StrategyFactory.create_strategy(self.training_config.model_type)
 
             # 加载模型
-            if self.config.model_type == 'lightgbm':
+            if self.training_config.model_type == 'lightgbm':
                 if not LIGHTGBM_AVAILABLE:
                     return Response.error(
                         error="LightGBM 模型需要 lightgbm: pip install lightgbm",
@@ -876,28 +939,29 @@ class ModelTrainer:
                 model_path = self.output_dir / f"{model_name}.txt"
                 self.model = LightGBMStockModel()
                 self.model.load_model(str(model_path))
-            elif self.config.model_type == 'gru':
+            elif self.training_config.model_type == 'gru':
                 from .gru_model import GRUStockTrainer
                 model_path = self.output_dir / f"{model_name}.pth"
 
                 # 过滤训练专用参数
+                hyperparams = self.training_config.hyperparameters or {}
                 gru_model_params = {
-                    k: v for k, v in self.config.model_params.items()
+                    k: v for k, v in hyperparams.items()
                     if k in ['input_size', 'hidden_size', 'num_layers', 'dropout',
                             'bidirectional', 'learning_rate', 'device']
                 }
 
                 self.model = GRUStockTrainer(**gru_model_params)
                 self.model.load_model(str(model_path))
-            elif self.config.model_type == 'ridge':
+            elif self.training_config.model_type == 'ridge':
                 model_path = self.output_dir / f"{model_name}.pkl"
                 self.model = RidgeStockModel()
                 self.model.load_model(str(model_path))
             else:
                 return Response.error(
-                    error=f"不支持的模型类型: {self.config.model_type}",
+                    error=f"不支持的模型类型: {self.training_config.model_type}",
                     error_code="UNSUPPORTED_MODEL_TYPE",
-                    model_type=self.config.model_type,
+                    model_type=self.training_config.model_type,
                     model_name=model_name
                 )
 
@@ -907,9 +971,10 @@ class ModelTrainer:
             return Response.success(
                 data={
                     'model': self.model,
-                    'model_type': self.config.model_type,
+                    'model_type': self.training_config.model_type,
                     'training_history': self.training_history,
-                    'model_params': self.config.model_params
+                    'hyperparameters': self.training_config.hyperparameters,
+                    'training_config': self.training_config
                 },
                 message="模型加载成功",
                 model_name=model_name,
@@ -987,31 +1052,56 @@ if __name__ == "__main__":
     logger.info("="*60)
 
     try:
-        config = TrainingConfig(
+        # 创建训练配置 (使用 ml.TrainingConfig)
+        training_config = TrainingConfig(
             model_type='lightgbm',
-            model_params={
+            hyperparameters={
                 'learning_rate': 0.1,
                 'n_estimators': 100,
                 'num_leaves': 31
-            }
+            },
+            train_start_date='2020-01-01',
+            train_end_date='2023-12-31',
+            validation_split=0.15,
+            forward_window=5,
+            feature_groups=['all']
         )
 
-        trainer = ModelTrainer(config=config)
+        # 创建训练器配置
+        trainer_config = ModelTrainerConfig(
+            output_dir='data/models/saved',
+            early_stopping_rounds=50,
+            verbose_eval=50
+        )
+
+        trainer = ModelTrainer(
+            training_config=training_config,
+            trainer_config=trainer_config
+        )
 
         split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
-        X_train, y_train, X_valid, y_valid, X_test, y_test = trainer.prepare_data(
-            df, feature_cols, 'target', split_config
-        )
+        prep_result = trainer.prepare_data(df, feature_cols, 'target', split_config)
 
-        trainer.train(X_train, y_train, X_valid, y_valid)
+        if prep_result.success:
+            data = prep_result.data
+            X_train = data['X_train']
+            y_train = data['y_train']
+            X_valid = data['X_valid']
+            y_valid = data['y_valid']
+            X_test = data['X_test']
+            y_test = data['y_test']
 
-        # 评估
-        test_metrics = trainer.evaluate(X_test, y_test, dataset_name='test')
+            train_result = trainer.train(X_train, y_train, X_valid, y_valid)
 
-        # 保存
-        trainer.save_model('test_lgb_model')
+            # 评估
+            test_result = trainer.evaluate(X_test, y_test, dataset_name='test')
 
-        logger.success("\n✓ LightGBM 测试完成")
+            # 保存
+            save_result = trainer.save_model('test_lgb_model')
+
+            logger.success("\n✓ LightGBM 测试完成")
+        else:
+            logger.error(f"\n✗ 数据准备失败: {prep_result.error}")
 
     except Exception as e:
         logger.error(f"\n✗ LightGBM 测试失败: {e}")

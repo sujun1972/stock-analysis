@@ -11,10 +11,11 @@ import tempfile
 import shutil
 
 from src.models.model_trainer import (
-    TrainingConfig,
+    ModelTrainerConfig,
     DataSplitConfig,
     ModelTrainer
 )
+from src.ml.trained_model import TrainingConfig
 from src.models.training_pipeline import train_stock_model
 
 
@@ -106,21 +107,23 @@ class TestEndToEndWorkflow:
     ):
         """测试完整的 LightGBM 工作流"""
         # 1. 配置
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='lightgbm',
-            model_params={
+            hyperparameters={
                 'learning_rate': 0.05,
                 'n_estimators': 100,
                 'num_leaves': 31,
                 'verbose': -1
-            },
+            }
+        )
+        trainer_config = ModelTrainerConfig(
             output_dir=temp_model_dir,
             early_stopping_rounds=20,
             verbose_eval=100
         )
 
         # 2. 创建训练器
-        trainer = ModelTrainer(config=config)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         # 3. 准备数据
         split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
@@ -166,7 +169,7 @@ class TestEndToEndWorkflow:
         assert Path(temp_model_dir, 'lightgbm_stock_model_meta.json').exists()
 
         # 7. 加载模型
-        new_trainer = ModelTrainer(config=config)
+        new_trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
         new_trainer.load_model('lightgbm_stock_model')
 
         # 8. 验证加载的模型
@@ -183,13 +186,13 @@ class TestEndToEndWorkflow:
         temp_model_dir
     ):
         """测试完整的 Ridge 工作流"""
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='ridge',
-            model_params={'alpha': 1.0},
-            output_dir=temp_model_dir
+            hyperparameters={'alpha': 1.0}
         )
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
 
-        trainer = ModelTrainer(config=config)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
         response = trainer.prepare_data(
@@ -269,12 +272,12 @@ class TestModelComparison:
         split_config = DataSplitConfig(train_ratio=0.7, valid_ratio=0.15)
 
         # LightGBM
-        lgb_config = TrainingConfig(
+        lgb_training_config = TrainingConfig(
             model_type='lightgbm',
-            model_params={'n_estimators': 50, 'verbose': -1},
-            output_dir=temp_model_dir
+            hyperparameters={'n_estimators': 50, 'verbose': -1}
         )
-        lgb_trainer = ModelTrainer(config=lgb_config)
+        lgb_trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        lgb_trainer = ModelTrainer(training_config=lgb_training_config, trainer_config=lgb_trainer_config)
         X_train, y_train, X_valid, y_valid, X_test, y_test = unwrap_prepare_data(
             lgb_trainer.prepare_data(
                 realistic_stock_data, feature_columns, 'target', split_config
@@ -284,12 +287,12 @@ class TestModelComparison:
         lgb_metrics = unwrap_response(lgb_trainer.evaluate(X_test, y_test, verbose=False))
 
         # Ridge
-        ridge_config = TrainingConfig(
+        ridge_training_config = TrainingConfig(
             model_type='ridge',
-            model_params={'alpha': 1.0},
-            output_dir=temp_model_dir
+            hyperparameters={'alpha': 1.0}
         )
-        ridge_trainer = ModelTrainer(config=ridge_config)
+        ridge_trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        ridge_trainer = ModelTrainer(training_config=ridge_training_config, trainer_config=ridge_trainer_config)
         ridge_trainer.train(X_train, y_train, X_valid, y_valid)
         ridge_metrics = unwrap_response(ridge_trainer.evaluate(X_test, y_test, verbose=False))
 
@@ -323,17 +326,17 @@ class TestParameterTuning:
         results = []
 
         for lr in learning_rates:
-            config = TrainingConfig(
+            training_config = TrainingConfig(
                 model_type='lightgbm',
-                model_params={
+                hyperparameters={
                     'learning_rate': lr,
                     'n_estimators': 50,
                     'verbose': -1
-                },
-                output_dir=temp_model_dir
+                }
             )
+            trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
 
-            trainer = ModelTrainer(config=config)
+            trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
             response = trainer.prepare_data(
                 realistic_stock_data, feature_columns, 'target', split_config
             )
@@ -378,13 +381,13 @@ class TestParameterTuning:
         results = []
 
         for alpha in alphas:
-            config = TrainingConfig(
+            training_config = TrainingConfig(
                 model_type='ridge',
-                model_params={'alpha': alpha},
-                output_dir=temp_model_dir
+                hyperparameters={'alpha': alpha}
             )
+            trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
 
-            trainer = ModelTrainer(config=config)
+            trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
             response = trainer.prepare_data(
                 realistic_stock_data, feature_columns, 'target', split_config
             )
@@ -435,13 +438,11 @@ class TestDataSplitting:
             DataSplitConfig(train_ratio=0.8, valid_ratio=0.1),
         ]
 
-        config = TrainingConfig(
-            model_type='ridge',
-            output_dir=temp_model_dir
-        )
+        training_config = TrainingConfig(model_type='ridge')
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
 
         for split_config in split_configs:
-            trainer = ModelTrainer(config=config)
+            trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
             response = trainer.prepare_data(
                 realistic_stock_data,
@@ -496,12 +497,10 @@ class TestErrorRecovery:
         df = realistic_stock_data.copy()
         df.loc[df.index[:50], 'return_1d'] = np.nan
 
-        config = TrainingConfig(
-            model_type='ridge',
-            output_dir=temp_model_dir
-        )
+        training_config = TrainingConfig(model_type='ridge')
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
 
-        trainer = ModelTrainer(config=config)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         # 数据准备应该能处理 NaN
         split_config = DataSplitConfig(remove_nan=True)
@@ -533,13 +532,13 @@ class TestErrorRecovery:
     ):
         """测试使用不同配置加载模型"""
         # 训练并保存
-        config1 = TrainingConfig(
+        training_config1 = TrainingConfig(
             model_type='lightgbm',
-            model_params={'n_estimators': 50, 'verbose': -1},
-            output_dir=temp_model_dir
+            hyperparameters={'n_estimators': 50, 'verbose': -1}
         )
+        trainer_config1 = ModelTrainerConfig(output_dir=temp_model_dir)
 
-        trainer1 = ModelTrainer(config=config1)
+        trainer1 = ModelTrainer(training_config=training_config1, trainer_config=trainer_config1)
 
         split_config = DataSplitConfig()
         X_train, y_train, X_valid, y_valid, X_test, y_test = unwrap_prepare_data(
@@ -552,12 +551,10 @@ class TestErrorRecovery:
         trainer1.save_model('test_model')
 
         # 使用不同的配置加载
-        config2 = TrainingConfig(
-            model_type='lightgbm',  # 类型应该从元数据中加载
-            output_dir=temp_model_dir
-        )
+        training_config2 = TrainingConfig(model_type='lightgbm')  # 类型应该从元数据中加载
+        trainer_config2 = ModelTrainerConfig(output_dir=temp_model_dir)
 
-        trainer2 = ModelTrainer(config=config2)
+        trainer2 = ModelTrainer(training_config=training_config2, trainer_config=trainer_config2)
         trainer2.load_model('test_model')
 
         # 应该能正常评估
@@ -579,13 +576,13 @@ class TestPerformance:
         """测试训练速度"""
         import time
 
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='lightgbm',
-            model_params={'n_estimators': 100, 'verbose': -1},
-            output_dir=temp_model_dir
+            hyperparameters={'n_estimators': 100, 'verbose': -1}
         )
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
 
-        trainer = ModelTrainer(config=config)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         split_config = DataSplitConfig()
         response = trainer.prepare_data(

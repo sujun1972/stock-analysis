@@ -13,7 +13,8 @@ project_root = Path(__file__).parent.parent
 
 from src.models.lightgbm_model import LightGBMStockModel
 from src.models.model_evaluator import ModelEvaluator
-from src.models.model_trainer import ModelTrainer, TrainingConfig, DataSplitConfig
+from src.models.model_trainer import ModelTrainer, ModelTrainerConfig, DataSplitConfig
+from src.ml.trained_model import TrainingConfig
 
 import pandas as pd
 import numpy as np
@@ -235,16 +236,18 @@ def test_model_trainer():
 
     # 创建训练器
     print("\n3.2 创建LightGBM训练器")
-    config = TrainingConfig(
+    training_config = TrainingConfig(
         model_type='lightgbm',
-        model_params={
+        hyperparameters={
             'learning_rate': 0.1,
             'n_estimators': 100,
             'num_leaves': 31
-        },
+        }
+    )
+    trainer_config = ModelTrainerConfig(
         output_dir=str(project_root / 'data' / 'test_models')
     )
-    trainer = ModelTrainer(config=config)
+    trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
     # 准备数据
     print("\n3.3 数据分割")
@@ -287,10 +290,11 @@ def test_model_trainer():
 
     # 加载模型
     print("\n3.7 加载模型")
-    new_config = TrainingConfig(
+    new_training_config = TrainingConfig()
+    new_trainer_config = ModelTrainerConfig(
         output_dir=str(project_root / 'data' / 'test_models')
     )
-    new_trainer = ModelTrainer(config=new_config)
+    new_trainer = ModelTrainer(training_config=new_training_config, trainer_config=new_trainer_config)
     new_trainer.load_model('trainer_test_model')
     print("  ✓ 模型已加载")
 

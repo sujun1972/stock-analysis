@@ -18,7 +18,7 @@ from src.models.model_trainer import (
     InvalidModelTypeError,
     # 配置类
     DataSplitConfig,
-    TrainingConfig,
+    ModelTrainerConfig,
     # 核心类
     DataPreparator,
     TrainingStrategy,
@@ -29,6 +29,8 @@ from src.models.model_trainer import (
     ModelEvaluationHelper,
     ModelTrainer
 )
+# TrainingConfig 从 ml 模块导入
+from src.ml.trained_model import TrainingConfig
 
 # 便捷函数从 training_pipeline 导入
 from src.models.training_pipeline import train_stock_model
@@ -108,35 +110,63 @@ class TestDataSplitConfig:
 
 
 class TestTrainingConfig:
-    """测试 TrainingConfig"""
+    """测试 TrainingConfig (from ml module)"""
 
     def test_default_config(self):
         """测试默认配置"""
         config = TrainingConfig()
         assert config.model_type == 'lightgbm'
-        assert config.model_params == {}
-        assert config.output_dir == 'data/models/saved'
+        assert config.train_start_date == '2020-01-01'
+        assert config.train_end_date == '2023-12-31'
+        assert config.validation_split == 0.2
+        assert config.forward_window == 5
+        assert config.feature_groups == ['all']
+        assert config.hyperparameters is None
 
     def test_custom_config(self):
         """测试自定义配置"""
         config = TrainingConfig(
             model_type='ridge',
-            model_params={'alpha': 0.5},
-            output_dir='/tmp/models'
+            hyperparameters={'alpha': 0.5},
+            train_start_date='2021-01-01',
+            train_end_date='2024-01-01',
+            validation_split=0.3,
+            forward_window=10,
+            feature_groups=['alpha', 'technical']
         )
         assert config.model_type == 'ridge'
-        assert config.model_params == {'alpha': 0.5}
-        assert config.output_dir == '/tmp/models'
+        assert config.hyperparameters == {'alpha': 0.5}
+        assert config.train_start_date == '2021-01-01'
+        assert config.validation_split == 0.3
+        assert config.forward_window == 10
+        assert config.feature_groups == ['alpha', 'technical']
 
-    def test_invalid_model_type(self):
-        """测试无效的模型类型"""
-        with pytest.raises(ValueError, match="不支持的模型类型"):
-            TrainingConfig(model_type='invalid_model')
+    def test_invalid_validation_split(self):
+        """测试无效的验证集比例"""
+        with pytest.raises(ValueError, match="validation_split must be"):
+            TrainingConfig(validation_split=0.0)
+        with pytest.raises(ValueError, match="validation_split must be"):
+            TrainingConfig(validation_split=1.5)
+
+    def test_invalid_forward_window(self):
+        """测试无效的前向窗口"""
+        with pytest.raises(ValueError, match="forward_window must be positive"):
+            TrainingConfig(forward_window=0)
+
+
+class TestModelTrainerConfig:
+    """测试 ModelTrainerConfig"""
+
+    def test_default_config(self):
+        """测试默认配置"""
+        config = ModelTrainerConfig()
+        assert config.output_dir == 'data/models/saved'
+        assert config.early_stopping_rounds == 50
+        assert config.verbose_eval == 50
 
     def test_lightgbm_specific_params(self):
         """测试 LightGBM 特定参数"""
-        config = TrainingConfig(
-            model_type='lightgbm',
+        config = ModelTrainerConfig(
             early_stopping_rounds=100,
             verbose_eval=50
         )
@@ -145,8 +175,7 @@ class TestTrainingConfig:
 
     def test_gru_specific_params(self):
         """测试 GRU 特定参数"""
-        config = TrainingConfig(
-            model_type='gru',
+        config = ModelTrainerConfig(
             seq_length=30,
             batch_size=128,
             epochs=200
@@ -154,6 +183,16 @@ class TestTrainingConfig:
         assert config.seq_length == 30
         assert config.batch_size == 128
         assert config.epochs == 200
+
+    def test_invalid_early_stopping_rounds(self):
+        """测试无效的早停轮数"""
+        with pytest.raises(ValueError, match="early_stopping_rounds must be"):
+            ModelTrainerConfig(early_stopping_rounds=-1)
+
+    def test_invalid_seq_length(self):
+        """测试无效的序列长度"""
+        with pytest.raises(ValueError, match="seq_length must be positive"):
+            ModelTrainerConfig(seq_length=0)
 
 
 # ==================== 数据准备器测试 ====================
@@ -278,14 +317,14 @@ class TestLightGBMTrainingStrategy:
         strategy = LightGBMTrainingStrategy()
         model = strategy.create_model({'n_estimators': 10, 'verbose': -1})
 
-        config = TrainingConfig(model_type='lightgbm', verbose_eval=100)
+        trainer_config = ModelTrainerConfig(verbose_eval=100)
         split_config = DataSplitConfig()
 
         X_train, y_train, X_valid, y_valid, X_test, y_test = DataPreparator.prepare_data(
             sample_dataframe, feature_cols, 'target', split_config
         )
 
-        history = strategy.train(model, X_train, y_train, X_valid, y_valid, config)
+        history = strategy.train(model, X_train, y_train, X_valid, y_valid, trainer_config)
 
         assert isinstance(history, dict)
         assert 'best_iteration' in history or 'train_score' in history
@@ -419,30 +458,31 @@ class TestModelTrainer:
 
     def test_init_default_config(self, temp_model_dir):
         """测试默认配置初始化"""
-        config = TrainingConfig(output_dir=temp_model_dir)
-        trainer = ModelTrainer(config=config)
+        training_config = TrainingConfig()
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
-        assert trainer.config.model_type == 'lightgbm'
+        assert trainer.training_config.model_type == 'lightgbm'
         assert trainer.model is None
         assert trainer.evaluator is not None
         assert isinstance(trainer.strategy, LightGBMTrainingStrategy)
 
     def test_init_custom_config(self, temp_model_dir):
         """测试自定义配置初始化"""
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='ridge',
-            model_params={'alpha': 0.5},
-            output_dir=temp_model_dir
+            hyperparameters={'alpha': 0.5}
         )
-        trainer = ModelTrainer(config=config)
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
-        assert trainer.config.model_type == 'ridge'
+        assert trainer.training_config.model_type == 'ridge'
         assert isinstance(trainer.strategy, RidgeTrainingStrategy)
 
     def test_prepare_data(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试数据准备"""
-        config = TrainingConfig(output_dir=temp_model_dir)
-        trainer = ModelTrainer(config=config)
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        trainer = ModelTrainer(trainer_config=trainer_config)
 
         split_config = DataSplitConfig(train_ratio=0.6, valid_ratio=0.2)
         response = trainer.prepare_data(
@@ -457,13 +497,15 @@ class TestModelTrainer:
 
     def test_train_lightgbm(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试训练 LightGBM 模型"""
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='lightgbm',
-            model_params={'n_estimators': 10, 'verbose': -1},
+            hyperparameters={'n_estimators': 10, 'verbose': -1}
+        )
+        trainer_config = ModelTrainerConfig(
             output_dir=temp_model_dir,
             verbose_eval=100
         )
-        trainer = ModelTrainer(config=config)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         split_config = DataSplitConfig()
         prep_response = trainer.prepare_data(
@@ -480,12 +522,12 @@ class TestModelTrainer:
 
     def test_train_ridge(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试训练 Ridge 模型"""
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='ridge',
-            model_params={'alpha': 0.5},
-            output_dir=temp_model_dir
+            hyperparameters={'alpha': 0.5}
         )
-        trainer = ModelTrainer(config=config)
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         split_config = DataSplitConfig()
         prep_response = trainer.prepare_data(
@@ -501,8 +543,8 @@ class TestModelTrainer:
 
     def test_evaluate_without_training(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试未训练时评估"""
-        config = TrainingConfig(output_dir=temp_model_dir)
-        trainer = ModelTrainer(config=config)
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        trainer = ModelTrainer(trainer_config=trainer_config)
 
         split_config = DataSplitConfig()
         prep_response = trainer.prepare_data(
@@ -517,13 +559,15 @@ class TestModelTrainer:
 
     def test_evaluate_after_training(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试训练后评估"""
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='lightgbm',
-            model_params={'n_estimators': 10, 'verbose': -1},
+            hyperparameters={'n_estimators': 10, 'verbose': -1}
+        )
+        trainer_config = ModelTrainerConfig(
             output_dir=temp_model_dir,
             verbose_eval=100
         )
-        trainer = ModelTrainer(config=config)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         split_config = DataSplitConfig()
         prep_response = trainer.prepare_data(
@@ -546,12 +590,12 @@ class TestModelTrainer:
 
     def test_save_and_load_model(self, sample_dataframe, feature_cols, temp_model_dir):
         """测试保存和加载模型"""
-        config = TrainingConfig(
+        training_config = TrainingConfig(
             model_type='lightgbm',
-            model_params={'n_estimators': 10, 'verbose': -1},
-            output_dir=temp_model_dir
+            hyperparameters={'n_estimators': 10, 'verbose': -1}
         )
-        trainer = ModelTrainer(config=config)
+        trainer_config = ModelTrainerConfig(output_dir=temp_model_dir)
+        trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
 
         split_config = DataSplitConfig()
         prep_response = trainer.prepare_data(
@@ -575,7 +619,7 @@ class TestModelTrainer:
         assert Path(save_response.data['model_path']).exists()
 
         # 加载
-        new_trainer = ModelTrainer(config=config)
+        new_trainer = ModelTrainer(training_config=training_config, trainer_config=trainer_config)
         load_response = new_trainer.load_model('test_model')
         assert load_response.is_success()
 
