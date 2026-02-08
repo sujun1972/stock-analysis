@@ -1099,17 +1099,17 @@ class MLStockRanker:
 
 ### Phase 1: 核心ML模块实现 (Week 1-2)
 
-| 日期 | 任务 | 交付物 | 优先级 |
-|------|------|--------|--------|
-| Day 1 | **删除旧模块** | 删除`strategies/three_layer/`<br>删除`strategies/ml_strategy.py` | 🔴 P0 |
-| Day 2-3 | **实现FeatureEngine** | `ml/feature_engine.py` + 单元测试 | 🔴 P0 |
-| Day 4 | **实现LabelGenerator** | `ml/label_generator.py` + 单元测试 | 🔴 P0 |
-| Day 5-6 | **实现TrainedModel** | `ml/trained_model.py` + 单元测试 | 🔴 P0 |
-| Day 7-8 | **实现MLEntry** | `ml/ml_entry.py` + 单元测试 | 🔴 P0 |
-| Day 9 | **实现MLStockRanker** | `ml/ml_stock_ranker.py` + 单元测试 | 🟡 P1 |
-| Day 10 | **集成测试** | 端到端测试通过 | 🔴 P0 |
+| 日期 | 任务 | 交付物 | 优先级 | 状态 |
+|------|------|--------|--------|------|
+| Day 1 | **删除旧模块** | 删除`strategies/three_layer/`<br>删除`strategies/ml_strategy.py` | 🔴 P0 | ✅ 完成 |
+| Day 2-3 | **实现FeatureEngine** | `ml/feature_engine.py` + 单元测试 | 🔴 P0 | 📝 待实现 |
+| Day 4 | **实现LabelGenerator** | `ml/label_generator.py` + 单元测试 | 🔴 P0 | 📝 待实现 |
+| Day 5-6 | **实现TrainedModel** | `ml/trained_model.py` + 单元测试 | 🔴 P0 | 📝 待实现 |
+| Day 7-8 | **实现MLEntry** | `ml/ml_entry.py` + 单元测试 | 🔴 P0 | 📝 待实现 |
+| Day 9 | **实现MLStockRanker** | `ml/ml_stock_ranker.py` + 单元测试 | 🟡 P1 | 📝 待实现 |
+| Day 10 | **集成测试** | 端到端测试通过 | 🔴 P0 | 📝 待实现 |
 
-**里程碑 1**: 核心ML模块完成,测试通过
+**里程碑 1**: 核心ML模块完成,测试通过 ⏳ 进行中
 
 ### Phase 2: 回测集成与工具链 (Week 3)
 
@@ -1140,7 +1140,7 @@ class MLStockRanker:
 
 #### 必须项 (P0)
 
-- [ ] 旧的三层架构已完全删除
+- [x] 旧的三层架构已完全删除 ✅ (2026-02-08)
 - [ ] `FeatureEngine`可计算125+ Alpha因子 + 60+技术指标
 - [ ] `LabelGenerator`支持4种标签类型
 - [ ] `TrainedModel`可保存/加载,提供预测接口
@@ -1291,13 +1291,45 @@ ml/
 
 ---
 
-**文档版本**: v2.0.0
+**文档版本**: v2.1.0
 **创建时间**: 2026-02-08
 **最后更新**: 2026-02-08
-**项目状态**: 🚧 开发初期 - 大胆重构
+**项目状态**: 🚧 Phase 1 完成 - 开始实现新模块
+
+---
+
+## 📝 实施日志
+
+### 2026-02-08 - Phase 1 Day 1 完成 ✅
+
+**已删除的模块**:
+- ✅ `core/src/strategies/three_layer/` (整个目录)
+- ✅ `core/src/strategies/ml_strategy.py`
+- ✅ `core/tests/unit/strategies/three_layer/` (整个目录)
+- ✅ `core/tests/unit/strategies/test_ml_strategy.py`
+- ✅ `core/tests/integration/test_three_layer_backtest.py`
+- ✅ `core/tests/integration/test_three_layer_performance.py`
+- ✅ `core/tests/integration/test_ml3_lightgbm_workflow.py`
+- ✅ `core/tools/train_stock_ranker_lgbm.py`
+- ✅ `core/tests/unit/tools/test_train_stock_ranker_lgbm.py`
+- ✅ `core/tests/unit/backtest/test_backtest_engine.py::TestBacktestThreeLayer` (测试类)
+
+**已修复的引用**:
+- ✅ `src/strategies/__init__.py` - 移除 MLStrategy 导入
+- ✅ `src/backtest/backtest_engine.py:392` - Position 导入从 position_manager
+- ✅ `src/backtest/parallel_backtester.py:365` - 注释 MLStrategy 引用
+- ✅ `src/cli/commands/backtest.py:104` - 添加弃用提示
+
+**验证结果**:
+- ✅ 测试收集成功: 3470 个测试 (删除了 38 个旧测试)
+- ✅ 无导入错误
+- ✅ backtest_engine 测试全部通过 (32/32)
+
+**下一步**: 实现 Phase 1 Day 2-3 - FeatureEngine
 
 ---
 
 **变更记录**:
+- v2.1.0 (2026-02-08): 完成 Phase 1 Day 1 - 旧模块删除和引用修复
 - v2.0.0 (2026-02-08): 重大调整 - 删除三层架构,不考虑向后兼容
 - v1.0.0 (2026-02-08): 初版 - 包含向后兼容策略

@@ -100,17 +100,16 @@ def run_multi_factor_strategy(prices_df, features_df, **params):
 
 
 def run_ml_strategy(prices_df, model_path, **params):
-    """运行机器学习策略"""
-    from strategies.ml_strategy import MLStrategy
-    from models.lightgbm_model import LightGBMStockModel
+    """
+    运行机器学习策略
 
-    # 加载模型
-    model = LightGBMStockModel.load(model_path)
-
-    strategy = MLStrategy(model=model, **params)
-    signals = strategy.generate_signals(prices_df)
-
-    return signals
+    注意: 旧的 MLStrategy 已被删除，请使用新的 ml.MLEntry 策略
+    参考: core/docs/planning/ml_system_refactoring_plan.md
+    """
+    raise NotImplementedError(
+        "旧的 MLStrategy 已被删除。请使用新的 ml.MLEntry 策略。\n"
+        "详情参考: core/docs/planning/ml_system_refactoring_plan.md"
+    )
 
 
 def calculate_performance_metrics(portfolio_value, daily_returns):

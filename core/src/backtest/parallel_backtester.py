@@ -362,13 +362,14 @@ class ParallelBacktester:
         from src.strategies.momentum_strategy import MomentumStrategy
         from src.strategies.mean_reversion_strategy import MeanReversionStrategy
         from src.strategies.multi_factor_strategy import MultiFactorStrategy
-        from src.strategies.ml_strategy import MLStrategy
+        # 注意: MLStrategy 已被删除，请使用新的 ml.MLEntry
+        # from src.strategies.ml_strategy import MLStrategy
 
         strategy_classes = {
             'MomentumStrategy': MomentumStrategy,
             'MeanReversionStrategy': MeanReversionStrategy,
             'MultiFactorStrategy': MultiFactorStrategy,
-            'MLStrategy': MLStrategy
+            # 'MLStrategy': MLStrategy  # 已废弃，使用 ml.MLEntry
         }
 
         strategy_class = strategy_classes.get(task.strategy_class_name)

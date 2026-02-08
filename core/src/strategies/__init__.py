@@ -4,9 +4,11 @@
 提供多种量化交易策略实现：
 - 动量策略 (MomentumStrategy)
 - 均值回归策略 (MeanReversionStrategy)
-- 机器学习策略 (MLStrategy)
 - 多因子策略 (MultiFactorStrategy)
 - 策略组合器 (StrategyCombiner)
+
+注意: MLStrategy 已废弃，请使用新的 ml.MLEntry 策略
+详情参考: core/docs/planning/ml_system_refactoring_plan.md
 
 使用示例：
     from strategies import MomentumStrategy
@@ -30,7 +32,8 @@ from .base_strategy import BaseStrategy, StrategyConfig
 from .signal_generator import SignalGenerator, SignalType
 from .momentum_strategy import MomentumStrategy
 from .mean_reversion_strategy import MeanReversionStrategy
-from .ml_strategy import MLStrategy
+# MLStrategy 已删除，使用新的 ml.MLEntry 替代
+# from .ml_strategy import MLStrategy
 from .multi_factor_strategy import MultiFactorStrategy
 from .strategy_combiner import StrategyCombiner
 
@@ -44,7 +47,7 @@ __all__ = [
     # 策略实现
     'MomentumStrategy',
     'MeanReversionStrategy',
-    'MLStrategy',
+    # 'MLStrategy',  # 已废弃
     'MultiFactorStrategy',
 
     # 工具类

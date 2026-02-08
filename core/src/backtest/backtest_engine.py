@@ -389,7 +389,7 @@ class BacktestEngine:
                 - trades: 交易记录
                 - metrics: 绩效指标
         """
-        from ..strategies.three_layer.base.exit_strategy import Position
+        from .position_manager import Position
 
         # 使用传入的初始资金或默认值
         capital = initial_capital if initial_capital is not None else self.initial_capital
