@@ -82,12 +82,14 @@ def get_project_root() -> Path:
 
 def check_venv() -> bool:
     """检查虚拟环境"""
-    venv_path = get_project_root().parent / 'stock_env'
+    # Core项目使用自己的虚拟环境
+    venv_path = get_project_root() / 'venv'
     return venv_path.exists()
 
 def get_python_cmd() -> str:
     """获取Python命令"""
-    venv_path = get_project_root().parent / 'stock_env'
+    # Core项目使用自己的虚拟环境
+    venv_path = get_project_root() / 'venv'
     if venv_path.exists():
         return str(venv_path / 'bin' / 'python')
     return 'python3'
