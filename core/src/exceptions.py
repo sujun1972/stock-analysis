@@ -465,6 +465,137 @@ class StrategyError(StockAnalysisError):
     pass
 
 
+class StrategyLoadError(StrategyError):
+    """策略加载错误
+
+    当策略从配置或代码加载失败时抛出。
+
+    Examples:
+        >>> raise StrategyLoadError(
+        ...     "策略加载失败",
+        ...     error_code="STRATEGY_LOAD_ERROR",
+        ...     strategy_id=123,
+        ...     strategy_type="dynamic",
+        ...     reason="代码编译失败"
+        ... )
+    """
+    pass
+
+
+class StrategyValidationError(StrategyError):
+    """策略验证错误
+
+    当策略验证失败时抛出。
+
+    Examples:
+        >>> raise StrategyValidationError(
+        ...     "策略接口验证失败",
+        ...     error_code="STRATEGY_VALIDATION_ERROR",
+        ...     strategy_class="CustomStrategy",
+        ...     missing_methods=["calculate_scores"]
+        ... )
+    """
+    pass
+
+
+class StrategySecurityError(StrategyError):
+    """策略安全错误
+
+    当策略代码存在安全问题时抛出。
+
+    Examples:
+        >>> raise StrategySecurityError(
+        ...     "策略代码存在安全风险",
+        ...     error_code="SECURITY_VIOLATION",
+        ...     strategy_id=456,
+        ...     violation_type="forbidden_import",
+        ...     details="检测到禁止的模块导入: os"
+        ... )
+    """
+    pass
+
+
+class StrategyExecutionError(StrategyError):
+    """策略执行错误
+
+    当策略执行过程中发生错误时抛出。
+
+    Examples:
+        >>> raise StrategyExecutionError(
+        ...     "策略执行失败",
+        ...     error_code="STRATEGY_EXEC_ERROR",
+        ...     strategy_name="MomentumStrategy",
+        ...     method="generate_signals",
+        ...     reason="运行时错误"
+        ... )
+    """
+    pass
+
+
+class ConfigNotFoundError(StrategyLoadError):
+    """配置不存在错误
+
+    当请求的策略配置不存在时抛出。
+
+    Examples:
+        >>> raise ConfigNotFoundError(
+        ...     "策略配置不存在",
+        ...     error_code="CONFIG_NOT_FOUND",
+        ...     config_id=123
+        ... )
+    """
+    pass
+
+
+class CodeCompileError(StrategyLoadError):
+    """代码编译错误
+
+    当动态代码编译失败时抛出。
+
+    Examples:
+        >>> raise CodeCompileError(
+        ...     "策略代码编译失败",
+        ...     error_code="CODE_COMPILE_ERROR",
+        ...     strategy_id=456,
+        ...     reason="语法错误: unexpected EOF"
+        ... )
+    """
+    pass
+
+
+class SecurityViolationError(StrategySecurityError):
+    """安全违规错误
+
+    当检测到安全违规行为时抛出。
+
+    Examples:
+        >>> raise SecurityViolationError(
+        ...     "检测到安全违规",
+        ...     error_code="SECURITY_VIOLATION",
+        ...     violation_type="forbidden_function",
+        ...     details="使用了禁止的函数: eval"
+        ... )
+    """
+    pass
+
+
+class ResourceLimitError(StrategyExecutionError):
+    """资源限制错误
+
+    当策略执行超出资源限制时抛出。
+
+    Examples:
+        >>> raise ResourceLimitError(
+        ...     "策略执行超时",
+        ...     error_code="RESOURCE_LIMIT_EXCEEDED",
+        ...     resource_type="execution_time",
+        ...     limit=60,
+        ...     actual=75
+        ... )
+    """
+    pass
+
+
 class SignalGenerationError(StrategyError):
     """信号生成错误
 
@@ -636,6 +767,14 @@ __all__ = [
 
     # 策略和回测相关异常
     'StrategyError',
+    'StrategyLoadError',
+    'StrategyValidationError',
+    'StrategySecurityError',
+    'StrategyExecutionError',
+    'ConfigNotFoundError',
+    'CodeCompileError',
+    'SecurityViolationError',
+    'ResourceLimitError',
     'SignalGenerationError',
     'BacktestError',
     'BacktestExecutionError',
