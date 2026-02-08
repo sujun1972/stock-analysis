@@ -54,3 +54,11 @@ htmlcov/
 # 配置文件（如果包含敏感信息）
 # config/local_settings.py
 # .env
+
+# 模型文件和临时文件
+models/
+*.pkl
+*.joblib
+*.h5
+*.pth
+*.ckpt
