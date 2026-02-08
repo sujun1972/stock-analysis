@@ -140,8 +140,9 @@ class TestTrainingConfig:
 
     def test_invalid_model_type(self):
         """测试无效的模型类型"""
-        with pytest.raises(ValueError, match="Invalid model_type"):
-            TrainingConfig(model_type='invalid_model')
+        # 现在允许任何非空字符串作为model_type，测试空字符串
+        with pytest.raises(ValueError, match="model_type must be a non-empty string"):
+            TrainingConfig(model_type='')
 
     def test_invalid_validation_split(self):
         """测试无效的验证集比例"""

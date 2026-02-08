@@ -45,8 +45,10 @@ class TrainingConfig:
 
     def __post_init__(self):
         """验证配置参数"""
-        if self.model_type not in ['lightgbm', 'xgboost', 'ridge', 'gru', 'ensemble']:
-            raise ValueError(f"Invalid model_type: {self.model_type}")
+        # 允许任何字符串作为model_type (支持sklearn等第三方模型)
+        # 常见模型: lightgbm, xgboost, ridge, gru, ensemble, random_forest, gradient_boosting, lasso, etc.
+        if not isinstance(self.model_type, str) or len(self.model_type) == 0:
+            raise ValueError(f"model_type must be a non-empty string, got {self.model_type}")
 
         if not 0 < self.validation_split < 1:
             raise ValueError(f"validation_split must be between 0 and 1, got {self.validation_split}")
