@@ -354,6 +354,159 @@ class BacktestEngine:
             raise ValueError("请先运行回测")
         return self.positions
 
+    def backtest_ml_strategy(
+        self,
+        ml_entry,
+        stock_pool: List[str],
+        market_data: pd.DataFrame,
+        start_date: str,
+        end_date: str,
+        rebalance_freq: str = 'W',
+        initial_capital: float = None
+    ) -> Response:
+        """
+        ML策略回测
+
+        参数:
+            ml_entry: ML入场策略实例 (MLEntry)
+            stock_pool: 股票池 (可交易股票列表)
+            market_data: 市场数据 DataFrame，需包含以下列:
+                - date: 日期
+                - stock_code: 股票代码
+                - open, high, low, close, volume: OHLCV数据
+            start_date: 开始日期 (格式: 'YYYY-MM-DD')
+            end_date: 结束日期 (格式: 'YYYY-MM-DD')
+            rebalance_freq: 调仓频率 ('D'=日, 'W'=周, 'M'=月)
+            initial_capital: 初始资金 (如果为None则使用self.initial_capital)
+
+        返回:
+            Response对象，包含:
+                - portfolio_value: 净值曲线
+                - positions: 持仓记录
+                - daily_returns: 每日收益率
+                - cost_analysis: 成本分析
+                - metrics: 绩效指标
+        """
+        # 使用传入的初始资金或默认值
+        capital = initial_capital if initial_capital is not None else self.initial_capital
+
+        logger.info(f"\n开始ML策略回测...")
+        logger.info(
+            f"初始资金: {capital:,.0f}, "
+            f"调仓频率: {rebalance_freq}, "
+            f"股票池: {len(stock_pool)}只"
+        )
+
+        # 1. 初始化
+        portfolio = BacktestPortfolio(capital)
+        recorder = BacktestRecorder()
+
+        # 2. 过滤日期范围
+        dates = pd.date_range(start_date, end_date, freq='D')
+        market_data = market_data.copy()
+        market_data['date'] = pd.to_datetime(market_data['date'])
+
+        # 获取实际交易日
+        trading_dates = sorted(market_data['date'].unique())
+        trading_dates = [d for d in trading_dates if start_date <= d.strftime('%Y-%m-%d') <= end_date]
+
+        if len(trading_dates) == 0:
+            logger.error(f"日期范围 {start_date} 到 {end_date} 没有数据")
+            return Response.error("日期范围没有数据")
+
+        logger.info(f"回测日期范围: {trading_dates[0].date()} 到 {trading_dates[-1].date()} ({len(trading_dates)}天)")
+
+        # 3. 计算调仓日期
+        rebalance_dates = set(self._get_rebalance_dates_list(
+            pd.DatetimeIndex(trading_dates), rebalance_freq
+        ))
+        logger.info(f"调仓次数: {len(rebalance_dates)}")
+
+        # 4. 准备价格数据 (用于计算持仓价值)
+        price_pivot = market_data.pivot_table(
+            index='date', columns='stock_code', values='close'
+        )
+
+        # 5. 主回测循环
+        for i, date in enumerate(trading_dates):
+            date_str = date.strftime('%Y-%m-%d')
+
+            logger.debug(f"回测日期: {date_str}")
+
+            # 5.1 更新持仓价格
+            if date in price_pivot.index:
+                portfolio.update_prices(price_pivot.loc[date])
+
+            # 记录净值
+            value_metrics = portfolio.get_total_value(price_pivot, date)
+            recorder.record_market_neutral_value(
+                date, value_metrics['cash'], value_metrics['long_value'],
+                value_metrics['short_value'], value_metrics['short_pnl'],
+                value_metrics['short_interest'], value_metrics['total']
+            )
+            recorder.record_positions(date, portfolio.get_positions_snapshot())
+
+            # 5.2 调仓
+            if date in rebalance_dates and i < len(trading_dates) - 1:
+                next_date = trading_dates[i + 1]
+
+                # 生成ML信号
+                try:
+                    signals = ml_entry.generate_signals(
+                        stock_pool=stock_pool,
+                        market_data=market_data,
+                        date=date_str
+                    )
+
+                    logger.debug(f"调仓日 {date_str}: 生成 {len(signals)} 个信号")
+
+                    # 执行调仓
+                    self._execute_ml_rebalance(
+                        portfolio, signals, price_pivot, date, next_date
+                    )
+
+                except Exception as e:
+                    logger.warning(f"调仓日 {date_str} 信号生成失败: {e}")
+                    continue
+
+        # 6. 保存结果
+        self.portfolio_value = recorder.get_portfolio_value_df()
+        self.positions = recorder.get_positions_history()
+        self.daily_returns = recorder.calculate_daily_returns()
+
+        logger.info(f"回测完成: 最终资产 {self.portfolio_value['total'].iloc[-1]:,.0f}")
+
+        # 7. 成本分析
+        cost_metrics = self.cost_analyzer.analyze_all(
+            portfolio_returns=self.daily_returns,
+            portfolio_values=self.portfolio_value['total'],
+            verbose=False
+        )
+
+        # 8. 计算绩效指标
+        metrics = self._calculate_ml_strategy_metrics(
+            self.portfolio_value['total'],
+            self.daily_returns,
+            capital
+        )
+
+        return Response.success(
+            data={
+                'portfolio_value': self.portfolio_value,
+                'positions': self.positions,
+                'daily_returns': self.daily_returns,
+                'cost_analysis': cost_metrics,
+                'cost_analyzer': self.cost_analyzer,
+                'metrics': metrics
+            },
+            message="ML策略回测完成",
+            backtest_type="ml_strategy",
+            n_days=len(self.portfolio_value),
+            initial_capital=capital,
+            final_value=float(self.portfolio_value['total'].iloc[-1]),
+            total_return=float((self.portfolio_value['total'].iloc[-1] / capital - 1))
+        )
+
     def backtest_three_layer(
         self,
         selector,
@@ -541,6 +694,171 @@ class BacktestEngine:
         )
 
     # ==================== 私有辅助方法 ====================
+
+    def _execute_ml_rebalance(
+        self,
+        portfolio: BacktestPortfolio,
+        signals: Dict[str, Dict],
+        price_pivot: pd.DataFrame,
+        current_date: pd.Timestamp,
+        next_date: pd.Timestamp
+    ):
+        """
+        执行ML策略调仓
+
+        参数:
+            portfolio: 组合对象
+            signals: ML信号字典 {stock: {'action': 'long'/'short', 'weight': 0.xx}}
+            price_pivot: 价格数据 (date × stock_code)
+            current_date: 当前日期
+            next_date: 下一交易日 (执行价格)
+        """
+        if not signals:
+            return
+
+        # 1. 分离做多和做空信号
+        long_signals = {s: v for s, v in signals.items() if v['action'] == 'long'}
+        short_signals = {s: v for s, v in signals.items() if v['action'] == 'short'}
+
+        # 2. 平掉不在信号中的多头持仓
+        current_long_stocks = list(portfolio.long_positions.keys())
+        target_long_stocks = list(long_signals.keys())
+
+        for stock in current_long_stocks:
+            if stock not in target_long_stocks:
+                if stock in price_pivot.columns and next_date in price_pivot.index:
+                    sell_price = price_pivot.loc[next_date, stock]
+                    if not np.isnan(sell_price) and sell_price > 0:
+                        self.executor.execute_sell(portfolio, stock, sell_price, next_date)
+                        logger.debug(f"平多头: {stock} @ {sell_price:.2f}")
+
+        # 3. 平掉不在信号中的空头持仓
+        current_short_stocks = list(portfolio.short_positions.keys())
+        target_short_stocks = list(short_signals.keys())
+
+        for stock in current_short_stocks:
+            if stock not in target_short_stocks:
+                if stock in price_pivot.columns and next_date in price_pivot.index:
+                    cover_price = price_pivot.loc[next_date, stock]
+                    if not np.isnan(cover_price) and cover_price > 0:
+                        self.executor.execute_cover_short(portfolio, stock, cover_price, next_date)
+                        logger.debug(f"平空头: {stock} @ {cover_price:.2f}")
+
+        # 4. 计算可用资金 (扣除空头保证金)
+        total_equity = portfolio.get_total_value(price_pivot, current_date)['total']
+        available_cash = total_equity
+
+        # 5. 开多头 / 调整多头仓位
+        for stock, signal in long_signals.items():
+            if stock not in price_pivot.columns or next_date not in price_pivot.index:
+                continue
+
+            buy_price = price_pivot.loc[next_date, stock]
+            if np.isnan(buy_price) or buy_price <= 0:
+                continue
+
+            target_value = available_cash * signal['weight']
+
+            # 如果已持有，先卖出
+            if stock in portfolio.long_positions:
+                self.executor.execute_sell(portfolio, stock, buy_price, next_date)
+
+            # 买入
+            if target_value > 0:
+                self.executor.execute_buy(portfolio, stock, buy_price, target_value, next_date)
+                logger.debug(f"开多头: {stock} @ {buy_price:.2f}, 权重: {signal['weight']:.3f}")
+
+        # 6. 开空头 / 调整空头仓位
+        for stock, signal in short_signals.items():
+            if stock not in price_pivot.columns or next_date not in price_pivot.index:
+                continue
+
+            short_price = price_pivot.loc[next_date, stock]
+            if np.isnan(short_price) or short_price <= 0:
+                continue
+
+            target_value = available_cash * signal['weight']
+
+            # 如果已持有，先平仓
+            if stock in portfolio.short_positions:
+                self.executor.execute_cover_short(portfolio, stock, short_price, next_date)
+
+            # 开空
+            if target_value > 0:
+                margin_ratio = 0.5  # 50%保证金
+                margin_rate = 0.10  # 10%融券费率
+                self.executor.execute_short_sell(
+                    portfolio, stock, short_price, target_value,
+                    margin_ratio, margin_rate, next_date
+                )
+                logger.debug(f"开空头: {stock} @ {short_price:.2f}, 权重: {signal['weight']:.3f}")
+
+    def _calculate_ml_strategy_metrics(
+        self,
+        equity_curve: pd.Series,
+        daily_returns: pd.Series,
+        initial_capital: float
+    ) -> Dict[str, Any]:
+        """
+        计算ML策略回测的绩效指标
+
+        参数:
+            equity_curve: 净值曲线
+            daily_returns: 每日收益率
+            initial_capital: 初始资金
+
+        返回:
+            绩效指标字典
+        """
+        if equity_curve.empty:
+            return {}
+
+        # 基础指标
+        final_value = equity_curve.iloc[-1]
+        total_return = (final_value / initial_capital - 1)
+
+        # 年化收益率
+        n_days = len(equity_curve)
+        n_years = n_days / 252
+        if n_years > 0:
+            annual_return = (final_value / initial_capital) ** (1 / n_years) - 1
+        else:
+            annual_return = 0.0
+
+        # 波动率
+        if len(daily_returns) > 1:
+            volatility = daily_returns.std() * np.sqrt(252)
+        else:
+            volatility = 0.0
+
+        # 夏普比率
+        if volatility > 0:
+            sharpe_ratio = annual_return / volatility
+        else:
+            sharpe_ratio = 0.0
+
+        # 最大回撤
+        cumulative_max = equity_curve.cummax()
+        drawdown = (equity_curve - cumulative_max) / cumulative_max
+        max_drawdown = drawdown.min()
+
+        # 胜率
+        if len(daily_returns) > 0:
+            win_rate = (daily_returns > 0).sum() / len(daily_returns)
+        else:
+            win_rate = 0.0
+
+        metrics = {
+            'total_return': float(total_return),
+            'annual_return': float(annual_return),
+            'volatility': float(volatility),
+            'sharpe_ratio': float(sharpe_ratio),
+            'max_drawdown': float(max_drawdown),
+            'win_rate': float(win_rate),
+            'n_days': n_days
+        }
+
+        return metrics
 
     def _get_rebalance_dates(self, dates: pd.DatetimeIndex, freq: str):
         if freq == 'D':
