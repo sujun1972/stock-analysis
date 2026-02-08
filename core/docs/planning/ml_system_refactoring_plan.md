@@ -1,9 +1,9 @@
 # Core项目ML系统重构实施方案
 
-**文档版本**: v2.3.0
+**文档版本**: v2.4.0
 **创建时间**: 2026-02-08
 **最后更新**: 2026-02-08
-**项目状态**: 🚧 Phase 1 进行中 - LabelGenerator已完成 (40%)
+**项目状态**: 🚧 Phase 1 进行中 - FeatureEngine/LabelGenerator/TrainedModel已完成 (60%)
 
 ---
 
@@ -1104,12 +1104,12 @@ class MLStockRanker:
 | Day 1 | **删除旧模块** | 删除`strategies/three_layer/`<br>删除`strategies/ml_strategy.py` | 🔴 P0 | ✅ 完成 |
 | Day 2-3 | **实现FeatureEngine** | `ml/feature_engine.py` + 单元测试 | 🔴 P0 | ✅ 完成 |
 | Day 4 | **实现LabelGenerator** | `ml/label_generator.py` + 单元测试 | 🔴 P0 | ✅ 完成 |
-| Day 5-6 | **实现TrainedModel** | `ml/trained_model.py` + 单元测试 | 🔴 P0 | 📝 待实现 |
+| Day 5-6 | **实现TrainedModel** | `ml/trained_model.py` + 单元测试 | 🔴 P0 | ✅ 完成 |
 | Day 7-8 | **实现MLEntry** | `ml/ml_entry.py` + 单元测试 | 🔴 P0 | 📝 待实现 |
 | Day 9 | **实现MLStockRanker** | `ml/ml_stock_ranker.py` + 单元测试 | 🟡 P1 | 📝 待实现 |
 | Day 10 | **集成测试** | 端到端测试通过 | 🔴 P0 | 📝 待实现 |
 
-**里程碑 1**: 核心ML模块完成,测试通过 ⏳ 进行中 (40% 完成)
+**里程碑 1**: 核心ML模块完成,测试通过 ⏳ 进行中 (60% 完成)
 
 ### Phase 2: 回测集成与工具链 (Week 3)
 
@@ -1143,10 +1143,11 @@ class MLStockRanker:
 - [x] 旧的三层架构已完全删除 ✅ (2026-02-08)
 - [x] `FeatureEngine`可计算Alpha因子 + 技术指标 ✅ (2026-02-08, 58+37+4=99特征)
 - [x] `LabelGenerator`支持4种标签类型 ✅ (2026-02-08, return/direction/classification/regression)
-- [ ] `TrainedModel`可保存/加载,提供预测接口
+- [x] `TrainedModel`可保存/加载,提供预测接口 ✅ (2026-02-08)
 - [ ] `MLEntry`生成符合文档的交易信号
 - [x] `FeatureEngine`单元测试覆盖率 >= 90% ✅ (2026-02-08, 100%)
 - [x] `LabelGenerator`单元测试覆盖率 >= 90% ✅ (2026-02-08, 100%)
+- [x] `TrainedModel`单元测试覆盖率 >= 90% ✅ (2026-02-08, 95%)
 - [ ] 所有模块单元测试覆盖率 >= 90%
 - [ ] 端到端测试通过(训练→预测→回测)
 - [ ] 接口命名与ML文档完全一致
@@ -1293,10 +1294,10 @@ ml/
 
 ---
 
-**文档版本**: v2.3.0
+**文档版本**: v2.4.0
 **创建时间**: 2026-02-08
 **最后更新**: 2026-02-08
-**项目状态**: 🚧 Phase 1 Day 4 完成 - LabelGenerator实现完成
+**项目状态**: 🚧 Phase 1 Day 5-6 完成 - TrainedModel实现完成
 
 ---
 
@@ -1416,11 +1417,82 @@ multi_labels = generator.generate_multi_horizon_labels(
 - ✅ 与 FeatureEngine 配合使用
 - ✅ ml 模块总测试: 43/43 通过 (19 FeatureEngine + 24 LabelGenerator)
 
-**下一步**: 实现 Phase 1 Day 5-6 - TrainedModel
+**下一步**: 实现 Phase 1 Day 7-8 - MLEntry
+
+---
+
+### 2026-02-08 - Phase 1 Day 5-6 完成 ✅
+
+**新增的模块**:
+- ✅ `core/src/ml/trained_model.py` - 训练好的模型包装类 (316 行)
+- ✅ `core/tests/unit/ml/test_trained_model.py` - 单元测试 (537 行)
+
+**TrainedModel功能**:
+- ✅ **TrainingConfig**: 训练配置数据类
+  - 支持模型类型: `lightgbm`, `xgboost`, `ridge`, `gru`, `ensemble`
+  - 配置项: 训练时间范围、验证集比例、前向窗口、特征组、超参数
+  - 参数自动验证（检测无效配置）
+- ✅ **TrainedModel**: 模型包装类
+  - `predict()`: 统一预测接口 (返回 expected_return, volatility, confidence)
+  - `save()` / `load()`: 模型持久化 (使用 joblib)
+  - `_estimate_volatility()`: 波动率估算（基于历史收益率）
+  - `_estimate_confidence()`: 置信度估算（基于特征完整度）
+  - `set_feature_columns()`: 特征列管理和对齐
+
+**测试验证**:
+- ✅ 单元测试: 29/29 通过
+- ✅ 测试覆盖率: 95% (97/102 statements)
+- ✅ ml 模块总覆盖率: 91%
+- ✅ 运行时间: 1.74秒
+- ✅ 测试场景: 配置验证/初始化/预测/波动率/置信度/保存加载/特征管理/边缘情况/集成测试
+
+**核心接口**:
+```python
+# 创建训练配置
+config = TrainingConfig(
+    model_type='lightgbm',
+    forward_window=5,
+    feature_groups=['technical']
+)
+
+# 封装训练好的模型
+model = TrainedModel(
+    model=lgb_model,
+    feature_engine=engine,
+    config=config,
+    metrics={'ic': 0.08}
+)
+
+# 预测
+predictions = model.predict(
+    stock_codes=['600000.SH'],
+    market_data=data,
+    date='2024-01-15'
+)
+
+# 保存和加载
+model.save('models/my_model.pkl')
+loaded_model = TrainedModel.load('models/my_model.pkl')
+```
+
+**技术亮点**:
+- ✅ 完全对齐 ml_system_refactoring_plan.md 设计（第651-847行）
+- ✅ 封装模型 + 特征引擎，提供统一接口
+- ✅ 自动特征列对齐，确保预测时特征顺序一致
+- ✅ 健壮的错误处理和清晰的异常信息
+- ✅ 完整的类型提示和文档字符串（Google Style）
+
+**集成状态**:
+- ✅ 已集成到 `src.ml` 模块
+- ✅ 导出 `TrainedModel` 和 `TrainingConfig`
+- ✅ ml 模块总测试: 72/72 通过 (19 FeatureEngine + 24 LabelGenerator + 29 TrainedModel)
+
+**下一步**: 实现 Phase 1 Day 7-8 - MLEntry
 
 ---
 
 **变更记录**:
+- v2.4.0 (2026-02-08): 完成 Phase 1 Day 5-6 - TrainedModel实现
 - v2.3.0 (2026-02-08): 完成 Phase 1 Day 4 - LabelGenerator实现
 - v2.2.0 (2026-02-08): 完成 Phase 1 Day 2-3 - FeatureEngine实现
 - v2.1.0 (2026-02-08): 完成 Phase 1 Day 1 - 旧模块删除和引用修复
