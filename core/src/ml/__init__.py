@@ -14,9 +14,11 @@ ML模块 - 机器学习工作流核心组件
 """
 
 from .feature_engine import FeatureEngine
+from .label_generator import LabelGenerator
 
 __all__ = [
     'FeatureEngine',
+    'LabelGenerator',
 ]
 
 __version__ = '1.0.0'
