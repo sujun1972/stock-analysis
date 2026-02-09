@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import { useTheme } from 'next-themes'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,6 +43,7 @@ export default function CreateStrategyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { theme } = useTheme()
 
   const source = searchParams.get('source') || 'custom'
   const cloneId = searchParams.get('clone')
@@ -346,7 +348,7 @@ export default function CreateStrategyPage() {
                 defaultLanguage="python"
                 value={code}
                 onChange={(value) => setCode(value || '')}
-                theme="vs-dark"
+                theme={theme === 'dark' ? 'vs-dark' : 'light'}
                 options={{
                   minimap: { enabled: true },
                   fontSize: 14,
