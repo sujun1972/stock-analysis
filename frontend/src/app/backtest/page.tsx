@@ -1,562 +1,590 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
-import dynamic from 'next/dynamic'
-import { useSearchParams } from 'next/navigation'
-
-// 动态导入回测相关组件以优化加载性能
-const BacktestPanel = dynamic(() => import('@/components/BacktestPanel'), {
-  loading: () => <div className="h-[200px] bg-gray-50 dark:bg-gray-900 rounded-lg animate-pulse" />
-})
-const BacktestKLineChart = dynamic(() => import('@/components/BacktestKLineChart'), {
-  ssr: false,
-  loading: () => <div className="h-[400px] bg-gray-50 dark:bg-gray-900 rounded-lg flex items-center justify-center">加载图表中...</div>
-})
-const EquityCurveChart = dynamic(() => import('@/components/EquityCurveChart'), {
-  ssr: false,
-  loading: () => <div className="h-[400px] bg-gray-50 dark:bg-gray-900 rounded-lg flex items-center justify-center">加载图表中...</div>
-})
-const PerformanceMetrics = dynamic(() => import('@/components/PerformanceMetrics'))
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import axios from 'axios'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useToast } from '@/hooks/use-toast'
+import { apiClient } from '@/lib/api-client'
+import type {
+  StrategyTypeMeta,
+  StrategyConfig,
+  DynamicStrategy,
+  BacktestRequest
+} from '@/types/strategy'
+import StrategyConfigEditor from '@/components/strategies/StrategyConfigEditor'
+import StockPoolSelector from '@/components/backtest/StockPoolSelector'
+import DateRangeSelector from '@/components/backtest/DateRangeSelector'
+import BacktestResultView from '@/components/backtest/BacktestResultView'
+import { Loader2, TrendingUp, Settings, Code } from 'lucide-react'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
+export default function BacktestPage() {
+  // 策略来源类型
+  const [strategySource, setStrategySource] = useState<'predefined' | 'config' | 'dynamic'>('predefined')
 
-interface BacktestHistory {
-  id: string
-  timestamp: number
-  strategy_name: string
-  symbol: string
-  result: any
-}
+  // 预定义策略相关
+  const [strategyTypes, setStrategyTypes] = useState<StrategyTypeMeta[]>([])
+  const [selectedStrategyType, setSelectedStrategyType] = useState<string>('')
+  const [strategyConfig, setStrategyConfig] = useState<Record<string, any>>({})
 
-function BacktestContent() {
-  const searchParams = useSearchParams()
-  const [backtestResult, setBacktestResult] = useState<any>(null)
-  const [backtestHistory, setBacktestHistory] = useState<BacktestHistory[]>([])
-  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(false)
-  const [backtestConfigFromResult, setBacktestConfigFromResult] = useState<{
-    strategyId?: string
-    symbols?: string
-    startDate?: string
-    endDate?: string
-    initialCash?: number
-    strategyParams?: Record<string, any>
-  } | undefined>(undefined)
+  // 策略配置相关
+  const [strategyConfigs, setStrategyConfigs] = useState<StrategyConfig[]>([])
+  const [selectedConfigId, setSelectedConfigId] = useState<number | undefined>()
 
-  /**
-   * 从 URL 参数加载回测结果或配置
-   * 支持两种模式：
-   * 1. task_id: 加载已完成的回测结果
-   * 2. config: 加载回测配置并自动执行
-   */
+  // 动态策略相关
+  const [dynamicStrategies, setDynamicStrategies] = useState<DynamicStrategy[]>([])
+  const [selectedDynamicId, setSelectedDynamicId] = useState<number | undefined>()
+
+  // 回测参数
+  const [stockPool, setStockPool] = useState<string[]>([])
+  const [dateRange, setDateRange] = useState({
+    start: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  })
+  const [initialCapital, setInitialCapital] = useState(1000000)
+  const [rebalanceFreq, setRebalanceFreq] = useState<'D' | 'W' | 'M'>('W')
+
+  // 回测状态
+  const [isRunning, setIsRunning] = useState(false)
+  const [result, setResult] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const { toast } = useToast()
+
+  // 加载策略类型列表
   useEffect(() => {
-    const taskId = searchParams.get('task_id')
-    const configParam = searchParams.get('config')
+    loadStrategyTypes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-    // 模式1: 加载回测结果
-    if (taskId) {
-      const fetchBacktestResult = async () => {
-        setLoading(true)
-        try {
-          const response = await axios.get(`${API_BASE}/backtest/result/${taskId}`)
+  // 根据策略来源加载对应数据
+  useEffect(() => {
+    if (strategySource === 'config') {
+      loadStrategyConfigs()
+    } else if (strategySource === 'dynamic') {
+      loadDynamicStrategies()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategySource])
 
-          if (response.data.status === 'success' && response.data.data) {
-            const result = response.data.data
-            handleBacktestComplete(result)
-
-            // 从回测结果中提取所有配置信息，用于在 BacktestPanel 中回填表单
-            const config: any = {}
-
-            if (result.strategy_id) {
-              config.strategyId = result.strategy_id
-            }
-
-            // 提取股票代码（支持单股和多股）
-            if (result.symbol) {
-              config.symbols = result.symbol
-            } else if (result.symbols && Array.isArray(result.symbols)) {
-              config.symbols = result.symbols.join(',')
-            }
-
-            // 提取日期范围
-            if (result.start_date) {
-              config.startDate = result.start_date
-            }
-            if (result.end_date) {
-              config.endDate = result.end_date
-            }
-
-            // 提取初始资金
-            if (result.initial_cash !== undefined) {
-              config.initialCash = result.initial_cash
-            }
-
-            // 提取策略参数（例如 ML 模型的 model_id）
-            if (result.strategy_params) {
-              config.strategyParams = result.strategy_params
-            }
-
-            setBacktestConfigFromResult(config)
-          } else {
-            console.error('获取回测结果失败:', response.data)
-          }
-        } catch (error: any) {
-          console.error('获取回测结果失败:', error)
-          alert(`获取回测结果失败: ${error.response?.data?.detail || error.message}`)
-        } finally {
-          setLoading(false)
-        }
+  // 当选择的策略类型变化时，更新默认配置
+  useEffect(() => {
+    if (selectedStrategyType && strategyTypes.length > 0) {
+      const strategyType = strategyTypes.find(t => t.type === selectedStrategyType)
+      if (strategyType) {
+        setStrategyConfig(strategyType.default_params)
       }
+    }
+  }, [selectedStrategyType, strategyTypes])
 
-      fetchBacktestResult()
+  const loadStrategyTypes = async () => {
+    setIsLoading(true)
+    try {
+      const response = await apiClient.getStrategyTypes()
+      if (response.success && response.data) {
+        setStrategyTypes(response.data)
+        if (response.data.length > 0) {
+          setSelectedStrategyType(response.data[0].type)
+          setStrategyConfig(response.data[0].default_params)
+        }
+      } else {
+        toast({
+          title: '加载失败',
+          description: response.error || '无法加载策略类型列表',
+          variant: 'destructive'
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: '加载失败',
+        description: error.message || '无法加载策略类型列表',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadStrategyConfigs = async () => {
+    setIsLoading(true)
+    try {
+      const response = await apiClient.getStrategyConfigs({ is_active: true })
+      if (response.success && response.data) {
+        setStrategyConfigs(response.data.items)
+        if (response.data.items.length > 0 && !selectedConfigId) {
+          setSelectedConfigId(response.data.items[0].id)
+        }
+      } else {
+        toast({
+          title: '加载失败',
+          description: response.error || '无法加载策略配置列表',
+          variant: 'destructive'
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: '加载失败',
+        description: error.message || '无法加载策略配置列表',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadDynamicStrategies = async () => {
+    setIsLoading(true)
+    try {
+      const response = await apiClient.getDynamicStrategies({
+        is_enabled: true,
+        validation_status: 'passed'
+      })
+      if (response.success && response.data) {
+        setDynamicStrategies(response.data.items)
+        if (response.data.items.length > 0 && !selectedDynamicId) {
+          setSelectedDynamicId(response.data.items[0].id)
+        }
+      } else {
+        toast({
+          title: '加载失败',
+          description: response.error || '无法加载动态策略列表',
+          variant: 'destructive'
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: '加载失败',
+        description: error.message || '无法加载动态策略列表',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRunBacktest = async () => {
+    // 验证参数
+    if (stockPool.length === 0) {
+      toast({
+        title: '参数错误',
+        description: '请至少选择一只股票',
+        variant: 'destructive'
+      })
       return
     }
 
-    // 模式2: 加载回测配置并标记为自动运行
-    if (configParam) {
-      try {
-        const config = JSON.parse(decodeURIComponent(configParam))
-        setBacktestConfigFromResult({ ...config, autoRun: true })
-      } catch (error) {
-        console.error('解析配置参数失败:', error)
+    if (!dateRange.start || !dateRange.end) {
+      toast({
+        title: '参数错误',
+        description: '请选择回测日期范围',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    // 验证策略选择
+    if (strategySource === 'predefined' && !selectedStrategyType) {
+      toast({
+        title: '参数错误',
+        description: '请选择预定义策略',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (strategySource === 'config' && !selectedConfigId) {
+      toast({
+        title: '参数错误',
+        description: '请选择策略配置',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (strategySource === 'dynamic' && !selectedDynamicId) {
+      toast({
+        title: '参数错误',
+        description: '请选择动态策略',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    // 构建请求参数
+    const request: BacktestRequest = {
+      strategy_type: strategySource,
+      stock_pool: stockPool,
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      initial_capital: initialCapital,
+      rebalance_freq: rebalanceFreq
+    }
+
+    if (strategySource === 'predefined') {
+      request.strategy_name = selectedStrategyType
+      request.strategy_config = strategyConfig
+    } else if (strategySource === 'config') {
+      request.strategy_id = selectedConfigId
+    } else if (strategySource === 'dynamic') {
+      request.strategy_id = selectedDynamicId
+    }
+
+    // 运行回测
+    setIsRunning(true)
+    setResult(null)
+    try {
+      const response = await apiClient.runUnifiedBacktest(request)
+      if (response.success && response.data) {
+        setResult(response.data)
+        toast({
+          title: '回测完成',
+          description: '策略回测已完成，请查看结果'
+        })
+      } else {
+        toast({
+          title: '回测失败',
+          description: response.error || '未知错误',
+          variant: 'destructive'
+        })
       }
+    } catch (error: any) {
+      toast({
+        title: '回测失败',
+        description: error.response?.data?.detail || error.message || '网络错误',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsRunning(false)
     }
-  }, [searchParams])
-
-  const handleBacktestComplete = (result: any) => {
-    setBacktestResult(result)
-
-    // 保存到历史记录
-    const historyItem: BacktestHistory = {
-      id: `backtest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-      strategy_name: result.strategy_name || '未知策略',
-      symbol: result.symbol || result.symbols?.[0] || '未知股票',
-      result: result
-    }
-
-    setBacktestHistory(prev => [historyItem, ...prev].slice(0, 10))
   }
 
-  const toggleHistorySelection = (id: string) => {
-    const newSelection = new Set(selectedHistoryIds)
-    if (newSelection.has(id)) {
-      newSelection.delete(id)
-    } else {
-      if (newSelection.size >= 3) {
-        // 最多选择3个进行对比
-        return
-      }
-      newSelection.add(id)
-    }
-    setSelectedHistoryIds(newSelection)
-  }
-
-  const getSelectedResults = () => {
-    return backtestHistory
-      .filter(item => selectedHistoryIds.has(item.id))
-      .map(item => item.result)
-  }
-
-  const renderSingleStockResults = () => {
-    if (!backtestResult || backtestResult.mode !== 'single') return null
-
-    return (
-      <div className="space-y-6">
-        {/* 策略信息卡片 */}
-        <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{backtestResult.strategy_name || '回测策略'}</CardTitle>
-                <CardDescription className="mt-1">
-                  股票: {backtestResult.symbol} |
-                  周期: {backtestResult.start_date} 至 {backtestResult.end_date} |
-                  交易次数: {backtestResult.total_trades || 0}
-                </CardDescription>
-              </div>
-              <Button
-                onClick={() => {
-                  // 自动选中当前结果用于对比
-                  const currentId = backtestHistory[0]?.id
-                  if (currentId) {
-                    toggleHistorySelection(currentId)
-                  }
-                }}
-                size="sm"
-              >
-                添加到对比
-              </Button>
-            </div>
-          </CardHeader>
-        </Card>
-
-        {/* K线图 + 买卖信号 */}
-        <BacktestKLineChart
-          data={backtestResult.kline_data}
-          signalPoints={backtestResult.signal_points}
-          stockCode={backtestResult.symbol}
-        />
-
-        {/* 资金曲线对比 */}
-        <EquityCurveChart
-          strategyData={backtestResult.equity_curve}
-          benchmarkData={backtestResult.benchmark_curve}
-          title={`${backtestResult.strategy_name} vs 沪深300`}
-        />
-
-        {/* 绩效报告 */}
-        <PerformanceMetrics
-          metrics={backtestResult.metrics}
-          mode="single"
-        />
-
-        {/* 交易明细 */}
-        {backtestResult.trades && backtestResult.trades.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>交易明细 (最近{backtestResult.trades.length}笔)</CardTitle>
-            </CardHeader>
-            <CardContent>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      日期
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      操作
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      价格
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      数量
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      金额
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {backtestResult.trades.map((trade: any, idx: number) => (
-                    <tr key={idx}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {trade.date}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 rounded ${
-                          trade.type === 'buy'
-                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                            : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                        }`}>
-                          {trade.type === 'buy' ? '买入' : '卖出'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        ¥{trade.price.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {trade.shares}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        ¥{trade.amount.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-              {backtestResult.total_trades > backtestResult.trades.length && (
-                <p className="mt-4 text-sm text-muted-foreground text-center">
-                  共{backtestResult.total_trades}笔交易,显示最近{backtestResult.trades.length}笔
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    )
-  }
-
-  const renderMultiStockResults = () => {
-    if (!backtestResult || backtestResult.mode !== 'multi') return null
-
-    return (
-      <div className="space-y-6">
-        {/* 策略信息卡片 */}
-        <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800">
-          <CardHeader>
-            <CardTitle>{backtestResult.strategy_name || '组合回测策略'}</CardTitle>
-            <CardDescription>
-              股票组合: {backtestResult.symbols?.length || 0} 只 |
-              周期: {backtestResult.start_date} 至 {backtestResult.end_date}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
-        {/* 资金曲线对比 */}
-        <EquityCurveChart
-          strategyData={backtestResult.equity_curve}
-          benchmarkData={backtestResult.benchmark_curve}
-          title="组合净值 vs 沪深300"
-        />
-
-        {/* 绩效报告 */}
-        <PerformanceMetrics
-          metrics={backtestResult.metrics}
-          mode="multi"
-        />
-
-        {/* 组合信息 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>组合信息</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <div className="text-sm text-gray-600 dark:text-gray-400">股票数量</div>
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                {backtestResult.symbols.length}
-              </div>
-            </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <div className="text-sm text-gray-600 dark:text-gray-400">数据点数</div>
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                {backtestResult.equity_curve.length}
-              </div>
-            </div>
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-              <div className="text-sm text-gray-600 dark:text-gray-400">持仓记录</div>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
-                {backtestResult.positions_count}
-              </div>
-            </div>
-          </div>
-
-            {/* 股票列表 */}
-            <div className="mt-6">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                回测股票池 ({backtestResult.symbols.length}只)
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {backtestResult.symbols.map((symbol: string, idx: number) => (
-                  <span
-                    key={idx}
-                    className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm"
-                  >
-                    {symbol}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  const renderComparisonView = () => {
-    const selectedResults = getSelectedResults()
-    if (selectedResults.length < 2) return null
-
-    return (
-      <div className="mt-6 p-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-          多策略对比分析 ({selectedResults.length}个策略)
-        </h2>
-
-        {/* 对比图表 - 使用多条曲线 */}
-        <EquityCurveChart
-          strategies={selectedResults.map((result, idx) => ({
-            name: result.strategy_name || `策略${idx + 1}`,
-            data: result.equity_curve,
-            color: ['#3b82f6', '#8b5cf6', '#10b981'][idx] || '#6b7280'
-          }))}
-          benchmarkData={selectedResults[0].benchmark_curve}
-          title="策略对比 vs 沪深300"
-        />
-
-        {/* 对比表格 */}
-        <div className="mt-6 overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                  策略
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                  总收益率
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                  夏普比率
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                  最大回撤
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                  胜率
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {selectedResults.map((result, idx) => (
-                <tr key={idx}>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                    {result.strategy_name}
-                  </td>
-                  <td className={`px-4 py-3 text-sm text-right font-semibold ${
-                    (result.metrics.total_return || 0) > 0
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    {((result.metrics.total_return || 0) * 100).toFixed(2)}%
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
-                    {(result.metrics.sharpe_ratio || 0).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-red-600 dark:text-red-400 font-semibold">
-                    {((result.metrics.max_drawdown || 0) * 100).toFixed(2)}%
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
-                    {((result.metrics.win_rate || 0) * 100).toFixed(2)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )
-  }
+  const currentStrategyType = strategyTypes.find(t => t.type === selectedStrategyType)
+  const selectedConfig = strategyConfigs.find(c => c.id === selectedConfigId)
+  const selectedDynamic = dynamicStrategies.find(s => s.id === selectedDynamicId)
 
   return (
-    <div className="space-y-6">
-      {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          策略回测系统
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          支持单股K线回测和多股组合回测，动态参数配置，多策略对比分析
-        </p>
-      </div>
+    <div className="container mx-auto py-6 px-4 max-w-7xl">
+      <div className="space-y-6">
+        {/* 页面标题 */}
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">策略回测</h1>
+          <p className="text-muted-foreground mt-2">
+            选择策略类型，配置参数，运行回测分析
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左侧: 配置面板 */}
-        <div className="lg:col-span-1 space-y-6">
-          <BacktestPanel
-            onBacktestComplete={handleBacktestComplete}
-            initialConfig={backtestConfigFromResult}
-          />
-
-          {/* 历史记录面板 */}
-          {backtestHistory.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 左侧: 配置面板 */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* 策略选择卡片 */}
             <Card>
-              <CardHeader className="p-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">回测历史</CardTitle>
-                  <span className="text-xs text-muted-foreground">
-                    选择2-3个对比
-                  </span>
-                </div>
+              <CardHeader>
+                <CardTitle>策略选择</CardTitle>
+                <CardDescription>
+                  选择策略类型并配置参数
+                </CardDescription>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                {backtestHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => toggleHistorySelection(item.id)}
-                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                      selectedHistoryIds.has(item.id)
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedHistoryIds.has(item.id)}
-                        onChange={() => {}}
-                        className="text-blue-600"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {item.strategy_name}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {item.symbol} | {new Date(item.timestamp).toLocaleTimeString('zh-CN', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
+              <CardContent className="space-y-4">
+                <Tabs value={strategySource} onValueChange={(v: any) => setStrategySource(v)}>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="predefined" className="text-xs">
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                      预定义
+                    </TabsTrigger>
+                    <TabsTrigger value="config" className="text-xs">
+                      <Settings className="h-3 w-3 mr-1" />
+                      配置
+                    </TabsTrigger>
+                    <TabsTrigger value="dynamic" className="text-xs">
+                      <Code className="h-3 w-3 mr-1" />
+                      动态
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* 预定义策略 */}
+                  <TabsContent value="predefined" className="space-y-4 mt-4">
+                    {isLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label>策略类型</Label>
+                          <Select value={selectedStrategyType} onValueChange={setSelectedStrategyType}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择策略" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {strategyTypes.map(type => (
+                                <SelectItem key={type.type} value={type.type}>
+                                  {type.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {currentStrategyType && (
+                          <>
+                            <div className="p-3 bg-muted rounded-lg">
+                              <p className="text-sm text-muted-foreground">
+                                {currentStrategyType.description}
+                              </p>
+                              {currentStrategyType.category && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  类别: {currentStrategyType.category}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="space-y-3">
+                              <Label className="text-sm font-semibold">策略参数</Label>
+                              <StrategyConfigEditor
+                                strategyType={selectedStrategyType}
+                                config={strategyConfig}
+                                schema={currentStrategyType.param_schema}
+                                onChange={setStrategyConfig}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </TabsContent>
+
+                  {/* 策略配置 */}
+                  <TabsContent value="config" className="space-y-4 mt-4">
+                    {isLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : strategyConfigs.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-sm text-muted-foreground mb-4">
+                          暂无可用的策略配置
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.location.href = '/strategies/configs'}
+                        >
+                          前往创建
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label>选择配置</Label>
+                          <Select
+                            value={selectedConfigId?.toString()}
+                            onValueChange={(v) => setSelectedConfigId(parseInt(v))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择配置" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {strategyConfigs.map(config => (
+                                <SelectItem key={config.id} value={config.id.toString()}>
+                                  {config.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {selectedConfig && (
+                          <div className="p-3 bg-muted rounded-lg space-y-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">策略类型</p>
+                              <p className="text-sm font-medium">{selectedConfig.strategy_type}</p>
+                            </div>
+                            {selectedConfig.description && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">描述</p>
+                                <p className="text-sm">{selectedConfig.description}</p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs text-muted-foreground">配置参数</p>
+                              <div className="text-xs font-mono mt-1 p-2 bg-background rounded">
+                                {JSON.stringify(selectedConfig.config, null, 2)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </TabsContent>
+
+                  {/* 动态策略 */}
+                  <TabsContent value="dynamic" className="space-y-4 mt-4">
+                    {isLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : dynamicStrategies.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-sm text-muted-foreground mb-4">
+                          暂无可用的动态策略
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.location.href = '/strategies/dynamic'}
+                        >
+                          前往创建
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label>选择策略</Label>
+                          <Select
+                            value={selectedDynamicId?.toString()}
+                            onValueChange={(v) => setSelectedDynamicId(parseInt(v))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择策略" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {dynamicStrategies.map(strategy => (
+                                <SelectItem key={strategy.id} value={strategy.id.toString()}>
+                                  {strategy.display_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {selectedDynamic && (
+                          <div className="p-3 bg-muted rounded-lg space-y-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">策略名称</p>
+                              <p className="text-sm font-medium">{selectedDynamic.strategy_name}</p>
+                            </div>
+                            {selectedDynamic.description && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">描述</p>
+                                <p className="text-sm">{selectedDynamic.description}</p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs text-muted-foreground">验证状态</p>
+                              <p className="text-sm font-medium text-green-600">
+                                {selectedDynamic.validation_status === 'passed' ? '✓ 验证通过' : selectedDynamic.validation_status}
+                              </p>
+                            </div>
+                            {selectedDynamic.version && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">版本</p>
+                                <p className="text-sm">v{selectedDynamic.version}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+
+            {/* 回测参数卡片 */}
+            <Card>
+              <CardHeader>
+                <CardTitle>回测参数</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* 股票池选择 */}
+                <StockPoolSelector value={stockPool} onChange={setStockPool} maxStocks={50} />
+
+                {/* 日期范围选择 */}
+                <DateRangeSelector value={dateRange} onChange={setDateRange} />
+
+                {/* 初始资金 */}
+                <div className="space-y-2">
+                  <Label htmlFor="initial-capital">初始资金（元）</Label>
+                  <Input
+                    id="initial-capital"
+                    type="number"
+                    value={initialCapital}
+                    onChange={(e) => setInitialCapital(parseInt(e.target.value) || 1000000)}
+                    min={10000}
+                    step={10000}
+                  />
+                </div>
+
+                {/* 调仓频率 */}
+                <div className="space-y-2">
+                  <Label htmlFor="rebalance-freq">调仓频率</Label>
+                  <Select value={rebalanceFreq} onValueChange={(v: any) => setRebalanceFreq(v)}>
+                    <SelectTrigger id="rebalance-freq">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="D">每日</SelectItem>
+                      <SelectItem value="W">每周</SelectItem>
+                      <SelectItem value="M">每月</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
             </Card>
-          )}
-        </div>
 
-        {/* 右侧: 结果展示 */}
-        <div className="lg:col-span-2">
-          {loading ? (
-            <Card className="p-12 text-center">
-              <div className="flex flex-col items-center justify-center">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
-                <CardTitle className="mt-4">正在加载回测结果...</CardTitle>
+            {/* 运行回测按钮 */}
+            <Button
+              onClick={handleRunBacktest}
+              disabled={isRunning || isLoading}
+              className="w-full"
+              size="lg"
+            >
+              {isRunning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isRunning ? '回测中...' : '运行回测'}
+            </Button>
+          </div>
+
+          {/* 右侧: 结果展示 */}
+          <div className="lg:col-span-2">
+            {isRunning ? (
+              <Card className="p-12 text-center">
+                <div className="flex flex-col items-center justify-center">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+                  <CardTitle className="mt-4">正在运行回测...</CardTitle>
+                  <CardDescription className="mt-2">
+                    请稍候，正在计算策略回测结果
+                  </CardDescription>
+                </div>
+              </Card>
+            ) : !result ? (
+              <Card className="p-12 text-center">
+                <svg
+                  className="mx-auto h-24 w-24 text-muted-foreground"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+                <CardTitle className="mt-4">等待回测结果</CardTitle>
                 <CardDescription className="mt-2">
-                  请稍候，正在获取回测数据
+                  在左侧配置策略和回测参数，点击&ldquo;运行回测&rdquo;按钮开始
                 </CardDescription>
-              </div>
-            </Card>
-          ) : !backtestResult ? (
-            <Card className="p-12 text-center">
-              <svg
-                className="mx-auto h-24 w-24 text-muted-foreground"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                />
-              </svg>
-              <CardTitle className="mt-4">等待回测结果</CardTitle>
-              <CardDescription className="mt-2">
-                在左侧配置回测参数并点击&ldquo;运行回测&rdquo;按钮
-              </CardDescription>
-            </Card>
-          ) : (
-            <>
-              {backtestResult.mode === 'single' ? renderSingleStockResults() : renderMultiStockResults()}
-              {renderComparisonView()}
-            </>
-          )}
+              </Card>
+            ) : (
+              <BacktestResultView result={result} />
+            )}
+          </div>
         </div>
       </div>
     </div>
-  )
-}
-
-export default function BacktestPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    }>
-      <BacktestContent />
-    </Suspense>
   )
 }
