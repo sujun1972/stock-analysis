@@ -9,8 +9,8 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 
-from strategies.base_strategy import BaseStrategy
-from strategies.signal_generator import SignalGenerator
+from core.strategies.base_strategy import BaseStrategy
+from core.strategies.signal_generator import SignalGenerator
 
 
 class MomentumStrategy(BaseStrategy):
@@ -216,7 +216,7 @@ class MomentumStrategy(BaseStrategy):
         """获取策略元信息"""
         return {
             'name': self.name,
-            'class_name': self.__class__.__name__,
+            'class_name': 'MomentumStrategy',
             'category': 'momentum',
             'description': '基于价格动量选股,买入近期强势股',
             'parameters': {

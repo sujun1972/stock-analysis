@@ -29,8 +29,7 @@ class CodeSanitizer:
     ALLOWED_IMPORTS = {
         'typing', 'types', 'dataclasses', 'enum', 'abc',
         'pandas', 'numpy', 'loguru',
-        'core.strategies.base_strategy',
-        'core.strategies.signal_generator',
+        'core', 'strategies',  # 允许 core.strategies.xxx 和 strategies.xxx
         'datetime', 'math',
     }
 
