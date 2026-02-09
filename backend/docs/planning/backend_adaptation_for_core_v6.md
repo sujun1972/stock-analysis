@@ -1,9 +1,9 @@
 # Backend适配Core v6.0架构变更方案
 
-**文档版本**: v1.1.0
+**文档版本**: v1.2.0
 **创建日期**: 2026-02-09
 **更新日期**: 2026-02-09
-**状态**: 🔄 Phase 1 已完成
+**状态**: 🔄 Phase 2 已完成
 **优先级**: 🔴 P0 - 必须完成
 
 ---
@@ -1213,11 +1213,39 @@ POST /api/backtest
 - ✅ 文档已更新至 v4.0.0
 - ✅ 无残留的 Three Layer 引用
 
-### Phase 2: 数据库Migration (0.5天) ⏳ 待开始
+### Phase 2: 新增数据库表 (0.5天) ✅ 已完成 (2026-02-09)
 
-- [ ] 创建migration脚本
-- [ ] 运行migration
-- [ ] 验证表结构
+**完成时间**: 2026-02-09
+**实际耗时**: 0.5天
+
+**已完成任务**:
+- [x] 创建migration脚本 `V004__add_strategy_configs_and_dynamic_strategies.sql`
+- [x] 运行migration并验证
+- [x] 创建Repository类（3个）
+  - [x] `StrategyConfigRepository` - 配置驱动策略数据访问层
+  - [x] `DynamicStrategyRepository` - 动态代码策略数据访问层
+  - [x] `StrategyExecutionRepository` - 策略执行记录数据访问层
+- [x] 编写并执行测试脚本
+- [x] 更新repositories模块导出
+
+**创建的数据库对象**:
+- 表 (3个): `strategy_configs`, `dynamic_strategies`, `strategy_executions`
+- 视图 (2个): `strategy_configs_leaderboard`, `dynamic_strategies_leaderboard`
+- 函数 (2个): `get_top_config_strategies()`, `get_top_dynamic_strategies()`
+- 触发器 (2个): 自动更新 `updated_at` 字段
+- 示例数据: 3个预定义策略配置
+
+**测试结果**:
+- ✅ StrategyConfigRepository - 所有功能正常
+- ✅ DynamicStrategyRepository - 所有功能正常
+- ✅ StrategyExecutionRepository - 所有功能正常
+
+**文件清单**:
+- `/backend/migrations/V004__add_strategy_configs_and_dynamic_strategies.sql`
+- `/backend/app/repositories/strategy_config_repository.py`
+- `/backend/app/repositories/dynamic_strategy_repository.py`
+- `/backend/app/repositories/strategy_execution_repository.py`
+- `/backend/test_phase2_repositories.py` (测试脚本)
 
 ### Phase 3: 新增Adapters (2-3天) ⏳ 待开始
 
