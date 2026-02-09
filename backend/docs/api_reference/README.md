@@ -1,7 +1,7 @@
 # API 参考文档
 
-**版本**: v1.0.0
-**最后更新**: 2026-02-01
+**版本**: v4.0.0
+**最后更新**: 2026-02-09
 
 ---
 
@@ -11,9 +11,11 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 
 ### 架构说明
 
-**Phase 0 架构修正已完成** (2026-02-02)：
+**Core v6.0 适配已完成** (2026-02-09)：
 - ✅ **核心业务 API 已重写**：使用 Core Adapters 调用 Core 项目功能
+- ✅ **新增策略系统 API**：支持三种策略类型（预定义/配置驱动/动态代码）
 - ✅ **辅助功能 API**：使用专门的 Service 类处理（不需要重写）
+- ✅ **移除 Three Layer API**：Three Layer 架构已废弃
 - Backend 现为**薄层 API 网关**，职责清晰
 
 ### 自动文档
@@ -92,11 +94,12 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 
 ### 5. 回测引擎 (`/api/backtest`) ✅ 已重写
 
-**使用的 Adapter**: BacktestAdapter, DataAdapter
+**使用的 Adapter**: BacktestAdapter, ConfigStrategyAdapter, DynamicStrategyAdapter, DataAdapter
 
 | 端点 | 方法 | 说明 | 状态 |
 |------|------|------|------|
-| `/run` | POST | 运行回测 | ✅ 已重写 |
+| `/run` | POST | 运行回测（旧接口） | ✅ 已重写 |
+| `` | POST | **统一回测接口（支持三种策略类型）** | ⭐ v4.0 新增 |
 | `/metrics` | POST | 计算绩效指标 | ✅ 新增 |
 | `/parallel` | POST | 并行回测 | ✅ 新增 |
 | `/optimize` | POST | 参数优化 | ✅ 新增 |
@@ -104,8 +107,8 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 | `/risk-metrics` | POST | 风险指标计算 | ✅ 新增 |
 | `/trade-statistics` | POST | 交易统计 | ✅ 新增 |
 
-**测试覆盖**: 44 个测试用例（26 单元 + 18 集成）
-**支持功能**: 策略参数优化、并行回测、20+ 绩效指标
+**测试覆盖**: 53 个测试用例（35 单元 + 18 集成）
+**支持功能**: 三种策略类型、策略参数优化、并行回测、20+ 绩效指标
 
 ### 6. 市场状态 (`/api/market`) ✅ 已重写
 
@@ -121,11 +124,48 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 **测试覆盖**: 33 个测试用例（19 单元 + 14 集成）
 **支持功能**: 交易时段判断、数据新鲜度智能判断
 
+### 7. 策略配置管理 (`/api/strategy-configs`) ⭐ v4.0 新增
+
+**使用的 Adapter**: ConfigStrategyAdapter
+
+| 端点 | 方法 | 说明 | 状态 |
+|------|------|------|------|
+| `/types` | GET | 获取可用的预定义策略类型 | ⭐ v4.0 新增 |
+| `` | POST | 创建策略配置 | ⭐ v4.0 新增 |
+| `` | GET | 获取配置列表 | ⭐ v4.0 新增 |
+| `/{id}` | GET | 获取配置详情 | ⭐ v4.0 新增 |
+| `/{id}` | PUT | 更新配置 | ⭐ v4.0 新增 |
+| `/{id}` | DELETE | 删除配置 | ⭐ v4.0 新增 |
+| `/{id}/test` | POST | 测试配置 | ⭐ v4.0 新增 |
+| `/validate` | POST | 验证配置参数 | ⭐ v4.0 新增 |
+
+**测试覆盖**: 14 个测试用例（单元测试）
+**支持功能**: 配置驱动策略 CRUD、参数验证、配置测试
+
+### 8. 动态策略管理 (`/api/dynamic-strategies`) ⭐ v4.0 新增
+
+**使用的 Adapter**: DynamicStrategyAdapter
+
+| 端点 | 方法 | 说明 | 状态 |
+|------|------|------|------|
+| `` | POST | 创建动态策略 | ⭐ v4.0 新增 |
+| `` | GET | 获取动态策略列表 | ⭐ v4.0 新增 |
+| `/{id}` | GET | 获取动态策略详情 | ⭐ v4.0 新增 |
+| `/{id}` | PUT | 更新动态策略 | ⭐ v4.0 新增 |
+| `/{id}` | DELETE | 删除动态策略 | ⭐ v4.0 新增 |
+| `/{id}/code` | GET | 获取策略代码 | ⭐ v4.0 新增 |
+| `/{id}/test` | POST | 测试动态策略 | ⭐ v4.0 新增 |
+| `/{id}/validate` | POST | 验证策略代码 | ⭐ v4.0 新增 |
+| `/statistics` | GET | 获取策略统计信息 | ⭐ v4.0 新增 |
+
+**测试覆盖**: 15 个测试用例（单元测试）
+**支持功能**: 动态代码策略 CRUD、代码安全验证、策略测试
+
 ---
 
 ## 辅助功能 API（使用专门的 Service，不需要重写）
 
-### 7. 机器学习训练 (`/api/ml`) 🟡 使用 MLTrainingService
+### 9. 机器学习训练 (`/api/ml`) 🟡 使用 MLTrainingService
 
 **说明**: 此 API 负责管理机器学习训练任务（任务调度、进度跟踪、模型管理），不涉及 Core 业务逻辑重复，因此使用专门的 `MLTrainingService`。
 
@@ -144,7 +184,7 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 **实现方式**: `MLTrainingService` + `ExperimentService`
 **文件大小**: 521 行
 
-### 8. 策略管理 (`/api/strategy`) 🟡 使用 StrategyManager
+### 10. 策略管理 (`/api/strategy`) 🟡 使用 StrategyManager
 
 **说明**: 提供策略元数据查询，使用 `StrategyManager` 管理策略注册表。
 
@@ -155,7 +195,7 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 
 **实现方式**: `StrategyManager`
 
-### 9. 数据同步 (`/api/sync`) 🟡 使用专门的 Sync Services
+### 11. 数据同步 (`/api/sync`) 🟡 使用专门的 Sync Services
 
 **说明**: 负责数据同步任务调度和状态管理，使用专门的同步服务类。
 
@@ -170,7 +210,7 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 
 **实现方式**: `StockListSyncService` + `DailySyncService` + `RealtimeSyncService`
 
-### 10. 定时任务 (`/api/scheduler`) 🟡 使用 ConfigService
+### 12. 定时任务 (`/api/scheduler`) 🟡 使用 ConfigService
 
 **说明**: 管理数据同步的定时任务配置和执行历史。
 
@@ -184,7 +224,7 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 
 **实现方式**: `ConfigService`
 
-### 11. 配置管理 (`/api/config`) 🟡 使用 ConfigService
+### 13. 配置管理 (`/api/config`) 🟡 使用 ConfigService
 
 **说明**: 管理系统配置、数据源设置。
 
@@ -195,7 +235,7 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 
 **实现方式**: `ConfigService`
 
-### 12. 自动化实验 (`/api/experiment`) 🟡 使用 ExperimentService
+### 14. 自动化实验 (`/api/experiment`) 🟡 使用 ExperimentService
 
 **说明**: 管理自动化实验批次、参数网格搜索、模型排名。
 
@@ -210,7 +250,7 @@ Backend 提供完整的 RESTful API 服务，涵盖股票数据管理、特征�
 
 **实现方式**: `ExperimentService` + `BatchRepository` + `ExperimentRepository`
 
-### 13. 模型管理 (`/api/models`) ⚠️ 占位符（未实现）
+### 15. 模型管理 (`/api/models`) ⚠️ 占位符（未实现）
 
 **说明**: 旧的模型管理端点，仅包含 TODO 占位符，功能已由 `/api/ml` 替代。
 
@@ -574,29 +614,47 @@ class APIClient:
 
 ## 更新日志
 
+### v4.0.0 (2026-02-09) 🎉 **Core v6.0 适配完成**
+
+**重大变更**:
+- ❌ **移除 Three Layer API**：`/api/three-layer/*` 端点已移除（返回 410 Gone）
+- ⭐ **新增策略配置 API**：`/api/strategy-configs`（8 个端点）
+- ⭐ **新增动态策略 API**：`/api/dynamic-strategies`（9 个端点）
+- ⭐ **统一回测 API**：`/api/backtest` 支持三种策略类型
+
+**新增功能**:
+- ✅ 预定义策略支持（momentum, mean_reversion, multi_factor）
+- ✅ 配置驱动策略（从数据库加载参数）
+- ✅ 动态代码策略（支持 AI 生成代码）
+- ✅ 策略代码安全验证（AST 分析、语法检查）
+- ✅ 策略执行记录追踪
+
+**数据库变更**:
+- ✅ 新增 `strategy_configs` 表
+- ✅ 新增 `dynamic_strategies` 表
+- ✅ 新增 `strategy_executions` 表
+
+**总计**:
+- 📊 **8 个核心业务 API 模块**（使用 Core Adapters）
+  - Stocks API (5 个端点)
+  - Data API (4 个端点)
+  - Features API (4 个端点)
+  - Backtest API (8 个端点) ⭐ 更新
+  - Market API (4 个端点)
+  - **Strategy Configs API (8 个端点)** ⭐ 新增
+  - **Dynamic Strategies API (9 个端点)** ⭐ 新增
+- 📦 **7 个辅助功能 API 模块**（独立实现）
+- ✅ **280+ 个测试用例**
+- 🎯 **测试覆盖率 60%+**
+
+**迁移指南**: 详见 [v3.x → v4.0 迁移指南](../migration/v3_to_v4.md)
+
 ### v2.0.0 (2026-02-02) ✅ **Phase 0 架构修正完成**
 
 **架构重大变更**:
 - ✅ **6 个核心业务 API 已重写**：使用 Core Adapters 调用 Core 项目
-  - Stocks API (5 个端点)
-  - Data API (4 个端点)
-  - Features API (4 个端点)
-  - Backtest API (7 个端点)
-  - Market API (4 个端点)
 - ✅ **7 个辅助功能 API 保持独立**：使用专门的 Service 类
-  - ML Training API (9 个端点) - `MLTrainingService`
-  - Strategy API (2 个端点) - `StrategyManager`
-  - Sync API (6 个端点) - 专门的 Sync Services
-  - Scheduler API (5 个端点) - `ConfigService`
-  - Config API (2 个端点) - `ConfigService`
-  - Experiment API (15+ 个端点) - `ExperimentService`
 - ⚠️ **1 个 API 待清理**：Models API（未实现的占位符）
-
-**总计**:
-- 📊 **31 个核心 API 端点**（已重写，使用 Core Adapters）
-- 📦 **39+ 个辅助 API 端点**（独立实现，使用专门 Service）
-- ✅ **226 个测试用例**（覆盖核心 API）
-- 🎯 **测试覆盖率 90%+**（核心 API）
 
 **关键成果**:
 - 🏆 Backend 成为**薄层 API 网关**
@@ -619,17 +677,21 @@ class APIClient:
 - [ ] WebSocket 支持
 - [ ] GraphQL 支持
 - [ ] 清理未实现的 Models API
+- [ ] AI 策略生成 API
 
 ---
 
 ## 相关文档
 
+- [Backend README](../README.md) - Backend 项目总览
+- [迁移指南](../migration/v3_to_v4.md) - v3.x → v4.0 迁移指南
 - [架构总览](../architecture/overview.md) - 了解系统架构
+- [API 使用指南](API_USAGE_GUIDE.md) - API 使用示例和最佳实践
 - [用户指南](../user_guide/quick_start.md) - 快速开始
 - [开发指南](../developer_guide/contributing.md) - 参与开发
 
 ---
 
 **维护团队**: Quant Team
-**文档版本**: v1.0.0
-**最后更新**: 2026-02-01
+**文档版本**: v4.0.0
+**最后更新**: 2026-02-09
