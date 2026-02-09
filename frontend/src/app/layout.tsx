@@ -7,6 +7,7 @@ import { MobileNav } from "@/components/mobile-nav";
 import { DesktopNav } from "@/components/desktop-nav";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { StockSearch } from "@/components/stock-search";
 
 export const metadata: Metadata = {
   title: "A股AI量化交易系统",
@@ -40,6 +41,11 @@ export default function RootLayout({
                 <div className="flex-1">
                   <h1 className="text-xl sm:text-2xl font-bold">A股AI量化交易系统</h1>
                   <p className="text-blue-100 text-xs sm:text-sm hidden sm:block">Stock Analysis Platform</p>
+                </div>
+
+                {/* 股票搜索 */}
+                <div className="hidden md:block">
+                  <StockSearch />
                 </div>
 
                 {/* 主题切换 */}
