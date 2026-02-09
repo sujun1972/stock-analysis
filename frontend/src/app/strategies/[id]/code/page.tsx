@@ -28,13 +28,14 @@ import {
 } from 'lucide-react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { toast } from '@/components/ui/use-toast'
+import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
 
 export default function StrategyCodePage() {
   const params = useParams()
   const router = useRouter()
+  const { toast } = useToast()
   const strategyId = parseInt(params.id as string)
 
   const [strategy, setStrategy] = useState<Strategy | null>(null)

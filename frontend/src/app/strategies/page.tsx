@@ -25,13 +25,14 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { toast } from '@/components/ui/use-toast'
+import { useToast } from '@/hooks/use-toast'
 import StrategyCard from '@/components/strategies/StrategyCard'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
 
 export default function StrategiesPage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')

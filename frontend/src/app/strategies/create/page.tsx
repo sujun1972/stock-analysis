@@ -23,13 +23,14 @@ import {
   XCircle,
   Loader2
 } from 'lucide-react'
-import { toast } from '@/components/ui/use-toast'
+import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
 
 export default function CreateStrategyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { toast } = useToast()
 
   const source = searchParams.get('source') || 'custom'
   const cloneId = searchParams.get('clone')
