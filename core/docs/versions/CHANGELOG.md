@@ -7,6 +7,90 @@
 
 ---
 
+## [7.0.0] - 2026-02-09 🚀🚀
+
+**重大更新**: 统一动态策略架构 V2.0 - Phase 1 完成
+
+详细更新内容请查看:
+- [统一动态策略架构方案](../../docs/UNIFIED_DYNAMIC_STRATEGY_ARCHITECTURE.md)
+- [Phase 1 实施总结](../../docs/PHASE1_IMPLEMENTATION_SUMMARY.md)
+- [Phase 1 测试总结](../../docs/PHASE1_TEST_SUMMARY.md)
+- [Phase 1 完成报告](../../docs/PHASE1_COMPLETE.md)
+
+### 新增 (Added)
+- **统一数据库架构**:
+  - 新增 `strategies` 统一表，整合所有策略类型
+  - 删除旧的 `strategy_configs` 和 `ai_strategies` 表
+  - 支持三种策略来源: builtin, ai, custom
+  - 完整代码存储在数据库（代码即数据）
+  - 7个优化索引（包括全文搜索）
+  - 自动更新时间戳触发器
+
+- **内置策略代码提取**:
+  - `momentum_strategy.py` (5,780 bytes) - 动量策略
+  - `mean_reversion_strategy.py` (6,688 bytes) - 均值回归策略
+  - `multi_factor_strategy.py` (9,651 bytes) - 多因子策略
+  - 使用相对导入路径，避免模块依赖问题
+  - SHA256 哈希保证代码完整性
+
+- **动态加载机制**:
+  - 基于 `exec()` 的安全动态代码加载
+  - 隔离命名空间防止污染
+  - 支持从数据库动态实例化策略类
+  - 代码加载时间 < 0.1s（目标 < 1s）
+
+- **初始化和验证工具**:
+  - `scripts/init_builtin_strategies.py` - 初始化内置策略到数据库
+  - `scripts/verify_strategy_loading.py` - 验证策略加载功能
+  - `scripts/run_phase1_tests.sh` - 一键运行所有测试
+
+- **完整测试套件**:
+  - 单元测试: `tests/unit/strategies/test_database_strategy_loader.py` (11个用例)
+  - 集成测试: `tests/integration/strategies/test_builtin_strategies_integration.py` (8个用例)
+  - 测试通过率: **100%** (19/19)
+  - 测试覆盖: 数据库加载、动态执行、策略实例化、信号生成、哈希验证、性能测试
+
+### 改进 (Changed)
+- **数据模型统一**: 从多表模型（strategy_configs + ai_strategies + 预定义模块）简化为单表模型（strategies）
+- **代码完全透明**: 所有策略代码存储在数据库，可审计、可版本控制
+- **统一管理接口**: 所有策略类型使用相同的查询和管理方式
+
+### 优化 (Performance)
+- **策略加载性能**:
+  - 加载时间: < 0.1s (目标 < 1s)
+  - 远超性能要求
+
+### 数据库迁移 (Migration)
+- **迁移脚本**: `core/src/database/migrations/008_unified_strategies_table.sql`
+- **执行命令**:
+  ```bash
+  docker-compose exec -T timescaledb psql -U stock_user -d stock_analysis < \
+    core/src/database/migrations/008_unified_strategies_table.sql
+  ```
+
+### 文档 (Documentation)
+- 新增 `docs/UNIFIED_DYNAMIC_STRATEGY_ARCHITECTURE.md` - 完整架构设计
+- 新增 `docs/PHASE1_IMPLEMENTATION_SUMMARY.md` - 实施总结
+- 新增 `docs/PHASE1_TEST_SUMMARY.md` - 测试总结
+- 新增 `docs/PHASE1_COMPLETE.md` - 完成报告
+- 更新 `core/docs/README.md` 至 v7.0.0
+
+### 验收标准 (Acceptance Criteria)
+- ✅ 数据库表创建成功
+- ✅ 内置策略代码提取完成（3个策略）
+- ✅ 初始化脚本工作正常
+- ✅ 策略加载功能验证通过
+- ✅ 测试覆盖完整（19个测试全部通过）
+
+### 下一步 (Next Steps)
+- Phase 2: Backend API 重构（预计 2 天）
+- Phase 3: Frontend 适配（预计 2 天）
+
+### 重要说明
+> **统一架构理念**: v7.0 实现了真正的统一架构，所有策略（内置/AI/自定义）都以相同方式存储和加载，简化了系统复杂度，提高了可维护性。
+
+---
+
 ## [6.0.0] - 2026-02-09 🚀
 
 **重大更新**: 策略系统全面重构（Phase 1-4 完成）

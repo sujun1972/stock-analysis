@@ -1,14 +1,15 @@
 # Stock-Analysis Core 系统指南
 
-**文档版本**: v6.0.0
+**文档版本**: v7.0.0
 **最后更新**: 2026-02-09
-**项目状态**: 🚀 策略系统重构完成 (Phase 1-4) + 完整文档体系
+**项目状态**: 🚀 统一动态策略架构 v2.0 - Phase 1 完成 + 测试验证通过
 
 ---
 
 ## 📋 目录
 
 - [项目概述](#-项目概述)
+- [新特性 v7.0](#-新特性-v70)
 - [新特性 v6.0](#-新特性-v60)
 - [快速开始](#-快速开始)
 - [核心架构](#-核心架构)
@@ -41,6 +42,108 @@
 4. **灵活组合**: 支持策略自由组合和动态加载
 5. **性能优先**: 多级缓存、懒加载、并行处理、JIT编译
 6. **类型安全**: 完整的类型提示，静态类型检查
+
+---
+
+## 🎉 新特性 v7.0
+
+### 统一动态策略架构 V2.0 - Phase 1 完成 ✅
+
+v7.0 版本完成了统一动态策略架构的 Phase 1 重构，彻底统一了策略数据模型和加载机制。
+
+#### 核心改进
+
+**1. 数据库架构统一**
+- ✅ 创建统一的 `strategies` 表，整合所有策略类型
+- ✅ 删除旧的 `strategy_configs` 和 `ai_strategies` 表
+- ✅ 统一存储内置策略、AI策略和自定义策略的完整代码
+- ✅ 新增 7 个优化索引（包括全文搜索）
+- ✅ 新增自动更新时间戳触发器
+
+**2. 内置策略代码提取**
+- ✅ 提取三个内置策略的完整可执行代码
+  - [momentum_strategy.py](../../core/scripts/builtin_strategies/momentum_strategy.py) (5,780 bytes)
+  - [mean_reversion_strategy.py](../../core/scripts/builtin_strategies/mean_reversion_strategy.py) (6,688 bytes)
+  - [multi_factor_strategy.py](../../core/scripts/builtin_strategies/multi_factor_strategy.py) (9,651 bytes)
+- ✅ 使用相对导入路径，避免模块依赖问题
+- ✅ SHA256 哈希保证代码完整性
+
+**3. 动态加载机制**
+- ✅ 实现基于 `exec()` 的安全动态代码加载
+- ✅ 隔离命名空间防止污染
+- ✅ 支持从数据库动态实例化策略类
+- ✅ 代码加载时间 < 0.1s（目标 < 1s）
+
+**4. 完整测试覆盖**
+- ✅ 单元测试：11/11 通过 (0.77s)
+- ✅ 集成测试：8/8 通过 (0.98s)
+- ✅ 验证脚本：3/3 策略成功加载
+- ✅ 测试通过率：**100%** (19/19)
+
+#### 架构对比
+
+**旧架构 (v6.x)**:
+```
+strategy_configs 表 (配置策略)
+ai_strategies 表 (AI策略)
++ 预定义策略 (Python模块)
+```
+
+**新架构 (v7.0)**:
+```
+strategies 统一表
+  ├── source_type: builtin   (内置策略)
+  ├── source_type: ai        (AI生成策略)
+  └── source_type: custom    (自定义策略)
+```
+
+#### 数据库迁移
+
+执行以下命令应用 Phase 1 数据库迁移：
+
+```bash
+cd /Volumes/MacDriver/stock-analysis
+docker-compose exec -T timescaledb psql -U stock_user -d stock_analysis < \
+  core/src/database/migrations/008_unified_strategies_table.sql
+```
+
+#### 初始化内置策略
+
+```bash
+cd core
+./venv/bin/python scripts/init_builtin_strategies.py
+```
+
+#### 验证策略加载
+
+```bash
+./venv/bin/python scripts/verify_strategy_loading.py
+```
+
+#### 运行测试套件
+
+```bash
+./scripts/run_phase1_tests.sh
+```
+
+#### 技术亮点
+
+1. **统一数据模型**: 一张表管理所有策略，简化查询和管理
+2. **代码完全透明**: 所有策略代码存储在数据库，可审计、可版本控制
+3. **动态加载安全**: 使用隔离命名空间，避免代码污染和安全问题
+4. **性能优异**: 策略加载 < 0.1s，远超 1s 目标
+5. **100% 测试覆盖**: 所有核心功能都有完整的单元测试和集成测试
+
+#### 详细文档
+
+- [统一动态策略架构方案](../../docs/UNIFIED_DYNAMIC_STRATEGY_ARCHITECTURE.md) - 完整架构设计
+- [Phase 1 实施总结](../../docs/PHASE1_IMPLEMENTATION_SUMMARY.md) - 实施细节
+- [Phase 1 测试总结](../../docs/PHASE1_TEST_SUMMARY.md) - 测试详情
+- [Phase 1 完成报告](../../docs/PHASE1_COMPLETE.md) - 交付成果
+
+#### 下一步：Phase 2
+
+Phase 2 将重构 Backend API，创建统一的策略管理接口。预计 2 天完成。
 
 ---
 
@@ -771,11 +874,23 @@ print(prometheus_metrics)
 
 ## 📚 文档导航
 
+### 🆕 策略系统文档 (v7.0)
+
+了解最新的统一动态策略架构。
+
+- **[统一动态策略架构方案](../../docs/UNIFIED_DYNAMIC_STRATEGY_ARCHITECTURE.md)** ⭐⭐ - v7.0 完整架构设计
+  - 统一数据模型设计
+  - 动态代码加载机制
+  - Phase 1-3 实施计划
+- **[Phase 1 实施总结](../../docs/PHASE1_IMPLEMENTATION_SUMMARY.md)** ⭐ - 数据库和 Core 层重构详细报告
+- **[Phase 1 测试总结](../../docs/PHASE1_TEST_SUMMARY.md)** ⭐ - 19 个测试用例详细结果
+- **[Phase 1 完成报告](../../docs/PHASE1_COMPLETE.md)** ⭐ - 交付成果和验收标准
+
 ### 🆕 策略系统文档 (v6.0)
 
-了解新的策略系统架构和使用方法。
+了解 v6.0 的策略系统架构和使用方法。
 
-- **[策略系统重构方案](./planning/core_strategy_system_refactoring.md)** ⭐ - 完整的重构文档
+- **[策略系统重构方案](./planning/core_strategy_system_refactoring.md)** - v6.0 完整的重构文档
   - 三种策略类型详解
   - 多层安全防护机制
   - 性能优化策略
@@ -822,6 +937,7 @@ ML 模型训练、评估和使用指南。
 
 了解项目版本演进历史。
 
+- **[v7.0.0 发布说明](#-新特性-v70)** ⭐⭐ - 统一动态策略架构 Phase 1（本文档）
 - **[v6.0.0 发布说明](#-新特性-v60)** ⭐ - 策略系统重构（本文档）
 - **[完整变更日志](./versions/CHANGELOG.md)** - 所有版本变更记录
 - **[v5.0.0 发布说明](./versions/CHANGELOG_v5.0.0.md)** - v5.0.0 版本详情
@@ -916,8 +1032,8 @@ P99:        156.7ms
 
 ```
 core/docs/
-├── README.md                                    # 本文档 - v6.0 总览
-├── planning/                                    # ⭐ 策略系统重构文档
+├── README.md                                    # 本文档 - v7.0 总览
+├── planning/                                    # 策略系统重构文档 (v6.0)
 │   ├── core_strategy_system_refactoring.md      # 完整重构方案 (Phase 1-4)
 │   ├── phase2_loader_implementation_report.md   # Phase 2 实施报告
 │   ├── phase3_factory_refactoring_report.md     # Phase 3 实施报告
@@ -948,6 +1064,15 @@ core/docs/
     └── v3.0.0.md
 ```
 
+### 新增文档 (v7.0)
+
+| 文档 | 说明 | 位置 |
+|------|------|------|
+| **统一动态策略架构方案** | 完整的架构设计文档，包含数据库设计、动态加载机制、Phase 1-3 计划 | [../../docs/UNIFIED_DYNAMIC_STRATEGY_ARCHITECTURE.md](../../docs/UNIFIED_DYNAMIC_STRATEGY_ARCHITECTURE.md) |
+| **Phase 1 实施总结** | 数据库和 Core 层重构详细实施报告 | [../../docs/PHASE1_IMPLEMENTATION_SUMMARY.md](../../docs/PHASE1_IMPLEMENTATION_SUMMARY.md) |
+| **Phase 1 测试总结** | 19 个测试用例的详细测试结果和覆盖分析 | [../../docs/PHASE1_TEST_SUMMARY.md](../../docs/PHASE1_TEST_SUMMARY.md) |
+| **Phase 1 完成报告** | 交付成果、验收标准和下一步计划 | [../../docs/PHASE1_COMPLETE.md](../../docs/PHASE1_COMPLETE.md) |
+
 ### 新增文档 (v6.0)
 
 | 文档 | 说明 | 位置 |
@@ -972,6 +1097,15 @@ core/docs/
 
 ### 已完成 ✅
 
+**v7.0 - 统一动态策略架构**
+- ✅ **Phase 1: 数据库和 Core 层重构** (2026-02-09)
+  - 统一 strategies 数据库表
+  - 内置策略代码提取（3个策略）
+  - 动态加载机制实现
+  - 完整测试覆盖 (19/19 通过)
+  - 详细文档和工具脚本
+
+**v6.0 - 策略系统重构**
 - ✅ **Phase 1: 安全基础设施** (2026-02-08)
   - CodeSanitizer、PermissionChecker、ResourceLimiter、AuditLogger
   - 测试覆盖率 87%
@@ -993,6 +1127,12 @@ core/docs/
 
 ### 进行中 🔄
 
+- 🔄 **统一动态策略架构 Phase 2: Backend API 重构** (预计 2 天)
+  - 创建统一策略API
+  - 简化回测API
+  - 删除旧端点
+  - 创建相关模块
+
 - 🔄 **Phase 5: 联调与发布** (预计 3 天)
   - Backend 对接
   - 端到端测试
@@ -1001,6 +1141,7 @@ core/docs/
 
 ### 待开始 ⏳
 
+- ⏳ **统一动态策略架构 Phase 3: Frontend 适配** (预计 2 天)
 - ⏳ 生产环境部署
 - ⏳ 性能基准测试（生产环境）
 - ⏳ 用户培训和文档完善
@@ -1090,10 +1231,14 @@ MIT License
 
 ---
 
-**文档版本**: v6.0.0
+**文档版本**: v7.0.0
 **最后更新**: 2026-02-09
-**更新内容**: 策略系统重构完成（Phase 1-4），新增三种策略类型（预定义/配置驱动/动态代码）、多层安全防护、性能优化系统
+**更新内容**:
+- **v7.0**: 统一动态策略架构 Phase 1 完成，数据库统一、动态加载、完整测试验证（19/19 通过）
+- **v6.0**: 策略系统重构完成（Phase 1-4），新增三种策略类型（预定义/配置驱动/动态代码）、多层安全防护、性能优化系统
 **维护团队**: Quant Team & Architecture Team
-**下一步**: Phase 5 联调与发布
+**下一步**:
+- 统一动态策略架构 Phase 2: Backend API 重构（预计 2 天）
+- Phase 5: 联调与发布（预计 3 天）
 
 **重要说明**: Core 项目保持职责单一，只负责安全地加载和执行策略代码，不关心代码来源（AI 生成、人工编写或其他方式）
