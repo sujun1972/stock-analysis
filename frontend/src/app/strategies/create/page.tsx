@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +27,16 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
+
+// 动态导入 Monaco Editor (客户端组件)
+const Editor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[600px] flex items-center justify-center border rounded-lg bg-muted">
+      <Loader2 className="h-8 w-8 animate-spin" />
+    </div>
+  )
+})
 
 export default function CreateStrategyPage() {
   const router = useRouter()
@@ -328,10 +339,39 @@ export default function CreateStrategyPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={`"""
+            {/* Monaco 代码编辑器 */}
+            <div className="border rounded-lg overflow-hidden">
+              <Editor
+                height="600px"
+                defaultLanguage="python"
+                value={code}
+                onChange={(value) => setCode(value || '')}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: 14,
+                  lineNumbers: 'on',
+                  rulers: [80, 120],
+                  wordWrap: 'on',
+                  formatOnPaste: true,
+                  formatOnType: true,
+                  autoIndent: 'full',
+                  tabSize: 4,
+                  scrollBeyondLastLine: false,
+                  folding: true,
+                  renderWhitespace: 'selection',
+                  bracketPairColorization: {
+                    enabled: true
+                  }
+                }}
+              />
+            </div>
+
+            {/* 代码模板提示 */}
+            {!code && (
+              <div className="bg-muted/50 border border-dashed rounded-lg p-4 text-sm text-muted-foreground">
+                <p className="font-medium mb-2">💡 代码模板提示：</p>
+                <pre className="text-xs overflow-x-auto">{`"""
 策略名称: 我的策略
 策略说明: 简要说明
 """
@@ -346,18 +386,20 @@ class MyStrategy(BaseStrategy):
         super().__init__(name, config)
         # 初始化参数
 
-    def calculate_scores(self, prices: pd.DataFrame, features: Optional[pd.DataFrame] = None, date: Optional[pd.Timestamp] = None) -> pd.Series:
+    def calculate_scores(self, prices: pd.DataFrame,
+                        features: Optional[pd.DataFrame] = None,
+                        date: Optional[pd.Timestamp] = None) -> pd.Series:
         # 计算股票评分
         pass
 
-    def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame] = None, **kwargs) -> pd.DataFrame:
+    def generate_signals(self, prices: pd.DataFrame,
+                        features: Optional[pd.DataFrame] = None,
+                        **kwargs) -> pd.DataFrame:
         # 生成交易信号
         pass
-`}
-              rows={20}
-              className="font-mono text-sm"
-              required
-            />
+`}</pre>
+              </div>
+            )}
 
             {/* 验证结果 */}
             {validationResult && (

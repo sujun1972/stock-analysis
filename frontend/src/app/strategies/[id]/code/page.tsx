@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,13 +25,22 @@ import {
   XCircle,
   AlertCircle,
   Edit,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
+
+// 动态导入 Monaco Editor (客户端组件)
+const Editor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[600px] flex items-center justify-center border rounded-lg bg-muted">
+      <Loader2 className="h-8 w-8 animate-spin" />
+    </div>
+  )
+})
 
 export default function StrategyCodePage() {
   const params = useParams()
@@ -292,18 +302,25 @@ export default function StrategyCodePage() {
             </CardHeader>
             <CardContent>
               <div className="rounded-lg overflow-hidden border">
-                <SyntaxHighlighter
-                  language="python"
-                  style={vscDarkPlus}
-                  showLineNumbers
-                  customStyle={{
-                    margin: 0,
-                    fontSize: '0.875rem',
-                    maxHeight: '600px'
+                <Editor
+                  height="600px"
+                  defaultLanguage="python"
+                  value={strategy.code}
+                  theme="vs-dark"
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: true },
+                    fontSize: 14,
+                    lineNumbers: 'on',
+                    rulers: [80, 120],
+                    wordWrap: 'on',
+                    scrollBeyondLastLine: false,
+                    folding: true,
+                    renderWhitespace: 'selection',
+                    contextmenu: true,
+                    selectOnLineNumbers: true
                   }}
-                >
-                  {strategy.code}
-                </SyntaxHighlighter>
+                />
               </div>
             </CardContent>
           </Card>
