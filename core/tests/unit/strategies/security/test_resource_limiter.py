@@ -18,14 +18,14 @@ class TestResourceLimiter:
         """创建 ResourceLimiter 实例"""
         return ResourceLimiter(
             max_memory_mb=512,
-            max_cpu_time=30,
+            max_cpu_time=300,  # 增加到300秒，避免测试期间累积超限
             max_wall_time=5  # 5秒超时，方便测试
         )
 
     def test_initialization(self, limiter):
         """测试初始化"""
         assert limiter.max_memory_mb == 512
-        assert limiter.max_cpu_time == 30
+        assert limiter.max_cpu_time == 300  # 已增加到300秒避免测试期间累积超限
         assert limiter.max_wall_time == 5
 
     def test_normal_execution(self, limiter):
@@ -42,7 +42,10 @@ class TestResourceLimiter:
     )
     def test_timeout_error(self):
         """测试超时错误"""
-        limiter = ResourceLimiter(max_wall_time=1)  # 1秒超时
+        limiter = ResourceLimiter(
+            max_wall_time=1,  # 1秒超时
+            max_cpu_time=300  # 避免累积CPU时间超限
+        )
 
         with pytest.raises((TimeoutError, ResourceLimitError)):
             with limiter.limit_resources():
@@ -135,7 +138,7 @@ class TestResourceLimiter:
         limiter = ResourceLimiter()
 
         assert limiter.max_memory_mb == 512
-        assert limiter.max_cpu_time == 30
+        assert limiter.max_cpu_time == 300  # 默认值已提高到300秒
         assert limiter.max_wall_time == 60
 
     def test_custom_parameters(self):

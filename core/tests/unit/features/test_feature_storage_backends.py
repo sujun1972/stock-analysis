@@ -24,6 +24,13 @@ from src.features.storage.hdf5_storage import HDF5Storage
 from src.features.storage.csv_storage import CSVStorage
 from src.utils.response import Response
 
+# 检查 pytables 是否可用
+try:
+    import tables
+    PYTABLES_AVAILABLE = True
+except ImportError:
+    PYTABLES_AVAILABLE = False
+
 
 # ==================== Fixtures ====================
 
@@ -141,6 +148,7 @@ class TestParquetStorage:
 # ==================== HDF5存储测试 ====================
 
 
+@pytest.mark.skipif(not PYTABLES_AVAILABLE, reason="pytables not installed")
 class TestHDF5Storage:
     """HDF5存储后端测试"""
 
@@ -245,6 +253,7 @@ class TestCSVStorage:
 class TestBackendSwitching:
     """存储后端切换测试"""
 
+    @pytest.mark.skipif(not PYTABLES_AVAILABLE, reason="pytables not installed")
     def test_switch_from_parquet_to_hdf5(self, temp_storage_dir, sample_feature_df):
         """测试从Parquet切换到HDF5"""
         # 使用Parquet保存
@@ -318,6 +327,7 @@ class TestBackendPerformance:
         print(f"\nParquet save time: {parquet_time:.3f}s")
         assert parquet_time < 5.0  # 应该在5秒内完成
 
+    @pytest.mark.skipif(not PYTABLES_AVAILABLE, reason="pytables not installed")
     def test_hdf5_save_speed(self, temp_storage_dir, large_feature_df):
         """测试HDF5保存速度"""
         import time
@@ -344,6 +354,7 @@ class TestBackendPerformance:
         print(f"\nCSV save time: {csv_time:.3f}s")
         assert csv_time < 10.0  # CSV通常较慢
 
+    @pytest.mark.skipif(not PYTABLES_AVAILABLE, reason="pytables not installed")
     def test_file_size_comparison(self, temp_storage_dir, large_feature_df):
         """测试文件大小对比"""
         storage_parquet = FeatureStorage(storage_dir=str(temp_storage_dir / "parquet"), format='parquet')
@@ -390,6 +401,7 @@ class TestBackendCompatibility:
 
         pd.testing.assert_frame_equal(loaded, df)
 
+    @pytest.mark.skipif(not PYTABLES_AVAILABLE, reason="pytables not installed")
     def test_hdf5_with_nan_values(self, temp_storage_dir):
         """测试HDF5处理NaN值"""
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='hdf5')
@@ -449,6 +461,7 @@ class TestBackendErrorHandling:
         result = storage.load_features("NONEXISTENT", feature_type="test")
         assert result is None or (hasattr(result, 'is_error') and result.is_error())
 
+    @pytest.mark.skipif(not PYTABLES_AVAILABLE, reason="pytables not installed")
     def test_load_nonexistent_file_hdf5(self, temp_storage_dir):
         """测试HDF5加载不存在的文件"""
         storage = FeatureStorage(storage_dir=str(temp_storage_dir), format='hdf5')
@@ -500,6 +513,7 @@ class TestBackendDirectAPI:
         # 不检查频率信息,因为保存后可能丢失
         pd.testing.assert_frame_equal(loaded, sample_feature_df, check_freq=False)
 
+    @pytest.mark.skipif(not PYTABLES_AVAILABLE, reason="pytables not installed")
     def test_hdf5_backend_direct(self, temp_storage_dir, sample_feature_df):
         """直接测试HDF5Storage"""
         backend = HDF5Storage(str(temp_storage_dir))

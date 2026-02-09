@@ -10,8 +10,8 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any
 
-from core.strategies.monitoring import PerformanceMonitor, MetricsCollector
-from core.strategies.cache import StrategyCache, CodeCache
+from strategies.monitoring import PerformanceMonitor, MetricsCollector
+from strategies.cache import StrategyCache, CodeCache
 
 
 class TestCachingPerformance:
@@ -27,12 +27,17 @@ class TestCachingPerformance:
         """Create code cache."""
         return CodeCache(max_size=100)
 
-    def test_memory_cache_performance(self, strategy_cache, benchmark):
+    def test_memory_cache_performance(self, strategy_cache):
         """Benchmark memory cache performance."""
         # Prepare test data
         test_data = {'strategy': 'test', 'config': {'param': 1}}
 
-        def cache_operations():
+        # Measure performance manually
+        import time
+        iterations = 1000
+        start = time.time()
+
+        for _ in range(iterations):
             # Write to cache
             strategy_cache.set('test_key', test_data)
 
@@ -40,11 +45,13 @@ class TestCachingPerformance:
             result = strategy_cache.get('test_key')
             assert result is not None
 
-        # Run benchmark
-        result = benchmark(cache_operations)
+        elapsed = time.time() - start
+        mean_time = elapsed / iterations
 
-        # Should be very fast (< 1ms)
-        assert benchmark.stats['mean'] < 0.001
+        print(f"\nCache operations: {mean_time*1000:.4f}ms per operation")
+
+        # Should be very fast (< 1ms per operation)
+        assert mean_time < 0.001
 
     def test_cache_hit_vs_miss(self, strategy_cache):
         """Compare cache hit vs miss performance."""
@@ -98,19 +105,23 @@ class TestPerformanceMonitoring:
         """Create performance monitor."""
         return PerformanceMonitor(enable_alerts=False)
 
-    def test_monitoring_overhead(self, monitor, benchmark):
+    def test_monitoring_overhead(self, monitor):
         """Measure performance monitoring overhead."""
 
-        def monitored_operation():
+        # Measure performance manually
+        iterations = 100
+        start = time.time()
+
+        for _ in range(iterations):
             with monitor.monitor('test_operation'):
                 # Simulate some work
                 time.sleep(0.001)  # 1ms
 
-        # Run benchmark
-        result = benchmark(monitored_operation)
+        elapsed = time.time() - start
+        mean_time = elapsed / iterations
 
         # Monitoring overhead should be minimal (< 10% of operation time)
-        overhead_ms = (benchmark.stats['mean'] - 0.001) * 1000
+        overhead_ms = (mean_time - 0.001) * 1000
         print(f"\nMonitoring overhead: {overhead_ms:.4f}ms")
 
         assert overhead_ms < 0.5  # Less than 0.5ms overhead

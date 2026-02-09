@@ -14,15 +14,15 @@ import numpy as np
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
 
-from src.backtest.parallel_backtester import (
+from backtest.parallel_backtester import (
     ParallelBacktester,
     BacktestTask,
     BacktestResult,
     parallel_backtest
 )
-from src.strategies.momentum_strategy import MomentumStrategy
-from src.strategies.mean_reversion_strategy import MeanReversionStrategy
-from src.config.features import ParallelComputingConfig
+from strategies.predefined.momentum_strategy import MomentumStrategy
+from strategies.predefined.mean_reversion_strategy import MeanReversionStrategy
+from config.features import ParallelComputingConfig
 
 
 # ==================== Fixtures ====================

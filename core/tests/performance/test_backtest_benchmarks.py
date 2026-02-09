@@ -18,14 +18,9 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-# 添加项目路径
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root / 'src'))
-
+# 不需要手动添加路径，pytest.ini 已配置 pythonpath = src
 from backtest.backtest_engine import BacktestEngine
-from strategies.momentum_strategy import MomentumStrategy
-from strategies.mean_reversion_strategy import MeanReversionStrategy
-from src.utils.response import Response
+from utils.response import Response
 
 from .benchmarks import (
     PerformanceBenchmarkBase,
@@ -56,9 +51,11 @@ def unwrap_response(response):
         >>> result = unwrap_response(engine.backtest_long_only(signals, prices))
         >>> assert isinstance(result, dict)
     """
-    if isinstance(response, Response):
+    # 使用 duck typing 检查 Response 对象(处理不同导入路径的问题)
+    if hasattr(response, 'is_success') and hasattr(response, 'data'):
         if not response.is_success():
-            raise ValueError(f"操作失败: {response.error_message}")
+            error_msg = getattr(response, 'error_message', 'Unknown error')
+            raise ValueError(f"操作失败: {error_msg}")
         return response.data
     return response
 

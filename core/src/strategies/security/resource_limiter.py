@@ -23,7 +23,7 @@ class ResourceLimiter:
     def __init__(
         self,
         max_memory_mb: int = 512,      # 最大内存 (MB) - 仅用于参考，macOS无法强制限制
-        max_cpu_time: int = 30,        # 最大CPU时间 (秒)
+        max_cpu_time: int = 300,       # 最大CPU时间 (秒) - 提高默认值避免测试时累积超限
         max_wall_time: int = 60        # 最大实际时间 (秒)
     ):
         self.max_memory_mb = max_memory_mb

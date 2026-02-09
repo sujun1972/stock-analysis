@@ -103,12 +103,15 @@ def parse_pytest_output(output: str) -> Dict:
         'errors': 0,
         'warnings': 0,
         'duration': 0.0,
-        'coverage': None
+        'coverage': None,
+        'interrupted': False
     }
 
-    # 解析测试结果行 (例如: "1427 passed, 17 skipped in 26.95s")
+    # 首先尝试从最终统计行解析 (例如: "1427 passed, 17 skipped in 26.95s")
     result_pattern = r'(\d+)\s+(passed|failed|skipped|error)'
+    found_summary = False
     for match in re.finditer(result_pattern, output):
+        found_summary = True
         count = int(match.group(1))
         status = match.group(2)
         if status == 'passed':
@@ -119,6 +122,20 @@ def parse_pytest_output(output: str) -> Dict:
             stats['skipped'] = count
         elif status == 'error':
             stats['errors'] = count
+
+    # 如果没有找到统计行（测试被中断），从实时输出中统计
+    if not found_summary:
+        stats['interrupted'] = True
+        # 统计每一行的测试结果
+        passed_pattern = r'PASSED\s+\['
+        failed_pattern = r'FAILED\s+\['
+        skipped_pattern = r'SKIPPED\s+\['
+        error_pattern = r'ERROR\s+\['
+
+        stats['passed'] = len(re.findall(passed_pattern, output))
+        stats['failed'] = len(re.findall(failed_pattern, output))
+        stats['skipped'] = len(re.findall(skipped_pattern, output))
+        stats['errors'] = len(re.findall(error_pattern, output))
 
     # 解析执行时间
     time_pattern = r'in\s+([\d.]+)s'
@@ -140,9 +157,26 @@ def print_test_summary(stats: Dict, duration: float):
 
     total = stats['passed'] + stats['failed'] + stats['skipped']
 
+    # 检查是否被中断
+    if stats.get('interrupted', False):
+        print_warning("⚠️  测试运行被中断或未完成")
+
     print(f"{Colors.BOLD}执行时间:{Colors.ENDC} {duration:.2f}秒")
-    print(f"{Colors.BOLD}总测试数:{Colors.ENDC} {total}")
+    print(f"{Colors.BOLD}总测试数:{Colors.ENDC} {total}", end="")
+    if stats.get('interrupted', False):
+        print(f" {Colors.WARNING}(统计自实时输出，可能不完整){Colors.ENDC}")
+    else:
+        print()
     print()
+
+    if total == 0:
+        print_error("未检测到任何测试结果")
+        print_warning("可能原因:")
+        print("  • 测试在收集阶段失败")
+        print("  • pytest输出格式改变")
+        print("  • 测试进程被强制终止")
+        print()
+        return
 
     if stats['passed'] > 0:
         print_success(f"通过: {stats['passed']} ({stats['passed']/total*100:.1f}%)")
@@ -210,6 +244,11 @@ def run_command(cmd: List[str], description: str = "", capture_output: bool = Fa
     if capture_output and output:
         stats = parse_pytest_output(output)
         print_test_summary(stats, duration)
+
+        # 如果有失败或错误，显示详细信息提示
+        if stats['failed'] > 0 or stats['errors'] > 0:
+            print_warning("\n提示: 要查看失败测试的详细信息，请向上滚动查看完整输出")
+            print_info("或者运行: pytest <测试文件> -v --tb=short 来查看特定测试的详细信息")
 
     return result.returncode, output
 

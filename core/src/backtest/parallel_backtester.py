@@ -24,10 +24,10 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-from src.utils.parallel_executor import ParallelExecutor
-from src.config.features import ParallelComputingConfig
-from src.backtest.backtest_engine import BacktestEngine
-from src.strategies.base_strategy import BaseStrategy
+from utils.parallel_executor import ParallelExecutor
+from config.features import ParallelComputingConfig
+from backtest.backtest_engine import BacktestEngine
+from strategies.base_strategy import BaseStrategy
 
 
 # ==================== 数据类 ====================
@@ -100,8 +100,8 @@ class ParallelBacktester:
     3. 智能的资源管理和错误处理
 
     Example:
-        >>> from src.strategies.momentum_strategy import MomentumStrategy
-        >>> from src.strategies.mean_reversion_strategy import MeanReversionStrategy
+        >>> from strategies.predefined.momentum_strategy import MomentumStrategy
+        >>> from strategies.predefined.mean_reversion_strategy import MeanReversionStrategy
         >>>
         >>> strategies = [
         ...     MomentumStrategy("动量策略", {'lookback': 20}),
@@ -359,11 +359,11 @@ class ParallelBacktester:
             策略对象
         """
         # 动态导入策略类
-        from src.strategies.momentum_strategy import MomentumStrategy
-        from src.strategies.mean_reversion_strategy import MeanReversionStrategy
-        from src.strategies.multi_factor_strategy import MultiFactorStrategy
+        from strategies.predefined.momentum_strategy import MomentumStrategy
+        from strategies.predefined.mean_reversion_strategy import MeanReversionStrategy
+        from strategies.predefined.multi_factor_strategy import MultiFactorStrategy
         # 注意: MLStrategy 已被删除，请使用新的 ml.MLEntry
-        # from src.strategies.ml_strategy import MLStrategy
+        # from strategies.ml_strategy import MLStrategy
 
         strategy_classes = {
             'MomentumStrategy': MomentumStrategy,
