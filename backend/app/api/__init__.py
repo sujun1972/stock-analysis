@@ -15,6 +15,7 @@ from .endpoints import (
     ml,
     scheduler,
     stocks,
+    strategies,  # Phase 2: 统一策略 API
     strategy,
     strategy_configs,
     sync,
@@ -30,9 +31,12 @@ router.include_router(features.router, prefix="/features", tags=["features"])
 router.include_router(backtest.router, prefix="/backtest", tags=["backtest"])
 router.include_router(strategy.router, prefix="/strategy", tags=["strategy"])
 
-# Core v6.0 新增路由
-router.include_router(strategy_configs.router, prefix="/strategy-configs", tags=["策略配置"])
-router.include_router(dynamic_strategies.router, prefix="/dynamic-strategies", tags=["动态策略"])
+# Phase 2: 统一策略 API (新架构)
+router.include_router(strategies.router, prefix="/strategies", tags=["统一策略系统"])
+
+# Core v6.0 路由 (将逐步废弃)
+router.include_router(strategy_configs.router, prefix="/strategy-configs", tags=["策略配置 (旧)"])
+router.include_router(dynamic_strategies.router, prefix="/dynamic-strategies", tags=["动态策略 (旧)"])
 router.include_router(ml.router, prefix="/ml", tags=["机器学习"])
 
 # 数据引擎路由

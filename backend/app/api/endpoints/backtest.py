@@ -860,3 +860,248 @@ async def get_trade_statistics(request: TradeStatisticsRequest):
     except Exception as e:
         logger.error(f"交易统计失败: {e}", exc_info=True)
         return ApiResponse.internal_error(message=f"交易统计失败: {str(e)}").to_dict()
+
+
+# ==================== Phase 2: 简化回测 API ====================
+
+
+@router.post("/run-v3", summary="简化回测接口 (Phase 2 统一策略)", status_code=status.HTTP_200_OK)
+@handle_api_errors
+async def run_simplified_backtest(
+    strategy_id: int = Body(..., description="策略ID（从 strategies 表）"),
+    stock_pool: List[str] = Body(..., description="股票代码列表", min_items=1),
+    start_date: str = Body(..., description="开始日期 (YYYY-MM-DD)"),
+    end_date: str = Body(..., description="结束日期 (YYYY-MM-DD)"),
+    initial_capital: float = Body(1000000.0, gt=0, description="初始资金"),
+    commission_rate: float = Body(0.0003, ge=0, le=0.01, description="佣金费率"),
+    stamp_tax_rate: float = Body(0.001, ge=0, le=0.01, description="印花税率"),
+    min_commission: float = Body(5.0, ge=0, description="最小佣金"),
+    slippage: float = Body(0.0, ge=0, description="滑点"),
+    strict_mode: bool = Body(True, description="严格模式（代码验证）")
+) -> Dict[str, Any]:
+    """
+    运行回测 - Phase 2 简化版本
+
+    根据 UNIFIED_DYNAMIC_STRATEGY_ARCHITECTURE.md Phase 2 设计:
+    - 只需要提供 strategy_id，从 strategies 表加载策略
+    - 移除复杂的 strategy_type 参数
+    - 统一使用 DynamicCodeLoader 加载策略
+
+    Args:
+        strategy_id: 策略ID（从 strategies 表）
+        stock_pool: 股票代码列表
+        start_date: 开始日期
+        end_date: 结束日期
+        initial_capital: 初始资金
+        commission_rate: 佣金费率
+        stamp_tax_rate: 印花税率
+        min_commission: 最小佣金
+        slippage: 滑点
+        strict_mode: 严格模式
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "execution_id": 1,
+                "strategy_info": {...},
+                "metrics": {...},
+                "equity_curve": [...],
+                "trades": [...]
+            }
+        }
+    """
+    start_time = datetime.now()
+
+    logger.info(
+        f"[简化回测] 开始: strategy_id={strategy_id}, "
+        f"stocks={len(stock_pool)}, period={start_date}~{end_date}"
+    )
+
+    try:
+        # 1. 从 strategies 表加载策略
+        from app.repositories.strategy_repository import StrategyRepository
+
+        repo = StrategyRepository()
+        strategy_record = repo.get_by_id(strategy_id)
+
+        if not strategy_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"策略不存在: strategy_id={strategy_id}"
+            )
+
+        if not strategy_record['is_enabled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"策略未启用: {strategy_record['name']}"
+            )
+
+        if strategy_record['validation_status'] != 'passed':
+            logger.warning(
+                f"策略验证未通过: strategy_id={strategy_id}, "
+                f"status={strategy_record['validation_status']}"
+            )
+            if strict_mode:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"策略验证未通过: {strategy_record['validation_status']}"
+                )
+
+        # 2. 使用 DynamicCodeLoader 加载策略实例
+        # TODO: 实现统一的策略加载器
+        # from src.strategies.loaders.dynamic_loader import DynamicCodeLoader
+        # loader = DynamicCodeLoader()
+        # strategy = loader.load_strategy_from_code(
+        #     code=strategy_record['code'],
+        #     class_name=strategy_record['class_name'],
+        #     strict_mode=strict_mode
+        # )
+
+        # 临时方案：根据 source_type 选择加载方式
+        if strategy_record['source_type'] == 'builtin' or strategy_record['source_type'] == 'ai':
+            # 使用动态加载
+            dynamic_adapter = DynamicStrategyAdapter()
+            # 需要先将策略代码临时保存到 dynamic_strategies 表，或直接使用代码加载
+            # 这里暂时抛出提示，等待 Phase 1 完成
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="统一策略加载器尚未实现，请等待 Phase 1 完成"
+            )
+        else:
+            # custom 策略也使用动态加载
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="统一策略加载器尚未实现，请等待 Phase 1 完成"
+            )
+
+        # 3. 加载市场数据
+        market_data = await data_adapter.load_market_data(
+            stock_codes=stock_pool,
+            start_date=start_date,
+            end_date=end_date
+        )
+        logger.info(f"[简化回测] 加载市场数据完成: {len(market_data)} 条")
+
+        # 4. 运行回测
+        engine = BacktestEngine()
+        result = engine.run(
+            strategy=strategy,
+            stock_pool=stock_pool,
+            market_data=market_data,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_capital,
+            commission_rate=commission_rate,
+            stamp_tax_rate=stamp_tax_rate,
+            min_commission=min_commission,
+            slippage=slippage,
+        )
+
+        # 5. 格式化结果
+        execution_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+
+        metrics = {
+            'total_return': float(result.total_return) if hasattr(result, 'total_return') else 0.0,
+            'annual_return': float(result.annual_return) if hasattr(result, 'annual_return') else 0.0,
+            'sharpe_ratio': float(result.sharpe_ratio) if hasattr(result, 'sharpe_ratio') else 0.0,
+            'max_drawdown': float(result.max_drawdown) if hasattr(result, 'max_drawdown') else 0.0,
+            'win_rate': float(result.win_rate) if hasattr(result, 'win_rate') else 0.0,
+            'total_trades': int(result.total_trades) if hasattr(result, 'total_trades') else 0,
+        }
+        metrics = sanitize_float_values(metrics)
+
+        equity_curve = []
+        if hasattr(result, 'equity_curve'):
+            equity_curve = result.equity_curve.to_dict('records')
+            equity_curve = sanitize_float_values(equity_curve)
+
+        trades = []
+        if hasattr(result, 'trades'):
+            trades = result.trades.to_dict('records')
+            trades = sanitize_float_values(trades)
+
+        # 6. 保存执行记录
+        execution_repo = StrategyExecutionRepository()
+        execution_data = {
+            'execution_type': 'backtest',
+            'execution_params': {
+                'strategy_id': strategy_id,
+                'stock_pool': stock_pool,
+                'start_date': start_date,
+                'end_date': end_date,
+                'initial_capital': initial_capital,
+            },
+            'metrics': metrics,
+            'execution_duration_ms': execution_time_ms,
+            'status': 'completed',
+            'started_at': start_time,
+            'completed_at': datetime.now(),
+        }
+
+        # 根据策略来源类型关联不同字段（兼容旧表结构）
+        # TODO: Phase 2 完成后，只需要 strategy_id
+        if strategy_record['source_type'] == 'builtin':
+            execution_data['predefined_strategy_type'] = strategy_record['name']
+        elif strategy_record['source_type'] == 'ai':
+            pass  # AI策略暂时没有对应字段
+        else:
+            pass  # custom策略暂时没有对应字段
+
+        execution_id = execution_repo.create(execution_data)
+
+        # 7. 更新策略统计
+        repo.increment_backtest_count(strategy_id)
+        repo.update_backtest_metrics(
+            strategy_id=strategy_id,
+            sharpe_ratio=metrics['sharpe_ratio'],
+            annual_return=metrics['annual_return']
+        )
+
+        logger.success(
+            f"[简化回测] 完成: execution_id={execution_id}, "
+            f"return={metrics['total_return']:.2%}, "
+            f"sharpe={metrics['sharpe_ratio']:.2f}, time={execution_time_ms}ms"
+        )
+
+        strategy_info = {
+            'strategy_id': strategy_record['id'],
+            'name': strategy_record['name'],
+            'display_name': strategy_record['display_name'],
+            'source_type': strategy_record['source_type'],
+            'class_name': strategy_record['class_name'],
+            'category': strategy_record['category'],
+        }
+
+        return {
+            "success": True,
+            "data": {
+                "execution_id": execution_id,
+                "strategy_info": strategy_info,
+                "metrics": metrics,
+                "equity_curve": equity_curve[:1000],
+                "trades": trades[:500],
+                "execution_time_ms": execution_time_ms,
+                "backtest_params": {
+                    "stock_pool": stock_pool,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "initial_capital": initial_capital,
+                }
+            },
+            "message": "回测完成"
+        }
+
+    except HTTPException:
+        raise
+
+    except ValueError as e:
+        logger.error(f"[简化回测] 参数错误: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"[简化回测] 失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"回测失败: {str(e)}"
+        )

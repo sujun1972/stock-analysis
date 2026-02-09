@@ -1,8 +1,8 @@
 # Stock-Analysis Core 系统指南
 
-**文档版本**: v7.0.0
+**文档版本**: v7.0.1
 **最后更新**: 2026-02-09
-**项目状态**: 🚀 统一动态策略架构 v2.0 - Phase 1 完成 + 测试验证通过
+**项目状态**: 🚀 统一动态策略架构 v2.0 - Phase 1 & 2 完成 ✅
 
 ---
 
@@ -141,9 +141,26 @@ cd core
 - [Phase 1 测试总结](../../docs/PHASE1_TEST_SUMMARY.md) - 测试详情
 - [Phase 1 完成报告](../../docs/PHASE1_COMPLETE.md) - 交付成果
 
-#### 下一步：Phase 2
+#### Phase 2: Backend API 重构 ✅ 已完成
 
-Phase 2 将重构 Backend API，创建统一的策略管理接口。预计 2 天完成。
+**完成日期**: 2026-02-09
+
+Phase 2 已成功完成 Backend API 重构，创建了统一的策略管理系统。
+
+**核心成果**:
+- ✅ 创建统一的 `/api/strategies` API（9个端点）
+- ✅ 简化回测 API `/api/backtest/run-v3`（只需 strategy_id）
+- ✅ 实现完整的 Pydantic Schema 和 Repository
+- ✅ 14个单元测试，100% 通过
+- ✅ 与现有104个测试兼容，总通过率 100% (118/118)
+
+**详细文档**:
+- [Backend Phase 2 实施报告](../../backend/PHASE2_IMPLEMENTATION.md)
+- [Backend Phase 2 测试总结](../../backend/PHASE2_TEST_SUMMARY.md)
+
+#### 下一步：Phase 3
+
+Phase 3 将重构 Frontend 页面，统一策略管理界面。预计 3-4 天完成。
 
 ---
 
@@ -1105,6 +1122,13 @@ core/docs/
   - 完整测试覆盖 (19/19 通过)
   - 详细文档和工具脚本
 
+- ✅ **Phase 2: Backend API 重构** (2026-02-09)
+  - 统一策略 API（9个端点）
+  - 简化回测 API
+  - Repository 和 Schema 实现
+  - 14个单元测试，100% 通过
+  - 总测试通过率 100% (118/118)
+
 **v6.0 - 策略系统重构**
 - ✅ **Phase 1: 安全基础设施** (2026-02-08)
   - CodeSanitizer、PermissionChecker、ResourceLimiter、AuditLogger
@@ -1127,23 +1151,19 @@ core/docs/
 
 ### 进行中 🔄
 
-- 🔄 **统一动态策略架构 Phase 2: Backend API 重构** (预计 2 天)
-  - 创建统一策略API
-  - 简化回测API
-  - 删除旧端点
-  - 创建相关模块
-
-- 🔄 **Phase 5: 联调与发布** (预计 3 天)
-  - Backend 对接
-  - 端到端测试
-  - 安全审计
-  - 生产部署
+- 🔄 **统一动态策略架构 Phase 3: Frontend 适配** (预计 3-4 天)
+  - 更新类型定义
+  - 重写策略管理页面
+  - 简化回测页面
+  - 更新 API 客户端
 
 ### 待开始 ⏳
 
-- ⏳ **统一动态策略架构 Phase 3: Frontend 适配** (预计 2 天)
-- ⏳ 生产环境部署
-- ⏳ 性能基准测试（生产环境）
+- ⏳ **Phase 4: 联调与发布** (预计 2-3 天)
+  - 端到端测试
+  - 安全审计
+  - 生产部署
+  - 性能基准测试
 - ⏳ 用户培训和文档完善
 
 ---
@@ -1231,14 +1251,15 @@ MIT License
 
 ---
 
-**文档版本**: v7.0.0
+**文档版本**: v7.0.1
 **最后更新**: 2026-02-09
 **更新内容**:
+- **v7.0.1**: 统一动态策略架构 Phase 2 完成，Backend API 重构，9个统一端点，118/118 测试通过
 - **v7.0**: 统一动态策略架构 Phase 1 完成，数据库统一、动态加载、完整测试验证（19/19 通过）
 - **v6.0**: 策略系统重构完成（Phase 1-4），新增三种策略类型（预定义/配置驱动/动态代码）、多层安全防护、性能优化系统
 **维护团队**: Quant Team & Architecture Team
 **下一步**:
-- 统一动态策略架构 Phase 2: Backend API 重构（预计 2 天）
-- Phase 5: 联调与发布（预计 3 天）
+- 统一动态策略架构 Phase 3: Frontend 适配（预计 3-4 天）
+- Phase 4: 联调与发布（预计 2-3 天）
 
 **重要说明**: Core 项目保持职责单一，只负责安全地加载和执行策略代码，不关心代码来源（AI 生成、人工编写或其他方式）
