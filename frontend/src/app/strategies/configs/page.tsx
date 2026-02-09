@@ -73,7 +73,7 @@ export default function StrategyConfigsPage() {
     try {
       const response = await apiClient.getStrategyConfigs()
       if (response.success && response.data) {
-        setConfigs(response.data.items)
+        setConfigs(response.data.items || [])
       }
     } catch (error: any) {
       toast({
@@ -87,7 +87,7 @@ export default function StrategyConfigsPage() {
   }
 
   // 筛选配置
-  const filteredConfigs = configs.filter(config => {
+  const filteredConfigs = (configs || []).filter(config => {
     // 搜索过滤
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
@@ -320,7 +320,7 @@ export default function StrategyConfigsPage() {
   }
 
   const currentStrategyType = strategyTypes.find(t => t.type === formData.strategy_type)
-  const uniqueTypes = Array.from(new Set(configs.map(c => c.strategy_type)))
+  const uniqueTypes = Array.from(new Set((configs || []).map(c => c.strategy_type)))
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -356,7 +356,7 @@ export default function StrategyConfigsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{configs.length}</div>
+              <div className="text-2xl font-bold">{(configs || []).length}</div>
             </CardContent>
           </Card>
           <Card>
@@ -367,7 +367,7 @@ export default function StrategyConfigsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {configs.filter(c => c.is_active).length}
+                {(configs || []).filter(c => c.is_active).length}
               </div>
             </CardContent>
           </Card>

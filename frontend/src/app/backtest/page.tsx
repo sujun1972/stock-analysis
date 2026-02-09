@@ -72,8 +72,8 @@ export default function BacktestPage() {
 
   // 当选择的策略类型变化时，更新默认配置
   useEffect(() => {
-    if (selectedStrategyType && strategyTypes.length > 0) {
-      const strategyType = strategyTypes.find(t => t.type === selectedStrategyType)
+    if (selectedStrategyType && (strategyTypes || []).length > 0) {
+      const strategyType = (strategyTypes || []).find(t => t.type === selectedStrategyType)
       if (strategyType) {
         setStrategyConfig(strategyType.default_params)
       }
@@ -85,10 +85,11 @@ export default function BacktestPage() {
     try {
       const response = await apiClient.getStrategyTypes()
       if (response.success && response.data) {
-        setStrategyTypes(response.data)
-        if (response.data.length > 0) {
-          setSelectedStrategyType(response.data[0].type)
-          setStrategyConfig(response.data[0].default_params)
+        const types = Array.isArray(response.data) ? response.data : []
+        setStrategyTypes(types)
+        if (types.length > 0) {
+          setSelectedStrategyType(types[0].type)
+          setStrategyConfig(types[0].default_params)
         }
       } else {
         toast({
@@ -113,9 +114,10 @@ export default function BacktestPage() {
     try {
       const response = await apiClient.getStrategyConfigs({ is_active: true })
       if (response.success && response.data) {
-        setStrategyConfigs(response.data.items)
-        if (response.data.items.length > 0 && !selectedConfigId) {
-          setSelectedConfigId(response.data.items[0].id)
+        const items = response.data.items || []
+        setStrategyConfigs(items)
+        if (items.length > 0 && !selectedConfigId) {
+          setSelectedConfigId(items[0].id)
         }
       } else {
         toast({
@@ -143,9 +145,10 @@ export default function BacktestPage() {
         validation_status: 'passed'
       })
       if (response.success && response.data) {
-        setDynamicStrategies(response.data.items)
-        if (response.data.items.length > 0 && !selectedDynamicId) {
-          setSelectedDynamicId(response.data.items[0].id)
+        const items = response.data.items || []
+        setDynamicStrategies(items)
+        if (items.length > 0 && !selectedDynamicId) {
+          setSelectedDynamicId(items[0].id)
         }
       } else {
         toast({
@@ -261,9 +264,9 @@ export default function BacktestPage() {
     }
   }
 
-  const currentStrategyType = strategyTypes.find(t => t.type === selectedStrategyType)
-  const selectedConfig = strategyConfigs.find(c => c.id === selectedConfigId)
-  const selectedDynamic = dynamicStrategies.find(s => s.id === selectedDynamicId)
+  const currentStrategyType = (strategyTypes || []).find(t => t.type === selectedStrategyType)
+  const selectedConfig = (strategyConfigs || []).find(c => c.id === selectedConfigId)
+  const selectedDynamic = (dynamicStrategies || []).find(s => s.id === selectedDynamicId)
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -319,7 +322,7 @@ export default function BacktestPage() {
                               <SelectValue placeholder="选择策略" />
                             </SelectTrigger>
                             <SelectContent>
-                              {strategyTypes.map(type => (
+                              {(strategyTypes || []).map(type => (
                                 <SelectItem key={type.type} value={type.type}>
                                   {type.name}
                                 </SelectItem>
@@ -362,7 +365,7 @@ export default function BacktestPage() {
                       <div className="flex justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
-                    ) : strategyConfigs.length === 0 ? (
+                    ) : (strategyConfigs || []).length === 0 ? (
                       <div className="text-center py-8">
                         <p className="text-sm text-muted-foreground mb-4">
                           暂无可用的策略配置
@@ -387,7 +390,7 @@ export default function BacktestPage() {
                               <SelectValue placeholder="选择配置" />
                             </SelectTrigger>
                             <SelectContent>
-                              {strategyConfigs.map(config => (
+                              {(strategyConfigs || []).map(config => (
                                 <SelectItem key={config.id} value={config.id.toString()}>
                                   {config.name}
                                 </SelectItem>
@@ -426,7 +429,7 @@ export default function BacktestPage() {
                       <div className="flex justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
-                    ) : dynamicStrategies.length === 0 ? (
+                    ) : (dynamicStrategies || []).length === 0 ? (
                       <div className="text-center py-8">
                         <p className="text-sm text-muted-foreground mb-4">
                           暂无可用的动态策略
@@ -451,7 +454,7 @@ export default function BacktestPage() {
                               <SelectValue placeholder="选择策略" />
                             </SelectTrigger>
                             <SelectContent>
-                              {dynamicStrategies.map(strategy => (
+                              {(dynamicStrategies || []).map(strategy => (
                                 <SelectItem key={strategy.id} value={strategy.id.toString()}>
                                   {strategy.display_name}
                                 </SelectItem>

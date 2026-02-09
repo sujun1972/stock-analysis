@@ -63,7 +63,7 @@ export default function DynamicStrategiesPage() {
     try {
       const response = await apiClient.getDynamicStrategies()
       if (response.success && response.data) {
-        setStrategies(response.data.items)
+        setStrategies(response.data.items || [])
       }
     } catch (error: any) {
       toast({
@@ -77,7 +77,7 @@ export default function DynamicStrategiesPage() {
   }
 
   // 筛选策略
-  const filteredStrategies = strategies.filter(strategy => {
+  const filteredStrategies = (strategies || []).filter(strategy => {
     // 搜索过滤
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
@@ -469,10 +469,10 @@ class MyCustomStrategy(BaseStrategy):
 
   // 验证状态统计
   const validationStats = {
-    passed: strategies.filter(s => s.validation_status === 'passed').length,
-    failed: strategies.filter(s => s.validation_status === 'failed').length,
-    warning: strategies.filter(s => s.validation_status === 'warning').length,
-    pending: strategies.filter(s => s.validation_status === 'pending').length
+    passed: (strategies || []).filter(s => s.validation_status === 'passed').length,
+    failed: (strategies || []).filter(s => s.validation_status === 'failed').length,
+    warning: (strategies || []).filter(s => s.validation_status === 'warning').length,
+    pending: (strategies || []).filter(s => s.validation_status === 'pending').length
   }
 
   return (
@@ -509,7 +509,7 @@ class MyCustomStrategy(BaseStrategy):
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{strategies.length}</div>
+              <div className="text-2xl font-bold">{(strategies || []).length}</div>
             </CardContent>
           </Card>
           <Card>
@@ -520,7 +520,7 @@ class MyCustomStrategy(BaseStrategy):
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {strategies.filter(s => s.is_enabled).length}
+                {(strategies || []).filter(s => s.is_enabled).length}
               </div>
             </CardContent>
           </Card>
