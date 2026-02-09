@@ -498,6 +498,41 @@ class PermissionError(BackendError):
     """
 
 
+# ==================== 适配器相关异常 ====================
+
+
+class AdapterError(BackendError):
+    """
+    适配器错误
+
+    用于Core适配器层的错误场景。
+
+    Examples:
+        >>> raise AdapterError(
+        ...     "适配器初始化失败",
+        ...     error_code="ADAPTER_INIT_FAILED",
+        ...     adapter_name="ConfigStrategyAdapter",
+        ...     reason="无法连接到Core"
+        ... )
+    """
+
+
+class SecurityError(BackendError):
+    """
+    安全验证错误
+
+    用于代码安全验证、权限检查失败等场景。
+
+    Examples:
+        >>> raise SecurityError(
+        ...     "代码安全验证失败",
+        ...     error_code="SECURITY_CHECK_FAILED",
+        ...     strategy_id=123,
+        ...     reason="检测到危险操作"
+        ... )
+    """
+
+
 # ==================== 便捷函数 ====================
 
 
@@ -566,6 +601,9 @@ EXCEPTION_MAP = {
     "sync_task": SyncTaskError,
     # 权限相关
     "permission": PermissionError,
+    # 适配器相关
+    "adapter": AdapterError,
+    "security": SecurityError,
 }
 
 

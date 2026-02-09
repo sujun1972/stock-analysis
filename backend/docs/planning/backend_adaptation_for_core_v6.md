@@ -1,9 +1,9 @@
 # Backend适配Core v6.0架构变更方案
 
-**文档版本**: v1.2.0
+**文档版本**: v1.3.0
 **创建日期**: 2026-02-09
 **更新日期**: 2026-02-09
-**状态**: 🔄 Phase 2 已完成
+**状态**: 🔄 Phase 3 已完成
 **优先级**: 🔴 P0 - 必须完成
 
 ---
@@ -1247,12 +1247,71 @@ POST /api/backtest
 - `/backend/app/repositories/strategy_execution_repository.py`
 - `/backend/test_phase2_repositories.py` (测试脚本)
 
-### Phase 3: 新增Adapters (2-3天) ⏳ 待开始
+### Phase 3: 新增Core Adapters (2-3天) ✅ 已完成 (2026-02-09)
 
-- [ ] ConfigStrategyAdapter
-- [ ] DynamicStrategyAdapter
-- [ ] 重构BacktestAdapter
-- [ ] 单元测试
+**完成时间**: 2026-02-09
+**实际耗时**: 0.5天
+
+**已完成任务**:
+- [x] 创建 `ConfigStrategyAdapter` - 配置驱动策略适配器
+- [x] 创建 `DynamicStrategyAdapter` - 动态代码策略适配器
+- [x] 新增异常类型
+  - [x] `AdapterError` - 适配器错误
+  - [x] `SecurityError` - 安全验证错误
+- [x] 更新 `app/core_adapters/__init__.py` - 导出新适配器
+- [x] 创建单元测试
+  - [x] `test_config_strategy_adapter.py` - 配置策略适配器测试（15个测试用例）
+  - [x] `test_dynamic_strategy_adapter.py` - 动态策略适配器测试（17个测试用例）
+
+**功能特性**:
+
+#### ConfigStrategyAdapter
+- ✅ 从数据库配置创建策略 (`create_strategy_from_config`)
+- ✅ 获取可用策略类型 (`get_available_strategy_types`)
+- ✅ 验证策略配置 (`validate_config`)
+- ✅ 列出配置 (`list_configs`)
+- ✅ 根据ID获取配置 (`get_config_by_id`)
+- ✅ 支持3种预定义策略类型：momentum, mean_reversion, multi_factor
+- ✅ 完整的参数验证（类型、范围、必需字段）
+- ✅ 参数 schema 定义
+
+#### DynamicStrategyAdapter
+- ✅ 从动态代码创建策略 (`create_strategy_from_code`)
+- ✅ 获取策略元信息 (`get_strategy_metadata`)
+- ✅ 获取策略代码 (`get_strategy_code`)
+- ✅ 列出动态策略 (`list_strategies`)
+- ✅ 验证策略代码 (`validate_strategy_code`)
+- ✅ 更新验证状态 (`update_validation_status`)
+- ✅ 检查策略名称重复 (`check_strategy_name_exists`)
+- ✅ 获取策略统计信息 (`get_strategy_statistics`)
+- ✅ 支持严格模式/非严格模式
+- ✅ 安全验证集成（AST 分析、语法检查）
+
+**文件清单**:
+- `/backend/app/core_adapters/config_strategy_adapter.py` - 配置策略适配器（380行）
+- `/backend/app/core_adapters/dynamic_strategy_adapter.py` - 动态策略适配器（380行）
+- `/backend/app/core/exceptions.py` - 新增 AdapterError 和 SecurityError
+- `/backend/app/core_adapters/__init__.py` - 更新导出
+- `/backend/tests/unit/core_adapters/test_config_strategy_adapter.py` - 单元测试（230行）
+- `/backend/tests/unit/core_adapters/test_dynamic_strategy_adapter.py` - 单元测试（280行）
+
+**测试覆盖率**:
+- ConfigStrategyAdapter: 15个测试用例
+- DynamicStrategyAdapter: 17个测试用例
+- 总计: 32个测试用例
+
+**技术亮点**:
+1. 完全异步设计，使用 `asyncio.to_thread` 包装同步调用
+2. 详细的错误处理和异常类型
+3. 完整的参数验证和类型检查
+4. 支持分页和过滤
+5. 安全代码验证（语法检查、AST分析）
+6. 结构化日志记录
+
+**依赖关系**:
+- 依赖 Phase 2 创建的 Repository 层
+- 依赖 Core v6.0 的 StrategyFactory
+- 为 Phase 4 API 层提供基础
 
 ### Phase 4: 新增API端点 (2-3天) ⏳ 待开始
 

@@ -11,14 +11,18 @@ Core Adapters - 异步适配器层
 - FeatureAdapter: 特征工程适配器
 - BacktestAdapter: 回测引擎适配器
 - ModelAdapter: 机器学习模型适配器
+- ConfigStrategyAdapter: 配置驱动策略适配器 (Core v6.0)
+- DynamicStrategyAdapter: 动态代码策略适配器 (Core v6.0)
 
 作者: Backend Team
 创建日期: 2026-02-01
-版本: 2.0.0
+版本: 3.0.0
 """
 
 from .backtest_adapter import BacktestAdapter
+from .config_strategy_adapter import ConfigStrategyAdapter
 from .data_adapter import DataAdapter
+from .dynamic_strategy_adapter import DynamicStrategyAdapter
 from .feature_adapter import FeatureAdapter
 from .model_adapter import ModelAdapter
 
@@ -27,6 +31,8 @@ __all__ = [
     "FeatureAdapter",
     "BacktestAdapter",
     "ModelAdapter",
+    "ConfigStrategyAdapter",
+    "DynamicStrategyAdapter",
 ]
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
