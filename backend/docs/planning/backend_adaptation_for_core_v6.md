@@ -1,9 +1,9 @@
 # Backend适配Core v6.0架构变更方案
 
-**文档版本**: v1.3.0
+**文档版本**: v1.4.0
 **创建日期**: 2026-02-09
 **更新日期**: 2026-02-09
-**状态**: 🔄 Phase 3 已完成
+**状态**: 🔄 Phase 4 已完成 - API层实现完成
 **优先级**: 🔴 P0 - 必须完成
 
 ---
@@ -1313,12 +1313,68 @@ POST /api/backtest
 - 依赖 Core v6.0 的 StrategyFactory
 - 为 Phase 4 API 层提供基础
 
-### Phase 4: 新增API端点 (2-3天) ⏳ 待开始
+### Phase 4: 新增API端点 (2-3天) ✅ 已完成 (2026-02-09)
 
-- [ ] 策略配置API
-- [ ] 动态策略API
-- [ ] 统一回测API
-- [ ] API测试
+**完成时间**: 2026-02-09
+**实际耗时**: 0.5天
+
+**已完成任务**:
+- [x] 策略配置API (`/api/strategy-configs`)
+  - [x] 8个端点（GET types, POST validate, CRUD, POST test）
+  - [x] 完整的参数验证和错误处理
+  - [x] 分页和过滤支持
+- [x] 动态策略API (`/api/dynamic-strategies`)
+  - [x] 9个端点（GET statistics, POST validate, GET code, CRUD, POST test）
+  - [x] 代码安全验证集成
+  - [x] 策略名称唯一性检查
+- [x] 统一回测API (`/backtest/run-v2`)
+  - [x] 支持三种策略类型（predefined, config, dynamic）
+  - [x] 自动策略创建和验证
+  - [x] 执行记录保存
+- [x] API路由注册
+  - [x] 更新 `app/api/__init__.py`
+- [x] 单元测试
+  - [x] `test_strategy_configs_api.py` - 14个测试用例
+  - [x] `test_dynamic_strategies_api.py` - 15个测试用例
+- [x] 集成测试
+  - [x] `test_strategy_configs_integration.py` - 完整生命周期测试
+  - [x] `test_unified_backtest_integration.py` - 三种策略类型回测测试
+
+**新增文件** (8个):
+- `/backend/app/api/endpoints/strategy_configs.py` - 策略配置API（550行）
+- `/backend/app/api/endpoints/dynamic_strategies.py` - 动态策略API（600行）
+- `/backend/app/api/endpoints/backtest.py` - 扩展统一回测端点（+250行）
+- `/backend/tests/unit/api/test_strategy_configs_api.py` - 单元测试（350行）
+- `/backend/tests/unit/api/test_dynamic_strategies_api.py` - 单元测试（400行）
+- `/backend/tests/integration/api/test_strategy_configs_integration.py` - 集成测试（150行）
+- `/backend/tests/integration/api/test_unified_backtest_integration.py` - 集成测试（250行）
+- `/backend/docs/phase4_implementation_summary.md` - 实施总结文档
+
+**代码统计**:
+- 新增代码: ~2,550 行
+- API端点: 18 个
+- 测试用例: 38 个（29个单元测试 + 9个集成测试）
+
+**功能特性**:
+1. 统一接口设计 - 三种策略类型使用同一回测端点
+2. 自动验证机制 - 参数验证、代码安全检查
+3. 完整错误处理 - 400/404/409/500 错误码
+4. 结构化日志 - 详细的请求/响应日志
+5. 执行记录追踪 - 自动保存到 strategy_executions 表
+
+**技术亮点**:
+- RESTful API 设计
+- Pydantic 参数验证
+- 异步处理 (async/await)
+- OpenAPI 文档自动生成
+- Mock 测试隔离依赖
+
+**依赖关系**:
+- 依赖 Phase 2 创建的数据库表
+- 依赖 Phase 3 创建的 Adapter 层
+- 依赖 Core v6.0 的 StrategyFactory
+
+**API文档**: http://localhost:8000/docs
 
 ### Phase 5: 更新文档 (1天) ⏳ 待开始
 

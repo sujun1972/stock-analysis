@@ -8,6 +8,7 @@ from .endpoints import (
     backtest,
     config,
     data,
+    dynamic_strategies,
     experiment,
     features,
     market,
@@ -15,6 +16,7 @@ from .endpoints import (
     scheduler,
     stocks,
     strategy,
+    strategy_configs,
     sync,
 )
 
@@ -27,6 +29,10 @@ router.include_router(data.router, prefix="/data", tags=["data"])
 router.include_router(features.router, prefix="/features", tags=["features"])
 router.include_router(backtest.router, prefix="/backtest", tags=["backtest"])
 router.include_router(strategy.router, prefix="/strategy", tags=["strategy"])
+
+# Core v6.0 新增路由
+router.include_router(strategy_configs.router, prefix="/strategy-configs", tags=["策略配置"])
+router.include_router(dynamic_strategies.router, prefix="/dynamic-strategies", tags=["动态策略"])
 router.include_router(ml.router, prefix="/ml", tags=["机器学习"])
 
 # 数据引擎路由

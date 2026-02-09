@@ -1,28 +1,44 @@
 """
-回测 API (重构版本)
+回测 API (Core v6.0 适配版)
 
-✅ 任务 0.5: 重写 Backtest API
-- 使用 Core Adapters 代替 BacktestService
-- Backend 只负责：参数验证、调用 Core Adapter、响应格式化
-- 业务逻辑全部由 Core 处理
+支持三种策略类型:
+1. 预定义策略 (Predefined) - 硬编码策略，性能最优
+2. 配置驱动策略 (Config) - 从数据库加载配置
+3. 动态代码策略 (Dynamic) - 动态加载Python代码
 
 作者: Backend Team
 创建日期: 2026-02-02
-版本: 2.0.0 (架构修正版)
+更新日期: 2026-02-09
+版本: 3.0.0 (Core v6.0 适配版)
 """
 
+import sys
+from pathlib import Path
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException, status
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 from app.core_adapters.backtest_adapter import BacktestAdapter
 from app.core_adapters.data_adapter import DataAdapter
+from app.core_adapters.config_strategy_adapter import ConfigStrategyAdapter
+from app.core_adapters.dynamic_strategy_adapter import DynamicStrategyAdapter
 from app.models.api_response import ApiResponse
 from app.utils.data_cleaning import sanitize_float_values
+from app.repositories.strategy_execution_repository import StrategyExecutionRepository
+from app.api.error_handler import handle_api_errors
+
+# 添加 core 项目到 Python 路径
+core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
+if str(core_path) not in sys.path:
+    sys.path.insert(0, str(core_path))
+
+# 导入 Core 模块
+from src.strategies import StrategyFactory
+from src.backtest import BacktestEngine
 
 router = APIRouter()
 
@@ -32,6 +48,100 @@ data_adapter = DataAdapter()
 
 
 # ==================== Pydantic 模型 ====================
+
+
+class UnifiedBacktestRequest(BaseModel):
+    """统一回测请求模型 (Core v6.0)"""
+
+    # 策略选择 (三选一)
+    strategy_type: str = Field(
+        ...,
+        description="策略类型: predefined (预定义), config (配置驱动), dynamic (动态代码)"
+    )
+    strategy_id: Optional[int] = Field(
+        None,
+        description="配置ID或动态策略ID (当strategy_type='config'或'dynamic'时必需)"
+    )
+    strategy_name: Optional[str] = Field(
+        None,
+        description="预定义策略名称 (当strategy_type='predefined'时必需)"
+    )
+    strategy_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="预定义策略配置 (当strategy_type='predefined'时可选)"
+    )
+
+    # 回测参数
+    stock_pool: List[str] = Field(..., description="股票代码列表", min_items=1)
+    start_date: str = Field(..., description="开始日期 (YYYY-MM-DD)")
+    end_date: str = Field(..., description="结束日期 (YYYY-MM-DD)")
+    initial_capital: float = Field(1000000.0, gt=0, description="初始资金")
+
+    # 交易成本参数 (可选)
+    commission_rate: float = Field(0.0003, ge=0, le=0.01, description="佣金费率")
+    stamp_tax_rate: float = Field(0.001, ge=0, le=0.01, description="印花税率")
+    min_commission: float = Field(5.0, ge=0, description="最小佣金")
+    slippage: float = Field(0.0, ge=0, description="滑点")
+
+    # 高级选项
+    strict_mode: bool = Field(
+        True,
+        description="严格模式（仅对dynamic策略有效）"
+    )
+
+    @validator("strategy_type")
+    def validate_strategy_type(cls, v):
+        allowed_types = ["predefined", "config", "dynamic"]
+        if v not in allowed_types:
+            raise ValueError(f"策略类型必须是以下之一: {', '.join(allowed_types)}")
+        return v
+
+    @validator("start_date", "end_date")
+    def validate_date(cls, v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(f"日期格式错误，应为 YYYY-MM-DD: {v}")
+        return v
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "name": "预定义策略",
+                    "value": {
+                        "strategy_type": "predefined",
+                        "strategy_name": "momentum",
+                        "strategy_config": {"lookback_period": 20, "top_n": 20},
+                        "stock_pool": ["000001.SZ", "600000.SH"],
+                        "start_date": "2023-01-01",
+                        "end_date": "2023-12-31",
+                        "initial_capital": 1000000.0
+                    }
+                },
+                {
+                    "name": "配置驱动策略",
+                    "value": {
+                        "strategy_type": "config",
+                        "strategy_id": 1,
+                        "stock_pool": ["000001.SZ"],
+                        "start_date": "2023-01-01",
+                        "end_date": "2023-12-31"
+                    }
+                },
+                {
+                    "name": "动态代码策略",
+                    "value": {
+                        "strategy_type": "dynamic",
+                        "strategy_id": 1,
+                        "stock_pool": ["000001.SZ"],
+                        "start_date": "2023-01-01",
+                        "end_date": "2023-12-31",
+                        "strict_mode": True
+                    }
+                }
+            ]
+        }
 
 
 class BacktestRequest(BaseModel):
@@ -110,6 +220,190 @@ class TradeStatisticsRequest(BaseModel):
 
 
 # ==================== API 端点 ====================
+
+
+@router.post("/run-v2", summary="统一回测接口 (Core v6.0)", status_code=status.HTTP_200_OK)
+@handle_api_errors
+async def run_unified_backtest(request: UnifiedBacktestRequest) -> Dict[str, Any]:
+    """
+    运行回测 - 统一接口 (Core v6.0)
+
+    支持三种策略类型:
+    - **predefined**: 预定义策略（硬编码，性能最优）
+    - **config**: 配置驱动策略（从数据库加载配置）
+    - **dynamic**: 动态代码策略（动态加载Python代码）
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "execution_id": 1,
+                "strategy_info": {...},
+                "metrics": {...},
+                "equity_curve": [...],
+                "trades": [...]
+            }
+        }
+    """
+    start_time = datetime.now()
+
+    logger.info(
+        f"[统一回测] 开始: strategy_type={request.strategy_type}, "
+        f"stocks={len(request.stock_pool)}, period={request.start_date}~{request.end_date}"
+    )
+
+    try:
+        # 1. 创建策略实例
+        factory = StrategyFactory()
+        strategy_info = {}
+
+        if request.strategy_type == 'predefined':
+            if not request.strategy_name:
+                raise ValueError("预定义策略需要提供 strategy_name")
+            strategy = factory.create(request.strategy_name, request.strategy_config or {})
+            strategy_info = {
+                'type': 'predefined',
+                'name': request.strategy_name,
+                'config': request.strategy_config,
+                'class': strategy.__class__.__name__
+            }
+
+        elif request.strategy_type == 'config':
+            if not request.strategy_id:
+                raise ValueError("配置驱动策略需要提供 strategy_id")
+            config_adapter = ConfigStrategyAdapter()
+            strategy = await config_adapter.create_strategy_from_config(request.strategy_id)
+            config = await config_adapter.get_config_by_id(request.strategy_id)
+            strategy_info = {
+                'type': 'config',
+                'config_id': request.strategy_id,
+                'strategy_type': config['strategy_type'],
+                'name': config.get('name', 'N/A'),
+                'class': strategy.__class__.__name__
+            }
+
+        elif request.strategy_type == 'dynamic':
+            if not request.strategy_id:
+                raise ValueError("动态代码策略需要提供 strategy_id")
+            dynamic_adapter = DynamicStrategyAdapter()
+            strategy = await dynamic_adapter.create_strategy_from_code(
+                strategy_id=request.strategy_id,
+                strict_mode=request.strict_mode
+            )
+            metadata = await dynamic_adapter.get_strategy_metadata(request.strategy_id)
+            strategy_info = {
+                'type': 'dynamic',
+                'strategy_id': request.strategy_id,
+                'strategy_name': metadata['strategy_name'],
+                'class_name': metadata['class_name'],
+                'validation_status': metadata['validation_status'],
+                'class': strategy.__class__.__name__
+            }
+        else:
+            raise ValueError(f"不支持的策略类型: {request.strategy_type}")
+
+        # 2. 加载市场数据
+        market_data = await data_adapter.load_market_data(
+            stock_codes=request.stock_pool,
+            start_date=request.start_date,
+            end_date=request.end_date
+        )
+        logger.info(f"[统一回测] 加载市场数据完成: {len(market_data)} 条")
+
+        # 3. 运行回测
+        engine = BacktestEngine()
+        result = engine.run(
+            strategy=strategy,
+            stock_pool=request.stock_pool,
+            market_data=market_data,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            initial_capital=request.initial_capital,
+            commission_rate=request.commission_rate,
+            stamp_tax_rate=request.stamp_tax_rate,
+            min_commission=request.min_commission,
+            slippage=request.slippage,
+        )
+
+        # 4. 格式化结果
+        execution_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+
+        metrics = {
+            'total_return': float(result.total_return) if hasattr(result, 'total_return') else 0.0,
+            'annual_return': float(result.annual_return) if hasattr(result, 'annual_return') else 0.0,
+            'sharpe_ratio': float(result.sharpe_ratio) if hasattr(result, 'sharpe_ratio') else 0.0,
+            'max_drawdown': float(result.max_drawdown) if hasattr(result, 'max_drawdown') else 0.0,
+            'win_rate': float(result.win_rate) if hasattr(result, 'win_rate') else 0.0,
+            'total_trades': int(result.total_trades) if hasattr(result, 'total_trades') else 0,
+        }
+        metrics = sanitize_float_values(metrics)
+
+        equity_curve = []
+        if hasattr(result, 'equity_curve'):
+            equity_curve = result.equity_curve.to_dict('records')
+            equity_curve = sanitize_float_values(equity_curve)
+
+        trades = []
+        if hasattr(result, 'trades'):
+            trades = result.trades.to_dict('records')
+            trades = sanitize_float_values(trades)
+
+        # 5. 保存执行记录
+        repo = StrategyExecutionRepository()
+        execution_data = {
+            'execution_type': 'backtest',
+            'execution_params': request.dict(),
+            'metrics': metrics,
+            'execution_duration_ms': execution_time_ms,
+            'status': 'completed',
+            'started_at': start_time,
+            'completed_at': datetime.now(),
+        }
+
+        if request.strategy_type == 'predefined':
+            execution_data['predefined_strategy_type'] = request.strategy_name
+        elif request.strategy_type == 'config':
+            execution_data['config_strategy_id'] = request.strategy_id
+        elif request.strategy_type == 'dynamic':
+            execution_data['dynamic_strategy_id'] = request.strategy_id
+
+        execution_id = repo.create(execution_data)
+
+        logger.success(
+            f"[统一回测] 完成: execution_id={execution_id}, "
+            f"return={metrics['total_return']:.2%}, "
+            f"sharpe={metrics['sharpe_ratio']:.2f}, time={execution_time_ms}ms"
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "execution_id": execution_id,
+                "strategy_info": strategy_info,
+                "metrics": metrics,
+                "equity_curve": equity_curve[:1000],
+                "trades": trades[:500],
+                "execution_time_ms": execution_time_ms,
+                "backtest_params": {
+                    "stock_pool": request.stock_pool,
+                    "start_date": request.start_date,
+                    "end_date": request.end_date,
+                    "initial_capital": request.initial_capital,
+                }
+            },
+            "message": "回测完成"
+        }
+
+    except ValueError as e:
+        logger.error(f"[统一回测] 参数错误: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"[统一回测] 失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"回测失败: {str(e)}"
+        )
 
 
 @router.post("/run")
