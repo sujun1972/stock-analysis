@@ -1,6 +1,118 @@
-// ========== 策略类型定义 ==========
+// ========== 统一策略类型定义 (V2.0) ==========
 
 /**
+ * 统一策略接口
+ * 所有策略（内置/AI/自定义）都使用这个统一的接口
+ */
+export interface Strategy {
+  // 主键和标识
+  id: number
+  name: string
+  display_name: string
+
+  // 核心代码
+  code: string
+  code_hash: string
+  class_name: string
+
+  // 来源分类
+  source_type: 'builtin' | 'ai' | 'custom'
+
+  // 策略元信息
+  description?: string
+  category?: string  // momentum/reversal/factor/ml
+  tags?: string[]
+
+  // 默认参数
+  default_params?: Record<string, any>
+
+  // 状态和验证
+  validation_status: 'pending' | 'passed' | 'failed' | 'validating'
+  validation_errors?: Record<string, any>
+  validation_warnings?: Record<string, any>
+  risk_level: 'safe' | 'low' | 'medium' | 'high'
+  is_enabled: boolean
+
+  // 使用统计
+  usage_count: number
+  backtest_count: number
+  avg_sharpe_ratio?: number
+  avg_annual_return?: number
+
+  // 版本和审计
+  version: number
+  parent_strategy_id?: number
+  created_by?: string
+  created_at: string
+  updated_at: string
+  last_used_at?: string
+}
+
+/**
+ * 策略创建请求
+ */
+export interface CreateStrategyRequest {
+  name: string
+  display_name: string
+  code: string
+  class_name: string
+  source_type: 'builtin' | 'ai' | 'custom'
+  description?: string
+  category?: string
+  tags?: string[]
+  default_params?: Record<string, any>
+}
+
+/**
+ * 策略更新请求
+ */
+export interface UpdateStrategyRequest {
+  display_name?: string
+  code?: string
+  description?: string
+  tags?: string[]
+  default_params?: Record<string, any>
+  is_enabled?: boolean
+}
+
+/**
+ * 策略验证响应
+ */
+export interface StrategyValidationResponse {
+  is_valid: boolean
+  risk_level: 'safe' | 'low' | 'medium' | 'high'
+  errors: string[]
+  warnings: string[]
+}
+
+/**
+ * 策略统计信息
+ */
+export interface StrategyStatistics {
+  total: number
+  by_source: {
+    builtin: number
+    ai: number
+    custom: number
+  }
+  by_category: Record<string, number>
+  enabled: number
+  validated: number
+}
+
+/**
+ * 策略测试响应
+ */
+export interface StrategyTestResponse {
+  success: boolean
+  message: string
+  details?: any
+}
+
+// ========== 旧类型定义（向后兼容，标记为废弃）==========
+
+/**
+ * @deprecated 使用 Strategy 代替
  * 策略类型元数据
  */
 export interface StrategyTypeMeta {
@@ -24,6 +136,7 @@ export interface StrategyTypeMeta {
 }
 
 /**
+ * @deprecated 使用 Strategy 代替
  * 策略配置
  */
 export interface StrategyConfig {
@@ -40,6 +153,7 @@ export interface StrategyConfig {
 }
 
 /**
+ * @deprecated 使用 Strategy 代替
  * 动态策略
  */
 export interface DynamicStrategy {
@@ -64,18 +178,24 @@ export interface DynamicStrategy {
 }
 
 /**
- * 统一回测请求
+ * 统一回测请求 (V2.0)
  */
 export interface BacktestRequest {
-  strategy_type: 'predefined' | 'config' | 'dynamic'
-  strategy_name?: string
-  strategy_id?: number
-  strategy_config?: Record<string, any>
+  // V2.0: 只需要 strategy_id
+  strategy_id: number
   stock_pool: string[]
   start_date: string
   end_date: string
   initial_capital?: number
   rebalance_freq?: 'D' | 'W' | 'M'
+
+  // V1.0 兼容字段（废弃）
+  /** @deprecated */
+  strategy_type?: 'predefined' | 'config' | 'dynamic'
+  /** @deprecated */
+  strategy_name?: string
+  /** @deprecated */
+  strategy_config?: Record<string, any>
 }
 
 /**

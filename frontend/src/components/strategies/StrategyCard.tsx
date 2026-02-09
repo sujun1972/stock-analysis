@@ -1,49 +1,80 @@
 /**
- * 策略卡片组件
- * 用于展示策略配置或动态策略的卡片
+ * 统一策略卡片组件 (V2.0)
+ * 用于展示所有类型的策略（内置/AI/自定义）
  */
 
 'use client'
 
 import { memo } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Edit, Trash2, Play, Code, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import type { StrategyConfig, DynamicStrategy } from '@/types/strategy'
+import {
+  Code,
+  Play,
+  Building2,
+  Sparkles,
+  User,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Copy,
+  Edit,
+  Trash2
+} from 'lucide-react'
+import type { Strategy } from '@/types/strategy'
 
 interface StrategyCardProps {
-  type: 'config' | 'dynamic'
-  data: StrategyConfig | DynamicStrategy
+  strategy: Strategy
+  onBacktest?: (id: number) => void
   onEdit?: (id: number) => void
   onDelete?: (id: number) => void
-  onTest?: (id: number) => void
-  onView?: (id: number) => void
+  onClone?: (id: number) => void
 }
 
 const StrategyCard = memo(function StrategyCard({
-  type,
-  data,
+  strategy,
+  onBacktest,
   onEdit,
   onDelete,
-  onTest,
-  onView
+  onClone
 }: StrategyCardProps) {
-  const isConfig = type === 'config'
-  const config = isConfig ? (data as StrategyConfig) : null
-  const dynamic = !isConfig ? (data as DynamicStrategy) : null
 
-  const getValidationStatusBadge = (status?: string) => {
-    if (!status) return null
+  // 获取来源类型图标
+  const getSourceIcon = () => {
+    switch (strategy.source_type) {
+      case 'builtin':
+        return <Building2 className="h-4 w-4" />
+      case 'ai':
+        return <Sparkles className="h-4 w-4" />
+      case 'custom':
+        return <User className="h-4 w-4" />
+    }
+  }
 
+  // 获取来源类型标签
+  const getSourceLabel = () => {
+    switch (strategy.source_type) {
+      case 'builtin':
+        return '内置'
+      case 'ai':
+        return 'AI生成'
+      case 'custom':
+        return '自定义'
+    }
+  }
+
+  // 获取验证状态徽章
+  const getValidationBadge = () => {
     const variants = {
-      passed: { variant: 'default' as const, icon: CheckCircle, label: '验证通过' },
+      passed: { variant: 'default' as const, icon: CheckCircle, label: '已验证' },
       failed: { variant: 'destructive' as const, icon: XCircle, label: '验证失败' },
-      warning: { variant: 'outline' as const, icon: AlertCircle, label: '有警告' },
-      pending: { variant: 'secondary' as const, icon: AlertCircle, label: '待验证' }
+      pending: { variant: 'secondary' as const, icon: AlertCircle, label: '待验证' },
+      validating: { variant: 'outline' as const, icon: AlertCircle, label: '验证中' }
     }
 
-    const info = variants[status as keyof typeof variants]
+    const info = variants[strategy.validation_status]
     if (!info) return null
 
     const Icon = info.icon
@@ -56,126 +87,175 @@ const StrategyCard = memo(function StrategyCard({
     )
   }
 
+  // 获取风险等级徽章颜色
+  const getRiskBadgeVariant = () => {
+    switch (strategy.risk_level) {
+      case 'safe':
+      case 'low':
+        return 'default'
+      case 'medium':
+        return 'outline'
+      case 'high':
+        return 'destructive'
+      default:
+        return 'secondary'
+    }
+  }
+
+  // 获取风险等级标签
+  const getRiskLabel = () => {
+    const labels = {
+      safe: '安全',
+      low: '低风险',
+      medium: '中等风险',
+      high: '高风险'
+    }
+    return labels[strategy.risk_level] || strategy.risk_level
+  }
+
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle className="text-lg">
-              {isConfig ? config?.name : dynamic?.display_name}
-            </CardTitle>
-            <CardDescription className="mt-1">
-              {isConfig ? (
-                <>
-                  类型: {config?.strategy_type} | 创建于{' '}
-                  {new Date(config!.created_at).toLocaleDateString()}
-                </>
-              ) : (
-                <>
-                  策略名: {dynamic?.strategy_name} | 版本 {dynamic?.version || 1}
-                </>
-              )}
+            <div className="flex items-center gap-2 mb-1">
+              <CardTitle className="text-lg">{strategy.display_name}</CardTitle>
+            </div>
+            <CardDescription>
+              {strategy.description || '暂无描述'}
             </CardDescription>
           </div>
           <div className="flex flex-col items-end gap-2">
-            {isConfig ? (
-              <Badge variant={config?.is_active ? 'default' : 'secondary'}>
-                {config?.is_active ? '启用' : '禁用'}
-              </Badge>
-            ) : (
-              <>
-                {getValidationStatusBadge(dynamic?.validation_status)}
-                <Badge variant={dynamic?.is_enabled ? 'default' : 'secondary'}>
-                  {dynamic?.is_enabled ? '启用' : '禁用'}
-                </Badge>
-              </>
-            )}
+            <Badge variant="outline" className="flex items-center gap-1">
+              {getSourceIcon()}
+              <span>{getSourceLabel()}</span>
+            </Badge>
+            {getValidationBadge()}
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        {/* 描述 */}
-        {(config?.description || dynamic?.description) && (
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {isConfig ? config?.description : dynamic?.description}
-          </p>
-        )}
+      <CardContent className="space-y-3">
+        {/* 标签和类别 */}
+        <div className="flex flex-wrap gap-2">
+          {strategy.category && (
+            <Badge variant="secondary">{strategy.category}</Badge>
+          )}
+          {strategy.tags?.map((tag, index) => (
+            <Badge key={index} variant="outline">{tag}</Badge>
+          ))}
+        </div>
 
-        {/* 配置详情 */}
-        {isConfig && config?.config && (
-          <div className="bg-muted/50 rounded-lg p-3">
-            <p className="text-xs font-medium text-muted-foreground mb-2">配置参数</p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(config.config).slice(0, 3).map(([key, value]) => (
-                <Badge key={key} variant="outline" className="text-xs">
-                  {key}: {JSON.stringify(value)}
-                </Badge>
-              ))}
-              {Object.keys(config.config).length > 3 && (
-                <Badge variant="outline" className="text-xs">
-                  +{Object.keys(config.config).length - 3} 个参数
-                </Badge>
+        {/* 风险等级和统计信息 */}
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">风险等级:</span>
+            <Badge variant={getRiskBadgeVariant() as any}>
+              {getRiskLabel()}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">使用次数:</span>
+            <span className="font-medium">{strategy.usage_count || 0}</span>
+          </div>
+        </div>
+
+        {/* 性能指标（如果有） */}
+        {(strategy.avg_sharpe_ratio || strategy.avg_annual_return) && (
+          <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">平均表现</p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {strategy.avg_sharpe_ratio && (
+                <div>
+                  <span className="text-muted-foreground">夏普率: </span>
+                  <span className="font-medium">{strategy.avg_sharpe_ratio.toFixed(2)}</span>
+                </div>
+              )}
+              {strategy.avg_annual_return && (
+                <div>
+                  <span className="text-muted-foreground">年化收益: </span>
+                  <span className="font-medium">
+                    {(strategy.avg_annual_return * 100).toFixed(2)}%
+                  </span>
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* 动态策略验证信息 */}
-        {!isConfig && dynamic?.validation_errors && dynamic.validation_errors.length > 0 && (
+        {/* 验证错误提示 */}
+        {strategy.validation_status === 'failed' && strategy.validation_errors && (
           <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
             <p className="text-xs font-medium text-destructive mb-1">验证错误</p>
-            <p className="text-xs text-destructive/80">
-              {dynamic.validation_errors[0].message}
-              {dynamic.validation_errors.length > 1 && ` (+${dynamic.validation_errors.length - 1} 个)`}
+            <p className="text-xs text-destructive/80 line-clamp-2">
+              {JSON.stringify(strategy.validation_errors)}
             </p>
           </div>
         )}
 
-        {/* 操作按钮 */}
-        <div className="flex gap-2 pt-2">
-          {onView && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onView(data.id)}
-              className="flex-1"
-            >
-              <Code className="h-4 w-4 mr-1" />
-              查看
-            </Button>
-          )}
-          {onTest && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onTest(data.id)}
-              className="flex-1"
-            >
-              <Play className="h-4 w-4 mr-1" />
-              测试
-            </Button>
-          )}
-          {onEdit && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onEdit(data.id)}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-          )}
-          {onDelete && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => onDelete(data.id)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
+        {/* 状态标签 */}
+        <div className="flex items-center gap-2">
+          <Badge variant={strategy.is_enabled ? 'default' : 'secondary'}>
+            {strategy.is_enabled ? '已启用' : '已禁用'}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            v{strategy.version}
+          </span>
         </div>
       </CardContent>
+
+      <CardFooter className="flex gap-2">
+        {/* 查看代码按钮 */}
+        <Link href={`/strategies/${strategy.id}/code`} className="flex-1">
+          <Button variant="outline" size="sm" className="w-full">
+            <Code className="mr-1 h-3 w-3" />
+            代码
+          </Button>
+        </Link>
+
+        {/* 回测按钮 */}
+        {onBacktest && (
+          <Link href={`/backtest?strategy=${strategy.id}`} className="flex-1">
+            <Button size="sm" className="w-full">
+              <Play className="mr-1 h-3 w-3" />
+              回测
+            </Button>
+          </Link>
+        )}
+
+        {/* 克隆按钮 */}
+        {onClone && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onClone(strategy.id)}
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* 编辑按钮（仅自定义和AI策略） */}
+        {strategy.source_type !== 'builtin' && onEdit && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onEdit(strategy.id)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* 删除按钮（仅自定义和AI策略） */}
+        {strategy.source_type !== 'builtin' && onDelete && (
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => onDelete(strategy.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </CardFooter>
     </Card>
   )
 })

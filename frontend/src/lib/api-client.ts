@@ -8,6 +8,15 @@ import type {
   ApiResponse,
   PaginatedResponse,
   MinuteData,
+  // V2.0 统一策略类型
+  Strategy,
+  CreateStrategyRequest,
+  UpdateStrategyRequest,
+  StrategyValidationResponse,
+  StrategyStatistics,
+  StrategyTestResponse,
+  BacktestRequest,
+  // V1.0 旧类型（向后兼容）
   StrategyTypeMeta,
   StrategyConfig,
   CreateStrategyConfigRequest,
@@ -21,7 +30,6 @@ import type {
   DynamicStrategyValidationResponse,
   DynamicStrategyTestResponse,
   DynamicStrategyStatistics,
-  BacktestRequest,
 } from '@/types'
 
 /**
@@ -410,7 +418,94 @@ class ApiClient {
     return response.data
   }
 
-  // ========== 策略配置相关API ==========
+  // ========== 统一策略相关API (V2.0) ==========
+
+  /**
+   * 获取统一策略列表
+   */
+  async getStrategies(params?: {
+    source_type?: 'builtin' | 'ai' | 'custom'
+    category?: string
+    is_enabled?: boolean
+    search?: string
+  }): Promise<ApiResponse<Strategy[]>> {
+    const response = await axiosInstance.get('/api/strategies', { params })
+    return response.data
+  }
+
+  /**
+   * 获取单个策略详情
+   */
+  async getStrategy(id: number): Promise<ApiResponse<Strategy>> {
+    const response = await axiosInstance.get(`/api/strategies/${id}`)
+    return response.data
+  }
+
+  /**
+   * 创建新策略
+   */
+  async createStrategy(data: CreateStrategyRequest): Promise<ApiResponse<{ strategy_id: number }>> {
+    const response = await axiosInstance.post('/api/strategies', data)
+    return response.data
+  }
+
+  /**
+   * 更新策略
+   */
+  async updateStrategy(id: number, data: UpdateStrategyRequest): Promise<ApiResponse<{ strategy_id: number }>> {
+    const response = await axiosInstance.put(`/api/strategies/${id}`, data)
+    return response.data
+  }
+
+  /**
+   * 删除策略
+   */
+  async deleteStrategy(id: number): Promise<ApiResponse<void>> {
+    const response = await axiosInstance.delete(`/api/strategies/${id}`)
+    return response.data
+  }
+
+  /**
+   * 验证策略代码
+   */
+  async validateStrategy(code: string): Promise<ApiResponse<StrategyValidationResponse>> {
+    const response = await axiosInstance.post('/api/strategies/validate', { code })
+    return response.data
+  }
+
+  /**
+   * 获取策略统计信息
+   */
+  async getStrategyStatistics(): Promise<ApiResponse<StrategyStatistics>> {
+    const response = await axiosInstance.get('/api/strategies/statistics')
+    return response.data
+  }
+
+  /**
+   * 获取策略代码
+   */
+  async getStrategyCode(id: number): Promise<ApiResponse<{ code: string }>> {
+    const response = await axiosInstance.get(`/api/strategies/${id}/code`)
+    return response.data
+  }
+
+  /**
+   * 测试策略
+   */
+  async testStrategy(id: number): Promise<ApiResponse<StrategyTestResponse>> {
+    const response = await axiosInstance.post(`/api/strategies/${id}/test`)
+    return response.data
+  }
+
+  /**
+   * 运行统一回测 (V2.0)
+   */
+  async runBacktestV2(params: BacktestRequest): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post('/api/backtest/run-v3', params)
+    return response.data
+  }
+
+  // ========== 策略配置相关API（旧版，向后兼容）==========
 
   /**
    * 获取可用策略类型列表
