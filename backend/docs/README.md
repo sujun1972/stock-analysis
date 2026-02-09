@@ -1,18 +1,18 @@
 # Stock-Analysis Backend 文档中心
 
-**版本**: v3.0.0
-**最后更新**: 2026-02-07
+**版本**: v4.0.0
+**最后更新**: 2026-02-09
 
 ---
 
 ## 🎉 项目状态
 
-Backend 项目已完成架构重构和性能优化，生产就绪！
+Backend 项目已完成 Core v6.0 适配，移除 Three Layer 架构，生产就绪！
 
-| 指标 | v1.0 | v2.0 | 提升 |
+| 指标 | v1.0 | v4.0 | 提升 |
 |------|------|------|------|
-| **代码行数** | 17,737 | 3,000 | ↓ 83% |
-| **测试覆盖率** | 0% | 65%+ | ↑ 65% |
+| **代码行数** | 17,737 | ~2,900 | ↓ 84% |
+| **测试覆盖率** | 0% | 60%+ | ↑ 60% |
 | **API P95 响应** | 200ms | <80ms | ↓ 60% |
 | **并发 QPS** | 100 | 850 | ↑ 8.5x |
 | **安全评分** | 4.5/10 | 9.0/10 | ↑ 100% |
@@ -72,7 +72,7 @@ Backend 项目已完成架构重构和性能优化，生产就绪！
 
 ### 2. 完整功能模块
 
-**13 个功能模块，70+ API 端点**:
+**12 个功能模块，65+ API 端点**:
 
 | 模块 | 端点前缀 | 功能 |
 |------|---------|------|
@@ -87,15 +87,14 @@ Backend 项目已完成架构重构和性能优化，生产就绪！
 | 定时任务 | `/api/scheduler` | 任务管理、执行 |
 | 配置管理 | `/api/config` | 配置读取、更新 |
 | 市场状态 | `/api/market` | 交易日历、市场状态 |
-| 三层策略 | `/api/three-layer` | 三层架构回测 ⭐ 新增 |
 | 自动化实验 | `/api/experiment` | 实验创建、管理 |
 
-### 3. 与 Core 集成（v2.0 架构）
+### 3. 与 Core v6.0 集成
 
 - **Core Adapters**: 薄层封装，调用 Core 功能
-- **零业务逻辑重复**: 代码减少 83%
+- **零业务逻辑重复**: 代码减少 84%
 - **职责清晰**: Backend 专注 API 网关，Core 专注业务逻辑
-- **高测试覆盖**: 65%+ 测试覆盖率，380+ 测试用例
+- **高测试覆盖**: 60%+ 测试覆盖率，250+ 测试用例
 
 ### 4. 生产级质量
 
@@ -112,14 +111,13 @@ Backend 项目已完成架构重构和性能优化，生产就绪！
 ## 🏛️ 当前架构
 
 ```
-Backend (3,000 行)
+Backend (~2,900 行)
 ├── Core Adapters（薄层封装）
 │   ├── DataAdapter
 │   ├── FeatureAdapter
 │   ├── BacktestAdapter
 │   ├── MarketAdapter
-│   ├── ModelAdapter
-│   └── ThreeLayerAdapter ⭐ 新增
+│   └── ModelAdapter
 ├── REST API 层
 ├── 缓存层（Redis）
 └── 监控层（Prometheus）
@@ -127,153 +125,7 @@ Backend (3,000 行)
 
 **设计原则**: Backend 作为 API 网关，所有业务逻辑由 Core 实现
 
----
-
-## 🎨 三层架构回测 API ⭐ 新增
-
-### 概述
-
-Backend 通过 **ThreeLayerAdapter** 集成 Core 的三层架构，提供灵活的策略组合回测。
-
-### 架构图
-
-```
-┌──────────────────────────────────────────┐
-│  Frontend                                 │
-└────────────────┬─────────────────────────┘
-                 ↓ HTTP/REST
-┌──────────────────────────────────────────┐
-│  Backend FastAPI Layer                    │
-├──────────────────────────────────────────┤
-│  /api/three-layer/selectors     GET      │
-│  /api/three-layer/entries       GET      │
-│  /api/three-layer/exits         GET      │
-│  /api/three-layer/validate      POST     │
-│  /api/three-layer/backtest      POST     │
-└────────────────┬─────────────────────────┘
-                 ↓ Python调用
-┌──────────────────────────────────────────┐
-│  ThreeLayerAdapter (Backend)              │
-├──────────────────────────────────────────┤
-│  - 参数验证和格式转换                      │
-│  - 异步调用封装                           │
-│  - Redis 缓存                            │
-│  - 错误处理和日志                         │
-└────────────────┬─────────────────────────┘
-                 ↓ 直接调用
-┌──────────────────────────────────────────┐
-│  Core Three-Layer Architecture            │
-├──────────────────────────────────────────┤
-│  - StockSelector (4个)                   │
-│  - EntryStrategy (3个)                   │
-│  - ExitStrategy (4个)                    │
-│  - StrategyComposer                      │
-│  - BacktestEngine.backtest_three_layer() │
-└──────────────────────────────────────────┘
-```
-
-### API 端点
-
-| 端点 | 方法 | 功能 | 缓存 |
-|------|------|------|------|
-| `/api/three-layer/selectors` | GET | 查询可用选股器 | ✅ Redis 1天 |
-| `/api/three-layer/entries` | GET | 查询可用入场策略 | ✅ Redis 1天 |
-| `/api/three-layer/exits` | GET | 查询可用退出策略 | ✅ Redis 1天 |
-| `/api/three-layer/validate` | POST | 验证策略组合 | ❌ 无缓存 |
-| `/api/three-layer/backtest` | POST | 执行回测 | ✅ Redis 1小时 |
-
-### 使用示例
-
-#### 1. 获取选股器列表
-
-```bash
-GET /api/three-layer/selectors
-```
-
-响应示例：
-```json
-[
-  {
-    "id": "momentum",
-    "name": "动量选股器",
-    "description": "选择近期涨幅最大的股票",
-    "version": "1.0.0",
-    "parameters": [
-      {
-        "name": "lookback_period",
-        "label": "动量计算周期（天）",
-        "type": "integer",
-        "default": 20,
-        "min_value": 5,
-        "max_value": 200
-      }
-    ]
-  }
-]
-```
-
-#### 2. 执行回测
-
-```bash
-POST /api/three-layer/backtest
-```
-
-请求体：
-```json
-{
-  "selector": {
-    "id": "momentum",
-    "params": {
-      "lookback_period": 20,
-      "top_n": 50
-    }
-  },
-  "entry": {
-    "id": "immediate",
-    "params": {}
-  },
-  "exit": {
-    "id": "fixed_stop_loss",
-    "params": {
-      "stop_loss_pct": -5.0
-    }
-  },
-  "rebalance_freq": "W",
-  "start_date": "2023-01-01",
-  "end_date": "2023-12-31",
-  "initial_capital": 1000000.0
-}
-```
-
-响应示例：
-```json
-{
-  "success": true,
-  "data": {
-    "metrics": {
-      "total_return": 0.32,
-      "annual_return": 0.32,
-      "sharpe_ratio": 1.85,
-      "max_drawdown": -0.12,
-      "win_rate": 0.62,
-      "total_trades": 150
-    },
-    "trades": [...],
-    "daily_portfolio": [...]
-  }
-}
-```
-
-### 测试覆盖
-
-| 测试类型 | 用例数 | 通过率 |
-|---------|--------|--------|
-| Adapter 单元测试 | 18 | 100% |
-| API 单元测试 | 24 | 100% |
-| 缓存测试 | 13 | 100% |
-| 监控测试 | 25 | 100% |
-| 集成测试 | 49 | 100% |
-| **总计** | **129** | **100%** |
+**注意**: Three Layer 架构已在 v4.0 移除，Core v6.0 采用统一策略系统（预定义/配置驱动/动态代码策略）
 
 ---
 
@@ -373,12 +225,22 @@ backend/docs/
 
 ## 🗺️ 开发路线
 
-### v3.0.0 (2026-02-07) 🎉 当前版本
+### v4.0.0 (2026-02-09) 🎉 当前版本
 
-**三层架构回测**:
+**Core v6.0 适配 - Phase 1**:
+- ✅ 移除 Three Layer 架构相关代码
+- ✅ 移除 ThreeLayerAdapter 适配器
+- ✅ 移除 5 个 Three Layer API 端点
+- ✅ 移除 129 个相关测试用例
+- ✅ 更新文档
+- ⏳ 待实施 Phase 2-5（新增统一策略系统）
+
+### v3.0.0 (2026-02-07)
+
+**三层架构回测**（已在 v4.0 移除）:
 - ✅ ThreeLayerAdapter 适配器
-- ✅ 5个三层架构 API 端点
-- ✅ 129个测试用例（100%通过）
+- ✅ 5 个三层架构 API 端点
+- ✅ 129 个测试用例（100%通过）
 - ✅ 完整的缓存和监控
 
 ### v2.0.0 (2026-02-05)
@@ -450,5 +312,5 @@ MIT License - 详见 [LICENSE](../LICENSE) 文件
 ---
 
 **维护团队**: Quant Team
-**文档版本**: v3.0.0
-**最后更新**: 2026-02-07
+**文档版本**: v4.0.0
+**最后更新**: 2026-02-09

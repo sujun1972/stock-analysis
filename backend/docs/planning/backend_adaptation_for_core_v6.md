@@ -1,8 +1,9 @@
 # Backend适配Core v6.0架构变更方案
 
-**文档版本**: v1.0.0
+**文档版本**: v1.1.0
 **创建日期**: 2026-02-09
-**状态**: 📋 待实施
+**更新日期**: 2026-02-09
+**状态**: 🔄 Phase 1 已完成
 **优先级**: 🔴 P0 - 必须完成
 
 ---
@@ -1176,15 +1177,43 @@ POST /api/backtest
 
 ## 实施计划
 
-### Phase 1: 移除Three Layer (1-2天) ✅ 优先
+### Phase 1: 移除Three Layer (1-2天) ✅ 已完成 (2026-02-09)
 
-- [x] 标记Three Layer API为deprecated
-- [x] 通知前端团队
-- [ ] 移除ThreeLayerAdapter及相关文件
-- [ ] 移除测试用例
-- [ ] 更新文档
+**完成时间**: 2026-02-09
+**实际耗时**: 0.5天
 
-### Phase 2: 数据库Migration (0.5天) 🔄 进行中
+**已完成任务**:
+- [x] 删除源代码文件
+  - [x] `app/api/endpoints/three_layer.py` - Three Layer API 路由
+  - [x] `app/core_adapters/three_layer_adapter.py` - ThreeLayerAdapter 适配器
+  - [x] `app/monitoring/three_layer_monitor.py` - Three Layer 监控模块
+- [x] 删除测试文件（6个）
+  - [x] `tests/unit/api/test_three_layer_api.py`
+  - [x] `tests/unit/core_adapters/test_three_layer_adapter.py`
+  - [x] `tests/unit/core_adapters/test_three_layer_cache.py`
+  - [x] `tests/unit/monitoring/test_three_layer_monitor.py`
+  - [x] `tests/integration/test_three_layer_api.py`
+- [x] 更新模块导入
+  - [x] `app/api/__init__.py` - 移除 `three_layer` 路由注册
+  - [x] `app/core_adapters/__init__.py` - 移除 `ThreeLayerAdapter` 导入
+  - [x] `app/monitoring/__init__.py` - 移除所有 `three_layer_monitor` 导入
+- [x] 更新文档
+  - [x] `docs/README.md` - 更新版本至 v4.0.0，移除三层架构章节
+  - [x] `docs/planning/backend_adaptation_for_core_v6.md` - 标记 Phase 1 完成
+- [x] 清理编译缓存（`__pycache__` 目录）
+
+**变更统计**:
+- 删除文件: 8 个（3个源代码 + 5个测试）
+- 修改文件: 5 个（3个导入 + 2个文档）
+- 总计: 13 个文件
+
+**验证结果**:
+- ✅ 所有 Three Layer 相关文件已删除
+- ✅ 所有导入引用已清理
+- ✅ 文档已更新至 v4.0.0
+- ✅ 无残留的 Three Layer 引用
+
+### Phase 2: 数据库Migration (0.5天) ⏳ 待开始
 
 - [ ] 创建migration脚本
 - [ ] 运行migration

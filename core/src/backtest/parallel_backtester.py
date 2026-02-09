@@ -24,10 +24,10 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-from utils.parallel_executor import ParallelExecutor
-from config.features import ParallelComputingConfig
-from backtest.backtest_engine import BacktestEngine
-from strategies.base_strategy import BaseStrategy
+from src.utils.parallel_executor import ParallelExecutor
+from src.config.features import ParallelComputingConfig
+from src.backtest.backtest_engine import BacktestEngine
+from src.strategies.base_strategy import BaseStrategy
 
 
 # ==================== 数据类 ====================

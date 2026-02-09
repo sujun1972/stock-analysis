@@ -11,25 +11,22 @@ Core Adapters - 异步适配器层
 - FeatureAdapter: 特征工程适配器
 - BacktestAdapter: 回测引擎适配器
 - ModelAdapter: 机器学习模型适配器
-- ThreeLayerAdapter: 三层架构策略适配器
 
 作者: Backend Team
 创建日期: 2026-02-01
-版本: 1.0.0
+版本: 2.0.0
 """
 
 from .backtest_adapter import BacktestAdapter
 from .data_adapter import DataAdapter
 from .feature_adapter import FeatureAdapter
 from .model_adapter import ModelAdapter
-from .three_layer_adapter import ThreeLayerAdapter
 
 __all__ = [
     "DataAdapter",
     "FeatureAdapter",
     "BacktestAdapter",
     "ModelAdapter",
-    "ThreeLayerAdapter",
 ]
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

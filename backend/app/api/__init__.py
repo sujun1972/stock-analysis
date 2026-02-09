@@ -16,7 +16,6 @@ from .endpoints import (
     stocks,
     strategy,
     sync,
-    three_layer,
 )
 
 # 创建主路由
@@ -38,8 +37,5 @@ router.include_router(market.router, prefix="/market", tags=["市场状态"])
 
 # 自动化实验路由
 router.include_router(experiment.router, prefix="/experiment", tags=["自动化实验"])
-
-# 三层架构策略路由
-router.include_router(three_layer.router, prefix="/three-layer", tags=["三层架构"])
 
 __all__ = ["router"]
