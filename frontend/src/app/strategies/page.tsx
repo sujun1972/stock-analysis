@@ -133,27 +133,13 @@ export default function StrategiesPage() {
           </p>
         </div>
 
-        {/* 创建策略按钮组 */}
-        <div className="flex gap-2">
-          <Link href="/strategies/create?source=builtin">
-            <Button variant="outline">
-              <Building2 className="mr-2 h-4 w-4" />
-              基于内置创建
-            </Button>
-          </Link>
-          <Link href="/strategies/create?source=ai">
-            <Button variant="outline">
-              <Sparkles className="mr-2 h-4 w-4" />
-              AI 生成
-            </Button>
-          </Link>
-          <Link href="/strategies/create?source=custom">
-            <Button>
-              <Code className="mr-2 h-4 w-4" />
-              自定义代码
-            </Button>
-          </Link>
-        </div>
+        {/* 创建策略按钮 */}
+        <Link href="/strategies/create">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            创建策略
+          </Button>
+        </Link>
       </div>
 
       {/* 统计卡片 */}
@@ -323,20 +309,12 @@ export default function StrategiesPage() {
                   : '还没有创建任何策略，立即创建您的第一个策略'}
               </p>
               {!searchQuery && sourceFilter === 'all' && categoryFilter === 'all' && (
-                <div className="flex gap-2 justify-center">
-                  <Link href="/strategies/create?source=builtin">
-                    <Button variant="outline">
-                      <Building2 className="mr-2 h-4 w-4" />
-                      基于内置创建
-                    </Button>
-                  </Link>
-                  <Link href="/strategies/create?source=custom">
-                    <Button>
-                      <Code className="mr-2 h-4 w-4" />
-                      自定义代码
-                    </Button>
-                  </Link>
-                </div>
+                <Link href="/strategies/create">
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    创建策略
+                  </Button>
+                </Link>
               )}
             </div>
           </CardContent>
@@ -347,7 +325,7 @@ export default function StrategiesPage() {
             <StrategyCard
               key={strategy.id}
               strategy={strategy}
-              onBacktest={(id) => router.push(`/backtest?strategy=${id}`)}
+              onBacktest={(id) => router.push(`/backtest?type=unified&id=${id}`)}
               onDelete={handleDelete}
               onClone={handleClone}
             />

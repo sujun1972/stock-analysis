@@ -1,112 +1,27 @@
 /**
  * 回测集成组件
- * 一键使用训练好的模型启动回测
+ * 使用训练好的模型启动回测
  */
 
 'use client';
 
-import { useState } from 'react';
 import { useMLStore } from '@/store/mlStore';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 export default function BacktestIntegration() {
   const { selectedModel } = useMLStore();
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
 
-  // 一键回测
-  const handleQuickBacktest = async () => {
+  // 跳转到回测页面（使用ML模型对应的策略）
+  const handleBacktest = () => {
     if (!selectedModel) {
       alert('请先选择一个模型');
       return;
     }
 
-    setLoading(true);
-    try {
-      const config = selectedModel.config;
-
-      // 创建回测任务
-      const response = await axios.post(`${API_BASE}/backtest/run`, {
-        symbols: selectedModel.symbol,  // 修正：使用 symbols (复数)
-        start_date: config.start_date,
-        end_date: config.end_date,
-        initial_cash: 100000,  // 修正：使用 initial_cash
-
-        // 使用ML模型信号作为策略
-        strategy_id: 'ml_model',  // 修正：使用 strategy_id
-        strategy_params: {
-          model_id: selectedModel.model_id,
-          model_type: selectedModel.model_type,
-          target_period: selectedModel.target_period,
-
-          // 交易阈值：预测上涨超过1%才买入，预测下跌超过-1%才卖出
-          buy_threshold: 1.0,
-          sell_threshold: -1.0,
-
-          // 交易设置
-          commission: 0.0003,  // 万三佣金
-          slippage: 0.001,     // 0.1% 滑点
-
-          // 风控参数
-          position_size: 1.0,  // 全仓
-          stop_loss: 0.05,     // 5% 止损
-          take_profit: 0.10,   // 10% 止盈
-        },
-      });
-
-      // 检查响应是否成功
-      if (response.data.status === 'success' && response.data.data) {
-        const backtestId = response.data.data.task_id;
-
-        alert(`回测任务已创建！\n任务ID: ${backtestId}\n\n即将跳转到回测页面...`);
-
-        // 跳转到回测页面
-        router.push(`/backtest?task_id=${backtestId}`);
-      } else {
-        throw new Error('回测任务创建失败：响应格式错误');
-      }
-
-    } catch (error: any) {
-      console.error('创建回测任务失败:', error);
-
-      // 改进错误信息提取
-      let errorMessage = '未知错误';
-
-      if (error.response?.data) {
-        // 后端返回的错误
-        const errorData = error.response.data;
-        errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
-      } else if (error.message) {
-        // 前端错误
-        errorMessage = error.message;
-      }
-
-      alert(`创建失败: ${errorMessage}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 高级回测（跳转到回测页面并预填参数）
-  const handleAdvancedBacktest = () => {
-    if (!selectedModel) {
-      alert('请先选择一个模型');
-      return;
-    }
-
-    // 跳转到回测页面，并通过URL参数传递模型信息
-    const params = new URLSearchParams({
-      model_id: selectedModel.model_id,
-      symbol: selectedModel.symbol,
-      model_type: selectedModel.model_type,
-      start_date: selectedModel.config.start_date,
-      end_date: selectedModel.config.end_date,
-    });
-
-    router.push(`/backtest?${params.toString()}`);
+    // 跳转到回测页面,使用ml类型
+    // id为model_id
+    router.push(`/backtest?type=ml&id=${selectedModel.model_id}`);
   };
 
   return (
@@ -166,25 +81,10 @@ export default function BacktestIntegration() {
           {/* 操作按钮 */}
           <div className="space-y-3">
             <button
-              onClick={handleQuickBacktest}
-              disabled={loading}
-              className="w-full px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              onClick={handleBacktest}
+              className="w-full px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
             >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  创建回测中...
-                </span>
-              ) : (
-                '🚀 一键回测（默认参数）'
-              )}
-            </button>
-
-            <button
-              onClick={handleAdvancedBacktest}
-              className="w-full px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-            >
-              ⚙️ 高级回测（自定义参数）
+              🚀 开始回测
             </button>
           </div>
 

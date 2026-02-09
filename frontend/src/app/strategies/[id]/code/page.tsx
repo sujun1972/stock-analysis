@@ -291,6 +291,14 @@ export default function StrategyCodePage() {
               <div className="flex items-center justify-between">
                 <CardTitle>Python 源代码</CardTitle>
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/strategies/create?mode=ai')}
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    AI生成
+                  </Button>
                   <Button variant="outline" size="sm" onClick={handleCopyCode}>
                     <Copy className="mr-2 h-4 w-4" />
                     复制
@@ -442,7 +450,7 @@ export default function StrategyCodePage() {
           <div className="flex gap-4">
             <Button
               className="flex-1"
-              onClick={() => router.push(`/backtest?strategy=${strategy.id}`)}
+              onClick={() => router.push(`/backtest?type=unified&id=${strategy.id}`)}
             >
               <Play className="mr-2 h-4 w-4" />
               使用此策略进行回测

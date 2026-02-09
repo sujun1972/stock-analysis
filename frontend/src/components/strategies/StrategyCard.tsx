@@ -215,7 +215,7 @@ const StrategyCard = memo(function StrategyCard({
 
         {/* 回测按钮 */}
         {onBacktest && (
-          <Link href={`/backtest?strategy=${strategy.id}`} className="flex-1">
+          <Link href={`/backtest?type=unified&id=${strategy.id}`} className="flex-1">
             <Button size="sm" className="w-full">
               <Play className="mr-1 h-3 w-3" />
               回测

@@ -197,6 +197,63 @@ class ConfigStrategyAdapter:
                             'description': '选股数量'
                         }
                     }
+                },
+                # ML模型策略类型 - 用于集成机器学习预测模型
+                {
+                    'type': 'ml_model',
+                    'name': '机器学习模型策略',
+                    'description': '使用训练好的机器学习模型预测未来收益率,根据预测值生成交易信号',
+                    'category': 'machine_learning',
+                    'default_params': {
+                        'model_id': '',
+                        'buy_threshold': 0.01,
+                        'sell_threshold': -0.01,
+                        'position_size': 1.0,
+                        'stop_loss': 0.05,
+                        'take_profit': 0.10
+                    },
+                    'param_schema': {
+                        'model_id': {
+                            'type': 'string',
+                            'description': '模型ID (UUID格式)',
+                            'required': True
+                        },
+                        'buy_threshold': {
+                            'type': 'float',
+                            'min': 0.0,
+                            'max': 1.0,
+                            'default': 0.01,
+                            'description': '买入阈值:预测上涨幅度超过此值时买入'
+                        },
+                        'sell_threshold': {
+                            'type': 'float',
+                            'min': -1.0,
+                            'max': 0.0,
+                            'default': -0.01,
+                            'description': '卖出阈值:预测下跌幅度低于此值时卖出'
+                        },
+                        'position_size': {
+                            'type': 'float',
+                            'min': 0.0,
+                            'max': 1.0,
+                            'default': 1.0,
+                            'description': '仓位大小:相对于可用资金的比例'
+                        },
+                        'stop_loss': {
+                            'type': 'float',
+                            'min': 0.0,
+                            'max': 1.0,
+                            'default': 0.05,
+                            'description': '止损比例:亏损达到此比例时止损'
+                        },
+                        'take_profit': {
+                            'type': 'float',
+                            'min': 0.0,
+                            'max': 2.0,
+                            'default': 0.10,
+                            'description': '止盈比例:盈利达到此比例时止盈'
+                        }
+                    }
                 }
             ]
 
@@ -226,7 +283,7 @@ class ConfigStrategyAdapter:
             warnings = []
 
             # 检查策略类型是否支持
-            supported_types = ['momentum', 'mean_reversion', 'multi_factor']
+            supported_types = ['momentum', 'mean_reversion', 'multi_factor', 'ml_model']
             if strategy_type not in supported_types:
                 errors.append({
                     'field': 'strategy_type',
@@ -255,6 +312,11 @@ class ConfigStrategyAdapter:
                     'type': 'multi_factor',
                     'required_params': ['factors', 'weights', 'top_n'],
                     'optional_params': []
+                },
+                {
+                    'type': 'ml_model',
+                    'required_params': ['model_id'],
+                    'optional_params': ['buy_threshold', 'sell_threshold', 'position_size', 'stop_loss', 'take_profit']
                 }
             ]
 
@@ -328,6 +390,48 @@ class ConfigStrategyAdapter:
                         warnings.append({
                             'field': 'weights',
                             'message': f'权重总和为 {sum(weights):.2f}，建议为 1.0'
+                        })
+
+            # ml_model 特殊验证
+            if strategy_type == 'ml_model':
+                if 'model_id' in config:
+                    model_id = config['model_id']
+                    if not isinstance(model_id, str):
+                        errors.append({
+                            'field': 'model_id',
+                            'message': 'model_id 必须是字符串'
+                        })
+                    elif not model_id:
+                        errors.append({
+                            'field': 'model_id',
+                            'message': 'model_id 不能为空'
+                        })
+
+                # 验证阈值参数
+                if 'buy_threshold' in config:
+                    buy_threshold = config['buy_threshold']
+                    if not isinstance(buy_threshold, (int, float)):
+                        errors.append({
+                            'field': 'buy_threshold',
+                            'message': 'buy_threshold 必须是数值'
+                        })
+                    elif buy_threshold < 0.0 or buy_threshold > 1.0:
+                        warnings.append({
+                            'field': 'buy_threshold',
+                            'message': f'buy_threshold={buy_threshold} 超出建议范围 [0.0, 1.0]'
+                        })
+
+                if 'sell_threshold' in config:
+                    sell_threshold = config['sell_threshold']
+                    if not isinstance(sell_threshold, (int, float)):
+                        errors.append({
+                            'field': 'sell_threshold',
+                            'message': 'sell_threshold 必须是数值'
+                        })
+                    elif sell_threshold < -1.0 or sell_threshold > 0.0:
+                        warnings.append({
+                            'field': 'sell_threshold',
+                            'message': f'sell_threshold={sell_threshold} 超出建议范围 [-1.0, 0.0]'
                         })
 
             return {

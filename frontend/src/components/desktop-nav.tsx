@@ -14,7 +14,6 @@ export function DesktopNav() {
   const menuItems = [
     { href: "/", label: "首页" },
     { href: "/strategies", label: "策略中心" },
-    { href: "/backtest", label: "策略回测" },
     { href: "/my-backtests", label: "我的回测" },
     { href: "/ai-lab", label: "AI实验舱" },
     { href: "/sync", label: "数据同步" },

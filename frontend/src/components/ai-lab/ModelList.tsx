@@ -333,15 +333,9 @@ export default function ModelList() {
 
   // 高级回测（跳转到回测页面并预填参数）
   const handleAdvancedBacktest = (model: any) => {
-    const params = new URLSearchParams({
-      model_id: model.model_id,
-      symbol: model.symbol,
-      // 注意: model_type 已移除，不再需要通过 URL 传递
-      start_date: model.config.start_date,
-      end_date: model.config.end_date,
-    });
-
-    router.push(`/backtest?${params.toString()}`);
+    // 跳转到回测页面,使用ml类型
+    // id为model_id
+    router.push(`/backtest?type=ml&id=${model.model_id}`);
   };
 
   return (

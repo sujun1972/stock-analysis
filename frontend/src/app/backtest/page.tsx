@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -13,30 +13,39 @@ import type {
   StrategyTypeMeta,
   StrategyConfig,
   DynamicStrategy,
-  BacktestRequest
+  Strategy
 } from '@/types/strategy'
 import StrategyConfigEditor from '@/components/strategies/StrategyConfigEditor'
 import StockPoolSelector from '@/components/backtest/StockPoolSelector'
 import DateRangeSelector from '@/components/backtest/DateRangeSelector'
 import BacktestResultView from '@/components/backtest/BacktestResultView'
-import { Loader2, TrendingUp, Settings, Code } from 'lucide-react'
+import { Loader2, AlertCircle } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+
+/**
+ * 策略来源类型
+ * - predefined: 预定义策略 (如动量策略、均值回归等)
+ * - config: 策略配置 (V1.0兼容)
+ * - dynamic: 动态策略 (V1.0兼容)
+ * - unified: 统一策略 (V2.0)
+ * - ml: ML模型策略
+ */
+type StrategySourceType = 'predefined' | 'config' | 'dynamic' | 'unified' | 'ml'
 
 export default function BacktestPage() {
-  // 策略来源类型
-  const [strategySource, setStrategySource] = useState<'predefined' | 'config' | 'dynamic'>('predefined')
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { toast } = useToast()
 
-  // 预定义策略相关
-  const [strategyTypes, setStrategyTypes] = useState<StrategyTypeMeta[]>([])
-  const [selectedStrategyType, setSelectedStrategyType] = useState<string>('')
+  // URL参数: type(策略类型) 和 id(策略/模型ID)
+  const strategyType = searchParams.get('type') as StrategySourceType | null
+  const strategyId = searchParams.get('id')
+
+  // 策略数据状态
+  const [strategyData, setStrategyData] = useState<any>(null)
   const [strategyConfig, setStrategyConfig] = useState<Record<string, any>>({})
-
-  // 策略配置相关
-  const [strategyConfigs, setStrategyConfigs] = useState<StrategyConfig[]>([])
-  const [selectedConfigId, setSelectedConfigId] = useState<number | undefined>()
-
-  // 动态策略相关
-  const [dynamicStrategies, setDynamicStrategies] = useState<DynamicStrategy[]>([])
-  const [selectedDynamicId, setSelectedDynamicId] = useState<number | undefined>()
+  const [isLoadingStrategy, setIsLoadingStrategy] = useState(true)
+  const [strategyError, setStrategyError] = useState<string | null>(null)
 
   // 回测参数
   const [stockPool, setStockPool] = useState<string[]>([])
@@ -50,123 +59,123 @@ export default function BacktestPage() {
   // 回测状态
   const [isRunning, setIsRunning] = useState(false)
   const [result, setResult] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(false)
 
-  const { toast } = useToast()
-
-  // 加载策略类型列表
+  // 加载策略数据
   useEffect(() => {
-    loadStrategyTypes()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 根据策略来源加载对应数据
-  useEffect(() => {
-    if (strategySource === 'config') {
-      loadStrategyConfigs()
-    } else if (strategySource === 'dynamic') {
-      loadDynamicStrategies()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strategySource])
-
-  // 当选择的策略类型变化时，更新默认配置
-  useEffect(() => {
-    if (selectedStrategyType && (strategyTypes || []).length > 0) {
-      const strategyType = (strategyTypes || []).find(t => t.type === selectedStrategyType)
-      if (strategyType) {
-        setStrategyConfig(strategyType.default_params)
+    const loadStrategyData = async () => {
+      // 验证URL参数
+      if (!strategyType || !strategyId) {
+        setStrategyError('缺少必需的URL参数：type 和 id')
+        setIsLoadingStrategy(false)
+        return
       }
-    }
-  }, [selectedStrategyType, strategyTypes])
 
-  const loadStrategyTypes = async () => {
-    setIsLoading(true)
-    try {
-      const response = await apiClient.getStrategyTypes()
-      if (response.success && response.data) {
-        const types = Array.isArray(response.data) ? response.data : []
-        setStrategyTypes(types)
-        if (types.length > 0) {
-          setSelectedStrategyType(types[0].type)
-          setStrategyConfig(types[0].default_params)
+      // 验证策略类型
+      if (!['predefined', 'config', 'dynamic', 'unified', 'ml'].includes(strategyType)) {
+        setStrategyError(`无效的策略类型: ${strategyType}`)
+        setIsLoadingStrategy(false)
+        return
+      }
+
+      setIsLoadingStrategy(true)
+      setStrategyError(null)
+
+      try {
+        let data: any = null
+
+        switch (strategyType) {
+          case 'predefined': {
+            // 获取预定义策略类型列表
+            const typesResponse = await apiClient.getStrategyTypes()
+            if (typesResponse.success && typesResponse.data) {
+              const types = Array.isArray(typesResponse.data) ? typesResponse.data : []
+              const strategyType = types.find((t: StrategyTypeMeta) => t.type === strategyId)
+              if (strategyType) {
+                data = strategyType
+                setStrategyConfig(strategyType.default_params || {})
+              } else {
+                setStrategyError(`未找到预定义策略: ${strategyId}`)
+              }
+            } else {
+              setStrategyError(typesResponse.error || '无法加载预定义策略')
+            }
+            break
+          }
+
+          case 'ml': {
+            // ML模型策略类型
+            // 首先获取ml_model策略的定义
+            const typesResponse = await apiClient.getStrategyTypes()
+            if (typesResponse.success && typesResponse.data) {
+              const types = Array.isArray(typesResponse.data) ? typesResponse.data : []
+              const mlStrategy = types.find((t: StrategyTypeMeta) => t.type === 'ml_model')
+              if (mlStrategy) {
+                // 使用ml_model策略的元数据,但设置model_id
+                data = {
+                  ...mlStrategy,
+                  name: `机器学习模型策略 (${strategyId})`,
+                  description: `使用ML模型 ${strategyId} 进行预测和交易`
+                }
+                setStrategyConfig({
+                  ...mlStrategy.default_params,
+                  model_id: strategyId // 使用URL中的id作为model_id
+                })
+              } else {
+                setStrategyError('未找到ML模型策略定义')
+              }
+            } else {
+              setStrategyError(typesResponse.error || '无法加载ML策略')
+            }
+            break
+          }
+
+          case 'config': {
+            // 获取策略配置
+            const response = await apiClient.getStrategyConfig(parseInt(strategyId))
+            if (response.success && response.data) {
+              data = response.data
+              setStrategyConfig(data.config || {})
+            } else {
+              setStrategyError(response.error || '无法加载策略配置')
+            }
+            break
+          }
+
+          case 'dynamic': {
+            // 获取动态策略
+            const response = await apiClient.getDynamicStrategy(parseInt(strategyId))
+            if (response.success && response.data) {
+              data = response.data
+            } else {
+              setStrategyError(response.error || '无法加载动态策略')
+            }
+            break
+          }
+
+          case 'unified': {
+            // 获取统一策略
+            const response = await apiClient.getStrategy(parseInt(strategyId))
+            if (response.success && response.data) {
+              data = response.data
+              setStrategyConfig(data.parameters || {})
+            } else {
+              setStrategyError(response.error || '无法加载统一策略')
+            }
+            break
+          }
         }
-      } else {
-        toast({
-          title: '加载失败',
-          description: response.error || '无法加载策略类型列表',
-          variant: 'destructive'
-        })
-      }
-    } catch (error: any) {
-      toast({
-        title: '加载失败',
-        description: error.message || '无法加载策略类型列表',
-        variant: 'destructive'
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
-  const loadStrategyConfigs = async () => {
-    setIsLoading(true)
-    try {
-      const response = await apiClient.getStrategyConfigs({ is_active: true })
-      if (response.success && response.data) {
-        const items = response.data.items || []
-        setStrategyConfigs(items)
-        if (items.length > 0 && !selectedConfigId) {
-          setSelectedConfigId(items[0].id)
-        }
-      } else {
-        toast({
-          title: '加载失败',
-          description: response.error || '无法加载策略配置列表',
-          variant: 'destructive'
-        })
+        setStrategyData(data)
+      } catch (error: any) {
+        console.error('加载策略失败:', error)
+        setStrategyError(error.message || '加载策略时发生错误')
+      } finally {
+        setIsLoadingStrategy(false)
       }
-    } catch (error: any) {
-      toast({
-        title: '加载失败',
-        description: error.message || '无法加载策略配置列表',
-        variant: 'destructive'
-      })
-    } finally {
-      setIsLoading(false)
     }
-  }
 
-  const loadDynamicStrategies = async () => {
-    setIsLoading(true)
-    try {
-      const response = await apiClient.getDynamicStrategies({
-        is_enabled: true,
-        validation_status: 'passed'
-      })
-      if (response.success && response.data) {
-        const items = response.data.items || []
-        setDynamicStrategies(items)
-        if (items.length > 0 && !selectedDynamicId) {
-          setSelectedDynamicId(items[0].id)
-        }
-      } else {
-        toast({
-          title: '加载失败',
-          description: response.error || '无法加载动态策略列表',
-          variant: 'destructive'
-        })
-      }
-    } catch (error: any) {
-      toast({
-        title: '加载失败',
-        description: error.message || '无法加载动态策略列表',
-        variant: 'destructive'
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    loadStrategyData()
+  }, [strategyType, strategyId])
 
   const handleRunBacktest = async () => {
     // 验证参数
@@ -188,37 +197,17 @@ export default function BacktestPage() {
       return
     }
 
-    // 验证策略选择
-    if (strategySource === 'predefined' && !selectedStrategyType) {
+    if (!strategyData) {
       toast({
-        title: '参数错误',
-        description: '请选择预定义策略',
-        variant: 'destructive'
-      })
-      return
-    }
-
-    if (strategySource === 'config' && !selectedConfigId) {
-      toast({
-        title: '参数错误',
-        description: '请选择策略配置',
-        variant: 'destructive'
-      })
-      return
-    }
-
-    if (strategySource === 'dynamic' && !selectedDynamicId) {
-      toast({
-        title: '参数错误',
-        description: '请选择动态策略',
+        title: '策略错误',
+        description: '策略数据未加载',
         variant: 'destructive'
       })
       return
     }
 
     // 构建请求参数
-    const request: BacktestRequest = {
-      strategy_type: strategySource,
+    const request: any = {
       stock_pool: stockPool,
       start_date: dateRange.start,
       end_date: dateRange.end,
@@ -226,13 +215,23 @@ export default function BacktestPage() {
       rebalance_freq: rebalanceFreq
     }
 
-    if (strategySource === 'predefined') {
-      request.strategy_name = selectedStrategyType
+    // 根据策略类型设置不同的参数
+    if (strategyType === 'predefined') {
+      request.strategy_type = 'predefined'
+      request.strategy_name = strategyId!
       request.strategy_config = strategyConfig
-    } else if (strategySource === 'config') {
-      request.strategy_id = selectedConfigId
-    } else if (strategySource === 'dynamic') {
-      request.strategy_id = selectedDynamicId
+    } else if (strategyType === 'ml') {
+      // ML模型策略,使用predefined类型,策略名为ml_model
+      request.strategy_type = 'predefined'
+      request.strategy_name = 'ml_model'
+      request.strategy_config = strategyConfig
+    } else if (strategyType === 'unified') {
+      // 统一策略使用新的 API (V2.0)
+      request.strategy_id = parseInt(strategyId!)
+    } else {
+      // config 和 dynamic 类型使用旧的 API (V1.0)
+      request.strategy_type = strategyType
+      request.strategy_id = parseInt(strategyId!)
     }
 
     // 运行回测
@@ -244,7 +243,7 @@ export default function BacktestPage() {
         setResult(response.data)
         toast({
           title: '回测完成',
-          description: '策略回测已完成，请查看结果'
+          description: '策略回测已完成,请查看结果'
         })
       } else {
         toast({
@@ -264,9 +263,202 @@ export default function BacktestPage() {
     }
   }
 
-  const currentStrategyType = (strategyTypes || []).find(t => t.type === selectedStrategyType)
-  const selectedConfig = (strategyConfigs || []).find(c => c.id === selectedConfigId)
-  const selectedDynamic = (dynamicStrategies || []).find(s => s.id === selectedDynamicId)
+  // 渲染策略信息卡片
+  const renderStrategyInfo = () => {
+    if (!strategyData) return null
+
+    switch (strategyType) {
+      case 'predefined': {
+        const strategy = strategyData as StrategyTypeMeta
+        return (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">策略名称</p>
+              <p className="text-lg font-semibold">{strategy.name}</p>
+            </div>
+            {strategy.description && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">描述</p>
+                <p className="text-sm">{strategy.description}</p>
+              </div>
+            )}
+            {strategy.category && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">类别</p>
+                <p className="text-sm">{strategy.category}</p>
+              </div>
+            )}
+            {strategy.param_schema && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">策略参数</p>
+                <StrategyConfigEditor
+                  strategyType={strategyId!}
+                  config={strategyConfig}
+                  schema={strategy.param_schema}
+                  onChange={setStrategyConfig}
+                />
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      case 'config': {
+        const config = strategyData as StrategyConfig
+        return (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">配置名称</p>
+              <p className="text-lg font-semibold">{config.name}</p>
+            </div>
+            {config.description && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">描述</p>
+                <p className="text-sm">{config.description}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">策略类型</p>
+              <p className="text-sm">{config.strategy_type}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">配置参数</p>
+              <div className="text-xs font-mono mt-1 p-2 bg-muted rounded max-h-40 overflow-auto">
+                {JSON.stringify(config.config, null, 2)}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      case 'dynamic': {
+        const strategy = strategyData as DynamicStrategy
+        return (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">策略名称</p>
+              <p className="text-lg font-semibold">{strategy.display_name}</p>
+            </div>
+            {strategy.description && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">描述</p>
+                <p className="text-sm">{strategy.description}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">验证状态</p>
+              <p className={`text-sm font-medium ${
+                strategy.validation_status === 'passed' ? 'text-green-600' : 'text-yellow-600'
+              }`}>
+                {strategy.validation_status === 'passed' ? '✓ 验证通过' : strategy.validation_status}
+              </p>
+            </div>
+            {strategy.version && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">版本</p>
+                <p className="text-sm">v{strategy.version}</p>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      case 'unified': {
+        const strategy = strategyData as Strategy
+        return (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">策略名称</p>
+              <p className="text-lg font-semibold">{strategy.name}</p>
+            </div>
+            {strategy.description && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">描述</p>
+                <p className="text-sm">{strategy.description}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">来源类型</p>
+              <p className="text-sm">{strategy.source_type}</p>
+            </div>
+            {strategy.category && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">类别</p>
+                <p className="text-sm">{strategy.category}</p>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      case 'ml': {
+        const strategy = strategyData as StrategyTypeMeta
+        return (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">策略类型</p>
+              <p className="text-lg font-semibold">机器学习模型策略</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">模型ID</p>
+              <p className="text-sm font-mono">{strategyId}</p>
+            </div>
+            {strategy.description && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">描述</p>
+                <p className="text-sm">{strategy.description}</p>
+              </div>
+            )}
+            {strategy.param_schema && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">策略参数</p>
+                <StrategyConfigEditor
+                  strategyType="ml_model"
+                  config={strategyConfig}
+                  schema={strategy.param_schema}
+                  onChange={setStrategyConfig}
+                />
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      default:
+        return null
+    }
+  }
+
+  // 显示错误状态
+  if (!isLoadingStrategy && strategyError) {
+    return (
+      <div className="container mx-auto py-6 px-4 max-w-7xl">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">策略回测</h1>
+            <p className="text-muted-foreground mt-2">
+              配置参数,运行回测分析
+            </p>
+          </div>
+
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>加载失败</AlertTitle>
+            <AlertDescription>{strategyError}</AlertDescription>
+          </Alert>
+
+          <div className="flex gap-4">
+            <Button onClick={() => router.back()} variant="outline">
+              返回上一页
+            </Button>
+            <Button onClick={() => router.push('/strategies')} variant="default">
+              前往策略管理
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -275,224 +467,29 @@ export default function BacktestPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">策略回测</h1>
           <p className="text-muted-foreground mt-2">
-            选择策略类型，配置参数，运行回测分析
+            配置参数,运行回测分析
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 左侧: 配置面板 */}
           <div className="lg:col-span-1 space-y-6">
-            {/* 策略选择卡片 */}
+            {/* 策略信息卡片 */}
             <Card>
               <CardHeader>
-                <CardTitle>策略选择</CardTitle>
+                <CardTitle>策略信息</CardTitle>
                 <CardDescription>
-                  选择策略类型并配置参数
+                  当前选择的策略详情
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <Tabs value={strategySource} onValueChange={(v: any) => setStrategySource(v)}>
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="predefined" className="text-xs">
-                      <TrendingUp className="h-3 w-3 mr-1" />
-                      预定义
-                    </TabsTrigger>
-                    <TabsTrigger value="config" className="text-xs">
-                      <Settings className="h-3 w-3 mr-1" />
-                      配置
-                    </TabsTrigger>
-                    <TabsTrigger value="dynamic" className="text-xs">
-                      <Code className="h-3 w-3 mr-1" />
-                      动态
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* 预定义策略 */}
-                  <TabsContent value="predefined" className="space-y-4 mt-4">
-                    {isLoading ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="space-y-2">
-                          <Label>策略类型</Label>
-                          <Select value={selectedStrategyType} onValueChange={setSelectedStrategyType}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="选择策略" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(strategyTypes || []).map(type => (
-                                <SelectItem key={type.type} value={type.type}>
-                                  {type.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {currentStrategyType && (
-                          <>
-                            <div className="p-3 bg-muted rounded-lg">
-                              <p className="text-sm text-muted-foreground">
-                                {currentStrategyType.description}
-                              </p>
-                              {currentStrategyType.category && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  类别: {currentStrategyType.category}
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="space-y-3">
-                              <Label className="text-sm font-semibold">策略参数</Label>
-                              <StrategyConfigEditor
-                                strategyType={selectedStrategyType}
-                                config={strategyConfig}
-                                schema={currentStrategyType.param_schema}
-                                onChange={setStrategyConfig}
-                              />
-                            </div>
-                          </>
-                        )}
-                      </>
-                    )}
-                  </TabsContent>
-
-                  {/* 策略配置 */}
-                  <TabsContent value="config" className="space-y-4 mt-4">
-                    {isLoading ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (strategyConfigs || []).length === 0 ? (
-                      <div className="text-center py-8">
-                        <p className="text-sm text-muted-foreground mb-4">
-                          暂无可用的策略配置
-                        </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.location.href = '/strategies/configs'}
-                        >
-                          前往创建
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="space-y-2">
-                          <Label>选择配置</Label>
-                          <Select
-                            value={selectedConfigId?.toString()}
-                            onValueChange={(v) => setSelectedConfigId(parseInt(v))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="选择配置" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(strategyConfigs || []).map(config => (
-                                <SelectItem key={config.id} value={config.id.toString()}>
-                                  {config.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {selectedConfig && (
-                          <div className="p-3 bg-muted rounded-lg space-y-2">
-                            <div>
-                              <p className="text-xs text-muted-foreground">策略类型</p>
-                              <p className="text-sm font-medium">{selectedConfig.strategy_type}</p>
-                            </div>
-                            {selectedConfig.description && (
-                              <div>
-                                <p className="text-xs text-muted-foreground">描述</p>
-                                <p className="text-sm">{selectedConfig.description}</p>
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-xs text-muted-foreground">配置参数</p>
-                              <div className="text-xs font-mono mt-1 p-2 bg-background rounded">
-                                {JSON.stringify(selectedConfig.config, null, 2)}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </TabsContent>
-
-                  {/* 动态策略 */}
-                  <TabsContent value="dynamic" className="space-y-4 mt-4">
-                    {isLoading ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (dynamicStrategies || []).length === 0 ? (
-                      <div className="text-center py-8">
-                        <p className="text-sm text-muted-foreground mb-4">
-                          暂无可用的动态策略
-                        </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.location.href = '/strategies/dynamic'}
-                        >
-                          前往创建
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="space-y-2">
-                          <Label>选择策略</Label>
-                          <Select
-                            value={selectedDynamicId?.toString()}
-                            onValueChange={(v) => setSelectedDynamicId(parseInt(v))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="选择策略" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(dynamicStrategies || []).map(strategy => (
-                                <SelectItem key={strategy.id} value={strategy.id.toString()}>
-                                  {strategy.display_name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {selectedDynamic && (
-                          <div className="p-3 bg-muted rounded-lg space-y-2">
-                            <div>
-                              <p className="text-xs text-muted-foreground">策略名称</p>
-                              <p className="text-sm font-medium">{selectedDynamic.strategy_name}</p>
-                            </div>
-                            {selectedDynamic.description && (
-                              <div>
-                                <p className="text-xs text-muted-foreground">描述</p>
-                                <p className="text-sm">{selectedDynamic.description}</p>
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-xs text-muted-foreground">验证状态</p>
-                              <p className="text-sm font-medium text-green-600">
-                                {selectedDynamic.validation_status === 'passed' ? '✓ 验证通过' : selectedDynamic.validation_status}
-                              </p>
-                            </div>
-                            {selectedDynamic.version && (
-                              <div>
-                                <p className="text-xs text-muted-foreground">版本</p>
-                                <p className="text-sm">v{selectedDynamic.version}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </TabsContent>
-                </Tabs>
+              <CardContent>
+                {isLoadingStrategy ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  renderStrategyInfo()
+                )}
               </CardContent>
             </Card>
 
@@ -541,7 +538,7 @@ export default function BacktestPage() {
             {/* 运行回测按钮 */}
             <Button
               onClick={handleRunBacktest}
-              disabled={isRunning || isLoading}
+              disabled={isRunning || isLoadingStrategy || !!strategyError}
               className="w-full"
               size="lg"
             >
@@ -558,7 +555,7 @@ export default function BacktestPage() {
                   <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
                   <CardTitle className="mt-4">正在运行回测...</CardTitle>
                   <CardDescription className="mt-2">
-                    请稍候，正在计算策略回测结果
+                    请稍候,正在计算策略回测结果
                   </CardDescription>
                 </div>
               </Card>
@@ -579,7 +576,7 @@ export default function BacktestPage() {
                 </svg>
                 <CardTitle className="mt-4">等待回测结果</CardTitle>
                 <CardDescription className="mt-2">
-                  在左侧配置策略和回测参数，点击&ldquo;运行回测&rdquo;按钮开始
+                  在左侧配置回测参数,点击&ldquo;运行回测&rdquo;按钮开始
                 </CardDescription>
               </Card>
             ) : (

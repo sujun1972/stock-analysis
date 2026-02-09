@@ -142,7 +142,7 @@ function ModelDetailsPageContent() {
     }
   };
 
-  // 跳转到回测页面（预填参数并自动运行）
+  // 跳转到回测页面
   const handleQuickBacktest = () => {
     if (!taskDetail) return;
 
@@ -150,28 +150,9 @@ function ModelDetailsPageContent() {
     const model = models.find(m => String(m.id) === selectedModelId);
     if (!model) return;
 
-    // 构建回测配置
-    const config = {
-      strategyId: 'ml_model',
-      symbols: model.symbol,
-      startDate: model.config?.start_date || '2020-01-01',
-      endDate: model.config?.end_date || new Date().toISOString().split('T')[0],
-      initialCash: 100000,
-      strategyParams: {
-        model_id: model.model_id,
-        buy_threshold: 1.0,
-        sell_threshold: -1.0,
-        commission: 0.0003,
-        slippage: 0.001,
-        position_size: 1.0,
-        stop_loss: 0.05,
-        take_profit: 0.10,
-      }
-    };
-
-    // 跳转到回测页面，通过 URL 参数传递配置
-    const configParam = encodeURIComponent(JSON.stringify(config));
-    router.push(`/backtest?config=${configParam}`);
+    // 跳转到回测页面,使用ml类型
+    // id为model_id
+    router.push(`/backtest?type=ml&id=${model.model_id}`);
   };
 
   /**
