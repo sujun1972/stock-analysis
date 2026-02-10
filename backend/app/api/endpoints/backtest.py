@@ -428,8 +428,88 @@ async def run_backtest_main(
 
         logger.info(f"[回测] 价格数据: {len(prices)} 天 x {len(prices.columns)} 只股票")
 
-        # 5. 生成交易信号
-        if hasattr(strategy, 'calculate_momentum'):
+        # 5. 计算特征数据（如果策略需要）
+        features = None
+        try:
+            # 检查策略是否需要特征
+            import inspect
+            if hasattr(strategy, 'generate_signals'):
+                sig = inspect.signature(strategy.generate_signals)
+                # 如果generate_signals有features参数，则计算特征
+                if 'features' in sig.parameters:
+                    logger.info(f"[回测] 开始计算特征数据...")
+                    from src.data_pipeline.feature_engineer import FeatureEngineer
+
+                    # 为每只股票计算特征
+                    features_dict = {}
+                    for code in stock_pool:
+                        try:
+                            # 获取该股票的数据
+                            stock_data = market_data[market_data['code'] == code].copy()
+                            if stock_data.empty:
+                                continue
+
+                            # 设置trade_date为索引
+                            stock_data = stock_data.set_index('trade_date').sort_index()
+
+                            # 计算特征（不需要target_period，因为回测不需要标签）
+                            engineer = FeatureEngineer(verbose=False)
+
+                            # 只计算技术指标和Alpha因子，不计算目标标签
+                            stock_data = engineer._compute_technical_indicators(stock_data)
+                            stock_data = engineer._compute_alpha_factors(stock_data)
+
+                            # 存储特征
+                            features_dict[code] = stock_data
+
+                        except Exception as e:
+                            logger.warning(f"计算股票 {code} 特征失败: {e}")
+                            continue
+
+                    if features_dict:
+                        # 构建特征DataFrame：MultiIndex格式 (date, factor) -> stock values
+                        # 或者简单格式：date -> factors (所有股票的因子在列中)
+
+                        # 使用简单格式：每个因子作为一列，股票代码也作为列的一部分
+                        # 格式: index=dates, columns=factor_names (对所有股票相同)
+
+                        # 提取所有因子名称（从第一只股票）
+                        first_stock = list(features_dict.keys())[0]
+                        factor_columns = [col for col in features_dict[first_stock].columns
+                                         if col not in ['open', 'high', 'low', 'close', 'volume', 'amount', 'code']]
+
+                        # 构建MultiIndex: (date, stock) -> factors
+                        all_dates = prices.index
+                        features_data = {}
+
+                        for factor in factor_columns:
+                            factor_data = pd.DataFrame(index=all_dates, columns=prices.columns)
+                            for code in prices.columns:
+                                if code in features_dict:
+                                    stock_features = features_dict[code]
+                                    if factor in stock_features.columns:
+                                        # 对齐日期
+                                        factor_data[code] = stock_features[factor].reindex(all_dates)
+                            features_data[factor] = factor_data
+
+                        # 转换为MultiIndex DataFrame: columns=(factor, stock)
+                        features = pd.concat(features_data, axis=1)
+
+                        logger.info(f"[回测] 特征计算完成: {len(factor_columns)} 个因子")
+                    else:
+                        logger.warning(f"[回测] 没有成功计算任何特征数据")
+        except Exception as e:
+            logger.warning(f"[回测] 特征计算失败: {e}", exc_info=True)
+
+        # 6. 生成交易信号
+        # 优先使用 generate_signals 方法（标准接口）
+        if hasattr(strategy, 'generate_signals'):
+            # 标准信号生成接口，传入features参数（如果计算了的话）
+            if features is not None:
+                signals = strategy.generate_signals(prices, features=features)
+            else:
+                signals = strategy.generate_signals(prices)
+        elif hasattr(strategy, 'calculate_momentum'):
             # 动量策略：使用动量分数
             momentum_raw = strategy.calculate_momentum(prices)
             # 重建DataFrame以确保index正确（动量计算可能导致DatetimeIndex丢失）
@@ -443,18 +523,21 @@ async def run_backtest_main(
                 logger.warning(f"信号长度({len(momentum_raw)})与价格长度({len(prices)})不匹配")
                 signals = momentum_raw
         elif hasattr(strategy, 'calculate_scores'):
-            # 其他策略：使用通用评分方法
-            signals = pd.DataFrame(index=prices.index, columns=prices.columns)
+            # 其他策略：使用通用评分方法（指定dtype避免object类型）
+            signals = pd.DataFrame(index=prices.index, columns=prices.columns, dtype=float)
             for date in prices.index:
                 scores = strategy.calculate_scores(prices, date=date)
                 signals.loc[date] = scores
         else:
-            # 降级：使用二元信号
-            signals = strategy.generate_signals(prices)
+            # 降级：无可用信号生成方法
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="策略缺少信号生成方法（generate_signals/calculate_momentum/calculate_scores）"
+            )
 
         logger.info(f"[回测] 信号生成完成: {len(signals)} 个交易日")
 
-        # 6. 运行回测
+        # 7. 运行回测
         engine = BacktestEngine()
         engine.set_market_data(market_data)
 
@@ -471,14 +554,14 @@ async def run_backtest_main(
             rebalance_freq=rebalance_freq
         )
 
-        # 7. 检查结果
+        # 8. 检查结果
         if not result.is_success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"回测执行失败: {result.error_message or result.message}"
             )
 
-        # 8. 格式化结果
+        # 9. 格式化结果
         execution_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
         try:
@@ -661,7 +744,7 @@ async def run_backtest_main(
             equity_curve = []
             trades = []
 
-        # 9. 更新策略统计
+        # 10. 更新策略统计
         try:
             repo.increment_backtest_count(strategy_id)
             repo.update_backtest_metrics(

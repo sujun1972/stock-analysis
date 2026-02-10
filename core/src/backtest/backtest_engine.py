@@ -997,7 +997,13 @@ class BacktestEngine:
         self, portfolio, signals, prices, date, next_date, top_n, holding_period, all_dates
     ):
         # 选股
-        top_stocks = signals.loc[date].dropna().nlargest(top_n).index.tolist()
+        date_signals = signals.loc[date].dropna()
+
+        # 防御性编程：确保数据类型正确（避免object类型导致nlargest失败）
+        if date_signals.dtype == 'object':
+            date_signals = pd.to_numeric(date_signals, errors='coerce').dropna()
+
+        top_stocks = date_signals.nlargest(top_n).index.tolist()
 
         # 卖出
         for stock in portfolio.get_long_stocks_to_sell(top_stocks, date, holding_period, all_dates):
@@ -1022,6 +1028,11 @@ class BacktestEngine:
     ):
         # 选股
         today_signals = signals.loc[date].dropna()
+
+        # 防御性编程：确保数据类型正确（避免object类型导致nlargest/nsmallest失败）
+        if today_signals.dtype == 'object':
+            today_signals = pd.to_numeric(today_signals, errors='coerce').dropna()
+
         top_stocks = today_signals.nlargest(top_n).index.tolist()
         bottom_stocks = today_signals.nsmallest(bottom_n).index.tolist()
 
@@ -1085,7 +1096,13 @@ class BacktestEngine:
             # 调仓
             if date in rebalance_dates and date in chunk_signals.index and i < len(chunk_dates) - 1:
                 next_date = chunk_dates[i + 1]
-                top_stocks = chunk_signals.loc[date].dropna().nlargest(top_n).index.tolist()
+                date_chunk_signals = chunk_signals.loc[date].dropna()
+
+                # 防御性编程：确保数据类型正确
+                if date_chunk_signals.dtype == 'object':
+                    date_chunk_signals = pd.to_numeric(date_chunk_signals, errors='coerce').dropna()
+
+                top_stocks = date_chunk_signals.nlargest(top_n).index.tolist()
 
                 # 卖出
                 for stock, pos in list(portfolio.long_positions.items()):
