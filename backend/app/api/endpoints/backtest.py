@@ -32,7 +32,13 @@ from app.repositories.strategy_execution_repository import StrategyExecutionRepo
 from app.api.error_handler import handle_api_errors
 
 # 添加 core 项目到 Python 路径
-core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
+# 在 Docker 容器中，core 目录在 /app/core
+# 在本地开发环境中，相对路径为 backend/../core
+if Path("/app/core").exists():
+    core_path = Path("/app/core")
+else:
+    core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
+
 if str(core_path) not in sys.path:
     sys.path.insert(0, str(core_path))
 
@@ -702,9 +708,19 @@ async def run_backtest_main(
                     equity_curve = portfolio_value.to_dict('records')
                 elif isinstance(portfolio_value, list):
                     equity_curve = portfolio_value
+
+            # 标准化日期格式为 YYYY-MM-DD（与K线数据保持一致）
+            for item in equity_curve:
+                if 'date' in item:
+                    date_value = item['date']
+                    if isinstance(date_value, pd.Timestamp):
+                        item['date'] = date_value.strftime('%Y-%m-%d')
+                    elif isinstance(date_value, str) and 'T' in date_value:
+                        item['date'] = date_value.split('T')[0]
+
             equity_curve = sanitize_float_values(equity_curve)
 
-            # 提取交易记录
+            # 提取交易记录（优先从trades字段，否则从cost_analyzer获取）
             trades = []
             if 'trades' in result_data:
                 trades_data = result_data['trades']
@@ -712,7 +728,105 @@ async def run_backtest_main(
                     trades = trades_data.to_dict('records')
                 elif isinstance(trades_data, list):
                     trades = trades_data
+            elif 'cost_analyzer' in result_data:
+                cost_analyzer = result_data['cost_analyzer']
+                if hasattr(cost_analyzer, 'get_trades_dataframe'):
+                    trades_df = cost_analyzer.get_trades_dataframe()
+                    if not trades_df.empty:
+                        trades_df = trades_df.reset_index()
+                        trades = trades_df.to_dict('records')
+
+            # 从数据库查询股票名称映射（stock_code -> stock_name）
+            stock_name_map = {}
+            try:
+                if not market_data.empty and 'code' in market_data.columns:
+                    stock_codes = set(market_data['code'].unique())
+
+                    if stock_codes:
+                        from src.database import DatabaseManager
+                        db = DatabaseManager()
+
+                        codes_str = "','".join(stock_codes)
+                        query = f"SELECT code, name FROM stock_basic WHERE code IN ('{codes_str}')"
+
+                        with db.get_connection() as conn:
+                            result = pd.read_sql(query, conn)
+                            if not result.empty:
+                                stock_name_map = dict(zip(result['code'], result['name']))
+                                logger.debug(f"已获取 {len(stock_name_map)} 个股票名称")
+                            else:
+                                logger.warning("stock_basic表中未找到股票名称")
+            except Exception as e:
+                logger.warning(f"查询股票名称失败: {e}")
+
+            # 统一交易记录日期格式并添加股票名称
+            for trade in trades:
+                # 标准化日期为 YYYY-MM-DD 格式
+                if 'date' in trade:
+                    date_value = trade['date']
+                    if isinstance(date_value, pd.Timestamp):
+                        trade['date'] = date_value.strftime('%Y-%m-%d')
+                    elif isinstance(date_value, str) and 'T' in date_value:
+                        trade['date'] = date_value.split('T')[0]
+
+                # 添加股票名称（兼容 stock_code/code/symbol 字段）
+                stock_code = trade.get('stock_code') or trade.get('code') or trade.get('symbol')
+                if stock_code and stock_code in stock_name_map:
+                    trade['stock_name'] = stock_name_map[stock_code]
+
             trades = sanitize_float_values(trades)
+
+            # 生成K线图表数据（最多前10只股票）
+            stock_charts = {}
+            for code in stock_pool[:10]:
+                try:
+                    stock_data = market_data[market_data['code'] == code].copy()
+                    if stock_data.empty:
+                        continue
+
+                    # 转换K线数据
+                    stock_data = stock_data.sort_values('trade_date')
+                    kline_data = []
+                    for _, row in stock_data.iterrows():
+                        kline_data.append({
+                            'date': row['trade_date'].strftime('%Y-%m-%d') if isinstance(row['trade_date'], pd.Timestamp) else str(row['trade_date']),
+                            'open': float(row['open']) if 'open' in row and pd.notna(row['open']) else float(row['close']),
+                            'high': float(row['high']) if 'high' in row and pd.notna(row['high']) else float(row['close']),
+                            'low': float(row['low']) if 'low' in row and pd.notna(row['low']) else float(row['close']),
+                            'close': float(row['close']),
+                            'volume': float(row['volume']) if 'volume' in row and pd.notna(row['volume']) else 0.0,
+                        })
+
+                    # 提取买卖信号
+                    buy_signals = []
+                    sell_signals = []
+                    for trade in trades:
+                        trade_code = trade.get('code') or trade.get('symbol') or trade.get('stock_code')
+                        if trade_code == code:
+                            trade_date = trade.get('date')
+                            if isinstance(trade_date, pd.Timestamp):
+                                trade_date = trade_date.strftime('%Y-%m-%d')
+                            elif trade_date:
+                                trade_date = str(trade_date)
+
+                            signal_point = {'date': trade_date, 'price': float(trade.get('price', 0))}
+                            action = trade.get('type') or trade.get('action')
+                            if action == 'buy':
+                                buy_signals.append(signal_point)
+                            elif action == 'sell':
+                                sell_signals.append(signal_point)
+
+                    stock_charts[code] = {
+                        'kline_data': kline_data,
+                        'buy_signals': buy_signals,
+                        'sell_signals': sell_signals,
+                    }
+
+                except Exception as e:
+                    logger.warning(f"生成股票 {code} 图表数据失败: {e}")
+                    continue
+
+            stock_charts = sanitize_float_values(stock_charts)
 
         except Exception as e:
             logger.error(f"格式化结果失败: {e}", exc_info=True)
@@ -775,8 +889,9 @@ async def run_backtest_main(
             "data": {
                 "strategy_info": strategy_info,
                 "metrics": metrics,
-                "equity_curve": equity_curve[:1000],
-                "trades": trades[:500],
+                "equity_curve": equity_curve,  # 权益曲线数据，用于K线图叠加显示
+                "trades": trades[:500],  # 限制返回最多500条交易记录
+                "stock_charts": stock_charts,  # 股票K线数据和买卖信号
                 "execution_time_ms": execution_time_ms,
                 "backtest_params": {
                     "stock_pool": stock_pool,
