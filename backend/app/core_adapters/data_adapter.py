@@ -185,6 +185,10 @@ class DataAdapter:
             end_date=end_str,
         )
 
+        # 将DatetimeIndex转为普通列'date'，避免缓存序列化时丢失
+        if not df.empty and isinstance(df.index, pd.DatetimeIndex):
+            df = df.reset_index()  # index变成'date'列
+
         # 缓存结果（转换为可序列化格式）
         await cache.set(
             cache_key,

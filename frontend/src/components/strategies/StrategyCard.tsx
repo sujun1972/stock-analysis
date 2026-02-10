@@ -165,17 +165,17 @@ const StrategyCard = memo(function StrategyCard({
           <div className="bg-muted/50 rounded-lg p-3 space-y-1">
             <p className="text-xs font-medium text-muted-foreground">平均表现</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              {strategy.avg_sharpe_ratio && (
+              {strategy.avg_sharpe_ratio !== null && strategy.avg_sharpe_ratio !== undefined && (
                 <div>
                   <span className="text-muted-foreground">夏普率: </span>
-                  <span className="font-medium">{strategy.avg_sharpe_ratio.toFixed(2)}</span>
+                  <span className="font-medium">{Number(strategy.avg_sharpe_ratio).toFixed(2)}</span>
                 </div>
               )}
-              {strategy.avg_annual_return && (
+              {strategy.avg_annual_return !== null && strategy.avg_annual_return !== undefined && (
                 <div>
                   <span className="text-muted-foreground">年化收益: </span>
                   <span className="font-medium">
-                    {(strategy.avg_annual_return * 100).toFixed(2)}%
+                    {(Number(strategy.avg_annual_return) * 100).toFixed(2)}%
                   </span>
                 </div>
               )}

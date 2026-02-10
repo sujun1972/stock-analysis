@@ -3,13 +3,19 @@
 interface Metrics {
   total_return?: number
   annualized_return?: number
+  annual_return?: number  // 添加支持annual_return字段
   sharpe_ratio?: number
   sortino_ratio?: number
   calmar_ratio?: number
   max_drawdown?: number
   max_drawdown_duration?: number
   volatility?: number
+  downside_deviation?: number  // 添加下行偏差字段
   win_rate?: number
+  profit_factor?: number  // 添加盈亏比字段
+  average_win?: number  // 添加平均盈利字段
+  average_loss?: number  // 添加平均亏损字段
+  win_loss_ratio?: number  // 添加盈亏比率字段
   alpha?: number | null
   beta?: number | null
   information_ratio?: number | null
@@ -66,19 +72,26 @@ export default function PerformanceMetrics({ metrics, mode = 'multi' }: Performa
         },
         {
           label: '年化收益率',
-          value: formatPercent(metrics.annualized_return),
-          colorClass: getColorClass(metrics.annualized_return)
-        },
-        {
-          label: '波动率',
-          value: formatPercent(metrics.volatility),
-          colorClass: 'text-gray-700 dark:text-gray-300'
+          value: formatPercent(metrics.annual_return || metrics.annualized_return),
+          colorClass: getColorClass(metrics.annual_return || metrics.annualized_return)
         }
       ]
     },
     {
       category: '风险指标',
       items: [
+        {
+          label: '波动率(年化)',
+          value: formatPercent(metrics.volatility),
+          colorClass: 'text-gray-700 dark:text-gray-300',
+          tooltip: '年化收益率的标准差'
+        },
+        {
+          label: '下行偏差',
+          value: formatPercent(metrics.downside_deviation),
+          colorClass: 'text-gray-700 dark:text-gray-300',
+          tooltip: '只统计负收益的波动'
+        },
         {
           label: '最大回撤',
           value: formatPercent(metrics.max_drawdown),
@@ -88,12 +101,7 @@ export default function PerformanceMetrics({ metrics, mode = 'multi' }: Performa
           label: '最大回撤持续期',
           value: formatDays(metrics.max_drawdown_duration),
           colorClass: 'text-gray-700 dark:text-gray-300'
-        },
-        ...(mode === 'single' && metrics.win_rate !== undefined ? [{
-          label: '胜率',
-          value: formatPercent(metrics.win_rate),
-          colorClass: getColorClass(metrics.win_rate)
-        }] : [])
+        }
       ]
     },
     {
@@ -116,6 +124,41 @@ export default function PerformanceMetrics({ metrics, mode = 'multi' }: Performa
           value: formatNumber(metrics.calmar_ratio),
           colorClass: getColorClass(metrics.calmar_ratio),
           tooltip: '年化收益率/最大回撤'
+        }
+      ]
+    },
+    {
+      category: '交易统计',
+      items: [
+        {
+          label: '胜率',
+          value: formatPercent(metrics.win_rate),
+          colorClass: getColorClass(metrics.win_rate),
+          tooltip: '盈利交易占比'
+        },
+        {
+          label: '盈亏比',
+          value: formatNumber(metrics.profit_factor),
+          colorClass: getColorClass(metrics.profit_factor),
+          tooltip: '总盈利/总亏损'
+        },
+        {
+          label: '平均盈利',
+          value: formatPercent(metrics.average_win),
+          colorClass: getColorClass(metrics.average_win),
+          tooltip: '单笔盈利交易的平均收益率'
+        },
+        {
+          label: '平均亏损',
+          value: formatPercent(metrics.average_loss),
+          colorClass: getColorClass(metrics.average_loss),
+          tooltip: '单笔亏损交易的平均损失率'
+        },
+        {
+          label: '盈亏比率',
+          value: formatNumber(metrics.win_loss_ratio),
+          colorClass: getColorClass(metrics.win_loss_ratio),
+          tooltip: '平均盈利/平均亏损'
         }
       ]
     }
