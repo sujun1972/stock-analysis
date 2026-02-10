@@ -32,7 +32,7 @@ class VolumeIndicators(BaseIndicator):
     def add_obv(
         self,
         price_col: str = 'close',
-        volume_col: str = 'vol'
+        volume_col: str = 'volume'
     ) -> pd.DataFrame:
         """
         添加OBV指标（能量潮）
@@ -55,7 +55,7 @@ class VolumeIndicators(BaseIndicator):
     def add_volume_ma(
         self,
         periods: list = [5, 10, 20],
-        volume_col: str = 'vol'
+        volume_col: str = 'volume'
     ) -> pd.DataFrame:
         """
         添加成交量移动平均线

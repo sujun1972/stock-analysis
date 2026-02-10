@@ -39,13 +39,12 @@ class FeatureEngineer:
         self.verbose = verbose
         self.feature_names = []
 
-        # 加载配置
+        # 加载配置（如果外部配置系统不可用，静默使用默认配置）
         if config is None:
             try:
                 from config.features import get_feature_config
                 self.config = get_feature_config()
             except ImportError:
-                logger.warning("无法导入配置系统，使用默认硬编码值")
                 self.config = None
         else:
             self.config = config

@@ -76,13 +76,12 @@ class AlphaFactors:
             - inplace=True: 直接修改原数据，最省内存但有风险
             - enable_copy_on_write=False: 传统模式，兼容旧代码
         """
-        # 加载配置
+        # 加载配置（如果外部配置系统不可用，静默使用默认配置）
         if config is None:
             try:
                 from config.features import get_feature_config
                 config = get_feature_config()
             except ImportError:
-                logger.warning("无法导入配置系统，使用默认硬编码值")
                 config = None
 
         # 从配置更新 FactorConfig（向后兼容）
