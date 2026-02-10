@@ -87,19 +87,29 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
   }
 
   /**
+   * 去除日期字符串中的时间部分
+   * @param dateStr - 日期字符串（如 "2025-01-23" 或 "2025-01-23 00:00:00"）
+   * @returns 只包含日期的字符串（如 "2025-01-23"）
+   */
+  const removeDateTimePart = useCallback((dateStr: string): string => {
+    return dateStr.includes(' ') ? dateStr.split(' ')[0] : dateStr
+  }, [])
+
+  /**
    * 格式化日期：添加星期信息
-   * @param dateStr - 日期字符串（如 "2025-01-23"）
+   * @param dateStr - 日期字符串（如 "2025-01-23" 或 "2025-01-23 00:00:00"）
    * @returns 格式化后的日期字符串（如 "2025年01月23日 星期四"）
    */
-  const formatDateWithWeekday = (dateStr: string): string => {
-    const date = new Date(dateStr)
+  const formatDateWithWeekday = useCallback((dateStr: string): string => {
+    const dateOnly = removeDateTimePart(dateStr)
+    const date = new Date(dateOnly)
     const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const weekday = weekdays[date.getDay()]
     return `${year}年${month}月${day}日 ${weekday}`
-  }
+  }, [removeDateTimePart])
 
   // 检查数据是否可用
   // RSI支持多周期：RSI6, RSI12, RSI24
@@ -421,8 +431,22 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
         boundaryGap: false,
         axisLine: { onZero: false },
         splitLine: { show: false },
-        axisLabel: { show: index === grids.length - 1 }, // 只在最后一个面板显示x轴标签
-        axisTick: { show: index === grids.length - 1 }   // 只在最后一个面板显示x轴刻度线
+        axisLabel: {
+          show: index === grids.length - 1,  // 只在最后一个面板显示x轴标签
+          formatter: removeDateTimePart  // 格式化日期：只显示 YYYY-MM-DD
+        },
+        axisTick: { show: index === grids.length - 1 },   // 只在最后一个面板显示x轴刻度线
+        axisPointer: {
+          show: true,
+          lineStyle: {
+            color: '#999',
+            width: 1,
+            type: 'dashed'
+          },
+          label: {
+            formatter: (params: any) => removeDateTimePart(params.value || '')
+          }
+        }
       })),
       yAxis: grids.map((_, index) => {
         const isRSIPanel = index > 0 && enabledIndicators[index - 1] === 'rsi'
@@ -432,7 +456,13 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
           scale: true,
           gridIndex: index,
           ...(isRSIPanel ? { min: 0, max: 100 } : {}),  // RSI固定0-100范围
-          splitArea: { show: true }
+          splitArea: { show: true },
+          axisPointer: {
+            show: true,
+            label: {
+              show: true
+            }
+          }
         }
 
         // 成交量Y轴：添加万/亿单位格式化
@@ -440,10 +470,8 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
           yAxisConfig.axisLabel = {
             formatter: (value: number) => formatVolume(value)
           }
-          yAxisConfig.axisPointer = {
-            label: {
-              formatter: (params: any) => formatVolume(params.value)
-            }
+          yAxisConfig.axisPointer.label = {
+            formatter: (params: any) => formatVolume(params.value)
           }
         }
 
@@ -468,7 +496,13 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
       tooltip: {
         trigger: 'axis',
         axisPointer: {
-          type: 'cross'
+          type: 'cross',
+          link: [{ xAxisIndex: 'all' }],  // 让十字线在所有x轴上联动
+          crossStyle: {
+            color: '#999',
+            width: 1,
+            type: 'dashed'
+          }
         },
         borderWidth: 1,
         borderColor: '#ccc',

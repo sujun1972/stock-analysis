@@ -179,7 +179,9 @@ class ApiClient {
     data: FeatureData[]
   }> {
     const response = await axiosInstance.get(`/api/features/${code}`, { params })
-    return response.data
+    // 后端返回的结构是 { code: 200, message: "...", data: {...} }
+    // 需要返回 data 字段中的内容
+    return response.data.data
   }
 
   // 计算特征
