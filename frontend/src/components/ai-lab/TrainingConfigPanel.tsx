@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { format, parse, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { extractApiError } from '@/lib/error-formatter';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -68,7 +69,7 @@ const TrainingConfigPanel = memo(function TrainingConfigPanel({ isInDialog = fal
       toast({
         variant: 'destructive',
         title: '训练启动失败',
-        description: error.response?.data?.detail || '无法启动训练任务',
+        description: extractApiError(error, '无法启动训练任务'),
       });
     } finally {
       setLoading(false);

@@ -242,7 +242,8 @@ async def run_backtest_main(
     stamp_tax_rate: float = Body(0.001, ge=0, le=0.01, description="印花税率"),
     min_commission: float = Body(5.0, ge=0, description="最小佣金"),
     slippage: float = Body(0.0, ge=0, description="滑点"),
-    strict_mode: bool = Body(True, description="严格模式（代码验证）")
+    strict_mode: bool = Body(True, description="严格模式（代码验证）"),
+    strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数（覆盖默认参数，用于ML模型ID等）")
 ) -> Dict[str, Any]:
     """
     运行回测
@@ -366,10 +367,12 @@ async def run_backtest_main(
                     import json
                     default_params = json.loads(default_params) if default_params else {}
 
-                # 实例化策略
-                # BaseStrategy 子类需要 name 和 config 参数
+                # 合并策略参数：优先使用传入的参数，否则使用默认参数
                 strategy_name = strategy_record['name']
                 strategy_config = default_params or {}
+                if strategy_params:
+                    strategy_config.update(strategy_params)
+                    logger.info(f"使用自定义策略参数: {strategy_params}")
 
                 strategy = strategy_class(name=strategy_name, config=strategy_config)
 

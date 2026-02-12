@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { format, parse, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { extractApiError } from '@/lib/error-formatter';
 import { MultiStockSelector } from './MultiStockSelector';
 import { Layers, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -99,7 +100,7 @@ const TrainingConfigPanelV2 = memo(function TrainingConfigPanelV2({ isInDialog =
       toast({
         variant: 'destructive',
         title: '训练启动失败',
-        description: error.response?.data?.detail || '无法启动训练任务',
+        description: extractApiError(error, '无法启动训练任务'),
       });
     } finally {
       setLoading(false);

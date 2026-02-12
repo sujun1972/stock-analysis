@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { PlayCircle, Settings, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { extractApiError } from '@/lib/error-formatter';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
@@ -261,7 +262,7 @@ export default function ModelList() {
       toast({
         variant: 'destructive',
         title: '删除失败',
-        description: error.response?.data?.detail || error.message || '未知错误',
+        description: extractApiError(error, '未知错误'),
       });
     } finally {
       setModelToDelete(null);

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
+import { extractApiError } from '@/lib/error-formatter'
 import type {
   StrategyTypeMeta,
   StrategyConfig,
@@ -59,6 +60,27 @@ export default function BacktestPage() {
   // 回测状态
   const [isRunning, setIsRunning] = useState(false)
   const [result, setResult] = useState<any>(null)
+
+  // ML策略ID（从数据库查询）
+  const [mlStrategyId, setMlStrategyId] = useState<number | null>(null)
+
+  // 加载ML策略ID
+  useEffect(() => {
+    const loadMLStrategyId = async () => {
+      try {
+        const response = await apiClient.getStrategies({ source_type: 'builtin' })
+        if (response.success && response.data) {
+          const mlStrategy = response.data.find((s: any) => s.name === 'ml_model')
+          if (mlStrategy) {
+            setMlStrategyId(mlStrategy.id)
+          }
+        }
+      } catch (error) {
+        console.error('加载ML策略ID失败:', error)
+      }
+    }
+    loadMLStrategyId()
+  }, [])
 
   // 加载策略数据
   useEffect(() => {
@@ -216,29 +238,54 @@ export default function BacktestPage() {
     }
 
     // 根据策略类型设置不同的参数
-    if (strategyType === 'predefined') {
-      request.strategy_type = 'predefined'
-      request.strategy_name = strategyId!
-      request.strategy_config = strategyConfig
-    } else if (strategyType === 'ml') {
-      // ML模型策略,使用predefined类型,策略名为ml_model
-      request.strategy_type = 'predefined'
-      request.strategy_name = 'ml_model'
-      request.strategy_config = strategyConfig
-    } else if (strategyType === 'unified') {
-      // 统一策略使用新的 API (V2.0)
-      request.strategy_id = parseInt(strategyId!)
-    } else {
-      // config 和 dynamic 类型使用旧的 API (V1.0)
-      request.strategy_type = strategyType
-      request.strategy_id = parseInt(strategyId!)
-    }
-
-    // 运行回测
     setIsRunning(true)
     setResult(null)
     try {
-      const response = await apiClient.runUnifiedBacktest(request)
+      let response: any
+
+      if (strategyType === 'ml') {
+        // ML模型回测：使用内置的ml_model策略
+        if (!mlStrategyId) {
+          toast({
+            title: '策略错误',
+            description: 'ML策略未加载，请刷新页面重试',
+            variant: 'destructive'
+          })
+          setIsRunning(false)
+          return
+        }
+
+        // 使用统一回测接口，传递ml_model策略ID和模型ID
+        // strategyId 是 URL 中的 ML 模型 ID
+        response = await apiClient.runUnifiedBacktest({
+          strategy_id: mlStrategyId,  // ml_model 策略的数据库 ID
+          stock_pool: stockPool,
+          start_date: dateRange.start,
+          end_date: dateRange.end,
+          initial_capital: initialCapital,
+          rebalance_freq: rebalanceFreq,
+          // 通过 strategy_params 传递模型 ID
+          strategy_params: {
+            model_id: strategyId  // ML 模型的 ID (来自 URL 参数)
+          }
+        })
+      } else {
+        // 其他类型的策略回测：使用统一回测API
+        if (strategyType === 'predefined') {
+          request.strategy_type = 'predefined'
+          request.strategy_name = strategyId!
+          request.strategy_config = strategyConfig
+        } else if (strategyType === 'unified') {
+          // 统一策略使用新的 API (V2.0)
+          request.strategy_id = parseInt(strategyId!)
+        } else {
+          // config 和 dynamic 类型使用旧的 API (V1.0)
+          request.strategy_type = strategyType
+          request.strategy_id = parseInt(strategyId!)
+        }
+
+        response = await apiClient.runUnifiedBacktest(request)
+      }
       if (response.success && response.data) {
         setResult(response.data)
         toast({
@@ -253,9 +300,10 @@ export default function BacktestPage() {
         })
       }
     } catch (error: any) {
+      // 格式化错误信息，处理 Pydantic 验证错误等复杂对象
       toast({
         title: '回测失败',
-        description: error.response?.data?.detail || error.message || '网络错误',
+        description: extractApiError(error, '网络错误'),
         variant: 'destructive'
       })
     } finally {

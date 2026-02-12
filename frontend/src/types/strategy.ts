@@ -189,6 +189,9 @@ export interface BacktestRequest {
   initial_capital?: number
   rebalance_freq?: 'D' | 'W' | 'M'
 
+  // 策略参数（用于覆盖默认参数，例如 ML 模型 ID）
+  strategy_params?: Record<string, any>
+
   // V1.0 兼容字段（废弃）
   /** @deprecated */
   strategy_type?: 'predefined' | 'config' | 'dynamic'

@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Trash2, Plus, Sparkles, User, X, Rocket, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { extractApiError } from '@/lib/error-formatter';
 import { useModels, useDeleteModel } from '@/hooks/useModels';
 import TrainingConfigPanel from './TrainingConfigPanel';
 import TrainingMonitor from './TrainingMonitor';
@@ -321,7 +322,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
       toast({
         variant: 'destructive',
         title: '删除失败',
-        description: error.response?.data?.detail || error.message || '未知错误',
+        description: extractApiError(error, '未知错误'),
       });
     }
   };
@@ -349,7 +350,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
       toast({
         variant: 'destructive',
         title: '删除失败',
-        description: error.response?.data?.detail || error.message || '未知错误',
+        description: extractApiError(error, '未知错误'),
       });
     }
   };

@@ -26,10 +26,11 @@ interface BacktestResultViewProps {
 const BacktestResultView = memo(function BacktestResultView({
   result
 }: BacktestResultViewProps) {
+  // 交易明细分页状态 - Hooks must be called before any early returns
+  const [tradesPage, setTradesPage] = useState(1)
+
   if (!result) return null
 
-  // 交易明细分页状态
-  const [tradesPage, setTradesPage] = useState(1)
   const tradesPerPage = 20
   const totalTrades = result.trades?.length || 0
   const totalPages = Math.ceil(totalTrades / tradesPerPage)
