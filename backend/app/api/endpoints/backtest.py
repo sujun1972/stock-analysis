@@ -243,7 +243,8 @@ async def run_backtest_main(
     min_commission: float = Body(5.0, ge=0, description="最小佣金"),
     slippage: float = Body(0.0, ge=0, description="滑点"),
     strict_mode: bool = Body(True, description="严格模式（代码验证）"),
-    strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数（覆盖默认参数，用于ML模型ID等）")
+    strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数（覆盖默认参数，用于ML模型ID等）"),
+    exit_strategy_ids: Optional[List[int]] = Body(None, description="离场策略ID列表（可选，支持多个）")
 ) -> Dict[str, Any]:
     """
     运行回测
@@ -546,7 +547,55 @@ async def run_backtest_main(
 
         logger.info(f"[回测] 信号生成完成: {len(signals)} 个交易日")
 
-        # 7. 运行回测
+        # 7. 加载离场策略（如果指定）
+        exit_manager = None
+        if exit_strategy_ids and len(exit_strategy_ids) > 0:
+            try:
+                from src.ml.exit_strategy import CompositeExitManager
+
+                exit_strategies = []
+                for exit_id in exit_strategy_ids:
+                    exit_record = repo.get_by_id(exit_id)
+                    if not exit_record:
+                        logger.warning(f"离场策略不存在: exit_strategy_id={exit_id}")
+                        continue
+
+                    if exit_record['strategy_type'] != 'exit':
+                        logger.warning(f"策略 {exit_id} 不是离场策略，跳过")
+                        continue
+
+                    # 动态执行离场策略代码
+                    try:
+                        exec_globals = {}
+                        exec(exit_record['code'], exec_globals)
+                        exit_class = exec_globals[exit_record['class_name']]
+
+                        # 使用默认参数实例化
+                        default_params = exit_record.get('default_params', {})
+                        if isinstance(default_params, str):
+                            import json
+                            default_params = json.loads(default_params)
+
+                        exit_instance = exit_class(**default_params) if default_params else exit_class()
+                        exit_strategies.append(exit_instance)
+                        logger.info(f"成功加载离场策略: {exit_record['display_name']}")
+
+                    except Exception as e:
+                        logger.error(f"加载离场策略失败 {exit_id}: {e}", exc_info=True)
+                        continue
+
+                if exit_strategies:
+                    exit_manager = CompositeExitManager(
+                        exit_strategies=exit_strategies,
+                        enable_reverse_entry=True,
+                        enable_risk_control=True
+                    )
+                    logger.info(f"[回测] 已加载 {len(exit_strategies)} 个离场策略")
+
+            except Exception as e:
+                logger.warning(f"[回测] 加载离场策略失败: {e}", exc_info=True)
+
+        # 8. 运行回测
         engine = BacktestEngine()
         engine.set_market_data(market_data)
 
@@ -560,7 +609,8 @@ async def run_backtest_main(
             prices=prices,
             top_n=top_n,
             holding_period=holding_period,
-            rebalance_freq=rebalance_freq
+            rebalance_freq=rebalance_freq,
+            exit_manager=exit_manager  # 传递离场管理器
         )
 
         # 8. 检查结果
@@ -723,9 +773,15 @@ async def run_backtest_main(
 
             equity_curve = sanitize_float_values(equity_curve)
 
-            # 提取交易记录（优先从trades字段，否则从cost_analyzer获取）
+            # 提取交易记录（优先从recorder字段，否则从trades或cost_analyzer获取）
             trades = []
-            if 'trades' in result_data:
+            if 'recorder' in result_data:
+                # 优先使用recorder的交易记录（包含离场原因）
+                recorder = result_data['recorder']
+                if hasattr(recorder, 'trades'):
+                    trades = recorder.trades.copy() if isinstance(recorder.trades, list) else []
+                    logger.info(f"从recorder获取到 {len(trades)} 条交易记录")
+            elif 'trades' in result_data:
                 trades_data = result_data['trades']
                 if isinstance(trades_data, pd.DataFrame):
                     trades = trades_data.to_dict('records')
@@ -776,6 +832,10 @@ async def run_backtest_main(
                 stock_code = trade.get('stock_code') or trade.get('code') or trade.get('symbol')
                 if stock_code and stock_code in stock_name_map:
                     trade['stock_name'] = stock_name_map[stock_code]
+
+                # 兼容性处理：direction -> action
+                if 'direction' in trade and 'action' not in trade:
+                    trade['action'] = trade['direction']
 
             trades = sanitize_float_values(trades)
 
@@ -886,6 +946,10 @@ async def run_backtest_main(
             'class_name': strategy_record['class_name'],
             'category': strategy_record['category'],
         }
+
+        # 修正metrics中的total_trades，使用实际交易记录数量
+        if metrics and isinstance(metrics, dict):
+            metrics['total_trades'] = len(trades)
 
         return {
             "success": True,

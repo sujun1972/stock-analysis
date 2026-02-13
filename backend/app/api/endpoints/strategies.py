@@ -223,6 +223,7 @@ async def create_strategy(data: StrategyCreate) -> Dict[str, Any]:
 @handle_api_errors
 async def list_strategies(
     source_type: Optional[str] = Query(None, description="来源类型过滤: builtin/ai/custom"),
+    strategy_type: Optional[str] = Query(None, description="策略类型过滤: entry/exit"),
     category: Optional[str] = Query(None, description="类别过滤"),
     is_enabled: Optional[bool] = Query(None, description="是否启用过滤"),
     validation_status: Optional[str] = Query(None, description="验证状态过滤"),
@@ -261,6 +262,7 @@ async def list_strategies(
 
     result = repo.list_all(
         source_type=source_type,
+        strategy_type=strategy_type,
         category=category,
         is_enabled=is_enabled,
         validation_status=validation_status,

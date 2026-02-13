@@ -33,6 +33,10 @@ class StrategyCreate(BaseModel):
         ...,
         description="来源类型: builtin (系统内置), ai (AI生成), custom (用户自定义)"
     )
+    strategy_type: str = Field(
+        "entry",
+        description="策略类型: entry (入场策略), exit (离场策略)"
+    )
 
     # 策略元信息
     description: Optional[str] = Field(None, description="策略说明")
@@ -53,6 +57,15 @@ class StrategyCreate(BaseModel):
         allowed = ["builtin", "ai", "custom"]
         if v not in allowed:
             raise ValueError(f"source_type 必须是以下之一: {', '.join(allowed)}")
+        return v
+
+    @field_validator("strategy_type")
+    @classmethod
+    def validate_strategy_type(cls, v):
+        """验证策略类型"""
+        allowed = ["entry", "exit"]
+        if v not in allowed:
+            raise ValueError(f"strategy_type 必须是以下之一: {', '.join(allowed)}")
         return v
 
     @field_validator("class_name")
@@ -164,6 +177,7 @@ class StrategyResponse(BaseModel):
 
     # 来源分类
     source_type: str = Field(..., description="来源类型: builtin/ai/custom")
+    strategy_type: str = Field("entry", description="策略类型: entry/exit")
 
     # 策略元信息
     description: Optional[str] = Field(None, description="策略说明")
@@ -206,6 +220,7 @@ class StrategyListResponse(BaseModel):
     display_name: str
     class_name: str
     source_type: str
+    strategy_type: str
     description: Optional[str]
     category: Optional[str]
     tags: List[str]
@@ -256,6 +271,9 @@ class SimplifiedBacktestRequest(BaseModel):
 
     # 高级选项
     strict_mode: bool = Field(True, description="严格模式")
+
+    # 离场策略（可选，支持多个）
+    exit_strategy_ids: Optional[List[int]] = Field(None, description="离场策略ID列表")
 
     @field_validator("start_date", "end_date")
     @classmethod

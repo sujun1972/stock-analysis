@@ -56,12 +56,12 @@ class StrategyRepository(BaseRepository):
         query = """
             INSERT INTO strategies (
                 name, display_name, code, code_hash, class_name,
-                source_type, description, category, tags,
+                source_type, strategy_type, description, category, tags,
                 default_params, validation_status, validation_errors,
                 validation_warnings, risk_level, parent_strategy_id,
                 created_by
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """
 
@@ -72,6 +72,7 @@ class StrategyRepository(BaseRepository):
             code_hash,
             data['class_name'],
             data['source_type'],
+            data.get('strategy_type', 'entry'),
             data.get('description'),
             data.get('category'),
             data.get('tags', []),
@@ -108,7 +109,7 @@ class StrategyRepository(BaseRepository):
         query = """
             SELECT
                 id, name, display_name, code, code_hash, class_name,
-                source_type, description, category, tags,
+                source_type, strategy_type, description, category, tags,
                 default_params, validation_status, validation_errors,
                 validation_warnings, risk_level, is_enabled,
                 usage_count, backtest_count, avg_sharpe_ratio, avg_annual_return,
@@ -145,7 +146,7 @@ class StrategyRepository(BaseRepository):
         query = """
             SELECT
                 id, name, display_name, code, code_hash, class_name,
-                source_type, description, category, tags,
+                source_type, strategy_type, description, category, tags,
                 default_params, validation_status, validation_errors,
                 validation_warnings, risk_level, is_enabled,
                 usage_count, backtest_count, avg_sharpe_ratio, avg_annual_return,
@@ -172,6 +173,7 @@ class StrategyRepository(BaseRepository):
     def list_all(
         self,
         source_type: Optional[str] = None,
+        strategy_type: Optional[str] = None,
         category: Optional[str] = None,
         is_enabled: Optional[bool] = None,
         validation_status: Optional[str] = None,
@@ -185,6 +187,7 @@ class StrategyRepository(BaseRepository):
 
         Args:
             source_type: 来源类型过滤 (builtin/ai/custom)
+            strategy_type: 策略类型过滤 (entry/exit)
             category: 类别过滤
             is_enabled: 是否启用过滤
             validation_status: 验证状态过滤
@@ -212,6 +215,10 @@ class StrategyRepository(BaseRepository):
             where_clauses.append("source_type = %s")
             params.append(source_type)
 
+        if strategy_type:
+            where_clauses.append("strategy_type = %s")
+            params.append(strategy_type)
+
         if category:
             where_clauses.append("category = %s")
             params.append(category)
@@ -236,7 +243,7 @@ class StrategyRepository(BaseRepository):
             select_fields = "*"
         else:
             select_fields = """
-                id, name, display_name, class_name, source_type,
+                id, name, display_name, class_name, source_type, strategy_type,
                 description, category, tags, validation_status,
                 risk_level, is_enabled, usage_count, backtest_count,
                 avg_sharpe_ratio, avg_annual_return, created_at, updated_at

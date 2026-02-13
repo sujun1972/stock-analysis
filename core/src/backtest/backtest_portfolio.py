@@ -38,12 +38,47 @@ class BacktestPortfolio:
         entry_price: float,
         entry_date: datetime
     ):
-        """添加多头持仓"""
-        self.long_positions[stock_code] = {
-            'shares': shares,
-            'entry_price': entry_price,
-            'entry_date': entry_date
-        }
+        """
+        添加多头持仓（支持仓位累加）
+
+        如果股票已存在持仓，则累加股数并使用加权平均法计算新的成本价。
+        这样可以正确处理多次买入同一只股票的场景。
+
+        Args:
+            stock_code: 股票代码
+            shares: 新增股数
+            entry_price: 本次买入价格
+            entry_date: 本次买入日期
+
+        Example:
+            # 第一次买入: 1000股 @ 10元，成本价=10元
+            portfolio.add_long_position('600000.SH', 1000, 10.0, date1)
+
+            # 第二次买入: 500股 @ 12元，成本价=(1000*10 + 500*12)/1500 = 10.67元
+            portfolio.add_long_position('600000.SH', 500, 12.0, date2)
+        """
+        if stock_code in self.long_positions:
+            # 已存在持仓，累加并计算加权平均成本
+            existing = self.long_positions[stock_code]
+            old_shares = existing['shares']
+            old_price = existing['entry_price']
+
+            new_total_shares = old_shares + shares
+            # 加权平均成本公式: (原持仓成本 + 新增成本) / 总股数
+            new_avg_price = (old_shares * old_price + shares * entry_price) / new_total_shares
+
+            self.long_positions[stock_code] = {
+                'shares': new_total_shares,
+                'entry_price': new_avg_price,
+                'entry_date': existing['entry_date']  # 保持最早的入场日期
+            }
+        else:
+            # 新建持仓
+            self.long_positions[stock_code] = {
+                'shares': shares,
+                'entry_price': entry_price,
+                'entry_date': entry_date
+            }
 
     def remove_long_position(self, stock_code: str):
         """移除多头持仓"""
@@ -306,24 +341,33 @@ class BacktestPortfolio:
         price: float,
         commission_rate: float,
         date: datetime
-    ):
+    ) -> bool:
         """
-        简化版买入方法（用于三层架构回测）
+        买入股票（支持资金检查）
 
-        参数:
+        Args:
             stock_code: 股票代码
             shares: 买入数量
             price: 买入价格
             commission_rate: 佣金费率
             date: 买入日期
+
+        Returns:
+            bool: True表示买入成功，False表示资金不足
+
+        Note:
+            - 买入前会检查资金是否充足（成本 = 股数 * 价格 * (1 + 佣金费率)）
+            - 买入成功后会自动扣除现金并更新持仓（支持仓位累加）
+            - 资金不足时返回False，不会执行任何操作
         """
         cost = shares * price * (1 + commission_rate)
         if cost > self.cash:
             logger.warning(f"资金不足：需要 {cost:.2f}，可用 {self.cash:.2f}")
-            return
+            return False
 
         self.cash -= cost
         self.add_long_position(stock_code, shares, price, date)
+        return True
 
     def sell(
         self,

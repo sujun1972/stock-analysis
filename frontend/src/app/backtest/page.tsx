@@ -19,7 +19,8 @@ import type {
 import StrategyConfigEditor from '@/components/strategies/StrategyConfigEditor'
 import StockPoolSelector from '@/components/backtest/StockPoolSelector'
 import DateRangeSelector from '@/components/backtest/DateRangeSelector'
-import BacktestResultView from '@/components/backtest/BacktestResultView'
+import BacktestResultView, { TradesTable } from '@/components/backtest/BacktestResultView'
+import ExitStrategySelector from '@/components/backtest/ExitStrategySelector'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
@@ -56,6 +57,7 @@ export default function BacktestPage() {
   })
   const [initialCapital, setInitialCapital] = useState(1000000)
   const [rebalanceFreq, setRebalanceFreq] = useState<'D' | 'W' | 'M'>('W')
+  const [exitStrategyIds, setExitStrategyIds] = useState<number[]>([])
 
   // 回测状态
   const [isRunning, setIsRunning] = useState(false)
@@ -234,7 +236,9 @@ export default function BacktestPage() {
       start_date: dateRange.start,
       end_date: dateRange.end,
       initial_capital: initialCapital,
-      rebalance_freq: rebalanceFreq
+      rebalance_freq: rebalanceFreq,
+      // 添加离场策略IDs（如果有选择）
+      exit_strategy_ids: exitStrategyIds.length > 0 ? exitStrategyIds : undefined
     }
 
     // 根据策略类型设置不同的参数
@@ -267,7 +271,9 @@ export default function BacktestPage() {
           // 通过 strategy_params 传递模型 ID
           strategy_params: {
             model_id: strategyId  // ML 模型的 ID (来自 URL 参数)
-          }
+          },
+          // 添加离场策略IDs（如果有选择）
+          exit_strategy_ids: exitStrategyIds.length > 0 ? exitStrategyIds : undefined
         })
       } else {
         // 其他类型的策略回测：使用统一回测API
@@ -509,21 +515,22 @@ export default function BacktestPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-7xl">
-      <div className="space-y-6">
-        {/* 页面标题 */}
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">策略回测</h1>
-          <p className="text-muted-foreground mt-2">
-            配置参数,运行回测分析
-          </p>
-        </div>
+    <>
+      <div className="container mx-auto py-6 px-4 max-w-7xl">
+        <div className="space-y-6">
+          {/* 页面标题 */}
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">策略回测</h1>
+            <p className="text-muted-foreground mt-2">
+              配置参数,运行回测分析
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 左侧: 配置面板 */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* 策略信息卡片 */}
-            <Card>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* 左侧: 配置面板 */}
+            <div className="lg:col-span-1 space-y-6">
+              {/* 策略信息卡片 */}
+              <Card>
               <CardHeader>
                 <CardTitle>策略信息</CardTitle>
                 <CardDescription>
@@ -583,6 +590,12 @@ export default function BacktestPage() {
               </CardContent>
             </Card>
 
+            {/* 离场策略选择器 */}
+            <ExitStrategySelector
+              selectedIds={exitStrategyIds}
+              onChange={setExitStrategyIds}
+            />
+
             {/* 运行回测按钮 */}
             <Button
               onClick={handleRunBacktest}
@@ -630,9 +643,19 @@ export default function BacktestPage() {
             ) : (
               <BacktestResultView result={result} />
             )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* 交易明细表格 - 占据全屏宽度 */}
+      {result && result.trades && result.trades.length > 0 && (
+        <div className="w-full bg-gray-50 dark:bg-gray-900 py-6">
+          <div className="container-custom">
+            <TradesTable result={result} />
+          </div>
+        </div>
+      )}
+    </>
   )
 }

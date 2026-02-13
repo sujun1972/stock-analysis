@@ -177,26 +177,72 @@ class BacktestRecorder:
         stock_code: str,
         direction: str,
         shares: int,
-        price: float
+        price: float,
+        exit_reason: str = None,
+        exit_trigger: str = None,
+        entry_reason: str = None,
+        cash_after: float = None,
+        holdings_value_after: float = None,
+        total_value_after: float = None
     ):
         """
-        记录交易（用于三层架构回测）
+        记录交易明细（支持入场/离场原因和资产状态）
 
-        参数:
+        Args:
             date: 交易日期
             stock_code: 股票代码
             direction: 交易方向 ('buy' 或 'sell')
             shares: 交易数量
             price: 交易价格
+            exit_reason: 离场原因（仅卖出时使用）
+                - 'risk_control': 风险控制（止损、移动止损）
+                - 'strategy': 策略信号（止盈、持仓时长）
+                - 'reverse_entry': 反向入场（持有多头时出现做空信号）
+                - 'rebalance': 调仓离场
+            exit_trigger: 离场触发器（仅卖出时使用）
+                - 'stop_loss': 止损
+                - 'take_profit': 止盈
+                - 'trailing_stop': 移动止损
+                - 'max_holding_period': 持仓时长
+                - 'rebalance': 调仓
+            entry_reason: 入场原因（仅买入时使用）
+                - 'signal': 策略信号
+                - 'rebalance': 调仓入场
+            cash_after: 交易后现金余额
+            holdings_value_after: 交易后持仓市值
+            total_value_after: 交易后总资产
+
+        Note:
+            - 所有原因和触发器字段会在前端自动翻译为中文显示
+            - 资产状态字段用于追踪每笔交易后的账户状态
         """
-        self.trades.append({
+        trade_record = {
             'date': date,
             'stock_code': stock_code,
             'direction': direction,
             'shares': shares,
             'price': price,
             'amount': shares * price
-        })
+        }
+
+        # 如果是卖出，添加离场信息
+        if direction == 'sell' and exit_reason:
+            trade_record['exit_reason'] = exit_reason
+            trade_record['exit_trigger'] = exit_trigger
+
+        # 如果是买入，添加入场信息
+        if direction == 'buy' and entry_reason:
+            trade_record['entry_reason'] = entry_reason
+
+        # 添加交易后的资产信息
+        if cash_after is not None:
+            trade_record['cash_after'] = cash_after
+        if holdings_value_after is not None:
+            trade_record['holdings_value_after'] = holdings_value_after
+        if total_value_after is not None:
+            trade_record['total_value_after'] = total_value_after
+
+        self.trades.append(trade_record)
 
     def get_equity_curve(self) -> pd.Series:
         """

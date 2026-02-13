@@ -112,11 +112,19 @@ class BacktestEngine:
         prices: pd.DataFrame,
         top_n: int = 50,
         holding_period: int = 5,
-        rebalance_freq: str = 'W'
+        rebalance_freq: str = 'W',
+        exit_manager=None
     ) -> Response:
-        """纯多头回测（等权重选股策略）"""
+        """
+        纯多头回测（等权重选股策略）
+
+        参数:
+            exit_manager: 离场管理器（可选），如果提供则会在每日检查离场信号
+        """
         logger.info(f"\n开始回测...")
         logger.info(f"初始资金: {self.initial_capital:,.0f}, 选股: {top_n}只, 调仓: {rebalance_freq}")
+        if exit_manager:
+            logger.info(f"已启用离场策略管理器")
 
         # 对齐数据
         common_dates = signals.index.intersection(prices.index)
@@ -143,10 +151,75 @@ class BacktestEngine:
             )
             recorder.record_positions(date, portfolio.get_long_only_snapshot())
 
+            # 检查离场信号（每日检查）
+            if exit_manager and i < len(dates) - 1:
+                next_date = dates[i + 1]
+                current_positions = self._prepare_positions_for_exit_check(portfolio, prices, date)
+
+                if current_positions:
+                    # 准备入场信号（用于反向离场检测）
+                    entry_signals = {}
+                    if date in signals.index:
+                        top_signals = signals.loc[date].nlargest(top_n)
+                        for stock_code, signal_value in top_signals.items():
+                            if signal_value > 0:
+                                # 格式化为符合 exit_manager 期望的格式
+                                entry_signals[stock_code] = {
+                                    'action': 'long',  # 默认为多头信号
+                                    'weight': float(signal_value)
+                                }
+
+                    # 检查离场信号
+                    exit_signals = exit_manager.check_exit(
+                        positions=current_positions,
+                        current_prices={stock: prices.loc[date, stock] for stock in prices.columns if stock in prices.loc[date]},
+                        current_date=date,
+                        entry_signals=entry_signals,
+                        market_data=None
+                    )
+
+                    # 执行离场
+                    for stock_code, exit_signal in exit_signals.items():
+                        if stock_code in portfolio.long_positions:
+                            position = portfolio.long_positions[stock_code]
+                            qty = position['shares']
+                            exit_price = prices.loc[next_date, stock_code] if stock_code in prices.columns else None
+                            if exit_price and pd.notna(exit_price):
+                                # 计算总佣金率（包含印花税）
+                                total_commission_rate = self.commission_rate + self.stamp_tax_rate
+
+                                # 执行卖出
+                                portfolio.sell(
+                                    stock_code=stock_code,
+                                    shares=qty,
+                                    price=exit_price,
+                                    commission_rate=total_commission_rate
+                                )
+
+                                # 计算交易后的资产状态
+                                cash_after = portfolio.get_cash()
+                                holdings_value = portfolio.calculate_long_holdings_value(prices, next_date)
+                                total_value = cash_after + holdings_value
+
+                                # 记录交易（包含离场原因和资产状态）
+                                recorder.record_trade(
+                                    date=next_date,
+                                    stock_code=stock_code,
+                                    direction='sell',
+                                    shares=qty,
+                                    price=exit_price,
+                                    exit_reason=exit_signal.reason,
+                                    exit_trigger=exit_signal.trigger,
+                                    cash_after=cash_after,
+                                    holdings_value_after=holdings_value,
+                                    total_value_after=total_value
+                                )
+                                logger.info(f"  [{date}] 离场 {stock_code}: {exit_signal.trigger} (原因: {exit_signal.reason})")
+
             # 调仓
             if date in rebalance_dates and i < len(dates) - 1:
                 self._rebalance_long_only(
-                    portfolio, signals, prices, date, dates[i + 1], top_n, holding_period, dates
+                    portfolio, signals, prices, date, dates[i + 1], top_n, holding_period, dates, recorder
                 )
 
         # 保存结果
@@ -169,7 +242,8 @@ class BacktestEngine:
                 'positions': self.positions,
                 'daily_returns': self.daily_returns,
                 'cost_analysis': cost_metrics,
-                'cost_analyzer': self.cost_analyzer
+                'cost_analyzer': self.cost_analyzer,
+                'recorder': recorder  # 添加 recorder 以获取交易记录
             },
             message="多头回测完成",
             backtest_type="long_only",
@@ -362,10 +436,11 @@ class BacktestEngine:
         start_date: str,
         end_date: str,
         rebalance_freq: str = 'W',
-        initial_capital: float = None
+        initial_capital: float = None,
+        exit_manager = None
     ) -> Response:
         """
-        ML策略回测
+        ML策略回测（支持离场策略）
 
         参数:
             ml_entry: ML入场策略实例 (MLEntry)
@@ -378,6 +453,7 @@ class BacktestEngine:
             end_date: 结束日期 (格式: 'YYYY-MM-DD')
             rebalance_freq: 调仓频率 ('D'=日, 'W'=周, 'M'=月)
             initial_capital: 初始资金 (如果为None则使用self.initial_capital)
+            exit_manager: 离场管理器 (CompositeExitManager，可选)
 
         返回:
             Response对象，包含:
@@ -394,7 +470,8 @@ class BacktestEngine:
         logger.info(
             f"初始资金: {capital:,.0f}, "
             f"调仓频率: {rebalance_freq}, "
-            f"股票池: {len(stock_pool)}只"
+            f"股票池: {len(stock_pool)}只, "
+            f"离场策略: {'启用' if exit_manager else '禁用'}"
         )
 
         # 1. 初始化
@@ -416,7 +493,7 @@ class BacktestEngine:
 
         logger.info(f"回测日期范围: {trading_dates[0].date()} 到 {trading_dates[-1].date()} ({len(trading_dates)}天)")
 
-        # 3. 计算调仓日期
+        # 3. 计算调仓日期（仅用于入场信号生成）
         rebalance_dates = set(self._get_rebalance_dates_list(
             pd.DatetimeIndex(trading_dates), rebalance_freq
         ))
@@ -427,13 +504,16 @@ class BacktestEngine:
             index='date', columns='stock_code', values='close'
         )
 
-        # 5. 主回测循环
+        # 5. 统计数据
+        exit_stats = {'strategy': 0, 'reverse_entry': 0, 'risk_control': 0}
+
+        # 6. 主回测循环
         for i, date in enumerate(trading_dates):
             date_str = date.strftime('%Y-%m-%d')
 
             logger.debug(f"回测日期: {date_str}")
 
-            # 5.1 更新持仓价格
+            # 6.1 更新持仓价格
             if date in price_pivot.index:
                 portfolio.update_prices(price_pivot.loc[date])
 
@@ -446,49 +526,107 @@ class BacktestEngine:
             )
             recorder.record_positions(date, portfolio.get_positions_snapshot())
 
-            # 5.2 调仓
-            if date in rebalance_dates and i < len(trading_dates) - 1:
-                next_date = trading_dates[i + 1]
-
-                # 生成ML信号
+            # 6.2 生成入场信号（在调仓日）
+            entry_signals = None
+            if date in rebalance_dates:
                 try:
-                    signals = ml_entry.generate_signals(
+                    entry_signals = ml_entry.generate_signals(
                         stock_pool=stock_pool,
                         market_data=market_data,
                         date=date_str
                     )
-
-                    logger.debug(f"调仓日 {date_str}: 生成 {len(signals)} 个信号")
-
-                    # 执行调仓
-                    self._execute_ml_rebalance(
-                        portfolio, signals, price_pivot, date, next_date
-                    )
-
+                    logger.debug(f"调仓日 {date_str}: 生成 {len(entry_signals)} 个入场信号")
                 except Exception as e:
                     logger.warning(f"调仓日 {date_str} 信号生成失败: {e}")
-                    continue
+                    entry_signals = {}
 
-        # 6. 保存结果
+            # 6.3 检查离场信号（每日检查）
+            if exit_manager and i < len(trading_dates) - 1:
+                next_date = trading_dates[i + 1]
+
+                # 准备当前持仓信息
+                current_positions = self._prepare_positions_for_exit_check(
+                    portfolio, price_pivot, date
+                )
+
+                # 准备当前价格字典
+                current_prices = {}
+                if date in price_pivot.index:
+                    current_prices = price_pivot.loc[date].to_dict()
+
+                # 检查离场
+                exit_signals = exit_manager.check_exit(
+                    positions=current_positions,
+                    current_prices=current_prices,
+                    current_date=date,
+                    entry_signals=entry_signals,
+                    market_data=market_data
+                )
+
+                # 执行离场
+                for stock, exit_signal in exit_signals.items():
+                    if stock in price_pivot.columns and next_date in price_pivot.index:
+                        sell_price = price_pivot.loc[next_date, stock]
+                        if not np.isnan(sell_price) and sell_price > 0:
+                            # 多头平仓
+                            if stock in portfolio.long_positions:
+                                self.executor.execute_sell(portfolio, stock, sell_price, next_date)
+                                exit_manager.on_position_closed(stock)
+                                exit_stats[exit_signal.reason] += 1
+                                logger.debug(
+                                    f"离场 {stock} @ {sell_price:.2f}: "
+                                    f"{exit_signal.trigger} (原因={exit_signal.reason})"
+                                )
+
+                            # 空头平仓
+                            elif stock in portfolio.short_positions:
+                                self.executor.execute_cover_short(portfolio, stock, sell_price, next_date)
+                                exit_manager.on_position_closed(stock)
+                                exit_stats[exit_signal.reason] += 1
+                                logger.debug(
+                                    f"平空 {stock} @ {sell_price:.2f}: "
+                                    f"{exit_signal.trigger} (原因={exit_signal.reason})"
+                                )
+
+            # 6.4 执行入场（在调仓日，且有入场信号）
+            if entry_signals and i < len(trading_dates) - 1:
+                next_date = trading_dates[i + 1]
+                self._execute_ml_entry(
+                    portfolio, entry_signals, price_pivot, date, next_date
+                )
+
+        # 7. 保存结果
         self.portfolio_value = recorder.get_portfolio_value_df()
         self.positions = recorder.get_positions_history()
         self.daily_returns = recorder.calculate_daily_returns()
 
         logger.info(f"回测完成: 最终资产 {self.portfolio_value['total'].iloc[-1]:,.0f}")
 
-        # 7. 成本分析
+        # 输出离场统计
+        if exit_manager:
+            logger.info(
+                f"离场统计: 策略={exit_stats['strategy']}, "
+                f"反向入场={exit_stats['reverse_entry']}, "
+                f"风控={exit_stats['risk_control']}"
+            )
+
+        # 8. 成本分析
         cost_metrics = self.cost_analyzer.analyze_all(
             portfolio_returns=self.daily_returns,
             portfolio_values=self.portfolio_value['total'],
             verbose=False
         )
 
-        # 8. 计算绩效指标
+        # 9. 计算绩效指标
         metrics = self._calculate_ml_strategy_metrics(
             self.portfolio_value['total'],
             self.daily_returns,
             capital
         )
+
+        # 添加离场统计到metrics
+        if exit_manager:
+            metrics['exit_stats'] = exit_stats
 
         return Response.success(
             data={
@@ -507,191 +645,154 @@ class BacktestEngine:
             total_return=float((self.portfolio_value['total'].iloc[-1] / capital - 1))
         )
 
-    def backtest_three_layer(
+    def _prepare_positions_for_exit_check(
         self,
-        selector,
-        entry,
-        exit_strategy,
-        prices: pd.DataFrame,
-        start_date: str,
-        end_date: str,
-        rebalance_freq: str = 'W',
-        initial_capital: float = None,
-        commission_rate: float = 0.0003,
-        slippage_rate: float = 0.0005,
-    ) -> Response:
+        portfolio: BacktestPortfolio,
+        price_pivot: pd.DataFrame,
+        current_date: pd.Timestamp
+    ) -> Dict[str, Dict]:
         """
-        三层架构回测
+        准备持仓信息用于离场检查
 
         参数:
-            selector: 股票选择器 (StockSelector)
-            entry: 入场策略 (EntryStrategy)
-            exit_strategy: 退出策略 (ExitStrategy)
-            prices: 价格数据 DataFrame(index=日期, columns=股票代码)
-            start_date: 开始日期
-            end_date: 结束日期
-            rebalance_freq: 选股频率 ('D'=日, 'W'=周, 'M'=月)
-            initial_capital: 初始资金（如果为None则使用self.initial_capital）
-            commission_rate: 佣金费率
-            slippage_rate: 滑点费率
+            portfolio: 组合对象
+            price_pivot: 价格数据
+            current_date: 当前日期
 
         返回:
-            Response对象，包含:
-                - equity_curve: 净值曲线
-                - positions: 持仓记录
-                - trades: 交易记录
-                - metrics: 绩效指标
+            持仓信息字典
         """
-        from .position_manager import Position
+        positions = {}
 
-        # 使用传入的初始资金或默认值
-        capital = initial_capital if initial_capital is not None else self.initial_capital
+        # 多头持仓
+        for stock, pos in portfolio.long_positions.items():
+            current_price = None
+            if stock in price_pivot.columns and current_date in price_pivot.index:
+                current_price = price_pivot.loc[current_date, stock]
+                if np.isnan(current_price):
+                    current_price = pos.get('entry_price', 0)
 
-        logger.info(f"\n开始三层架构回测...")
-        logger.info(
-            f"初始资金: {capital:,.0f}, "
-            f"调仓频率: {rebalance_freq}, "
-            f"选股器: {selector.name}, "
-            f"入场: {entry.name}, "
-            f"退出: {exit_strategy.name}"
-        )
-
-        # 1. 初始化
-        portfolio = BacktestPortfolio(capital)
-        recorder = BacktestRecorder()
-
-        # 2. 过滤日期范围
-        dates = pd.date_range(start_date, end_date, freq='D')
-        dates = dates.intersection(prices.index)
-
-        if len(dates) == 0:
-            logger.error(f"日期范围 {start_date} 到 {end_date} 没有数据")
-            return Response.error("日期范围没有数据")
-
-        logger.info(f"回测日期范围: {dates[0]} 到 {dates[-1]} ({len(dates)}天)")
-
-        # 3. 计算调仓日期
-        rebalance_dates = set(self._get_rebalance_dates_list(dates, rebalance_freq))
-        logger.info(f"调仓次数: {len(rebalance_dates)}")
-
-        # 4. 准备股票数据字典（OHLCV格式）
-        stock_data = self._prepare_stock_data_dict(prices)
-
-        # 5. 当前候选股票池
-        candidate_stocks = []
-
-        # 6. 主回测循环
-        for date in dates:
-            if date not in prices.index:
+            if current_price is None or current_price <= 0:
                 continue
 
-            logger.debug(f"回测日期: {date}")
+            entry_price = pos.get('entry_price', current_price)
+            unrealized_pnl_pct = (current_price - entry_price) / entry_price if entry_price > 0 else 0.0
 
-            # 6.1 更新持仓价格
-            portfolio.update_prices(prices.loc[date])
-            recorder.record_equity(date, portfolio.get_total_equity())
+            positions[stock] = {
+                'stock_code': stock,
+                'shares': pos.get('shares', 0),
+                'entry_price': entry_price,
+                'entry_date': pos.get('entry_date', current_date),
+                'current_price': current_price,
+                'unrealized_pnl_pct': unrealized_pnl_pct,
+                'position_type': 'long'
+            }
 
-            # 记录持仓
-            recorder.record_positions(date, portfolio.get_long_only_snapshot())
+        # 空头持仓
+        for stock, pos in portfolio.short_positions.items():
+            current_price = None
+            if stock in price_pivot.columns and current_date in price_pivot.index:
+                current_price = price_pivot.loc[current_date, stock]
+                if np.isnan(current_price):
+                    current_price = pos.get('entry_price', 0)
 
-            # 6.2 Layer 3: 检查退出信号（每日检查）
-            if portfolio.long_positions:
-                # 构建Position对象字典
-                positions_dict = {}
-                for stock, pos in portfolio.long_positions.items():
-                    positions_dict[stock] = Position(
-                        stock_code=stock,
-                        entry_date=pos['entry_date'],
-                        entry_price=pos['entry_price'],
-                        shares=pos['shares'],
-                        current_price=pos.get('current_price', pos['entry_price']),
-                        unrealized_pnl=pos.get('unrealized_pnl', 0.0),
-                        unrealized_pnl_pct=pos.get('unrealized_pnl_pct', 0.0)
-                    )
+            if current_price is None or current_price <= 0:
+                continue
 
-                # 生成退出信号
-                exit_signals = exit_strategy.generate_exit_signals(
-                    positions_dict, stock_data, date
+            entry_price = pos.get('entry_price', current_price)
+            # 空头的盈亏是反向的
+            unrealized_pnl_pct = (entry_price - current_price) / entry_price if entry_price > 0 else 0.0
+
+            positions[stock] = {
+                'stock_code': stock,
+                'shares': pos.get('shares', 0),
+                'entry_price': entry_price,
+                'entry_date': pos.get('entry_date', current_date),
+                'current_price': current_price,
+                'unrealized_pnl_pct': unrealized_pnl_pct,
+                'position_type': 'short'
+            }
+
+        return positions
+
+    def _execute_ml_entry(
+        self,
+        portfolio: BacktestPortfolio,
+        signals: Dict[str, Dict],
+        price_pivot: pd.DataFrame,
+        current_date: pd.Timestamp,
+        next_date: pd.Timestamp
+    ):
+        """
+        执行ML入场信号（不自动平仓已有持仓）
+
+        与 _execute_ml_rebalance 的区别：
+        - _execute_ml_rebalance: 调仓式，平掉不在信号中的持仓
+        - _execute_ml_entry: 只执行新入场，保留现有持仓（离场由exit_manager处理）
+
+        参数:
+            portfolio: 组合对象
+            signals: ML信号字典 {stock: {'action': 'long'/'short', 'weight': 0.xx}}
+            price_pivot: 价格数据 (date × stock_code)
+            current_date: 当前日期
+            next_date: 下一交易日 (执行价格)
+        """
+        if not signals:
+            return
+
+        # 分离做多和做空信号
+        long_signals = {s: v for s, v in signals.items() if v['action'] == 'long'}
+        short_signals = {s: v for s, v in signals.items() if v['action'] == 'short'}
+
+        # 计算可用资金
+        total_equity = portfolio.get_total_value(price_pivot, current_date)['total']
+        available_cash = total_equity
+
+        # 开多头 / 调整多头仓位
+        for stock, signal in long_signals.items():
+            if stock not in price_pivot.columns or next_date not in price_pivot.index:
+                continue
+
+            buy_price = price_pivot.loc[next_date, stock]
+            if np.isnan(buy_price) or buy_price <= 0:
+                continue
+
+            target_value = available_cash * signal['weight']
+
+            # 如果已持有，先卖出
+            if stock in portfolio.long_positions:
+                self.executor.execute_sell(portfolio, stock, buy_price, next_date)
+
+            # 买入
+            if target_value > 0:
+                self.executor.execute_buy(portfolio, stock, buy_price, target_value, next_date)
+                logger.debug(f"入场多头: {stock} @ {buy_price:.2f}, 权重: {signal['weight']:.3f}")
+
+        # 开空头 / 调整空头仓位
+        for stock, signal in short_signals.items():
+            if stock not in price_pivot.columns or next_date not in price_pivot.index:
+                continue
+
+            short_price = price_pivot.loc[next_date, stock]
+            if np.isnan(short_price) or short_price <= 0:
+                continue
+
+            target_value = available_cash * signal['weight']
+
+            # 如果已持有，先平仓
+            if stock in portfolio.short_positions:
+                self.executor.execute_cover_short(portfolio, stock, short_price, next_date)
+
+            # 开空
+            if target_value > 0:
+                margin_ratio = 0.5  # 50%保证金
+                margin_rate = 0.10  # 10%融券费率
+                self.executor.execute_short_sell(
+                    portfolio, stock, short_price, target_value,
+                    margin_ratio, margin_rate, next_date
                 )
+                logger.debug(f"入场空头: {stock} @ {short_price:.2f}, 权重: {signal['weight']:.3f}")
 
-                # 执行卖出
-                for stock in exit_signals:
-                    if stock in portfolio.long_positions:
-                        sell_price = prices.loc[date, stock] * (1 - slippage_rate)
-                        if pd.isna(sell_price) or sell_price <= 0:
-                            logger.warning(f"{stock}: 卖出价格无效，跳过")
-                            continue
-
-                        shares = portfolio.long_positions[stock]['shares']
-                        # 佣金 + 印花税
-                        total_commission = commission_rate + 0.001
-                        portfolio.sell(stock, shares, sell_price, total_commission)
-                        recorder.record_trade(date, stock, 'sell', shares, sell_price)
-                        logger.debug(f"卖出 {stock}: {shares} 股 @ {sell_price:.2f}")
-
-            # 6.3 Layer 1: 选股（按调仓频率）
-            if date in rebalance_dates:
-                candidate_stocks = selector.select(date, prices)
-                logger.info(f"调仓日 {date.date()}: 选出 {len(candidate_stocks)} 只候选股票")
-
-            # 6.4 Layer 2: 入场信号（每日检查）
-            if candidate_stocks:
-                # 过滤掉已持有的股票
-                available_candidates = [
-                    s for s in candidate_stocks
-                    if s not in portfolio.long_positions
-                ]
-
-                if available_candidates:
-                    entry_signals = entry.generate_entry_signals(
-                        available_candidates, stock_data, date
-                    )
-
-                    # 执行买入
-                    if entry_signals:
-                        total_weight = sum(entry_signals.values())
-                        if total_weight > 0:
-                            for stock, weight in entry_signals.items():
-                                normalized_weight = weight / total_weight
-                                target_value = portfolio.cash * normalized_weight
-
-                                buy_price = prices.loc[date, stock] * (1 + slippage_rate)
-                                if pd.isna(buy_price) or buy_price <= 0:
-                                    logger.warning(f"{stock}: 买入价格无效，跳过")
-                                    continue
-
-                                shares = int(target_value // (buy_price * (1 + commission_rate)))
-
-                                if shares > 0:
-                                    portfolio.buy(stock, shares, buy_price, commission_rate, date)
-                                    recorder.record_trade(date, stock, 'buy', shares, buy_price)
-                                    logger.debug(f"买入 {stock}: {shares} 股 @ {buy_price:.2f}")
-
-        # 7. 计算绩效指标
-        equity_curve = recorder.get_equity_curve()
-
-        if equity_curve.empty:
-            logger.error("回测失败：没有生成净值曲线")
-            return Response.error("回测失败：没有生成净值曲线")
-
-        metrics = self._calculate_three_layer_metrics(equity_curve, recorder.trades, capital)
-
-        logger.info(f"回测完成: 最终资产 {equity_curve.iloc[-1]:,.0f}")
-
-        return Response.success(
-            data={
-                'equity_curve': equity_curve,
-                'positions': recorder.positions_history,
-                'trades': recorder.get_trades_df(),
-                'metrics': metrics
-            },
-            message="三层架构回测完成",
-            backtest_type="three_layer",
-            n_days=len(equity_curve),
-            initial_capital=capital,
-            final_value=float(equity_curve.iloc[-1]),
-            total_return=float((equity_curve.iloc[-1] / capital - 1))
-        )
 
     # ==================== 私有辅助方法 ====================
 
@@ -891,110 +992,9 @@ class BacktestEngine:
         else:
             raise ValueError(f"不支持的调仓频率: {freq}")
 
-    def _prepare_stock_data_dict(self, prices: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-        """
-        准备股票数据字典（OHLCV格式，用于三层架构回测）
-
-        注意：如果没有OHLCV数据，使用收盘价模拟
-
-        参数:
-            prices: 价格DataFrame (index=日期, columns=股票代码)
-
-        返回:
-            股票数据字典 {股票代码: OHLCV DataFrame}
-        """
-        stock_data = {}
-
-        for stock in prices.columns:
-            stock_data[stock] = pd.DataFrame({
-                'open': prices[stock],    # 模拟数据
-                'high': prices[stock],
-                'low': prices[stock],
-                'close': prices[stock],
-                'volume': 1000000         # 模拟数据
-            }, index=prices.index)
-
-        return stock_data
-
-    def _calculate_three_layer_metrics(
-        self,
-        equity_curve: pd.Series,
-        trades: List[Dict],
-        initial_capital: float
-    ) -> Dict[str, Any]:
-        """
-        计算三层架构回测的绩效指标
-
-        参数:
-            equity_curve: 净值曲线
-            trades: 交易记录
-            initial_capital: 初始资金
-
-        返回:
-            绩效指标字典
-        """
-        if equity_curve.empty:
-            return {}
-
-        # 计算收益率
-        daily_returns = equity_curve.pct_change().dropna()
-
-        # 基础指标
-        final_value = equity_curve.iloc[-1]
-        total_return = (final_value / initial_capital - 1)
-
-        # 年化收益率
-        n_days = len(equity_curve)
-        n_years = n_days / 252
-        if n_years > 0:
-            annual_return = (final_value / initial_capital) ** (1 / n_years) - 1
-        else:
-            annual_return = 0.0
-
-        # 波动率
-        if len(daily_returns) > 1:
-            volatility = daily_returns.std() * np.sqrt(252)
-        else:
-            volatility = 0.0
-
-        # 夏普比率
-        if volatility > 0:
-            sharpe_ratio = annual_return / volatility
-        else:
-            sharpe_ratio = 0.0
-
-        # 最大回撤
-        cumulative_max = equity_curve.cummax()
-        drawdown = (equity_curve - cumulative_max) / cumulative_max
-        max_drawdown = drawdown.min()
-
-        # 交易统计
-        n_trades = len(trades)
-        if n_trades > 0:
-            buy_trades = [t for t in trades if t['direction'] == 'buy']
-            sell_trades = [t for t in trades if t['direction'] == 'sell']
-            n_buy = len(buy_trades)
-            n_sell = len(sell_trades)
-        else:
-            n_buy = 0
-            n_sell = 0
-
-        metrics = {
-            'total_return': float(total_return),
-            'annual_return': float(annual_return),
-            'volatility': float(volatility),
-            'sharpe_ratio': float(sharpe_ratio),
-            'max_drawdown': float(max_drawdown),
-            'n_trades': n_trades,
-            'n_buy': n_buy,
-            'n_sell': n_sell,
-            'n_days': n_days
-        }
-
-        return metrics
 
     def _rebalance_long_only(
-        self, portfolio, signals, prices, date, next_date, top_n, holding_period, all_dates
+        self, portfolio, signals, prices, date, next_date, top_n, holding_period, all_dates, recorder=None
     ):
         # 选股
         date_signals = signals.loc[date].dropna()
@@ -1005,14 +1005,43 @@ class BacktestEngine:
 
         top_stocks = date_signals.nlargest(top_n).index.tolist()
 
-        # 卖出
+        # 卖出（调仓）
         for stock in portfolio.get_long_stocks_to_sell(top_stocks, date, holding_period, all_dates):
             if stock in prices.columns:
                 sell_price = prices.loc[next_date, stock]
                 if not np.isnan(sell_price):
-                    self.executor.execute_sell(portfolio, stock, sell_price, next_date)
+                    pos = portfolio.get_long_position(stock)
+                    if pos:
+                        shares = pos['shares']
+                        # 直接执行卖出并记录
+                        total_commission_rate = self.commission_rate + self.stamp_tax_rate
+                        portfolio.sell(
+                            stock_code=stock,
+                            shares=shares,
+                            price=sell_price,
+                            commission_rate=total_commission_rate
+                        )
+                        # 计算交易后资产状态
+                        cash_after = portfolio.get_cash()
+                        holdings_value = portfolio.calculate_long_holdings_value(prices, next_date)
+                        total_value = cash_after + holdings_value
 
-        # 买入
+                        # 记录交易（调仓卖出）
+                        if recorder:
+                            recorder.record_trade(
+                                date=next_date,
+                                stock_code=stock,
+                                direction='sell',
+                                shares=shares,
+                                price=sell_price,
+                                exit_reason='rebalance',
+                                exit_trigger='rebalance',
+                                cash_after=cash_after,
+                                holdings_value_after=holdings_value,
+                                total_value_after=total_value
+                            )
+
+        # 买入（调仓）
         stocks_to_buy = portfolio.get_stocks_to_buy(top_stocks)
         if stocks_to_buy:
             capital_per_stock = portfolio.get_cash() / len(stocks_to_buy)
@@ -1020,7 +1049,37 @@ class BacktestEngine:
                 if stock in prices.columns:
                     buy_price = prices.loc[next_date, stock]
                     if not np.isnan(buy_price) and buy_price > 0:
-                        self.executor.execute_buy(portfolio, stock, buy_price, capital_per_stock, next_date)
+                        # 计算可买数量
+                        shares = int(capital_per_stock / buy_price / 100) * 100
+                        if shares > 0:
+                            # 直接执行买入
+                            success = portfolio.buy(
+                                stock_code=stock,
+                                shares=shares,
+                                price=buy_price,
+                                commission_rate=self.commission_rate,
+                                date=next_date
+                            )
+
+                            # 只在买入成功时才记录交易
+                            if success and recorder:
+                                # 计算交易后资产状态
+                                cash_after = portfolio.get_cash()
+                                holdings_value = portfolio.calculate_long_holdings_value(prices, next_date)
+                                total_value = cash_after + holdings_value
+
+                                # 记录交易
+                                recorder.record_trade(
+                                    date=next_date,
+                                    stock_code=stock,
+                                    direction='buy',
+                                    shares=shares,
+                                    price=buy_price,
+                                    entry_reason='rebalance',
+                                    cash_after=cash_after,
+                                    holdings_value_after=holdings_value,
+                                    total_value_after=total_value
+                                )
 
     def _rebalance_market_neutral(
         self, portfolio, signals, prices, date, next_date,

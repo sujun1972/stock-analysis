@@ -113,6 +113,9 @@ const StrategyCard = memo(function StrategyCard({
     return labels[strategy.risk_level] || strategy.risk_level
   }
 
+  // 判断是否为离场策略
+  const isExitStrategy = strategy.strategy_type === 'exit'
+
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
@@ -120,6 +123,12 @@ const StrategyCard = memo(function StrategyCard({
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <CardTitle className="text-lg">{strategy.display_name}</CardTitle>
+              {/* 离场策略标识 */}
+              {isExitStrategy && (
+                <Badge variant="secondary" className="text-xs">
+                  离场策略
+                </Badge>
+              )}
             </div>
             <CardDescription>
               {strategy.description || '暂无描述'}
@@ -213,14 +222,20 @@ const StrategyCard = memo(function StrategyCard({
           </Button>
         </Link>
 
-        {/* 回测按钮 */}
-        {onBacktest && (
+        {/* 回测按钮（离场策略不能单独回测） */}
+        {onBacktest && !isExitStrategy && (
           <Link href={`/backtest?type=unified&id=${strategy.id}`} className="flex-1">
             <Button size="sm" className="w-full">
               <Play className="mr-1 h-3 w-3" />
               回测
             </Button>
           </Link>
+        )}
+        {onBacktest && isExitStrategy && (
+          <Button size="sm" className="w-full flex-1" disabled title="离场策略需要配合入场策略使用，不能单独回测">
+            <Play className="mr-1 h-3 w-3" />
+            不可回测
+          </Button>
         )}
 
         {/* 克隆按钮 */}

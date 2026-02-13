@@ -18,9 +18,12 @@ export interface Strategy {
   // 来源分类
   source_type: 'builtin' | 'ai' | 'custom'
 
+  // 策略类型（新增：区分入场策略和离场策略）
+  strategy_type: 'entry' | 'exit'
+
   // 策略元信息
   description?: string
-  category?: string  // momentum/reversal/factor/ml
+  category?: string  // momentum/reversal/factor/ml (entry) | stop_loss/take_profit/trailing_stop/holding_period (exit)
   tags?: string[]
 
   // 默认参数
@@ -57,6 +60,7 @@ export interface CreateStrategyRequest {
   code: string
   class_name: string
   source_type: 'builtin' | 'ai' | 'custom'
+  strategy_type: 'entry' | 'exit'  // 新增：策略类型
   description?: string
   category?: string
   tags?: string[]
@@ -191,6 +195,9 @@ export interface BacktestRequest {
 
   // 策略参数（用于覆盖默认参数，例如 ML 模型 ID）
   strategy_params?: Record<string, any>
+
+  // 离场策略（可选，支持多个）
+  exit_strategy_ids?: number[]
 
   // V1.0 兼容字段（废弃）
   /** @deprecated */

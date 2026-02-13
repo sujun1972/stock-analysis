@@ -427,6 +427,7 @@ class ApiClient {
    */
   async getStrategies(params?: {
     source_type?: 'builtin' | 'ai' | 'custom'
+    strategy_type?: 'entry' | 'exit'
     category?: string
     is_enabled?: boolean
     search?: string
