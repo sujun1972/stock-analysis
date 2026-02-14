@@ -151,6 +151,9 @@ class BacktestEngine:
             )
             recorder.record_positions(date, portfolio.get_long_only_snapshot())
 
+            # 记录当日离场的股票（防止同日再次买入）
+            stocks_exited_today = set()
+
             # 检查离场信号（每日检查）
             if exit_manager and i < len(dates) - 1:
                 next_date = dates[i + 1]
@@ -196,6 +199,9 @@ class BacktestEngine:
                                     commission_rate=total_commission_rate
                                 )
 
+                                # 记录当日离场的股票（防止调仓时同日再买入）
+                                stocks_exited_today.add(stock_code)
+
                                 # 计算交易后的资产状态
                                 cash_after = portfolio.get_cash()
                                 holdings_value = portfolio.calculate_long_holdings_value(prices, next_date)
@@ -219,7 +225,8 @@ class BacktestEngine:
             # 调仓
             if date in rebalance_dates and i < len(dates) - 1:
                 self._rebalance_long_only(
-                    portfolio, signals, prices, date, dates[i + 1], top_n, holding_period, dates, recorder
+                    portfolio, signals, prices, date, dates[i + 1], top_n, holding_period, dates, recorder,
+                    stocks_exited_today=stocks_exited_today
                 )
 
         # 保存结果
@@ -994,7 +1001,8 @@ class BacktestEngine:
 
 
     def _rebalance_long_only(
-        self, portfolio, signals, prices, date, next_date, top_n, holding_period, all_dates, recorder=None
+        self, portfolio, signals, prices, date, next_date, top_n, holding_period, all_dates, recorder=None,
+        stocks_exited_today=None
     ):
         """
         调仓逻辑（优化版）：只负责买入新股票，卖出由离场策略管理
@@ -1014,6 +1022,7 @@ class BacktestEngine:
             holding_period: 持仓期限（该参数已废弃，保留仅为向后兼容）
             all_dates: 所有交易日期
             recorder: 交易记录器
+            stocks_exited_today: 当日已离场的股票集合（防止同日再买入）
         """
         # 选股：根据信号强度选出top_n
         date_signals = signals.loc[date].dropna()
@@ -1023,6 +1032,12 @@ class BacktestEngine:
             date_signals = pd.to_numeric(date_signals, errors='coerce').dropna()
 
         top_stocks = date_signals.nlargest(top_n).index.tolist()
+
+        # 过滤掉当日已离场的股票（防止同日卖出再买入）
+        if stocks_exited_today:
+            top_stocks = [s for s in top_stocks if s not in stocks_exited_today]
+            if len(stocks_exited_today & set(date_signals.nlargest(top_n).index)) > 0:
+                logger.debug(f"  [{date}] 过滤当日离场股票: {stocks_exited_today}")
 
         # ========== 移除自动卖出逻辑 ==========
         # 原逻辑：卖出不在top_n中的股票 OR 持仓超过holding_period的股票
