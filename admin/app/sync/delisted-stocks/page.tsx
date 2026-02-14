@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -135,9 +136,10 @@ export default function DelistedStocksSyncPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 返回按钮 */}
-      <button
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* 返回按钮 */}
+        <button
         onClick={() => router.back()}
         className="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
       >
@@ -369,6 +371,7 @@ export default function DelistedStocksSyncPage() {
           </ul>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AdminLayout>
   )
 }

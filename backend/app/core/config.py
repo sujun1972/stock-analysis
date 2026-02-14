@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     # API配置
     API_PREFIX: str = "/api"
     ALLOWED_ORIGINS: List[str] = [
-        "http://localhost:3000",  # React默认端口
+        "http://localhost:3000",  # Frontend用户前端
+        "http://localhost:3002",  # Admin管理后台
         "http://localhost:5173",  # Vite默认端口
         "http://localhost:8080",  # Vue默认端口
         "http://localhost",

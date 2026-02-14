@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -244,9 +245,10 @@ export default function InitializePage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 返回按钮 */}
-      <div>
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* 返回按钮 */}
+        <div>
         <Button variant="ghost" onClick={() => router.back()}>
           ← 返回数据同步管理
         </Button>
@@ -652,6 +654,7 @@ export default function InitializePage() {
           </ul>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AdminLayout>
   )
 }

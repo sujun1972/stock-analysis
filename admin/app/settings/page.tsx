@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -82,9 +83,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 页面标题 */}
-      <div>
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* 页面标题 */}
+        <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           系统设置
         </h1>
@@ -265,6 +267,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-    </div>
+      </div>
+    </AdminLayout>
   )
 }

@@ -27,9 +27,7 @@ export function MobileNav() {
     { href: "/strategies", label: "策略中心" },
     { href: "/my-backtests", label: "我的回测" },
     { href: "/ai-lab", label: "AI实验舱" },
-    { href: "/sync", label: "数据同步" },
     { href: "/stocks", label: "股票列表" },
-    { href: "/settings", label: "系统设置" },
   ]
 
   const isActive = (href: string) => {
