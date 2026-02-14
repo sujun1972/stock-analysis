@@ -996,7 +996,26 @@ class BacktestEngine:
     def _rebalance_long_only(
         self, portfolio, signals, prices, date, next_date, top_n, holding_period, all_dates, recorder=None
     ):
-        # 选股
+        """
+        调仓逻辑（优化版）：只负责买入新股票，卖出由离场策略管理
+
+        设计理念：
+        - 调仓日：根据信号强度选出top_n股票，买入尚未持有的股票
+        - 离场决策：完全由exit_manager管理（止盈、止损、持仓时长等）
+        - 避免问题：不再出现"同价卖出再买入"的无效交易
+
+        参数:
+            portfolio: 投资组合
+            signals: 信号DataFrame
+            prices: 价格DataFrame
+            date: 当前日期
+            next_date: 下一交易日
+            top_n: 选股数量
+            holding_period: 持仓期限（该参数已废弃，保留仅为向后兼容）
+            all_dates: 所有交易日期
+            recorder: 交易记录器
+        """
+        # 选股：根据信号强度选出top_n
         date_signals = signals.loc[date].dropna()
 
         # 防御性编程：确保数据类型正确（避免object类型导致nlargest失败）
@@ -1005,43 +1024,15 @@ class BacktestEngine:
 
         top_stocks = date_signals.nlargest(top_n).index.tolist()
 
-        # 卖出（调仓）
-        for stock in portfolio.get_long_stocks_to_sell(top_stocks, date, holding_period, all_dates):
-            if stock in prices.columns:
-                sell_price = prices.loc[next_date, stock]
-                if not np.isnan(sell_price):
-                    pos = portfolio.get_long_position(stock)
-                    if pos:
-                        shares = pos['shares']
-                        # 直接执行卖出并记录
-                        total_commission_rate = self.commission_rate + self.stamp_tax_rate
-                        portfolio.sell(
-                            stock_code=stock,
-                            shares=shares,
-                            price=sell_price,
-                            commission_rate=total_commission_rate
-                        )
-                        # 计算交易后资产状态
-                        cash_after = portfolio.get_cash()
-                        holdings_value = portfolio.calculate_long_holdings_value(prices, next_date)
-                        total_value = cash_after + holdings_value
+        # ========== 移除自动卖出逻辑 ==========
+        # 原逻辑：卖出不在top_n中的股票 OR 持仓超过holding_period的股票
+        # 新逻辑：卖出决策完全由exit_manager在每日检查中处理
+        # 优势：
+        #   1. 避免盈利股票因持仓到期被强制卖出
+        #   2. 避免同价卖出再买入的无效交易
+        #   3. 离场原因更准确（止盈/止损/信号反转，而非统一标记为"调仓"）
 
-                        # 记录交易（调仓卖出）
-                        if recorder:
-                            recorder.record_trade(
-                                date=next_date,
-                                stock_code=stock,
-                                direction='sell',
-                                shares=shares,
-                                price=sell_price,
-                                exit_reason='rebalance',
-                                exit_trigger='rebalance',
-                                cash_after=cash_after,
-                                holdings_value_after=holdings_value,
-                                total_value_after=total_value
-                            )
-
-        # 买入（调仓）
+        # 买入新股票（仅买入尚未持有的股票）
         stocks_to_buy = portfolio.get_stocks_to_buy(top_stocks)
         if stocks_to_buy:
             capital_per_stock = portfolio.get_cash() / len(stocks_to_buy)
@@ -1049,10 +1040,10 @@ class BacktestEngine:
                 if stock in prices.columns:
                     buy_price = prices.loc[next_date, stock]
                     if not np.isnan(buy_price) and buy_price > 0:
-                        # 计算可买数量
+                        # 计算可买数量（A股最小交易单位100股）
                         shares = int(capital_per_stock / buy_price / 100) * 100
                         if shares > 0:
-                            # 直接执行买入
+                            # 执行买入
                             success = portfolio.buy(
                                 stock_code=stock,
                                 shares=shares,
@@ -1061,21 +1052,21 @@ class BacktestEngine:
                                 date=next_date
                             )
 
-                            # 只在买入成功时才记录交易
+                            # 记录交易（买入成功时）
                             if success and recorder:
                                 # 计算交易后资产状态
                                 cash_after = portfolio.get_cash()
                                 holdings_value = portfolio.calculate_long_holdings_value(prices, next_date)
                                 total_value = cash_after + holdings_value
 
-                                # 记录交易
+                                # 记录交易：entry_reason改为'signal'（信号触发）
                                 recorder.record_trade(
                                     date=next_date,
                                     stock_code=stock,
                                     direction='buy',
                                     shares=shares,
                                     price=buy_price,
-                                    entry_reason='rebalance',
+                                    entry_reason='signal',  # 修改：更准确的入场原因
                                     cash_after=cash_after,
                                     holdings_value_after=holdings_value,
                                     total_value_after=total_value

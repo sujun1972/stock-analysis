@@ -87,77 +87,244 @@ BacktestResultView.displayName = 'BacktestResultView'
 export const TradesTable = memo(function TradesTable({ result }: { result: any }) {
   // 交易明细分页状态
   const [tradesPage, setTradesPage] = useState(1)
+  // 过滤器状态
+  const [selectedStock, setSelectedStock] = useState<string>('all')
+  const [selectedDirection, setSelectedDirection] = useState<string>('all')
+  const [selectedReason, setSelectedReason] = useState<string>('all')
 
-  // 翻译原因/策略字段为中文
+  // 翻译原因/策略字段为中文（优化版：显示具体策略触发器）
   const translateReason = (reason?: string, trigger?: string) => {
     if (!reason && !trigger) return '-'
 
     const reasonMap: Record<string, string> = {
-      'rebalance': '调仓',
-      'signal': '信号',
+      'signal': '策略信号',
       'risk_control': '风险控制',
-      'strategy': '策略',
+      'strategy': '策略触发',
       'reverse_entry': '反向入场'
     }
     const triggerMap: Record<string, string> = {
       'stop_loss': '止损',
       'take_profit': '止盈',
       'trailing_stop': '移动止损',
-      'max_holding_period': '持仓时长',
-      'rebalance': '调仓'
+      'max_holding_period': '持仓时长到期',
+      'signal_reverse': '信号反转'
     }
 
     const reasonText = reason ? (reasonMap[reason] || reason) : ''
     const triggerText = trigger ? (triggerMap[trigger] || trigger) : ''
 
-    if (reasonText && triggerText) {
-      return `${reasonText}/${triggerText}`
+    // 优化显示逻辑
+    if (triggerText) {
+      // 有具体触发器，优先显示触发器
+      if (reasonText === '策略触发' || reasonText === '风险控制') {
+        // "策略触发/止盈" → "止盈"
+        return triggerText
+      }
+      // "策略信号/xxx" → "策略信号"（买入时）
+      return triggerText
     }
-    return reasonText || triggerText || '-'
+
+    return reasonText || '-'
   }
 
+  // 提取所有唯一的股票代码用于过滤器
+  const allStocks = Array.from(
+    new Set(
+      result.trades?.map((t: any) => t.stock_code || t.code || t.symbol).filter(Boolean) || []
+    )
+  ).sort()
+
+  // 提取所有唯一的交易原因
+  const allReasons = Array.from(
+    new Set(
+      result.trades?.map((t: any) => {
+        const direction = t.direction || t.action
+        if (direction === 'buy') {
+          return t.entry_reason
+        } else {
+          return t.exit_trigger || t.exit_reason
+        }
+      }).filter(Boolean) || []
+    )
+  ).sort()
+
+  // 应用过滤器
+  const filteredTrades = (result.trades || []).filter((trade: any) => {
+    const stockCode = trade.stock_code || trade.code || trade.symbol
+    const direction = trade.direction || trade.action
+
+    // 股票过滤
+    if (selectedStock !== 'all' && stockCode !== selectedStock) {
+      return false
+    }
+
+    // 方向过滤
+    if (selectedDirection !== 'all' && direction !== selectedDirection) {
+      return false
+    }
+
+    // 原因过滤
+    if (selectedReason !== 'all') {
+      const reason = direction === 'buy'
+        ? trade.entry_reason
+        : (trade.exit_trigger || trade.exit_reason)
+      if (reason !== selectedReason) {
+        return false
+      }
+    }
+
+    return true
+  })
+
+  // 分页逻辑应用于过滤后的数据
   const tradesPerPage = 20
-  const totalTrades = result.trades?.length || 0
+  const totalTrades = filteredTrades.length
   const totalPages = Math.ceil(totalTrades / tradesPerPage)
   const startIndex = (tradesPage - 1) * tradesPerPage
   const endIndex = startIndex + tradesPerPage
-  const currentTrades = result.trades?.slice(startIndex, endIndex) || []
+  const currentTrades = filteredTrades.slice(startIndex, endIndex)
+
+  // 重置分页当过滤器改变时
+  const resetPage = () => setTradesPage(1)
 
   if (!result.trades || result.trades.length === 0) return null
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>交易明细</CardTitle>
-            <CardDescription className="mt-1">
-              共 {totalTrades} 笔交易，当前显示第 {startIndex + 1}-{Math.min(endIndex, totalTrades)} 笔
-            </CardDescription>
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setTradesPage(p => Math.max(1, p - 1))}
-                disabled={tradesPage === 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-muted-foreground min-w-[80px] text-center">
-                {tradesPage} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setTradesPage(p => Math.min(totalPages, p + 1))}
-                disabled={tradesPage === totalPages}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>交易明细</CardTitle>
+              <CardDescription className="mt-1">
+                {selectedStock !== 'all' || selectedDirection !== 'all' || selectedReason !== 'all' ? (
+                  <>
+                    过滤后显示 {totalTrades} 笔交易（共 {result.trades?.length || 0} 笔），
+                    当前第 {totalTrades > 0 ? startIndex + 1 : 0}-{Math.min(endIndex, totalTrades)} 笔
+                  </>
+                ) : (
+                  <>
+                    共 {totalTrades} 笔交易，当前显示第 {startIndex + 1}-{Math.min(endIndex, totalTrades)} 笔
+                  </>
+                )}
+              </CardDescription>
             </div>
-          )}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTradesPage(p => Math.max(1, p - 1))}
+                  disabled={tradesPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground min-w-[80px] text-center">
+                  {tradesPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTradesPage(p => Math.min(totalPages, p + 1))}
+                  disabled={tradesPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* 过滤器 */}
+          <div className="flex flex-wrap gap-3">
+            {/* 股票过滤 */}
+            {allStocks.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  股票:
+                </label>
+                <select
+                  value={selectedStock}
+                  onChange={(e) => {
+                    setSelectedStock(e.target.value)
+                    resetPage()
+                  }}
+                  className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">全部 ({result.trades?.length || 0})</option>
+                  {allStocks.map((stock) => {
+                    const count = result.trades?.filter((t: any) =>
+                      (t.stock_code || t.code || t.symbol) === stock
+                    ).length || 0
+                    return (
+                      <option key={stock} value={stock}>
+                        {stock} ({count})
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            )}
+
+            {/* 方向过滤 */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                方向:
+              </label>
+              <select
+                value={selectedDirection}
+                onChange={(e) => {
+                  setSelectedDirection(e.target.value)
+                  resetPage()
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">全部</option>
+                <option value="buy">买入</option>
+                <option value="sell">卖出</option>
+              </select>
+            </div>
+
+            {/* 原因过滤 */}
+            {allReasons.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  原因:
+                </label>
+                <select
+                  value={selectedReason}
+                  onChange={(e) => {
+                    setSelectedReason(e.target.value)
+                    resetPage()
+                  }}
+                  className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">全部</option>
+                  {allReasons.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {translateReason(reason, reason)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* 重置按钮 */}
+            {(selectedStock !== 'all' || selectedDirection !== 'all' || selectedReason !== 'all') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedStock('all')
+                  setSelectedDirection('all')
+                  setSelectedReason('all')
+                  resetPage()
+                }}
+                className="text-xs"
+              >
+                重置过滤
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>

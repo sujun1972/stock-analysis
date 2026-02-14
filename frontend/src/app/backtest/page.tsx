@@ -230,6 +230,16 @@ export default function BacktestPage() {
       return
     }
 
+    // ⚠️ 验证离场策略（必选）
+    if (!exitStrategyIds || exitStrategyIds.length === 0) {
+      toast({
+        title: '请选择离场策略',
+        description: '离场策略是必选项，用于控制何时卖出股票（止损/止盈/持仓时长等）。如果不选择离场策略，系统将永远不会卖出持仓，可能导致巨大亏损。',
+        variant: 'destructive'
+      })
+      return
+    }
+
     // 构建请求参数
     const request: any = {
       stock_pool: stockPool,

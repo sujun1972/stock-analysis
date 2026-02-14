@@ -38,7 +38,7 @@ export default function ExitStrategySelector({ selectedIds, onChange }: ExitStra
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(true)  // 默认展开，因为是必选项
 
   useEffect(() => {
     loadExitStrategies()
@@ -80,6 +80,14 @@ export default function ExitStrategySelector({ selectedIds, onChange }: ExitStra
     onChange([])
   }
 
+  const handleSelectRecommended = () => {
+    // 推荐策略：止损 + 止盈
+    const stopLoss = strategies.find(s => s.category === 'stop_loss')
+    const takeProfit = strategies.find(s => s.category === 'take_profit')
+    const recommendedIds = [stopLoss?.id, takeProfit?.id].filter((id): id is number => id !== undefined)
+    onChange(recommendedIds)
+  }
+
   const getRiskBadgeVariant = (riskLevel: string) => {
     switch (riskLevel) {
       case 'safe':
@@ -112,12 +120,17 @@ export default function ExitStrategySelector({ selectedIds, onChange }: ExitStra
             <div className="flex-1">
               <CardTitle className="flex items-center gap-2">
                 离场策略
+                <Badge variant="destructive" className="text-xs">必选</Badge>
                 {selectedIds.length > 0 && (
                   <Badge variant="secondary">{selectedIds.length} 个已选</Badge>
                 )}
               </CardTitle>
               <CardDescription>
-                选择一个或多个离场策略（可选）。若不选择，将使用默认的重新平衡策略
+                <span className="font-medium text-yellow-600 dark:text-yellow-500">⚠️ 必须选择至少一个离场策略</span>
+                <span className="block mt-1">
+                  离场策略控制何时卖出持仓（止损/止盈/持仓时长等），是风险控制的关键。
+                  不选择离场策略会导致系统永远不卖出，可能造成巨大亏损。
+                </span>
               </CardDescription>
             </div>
             <CollapsibleTrigger asChild>
@@ -149,12 +162,35 @@ export default function ExitStrategySelector({ selectedIds, onChange }: ExitStra
               </div>
             ) : (
               <div className="space-y-4">
+                {/* 推荐提示 */}
+                {selectedIds.length === 0 && (
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                      💡 推荐选择
+                    </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                      建议同时选择<strong>止损</strong>和<strong>止盈</strong>策略，实现风险控制和利润保护。
+                    </p>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleSelectRecommended}
+                      className="w-full"
+                    >
+                      使用推荐配置（止损 + 止盈）
+                    </Button>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={handleSelectAll}>
                     全选
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleClearAll}>
                     清空
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleSelectRecommended}>
+                    推荐配置
                   </Button>
                   <div className="flex-1" />
                   <span className="text-xs text-muted-foreground">

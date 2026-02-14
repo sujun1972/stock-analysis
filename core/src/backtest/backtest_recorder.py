@@ -196,18 +196,16 @@ class BacktestRecorder:
             price: 交易价格
             exit_reason: 离场原因（仅卖出时使用）
                 - 'risk_control': 风险控制（止损、移动止损）
-                - 'strategy': 策略信号（止盈、持仓时长）
+                - 'strategy': 策略信号（止盈、持仓时长、信号反转）
                 - 'reverse_entry': 反向入场（持有多头时出现做空信号）
-                - 'rebalance': 调仓离场
             exit_trigger: 离场触发器（仅卖出时使用）
                 - 'stop_loss': 止损
                 - 'take_profit': 止盈
                 - 'trailing_stop': 移动止损
                 - 'max_holding_period': 持仓时长
-                - 'rebalance': 调仓
+                - 'signal_reverse': 信号反转（不再排名top_n）
             entry_reason: 入场原因（仅买入时使用）
-                - 'signal': 策略信号
-                - 'rebalance': 调仓入场
+                - 'signal': 策略信号（调仓日新进入top_n的股票）
             cash_after: 交易后现金余额
             holdings_value_after: 交易后持仓市值
             total_value_after: 交易后总资产
