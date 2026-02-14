@@ -18,21 +18,37 @@ import {
 } from '@/components/ui/pagination'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
+import type { Concept } from '@/types'
 
 export default function StocksPage() {
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [marketFilter, setMarketFilter] = useState<string>('all')
+  const [conceptFilter, setConceptFilter] = useState<string>('all')
+  const [concepts, setConcepts] = useState<Concept[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [totalStocks, setTotalStocks] = useState(0)
   const [pageSize, setPageSize] = useState(20)
   const [sortBy, setSortBy] = useState('pct_change')
   const [sortOrder, setSortOrder] = useState('desc')
 
+  // 加载概念列表
+  useEffect(() => {
+    const loadConcepts = async () => {
+      try {
+        const result = await apiClient.getConceptsList({ limit: 100 })
+        setConcepts(result.items || [])
+      } catch (err) {
+        console.error('Failed to load concepts:', err)
+      }
+    }
+    loadConcepts()
+  }, [])
+
   useEffect(() => {
     loadStocks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, marketFilter, searchTerm, pageSize, sortBy, sortOrder])
+  }, [currentPage, marketFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder])
 
   const loadStocks = async () => {
     try {
@@ -48,6 +64,13 @@ export default function StocksPage() {
 
       if (marketFilter !== 'all') {
         params.market = marketFilter
+      }
+
+      if (conceptFilter !== 'all') {
+        const concept = concepts.find(c => c.code === conceptFilter)
+        if (concept) {
+          params.concepts = concept.name
+        }
       }
 
       if (searchTerm && searchTerm.trim()) {
@@ -120,7 +143,7 @@ export default function StocksPage() {
       {/* 搜索和筛选 */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="market-filter">市场筛选</Label>
               <Select
@@ -139,6 +162,29 @@ export default function StocksPage() {
                   <SelectItem value="深圳主板">深圳主板</SelectItem>
                   <SelectItem value="创业板">创业板</SelectItem>
                   <SelectItem value="科创板">科创板</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="concept-filter">概念筛选</Label>
+              <Select
+                value={conceptFilter}
+                onValueChange={(value) => {
+                  setConceptFilter(value)
+                  setCurrentPage(1)
+                }}
+              >
+                <SelectTrigger id="concept-filter">
+                  <SelectValue placeholder="选择概念..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  <SelectItem value="all">全部概念</SelectItem>
+                  {concepts.map((concept) => (
+                    <SelectItem key={concept.id} value={concept.code}>
+                      {concept.name} ({concept.stock_count})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

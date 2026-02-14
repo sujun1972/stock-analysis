@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from .endpoints import (
     backtest,
+    concepts,
     config,
     data,
     dynamic_strategies,
@@ -26,6 +27,7 @@ router = APIRouter()
 
 # 注册子路由
 router.include_router(stocks.router, prefix="/stocks", tags=["stocks"])
+router.include_router(concepts.router, prefix="/concepts", tags=["概念板块"])
 router.include_router(data.router, prefix="/data", tags=["data"])
 router.include_router(features.router, prefix="/features", tags=["features"])
 router.include_router(backtest.router, prefix="/backtest", tags=["backtest"])

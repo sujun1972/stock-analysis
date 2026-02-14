@@ -1,3 +1,15 @@
+// 概念板块类型
+export interface Concept {
+  id: number
+  code: string
+  name: string
+  source: string
+  description?: string
+  stock_count: number
+  created_at?: string
+  updated_at?: string
+}
+
 // 股票信息类型
 export interface StockInfo {
   code: string
@@ -15,6 +27,8 @@ export interface StockInfo {
   amount?: number
   turnover?: number
   trade_time?: string
+  // 概念标签
+  concepts?: Concept[]
 }
 
 // 股票日线数据类型

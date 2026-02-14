@@ -8,6 +8,7 @@ import type {
   ApiResponse,
   PaginatedResponse,
   MinuteData,
+  Concept,
   // V2.0 统一策略类型
   Strategy,
   CreateStrategyRequest,
@@ -108,6 +109,7 @@ class ApiClient {
     skip?: number
     limit?: number
     search?: string
+    concepts?: string
     sort_by?: string
     sort_order?: string
   }): Promise<PaginatedResponse<StockInfo>> {
@@ -136,6 +138,53 @@ class ApiClient {
    */
   async updateStockList(): Promise<ApiResponse<{ total: number }>> {
     const response = await axiosInstance.post('/api/stocks/update')
+    return response.data
+  }
+
+  // ========== 概念相关API ==========
+
+  // 获取概念列表
+  async getConceptsList(params?: {
+    limit?: number
+    search?: string
+  }): Promise<{ items: Concept[]; total: number }> {
+    const response = await axiosInstance.get('/api/concepts/list', { params })
+    return response.data.data || { items: [], total: 0 }
+  }
+
+  // 获取概念详情
+  async getConcept(conceptId: number): Promise<Concept> {
+    const response = await axiosInstance.get(`/api/concepts/${conceptId}`)
+    return response.data.data
+  }
+
+  // 获取概念包含的股票
+  async getConceptStocks(conceptId: number, limit?: number): Promise<{ items: StockInfo[]; total: number }> {
+    const response = await axiosInstance.get(`/api/concepts/${conceptId}/stocks`, {
+      params: { limit }
+    })
+    return response.data.data || { items: [], total: 0 }
+  }
+
+  // 获取股票的概念
+  async getStockConcepts(stockCode: string): Promise<Concept[]> {
+    const response = await axiosInstance.get(`/api/concepts/stock/${stockCode}`)
+    return response.data.data || []
+  }
+
+  // 同步概念数据
+  async syncConcepts(source: string = 'ths'): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post('/api/concepts/sync', null, {
+      params: { source }
+    })
+    return response.data
+  }
+
+  // 更新股票的概念标签
+  async updateStockConcepts(stockCode: string, conceptIds: number[]): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.put(`/api/concepts/stock/${stockCode}/concepts`, {
+      concept_ids: conceptIds
+    })
     return response.data
   }
 

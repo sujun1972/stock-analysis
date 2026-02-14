@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
-import type { StockInfo, FeatureData, MinuteData } from '@/types'
+import type { StockInfo, FeatureData, MinuteData, Concept } from '@/types'
 import { aggregateMinuteData, type MinutePeriod } from '@/lib/minute-data-aggregator'
 
 // 动态导入图表组件以减少初始加载体积
@@ -39,6 +39,12 @@ function AnalysisContent() {
   const [stockInfo, setStockInfo] = useState<StockInfo | null>(null)
   const [features, setFeatures] = useState<FeatureData[]>([])
 
+  // 概念相关状态
+  const [stockConcepts, setStockConcepts] = useState<Concept[]>([])
+  const [allConcepts, setAllConcepts] = useState<Concept[]>([])
+  const [isEditingConcepts, setIsEditingConcepts] = useState(false)
+  const [selectedConceptIds, setSelectedConceptIds] = useState<number[]>([])
+
   // 新增状态
   const [chartType, setChartType] = useState<ChartType>('daily')
   const [minutePeriod, setMinutePeriod] = useState<MinutePeriod>('5')
@@ -61,11 +67,52 @@ function AnalysisContent() {
   useEffect(() => {
     if (code) {
       loadStockData()
+      loadConceptsData()
     } else {
       setIsLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
+
+  const loadConceptsData = async () => {
+    if (!code) return
+
+    try {
+      // 加载股票的概念
+      const concepts = await apiClient.getStockConcepts(code)
+      setStockConcepts(concepts)
+      setSelectedConceptIds(concepts.map(c => c.id))
+
+      // 加载所有可用的概念
+      const allConceptsResult = await apiClient.getConceptsList({ limit: 100 })
+      setAllConcepts(allConceptsResult.items || [])
+    } catch (err) {
+      console.error('Failed to load concepts:', err)
+    }
+  }
+
+  const handleSaveConcepts = async () => {
+    if (!code) return
+
+    try {
+      await apiClient.updateStockConcepts(code, selectedConceptIds)
+      // 重新加载概念数据
+      await loadConceptsData()
+      setIsEditingConcepts(false)
+    } catch (err: any) {
+      alert(`保存失败: ${err.message}`)
+    }
+  }
+
+  const toggleConceptSelection = (conceptId: number) => {
+    setSelectedConceptIds(prev => {
+      if (prev.includes(conceptId)) {
+        return prev.filter(id => id !== conceptId)
+      } else {
+        return [...prev, conceptId]
+      }
+    })
+  }
 
   // 当切换到分时图或更换日期时，加载1分钟数据
   // 注意：切换周期时不需要重新加载，只需重新聚合
@@ -318,6 +365,76 @@ function AnalysisContent() {
               }
             </p>
           </div>
+        </div>
+
+        {/* 概念标签 */}
+        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">概念标签</h3>
+            {!isEditingConcepts ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditingConcepts(true)}
+              >
+                编辑
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditingConcepts(false)
+                    setSelectedConceptIds(stockConcepts.map(c => c.id))
+                  }}
+                >
+                  取消
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveConcepts}
+                >
+                  保存
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {!isEditingConcepts ? (
+            <div className="flex flex-wrap gap-2">
+              {stockConcepts.length > 0 ? (
+                stockConcepts.map((concept) => (
+                  <span
+                    key={concept.id}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                  >
+                    {concept.name}
+                  </span>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">暂无概念标签</p>
+              )}
+            </div>
+          ) : (
+            <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+              <div className="flex flex-wrap gap-2">
+                {allConcepts.map((concept) => (
+                  <button
+                    key={concept.id}
+                    onClick={() => toggleConceptSelection(concept.id)}
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                      selectedConceptIds.includes(concept.id)
+                        ? 'bg-blue-600 text-white dark:bg-blue-500'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {concept.name} ({concept.stock_count})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
       </Card>

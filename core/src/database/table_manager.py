@@ -78,10 +78,16 @@ class TableManager:
             # 10. 创建实时行情表
             self._create_stock_realtime_table(cursor)
 
-            # 11. 创建所有索引
+            # 11. 创建概念板块表
+            self._create_concept_table(cursor)
+
+            # 12. 创建股票-概念关系表
+            self._create_stock_concept_table(cursor)
+
+            # 13. 创建所有索引
             self._create_all_indexes(cursor)
 
-            # 12. TimescaleDB优化分时数据表（可选）
+            # 14. TimescaleDB优化分时数据表（可选）
             self._optimize_minute_data_with_timescaledb(cursor)
 
             conn.commit()
@@ -317,6 +323,38 @@ class TableManager:
         """)
         logger.info("✓ 实时行情表创建/验证完成")
 
+    def _create_concept_table(self, cursor: 'Cursor') -> None:
+        """创建概念板块表"""
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS concept (
+                id SERIAL PRIMARY KEY,
+                code VARCHAR(50) UNIQUE NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                source VARCHAR(50) DEFAULT 'ths',
+                description TEXT,
+                stock_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        logger.info("✓ 概念板块表创建/验证完成")
+
+    def _create_stock_concept_table(self, cursor: 'Cursor') -> None:
+        """创建股票-概念关系表（多对多）"""
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS stock_concept (
+                id SERIAL PRIMARY KEY,
+                stock_code VARCHAR(20) NOT NULL,
+                concept_id INTEGER NOT NULL,
+                concept_code VARCHAR(50) NOT NULL,
+                concept_name VARCHAR(100) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(stock_code, concept_id)
+            );
+        """)
+        logger.info("✓ 股票-概念关系表创建/验证完成")
+
     def _create_all_indexes(self, cursor: 'Cursor') -> None:
         """创建所有索引"""
         # 日线数据索引
@@ -341,6 +379,15 @@ class TableManager:
         # 交易日历索引
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_date ON trading_calendar(trade_date DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_trading ON trading_calendar(is_trading_day);")
+
+        # 概念表索引
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_code ON concept(code);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_name ON concept(name);")
+
+        # 股票-概念关系表索引
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_concept_stock ON stock_concept(stock_code);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_concept_concept ON stock_concept(concept_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_concept_code ON stock_concept(concept_code);")
 
         logger.info("✓ 索引创建完成")
 

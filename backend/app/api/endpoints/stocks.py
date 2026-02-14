@@ -12,7 +12,9 @@
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
+import sys
+from pathlib import Path
 
 from fastapi import APIRouter, Query
 
@@ -23,6 +25,77 @@ router = APIRouter()
 
 # 全局 Data Adapter 实例
 data_adapter = DataAdapter()
+
+# 添加 core 模块到路径（用于概念筛选）
+core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
+if str(core_path) not in sys.path:
+    sys.path.insert(0, str(core_path))
+
+
+def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_names_str: str) -> List[Dict[str, Any]]:
+    """
+    按概念筛选股票列表
+
+    Args:
+        stocks: 股票列表
+        concept_names_str: 概念名称字符串，多个概念用逗号分隔
+
+    Returns:
+        筛选后的股票列表
+    """
+    from src.database.connection_pool_manager import ConnectionPoolManager
+    from src.config.settings import get_settings
+
+    settings = get_settings()
+    db_settings = settings.database
+
+    # 创建连接池（注意：这里应该使用全局连接池，但为了快速实现先这样）
+    pool_manager = ConnectionPoolManager(
+        config={
+            'host': db_settings.host,
+            'port': db_settings.port,
+            'database': db_settings.database,
+            'user': db_settings.user,
+            'password': db_settings.password
+        },
+        min_conn=1,
+        max_conn=5
+    )
+
+    try:
+        conn = pool_manager.get_connection()
+        cursor = conn.cursor()
+
+        # 解析概念列表（支持多个概念，逗号分隔）
+        concept_names = [c.strip() for c in concept_names_str.split(',') if c.strip()]
+
+        if not concept_names:
+            return stocks
+
+        # 获取属于这些概念的股票代码
+        placeholders = ','.join(['%s'] * len(concept_names))
+        cursor.execute(f"""
+            SELECT DISTINCT sc.stock_code
+            FROM stock_concept sc
+            INNER JOIN concept c ON sc.concept_id = c.id
+            WHERE c.name IN ({placeholders})
+        """, concept_names)
+
+        concept_stock_codes = {row[0] for row in cursor.fetchall()}
+
+        # 过滤股票列表
+        filtered_stocks = [
+            stock for stock in stocks
+            if stock.get("code") in concept_stock_codes
+        ]
+
+        cursor.close()
+        pool_manager.release_connection(conn)
+
+        return filtered_stocks
+
+    finally:
+        pool_manager.close_all()
 
 
 @router.get(
@@ -96,6 +169,7 @@ async def get_stock_list(
     market: Optional[str] = Query(None, description="市场类型筛选，如: 深圳主板、上海主板、创业板、科创板、北交所"),
     status_filter: str = Query("正常", description="股票状态筛选，如: 正常、退市、暂停上市", alias="status"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配，如: 平安、000001"),
+    concepts: Optional[str] = Query(None, description="概念板块筛选，多个概念用逗号分隔，如: 白酒概念,消费概念"),
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(20, ge=1, le=100, description="每页记录数，范围: 1-100"),
 ):
@@ -136,6 +210,10 @@ async def get_stock_list(
             if search_lower in stock.get("code", "").lower()
             or search_lower in stock.get("name", "").lower()
         ]
+
+    # 2.5 Backend 职责：概念筛选
+    if concepts:
+        stocks = filter_stocks_by_concepts(stocks, concepts)
 
     # 3. Backend 职责：分页
     total = len(stocks)
