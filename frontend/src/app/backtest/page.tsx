@@ -525,147 +525,151 @@ export default function BacktestPage() {
   }
 
   return (
-    <>
-      <div className="container mx-auto py-6 px-4 max-w-7xl">
-        <div className="space-y-6">
-          {/* 页面标题 */}
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">策略回测</h1>
-            <p className="text-muted-foreground mt-2">
-              配置参数,运行回测分析
-            </p>
-          </div>
+    <div className="container mx-auto py-6 px-4 max-w-7xl">
+      <div className="space-y-6">
+        {/* 页面标题 */}
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">策略回测</h1>
+          <p className="text-muted-foreground mt-2">
+            配置参数,运行回测分析
+          </p>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 左侧: 配置面板 */}
-            <div className="lg:col-span-1 space-y-6">
-              {/* 策略信息卡片 */}
-              <Card>
-              <CardHeader>
-                <CardTitle>策略信息</CardTitle>
-                <CardDescription>
-                  当前选择的策略详情
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoadingStrategy ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : (
-                  renderStrategyInfo()
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 回测参数卡片 */}
-            <Card>
-              <CardHeader>
-                <CardTitle>回测参数</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* 股票池选择 */}
-                <StockPoolSelector value={stockPool} onChange={setStockPool} maxStocks={50} />
-
-                {/* 日期范围选择 */}
-                <DateRangeSelector value={dateRange} onChange={setDateRange} />
-
-                {/* 初始资金 */}
-                <div className="space-y-2">
-                  <Label htmlFor="initial-capital">初始资金（元）</Label>
-                  <Input
-                    id="initial-capital"
-                    type="number"
-                    value={initialCapital}
-                    onChange={(e) => setInitialCapital(parseInt(e.target.value) || 1000000)}
-                    min={10000}
-                    step={10000}
-                  />
-                </div>
-
-                {/* 调仓频率 */}
-                <div className="space-y-2">
-                  <Label htmlFor="rebalance-freq">调仓频率</Label>
-                  <Select value={rebalanceFreq} onValueChange={(v: any) => setRebalanceFreq(v)}>
-                    <SelectTrigger id="rebalance-freq">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="D">每日</SelectItem>
-                      <SelectItem value="W">每周</SelectItem>
-                      <SelectItem value="M">每月</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 离场策略选择器 */}
-            <ExitStrategySelector
-              selectedIds={exitStrategyIds}
-              onChange={setExitStrategyIds}
-            />
-
-            {/* 运行回测按钮 */}
-            <Button
-              onClick={handleRunBacktest}
-              disabled={isRunning || isLoadingStrategy || !!strategyError}
-              className="w-full"
-              size="lg"
-            >
-              {isRunning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isRunning ? '回测中...' : '运行回测'}
-            </Button>
-          </div>
-
-          {/* 右侧: 结果展示 */}
-          <div className="lg:col-span-2">
-            {isRunning ? (
-              <Card className="p-12 text-center">
-                <div className="flex flex-col items-center justify-center">
-                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
-                  <CardTitle className="mt-4">正在运行回测...</CardTitle>
-                  <CardDescription className="mt-2">
-                    请稍候,正在计算策略回测结果
-                  </CardDescription>
-                </div>
-              </Card>
-            ) : !result ? (
-              <Card className="p-12 text-center">
-                <svg
-                  className="mx-auto h-24 w-24 text-muted-foreground"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
-                </svg>
-                <CardTitle className="mt-4">等待回测结果</CardTitle>
-                <CardDescription className="mt-2">
-                  在左侧配置回测参数,点击&ldquo;运行回测&rdquo;按钮开始
-                </CardDescription>
-              </Card>
+        {/* 1. 策略信息 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>策略信息</CardTitle>
+            <CardDescription>
+              当前选择的策略详情
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingStrategy ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
             ) : (
-              <BacktestResultView result={result} />
+              renderStrategyInfo()
             )}
-            </div>
-          </div>
-        </div>
-      </div>
+          </CardContent>
+        </Card>
 
-      {/* 交易明细表格 - 占据全屏宽度 */}
-      {result && result.trades && result.trades.length > 0 && (
-        <div className="w-full bg-gray-50 dark:bg-gray-900 py-6">
-          <div className="container-custom">
-            <TradesTable result={result} />
-          </div>
+        {/* 2. 回测参数 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>回测参数</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* 股票池选择 */}
+              <div className="md:col-span-2">
+                <StockPoolSelector value={stockPool} onChange={setStockPool} maxStocks={50} />
+              </div>
+
+              {/* 日期范围选择 */}
+              <div className="md:col-span-2">
+                <DateRangeSelector value={dateRange} onChange={setDateRange} />
+              </div>
+
+              {/* 初始资金 */}
+              <div className="space-y-2">
+                <Label htmlFor="initial-capital">初始资金（元）</Label>
+                <Input
+                  id="initial-capital"
+                  type="number"
+                  value={initialCapital}
+                  onChange={(e) => setInitialCapital(parseInt(e.target.value) || 1000000)}
+                  min={10000}
+                  step={10000}
+                />
+              </div>
+
+              {/* 调仓频率 */}
+              <div className="space-y-2">
+                <Label htmlFor="rebalance-freq">调仓频率</Label>
+                <Select value={rebalanceFreq} onValueChange={(v: any) => setRebalanceFreq(v)}>
+                  <SelectTrigger id="rebalance-freq">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="D">每日</SelectItem>
+                    <SelectItem value="W">每周</SelectItem>
+                    <SelectItem value="M">每月</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 3. 离场策略 */}
+        <ExitStrategySelector
+          selectedIds={exitStrategyIds}
+          onChange={setExitStrategyIds}
+        />
+
+        {/* 运行回测按钮 */}
+        <div className="flex justify-center">
+          <Button
+            onClick={handleRunBacktest}
+            disabled={isRunning || isLoadingStrategy || !!strategyError}
+            className="w-full md:w-auto min-w-[200px]"
+            size="lg"
+          >
+            {isRunning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isRunning ? '回测中...' : '运行回测'}
+          </Button>
         </div>
-      )}
-    </>
+
+        {/* 4. 回测结果 */}
+        {isRunning ? (
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+              <div>
+                <CardTitle className="text-2xl">正在运行回测...</CardTitle>
+                <CardDescription className="mt-2 text-base">
+                  正在计算策略回测结果，这可能需要几分钟时间
+                </CardDescription>
+              </div>
+              <div className="text-sm text-muted-foreground mt-4">
+                <p>• 正在加载历史数据</p>
+                <p>• 正在执行策略信号</p>
+                <p>• 正在计算绩效指标</p>
+              </div>
+            </div>
+          </Card>
+        ) : result ? (
+          <>
+            <BacktestResultView result={result} />
+
+            {/* 交易明细表格 */}
+            {result.trades && result.trades.length > 0 && (
+              <TradesTable result={result} />
+            )}
+          </>
+        ) : (
+          <Card className="p-12 text-center">
+            <svg
+              className="mx-auto h-24 w-24 text-muted-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+            <CardTitle className="mt-4">等待回测结果</CardTitle>
+            <CardDescription className="mt-2">
+              配置上方参数后，点击"运行回测"按钮开始
+            </CardDescription>
+          </Card>
+        )}
+      </div>
+    </div>
   )
 }
