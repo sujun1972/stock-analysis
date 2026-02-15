@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DatePicker } from '@/components/ui/date-picker'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { format, subDays, subMonths, subYears } from 'date-fns'
 
 /**
@@ -245,8 +246,9 @@ export default function InitializePage() {
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <ProtectedRoute requireAdmin>
+      <AdminLayout>
+        <div className="space-y-6">
         {/* 返回按钮 */}
         <div>
         <Button variant="ghost" onClick={() => router.back()}>
@@ -655,6 +657,7 @@ export default function InitializePage() {
         </CardContent>
       </Card>
       </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   )
 }

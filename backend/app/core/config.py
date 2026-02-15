@@ -72,6 +72,28 @@ class Settings(BaseSettings):
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # JWT认证配置
+    JWT_SECRET_KEY: str = os.getenv(
+        "JWT_SECRET_KEY",
+        "your-secret-key-here-please-change-in-production-use-openssl-rand-hex-32"
+    )
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+    # 初始管理员配置（首次启动时创建）
+    INITIAL_SUPER_ADMIN_EMAIL: str = os.getenv("INITIAL_SUPER_ADMIN_EMAIL", "admin@stock-analysis.com")
+    INITIAL_SUPER_ADMIN_PASSWORD: str = os.getenv("INITIAL_SUPER_ADMIN_PASSWORD", "admin123456")
+    INITIAL_SUPER_ADMIN_USERNAME: str = os.getenv("INITIAL_SUPER_ADMIN_USERNAME", "admin")
+
+    # 用户配额默认值
+    DEFAULT_TRIAL_BACKTEST_QUOTA: int = 5
+    DEFAULT_TRIAL_ML_QUOTA: int = 2
+    DEFAULT_TRIAL_MAX_STRATEGIES: int = 3
+    DEFAULT_NORMAL_BACKTEST_QUOTA: int = 10
+    DEFAULT_NORMAL_ML_QUOTA: int = 5
+    DEFAULT_NORMAL_MAX_STRATEGIES: int = 10
+
     # 生产环境配置
     @property
     def is_production(self) -> bool:

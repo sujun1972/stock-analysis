@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 interface SyncStatus {
   status: string
@@ -105,8 +106,9 @@ export default function RealtimeSyncPage() {
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <ProtectedRoute requireAdmin>
+      <AdminLayout>
+        <div className="space-y-6">
         {/* 返回按钮 */}
         <button
         onClick={() => router.back()}
@@ -427,6 +429,7 @@ export default function RealtimeSyncPage() {
         </CardContent>
       </Card>
       </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   )
 }

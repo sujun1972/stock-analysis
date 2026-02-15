@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { apiClient } from '@/lib/api-client'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import {
   Activity,
   Database,
@@ -41,9 +42,9 @@ export default function AdminDashboard() {
 
       // 构建统计数据
       setStats({
-        stockCount: syncStatus.data?.total_stocks || 0,
-        syncStatus: syncStatus.data?.is_syncing ? 'syncing' : 'idle',
-        lastSyncTime: syncStatus.data?.last_sync_time || '-',
+        stockCount: syncStatus.data?.total || 0,
+        syncStatus: syncStatus.data?.status === 'syncing' ? 'syncing' : 'idle',
+        lastSyncTime: syncStatus.data?.last_sync_date || '-',
         todayTasks: 0
       })
     } catch (error) {
@@ -54,8 +55,9 @@ export default function AdminDashboard() {
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <ProtectedRoute requireAdmin>
+      <AdminLayout>
+        <div className="space-y-6">
         {/* 页面标题 */}
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -255,6 +257,7 @@ export default function AdminDashboard() {
           </Card>
         </div>
       </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   )
 }

@@ -9,7 +9,8 @@ import {
   FileText,
   Activity,
   LayoutDashboard,
-  ChevronRight
+  ChevronRight,
+  Users
 } from 'lucide-react'
 
 interface AdminLayoutProps {
@@ -21,6 +22,11 @@ const navItems = [
     name: '控制台',
     href: '/',
     icon: LayoutDashboard
+  },
+  {
+    name: '用户管理',
+    href: '/users',
+    icon: Users
   },
   {
     name: '系统设置',

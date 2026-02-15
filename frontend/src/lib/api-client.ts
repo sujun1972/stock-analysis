@@ -53,14 +53,28 @@ const axiosInstance: AxiosInstance = axios.create({
 
 /**
  * 请求拦截器
- * 可以在这里添加认证token等全局请求配置
+ * 自动添加认证token到请求头
  */
 axiosInstance.interceptors.request.use(
   (config) => {
-    // TODO: 添加认证token
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`
-    // }
+    // 只在浏览器环境中访问localStorage
+    if (typeof window === 'undefined') {
+      return config
+    }
+
+    // 从localStorage获取Token（由auth-store管理）
+    const authStorage = localStorage.getItem('auth-storage')
+    if (authStorage) {
+      try {
+        const { state } = JSON.parse(authStorage)
+        const accessToken = state?.accessToken
+        if (accessToken) {
+          config.headers.Authorization = `Bearer ${accessToken}`
+        }
+      } catch (error) {
+        console.error('Failed to parse auth storage:', error)
+      }
+    }
     return config
   },
   (error) => {
@@ -70,14 +84,59 @@ axiosInstance.interceptors.request.use(
 
 /**
  * 响应拦截器
- * 统一处理API错误和网络错误
+ * 统一处理API错误、Token过期自动刷新
  */
 axiosInstance.interceptors.response.use(
   (response) => {
     return response
   },
-  (error) => {
-    // 统一错误处理
+  async (error) => {
+    const originalRequest = error.config
+
+    // Token过期，尝试刷新
+    // 注意：不对refresh请求本身进行刷新，避免死循环
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/api/auth/refresh') &&
+      !originalRequest.url?.includes('/api/auth/login')
+    ) {
+      originalRequest._retry = true
+
+      try {
+        // 动态导入auth store以避免循环依赖
+        const { useAuthStore } = await import('@/stores/auth-store')
+        await useAuthStore.getState().refreshAccessToken()
+
+        // 重新获取新Token并重试请求
+        const authStorage = localStorage.getItem('auth-storage')
+        if (authStorage) {
+          const { state } = JSON.parse(authStorage)
+          const accessToken = state?.accessToken
+          if (accessToken) {
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`
+          }
+        }
+
+        return axiosInstance(originalRequest)
+      } catch (refreshError) {
+        // Token刷新失败，需要重新登录
+        console.error('Token refresh failed, redirecting to login...')
+
+        // 清除认证状态
+        const { useAuthStore } = await import('@/stores/auth-store')
+        useAuthStore.getState().logout()
+
+        // 重定向到登录页
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
+
+        return Promise.reject(refreshError)
+      }
+    }
+
+    // 其他错误统一处理
     if (error.response) {
       console.error('API Error:', error.response.data)
     } else if (error.request) {
@@ -94,6 +153,48 @@ axiosInstance.interceptors.response.use(
  * 封装所有后端API调用
  */
 class ApiClient {
+  // ========== 基础HTTP方法 ==========
+
+  /**
+   * 通用GET请求
+   */
+  async get<T = any>(url: string, config?: any): Promise<ApiResponse<T>> {
+    const response = await axiosInstance.get(url, config)
+    return response.data
+  }
+
+  /**
+   * 通用POST请求
+   */
+  async post<T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>> {
+    const response = await axiosInstance.post(url, data, config)
+    return response.data
+  }
+
+  /**
+   * 通用PATCH请求
+   */
+  async patch<T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>> {
+    const response = await axiosInstance.patch(url, data, config)
+    return response.data
+  }
+
+  /**
+   * 通用DELETE请求
+   */
+  async delete<T = any>(url: string, config?: any): Promise<ApiResponse<T>> {
+    const response = await axiosInstance.delete(url, config)
+    return response.data
+  }
+
+  /**
+   * 通用PUT请求
+   */
+  async put<T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>> {
+    const response = await axiosInstance.put(url, data, config)
+    return response.data
+  }
+
   // 健康检查
   async healthCheck(): Promise<ApiResponse<any>> {
     const response = await axiosInstance.get('/health')
@@ -905,6 +1006,47 @@ class ApiClient {
    */
   async getRealtimeInfo(code: string): Promise<ApiResponse<any>> {
     const response = await axiosInstance.get(`/api/market/realtime-info/${code}`)
+    return response.data
+  }
+
+  // ========== 个人资料相关API ==========
+
+  /**
+   * 获取个人资料
+   */
+  async getProfile(): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/profile')
+    return response.data
+  }
+
+  /**
+   * 更新个人资料
+   */
+  async updateProfile(data: {
+    full_name?: string
+    phone?: string
+    avatar_url?: string
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.patch('/api/profile', data)
+    return response.data
+  }
+
+  /**
+   * 修改密码
+   */
+  async changePassword(oldPassword: string, newPassword: string): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post('/api/profile/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    })
+    return response.data
+  }
+
+  /**
+   * 获取个人配额
+   */
+  async getQuota(): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/profile/quota')
     return response.data
   }
 }

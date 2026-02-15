@@ -665,7 +665,7 @@ export default function BacktestPage() {
             </svg>
             <CardTitle className="mt-4">等待回测结果</CardTitle>
             <CardDescription className="mt-2">
-              配置上方参数后，点击"运行回测"按钮开始
+              配置上方参数后，点击&ldquo;运行回测&rdquo;按钮开始
             </CardDescription>
           </Card>
         )}

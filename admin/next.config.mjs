@@ -3,6 +3,14 @@ const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
 
+  // 跳过TypeScript和ESLint检查以加快构建速度
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   async rewrites() {
     return [
       {

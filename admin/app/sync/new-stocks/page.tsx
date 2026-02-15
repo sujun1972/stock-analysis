@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 interface ModuleSyncStatus {
   status: string
@@ -137,8 +138,9 @@ export default function NewStocksSyncPage() {
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <ProtectedRoute requireAdmin>
+      <AdminLayout>
+        <div className="space-y-6">
         {/* 返回按钮 */}
         <button
         onClick={() => router.back()}
@@ -383,6 +385,7 @@ export default function NewStocksSyncPage() {
         </CardContent>
       </Card>
       </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   )
 }

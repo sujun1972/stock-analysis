@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 interface DataSourceConfig {
   data_source: string
@@ -63,8 +64,9 @@ export default function SyncOverviewPage() {
   ]
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <ProtectedRoute requireAdmin>
+      <AdminLayout>
+        <div className="space-y-6">
         {/* 页面标题 */}
         <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -122,6 +124,7 @@ export default function SyncOverviewPage() {
         </CardContent>
       </Card>
       </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   )
 }

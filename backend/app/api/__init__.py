@@ -5,6 +5,7 @@ API路由模块
 from fastapi import APIRouter
 
 from .endpoints import (
+    auth,
     backtest,
     concepts,
     config,
@@ -14,16 +15,23 @@ from .endpoints import (
     features,
     market,
     ml,
+    profile,
     scheduler,
     stocks,
     strategies,  # Phase 2: 统一策略 API
     strategy,
     strategy_configs,
     sync,
+    users,
 )
 
 # 创建主路由
 router = APIRouter()
+
+# 认证和用户管理路由（无需prefix，已在endpoint中定义）
+router.include_router(auth.router)
+router.include_router(users.router)
+router.include_router(profile.router)
 
 # 注册子路由
 router.include_router(stocks.router, prefix="/stocks", tags=["stocks"])

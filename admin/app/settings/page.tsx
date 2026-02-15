@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import {
   Select,
   SelectContent,
@@ -83,8 +84,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <ProtectedRoute requireAdmin>
+      <AdminLayout>
+        <div className="space-y-6">
         {/* 页面标题 */}
         <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -268,6 +270,7 @@ export default function SettingsPage() {
       </Card>
 
       </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   )
 }
