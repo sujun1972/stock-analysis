@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Users
 } from 'lucide-react'
+import { Header } from '@/components/layout/Header'
 
 interface AdminLayoutProps {
   children: ReactNode
@@ -108,8 +109,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       </aside>
 
       {/* 主内容区 */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-8">
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* 顶部 Header */}
+        <Header />
+
+        {/* 页面内容 */}
+        <div className="flex-1 overflow-auto p-8">
           {children}
         </div>
       </main>

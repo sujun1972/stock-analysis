@@ -66,7 +66,10 @@ services:
       - ./admin/app:/app/app
       - ./admin/components:/app/components
       - ./admin/lib:/app/lib
+      - ./admin/stores:/app/stores
+      - ./admin/types:/app/types
       - ./admin/hooks:/app/hooks
+      - ./admin/public:/app/public
       - ./admin/middleware.ts:/app/middleware.ts
       - ./admin/next.config.mjs:/app/next.config.mjs
       - ./admin/tailwind.config.ts:/app/tailwind.config.ts

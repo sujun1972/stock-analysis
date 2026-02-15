@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- 背景圆形 - 渐变蓝色 -->
+  <defs>
+    <linearGradient id="avatarGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 背景圆 -->
+  <circle cx="64" cy="64" r="64" fill="url(#avatarGradient)"/>
+
+  <!-- 用户图标 -->
+  <g fill="white" opacity="0.9">
+    <!-- 头部 -->
+    <circle cx="64" cy="48" r="20"/>
+
+    <!-- 身体 -->
+    <path d="M 64 72 C 45 72 30 80 30 95 L 30 108 C 30 112 32 116 36 116 L 92 116 C 96 116 98 112 98 108 L 98 95 C 98 80 83 72 64 72 Z"/>
+  </g>
+</svg>
