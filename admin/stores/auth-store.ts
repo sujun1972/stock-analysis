@@ -1,5 +1,15 @@
 /**
  * Admin项目认证Store (Zustand)
+ *
+ * 功能:
+ * 1. 管理用户登录状态和Token
+ * 2. 自动Token刷新机制
+ * 3. localStorage持久化
+ *
+ * 优化:
+ * - checkAuth不再调用API，只从localStorage恢复状态
+ * - 登录时已获取完整用户信息，无需重复请求
+ * - Token刷新在请求拦截器中自动处理
  */
 
 import { create } from 'zustand';
@@ -220,48 +230,43 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      // 检查认证状态（从localStorage恢复或验证Token）
+      /**
+       * 检查认证状态（从localStorage恢复,不调用API）
+       *
+       * 优化说明:
+       * - 不再调用 /api/auth/me 验证Token
+       * - 只从localStorage恢复已保存的状态
+       * - Token验证在请求拦截器中自动处理
+       * - 避免页面切换时的重复API调用
+       */
       checkAuth: async () => {
-        const { accessToken } = get();
+        const { accessToken, user } = get();
 
-        if (!accessToken) {
-          // 尝试从localStorage恢复
-          const storedTokens = localStorage.getItem(TOKEN_STORAGE_KEY);
-          const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+        // 如果已经有用户信息,直接返回,不需要再次验证
+        if (accessToken && user) {
+          return;
+        }
 
-          if (storedTokens && storedUser) {
+        // 尝试从localStorage恢复
+        const storedTokens = localStorage.getItem(TOKEN_STORAGE_KEY);
+        const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+
+        if (storedTokens && storedUser) {
+          try {
             const tokens = JSON.parse(storedTokens);
-            const user = JSON.parse(storedUser);
+            const userData = JSON.parse(storedUser);
 
             set({
-              user,
+              user: userData,
               accessToken: tokens.accessToken,
               refreshToken: tokens.refreshToken,
               isAuthenticated: true,
             });
-          }
-          return;
-        }
-
-        // 验证Token是否有效
-        try {
-          const response = await apiClient.get<User>('/api/auth/me');
-
-          set({
-            user: response,
-            isAuthenticated: true,
-          });
-
-          // 更新localStorage中的用户信息
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
-        } catch (error) {
-          // Token无效，尝试刷新
-          try {
-            await get().refreshAccessToken();
-            await get().checkAuth(); // 递归验证
-          } catch (refreshError) {
-            // 刷新失败，清除登录状态
-            get().logout();
+          } catch (error) {
+            console.error('Failed to restore auth from localStorage:', error);
+            // 如果恢复失败,清除无效数据
+            localStorage.removeItem(TOKEN_STORAGE_KEY);
+            localStorage.removeItem(USER_STORAGE_KEY);
           }
         }
       },

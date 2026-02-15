@@ -1,40 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminLayout from '@/components/layouts/AdminLayout'
-import { apiClient } from '@/lib/api-client'
+import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
-interface DataSourceConfig {
-  data_source: string
-  realtime_data_source: string
-  tushare_token: string
-}
-
 export default function SyncOverviewPage() {
   const router = useRouter()
-  const [dataSource, setDataSource] = useState<DataSourceConfig | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { dataSource, isLoading: loading, fetchDataSourceConfig } = useConfigStore()
 
   useEffect(() => {
-    loadData()
+    fetchDataSourceConfig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const configRes = await apiClient.getDataSourceConfig()
-      if (configRes.data) {
-        setDataSource(configRes.data)
-      }
-    } catch (error) {
-      console.error('加载数据失败:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const syncModules = [
     {

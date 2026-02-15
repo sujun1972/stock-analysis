@@ -47,6 +47,7 @@ backend/data/
 # Logs
 *.log
 logs/
+!admin/app/logs/  # admin前端的日志页面需要提交
 
 # Test results and reports
 test_results/

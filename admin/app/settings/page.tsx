@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
+import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,39 +19,38 @@ import {
 } from '@/components/ui/select'
 
 export default function SettingsPage() {
+  const { dataSource: configData, isLoading, error: configError, fetchDataSourceConfig } = useConfigStore()
+
   const [dataSource, setDataSource] = useState<'akshare' | 'tushare'>('akshare')
   const [minuteDataSource, setMinuteDataSource] = useState<'akshare' | 'tushare'>('akshare')
   const [realtimeDataSource, setRealtimeDataSource] = useState<'akshare' | 'tushare'>('akshare')
   const [tushareToken, setTushareToken] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
+  // 只在首次挂载时加载配置
   useEffect(() => {
-    loadConfig()
+    fetchDataSourceConfig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const loadConfig = async () => {
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      const response = await apiClient.getDataSourceConfig()
-
-      if (response.data) {
-        setDataSource(response.data.data_source as 'akshare' | 'tushare')
-        setMinuteDataSource(response.data.minute_data_source as 'akshare' | 'tushare')
-        setRealtimeDataSource(response.data.realtime_data_source as 'akshare' | 'tushare')
-        setTushareToken(response.data.tushare_token || '')
-      }
-    } catch (err: any) {
-      setError(err.message || '加载配置失败')
-      console.error('Failed to load config:', err)
-    } finally {
-      setIsLoading(false)
+  // 当配置加载完成后,更新本地状态
+  useEffect(() => {
+    if (configData) {
+      setDataSource(configData.data_source as 'akshare' | 'tushare')
+      setMinuteDataSource(configData.minute_data_source as 'akshare' | 'tushare')
+      setRealtimeDataSource(configData.realtime_data_source as 'akshare' | 'tushare')
+      setTushareToken(configData.tushare_token || '')
     }
-  }
+  }, [configData])
+
+  // 设置错误消息
+  useEffect(() => {
+    if (configError) {
+      setError(configError)
+    }
+  }, [configError])
 
   const handleSave = async () => {
     try {
@@ -70,6 +70,9 @@ export default function SettingsPage() {
         realtime_data_source: realtimeDataSource,
         tushare_token: tushareToken.trim()
       })
+
+      // 更新Store中的缓存
+      fetchDataSourceConfig(true)
 
       setSuccessMessage('数据源配置已保存')
 

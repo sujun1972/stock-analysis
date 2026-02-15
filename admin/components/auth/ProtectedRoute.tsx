@@ -11,6 +11,19 @@ interface ProtectedRouteProps {
   requireSuperAdmin?: boolean
 }
 
+/**
+ * 路由保护组件
+ *
+ * 功能:
+ * 1. 验证用户登录状态
+ * 2. 检查用户权限级别
+ * 3. 自动重定向未授权用户
+ *
+ * 优化:
+ * - 只在首次挂载时检查认证状态，避免重复API调用
+ * - 使用localStorage缓存，无需每次都调用 /api/auth/me
+ * - Token过期时自动刷新，对用户透明
+ */
 export function ProtectedRoute({
   children,
   requireAdmin = true,
@@ -19,10 +32,14 @@ export function ProtectedRoute({
   const router = useRouter()
   const { isAuthenticated, user, isLoading, checkAuth } = useAuthStore()
 
+  // 只在首次挂载时检查一次认证状态
+  // 避免每次路由切换都调用API，提升性能
   useEffect(() => {
-    // 检查认证状态
-    checkAuth()
-  }, [checkAuth])
+    if (!isAuthenticated && !isLoading) {
+      checkAuth()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!isLoading) {

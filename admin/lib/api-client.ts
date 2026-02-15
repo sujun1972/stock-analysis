@@ -85,6 +85,12 @@ axiosInstance.interceptors.request.use(
 /**
  * 响应拦截器
  * 统一处理API错误、Token过期自动刷新
+ *
+ * 优化:
+ * - 401错误时自动刷新Token并重试原请求
+ * - 避免刷新死循环（不对refresh和login请求刷新）
+ * - 刷新失败自动登出并重定向
+ * - 对用户透明，无需手动处理Token过期
  */
 axiosInstance.interceptors.response.use(
   (response) => {
@@ -198,6 +204,36 @@ class ApiClient {
   // 健康检查
   async healthCheck(): Promise<ApiResponse<any>> {
     const response = await axiosInstance.get('/health')
+    return response.data
+  }
+
+  // ========== 系统监控相关API ==========
+
+  /**
+   * 获取系统指标（Prometheus格式）
+   */
+  async getSystemMetrics(): Promise<string> {
+    const response = await axiosInstance.get('/metrics', {
+      headers: {
+        'Accept': 'text/plain'
+      },
+      responseType: 'text'
+    })
+    return response.data as any
+  }
+
+  /**
+   * 获取数据库统计信息
+   */
+  async getDatabaseStats(): Promise<ApiResponse<{
+    total_stocks: number
+    total_daily_records: number
+    total_features: number
+    database_size: string
+    oldest_record: string
+    newest_record: string
+  }>> {
+    const response = await axiosInstance.get('/api/monitor/database-stats')
     return response.data
   }
 
@@ -1108,6 +1144,47 @@ class ApiClient {
     const response = await axiosInstance.get(`/api/users/${userId}/activity-logs`, {
       params: { limit, action_type }
     })
+    return response.data
+  }
+
+  // ========== 系统日志相关API ==========
+
+  /**
+   * 获取所有用户的活动日志（系统级）
+   */
+  async getAllActivityLogs(params?: {
+    limit?: number
+    offset?: number
+    action_type?: string
+    user_id?: number
+    start_date?: string
+    end_date?: string
+  }): Promise<ApiResponse<{
+    items: any[]
+    total: number
+    page: number
+    page_size: number
+  }>> {
+    const response = await axiosInstance.get('/api/logs/activity', { params })
+    return response.data
+  }
+
+  /**
+   * 获取所有登录历史（系统级）
+   */
+  async getAllLoginHistory(params?: {
+    limit?: number
+    offset?: number
+    user_id?: number
+    start_date?: string
+    end_date?: string
+  }): Promise<ApiResponse<{
+    items: any[]
+    total: number
+    page: number
+    page_size: number
+  }>> {
+    const response = await axiosInstance.get('/api/logs/login-history', { params })
     return response.data
   }
 }

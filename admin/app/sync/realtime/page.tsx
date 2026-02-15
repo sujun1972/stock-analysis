@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
+import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
@@ -15,16 +16,10 @@ interface SyncStatus {
   completed: number
 }
 
-interface DataSourceConfig {
-  data_source: string
-  realtime_data_source: string
-  tushare_token: string
-}
-
 export default function RealtimeSyncPage() {
   const router = useRouter()
+  const { dataSource, fetchDataSourceConfig } = useConfigStore()
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
-  const [dataSource, setDataSource] = useState<DataSourceConfig | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -33,7 +28,8 @@ export default function RealtimeSyncPage() {
 
   useEffect(() => {
     loadSyncStatus()
-    loadDataSource()
+    fetchDataSourceConfig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadSyncStatus = async () => {
@@ -44,17 +40,6 @@ export default function RealtimeSyncPage() {
       }
     } catch (err) {
       console.error('Failed to load sync status:', err)
-    }
-  }
-
-  const loadDataSource = async () => {
-    try {
-      const response = await apiClient.getDataSourceConfig()
-      if (response.data) {
-        setDataSource(response.data)
-      }
-    } catch (err) {
-      console.error('Failed to load data source config:', err)
     }
   }
 
