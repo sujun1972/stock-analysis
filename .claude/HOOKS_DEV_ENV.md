@@ -107,6 +107,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 - TimescaleDB 健康状态
 - Backend 容器状态
 - Frontend 容器状态
+- Admin 容器状态
 
 ---
 
@@ -190,11 +191,13 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml down -v
 **热重载支持**:
 - ✅ Backend: `--reload` 模式，修改 Python 自动重启
 - ✅ Frontend: `npm run dev`，修改 TypeScript 即时刷新
+- ✅ Admin: `npm run dev`，修改 TypeScript 即时刷新
 
 **卷挂载**:
 - `./backend:/app` - Backend 代码
-- `./core/src:/app/src` - 核心模块
+- `./core/src:/app/core/src` - 核心模块
 - `./frontend/src:/app/src` - Frontend 代码
+- `./admin/app:/app/app` - Admin 代码 (Next.js App Router)
 
 **环境变量**:
 - `ENVIRONMENT=development`
@@ -380,4 +383,4 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart
 **功能状态**: ✅ 开箱即用
 **依赖工具**: ✅ 零依赖
 
-**最后更新**: 2026-01-26
+**最后更新**: 2025-02-15 (新增 Admin 热重载支持)

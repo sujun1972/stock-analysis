@@ -2,90 +2,150 @@
 
 本文档说明如何配置支持热重载的开发环境，让代码修改后自动重新编译。
 
+## ✨ 更新说明（2025-02-15）
+
+- ✅ 支持 Backend 热重载（Python/FastAPI）
+- ✅ 支持 Frontend 热重载（Next.js）
+- ✅ 支持 Admin 热重载（Next.js）
+- ✅ 新增快速启动脚本 `./scripts/dev.sh`
+- ✅ 完整的代码挂载和热更新配置
+
 ## 📋 目录
 
-- [Backend热重载（已支持）](#backend热重载)
-- [Frontend热重载（新增）](#frontend热重载)
+- [快速启动](#快速启动)
+- [Backend热重载](#backend热重载)
+- [Frontend热重载](#frontend热重载)
+- [Admin热重载](#admin热重载)
 - [使用开发环境](#使用开发环境)
 - [常见问题](#常见问题)
+
+## 🚀 快速启动
+
+### 使用启动脚本（推荐）
+
+```bash
+./scripts/dev.sh
+```
+
+这个脚本会自动：
+1. 检查 Docker 是否运行
+2. 停止旧容器
+3. 构建并启动所有服务（开发模式）
+4. 显示服务访问地址
+
+### 手动启动
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+### 服务访问地址
+
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| Frontend | http://localhost:3000 | 前端应用 |
+| Admin | http://localhost:3002 | 管理后台 |
+| Backend | http://localhost:8000 | 后端 API |
+| API 文档 | http://localhost:8000/docs | FastAPI 文档 |
+| Grafana | http://localhost:3001 | 监控面板 |
+
+---
 
 ## 🔧 Backend热重载
 
 ### 当前状态：✅ 已支持
 
-Backend已经配置了热重载功能：
+Backend 已经配置了热重载功能。
 
-**配置文件**: `docker-compose.yml`
+**配置文件**: [docker-compose.dev.yml](docker-compose.dev.yml#L7-L30)
 ```yaml
 backend:
   volumes:
-    - ./backend:/app          # 代码挂载
-    - ./core/src:/app/src     # 核心代码挂载
-  command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    - ./backend:/app              # Backend 代码
+    - ./core/src:/app/core/src    # Core 核心模块
+  command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **特性**:
-- ✅ 修改Python代码后自动重启
-- ✅ 修改`backend/`目录下的任何文件都会触发重载
-- ✅ 修改`core/src/`目录下的代码也会触发重载
-- ⚡ 重启速度: 1-3秒
+- ✅ 修改 Python 代码后自动重启（1-3 秒）
+- ✅ 支持 `backend/` 和 `core/src/` 目录
+- ✅ 自动安装测试依赖
+- ⚡ 热重载速度: 1-3 秒
 
 **测试方法**:
 ```bash
-# 1. 修改任意Python文件，如 backend/app/api/endpoints/stocks.py
-# 2. 查看日志，应该看到 "Application startup complete"
-docker-compose logs -f backend
+# 1. 修改任意 Python 文件
+# 2. 查看日志确认重启
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f backend
 ```
 
 ---
 
 ## 🎨 Frontend热重载
 
-### 当前状态：⚠️ 生产模式（需切换到开发模式）
+### 当前状态：✅ 已支持
 
-Frontend目前使用生产构建模式，需要切换到开发模式以支持热重载。
+Frontend 使用 Next.js 开发模式，支持快速刷新。
 
-### 方案1：使用开发环境配置文件（推荐）
-
-**步骤**:
-
-1. **停止当前服务**:
-   ```bash
-   docker-compose down
-   ```
-
-2. **使用开发模式启动**:
-   ```bash
-   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-   ```
-
-3. **查看日志**:
-   ```bash
-   docker-compose logs -f frontend
-   ```
+**配置文件**: [docker-compose.dev.yml](docker-compose.dev.yml#L32-L53)
+```yaml
+frontend:
+  build:
+    dockerfile: Dockerfile.dev
+  environment:
+    - NODE_ENV=development
+  volumes:
+    - ./frontend/src:/app/src
+    - ./frontend/public:/app/public
+    - /app/node_modules  # 排除容器内的 node_modules
+  command: npm run dev
+```
 
 **特性**:
-- ✅ 修改`frontend/src/`下的代码自动热重载
-- ✅ Fast Refresh支持（React组件级热更新）
-- ⚡ 更新速度: 即时（通常<1秒）
-- 📦 不需要重新构建整个应用
+- ✅ Fast Refresh（React 组件级热更新）
+- ✅ 修改代码即时生效（< 1 秒）
+- ✅ 无需重新构建
+- ⚡ 热更新速度: 即时
 
 **测试方法**:
 ```bash
-# 1. 修改任意React组件，如 frontend/src/app/page.tsx
-# 2. 浏览器自动刷新，无需手动操作
+# 1. 修改 frontend/src/ 下的任意文件
+# 2. 浏览器自动刷新（无需手动操作）
 ```
 
-### 方案2：只启动Frontend开发模式
+---
 
-如果只需要开发Frontend：
+## 🔐 Admin热重载
 
+### 当前状态：✅ 已支持（新增）
+
+Admin 管理后台同样支持热重载。
+
+**配置文件**: [docker-compose.dev.yml](docker-compose.dev.yml#L55-L76)
+```yaml
+admin:
+  build:
+    dockerfile: Dockerfile.dev
+  environment:
+    - NODE_ENV=development
+  volumes:
+    - ./admin/app:/app/app
+    - ./admin/components:/app/components
+    - ./admin/lib:/app/lib
+    - /app/node_modules
+  command: npm run dev
+```
+
+**特性**:
+- ✅ Next.js App Router 支持
+- ✅ Fast Refresh
+- ✅ 组件、页面、库文件全部热更新
+- ⚡ 热更新速度: 即时
+
+**测试方法**:
 ```bash
-# 1. 确保Backend在运行
-docker-compose up -d backend timescaledb
-
-# 2. 启动Frontend开发模式
-docker-compose -f docker-compose.dev.yml up frontend
+# 1. 修改 admin/app/ 或 admin/components/ 下的文件
+# 2. 浏览器自动刷新
 ```
 
 ---
@@ -95,17 +155,19 @@ docker-compose -f docker-compose.dev.yml up frontend
 ### 完整启动命令
 
 ```bash
-# 启动所有服务（开发模式）
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# 方式1：使用脚本（推荐）
+./scripts/dev.sh
+
+# 方式2：手动启动
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 # 查看所有日志
-docker-compose logs -f
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f
 
-# 只查看Frontend日志
-docker-compose logs -f frontend
-
-# 只查看Backend日志
-docker-compose logs -f backend
+# 查看特定服务日志
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f backend
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f frontend
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f admin
 ```
 
 ### 停止服务
@@ -114,23 +176,44 @@ docker-compose logs -f backend
 # 停止所有服务
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
 
-# 停止并删除数据卷（慎用）
+# 停止并删除数据卷（慎用！会删除数据库数据）
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml down -v
 ```
 
 ### 重建镜像
 
-当修改了Dockerfile或package.json后，需要重建镜像：
+当修改了以下文件时需要重建：
+- `Dockerfile` 或 `Dockerfile.dev`
+- `requirements.txt` 或 `package.json`
+- 添加了系统依赖
 
 ```bash
 # 重建所有镜像
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml build
 
-# 只重建Frontend
+# 只重建特定服务
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml build backend
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml build frontend
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml build admin
 
 # 重建并启动
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+### 进入容器
+
+```bash
+# 进入 Backend 容器
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec backend bash
+
+# 进入 Frontend 容器
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend sh
+
+# 进入 Admin 容器
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec admin sh
+
+# 连接数据库
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec timescaledb psql -U stock_user -d stock_analysis
 ```
 
 ---
@@ -172,55 +255,95 @@ services:
 
 ## 🐛 常见问题
 
-### Q1: Frontend修改后没有自动刷新？
+### Q1: 修改代码后没有自动重载？
 
-**检查项**:
-1. 确认使用了开发模式启动:
-   ```bash
-   docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
-   ```
+**Backend 排查**:
+```bash
+# 1. 检查是否使用开发模式
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
 
-2. 检查Frontend日志:
-   ```bash
-   docker-compose logs frontend | grep "ready"
-   ```
+# 2. 查看日志确认是否有错误
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f backend
 
-3. 确认浏览器地址是`http://localhost:3000`
+# 3. 检查代码是否正确挂载
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec backend ls -la /app
+```
 
-### Q2: Backend修改后没有重启？
+**Frontend/Admin 排查**:
+```bash
+# 1. 确认使用开发模式
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
 
-**检查项**:
-1. 确认代码卷挂载正确:
-   ```bash
-   docker-compose exec backend ls -la /app
-   ```
+# 2. 检查日志
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f frontend
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f admin
 
-2. 检查Backend日志是否有错误:
-   ```bash
-   docker-compose logs backend
-   ```
+# 3. 确认浏览器地址正确
+# Frontend: http://localhost:3000
+# Admin: http://localhost:3002
 
-### Q3: 端口冲突？
+# 4. 清除浏览器缓存或硬刷新（Cmd/Ctrl + Shift + R）
+```
 
-如果端口已被占用：
+### Q2: 端口冲突
 
 ```bash
 # 查看端口占用
-lsof -i :3000
-lsof -i :8000
+lsof -i :3000  # Frontend
+lsof -i :3002  # Admin
+lsof -i :8000  # Backend
 
-# 修改docker-compose.yml中的端口映射
-# 例如: "3001:3000" 或 "8001:8000"
+# 解决方案1: 停止占用端口的进程
+kill -9 <PID>
+
+# 解决方案2: 修改 docker-compose.yml 中的端口映射
+# 例如: "3001:3000"
 ```
 
-### Q4: 性能问题？
+### Q3: node_modules 或 .next 缓存问题
 
-开发模式会占用更多资源：
+```bash
+# 删除容器和镜像，重新构建
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+# 如果仍有问题，删除本地缓存
+rm -rf frontend/.next frontend/node_modules
+rm -rf admin/.next admin/node_modules
+```
+
+### Q4: 权限问题（Linux/Mac）
+
+```bash
+# 修复文件权限
+sudo chown -R $USER:$USER .
+
+# 或者在 docker-compose.dev.yml 中添加用户映射
+user: "${UID}:${GID}"
+```
+
+### Q5: 性能问题
 
 **优化建议**:
-- 增加Docker Desktop的内存限制（建议8GB+）
-- 关闭不需要的服务
-- 使用`.dockerignore`排除不必要的文件
+- 增加 Docker Desktop 内存限制（建议 8GB+）
+- 关闭不需要的服务：
+  ```bash
+  # 只启动 Backend 和 Frontend
+  docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d backend frontend timescaledb redis
+  ```
+- 使用 `.dockerignore` 排除不必要的文件
+
+### Q6: 环境变量未生效
+
+```bash
+# 检查环境变量
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec backend env | grep ENVIRONMENT
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend env | grep NODE_ENV
+
+# 确保 .env 文件存在并正确配置
+# 重启服务使环境变量生效
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart
+```
 
 ---
 
@@ -239,18 +362,22 @@ lsof -i :8000
 
 ```bash
 # 1. 启动开发环境（一次性）
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+./scripts/dev.sh
+# 或
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
-# 2. 查看日志（新终端）
-docker-compose logs -f
+# 2. 查看日志（新终端，可选）
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f
 
 # 3. 修改代码（自动热重载）
-# - Backend: 保存文件 → 等待1-3秒 → API自动更新
+# - Backend: 保存文件 → 等待 1-3 秒 → API 自动更新
 # - Frontend: 保存文件 → 即时刷新 → 页面自动更新
+# - Admin: 保存文件 → 即时刷新 → 页面自动更新
 
 # 4. 调试
-docker-compose exec backend python -c "print('test')"
-docker-compose exec frontend npm run lint
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec backend python -m pytest
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run lint
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec admin npm run lint
 
 # 5. 完成开发后关闭
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
@@ -263,10 +390,23 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
 
 # 启动生产模式
-docker-compose up -d
+docker-compose up -d --build
 
 # 查看生产环境日志
 docker-compose logs -f
+```
+
+### 只开发特定服务
+
+```bash
+# 只开发 Backend
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d backend timescaledb redis
+
+# 只开发 Frontend
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d frontend backend timescaledb redis
+
+# 只开发 Admin
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d admin backend timescaledb redis
 ```
 
 ---

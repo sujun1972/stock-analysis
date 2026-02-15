@@ -51,3 +51,28 @@ services:
       - /app/node_modules
       - /app/.next
     command: npm run dev
+
+  # Admin 开发模式配置
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile.dev  # 使用开发模式Dockerfile
+      target: development
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      # 挂载源代码，实现热重载
+      - ./admin/app:/app/app
+      - ./admin/components:/app/components
+      - ./admin/lib:/app/lib
+      - ./admin/hooks:/app/hooks
+      - ./admin/middleware.ts:/app/middleware.ts
+      - ./admin/next.config.mjs:/app/next.config.mjs
+      - ./admin/tailwind.config.ts:/app/tailwind.config.ts
+      - ./admin/tsconfig.json:/app/tsconfig.json
+      - ./admin/postcss.config.mjs:/app/postcss.config.mjs
+      # 排除node_modules，使用容器内的
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
