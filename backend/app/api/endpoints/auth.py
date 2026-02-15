@@ -3,7 +3,7 @@
 包括登录、注册、Token刷新等
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
@@ -149,13 +149,13 @@ async def login(
     refresh_token_obj = RefreshToken(
         user_id=user.id,
         token=tokens["refresh_token"],
-        expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         is_revoked=False
     )
     db.add(refresh_token_obj)
 
     # 更新用户登录信息
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = datetime.now(timezone.utc)
     user.login_count += 1
 
     # 记录成功登录
@@ -213,9 +213,9 @@ async def refresh_token(
         )
 
     # 检查token是否过期
-    if token_obj.expires_at < datetime.utcnow():
+    if token_obj.expires_at < datetime.now(timezone.utc):
         token_obj.is_revoked = True
-        token_obj.revoked_at = datetime.utcnow()
+        token_obj.revoked_at = datetime.now(timezone.utc)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -240,13 +240,13 @@ async def refresh_token(
 
     # 撤销旧的refresh_token
     token_obj.is_revoked = True
-    token_obj.revoked_at = datetime.utcnow()
+    token_obj.revoked_at = datetime.now(timezone.utc)
 
     # 保存新的refresh_token
     new_refresh_token = RefreshToken(
         user_id=user.id,
         token=new_tokens["refresh_token"],
-        expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         is_revoked=False
     )
     db.add(new_refresh_token)
@@ -280,7 +280,7 @@ async def logout(
 
     if token_obj:
         token_obj.is_revoked = True
-        token_obj.revoked_at = datetime.utcnow()
+        token_obj.revoked_at = datetime.now(timezone.utc)
         db.commit()
 
     return MessageResponse(message="登出成功")

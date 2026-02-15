@@ -325,6 +325,32 @@ class ApiClient {
     return response.data
   }
 
+  // 创建概念
+  async createConcept(data: {
+    code: string
+    name: string
+    description?: string
+  }): Promise<ApiResponse<Concept>> {
+    const response = await axiosInstance.post('/api/concepts/', data)
+    return response.data
+  }
+
+  // 更新概念
+  async updateConcept(conceptId: number, data: {
+    code?: string
+    name?: string
+    description?: string
+  }): Promise<ApiResponse<Concept>> {
+    const response = await axiosInstance.put(`/api/concepts/${conceptId}`, data)
+    return response.data
+  }
+
+  // 删除概念
+  async deleteConcept(conceptId: number): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.delete(`/api/concepts/${conceptId}`)
+    return response.data
+  }
+
   // ========== 数据相关API ==========
 
   // 获取日线数据
@@ -873,6 +899,7 @@ class ApiClient {
   }): Promise<ApiResponse<any>> {
     // 转换为新格式，调用统一回测接口
     return this.runUnifiedBacktest({
+      strategy_id: 1, // 默认使用 ID=1 的策略（向后兼容）
       strategy_type: 'predefined',
       strategy_name: params.strategy_id || 'momentum',
       strategy_config: params.strategy_params || {},

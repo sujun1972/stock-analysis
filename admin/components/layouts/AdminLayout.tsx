@@ -10,7 +10,8 @@ import {
   Activity,
   LayoutDashboard,
   ChevronRight,
-  Users
+  Users,
+  Tag
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 
@@ -28,6 +29,11 @@ const navItems = [
     name: '用户管理',
     href: '/users',
     icon: Users
+  },
+  {
+    name: '概念管理',
+    href: '/concepts',
+    icon: Tag
   },
   {
     name: '系统设置',
