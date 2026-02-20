@@ -48,6 +48,7 @@ backend/data/
 *.log
 logs/
 !admin/app/logs/  # admin前端的日志页面需要提交
+!admin/app/(dashboard)/logs/  # admin前端的日志页面需要提交（路由组）
 
 # Test results and reports
 test_results/

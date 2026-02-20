@@ -2,10 +2,8 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 export default function SyncOverviewPage() {
   const router = useRouter()
@@ -44,11 +42,9 @@ export default function SyncOverviewPage() {
   ]
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
-        <div className="space-y-6">
-        {/* 页面标题 */}
-        <div>
+    <div className="space-y-6">
+      {/* 页面标题 */}
+      <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           数据同步管理
         </h1>
@@ -103,8 +99,6 @@ export default function SyncOverviewPage() {
           </ul>
         </CardContent>
       </Card>
-      </div>
-      </AdminLayout>
-    </ProtectedRoute>
+    </div>
   )
 }

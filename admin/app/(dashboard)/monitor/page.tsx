@@ -1,10 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -154,8 +152,6 @@ export default function MonitorPage() {
   const overallStatus = health?.status || 'unhealthy'
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6">
           {/* 页面标题 */}
           <div className="flex items-center justify-between">
@@ -500,7 +496,5 @@ export default function MonitorPage() {
             </CardContent>
           </Card>
         </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

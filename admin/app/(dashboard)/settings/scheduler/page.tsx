@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 interface ScheduledTask {
   id: number
@@ -97,7 +96,6 @@ export default function SchedulerSettingsPage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
       <div className="space-y-6">
       {/* 页面标题 */}
       <div>
@@ -327,6 +325,5 @@ export default function SchedulerSettingsPage() {
         </div>
       )}
       </div>
-    </ProtectedRoute>
   )
 }

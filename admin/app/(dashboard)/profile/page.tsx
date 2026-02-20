@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import AdminLayout from '@/components/layouts/AdminLayout'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -134,8 +132,6 @@ export default function ProfilePage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6 max-w-4xl">
           {/* 页面标题 */}
           <div>
@@ -393,7 +389,5 @@ export default function ProfilePage() {
             </TabsContent>
           </Tabs>
         </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

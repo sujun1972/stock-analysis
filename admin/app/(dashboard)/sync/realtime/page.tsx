@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 interface SyncStatus {
   status: string
@@ -91,8 +89,6 @@ export default function RealtimeSyncPage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6">
         {/* 返回按钮 */}
         <button
@@ -414,7 +410,5 @@ export default function RealtimeSyncPage() {
         </CardContent>
       </Card>
       </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

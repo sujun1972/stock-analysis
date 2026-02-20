@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 interface ModuleSyncStatus {
   status: string
@@ -138,8 +136,6 @@ export default function NewStocksSyncPage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6">
         {/* 返回按钮 */}
         <button
@@ -385,7 +381,5 @@ export default function NewStocksSyncPage() {
         </CardContent>
       </Card>
       </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

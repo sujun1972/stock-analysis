@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -91,8 +89,6 @@ export default function StockConceptsPage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6">
           {/* 页面标题和导航 */}
           <div className="flex items-center justify-between">
@@ -262,7 +258,5 @@ export default function StockConceptsPage() {
             </>
           )}
         </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

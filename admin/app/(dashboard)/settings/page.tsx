@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +8,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import {
   Select,
   SelectContent,
@@ -87,8 +85,6 @@ export default function SettingsPage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6">
         {/* 页面标题 */}
         <div>
@@ -273,7 +269,5 @@ export default function SettingsPage() {
       </Card>
 
       </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

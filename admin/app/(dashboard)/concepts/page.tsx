@@ -1,8 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -161,8 +159,6 @@ export default function ConceptsPage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6">
           {/* 页面标题和操作栏 */}
           <div className="flex items-center justify-between">
@@ -405,7 +401,5 @@ export default function ConceptsPage() {
             </DialogContent>
           </Dialog>
         </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

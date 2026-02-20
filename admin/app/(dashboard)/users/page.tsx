@@ -1,8 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -110,8 +108,6 @@ export default function UsersPage() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -268,7 +264,5 @@ export default function UsersPage() {
               )}
             </CardContent>
           </Card>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

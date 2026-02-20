@@ -1,10 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -214,8 +212,6 @@ export default function LogsPage() {
   })
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
         <div className="space-y-6">
           {/* 页面标题 */}
           <div className="flex items-center justify-between">
@@ -463,7 +459,5 @@ export default function LogsPage() {
             </CardContent>
           </Card>
         </div>
-      </AdminLayout>
-    </ProtectedRoute>
   )
 }

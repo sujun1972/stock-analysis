@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import AdminLayout from '@/components/layouts/AdminLayout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { apiClient } from '@/lib/api-client'
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import {
   Activity,
   Database,
@@ -55,18 +53,16 @@ export default function AdminDashboard() {
   }
 
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
-        <div className="space-y-6">
-        {/* 页面标题 */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            管理控制台
-          </h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">
-            股票分析系统管理后台 - 系统监控与管理
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* 页面标题 */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          管理控制台
+        </h1>
+        <p className="text-gray-600 dark:text-gray-300 mt-2">
+          股票分析系统管理后台 - 系统监控与管理
+        </p>
+      </div>
 
         {/* 统计卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -256,8 +252,6 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
-      </div>
-      </AdminLayout>
-    </ProtectedRoute>
+    </div>
   )
 }
