@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { apiClient } from '@/lib/api-client'
@@ -10,8 +11,7 @@ import {
   Database,
   TrendingUp,
   Clock,
-  CheckCircle2,
-  XCircle
+  CheckCircle2
 } from 'lucide-react'
 
 interface SystemStats {
@@ -164,7 +164,7 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <a
+              <Link
                 href="/settings"
                 className="flex items-center gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
@@ -175,9 +175,9 @@ export default function AdminDashboard() {
                   <div className="font-medium">系统设置</div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">配置数据源</div>
                 </div>
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/sync"
                 className="flex items-center gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
@@ -188,9 +188,9 @@ export default function AdminDashboard() {
                   <div className="font-medium">数据同步</div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">同步股票数据</div>
                 </div>
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/monitor"
                 className="flex items-center gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
@@ -201,7 +201,7 @@ export default function AdminDashboard() {
                   <div className="font-medium">性能监控</div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">查看系统状态</div>
                 </div>
-              </a>
+              </Link>
             </div>
           </CardContent>
         </Card>
