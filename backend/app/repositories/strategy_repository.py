@@ -55,24 +55,25 @@ class StrategyRepository(BaseRepository):
 
         query = """
             INSERT INTO strategies (
-                name, display_name, code, code_hash, class_name,
+                user_id, name, display_name, code, code_hash, class_name,
                 source_type, strategy_type, description, category, tags,
                 default_params, validation_status, validation_errors,
                 validation_warnings, risk_level, parent_strategy_id,
                 created_by
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """
 
         params = (
+            data.get('user_id'),  # NULL表示系统策略
             data['name'],
             data['display_name'],
             code,
             code_hash,
             data['class_name'],
             data['source_type'],
-            data.get('strategy_type', 'entry'),
+            data.get('strategy_type', 'stock_selection'),
             data.get('description'),
             data.get('category'),
             data.get('tags', []),
@@ -172,6 +173,7 @@ class StrategyRepository(BaseRepository):
 
     def list_all(
         self,
+        user_id: Optional[int] = None,
         source_type: Optional[str] = None,
         strategy_type: Optional[str] = None,
         category: Optional[str] = None,
@@ -186,8 +188,9 @@ class StrategyRepository(BaseRepository):
         获取策略列表（支持筛选和分页）
 
         Args:
+            user_id: 用户ID过滤（None表示不过滤，-1表示仅系统策略）
             source_type: 来源类型过滤 (builtin/ai/custom)
-            strategy_type: 策略类型过滤 (entry/exit)
+            strategy_type: 策略类型过滤 (stock_selection/entry/exit)
             category: 类别过滤
             is_enabled: 是否启用过滤
             validation_status: 验证状态过滤
@@ -210,6 +213,14 @@ class StrategyRepository(BaseRepository):
         # 构建查询条件
         where_clauses = []
         params = []
+
+        if user_id is not None:
+            if user_id == -1:
+                # -1 表示仅查询系统策略
+                where_clauses.append("user_id IS NULL")
+            else:
+                where_clauses.append("user_id = %s")
+                params.append(user_id)
 
         if source_type:
             where_clauses.append("source_type = %s")
@@ -246,7 +257,8 @@ class StrategyRepository(BaseRepository):
                 id, name, display_name, class_name, source_type, strategy_type,
                 description, category, tags, validation_status,
                 risk_level, is_enabled, usage_count, backtest_count,
-                avg_sharpe_ratio, avg_annual_return, created_at, updated_at
+                avg_sharpe_ratio, avg_annual_return, user_id, created_by,
+                created_at, updated_at
             """
 
         # 计算总数

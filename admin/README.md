@@ -29,19 +29,28 @@
 - 配额管理
 - 登录历史和活动日志
 
-### 5. 数据同步 (/sync)
+### 5. 策略管理 (/strategies)
+- 策略列表、创建、编辑和详情
+- 支持三种策略类型：选股策略、入场策略、离场策略
+- 用户策略关联（用户可管理自己的策略）
+- Monaco Editor代码编辑（类VSCode编辑器）
+- 策略代码验证和风险评估
+- 系统内置策略（只读）
+- 策略使用统计和回测统计
+
+### 6. 数据同步 (/sync)
 - 数据初始化 (/sync/initialize)
 - 新股列表同步 (/sync/new-stocks)
 - 退市列表同步 (/sync/delisted-stocks)
 - 实时行情同步 (/sync/realtime)
 
-### 6. 系统日志 (/logs)
+### 7. 系统日志 (/logs)
 - 用户活动日志查看
 - 登录历史追踪
 - 操作类型筛选
 - 用户搜索和过滤
 
-### 7. 性能监控 (/monitor)
+### 8. 性能监控 (/monitor)
 - 系统健康状态检查
 - 数据库和Redis连接监控
 - API性能指标
@@ -90,6 +99,14 @@ admin/
 │   ├── profile/           # 个人资料管理
 │   │   └── page.tsx
 │   ├── users/             # 用户管理
+│   ├── strategies/        # 策略管理
+│   │   ├── page.tsx       # 策略列表
+│   │   ├── new/           # 创建策略
+│   │   │   └── page.tsx
+│   │   └── [id]/          # 策略详情和编辑
+│   │       ├── page.tsx   # 策略详情
+│   │       └── edit/
+│   │           └── page.tsx  # 编辑策略
 │   ├── settings/          # 系统设置
 │   │   ├── page.tsx
 │   │   └── scheduler/     # 定时任务管理
@@ -142,6 +159,7 @@ admin/
 - **数据查询**: @tanstack/react-query
 - **HTTP客户端**: Axios (带Token自动注入和刷新)
 - **图标**: Lucide React
+- **代码编辑器**: Monaco Editor (VSCode内核)
 
 ## 🏗️ 架构设计
 

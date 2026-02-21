@@ -192,6 +192,7 @@ async def create_strategy(data: StrategyCreate) -> Dict[str, Any]:
         "code": data.code,
         "class_name": data.class_name,
         "source_type": data.source_type,
+        "strategy_type": data.strategy_type,
         "description": data.description,
         "category": data.category,
         "tags": data.tags or [],
@@ -222,8 +223,9 @@ async def create_strategy(data: StrategyCreate) -> Dict[str, Any]:
 @router.get("", summary="获取策略列表", response_model=Dict[str, Any])
 @handle_api_errors
 async def list_strategies(
+    user_id: Optional[int] = Query(None, description="用户ID过滤（管理员可查看所有用户）"),
     source_type: Optional[str] = Query(None, description="来源类型过滤: builtin/ai/custom"),
-    strategy_type: Optional[str] = Query(None, description="策略类型过滤: entry/exit"),
+    strategy_type: Optional[str] = Query(None, description="策略类型过滤: stock_selection/entry/exit"),
     category: Optional[str] = Query(None, description="类别过滤"),
     is_enabled: Optional[bool] = Query(None, description="是否启用过滤"),
     validation_status: Optional[str] = Query(None, description="验证状态过滤"),
@@ -238,7 +240,9 @@ async def list_strategies(
     注意：列表接口不返回完整代码，只返回元信息。
 
     Args:
+        user_id: 用户ID过滤（NULL表示系统策略）
         source_type: 来源类型过滤
+        strategy_type: 策略类型过滤（stock_selection/entry/exit）
         category: 类别过滤
         is_enabled: 是否启用过滤
         validation_status: 验证状态过滤
@@ -261,6 +265,7 @@ async def list_strategies(
     repo = StrategyRepository()
 
     result = repo.list_all(
+        user_id=user_id,
         source_type=source_type,
         strategy_type=strategy_type,
         category=category,

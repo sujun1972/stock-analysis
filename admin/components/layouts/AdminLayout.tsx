@@ -11,7 +11,8 @@ import {
   LayoutDashboard,
   ChevronRight,
   Users,
-  Tag
+  Tag,
+  TrendingUp
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 
@@ -29,6 +30,11 @@ const navItems = [
     name: '用户管理',
     href: '/users',
     icon: Users
+  },
+  {
+    name: '策略管理',
+    href: '/strategies',
+    icon: TrendingUp
   },
   {
     name: '概念管理',
