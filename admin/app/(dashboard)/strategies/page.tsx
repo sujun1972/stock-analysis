@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Filter, Edit, Trash2, Play, Code } from 'lucide-react'
+import { Plus, Search, Filter, Edit, Trash2, Play, Code, AlertCircle } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -163,34 +170,42 @@ export default function StrategiesPage() {
         </div>
 
         {/* 策略类型过滤 */}
-        <select
-          value={filterStrategyType}
-          onChange={(e) => {
-            setFilterStrategyType(e.target.value)
+        <Select
+          value={filterStrategyType || 'all'}
+          onValueChange={(value) => {
+            setFilterStrategyType(value === 'all' ? '' : value)
             setCurrentPage(1)
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
-          <option value="">所有策略类型</option>
-          <option value="stock_selection">选股策略</option>
-          <option value="entry">入场策略</option>
-          <option value="exit">离场策略</option>
-        </select>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="所有策略类型" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">所有策略类型</SelectItem>
+            <SelectItem value="stock_selection">选股策略</SelectItem>
+            <SelectItem value="entry">入场策略</SelectItem>
+            <SelectItem value="exit">离场策略</SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* 来源类型过滤 */}
-        <select
-          value={filterSourceType}
-          onChange={(e) => {
-            setFilterSourceType(e.target.value)
+        <Select
+          value={filterSourceType || 'all'}
+          onValueChange={(value) => {
+            setFilterSourceType(value === 'all' ? '' : value)
             setCurrentPage(1)
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
-          <option value="">所有来源</option>
-          <option value="builtin">系统内置</option>
-          <option value="ai">AI生成</option>
-          <option value="custom">用户自定义</option>
-        </select>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="所有来源" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">所有来源</SelectItem>
+            <SelectItem value="builtin">系统内置</SelectItem>
+            <SelectItem value="ai">AI生成</SelectItem>
+            <SelectItem value="custom">用户自定义</SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* 用户ID过滤 */}
         <input
