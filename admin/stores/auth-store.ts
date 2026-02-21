@@ -69,8 +69,8 @@ export interface AuthActions {
 
 export type AuthStore = AuthState & AuthActions;
 
-const TOKEN_STORAGE_KEY = 'auth_tokens';
-const USER_STORAGE_KEY = 'auth_user';
+// 已移除冗余的 TOKEN_STORAGE_KEY 和 USER_STORAGE_KEY
+// 现在统一使用 Zustand persist 中间件管理 localStorage (键名: 'auth-storage')
 
 export const useAuthStore = create<AuthStore>()(
   persist(
@@ -87,12 +87,18 @@ export const useAuthStore = create<AuthStore>()(
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await apiClient.post<any>('/api/auth/login', {
+          // 注意：/api/auth/login 直接返回数据，不包裹在 ApiResponse 中
+          const response = await apiClient.post<{
+            access_token: string;
+            refresh_token: string;
+            user: User;
+          }>('/api/auth/login', {
             email,
             password,
           });
 
-          const { access_token, refresh_token, user } = response;
+          // 认证端点直接返回数据对象（不在 response.data 中）
+          const { access_token, refresh_token, user } = response as any;
 
           set({
             user,
@@ -103,12 +109,7 @@ export const useAuthStore = create<AuthStore>()(
             error: null,
           });
 
-          // 保存到localStorage
-          localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({
-            accessToken: access_token,
-            refreshToken: refresh_token,
-          }));
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+          // Zustand persist 中间件会自动保存到 localStorage (键名: 'auth-storage')
         } catch (error: any) {
           const errorMessage = error.response?.data?.detail || '登录失败，请检查邮箱和密码';
           set({
@@ -159,7 +160,7 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           // 忽略错误，继续登出
         } finally {
-          // 清除状态
+          // 清除状态 (Zustand persist 会自动同步到 localStorage)
           set({
             user: null,
             accessToken: null,
@@ -167,10 +168,6 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: false,
             error: null,
           });
-
-          // 清除localStorage
-          localStorage.removeItem(TOKEN_STORAGE_KEY);
-          localStorage.removeItem(USER_STORAGE_KEY);
         }
       },
 
@@ -179,28 +176,42 @@ export const useAuthStore = create<AuthStore>()(
         const { refreshToken } = get();
 
         if (!refreshToken) {
-          throw new Error('没有刷新令牌');
+          const error = new Error('没有刷新令牌');
+          console.error('Token refresh failed: no refresh token available');
+          throw error;
         }
 
         try {
-          const response = await apiClient.post('/api/auth/refresh', {
+          // 注意：/api/auth/refresh 直接返回数据，不包裹在 ApiResponse 中
+          const response = await apiClient.post<{
+            access_token: string;
+            refresh_token: string;
+          }>('/api/auth/refresh', {
             refresh_token: refreshToken,
           });
 
-          const { access_token, refresh_token: new_refresh_token } = response;
+          // 认证端点直接返回数据对象（不在 response.data 中）
+          const { access_token, refresh_token: new_refresh_token } = response as any;
 
           set({
             accessToken: access_token,
             refreshToken: new_refresh_token,
           });
 
-          // 更新localStorage
-          localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({
-            accessToken: access_token,
-            refreshToken: new_refresh_token,
-          }));
-        } catch (error) {
+          // Zustand persist 中间件会自动保存到 localStorage (键名: 'auth-storage')
+        } catch (error: any) {
           // Token刷新失败，清除登录状态
+          console.error('Token refresh failed:', error.message || error);
+
+          // 记录错误详情以便调试
+          if (error.response) {
+            console.error('Refresh error response:', {
+              status: error.response.status,
+              data: error.response.data,
+            });
+          }
+
+          // 清除登录状态（会触发登出流程）
           get().logout();
           throw error;
         }
@@ -212,14 +223,17 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await apiClient.patch<User>('/api/profile', data);
 
+          if (!response.data) {
+            throw new Error('更新响应数据为空');
+          }
+
           set({
-            user: response,
+            user: response.data,
             isLoading: false,
             error: null,
           });
 
-          // 更新localStorage
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
+          // Zustand persist 中间件会自动保存到 localStorage (键名: 'auth-storage')
         } catch (error: any) {
           const errorMessage = error.response?.data?.detail || '更新失败';
           set({
@@ -235,7 +249,7 @@ export const useAuthStore = create<AuthStore>()(
        *
        * 优化说明:
        * - 不再调用 /api/auth/me 验证Token
-       * - 只从localStorage恢复已保存的状态
+       * - Zustand persist 中间件会自动从 localStorage 恢复状态
        * - Token验证在请求拦截器中自动处理
        * - 避免页面切换时的重复API调用
        */
@@ -243,32 +257,13 @@ export const useAuthStore = create<AuthStore>()(
         const { accessToken, user } = get();
 
         // 如果已经有用户信息,直接返回,不需要再次验证
+        // Zustand persist 中间件会自动在初始化时恢复状态
         if (accessToken && user) {
           return;
         }
 
-        // 尝试从localStorage恢复
-        const storedTokens = localStorage.getItem(TOKEN_STORAGE_KEY);
-        const storedUser = localStorage.getItem(USER_STORAGE_KEY);
-
-        if (storedTokens && storedUser) {
-          try {
-            const tokens = JSON.parse(storedTokens);
-            const userData = JSON.parse(storedUser);
-
-            set({
-              user: userData,
-              accessToken: tokens.accessToken,
-              refreshToken: tokens.refreshToken,
-              isAuthenticated: true,
-            });
-          } catch (error) {
-            console.error('Failed to restore auth from localStorage:', error);
-            // 如果恢复失败,清除无效数据
-            localStorage.removeItem(TOKEN_STORAGE_KEY);
-            localStorage.removeItem(USER_STORAGE_KEY);
-          }
-        }
+        // 状态已由 Zustand persist 中间件自动恢复
+        // 如果没有恢复到数据，说明用户未登录或数据已过期
       },
 
       // 清除错误

@@ -32,6 +32,7 @@ import type {
   DynamicStrategyTestResponse,
   DynamicStrategyStatistics,
 } from '@/types'
+import { isTokenExpiringSoon } from './jwt-utils'
 
 /**
  * API基础URL配置
@@ -53,10 +54,10 @@ const axiosInstance: AxiosInstance = axios.create({
 
 /**
  * 请求拦截器
- * 自动添加认证token到请求头
+ * 自动添加认证token到请求头，并检查token是否即将过期
  */
 axiosInstance.interceptors.request.use(
-  (config) => {
+  async (config) => {
     // 只在浏览器环境中访问localStorage
     if (typeof window === 'undefined') {
       return config
@@ -68,8 +69,58 @@ axiosInstance.interceptors.request.use(
       try {
         const { state } = JSON.parse(authStorage)
         const accessToken = state?.accessToken
+
         if (accessToken) {
-          config.headers.Authorization = `Bearer ${accessToken}`
+          // 检查 token 是否即将过期（5分钟内）
+          // 排除刷新和登录请求，避免死循环
+          const isAuthRequest =
+            config.url?.includes('/api/auth/refresh') ||
+            config.url?.includes('/api/auth/login')
+
+          if (!isAuthRequest && isTokenExpiringSoon(accessToken, 5)) {
+            // Token即将过期（5分钟内），启动预刷新机制
+            if (isRefreshing) {
+              // 已有刷新进行中，加入队列等待
+              await new Promise((resolve, reject) => {
+                failedQueue.push({ resolve, reject })
+              })
+              // 使用刷新后的新token
+              const newAuthStorage = localStorage.getItem('auth-storage')
+              if (newAuthStorage) {
+                const { state: newState } = JSON.parse(newAuthStorage)
+                const newAccessToken = newState?.accessToken
+                if (newAccessToken) {
+                  config.headers.Authorization = `Bearer ${newAccessToken}`
+                }
+              }
+            } else {
+              // 启动新的刷新流程
+              isRefreshing = true
+              try {
+                const { useAuthStore } = await import('@/stores/auth-store')
+                await useAuthStore.getState().refreshAccessToken()
+
+                // 刷新成功，获取新token并处理队列
+                const newAuthStorage = localStorage.getItem('auth-storage')
+                if (newAuthStorage) {
+                  const { state: newState } = JSON.parse(newAuthStorage)
+                  const newAccessToken = newState?.accessToken
+                  if (newAccessToken) {
+                    config.headers.Authorization = `Bearer ${newAccessToken}`
+                    processQueue(null, newAccessToken)
+                  }
+                }
+              } catch (error) {
+                console.error('Token预刷新失败，将在401时重试:', error)
+                processQueue(error, null)
+                // 预刷新失败不阻断请求，使用旧token继续，让响应拦截器处理401
+              } finally {
+                isRefreshing = false
+              }
+            }
+          } else {
+            config.headers.Authorization = `Bearer ${accessToken}`
+          }
         }
       } catch (error) {
         console.error('Failed to parse auth storage:', error)
@@ -83,11 +134,38 @@ axiosInstance.interceptors.request.use(
 )
 
 /**
+ * Token 刷新互斥锁
+ * 防止多个并发请求同时触发 token 刷新
+ */
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (value?: any) => void
+  reject: (reason?: any) => void
+}> = []
+
+/**
+ * 处理队列中的请求
+ */
+const processQueue = (error: any = null, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+
+  failedQueue = []
+}
+
+/**
  * 响应拦截器
  * 统一处理API错误、Token过期自动刷新
  *
  * 优化:
  * - 401错误时自动刷新Token并重试原请求
+ * - 使用互斥锁防止并发刷新
+ * - 失败的请求会排队等待刷新完成
  * - 避免刷新死循环（不对refresh和login请求刷新）
  * - 刷新失败自动登出并重定向
  * - 对用户透明，无需手动处理Token过期
@@ -107,38 +185,85 @@ axiosInstance.interceptors.response.use(
       !originalRequest.url?.includes('/api/auth/refresh') &&
       !originalRequest.url?.includes('/api/auth/login')
     ) {
+      // 如果正在刷新token，将请求加入队列
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            return axiosInstance(originalRequest)
+          })
+          .catch((err) => {
+            return Promise.reject(err)
+          })
+      }
+
       originalRequest._retry = true
+      isRefreshing = true
 
       try {
         // 动态导入auth store以避免循环依赖
         const { useAuthStore } = await import('@/stores/auth-store')
         await useAuthStore.getState().refreshAccessToken()
 
-        // 重新获取新Token并重试请求
+        // 重新获取新Token
         const authStorage = localStorage.getItem('auth-storage')
-        if (authStorage) {
-          const { state } = JSON.parse(authStorage)
-          const accessToken = state?.accessToken
-          if (accessToken) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`
-          }
+        if (!authStorage) {
+          throw new Error('No auth storage found')
         }
 
+        const { state } = JSON.parse(authStorage)
+        const accessToken = state?.accessToken
+
+        if (!accessToken) {
+          throw new Error('No access token found after refresh')
+        }
+
+        // 处理队列中的请求，传入新token
+        processQueue(null, accessToken)
+
+        // 重试原始请求
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`
         return axiosInstance(originalRequest)
-      } catch (refreshError) {
+      } catch (refreshError: any) {
         // Token刷新失败，需要重新登录
-        console.error('Token refresh failed, redirecting to login...')
+        console.error('Token refresh failed, redirecting to login...', refreshError)
+
+        // 处理队列中的请求，全部拒绝
+        processQueue(refreshError, null)
 
         // 清除认证状态
         const { useAuthStore } = await import('@/stores/auth-store')
         useAuthStore.getState().logout()
 
-        // 重定向到登录页
+        // 显示友好的错误提示
         if (typeof window !== 'undefined') {
-          window.location.href = '/login'
+          // 尝试显示 toast 通知（如果可用）
+          try {
+            const { toast } = await import('@/hooks/use-toast')
+            toast({
+              title: '登录已过期',
+              description: '您的登录会话已过期，请重新登录',
+              variant: 'destructive',
+            })
+          } catch (toastError) {
+            // toast 不可用时，使用 alert 作为后备
+            console.warn('Toast not available, using alert instead')
+          }
+
+          // 延迟重定向，让用户有时间看到提示
+          setTimeout(() => {
+            const currentPath = window.location.pathname
+            if (currentPath !== '/login') {
+              window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
+            }
+          }, 1500)
         }
 
         return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
       }
     }
 

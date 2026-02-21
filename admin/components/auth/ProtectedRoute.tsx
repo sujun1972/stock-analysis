@@ -38,9 +38,10 @@ export function ProtectedRoute({
   // 等待 Zustand persist 中间件恢复状态
   useEffect(() => {
     const initialize = async () => {
-      // Zustand persist 需要时间从 localStorage 恢复
-      // 等待一个微任务周期确保状态已恢复
-      await Promise.resolve()
+      // Zustand persist 中间件的 onRehydrateStorage 回调
+      // 会在状态恢复完成后触发，但我们需要等待它完成
+      // 使用 setTimeout 确保 persist 中间件已经完成初始化
+      await new Promise((resolve) => setTimeout(resolve, 50))
 
       if (!isAuthenticated && !isLoading) {
         await checkAuth()
