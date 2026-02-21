@@ -1238,12 +1238,16 @@ class ApiClient {
 
   /**
    * 更新用户
+   * @param userId 用户ID
+   * @param data 更新数据（支持部分更新）
+   * @param data.is_email_verified 邮箱是否已验证（管理员可手动设置）
    */
   async updateUser(userId: number, data: {
     email?: string
     username?: string
     role?: string
     is_active?: boolean
+    is_email_verified?: boolean
     full_name?: string
     phone?: string
   }): Promise<ApiResponse<any>> {

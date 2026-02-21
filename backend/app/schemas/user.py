@@ -41,6 +41,7 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = None
     role: Optional[Literal["super_admin", "admin", "vip_user", "normal_user", "trial_user"]] = None
     is_active: Optional[bool] = None
+    is_email_verified: Optional[bool] = None  # 管理员可手动设置用户邮箱验证状态
 
 
 class UserInDB(UserBase):
