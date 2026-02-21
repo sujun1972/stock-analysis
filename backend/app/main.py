@@ -112,6 +112,7 @@ async def health_check():
     checks = {}
 
     # 获取 core 路径 (backend/app/main.py -> backend/.. -> stock-analysis/core)
+    # 确保可以导入 core 模块的数据库连接池管理器
     import sys
     from pathlib import Path
     core_path = Path(__file__).parent.parent.parent / "core"
@@ -119,9 +120,10 @@ async def health_check():
         sys.path.insert(0, str(core_path))
 
     # 1. 检查数据库连接
+    # 使用 core 的连接池管理器测试数据库连接，并记录响应时间
+    import time
     try:
         # 导入 core 的连接池管理器
-
         from src.database.connection_pool_manager import ConnectionPoolManager
 
         # 创建数据库配置
@@ -133,10 +135,12 @@ async def health_check():
             'password': settings.DATABASE_PASSWORD
         }
 
+        # 记录开始时间，用于计算数据库响应时间
+        start_time = time.time()
         pool_manager = ConnectionPoolManager(config=db_config)
         conn = pool_manager.get_connection()
 
-        # 执行简单查询测试连接
+        # 执行简单查询测试连接（SELECT 1 是标准的数据库健康检查查询）
         cursor = conn.cursor()
         cursor.execute("SELECT 1")
         result = cursor.fetchone()
@@ -144,44 +148,94 @@ async def health_check():
         pool_manager.release_connection(conn)
         pool_manager.close_all_connections()
 
-        checks["database"] = result is not None and result[0] == 1
+        # 计算响应时间（毫秒）
+        response_time_ms = round((time.time() - start_time) * 1000, 2)
+
+        checks["database"] = {
+            "status": "healthy" if (result is not None and result[0] == 1) else "unhealthy",
+            "response_time_ms": response_time_ms,
+            "message": "Database connection successful"
+        }
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
-        # 在测试环境中，数据库连接失败不影响健康检查
-        checks["database"] = settings.is_testing
+        # 在测试环境中，数据库连接失败不影响健康检查（允许无数据库的单元测试）
+        checks["database"] = {
+            "status": "healthy" if settings.is_testing else "unhealthy",
+            "message": str(e) if not settings.is_testing else "Database check skipped in test mode"
+        }
 
     # 2. 检查 Redis 连接
+    # Redis 是可选的缓存服务，连接失败不会导致整体健康检查失败
     try:
         from app.core.cache import cache
         redis = await cache._get_redis()
 
         if redis is not None:
-            # 测试 Redis ping
+            # 测试 Redis ping 命令并记录延迟
+            start_time = time.time()
             await redis.ping()
-            checks["redis"] = True
+            ping_time_ms = round((time.time() - start_time) * 1000, 2)
+
+            checks["redis"] = {
+                "status": "healthy",
+                "ping_time_ms": ping_time_ms,
+                "message": "Redis connection successful"
+            }
         else:
             # Redis 未启用或连接失败
-            checks["redis"] = True  # Redis 是可选的，不影响核心功能
+            checks["redis"] = {
+                "status": "healthy",
+                "message": "Redis not enabled (optional service)"
+            }
     except Exception as e:
         logger.error(f"Redis health check failed: {e}")
         # Redis 是可选的缓存服务，失败不影响健康检查
-        checks["redis"] = True
+        checks["redis"] = {
+            "status": "healthy",
+            "message": f"Redis optional service: {str(e)}"
+        }
 
     # 3. 检查 Core 服务可用性
+    # Core 模块提供核心的数据分析和策略功能
     try:
         # 检查 core 路径是否可访问
-        # 在 Docker 环境中，core 代码已经集成到 backend 中，不需要单独的 core 目录
+        # 在 Docker 环境中，core 代码通过 volume 挂载集成到 backend 中
         core_available = core_path.exists() and (core_path / "src").exists()
-        checks["core"] = core_available if core_available else True  # 如果 core 不存在，假设已集成
+        checks["core_service"] = {
+            "status": "healthy",
+            "message": "Core service integrated" if core_available else "Core service available"
+        }
     except Exception as e:
         logger.error(f"Core service health check failed: {e}")
-        checks["core"] = True  # Core 检查失败不影响整体健康状态
+        checks["core_service"] = {
+            "status": "healthy",
+            "message": f"Core service check: {str(e)}"
+        }
 
     # 4. 获取熔断器状态
+    # 熔断器用于保护外部服务调用，防止级联故障
     breakers_status = get_all_breakers_status()
 
+    # 计算熔断器整体状态
+    breakers_all_closed = all(
+        breaker.get("state") == "closed"
+        for breaker in breakers_status.values()
+    )
+
+    checks["circuit_breakers"] = {
+        "status": "All circuits closed" if breakers_all_closed else "Some circuits open",
+        "details": breakers_status
+    }
+
     # 判断整体健康状态
-    all_healthy = all(checks.values())
+    # 只检查关键服务：database, redis, core_service
+    # 熔断器状态不影响整体健康判定（可能只是临时保护措施）
+    critical_checks = ["database", "redis", "core_service"]
+    all_healthy = all(
+        checks.get(key, {}).get("status") == "healthy"
+        for key in critical_checks
+        if key in checks
+    )
     status_code = 200 if all_healthy else 503
 
     return JSONResponse(
@@ -190,7 +244,6 @@ async def health_check():
             "status": "healthy" if all_healthy else "unhealthy",
             "environment": settings.ENVIRONMENT,
             "checks": checks,
-            "circuit_breakers": breakers_status,
             "version": settings.VERSION,
         }
     )

@@ -1,3 +1,16 @@
+/**
+ * 系统监控页面
+ *
+ * 功能：
+ * 1. 实时健康检查 - 每10秒自动刷新服务状态（数据库、Redis、核心服务、熔断器）
+ * 2. 性能监控 - 显示数据库和Redis的响应时间，帮助快速识别性能问题
+ * 3. 监控工具集成 - 提供Grafana和Prometheus的快速访问入口
+ *
+ * 架构说明：
+ * - Admin监控页面：适合日常巡检和快速故障排查
+ * - Grafana：适合详细的性能分析、历史趋势查看和容量规划
+ * - Prometheus：适合原始指标查询和告警规则配置
+ */
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -10,16 +23,16 @@ import {
   Activity,
   Database,
   Server,
-  HardDrive,
   Cpu,
   RefreshCw,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   Clock,
-  TrendingUp,
   BarChart3,
-  Zap
+  Zap,
+  ExternalLink,
+  LineChart
 } from 'lucide-react'
 
 interface HealthStatus {
@@ -47,25 +60,22 @@ interface HealthStatus {
   timestamp: string
 }
 
-interface SystemMetrics {
-  requestCount: number
-  requestDuration: number
-  errorCount: number
-  activeConnections: number
-}
-
 export default function MonitorPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [metrics, setMetrics] = useState<SystemMetrics | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
 
+  // Grafana 和 Prometheus 配置
+  // 这些URL用于快速跳转到专业监控工具
+  const GRAFANA_URL = 'http://localhost:3001'
+  const GRAFANA_DASHBOARD_UID = 'stock-analysis-overview'
+
   useEffect(() => {
     loadMonitorData()
 
-    // 自动刷新
+    // 自动刷新健康检查
     let interval: NodeJS.Timeout
     if (autoRefresh) {
       interval = setInterval(() => {
@@ -78,28 +88,20 @@ export default function MonitorPage() {
     }
   }, [autoRefresh])
 
+  /**
+   * 加载监控数据
+   * 调用后端 /health 接口获取服务健康状态和性能指标
+   */
   const loadMonitorData = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      // 并发加载健康检查和指标
-      const [healthResponse] = await Promise.all([
-        apiClient.healthCheck(),
-        // 可以添加更多监控数据
-      ])
+      const healthResponse = await apiClient.healthCheck()
 
       if (healthResponse) {
         setHealth(healthResponse as any)
       }
-
-      // 模拟一些系统指标（后续可以从Prometheus获取）
-      setMetrics({
-        requestCount: Math.floor(Math.random() * 10000),
-        requestDuration: Math.random() * 100,
-        errorCount: Math.floor(Math.random() * 50),
-        activeConnections: Math.floor(Math.random() * 100),
-      })
 
       setLastUpdate(new Date())
     } catch (err: any) {
@@ -108,6 +110,16 @@ export default function MonitorPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // 打开 Grafana 完整仪表板
+  const openGrafana = () => {
+    window.open(`${GRAFANA_URL}/d/${GRAFANA_DASHBOARD_UID}`, '_blank')
+  }
+
+  // 打开 Prometheus
+  const openPrometheus = () => {
+    window.open('http://localhost:9090', '_blank')
   }
 
   const getStatusBadge = (status: 'healthy' | 'degraded' | 'unhealthy' | string) => {
@@ -140,6 +152,12 @@ export default function MonitorPage() {
     )
   }
 
+  /**
+   * 解析服务健康状态
+   * 统一处理不同服务的健康检查响应格式
+   * @param serviceCheck - 服务健康检查数据
+   * @returns 统一的状态对象（包含状态、消息和响应时间）
+   */
   const getServiceStatus = (serviceCheck: any) => {
     if (!serviceCheck) return { status: 'unhealthy', message: '未知' }
     return {
@@ -157,13 +175,29 @@ export default function MonitorPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                性能监控
+                系统监控
               </h1>
               <p className="text-gray-600 dark:text-gray-300 mt-2">
                 实时查看系统健康状态和性能指标
               </p>
             </div>
             <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={openPrometheus}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Prometheus
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </Button>
+              <Button
+                variant="default"
+                onClick={openGrafana}
+              >
+                <LineChart className="h-4 w-4 mr-2" />
+                Grafana 仪表板
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </Button>
               <Button
                 variant={autoRefresh ? "default" : "outline"}
                 onClick={() => setAutoRefresh(!autoRefresh)}
@@ -262,76 +296,133 @@ export default function MonitorPage() {
             </CardContent>
           </Card>
 
-          {/* 性能指标 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  请求总数
-                </CardTitle>
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {metrics?.requestCount.toLocaleString() || 0}
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  系统启动以来的总请求数
-                </p>
-              </CardContent>
-            </Card>
+          {/* 监控工具链接 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                监控工具
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-2">
+                使用专业的监控工具查看详细的性能指标和系统状态
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Grafana 卡片 */}
+                <Card className="border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-colors">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                        <LineChart className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-2">Grafana 仪表板</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          可视化监控仪表板，提供丰富的图表和自定义查询功能
+                        </p>
+                        <ul className="text-sm space-y-1.5 mb-4 text-muted-foreground">
+                          <li>• 请求速率和响应时间分析</li>
+                          <li>• 缓存性能和数据库监控</li>
+                          <li>• 自定义时间范围查询</li>
+                          <li>• 告警规则配置</li>
+                        </ul>
+                        <Button onClick={openGrafana} className="w-full">
+                          <LineChart className="h-4 w-4 mr-2" />
+                          打开 Grafana
+                          <ExternalLink className="h-3 w-3 ml-2" />
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-2 text-center">
+                          默认账号: admin / admin123
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  平均响应时间
-                </CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {metrics?.requestDuration.toFixed(2) || 0}ms
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  API请求平均耗时
-                </p>
-              </CardContent>
-            </Card>
+                {/* Prometheus 卡片 */}
+                <Card className="border-2 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600 transition-colors">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                        <BarChart3 className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-2">Prometheus</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          强大的监控和告警系统，支持 PromQL 查询语言
+                        </p>
+                        <ul className="text-sm space-y-1.5 mb-4 text-muted-foreground">
+                          <li>• 原始指标数据查看</li>
+                          <li>• PromQL 查询语言</li>
+                          <li>• 目标状态监控</li>
+                          <li>• 规则评估和告警</li>
+                        </ul>
+                        <Button onClick={openPrometheus} variant="outline" className="w-full">
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          打开 Prometheus
+                          <ExternalLink className="h-3 w-3 ml-2" />
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-2 text-center">
+                          无需登录，直接访问
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  错误数量
-                </CardTitle>
-                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">
-                  {metrics?.errorCount || 0}
+              {/* 快速链接 */}
+              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  快速访问
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  <a
+                    href="http://localhost:3001/d/stock-analysis-overview"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                  >
+                    <LineChart className="h-4 w-4 text-blue-600" />
+                    <span>Stock Analysis 仪表板</span>
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                  <a
+                    href="http://localhost:9090/targets"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                  >
+                    <BarChart3 className="h-4 w-4 text-orange-600" />
+                    <span>Prometheus 目标状态</span>
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                  <a
+                    href="http://localhost:8000/metrics"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                  >
+                    <Server className="h-4 w-4 text-green-600" />
+                    <span>Backend 原始指标</span>
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                  <a
+                    href="http://localhost:9090/graph"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                  >
+                    <Activity className="h-4 w-4 text-purple-600" />
+                    <span>Prometheus 查询</span>
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  最近1小时的错误次数
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  活跃连接
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {metrics?.activeConnections || 0}
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  当前活跃的数据库连接数
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* 服务详细状态 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -436,61 +527,47 @@ export default function MonitorPage() {
             </Card>
           </div>
 
-          {/* 系统资源使用（占位，后续可集成真实数据） */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <HardDrive className="h-5 w-5" />
-                系统资源
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">CPU使用率</span>
-                    <span className="font-semibold">--</span>
-                  </div>
-                  <Progress value={0} className="h-2" />
-                  <p className="text-xs text-gray-500">需要集成系统监控</p>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">内存使用率</span>
-                    <span className="font-semibold">--</span>
-                  </div>
-                  <Progress value={0} className="h-2" />
-                  <p className="text-xs text-gray-500">需要集成系统监控</p>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">磁盘使用率</span>
-                    <span className="font-semibold">--</span>
-                  </div>
-                  <Progress value={0} className="h-2" />
-                  <p className="text-xs text-gray-500">需要集成系统监控</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 提示信息 */}
-          <Card className="bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800">
+          {/* 监控说明 */}
+          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-blue-200 dark:border-blue-800">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <Activity className="h-5 w-5 text-blue-600 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
-                    监控说明
+                <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-3 text-lg">
+                    监控架构说明
                   </h3>
-                  <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-                    <li>• 系统自动每10秒刷新一次监控数据（可切换为手动模式）</li>
-                    <li>• 健康检查包括：数据库、Redis、核心服务和熔断器状态</li>
-                    <li>• 如需查看详细的Prometheus指标，请访问后端的 /metrics 端点</li>
-                    <li>• 系统资源监控需要额外集成node-exporter等监控工具</li>
-                  </ul>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 text-sm">
+                        健康检查（本页面）
+                      </h4>
+                      <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1.5">
+                        <li>• 自动每 10 秒刷新服务状态</li>
+                        <li>• 监控数据库、Redis、核心服务</li>
+                        <li>• 显示响应时间和连接状态</li>
+                        <li>• 适合快速巡检和故障排查</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 text-sm">
+                        性能指标（Grafana）
+                      </h4>
+                      <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1.5">
+                        <li>• 图表自动每 10 秒刷新数据</li>
+                        <li>• 显示请求量、响应时间、错误率</li>
+                        <li>• 支持自定义时间范围查询</li>
+                        <li>• 适合性能分析和容量规划</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-blue-700 dark:text-blue-400">
+                      <strong>访问地址：</strong>
+                      Grafana: <code className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 rounded">http://localhost:3001</code>
+                      （默认账号：admin / admin123） |
+                      Prometheus: <code className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 rounded ml-2">http://localhost:9090</code>
+                    </p>
+                  </div>
                 </div>
               </div>
             </CardContent>
