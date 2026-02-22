@@ -444,9 +444,7 @@ class ApiClient {
 
   // 更新股票的概念标签
   async updateStockConcepts(stockCode: string, conceptIds: number[]): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.put(`/api/concepts/stock/${stockCode}/concepts`, {
-      concept_ids: conceptIds
-    })
+    const response = await axiosInstance.put(`/api/concepts/stock/${stockCode}/concepts`, conceptIds)
     return response.data
   }
 

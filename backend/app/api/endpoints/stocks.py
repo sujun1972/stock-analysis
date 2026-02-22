@@ -32,13 +32,13 @@ if str(core_path) not in sys.path:
     sys.path.insert(0, str(core_path))
 
 
-def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_names_str: str) -> List[Dict[str, Any]]:
+def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_codes_str: str) -> List[Dict[str, Any]]:
     """
     按概念筛选股票列表
 
     Args:
         stocks: 股票列表
-        concept_names_str: 概念名称字符串，多个概念用逗号分隔
+        concept_codes_str: 概念代码字符串，多个概念用逗号分隔（如: 309264,301154）
 
     Returns:
         筛选后的股票列表
@@ -67,19 +67,19 @@ def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_names_str: s
         cursor = conn.cursor()
 
         # 解析概念列表（支持多个概念，逗号分隔）
-        concept_names = [c.strip() for c in concept_names_str.split(',') if c.strip()]
+        concept_codes = [c.strip() for c in concept_codes_str.split(',') if c.strip()]
 
-        if not concept_names:
+        if not concept_codes:
             return stocks
 
-        # 获取属于这些概念的股票代码
-        placeholders = ','.join(['%s'] * len(concept_names))
+        # 获取属于这些概念的股票代码（按概念code查询）
+        placeholders = ','.join(['%s'] * len(concept_codes))
         cursor.execute(f"""
             SELECT DISTINCT sc.stock_code
             FROM stock_concept sc
             INNER JOIN concept c ON sc.concept_id = c.id
-            WHERE c.name IN ({placeholders})
-        """, concept_names)
+            WHERE c.code IN ({placeholders})
+        """, concept_codes)
 
         concept_stock_codes = {row[0] for row in cursor.fetchall()}
 
@@ -95,7 +95,7 @@ def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_names_str: s
         return filtered_stocks
 
     finally:
-        pool_manager.close_all()
+        pool_manager.close_all_connections()
 
 
 @router.get(

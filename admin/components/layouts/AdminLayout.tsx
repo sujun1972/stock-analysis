@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Users,
   Tag,
-  TrendingUp
+  TrendingUp,
+  LineChart
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 
@@ -30,6 +31,11 @@ const navItems = [
     name: '用户管理',
     href: '/users',
     icon: Users
+  },
+  {
+    name: '股票管理',
+    href: '/stocks',
+    icon: LineChart
   },
   {
     name: '策略管理',
