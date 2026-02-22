@@ -2,7 +2,7 @@
 用户管理API端点（仅管理员可访问）
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
@@ -25,7 +25,7 @@ from app.schemas.auth import MessageResponse
 router = APIRouter(prefix="/users", tags=["用户管理（Admin）"])
 
 
-@router.get("", response_model=UserListResponse)
+@router.get("")
 async def list_users(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -34,7 +34,7 @@ async def list_users(
     is_active: Optional[bool] = Query(None, description="是否激活"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
-):
+) -> Dict[str, Any]:
     """
     获取用户列表（分页）
 
@@ -45,6 +45,17 @@ async def list_users(
     - **is_active**: 是否激活（可选）
 
     需要管理员权限
+
+    返回格式:
+    {
+        "success": true,
+        "data": {
+            "total": 100,
+            "page": 1,
+            "page_size": 20,
+            "users": [...]
+        }
+    }
     """
     # 构建查询
     query = db.query(User)
@@ -78,6 +89,24 @@ async def list_users(
     # 加载配额信息
     users_with_quota = []
     for user in users:
+        # 转换配额对象为字典
+        quota_dict = None
+        if user.quota:
+            quota_dict = {
+                "id": user.quota.id,
+                "user_id": user.quota.user_id,
+                "backtest_quota_total": user.quota.backtest_quota_total,
+                "backtest_quota_used": user.quota.backtest_quota_used,
+                "ml_prediction_quota_total": user.quota.ml_prediction_quota_total,
+                "ml_prediction_quota_used": user.quota.ml_prediction_quota_used,
+                "max_strategies": user.quota.max_strategies,
+                "current_strategies": user.quota.current_strategies,
+                "backtest_quota_reset_at": user.quota.backtest_quota_reset_at,
+                "ml_prediction_quota_reset_at": user.quota.ml_prediction_quota_reset_at,
+                "created_at": user.quota.created_at,
+                "updated_at": user.quota.updated_at,
+            }
+
         user_dict = {
             "id": user.id,
             "email": user.email,
@@ -92,16 +121,19 @@ async def list_users(
             "full_name": user.full_name,
             "avatar_url": user.avatar_url,
             "phone": user.phone,
-            "quota": user.quota
+            "quota": quota_dict
         }
         users_with_quota.append(user_dict)
 
-    return UserListResponse(
-        total=total,
-        page=page,
-        page_size=page_size,
-        users=users_with_quota
-    )
+    return {
+        "success": True,
+        "data": {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "users": users_with_quota
+        }
+    }
 
 
 @router.post("", response_model=UserWithQuota, status_code=status.HTTP_201_CREATED)

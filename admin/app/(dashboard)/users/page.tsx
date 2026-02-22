@@ -207,6 +207,7 @@ export default function UsersPage() {
         role: formData.role,
         full_name: formData.full_name || undefined,
         phone: formData.phone || undefined,
+        is_email_verified: formData.is_email_verified,
       })
       toast.success('用户创建成功')
       setIsCreateDialogOpen(false)
@@ -607,6 +608,21 @@ export default function UsersPage() {
                       <SelectItem value="trial_user">试用用户</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex items-center justify-between space-x-2 py-2">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="create-email-verified">邮箱验证状态</Label>
+                    <p className="text-sm text-gray-500">
+                      是否已验证该用户的邮箱地址
+                    </p>
+                  </div>
+                  <Switch
+                    id="create-email-verified"
+                    checked={formData.is_email_verified}
+                    onCheckedChange={(checked) =>
+                      setFormData({ ...formData, is_email_verified: checked })
+                    }
+                  />
                 </div>
               </div>
               <DialogFooter>

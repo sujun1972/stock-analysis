@@ -1231,6 +1231,7 @@ class ApiClient {
     role: string
     full_name?: string
     phone?: string
+    is_email_verified?: boolean
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/users', data)
     return response.data
