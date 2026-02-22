@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Search, RefreshCw, Edit, Trash2, Tag } from 'lucide-react'
+import { Plus, Search, RefreshCw, Edit, Trash2, Tag, ChevronLeft, ChevronRight } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import type { Concept } from '@/types/stock'
@@ -33,6 +33,7 @@ export default function ConceptsPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const pageSize = 50
 
   // 对话框状态
@@ -51,11 +52,13 @@ export default function ConceptsPage() {
     setLoading(true)
     try {
       const response = await apiClient.getConceptsList({
-        limit: pageSize,
+        page: page,
+        page_size: pageSize,
         search: search || undefined,
       })
       setConcepts(response.items || [])
       setTotal(response.total || 0)
+      setTotalPages(response.total_pages || 0)
     } catch (error: any) {
       toast.error('加载概念列表失败: ' + (error.message || '未知错误'))
     } finally {
@@ -65,15 +68,21 @@ export default function ConceptsPage() {
 
   useEffect(() => {
     loadConcepts()
-  }, [search])
+  }, [page, search])
+
+  // 搜索时重置到第一页
+  const handleSearch = (value: string) => {
+    setSearch(value)
+    setPage(1)
+  }
 
   // 同步概念数据
   const handleSync = async () => {
     setLoading(true)
     try {
-      await apiClient.syncConcepts('ths')
-      toast.success('概念数据同步成功')
-      loadConcepts()
+      await apiClient.syncConcepts('em')
+      toast.success('概念数据同步任务已提交，正在后台执行')
+      setTimeout(() => loadConcepts(), 2000)
     } catch (error: any) {
       toast.error('同步失败: ' + (error.message || '未知错误'))
     } finally {
@@ -192,14 +201,10 @@ export default function ConceptsPage() {
                   <Input
                     placeholder="搜索概念代码或名称..."
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => handleSearch(e.target.value)}
                     className="pl-10"
                   />
                 </div>
-                <Button onClick={loadConcepts} variant="outline">
-                  <Search className="mr-2 h-4 w-4" />
-                  搜索
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -209,7 +214,7 @@ export default function ConceptsPage() {
             <CardHeader>
               <CardTitle>概念列表</CardTitle>
               <CardDescription>
-                共 {total} 个概念标签
+                共 {total} 个概念标签，第 {page}/{totalPages} 页
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -285,6 +290,77 @@ export default function ConceptsPage() {
                   )}
                 </TableBody>
               </Table>
+
+              {/* 分页控件 */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-muted-foreground">
+                    显示第 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} 条，共 {total} 条
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(1)}
+                      disabled={page === 1 || loading}
+                    >
+                      首页
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1 || loading}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      上一页
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum: number
+                        if (totalPages <= 5) {
+                          pageNum = i + 1
+                        } else if (page <= 3) {
+                          pageNum = i + 1
+                        } else if (page >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i
+                        } else {
+                          pageNum = page - 2 + i
+                        }
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={page === pageNum ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setPage(pageNum)}
+                            disabled={loading}
+                            className="w-10"
+                          >
+                            {pageNum}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page === totalPages || loading}
+                    >
+                      下一页
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(totalPages)}
+                      disabled={page === totalPages || loading}
+                    >
+                      末页
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

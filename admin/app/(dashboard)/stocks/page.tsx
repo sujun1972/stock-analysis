@@ -12,12 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { StockDetailDialog } from '@/components/stocks/StockDetailDialog'
-import { SimpleConceptSelect } from '@/components/stocks/SimpleConceptSelect'
+import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
 
 export default function StocksManagementPage() {
   // 数据状态
   const [stocks, setStocks] = useState<StockInfo[]>([])
-  const [concepts, setConcepts] = useState<Concept[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [totalStocks, setTotalStocks] = useState(0)
@@ -42,16 +41,6 @@ export default function StocksManagementPage() {
 
   // 计算总页数
   const totalPages = Math.ceil(totalStocks / pageSize)
-
-  // 加载概念列表
-  const loadConcepts = async () => {
-    try {
-      const response = await apiClient.getConceptsList({ limit: 100 })
-      setConcepts(response.items || [])
-    } catch (error: any) {
-      console.error('加载概念列表失败:', error)
-    }
-  }
 
   // 加载股票列表
   const loadStocks = async () => {
@@ -115,11 +104,6 @@ export default function StocksManagementPage() {
       setSyncing(false)
     }
   }
-
-  // 初始加载
-  useEffect(() => {
-    loadConcepts()
-  }, [])
 
   // 当筛选条件或分页变化时重新加载
   useEffect(() => {
@@ -300,12 +284,12 @@ export default function StocksManagementPage() {
 
             <div>
               <label className="text-sm font-medium mb-2 block">概念板块</label>
-              <SimpleConceptSelect
-                concepts={concepts}
+              <LazyConceptSelect
                 value={conceptFilter}
                 onSelect={setConceptFilter}
                 includeAllOption={true}
                 valueType="code"
+                placeholder="选择概念..."
               />
             </div>
 

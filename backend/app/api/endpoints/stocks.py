@@ -81,7 +81,14 @@ def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_codes_str: s
             WHERE c.code IN ({placeholders})
         """, concept_codes)
 
-        concept_stock_codes = {row[0] for row in cursor.fetchall()}
+        # stock_concept中的code格式: 000001.SZ
+        # stock_info中的code格式: 000001
+        # 需要提取前缀进行匹配
+        concept_stock_codes = set()
+        for row in cursor.fetchall():
+            stock_code_with_suffix = row[0]  # 如: 000001.SZ
+            stock_code = stock_code_with_suffix.split('.')[0]  # 提取: 000001
+            concept_stock_codes.add(stock_code)
 
         # 过滤股票列表
         filtered_stocks = [

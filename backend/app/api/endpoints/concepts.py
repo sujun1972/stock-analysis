@@ -39,78 +39,78 @@ pool_manager = ConnectionPoolManager(
 
 @router.get("/list")
 async def get_concepts_list(
-    limit: Optional[int] = Query(None, ge=1, le=1000, description="限制返回数量"),
+    page: int = Query(default=1, ge=1, description="页码（从1开始）"),
+    page_size: int = Query(default=50, ge=1, le=100, description="每页数量"),
     search: Optional[str] = Query(None, description="搜索概念名称")
 ):
     """
-    获取概念板块列表
+    获取概念板块列表（支持分页）
 
     Args:
-        limit: 限制返回数量
+        page: 页码（从1开始）
+        page_size: 每页数量（1-100）
         search: 搜索关键词（概念名称）
 
     Returns:
-        概念列表及统计信息
+        概念列表及分页信息
     """
     try:
-        fetcher = ConceptFetcher(pool_manager)
+        conn = pool_manager.get_connection()
+        try:
+            cursor = conn.cursor()
 
-        # 如果有搜索关键词，使用模糊查询
-        if search:
-            conn = pool_manager.get_connection()
-            try:
-                cursor = conn.cursor()
-                query = """
-                    SELECT id, code, name, source, stock_count, created_at, updated_at
-                    FROM concept
-                    WHERE name ILIKE %s
-                    ORDER BY stock_count DESC, name
-                """
-                if limit:
-                    query += f" LIMIT {limit}"
+            # 计算偏移量
+            offset = (page - 1) * page_size
 
-                cursor.execute(query, (f'%{search}%',))
+            # 构建查询条件
+            where_clause = ""
+            params = []
+            if search:
+                where_clause = "WHERE name ILIKE %s"
+                params.append(f'%{search}%')
 
-                concepts = []
-                for row in cursor.fetchall():
-                    concepts.append({
-                        'id': row[0],
-                        'code': row[1],
-                        'name': row[2],
-                        'source': row[3],
-                        'stock_count': row[4],
-                        'created_at': row[5].isoformat() if row[5] else None,
-                        'updated_at': row[6].isoformat() if row[6] else None
-                    })
+            # 查询总数
+            count_query = f"SELECT COUNT(*) FROM concept {where_clause}"
+            cursor.execute(count_query, params)
+            total = cursor.fetchone()[0]
 
-                return {
-                    "code": 200,
-                    "message": f"成功获取 {len(concepts)} 个概念",
-                    "data": {
-                        "items": concepts,
-                        "total": len(concepts)
-                    }
+            # 查询数据
+            data_query = f"""
+                SELECT id, code, name, source, stock_count, created_at, updated_at
+                FROM concept
+                {where_clause}
+                ORDER BY stock_count DESC, name
+                LIMIT %s OFFSET %s
+            """
+            cursor.execute(data_query, params + [page_size, offset])
+
+            concepts = []
+            for row in cursor.fetchall():
+                concepts.append({
+                    'id': row[0],
+                    'code': row[1],
+                    'name': row[2],
+                    'source': row[3],
+                    'stock_count': row[4],
+                    'created_at': row[5].isoformat() if row[5] else None,
+                    'updated_at': row[6].isoformat() if row[6] else None
+                })
+
+            return {
+                "code": 200,
+                "message": f"成功获取第 {page} 页，共 {total} 个概念",
+                "data": {
+                    "items": concepts,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total + page_size - 1) // page_size
                 }
+            }
 
-            finally:
-                cursor.close()
-                pool_manager.release_connection(conn)
-
-        else:
-            # 获取全部概念
-            result = fetcher.get_all_concepts(limit=limit)
-
-            if result.is_success():
-                return {
-                    "code": 200,
-                    "message": result.message,
-                    "data": {
-                        "items": result.data,
-                        "total": len(result.data)
-                    }
-                }
-            else:
-                raise HTTPException(status_code=500, detail=result.error)
+        finally:
+            cursor.close()
+            pool_manager.release_connection(conn)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取概念列表失败: {str(e)}")
@@ -267,13 +267,14 @@ async def get_stock_concepts(stock_code: str):
 @router.post("/sync")
 async def sync_concepts(
     background_tasks: BackgroundTasks,
-    source: str = Query(default='ths', description="数据源：ths（同花顺）或 em（东方财富）")
+    source: str = Query(default='em', description="数据源：em（东方财富，推荐）或 ths（同花顺，成分股API已失效）")
 ):
     """
     同步概念数据（后台任务）
 
     Args:
-        source: 数据源（ths 或 em）
+        source: 数据源，推荐使用 'em'（东方财富，466个概念，完整成分股）
+               'ths'（同花顺，375个概念，但成分股API已失效）
 
     Returns:
         任务提交成功信息

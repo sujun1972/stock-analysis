@@ -407,11 +407,12 @@ class ApiClient {
 
   // 获取概念列表
   async getConceptsList(params?: {
-    limit?: number
+    page?: number
+    page_size?: number
     search?: string
-  }): Promise<{ items: Concept[]; total: number }> {
+  }): Promise<{ items: Concept[]; total: number; page: number; page_size: number; total_pages: number }> {
     const response = await axiosInstance.get('/api/concepts/list', { params })
-    return response.data.data || { items: [], total: 0 }
+    return response.data.data || { items: [], total: 0, page: 1, page_size: 50, total_pages: 0 }
   }
 
   // 获取概念详情

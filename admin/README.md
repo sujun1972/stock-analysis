@@ -41,19 +41,35 @@
 - 系统内置策略（只读）
 - 策略使用统计和回测统计
 
-### 6. 数据同步 (/sync)
+### 6. 股票管理 (/stocks)
+- 股票列表展示（分页、搜索、排序）
+- 多维度筛选（市场、概念板块、状态）
+- 实时行情数据展示
+- 股票详情查看（基本信息、概念标签）
+- 概念标签编辑
+- 批量同步实时行情
+- 懒加载概念选择器（后端搜索、无限滚动）
+
+### 7. 概念管理 (/concepts)
+- 概念板块列表（分页、搜索）
+- 创建、编辑、删除概念
+- 从东方财富同步概念数据（466个概念 + 成分股）
+- 概念成分股查看
+- 股票数量统计
+
+### 8. 数据同步 (/sync)
 - 数据初始化 (/sync/initialize)
 - 新股列表同步 (/sync/new-stocks)
 - 退市列表同步 (/sync/delisted-stocks)
 - 实时行情同步 (/sync/realtime)
 
-### 7. 系统日志 (/logs)
+### 9. 系统日志 (/logs)
 - 用户活动日志查看
 - 登录历史追踪
 - 操作类型筛选
 - 用户搜索和过滤
 
-### 8. 性能监控 (/monitor)
+### 10. 性能监控 (/monitor)
 - 系统健康状态检查
 - 数据库和Redis连接监控
 - API性能指标
@@ -119,6 +135,10 @@ admin/
 │   │   ├── new-stocks/
 │   │   ├── delisted-stocks/
 │   │   └── realtime/
+│   ├── stocks/            # 股票管理
+│   │   └── page.tsx
+│   ├── concepts/          # 概念管理
+│   │   └── page.tsx
 │   ├── logs/              # 系统日志
 │   │   └── page.tsx
 │   └── monitor/           # 性能监控
@@ -129,6 +149,10 @@ admin/
 │   │   └── ...
 │   ├── auth/              # 认证组件
 │   │   └── ProtectedRoute.tsx
+│   ├── stocks/            # 股票相关组件
+│   │   ├── LazyConceptSelect.tsx  # 懒加载概念选择器
+│   │   ├── SimpleConceptSelect.tsx
+│   │   └── StockDetailDialog.tsx
 │   ├── layout/
 │   │   └── Header.tsx     # 顶部用户信息栏
 │   ├── layouts/
@@ -163,6 +187,7 @@ admin/
 - **HTTP客户端**: Axios (带Token自动注入和刷新)
 - **图标**: Lucide React
 - **代码编辑器**: Monaco Editor (VSCode内核)
+- **通知**: Sonner (Toast notifications)
 
 ## 🏗️ 架构设计
 
@@ -267,7 +292,15 @@ NODE_ENV=development
    - 配额使用情况展示
    - 登录历史和活动日志查看
 
-4. **系统监控**
+4. **股票和概念管理**
+   - 股票列表分页、搜索和筛选
+   - 懒加载概念选择器（后端搜索、300ms防抖、无限滚动）
+   - React Portal渲染（避免z-index问题）
+   - 概念板块CRUD操作
+   - 东方财富数据源同步（466个概念 + 成分股）
+   - 股票-概念多对多关系管理
+
+5. **系统监控**
    - 实时健康状态检查
    - 数据库和Redis监控
    - 自动刷新机制
