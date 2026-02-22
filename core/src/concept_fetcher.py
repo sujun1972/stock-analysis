@@ -44,6 +44,26 @@ class ConceptFetcher:
         """
         self.pool_manager = pool_manager
 
+    @staticmethod
+    def _normalize_stock_code(stock_code: str) -> str:
+        """
+        标准化股票代码，添加交易所后缀
+
+        规则：
+        - 6开头：上海证券交易所（.SH）
+        - 其他：深圳证券交易所（.SZ）
+        - 已有后缀：保持不变
+
+        Args:
+            stock_code: 股票代码（如 '000001' 或 '000001.SZ'）
+
+        Returns:
+            标准化后的股票代码（如 '000001.SZ' 或 '600000.SH'）
+        """
+        if '.' not in stock_code:
+            return f"{stock_code}.SH" if stock_code.startswith('6') else f"{stock_code}.SZ"
+        return stock_code
+
     def fetch_and_save_concepts(self, source: str = 'em') -> Response:
         """
         获取并保存概念板块数据
@@ -218,12 +238,8 @@ class ConceptFetcher:
                 if not stock_code:
                     continue
 
-                # 标准化股票代码（添加后缀）
-                if not ('.' in stock_code):
-                    if stock_code.startswith('6'):
-                        stock_code = f"{stock_code}.SH"
-                    else:
-                        stock_code = f"{stock_code}.SZ"
+                # 标准化股票代码（自动添加交易所后缀）
+                stock_code = self._normalize_stock_code(stock_code)
 
                 try:
                     cursor.execute("""
@@ -271,13 +287,16 @@ class ConceptFetcher:
         获取某只股票所属的所有概念
 
         Args:
-            stock_code: 股票代码（如 '000001.SZ'）
+            stock_code: 股票代码（支持 '000001' 或 '000001.SZ' 格式）
 
         Returns:
             Response: 包含概念列表的响应对象
         """
         conn = None
         try:
+            # 标准化股票代码（自动添加交易所后缀）
+            stock_code = self._normalize_stock_code(stock_code)
+
             conn = self.pool_manager.get_connection()
             cursor = conn.cursor()
 
