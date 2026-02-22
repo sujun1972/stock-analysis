@@ -367,6 +367,7 @@ class ApiClient {
   // 获取股票列表
   async getStockList(params?: {
     market?: string
+    industry?: string
     status?: string
     skip?: number
     limit?: number

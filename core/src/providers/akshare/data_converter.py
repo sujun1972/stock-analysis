@@ -84,6 +84,14 @@ class AkShareDataConverter:
         # 添加默认状态
         df['status'] = '正常'
 
+        # 添加行业和地区字段（AkShare基础接口不提供这些字段，设为空值）
+        # 注意：AkShare的stock_info_a_code_name接口仅返回代码和名称
+        # 如需行业信息，建议使用Tushare数据源或通过其他AkShare接口补充
+        if 'industry' not in df.columns:
+            df['industry'] = None
+        if 'area' not in df.columns:
+            df['area'] = None
+
         # 选择标准字段
         return df[AkShareFields.STOCK_LIST_OUTPUT]
 

@@ -28,6 +28,7 @@ export default function StocksManagementPage() {
   // 筛选和搜索
   const [search, setSearch] = useState('')
   const [marketFilter, setMarketFilter] = useState<string>('all')
+  const [industryFilter, setIndustryFilter] = useState<string>('all')
   const [conceptFilter, setConceptFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
@@ -55,6 +56,7 @@ export default function StocksManagementPage() {
 
       if (search) params.search = search
       if (marketFilter !== 'all') params.market = marketFilter
+      if (industryFilter !== 'all') params.industry = industryFilter
       if (conceptFilter !== 'all') params.concepts = conceptFilter
       if (statusFilter !== 'all') params.status = statusFilter
 
@@ -108,12 +110,13 @@ export default function StocksManagementPage() {
   // 当筛选条件或分页变化时重新加载
   useEffect(() => {
     loadStocks()
-  }, [currentPage, pageSize, search, marketFilter, conceptFilter, statusFilter, sortBy, sortOrder])
+  }, [currentPage, pageSize, search, marketFilter, industryFilter, conceptFilter, statusFilter, sortBy, sortOrder])
 
   // 重置筛选
   const handleResetFilters = () => {
     setSearch('')
     setMarketFilter('all')
+    setIndustryFilter('all')
     setConceptFilter('all')
     setStatusFilter('all')
     setCurrentPage(1)
@@ -265,7 +268,7 @@ export default function StocksManagementPage() {
           </div>
 
           {/* 筛选器 */}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="text-sm font-medium mb-2 block">市场</label>
               <Select value={marketFilter} onValueChange={setMarketFilter}>
@@ -278,6 +281,28 @@ export default function StocksManagementPage() {
                   <SelectItem value="深圳主板">深圳主板</SelectItem>
                   <SelectItem value="创业板">创业板</SelectItem>
                   <SelectItem value="科创板">科创板</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">行业</label>
+              <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择行业" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部行业</SelectItem>
+                  <SelectItem value="银行">银行</SelectItem>
+                  <SelectItem value="医药">医药</SelectItem>
+                  <SelectItem value="计算机">计算机</SelectItem>
+                  <SelectItem value="电子">电子</SelectItem>
+                  <SelectItem value="汽车">汽车</SelectItem>
+                  <SelectItem value="房地产">房地产</SelectItem>
+                  <SelectItem value="建筑">建筑</SelectItem>
+                  <SelectItem value="钢铁">钢铁</SelectItem>
+                  <SelectItem value="化工">化工</SelectItem>
+                  <SelectItem value="食品饮料">食品饮料</SelectItem>
                 </SelectContent>
               </Select>
             </div>

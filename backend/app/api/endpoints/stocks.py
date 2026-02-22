@@ -174,6 +174,7 @@ def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_codes_str: s
 )
 async def get_stock_list(
     market: Optional[str] = Query(None, description="市场类型筛选，如: 深圳主板、上海主板、创业板、科创板、北交所"),
+    industry: Optional[str] = Query(None, description="行业筛选，如: 银行、医药、计算机"),
     status_filter: str = Query("正常", description="股票状态筛选，如: 正常、退市、暂停上市", alias="status"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配，如: 平安、000001"),
     concepts: Optional[str] = Query(None, description="概念板块筛选，多个概念用逗号分隔，如: 白酒概念,消费概念"),
@@ -189,6 +190,8 @@ async def get_stock_list(
 
     ## 功能说明
     - 支持按市场类型筛选（深圳主板/上海主板/创业板/科创板/北交所）
+    - 支持按行业筛选（银行/医药/计算机等）
+    - 支持按概念板块筛选
     - 支持按股票状态筛选（正常/退市/暂停上市等）
     - 支持股票代码和名称的模糊搜索
     - 支持分页查询，避免一次返回大量数据
@@ -208,7 +211,15 @@ async def get_stock_list(
     # 1. 调用 Core Adapter（业务逻辑在 Core）
     stocks = await data_adapter.get_stock_list(market=market, status=status_filter)
 
-    # 2. Backend 职责：搜索过滤（前端功能）
+    # 2. Backend 职责：行业过滤
+    if industry:
+        stocks = [
+            stock
+            for stock in stocks
+            if stock.get("industry") == industry
+        ]
+
+    # 3. Backend 职责：搜索过滤（前端功能）
     if search:
         search_lower = search.lower()
         stocks = [
@@ -218,17 +229,17 @@ async def get_stock_list(
             or search_lower in stock.get("name", "").lower()
         ]
 
-    # 2.5 Backend 职责：概念筛选
+    # 4. Backend 职责：概念筛选
     if concepts:
         stocks = filter_stocks_by_concepts(stocks, concepts)
 
-    # 3. Backend 职责：分页
+    # 5. Backend 职责：分页
     total = len(stocks)
     start = (page - 1) * page_size
     end = start + page_size
     items = stocks[start:end]
 
-    # 4. Backend 职责：响应格式化
+    # 6. Backend 职责：响应格式化
     return ApiResponse.paginated(
         items=items, total=total, page=page, page_size=page_size, message="获取股票列表成功"
     ).to_dict()

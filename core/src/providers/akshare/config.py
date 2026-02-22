@@ -80,7 +80,7 @@ class AkShareFields:
         'code': 'code',
         'name': 'name'
     }
-    STOCK_LIST_OUTPUT = ['code', 'name', 'market', 'status']
+    STOCK_LIST_OUTPUT = ['code', 'name', 'market', 'industry', 'area', 'status']
 
     # ========== 日线数据字段 ==========
     DAILY_DATA_RENAME = {
