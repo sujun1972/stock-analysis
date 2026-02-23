@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
@@ -11,19 +11,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, TrendingUp } from 'lucide-react'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { login, isAuthenticated, isLoading, error, clearError } = useAuthStore()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
+  // 获取重定向路径
+  const redirect = searchParams.get('redirect') || '/'
+
   // 已登录用户重定向
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/')
+      router.push(redirect)
     }
-  }, [isAuthenticated, router])
+  }, [isAuthenticated, router, redirect])
 
   // 清除错误
   useEffect(() => {
@@ -36,7 +40,8 @@ export default function LoginPage() {
 
     try {
       await login(email, password)
-      router.push('/')
+      // 登录成功后重定向到目标页面
+      router.push(redirect)
     } catch (err) {
       // 错误已经在store中处理
       console.error('Login failed:', err)
@@ -72,6 +77,12 @@ export default function LoginPage() {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {searchParams.get('message') && (
+                <Alert>
+                  <AlertDescription>{searchParams.get('message')}</AlertDescription>
                 </Alert>
               )}
 
@@ -152,5 +163,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }

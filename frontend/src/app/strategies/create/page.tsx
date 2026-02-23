@@ -5,10 +5,11 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { useTheme } from 'next-themes'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,7 +40,7 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
   )
 })
 
-export default function CreateStrategyPage() {
+function CreateStrategyContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -487,5 +488,19 @@ class MyStrategy(BaseStrategy):
         </div>
       </form>
     </div>
+  )
+}
+
+export default function CreateStrategyPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <ProtectedRoute requireAuth={true}>
+        <CreateStrategyContent />
+      </ProtectedRoute>
+    </Suspense>
   )
 }

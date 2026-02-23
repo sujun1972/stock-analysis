@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { isTokenExpiringSoon } from '@/lib/jwt-utils'
 import type {
   StockInfo,
   StockDaily,
@@ -52,15 +53,42 @@ const axiosInstance: AxiosInstance = axios.create({
 })
 
 /**
+ * Token刷新状态管理
+ */
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (value: any) => void
+  reject: (reason?: any) => void
+}> = []
+
+const processQueue = (error: any = null, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
+/**
  * 请求拦截器
- * 自动添加认证token到请求头
+ * 自动添加认证token到请求头，并实现Token预刷新机制
  */
 axiosInstance.interceptors.request.use(
-  (config) => {
+  async (config) => {
     // 只在浏览器环境中访问localStorage
     if (typeof window === 'undefined') {
       return config
     }
+
+    // 检查是否为认证相关请求（避免循环刷新）
+    const isAuthRequest =
+      config.url?.includes('/api/auth/login') ||
+      config.url?.includes('/api/auth/register') ||
+      config.url?.includes('/api/auth/refresh') ||
+      config.url?.includes('/api/auth/logout')
 
     // 从localStorage获取Token（由auth-store管理）
     const authStorage = localStorage.getItem('auth-storage')
@@ -68,8 +96,52 @@ axiosInstance.interceptors.request.use(
       try {
         const { state } = JSON.parse(authStorage)
         const accessToken = state?.accessToken
+
         if (accessToken) {
-          config.headers.Authorization = `Bearer ${accessToken}`
+          // Token预刷新机制：如果Token即将在5分钟内过期，先刷新
+          if (!isAuthRequest && isTokenExpiringSoon(accessToken, 5)) {
+            if (isRefreshing) {
+              // 如果正在刷新，加入队列等待
+              return new Promise((resolve, reject) => {
+                failedQueue.push({ resolve, reject })
+              })
+                .then((token) => {
+                  config.headers.Authorization = `Bearer ${token}`
+                  return config
+                })
+                .catch((err) => {
+                  return Promise.reject(err)
+                })
+            }
+
+            // 启动刷新流程
+            isRefreshing = true
+
+            try {
+              // 动态导入auth store以避免循环依赖
+              const { useAuthStore } = await import('@/stores/auth-store')
+              await useAuthStore.getState().refreshAccessToken()
+
+              // 获取新Token
+              const newAuthStorage = localStorage.getItem('auth-storage')
+              if (newAuthStorage) {
+                const { state: newState } = JSON.parse(newAuthStorage)
+                const newAccessToken = newState?.accessToken
+                if (newAccessToken) {
+                  config.headers.Authorization = `Bearer ${newAccessToken}`
+                  processQueue(null, newAccessToken)
+                }
+              }
+            } catch (refreshError) {
+              processQueue(refreshError, null)
+              return Promise.reject(refreshError)
+            } finally {
+              isRefreshing = false
+            }
+          } else {
+            // Token还有效，直接使用
+            config.headers.Authorization = `Bearer ${accessToken}`
+          }
         }
       } catch (error) {
         console.error('Failed to parse auth storage:', error)
@@ -101,7 +173,22 @@ axiosInstance.interceptors.response.use(
       !originalRequest.url?.includes('/api/auth/refresh') &&
       !originalRequest.url?.includes('/api/auth/login')
     ) {
+      if (isRefreshing) {
+        // 如果正在刷新，将请求加入队列
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            return axiosInstance(originalRequest)
+          })
+          .catch((err) => {
+            return Promise.reject(err)
+          })
+      }
+
       originalRequest._retry = true
+      isRefreshing = true
 
       try {
         // 动态导入auth store以避免循环依赖
@@ -115,24 +202,32 @@ axiosInstance.interceptors.response.use(
           const accessToken = state?.accessToken
           if (accessToken) {
             originalRequest.headers.Authorization = `Bearer ${accessToken}`
+            processQueue(null, accessToken)
+            return axiosInstance(originalRequest)
           }
         }
 
-        return axiosInstance(originalRequest)
+        throw new Error('Failed to get new access token')
       } catch (refreshError) {
         // Token刷新失败，需要重新登录
         console.error('Token refresh failed, redirecting to login...')
+
+        processQueue(refreshError, null)
 
         // 清除认证状态
         const { useAuthStore } = await import('@/stores/auth-store')
         useAuthStore.getState().logout()
 
-        // 重定向到登录页
+        // 重定向到登录页（带上当前路径用于登录后跳转）
         if (typeof window !== 'undefined') {
-          window.location.href = '/login'
+          const currentPath = window.location.pathname
+          const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : ''
+          window.location.href = `/login${redirectPath}`
         }
 
         return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
       }
     }
 

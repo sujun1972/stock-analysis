@@ -21,6 +21,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [success, setSuccess] = useState(false)
+  const [validationError, setValidationError] = useState('')
 
   // 已登录用户重定向
   useEffect(() => {
@@ -37,15 +38,16 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
+    setValidationError('')
 
     // 验证密码
     if (password !== confirmPassword) {
-      alert('两次输入的密码不一致')
+      setValidationError('两次输入的密码不一致')
       return
     }
 
     if (password.length < 6) {
-      alert('密码长度至少为6个字符')
+      setValidationError('密码长度至少为6个字符')
       return
     }
 
@@ -61,7 +63,7 @@ export default function RegisterPage() {
 
       // 3秒后跳转到登录页
       setTimeout(() => {
-        router.push('/login')
+        router.push('/login?message=' + encodeURIComponent('注册成功，请登录'))
       }, 3000)
     } catch (err) {
       console.error('Registration failed:', err)
@@ -127,10 +129,10 @@ export default function RegisterPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
+              {(error || validationError) && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
+                  <AlertDescription>{error || validationError}</AlertDescription>
                 </Alert>
               )}
 

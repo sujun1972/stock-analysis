@@ -6,11 +6,12 @@
 
 - **框架**: Next.js 14 (App Router)
 - **语言**: TypeScript
-- **样式**: Tailwind CSS
-- **状态管理**: Zustand
+- **样式**: Tailwind CSS + shadcn/ui
+- **状态管理**: Zustand (with persist)
 - **HTTP客户端**: Axios
-- **图表**: Recharts
+- **图表**: ECharts, Highcharts, Lightweight Charts
 - **日期处理**: date-fns
+- **认证**: JWT (Access Token + Refresh Token)
 
 ## 📁 项目结构
 
@@ -105,30 +106,45 @@ docker run -p 3000:3000 \
 
 ## 📦 主要功能
 
-### 1. 首页 (`/`)
+### 1. 用户认证系统
+
+- **登录/注册**: 支持邮箱密码登录，JWT双Token机制
+- **Token管理**: 自动预刷新（过期前5分钟）、请求队列管理
+- **路由保护**: 灵活的可选登录模式，支持角色权限控制
+- **用户中心**: 个人资料管理、配额查看、角色权益展示
+
+### 2. 首页 (`/`)
 
 - 系统概览
 - 功能介绍
 - 后端服务健康检查
 
-### 2. 股票列表 (`/stocks`)
+### 3. 股票列表 (`/stocks`)
 
 - 显示所有A股股票
-- 支持搜索和筛选
+- 支持搜索和筛选（市场、概念板块）
 - 分页浏览
-- 跳转到分析页面
+- 实时行情智能刷新
 
-### 3. 数据分析 (`/analysis`) - 待实现
+### 4. 策略中心 (`/strategies`)
 
-- 股票数据可视化
-- 技术指标计算
-- 特征工程
+- 策略列表（内置/AI/自定义）
+- 策略创建（需登录）
+- 策略代码编辑（Monaco Editor）
+- 策略验证和测试
 
-### 4. 策略回测 (`/backtest`) - 待实现
+### 5. 回测系统 (`/backtest`)
 
-- 回测参数配置
-- 回测结果展示
-- 绩效分析
+- 支持多种策略类型
+- 股票池选择
+- 日期范围配置
+- 回测结果可视化
+
+### 6. AI实验舱 (`/ai-lab`)
+
+- ML模型训练
+- 预测分析
+- 模型性能评估
 
 ## 🔌 API集成
 
@@ -146,6 +162,15 @@ const dailyData = await apiClient.getDailyData('000001')
 // 计算特征
 await apiClient.calculateFeatures('000001')
 ```
+
+### Token自动刷新机制
+
+API客户端内置智能Token管理：
+
+- **预刷新**: Token过期前5分钟自动刷新
+- **请求队列**: 多个并发请求时只刷新一次Token
+- **自动重试**: 401错误时自动刷新Token并重试原请求
+- **智能重定向**: 刷新失败时保存当前路径用于登录后回跳
 
 ## 🎨 样式系统
 
@@ -171,14 +196,35 @@ await apiClient.calculateFeatures('000001')
 使用 Zustand 管理全局状态：
 
 ```typescript
+// 股票状态
 import { useStockStore } from '@/store/stock-store'
 
 function MyComponent() {
   const { stocks, setStocks, isLoading } = useStockStore()
-
   // 使用状态...
 }
+
+// 认证状态
+import { useAuthStore, isVipUser } from '@/stores/auth-store'
+
+function AuthComponent() {
+  const { user, isAuthenticated, login, logout } = useAuthStore()
+
+  // 使用辅助函数检查权限
+  if (isVipUser()) {
+    // VIP功能
+  }
+}
 ```
+
+### 认证辅助函数
+
+- `isAdmin()` - 检查是否为管理员
+- `isSuperAdmin()` - 检查是否为超级管理员
+- `isVipUser()` - 检查是否为VIP用户
+- `isTrialUser()` - 检查是否为试用用户
+- `hasPremiumAccess()` - 检查是否有高级权限
+- `getRoleDisplayName(role)` - 获取角色显示名称
 
 ## 🔄 开发流程
 
@@ -279,6 +325,53 @@ export default function MyComponent() {
 2. 删除 `node_modules` 重新安装
 3. 查看构建日志: `docker-compose logs frontend`
 
+## 🔐 路由保护
+
+使用 `ProtectedRoute` 组件保护需要认证的页面：
+
+```tsx
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+
+// 必须登录
+export default function ProfilePage() {
+  return (
+    <ProtectedRoute>
+      <ProfileContent />
+    </ProtectedRoute>
+  )
+}
+
+// 可选登录（未登录也可访问）
+export default function StocksPage() {
+  return (
+    <ProtectedRoute requireAuth={false}>
+      <StocksContent />
+    </ProtectedRoute>
+  )
+}
+
+// 限制特定角色
+export default function AdminPage() {
+  return (
+    <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+      <AdminContent />
+    </ProtectedRoute>
+  )
+}
+```
+
+## 🎨 UI组件系统
+
+基于 shadcn/ui + Radix UI 构建，支持暗黑模式：
+
+- **表单组件**: Button, Input, Label, Select, Checkbox, Switch
+- **布局组件**: Card, Dialog, Sheet, Tabs, Separator
+- **反馈组件**: Toast, Alert, Progress, Badge
+- **导航组件**: DropdownMenu, Avatar
+- **数据展示**: Table, Pagination
+
+所有组件位于 `src/components/ui/`
+
 ---
 
-**最后更新**: 2026-01-20
+**最后更新**: 2026-02-23

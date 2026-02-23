@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -21,23 +22,17 @@ interface UserQuota {
   current_strategies: number
 }
 
-export default function ProfilePage() {
+function ProfileContent() {
   const router = useRouter()
-  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuthStore()
+  const { user, logout } = useAuthStore()
   const [quota, setQuota] = useState<UserQuota | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login')
-    }
-  }, [authLoading, isAuthenticated, router])
-
-  useEffect(() => {
-    if (isAuthenticated && user) {
+    if (user) {
       loadQuota()
     }
-  }, [isAuthenticated, user])
+  }, [user])
 
   const loadQuota = async () => {
     try {
@@ -76,7 +71,7 @@ export default function ProfilePage() {
     return new Date(dateString).toLocaleDateString('zh-CN')
   }
 
-  if (authLoading || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -233,5 +228,13 @@ export default function ProfilePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function ProfilePage() {
+  return (
+    <ProtectedRoute requireAuth={true}>
+      <ProfileContent />
+    </ProtectedRoute>
   )
 }

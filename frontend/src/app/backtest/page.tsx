@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -34,7 +34,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
  */
 type StrategySourceType = 'predefined' | 'config' | 'dynamic' | 'unified' | 'ml'
 
-export default function BacktestPage() {
+function BacktestContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -671,5 +671,17 @@ export default function BacktestPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function BacktestPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <BacktestContent />
+    </Suspense>
   )
 }

@@ -299,3 +299,34 @@ export const isSuperAdmin = () => {
   const user = useAuthStore.getState().user;
   return user?.role === 'super_admin';
 };
+
+// 辅助函数：检查是否为VIP用户
+export const isVipUser = () => {
+  const user = useAuthStore.getState().user;
+  return user?.role === 'vip_user' || user?.role === 'admin' || user?.role === 'super_admin';
+};
+
+// 辅助函数：检查是否为试用用户
+export const isTrialUser = () => {
+  const user = useAuthStore.getState().user;
+  return user?.role === 'trial_user';
+};
+
+// 辅助函数：检查是否有高级权限（VIP及以上）
+export const hasPremiumAccess = () => {
+  const user = useAuthStore.getState().user;
+  return ['vip_user', 'admin', 'super_admin'].includes(user?.role || '');
+};
+
+// 辅助函数：获取角色显示名称
+export const getRoleDisplayName = (role?: UserRole): string => {
+  if (!role) return '未登录';
+  const roleNames: Record<UserRole, string> = {
+    super_admin: '超级管理员',
+    admin: '管理员',
+    vip_user: 'VIP用户',
+    normal_user: '普通用户',
+    trial_user: '试用用户',
+  };
+  return roleNames[role] || role;
+};
