@@ -246,6 +246,103 @@ async def get_stock_list(
 
 
 @router.get(
+    "/codes/filtered",
+    summary="获取股票代码列表（筛选后）",
+    description="根据筛选条件获取股票代码列表，用于批量选择场景（如回测股票池）。只返回股票代码，不返回完整信息，性能更优。",
+    tags=["股票管理"],
+    responses={
+        200: {
+            "description": "成功获取股票代码列表",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 200,
+                        "message": "获取股票代码列表成功",
+                        "data": {
+                            "codes": ["000001", "000002", "000004", "000005"],
+                            "total": 4
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_stock_codes(
+    market: Optional[str] = Query(None, description="市场类型筛选，如: 深圳主板、上海主板、创业板、科创板、北交所"),
+    industry: Optional[str] = Query(None, description="行业筛选，如: 银行、医药、计算机"),
+    status_filter: str = Query("正常", description="股票状态筛选，如: 正常、退市、暂停上市", alias="status"),
+    search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
+    concepts: Optional[str] = Query(None, description="概念板块筛选，多个概念用逗号分隔"),
+    limit: int = Query(500, ge=1, le=1000, description="最大返回数量，范围: 1-1000，默认 500"),
+):
+    """
+    获取符合筛选条件的股票代码列表
+
+    ## 功能说明
+    - 专门用于批量选择股票场景（如回测股票池配置）
+    - 只返回股票代码，不返回完整股票信息，性能更优
+    - 支持与 /list 接口相同的筛选条件
+    - 最多支持一次性获取 1000 只股票代码
+
+    ## 使用场景
+    1. 回测页面"全选所有筛选结果"功能
+    2. 批量导出股票代码
+    3. 快速获取特定市场/行业的所有股票代码
+
+    ## 返回格式
+    - codes: 股票代码列表（不带后缀，如 "000001"）
+    - total: 符合条件的股票总数
+
+    ## 错误码说明
+    - 200: 成功
+    - 400: 参数错误
+    - 500: 服务器内部错误
+    """
+    # 1. 调用 Core Adapter 获取股票列表
+    stocks = await data_adapter.get_stock_list(market=market, status=status_filter)
+
+    # 2. 行业过滤
+    if industry:
+        stocks = [
+            stock
+            for stock in stocks
+            if stock.get("industry") == industry
+        ]
+
+    # 3. 搜索过滤
+    if search:
+        search_lower = search.lower()
+        stocks = [
+            stock
+            for stock in stocks
+            if search_lower in stock.get("code", "").lower() or search_lower in stock.get("name", "").lower()
+        ]
+
+    # 4. 概念筛选
+    if concepts:
+        stocks = filter_stocks_by_concepts(stocks, concepts)
+
+    # 5. 提取股票代码（去除后缀）并限制数量
+    codes = []
+    for stock in stocks[:limit]:
+        code = stock.get("code", "")
+        # 去除 .SZ .SH 等后缀
+        if "." in code:
+            code = code.split(".")[0]
+        codes.append(code)
+
+    # 6. 返回结果
+    return ApiResponse.success(
+        data={
+            "codes": codes,
+            "total": len(codes)
+        },
+        message="获取股票代码列表成功"
+    ).to_dict()
+
+
+@router.get(
     "/{code}",
     summary="获取单只股票详情",
     description="根据股票代码获取该股票的详细信息，包括基本信息、行业分类、上市日期等",

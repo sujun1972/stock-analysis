@@ -1,21 +1,26 @@
 'use client'
 
 /**
- * 概念选择器组件（支持懒加载和后端搜索）
+ * 概念选择器组件（不使用 Command 组件，避免点击问题）
  *
  * 特性：
  * - 懒加载：打开下拉框时才加载数据
  * - 后端搜索：搜索时从后端API获取结果
  * - 分页加载：支持滚动加载更多
  * - 防抖搜索：避免频繁请求
- * - 使用 React Portal 渲染下拉框，避免被父容器遮挡
+ * - 使用 Popover 提供下拉功能
  */
 
 import * as React from 'react'
-import { createPortal } from 'react-dom'
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { apiClient } from '@/lib/api-client'
 import type { Concept } from '@/types/stock'
 
@@ -49,17 +54,9 @@ export function LazyConceptSelect({
   const [selectedConcept, setSelectedConcept] = React.useState<Concept | null>(null)
   const [page, setPage] = React.useState(1)
   const [hasMore, setHasMore] = React.useState(true)
-  const [dropdownPosition, setDropdownPosition] = React.useState({ top: 0, left: 0, width: 0 })
 
-  const buttonRef = React.useRef<HTMLButtonElement>(null)
-  const dropdownRef = React.useRef<HTMLDivElement>(null)
-  const scrollRef = React.useRef<HTMLDivElement>(null)
-  const [mounted, setMounted] = React.useState(false)
   const searchTimeoutRef = React.useRef<NodeJS.Timeout>()
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  const scrollRef = React.useRef<HTMLDivElement>(null)
 
   // 加载已选中的概念信息
   React.useEffect(() => {
@@ -72,7 +69,6 @@ export function LazyConceptSelect({
     if (value === 'all') return
 
     try {
-      // 如果是code类型，从concepts中查找
       if (valueType === 'code') {
         const response = await apiClient.getConceptsList({ limit: 1000 })
         const concept = response.items.find(c => c.code === value)
@@ -80,7 +76,6 @@ export function LazyConceptSelect({
           setSelectedConcept(concept)
         }
       } else {
-        // 如果是id类型，直接调用API获取
         const concept = await apiClient.getConcept(parseInt(value))
         setSelectedConcept(concept)
       }
@@ -100,7 +95,12 @@ export function LazyConceptSelect({
       })
 
       if (append) {
-        setConcepts(prev => [...prev, ...response.items])
+        // 去重：只添加不存在的概念
+        setConcepts(prev => {
+          const existingIds = new Set(prev.map(c => c.id))
+          const newConcepts = response.items.filter(c => !existingIds.has(c.id))
+          return [...prev, ...newConcepts]
+        })
       } else {
         setConcepts(response.items)
       }
@@ -142,59 +142,17 @@ export function LazyConceptSelect({
   }, [search, open])
 
   // 滚动加载更多
-  const handleScroll = React.useCallback(() => {
-    if (!scrollRef.current || loading || !hasMore) return
+  const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget
+    if (loading || !hasMore) return
 
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+    const { scrollTop, scrollHeight, clientHeight } = target
     if (scrollHeight - scrollTop <= clientHeight * 1.5) {
       loadConcepts(search, page + 1, true)
     }
   }, [loading, hasMore, search, page])
 
-  // 更新下拉框位置
-  React.useEffect(() => {
-    if (open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
-      const viewportHeight = window.innerHeight
-      const dropdownMaxHeight = 400
-
-      const spaceBelow = viewportHeight - rect.bottom
-      const spaceAbove = rect.top
-
-      let top: number
-      if (spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow) {
-        top = rect.top + window.scrollY - dropdownMaxHeight - 4
-      } else {
-        top = rect.bottom + window.scrollY + 4
-      }
-
-      setDropdownPosition({
-        top,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      })
-    }
-  }, [open])
-
-  // 点击外部关闭
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false)
-      }
-    }
-
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [open])
-
+  // 处理选择
   const handleSelect = (selectedValue: string) => {
     if (selectedValue === 'all') {
       setSelectedConcept(null)
@@ -211,137 +169,123 @@ export function LazyConceptSelect({
     setSearch('')
   }
 
-  const getPortalContainer = React.useCallback(() => {
-    const radixPortal = document.querySelector('[data-radix-portal]')
-    if (radixPortal) return radixPortal as HTMLElement
-    return document.body
-  }, [])
-
-  const dropdownContent = open && mounted && (
-    <div
-      ref={dropdownRef}
-      className="fixed rounded-md border bg-popover text-popover-foreground shadow-lg outline-none animate-in fade-in-80"
-      style={{
-        top: `${dropdownPosition.top}px`,
-        left: `${dropdownPosition.left}px`,
-        width: `${dropdownPosition.width}px`,
-        zIndex: 99999,
-        pointerEvents: 'auto',
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="p-2" onMouseDown={(e) => e.stopPropagation()}>
-        <input
-          type="text"
-          placeholder="搜索概念..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          autoFocus
-        />
-      </div>
-
-      <div
-        ref={scrollRef}
-        className="max-h-[min(400px,60vh)] overflow-y-auto overflow-x-hidden p-1"
-        onScroll={handleScroll}
-      >
-        {includeAllOption && (
-          <div
-            className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-            onClick={() => handleSelect('all')}
-          >
-            <Check
-              className={cn(
-                'mr-2 h-4 w-4',
-                value === 'all' ? 'opacity-100' : 'opacity-0'
-              )}
-            />
-            <span className="font-medium">全部概念</span>
-          </div>
-        )}
-
-        {concepts.length === 0 && !loading ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            {search ? '没有找到匹配的概念' : '暂无概念数据'}
-          </div>
-        ) : (
-          concepts.map((concept) => {
-            const itemValue = valueType === 'id' ? concept.id.toString() : concept.code
-            return (
-              <div
-                key={concept.id}
-                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                onClick={() => handleSelect(itemValue)}
-              >
-                <Check
-                  className={cn(
-                    'mr-2 h-4 w-4',
-                    value === itemValue ? 'opacity-100' : 'opacity-0'
-                  )}
-                />
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {concept.code}
-                  </span>
-                  <span className="flex-1">{concept.name}</span>
-                  {concept.stock_count !== undefined && (
-                    <span className="text-xs text-muted-foreground">
-                      {concept.stock_count}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )
-          })
-        )}
-
-        {loading && (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">
-              {concepts.length === 0 ? '加载中...' : '加载更多...'}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-
   return (
-    <>
-      <Button
-        ref={buttonRef}
-        type="button"
-        variant="outline"
-        role="combobox"
-        aria-expanded={open}
-        className="w-full justify-between"
-        disabled={disabled}
-        onClick={() => setOpen(!open)}
-      >
-        {selectedConcept ? (
-          <span className="flex items-center gap-2">
-            <span className="font-mono text-xs text-muted-foreground">
-              {selectedConcept.code}
-            </span>
-            <span>{selectedConcept.name}</span>
-            {selectedConcept.stock_count !== undefined && (
-              <span className="text-xs text-muted-foreground">
-                ({selectedConcept.stock_count})
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between"
+          disabled={disabled}
+        >
+          {selectedConcept ? (
+            <span className="flex items-center gap-2">
+              <span className="font-mono text-xs text-muted-foreground">
+                {selectedConcept.code}
               </span>
-            )}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">
-            {includeAllOption && value === 'all' ? '全部概念' : placeholder}
-          </span>
-        )}
-        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-      </Button>
+              <span>{selectedConcept.name}</span>
+              {selectedConcept.stock_count !== undefined && (
+                <span className="text-xs text-muted-foreground">
+                  ({selectedConcept.stock_count})
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              {includeAllOption && value === 'all' ? '全部概念' : placeholder}
+            </span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+        side="bottom"
+      >
+        {/* 搜索输入框 */}
+        <div className="flex items-center border-b px-3 py-2">
+          <Input
+            placeholder="搜索概念..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+          />
+        </div>
 
-      {mounted && createPortal(dropdownContent, getPortalContainer())}
-    </>
+        {/* 选项列表 */}
+        <div
+          ref={scrollRef}
+          className="max-h-[300px] overflow-y-auto overflow-x-hidden"
+          onScroll={handleScroll}
+        >
+          {concepts.length === 0 && !loading ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              {search ? '没有找到匹配的概念' : '暂无概念数据'}
+            </div>
+          ) : (
+            <div className="p-1">
+              {/* 全部选项 */}
+              {includeAllOption && (
+                <div
+                  className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => handleSelect('all')}
+                >
+                  <Check
+                    className={cn(
+                      'mr-2 h-4 w-4',
+                      value === 'all' ? 'opacity-100' : 'opacity-0'
+                    )}
+                  />
+                  <span className="font-medium">全部概念</span>
+                </div>
+              )}
+
+              {/* 概念列表 */}
+              {concepts.map((concept) => {
+                const itemValue = valueType === 'id' ? concept.id.toString() : concept.code
+                return (
+                  <div
+                    key={concept.id}
+                    className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                    onClick={() => handleSelect(itemValue)}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        value === itemValue ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {concept.code}
+                      </span>
+                      <span className="flex-1">{concept.name}</span>
+                      {concept.stock_count !== undefined && (
+                        <span className="text-xs text-muted-foreground">
+                          {concept.stock_count}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* 加载指示器 */}
+              {loading && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">
+                    {concepts.length === 0 ? '加载中...' : '加载更多...'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

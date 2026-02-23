@@ -2,8 +2,7 @@
  * 股票池选择器组件
  *
  * 功能特性：
- * - 实时搜索添加股票（使用 StockSearch 组件）
- * - 批量输入股票代码（支持逗号、分号、换行分隔）
+ * - 从股票列表选择（弹窗筛选）
  * - 展示已选股票列表（支持删除）
  * - 数量限制和去重处理
  *
@@ -16,11 +15,10 @@
 
 import { useState, memo, useCallback } from 'react'
 import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { X, Plus } from 'lucide-react'
-import { StockSearch } from '@/components/stock-search'
+import { X, List } from 'lucide-react'
+import { StockSelectionDialog } from './StockSelectionDialog'
 
 interface StockPoolSelectorProps {
   /** 已选股票代码列表 */
@@ -34,30 +32,9 @@ interface StockPoolSelectorProps {
 const StockPoolSelector = memo(function StockPoolSelector({
   value,
   onChange,
-  maxStocks = 100
+  maxStocks = 500
 }: StockPoolSelectorProps) {
-  const [inputValue, setInputValue] = useState('')
-
-  /**
-   * 添加单个股票到股票池
-   * 自动转大写、去重、检查数量限制
-   */
-  const addStock = useCallback((stockCode: string) => {
-    const code = stockCode.trim().toUpperCase()
-    if (!code) return
-
-    if (value.includes(code)) {
-      return
-    }
-
-    if (value.length >= maxStocks) {
-      alert(`最多添加 ${maxStocks} 只股票`)
-      return
-    }
-
-    onChange([...value, code])
-    setInputValue('')
-  }, [value, maxStocks, onChange])
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   /**
    * 从股票池中移除指定股票
@@ -67,86 +44,40 @@ const StockPoolSelector = memo(function StockPoolSelector({
   }, [value, onChange])
 
   /**
-   * 处理回车键添加股票
+   * 处理从弹窗确认选择
    */
-  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addStock(inputValue)
-    }
-  }, [inputValue, addStock])
+  const handleDialogConfirm = useCallback((selectedCodes: string[]) => {
+    // 合并已有股票和新选择的股票，去重
+    const allCodes = [...value, ...selectedCodes]
+    const uniqueCodes = Array.from(new Set(allCodes))
 
-  /**
-   * 批量添加股票
-   * 支持逗号、分号、换行等分隔符
-   */
-  const handleBatchAdd = useCallback(() => {
-    const codes = inputValue
-      .split(/[\s,，;；\n]+/)
-      .map(code => code.trim().toUpperCase())
-      .filter(code => code.length > 0)
-      .filter(code => !value.includes(code))
-      .slice(0, maxStocks - value.length)
+    // 限制在 maxStocks 范围内
+    const finalCodes = uniqueCodes.slice(0, maxStocks)
 
-    if (codes.length > 0) {
-      onChange([...value, ...codes])
-      setInputValue('')
-    }
-  }, [inputValue, value, maxStocks, onChange])
+    onChange(finalCodes)
+  }, [value, maxStocks, onChange])
 
   return (
     <div className="space-y-3">
-      <Label className="text-sm font-medium">
-        股票池 ({value.length}/{maxStocks})
-      </Label>
-
-      {/* 股票搜索 */}
-      <StockSearch
-        onSelect={(stock) => addStock(stock.code)}
-        placeholder="搜索并添加股票..."
-        maxResults={10}
-        className="max-w-full"
-      />
-
-      {/* 批量输入区域 */}
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">
-          批量添加（支持逗号、分号或换行分隔）
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">
+          股票池 ({value.length}/{maxStocks})
         </Label>
-        <div className="flex gap-2">
-          <Input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="例如: 600000, 000001, 300750"
-            className="flex-1"
-          />
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => addStock(inputValue)}
-            disabled={!inputValue.trim() || inputValue.includes(',') || inputValue.includes('\n') || inputValue.includes('，')}
-            title="单个添加"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handleBatchAdd}
-            disabled={!inputValue.includes(',') && !inputValue.includes('\n') && !inputValue.includes('，')}
-            title="批量添加"
-          >
-            批量添加
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setDialogOpen(true)}
+          className="gap-2"
+        >
+          <List className="h-4 w-4" />
+          从股票列表选择
+        </Button>
       </div>
 
       {/* 已选股票列表 */}
-      {value.length > 0 && (
-        <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+      {value.length > 0 ? (
+        <div className="border rounded-lg p-3 max-h-64 overflow-y-auto">
           <div className="flex flex-wrap gap-2">
             {value.map((stockCode) => (
               <Badge
@@ -168,11 +99,25 @@ const StockPoolSelector = memo(function StockPoolSelector({
             ))}
           </div>
         </div>
+      ) : (
+        <div className="border rounded-lg p-6 text-center">
+          <div className="text-gray-400 dark:text-gray-500 mb-2">
+            <List className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">还未选择股票</p>
+            <p className="text-xs mt-1">点击上方按钮从股票列表中选择</p>
+          </div>
+        </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        提示: 可通过搜索框快速查找股票，或批量粘贴股票代码
-      </p>
+      {/* 股票筛选弹窗 */}
+      <StockSelectionDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onConfirm={handleDialogConfirm}
+        initialSelected={[]}
+        maxSelection={maxStocks}
+        existingCount={value.length}
+      />
     </div>
   )
 })

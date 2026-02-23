@@ -329,6 +329,23 @@ class ApiClient {
   }
 
   /**
+   * 获取股票代码列表（筛选后）
+   * 专门用于批量选择场景，只返回股票代码，性能更优
+   */
+  async getStockCodes(params?: {
+    market?: string
+    industry?: string
+    status?: string
+    search?: string
+    concepts?: string
+    limit?: number
+  }): Promise<{ codes: string[]; total: number }> {
+    const response = await axiosInstance.get('/api/stocks/codes/filtered', { params })
+    const result = response.data as ApiResponse<{ codes: string[]; total: number }>
+    return result.data || { codes: [], total: 0 }
+  }
+
+  /**
    * 更新股票列表（从数据源获取最新列表）
    * @returns 包含更新股票总数的响应对象
    */
