@@ -18,37 +18,25 @@ import {
 } from '@/components/ui/pagination'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
-import type { Concept } from '@/types'
+import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
 
 export default function StocksPage() {
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [marketFilter, setMarketFilter] = useState<string>('all')
+  const [industryFilter, setIndustryFilter] = useState<string>('all')
   const [conceptFilter, setConceptFilter] = useState<string>('all')
-  const [concepts, setConcepts] = useState<Concept[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [totalStocks, setTotalStocks] = useState(0)
   const [pageSize, setPageSize] = useState(20)
   const [sortBy, setSortBy] = useState('pct_change')
   const [sortOrder, setSortOrder] = useState('desc')
 
-  // 加载概念列表
-  useEffect(() => {
-    const loadConcepts = async () => {
-      try {
-        const result = await apiClient.getConceptsList({ limit: 100 })
-        setConcepts(result.items || [])
-      } catch (err) {
-        console.error('Failed to load concepts:', err)
-      }
-    }
-    loadConcepts()
-  }, [])
 
   useEffect(() => {
     loadStocks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, marketFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder])
+  }, [currentPage, marketFilter, industryFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder])
 
   const loadStocks = async () => {
     try {
@@ -66,11 +54,13 @@ export default function StocksPage() {
         params.market = marketFilter
       }
 
+      if (industryFilter !== 'all') {
+        params.industry = industryFilter
+      }
+
+      // 概念筛选：传递概念代码（不是名称）
       if (conceptFilter !== 'all') {
-        const concept = concepts.find(c => c.code === conceptFilter)
-        if (concept) {
-          params.concepts = concept.name
-        }
+        params.concepts = conceptFilter
       }
 
       if (searchTerm && searchTerm.trim()) {
@@ -143,7 +133,7 @@ export default function StocksPage() {
       {/* 搜索和筛选 */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label htmlFor="market-filter">市场筛选</Label>
               <Select
@@ -167,26 +157,45 @@ export default function StocksPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="concept-filter">概念筛选</Label>
+              <Label htmlFor="industry-filter">行业筛选</Label>
               <Select
-                value={conceptFilter}
+                value={industryFilter}
                 onValueChange={(value) => {
-                  setConceptFilter(value)
+                  setIndustryFilter(value)
                   setCurrentPage(1)
                 }}
               >
-                <SelectTrigger id="concept-filter">
-                  <SelectValue placeholder="选择概念..." />
+                <SelectTrigger id="industry-filter">
+                  <SelectValue placeholder="选择行业..." />
                 </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  <SelectItem value="all">全部概念</SelectItem>
-                  {concepts.map((concept) => (
-                    <SelectItem key={concept.id} value={concept.code}>
-                      {concept.name} ({concept.stock_count})
-                    </SelectItem>
-                  ))}
+                <SelectContent>
+                  <SelectItem value="all">全部行业</SelectItem>
+                  <SelectItem value="银行">银行</SelectItem>
+                  <SelectItem value="医药">医药</SelectItem>
+                  <SelectItem value="计算机">计算机</SelectItem>
+                  <SelectItem value="电子">电子</SelectItem>
+                  <SelectItem value="汽车">汽车</SelectItem>
+                  <SelectItem value="房地产">房地产</SelectItem>
+                  <SelectItem value="建筑">建筑</SelectItem>
+                  <SelectItem value="钢铁">钢铁</SelectItem>
+                  <SelectItem value="化工">化工</SelectItem>
+                  <SelectItem value="食品饮料">食品饮料</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="concept-filter">概念筛选</Label>
+              <LazyConceptSelect
+                value={conceptFilter}
+                onSelect={(value) => {
+                  setConceptFilter(value)
+                  setCurrentPage(1)
+                }}
+                includeAllOption={true}
+                valueType="code"
+                placeholder="选择概念..."
+              />
             </div>
 
             <div className="space-y-2">
