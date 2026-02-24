@@ -145,6 +145,30 @@ export default function EChartsStockChart({
   // 设置对话框显示状态
   const [showSettings, setShowSettings] = useState(false)
 
+  /**
+   * 控制 body 滚动：打开对话框时禁用，关闭时恢复
+   */
+  useEffect(() => {
+    if (showSettings) {
+      // 保存当前滚动位置
+      const scrollY = window.scrollY
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.top = `-${scrollY}px`
+      document.body.style.width = '100%'
+    } else {
+      // 恢复滚动
+      const scrollY = document.body.style.top
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.width = ''
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1)
+      }
+    }
+  }, [showSettings])
+
   // 检查是否有权益曲线数据
   const hasEquityData = backtestMode && equityCurve && equityCurve.length > 0
 

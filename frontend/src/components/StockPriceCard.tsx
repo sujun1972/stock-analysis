@@ -142,6 +142,30 @@ export default function StockPriceCard({
   const [showIndicatorSettings, setShowIndicatorSettings] = useState(false)
 
   /**
+   * 控制 body 滚动：打开对话框时禁用，关闭时恢复
+   */
+  useEffect(() => {
+    if (showIndicatorSettings) {
+      // 保存当前滚动位置
+      const scrollY = window.scrollY
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.top = `-${scrollY}px`
+      document.body.style.width = '100%'
+    } else {
+      // 恢复滚动
+      const scrollY = document.body.style.top
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.width = ''
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1)
+      }
+    }
+  }, [showIndicatorSettings])
+
+  /**
    * 指标显示状态管理
    * - 从 localStorage 读取用户的指标偏好设置
    * - 默认开启成交量和MACD，其他指标默认关闭
