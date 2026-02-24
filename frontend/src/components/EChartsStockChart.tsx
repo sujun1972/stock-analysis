@@ -28,12 +28,53 @@ interface ChartData {
   BOLL_LOWER?: number | null
 }
 
+// 回测相关类型定义
+interface SignalPoint {
+  date: string
+  price: number
+}
+
+interface SignalPoints {
+  buy: SignalPoint[]
+  sell: SignalPoint[]
+}
+
+interface EquityCurvePoint {
+  date: string
+  total: number
+  cash?: number
+  holdings?: number
+}
+
 interface EChartsStockChartProps {
   data: ChartData[]
   stockCode: string
+  // 回测模式相关（可选）
+  backtestMode?: boolean
+  signalPoints?: SignalPoints
+  equityCurve?: EquityCurvePoint[]
+  // 外部控制指标设置（可选）
+  externalVisibleIndicators?: {
+    volume: boolean
+    macd: boolean
+    kdj: boolean
+    rsi: boolean
+    boll: boolean
+  }
+  onIndicatorsChange?: (indicators: any) => void
+  hideSettingsButton?: boolean  // 是否隐藏设置按钮
 }
 
-export default function EChartsStockChart({ data, stockCode }: EChartsStockChartProps) {
+export default function EChartsStockChart({
+  data,
+  stockCode,
+  backtestMode = false,
+  signalPoints,
+  equityCurve,
+  externalVisibleIndicators,
+  onIndicatorsChange,
+  hideSettingsButton = false
+}: EChartsStockChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
   const [allData, setAllData] = useState<ChartData[]>(data)
@@ -41,8 +82,25 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
   const hasLoadedAllDataRef = useRef(false)  // 标记是否已加载全部数据
   const currentDataZoomRef = useRef<{ start: number; end: number } | null>(null)  // 保存当前缩放位置
 
-  // 指标显示状态（默认只显示成交量和MACD，从localStorage读取保存的设置）
+  /**
+   * 指标显示状态管理
+   *
+   * 支持两种模式：
+   * 1. 外部控制模式：当传入 externalVisibleIndicators 时，使用外部状态
+   *    - 由父组件（如 StockPriceCard）统一管理指标设置
+   *    - 不保存到 localStorage，由父组件负责持久化
+   *
+   * 2. 独立模式：未传入 externalVisibleIndicators 时，自主管理
+   *    - 从 localStorage 读取用户偏好
+   *    - 自动保存设置变化到 localStorage
+   */
   const [visibleIndicators, setVisibleIndicators] = useState(() => {
+    // 优先使用外部控制的指标设置
+    if (externalVisibleIndicators) {
+      return externalVisibleIndicators
+    }
+
+    // 独立模式：从 localStorage 读取
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('chart_visible_indicators')
       if (saved) {
@@ -53,24 +111,41 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
         }
       }
     }
+
+    // 默认配置：开启成交量和MACD
     return {
-      volume: true,   // 成交量 - 默认开启
-      macd: true,     // MACD - 默认开启
-      kdj: false,     // KDJ - 默认关闭
-      rsi: false,     // RSI - 默认关闭
-      boll: false     // BOLL - 默认关闭
+      volume: true,
+      macd: true,
+      kdj: false,
+      rsi: false,
+      boll: false
     }
   })
 
-  // 保存指标设置到 localStorage
+  /**
+   * 外部控制模式：同步外部指标设置变化
+   */
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (externalVisibleIndicators) {
+      setVisibleIndicators(externalVisibleIndicators)
+    }
+  }, [externalVisibleIndicators])
+
+  /**
+   * 独立模式：持久化指标设置到 localStorage
+   * 仅在非外部控制时执行
+   */
+  useEffect(() => {
+    if (!externalVisibleIndicators && typeof window !== 'undefined') {
       localStorage.setItem('chart_visible_indicators', JSON.stringify(visibleIndicators))
     }
-  }, [visibleIndicators])
+  }, [visibleIndicators, externalVisibleIndicators])
 
   // 设置对话框显示状态
   const [showSettings, setShowSettings] = useState(false)
+
+  // 检查是否有权益曲线数据
+  const hasEquityData = backtestMode && equityCurve && equityCurve.length > 0
 
   /**
    * 格式化成交量：将大数值转换为中国习惯的万/亿单位
@@ -273,6 +348,87 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
     const ma20Data = sortedData.map(d => d.MA20 ?? '-')
     const ma60Data = sortedData.map(d => d.MA60 ?? '-')
 
+    // 回测模式：处理买卖信号和权益曲线
+    let normalizedEquityData: (number | null)[] = []
+    const equityDataForTooltip: (EquityCurvePoint | null)[] = []
+    let buyMarkPoints: any[] = []
+    let sellMarkPoints: any[] = []
+
+    if (backtestMode && signalPoints) {
+      // 准备买卖信号markPoint数据
+      buyMarkPoints = signalPoints.buy.map(point => ({
+        name: '买入',
+        coord: [point.date, point.price],
+        value: '买',
+        symbol: 'pin',
+        symbolSize: 50,
+        itemStyle: {
+          color: '#ef4444'
+        },
+        label: {
+          show: true,
+          formatter: '买',
+          color: '#fff',
+          fontSize: 12
+        }
+      }))
+
+      sellMarkPoints = signalPoints.sell.map(point => ({
+        name: '卖出',
+        coord: [point.date, point.price],
+        value: '卖',
+        symbol: 'pin',
+        symbolSize: 50,
+        symbolRotate: 180,
+        itemStyle: {
+          color: '#22c55e'
+        },
+        label: {
+          show: true,
+          formatter: '卖',
+          color: '#fff',
+          fontSize: 12
+        }
+      }))
+    }
+
+    if (hasEquityData && equityCurve) {
+      // 创建日期到权益的映射
+      const equityMap = new Map<string, EquityCurvePoint>()
+      equityCurve.forEach(point => {
+        equityMap.set(point.date, point)
+      })
+
+      // 提取原始权益数据
+      const rawEquityData = dates.map(date => {
+        const equity = equityMap.get(date)
+        equityDataForTooltip.push(equity || null)
+        return equity ? equity.total : null
+      })
+
+      // 检查是否有有效数据
+      const validEquityData = rawEquityData.filter(v => v !== null && v > 0) as number[]
+
+      if (validEquityData.length > 0) {
+        // 计算权益的最小值和最大值
+        const equityMin = Math.min(...validEquityData)
+        const equityMax = Math.max(...validEquityData)
+
+        // 计算价格的最小值和最大值（用于归一化）
+        const allPrices = sortedData.flatMap(d => [d.open, d.high, d.low, d.close])
+        const priceMin = Math.min(...allPrices)
+        const priceMax = Math.max(...allPrices)
+
+        // 将权益数据归一化到价格范围
+        normalizedEquityData = rawEquityData.map(equity => {
+          if (equity === null || equity === 0) return null
+          // 归一化公式：映射到价格范围的80%-120%区间（留出一些边距）
+          const normalized = priceMin + (equity - equityMin) / (equityMax - equityMin) * (priceMax - priceMin) * 0.4 + (priceMax - priceMin) * 0.3
+          return normalized
+        })
+      }
+    }
+
     // MACD数据
     const macdData = sortedData.map(d => d.MACD ?? '-')
     const macdSignalData = sortedData.map(d => d.MACD_SIGNAL ?? '-')
@@ -304,11 +460,20 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
     if (visibleIndicators.rsi && hasRSI) enabledIndicators.push('rsi')
 
     // 动态构建图例（使用像素定位）
+    const mainLegendData = (() => {
+      const base = ['K线', 'MA5', 'MA20', 'MA60']
+      if (visibleIndicators.boll && hasBOLL) {
+        base.push('BOLL上轨', 'BOLL中轨', 'BOLL下轨')
+      }
+      if (hasEquityData) {
+        base.push('权益曲线')
+      }
+      return base
+    })()
+
     const legends: any[] = [
       {
-        data: visibleIndicators.boll && hasBOLL
-          ? ['K线', 'MA5', 'MA20', 'MA60', 'BOLL上轨', 'BOLL中轨', 'BOLL下轨']
-          : ['K线', 'MA5', 'MA20', 'MA60'],
+        data: mainLegendData,
         top: TOP_PADDING,
         left: 'center',
         textStyle: {
@@ -544,11 +709,26 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
 
           params.forEach((param: any) => {
             const { seriesName, value, marker, color } = param
+            const dataIndex = param.dataIndex
 
             if (seriesName === '成交量') {
               // 成交量：使用万/亿单位格式化
               const volumeValue = Array.isArray(value) ? value[1] : value
               otherContent += createTooltipRow(marker, seriesName, formatVolume(volumeValue), color)
+            } else if (seriesName === '权益曲线' && equityDataForTooltip[dataIndex]) {
+              // 特殊处理权益曲线，显示真实资产数据
+              const equity = equityDataForTooltip[dataIndex]!
+              otherContent += `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #eee;">
+                <div style="font-weight:bold; color:#ec4899; margin-bottom:4px;">
+                  <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ec4899;margin-right:5px;"></span>
+                  权益曲线
+                </div>
+                <div style="margin-left:15px;">
+                  <div>总资产: ¥${equity.total.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div>持仓市值: ¥${(equity.holdings || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div>现金: ¥${(equity.cash || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </div>
+              </div>`
             } else if (seriesName === 'K线' && Array.isArray(value)) {
               // K线数据：显示开高低收，保持2位小数，颜色与涨跌一致
               hasKLine = true
@@ -556,8 +736,8 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
               klineContent += createTooltipRow(marker, '收', Number(value[2]).toFixed(2), priceColor)
               klineContent += createTooltipRow(marker, '低', Number(value[3]).toFixed(2), priceColor)
               klineContent += createTooltipRow(marker, '高', Number(value[4]).toFixed(2), priceColor)
-            } else {
-              // 其他指标：MA、MACD、KDJ、RSI等
+            } else if (seriesName !== '权益曲线') {
+              // 其他指标：MA、MACD、KDJ、RSI等（排除权益曲线）
               const displayValue = Array.isArray(value) ? value[1] : value
               if (displayValue !== '-' && displayValue !== null && displayValue !== undefined) {
                 const formattedValue = typeof displayValue === 'number' ? displayValue.toFixed(2) : displayValue
@@ -594,7 +774,15 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
               color0: '#22c55e',
               borderColor: '#ef4444',
               borderColor0: '#22c55e'
-            }
+            },
+            // 回测模式：添加买卖信号markPoint
+            ...(backtestMode && (buyMarkPoints.length > 0 || sellMarkPoints.length > 0) ? {
+              markPoint: {
+                data: [...buyMarkPoints, ...sellMarkPoints],
+                animation: true,
+                animationDuration: 500
+              }
+            } : {})
           },
           {
             name: 'MA5',
@@ -688,6 +876,28 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
               showSymbol: false
             }
           )
+        }
+
+        // 权益曲线（回测模式，归一化后重叠在K线图上）
+        if (hasEquityData) {
+          series.push({
+            name: '权益曲线',
+            type: 'line',
+            data: normalizedEquityData,
+            xAxisIndex: 0,
+            yAxisIndex: 0,
+            smooth: true,
+            lineStyle: {
+              width: 2.5,
+              color: '#ec4899',
+              type: 'solid'
+            },
+            itemStyle: {
+              color: '#ec4899'
+            },
+            showSymbol: false,
+            z: 10  // 确保在K线上层显示
+          })
         }
 
         // 成交量
@@ -866,7 +1076,7 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
       window.removeEventListener('resize', handleResize)
       chart.off('dataZoom')
     }
-  }, [allData, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData])
+  }, [allData, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData, backtestMode, signalPoints, equityCurve, hasEquityData])
 
   // 显示加载状态
   useEffect(() => {
@@ -909,19 +1119,21 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
 
   return (
     <div className="w-full">
-      {/* 设置按钮 */}
-      <div className="mb-4 flex justify-end">
-        <button
-          onClick={() => setShowSettings(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          指标设置
-        </button>
-      </div>
+      {/* 设置按钮（仅在未隐藏且非外部控制时显示） */}
+      {!hideSettingsButton && !externalVisibleIndicators && (
+        <div className="mb-4 flex justify-end">
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            指标设置
+          </button>
+        </div>
+      )}
 
       {/* 设置对话框 */}
       {showSettings && (
@@ -1029,8 +1241,39 @@ export default function EChartsStockChart({ data, stockCode }: EChartsStockChart
         </div>
       )}
 
+      {/* 回测模式提示 */}
+      {backtestMode && hasEquityData && (
+        <div className="mb-2 px-3 py-2 bg-pink-50 dark:bg-pink-900/20 rounded-md border border-pink-200 dark:border-pink-800">
+          <p className="text-xs text-pink-800 dark:text-pink-300">
+            💡 粉色线为权益曲线（已归一化到价格范围），可直观看到资产变化与股价走势的关系
+          </p>
+        </div>
+      )}
+
       {/* 图表 */}
       <div ref={chartRef} style={{ width: '100%', height: `${chartHeight}px` }} />
+
+      {/* 回测信号统计 */}
+      {backtestMode && signalPoints && (signalPoints.buy.length > 0 || signalPoints.sell.length > 0) && (
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                买入信号: {signalPoints.buy.length} 次
+              </span>
+            </div>
+          </div>
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                卖出信号: {signalPoints.sell.length} 次
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

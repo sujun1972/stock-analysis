@@ -49,6 +49,24 @@ export const MINUTE_PERIOD_OPTIONS = [
   { value: '60', label: '60分钟' },
 ] as const
 
+// 回测相关类型定义
+interface SignalPoint {
+  date: string
+  price: number
+}
+
+interface SignalPoints {
+  buy: SignalPoint[]
+  sell: SignalPoint[]
+}
+
+interface EquityCurvePoint {
+  date: string
+  total: number
+  cash?: number
+  holdings?: number
+}
+
 interface StockPriceCardProps {
   stockCode: string
   stockName?: string
@@ -56,6 +74,12 @@ interface StockPriceCardProps {
   showHeader?: boolean
   className?: string
   onIndicatorsChange?: (indicators: string[]) => void
+  // 回测模式相关（可选）
+  backtestMode?: boolean
+  signalPoints?: SignalPoints
+  equityCurve?: EquityCurvePoint[]
+  // 外部提供的数据（可选，用于回测模式）
+  externalData?: FeatureData[]
 }
 
 /**
@@ -66,14 +90,25 @@ interface StockPriceCardProps {
  * - 选择显示的技术指标
  * - 分时图支持多周期（1/5/15/30/60分钟）
  * - 自动加载和缓存数据
+ * - 支持回测模式（显示买卖信号和权益曲线）
  *
  * @example
  * ```tsx
+ * // 普通模式
  * <StockPriceCard
  *   stockCode="000001"
  *   stockName="平安银行"
  *   defaultChartType="daily"
  *   showHeader={true}
+ * />
+ *
+ * // 回测模式
+ * <StockPriceCard
+ *   stockCode="000001"
+ *   stockName="平安银行"
+ *   backtestMode={true}
+ *   signalPoints={{ buy: [...], sell: [...] }}
+ *   equityCurve={[...]}
  * />
  * ```
  */
@@ -84,6 +119,10 @@ export default function StockPriceCard({
   showHeader = true,
   className = '',
   onIndicatorsChange,
+  backtestMode = false,
+  signalPoints,
+  equityCurve,
+  externalData,
 }: StockPriceCardProps) {
   // 图表类型（日线/分时）
   const [chartType, setChartType] = useState<'daily' | 'minute'>(defaultChartType)
@@ -98,11 +137,72 @@ export default function StockPriceCard({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // 指标设置面板显示状态
+  // 指标设置对话框显示状态
   const [showIndicatorSettings, setShowIndicatorSettings] = useState(false)
+
+  /**
+   * 指标显示状态管理
+   * - 从 localStorage 读取用户的指标偏好设置
+   * - 默认开启成交量和MACD，其他指标默认关闭
+   * - 支持5种技术指标：成交量、MACD、KDJ、RSI、BOLL
+   */
+  const [visibleIndicators, setVisibleIndicators] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chart_visible_indicators')
+      if (saved) {
+        try {
+          return JSON.parse(saved)
+        } catch (e) {
+          console.error('Failed to parse saved indicators:', e)
+        }
+      }
+    }
+    return {
+      volume: true,   // 成交量 - 默认开启
+      macd: true,     // MACD - 默认开启
+      kdj: false,     // KDJ - 默认关闭
+      rsi: false,     // RSI - 默认关闭
+      boll: false     // BOLL - 默认关闭
+    }
+  })
+
+  /**
+   * 持久化指标设置
+   * - 自动保存到 localStorage，实现跨会话记忆
+   * - 通知父组件指标变化（如果提供了回调）
+   */
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('chart_visible_indicators', JSON.stringify(visibleIndicators))
+    }
+    if (onIndicatorsChange) {
+      onIndicatorsChange(Object.keys(visibleIndicators).filter(key => visibleIndicators[key as keyof typeof visibleIndicators]))
+    }
+  }, [visibleIndicators, onIndicatorsChange])
+
+  /**
+   * 检测数据中是否包含技术指标
+   * - 用于控制设置对话框中指标选项的可用性
+   * - 无数据的指标会被禁用并显示"(无数据)"提示
+   */
+  const hasMACD = features.some(d => d.MACD !== null && d.MACD !== undefined)
+  const hasKDJ = features.some(d => d.KDJ_K !== null && d.KDJ_K !== undefined)
+  const hasRSI = features.some(d =>
+    (d.RSI6 !== null && d.RSI6 !== undefined) ||
+    (d.RSI12 !== null && d.RSI12 !== undefined) ||
+    (d.RSI24 !== null && d.RSI24 !== undefined)
+  )
+  const hasBOLL = features.some(d => d.BOLL_UPPER !== null && d.BOLL_UPPER !== undefined)
 
   // 加载日线数据
   const loadDailyData = async () => {
+    // 如果提供了外部数据（回测模式），直接使用
+    if (externalData && externalData.length > 0) {
+      setFeatures(externalData)
+      return
+    }
+
+    // 否则从API加载
     try {
       setIsLoading(true)
       setError(null)
@@ -141,7 +241,7 @@ export default function StockPriceCard({
     } else {
       loadMinuteData()
     }
-  }, [stockCode, chartType])
+  }, [stockCode, chartType, externalData])
 
   // 分时图周期变化时重新聚合数据
   useEffect(() => {
@@ -185,7 +285,17 @@ export default function StockPriceCard({
           </div>
         )
       }
-      return <EChartsStockChart data={features} stockCode={stockCode} />
+      return (
+        <EChartsStockChart
+          data={features}
+          stockCode={stockCode}
+          backtestMode={backtestMode}
+          signalPoints={signalPoints}
+          equityCurve={equityCurve}
+          externalVisibleIndicators={visibleIndicators}
+          hideSettingsButton={true}  // 隐藏内部的设置按钮
+        />
+      )
     } else {
       if (aggregatedMinuteData.length === 0) {
         return (
@@ -264,7 +374,7 @@ export default function StockPriceCard({
               variant="outline"
               size="sm"
               className="flex items-center gap-1.5"
-              onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}
+              onClick={() => setShowIndicatorSettings(true)}
             >
               <Settings2 className="w-4 h-4" />
               <span>指标设置</span>
@@ -272,15 +382,100 @@ export default function StockPriceCard({
           )}
         </div>
 
-        {/* 指标设置提示（日线图） */}
-        {chartType === 'daily' && showIndicatorSettings && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-800">
-            <p className="flex items-center gap-2">
-              <Settings2 className="w-4 h-4" />
-              <span>
-                技术指标可在图表右上角的设置按钮中配置。支持选择显示：成交量、MACD、KDJ、RSI、BOLL 等指标。
-              </span>
-            </p>
+        {/* 指标设置对话框 */}
+        {showIndicatorSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowIndicatorSettings(false)}>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">选择显示的指标</h3>
+                <button
+                  onClick={() => setShowIndicatorSettings(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* 成交量 */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleIndicators.volume}
+                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, volume: e.target.checked })}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="ml-3 text-gray-900 dark:text-white">成交量 (Volume)</span>
+                </label>
+
+                {/* MACD */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleIndicators.macd}
+                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, macd: e.target.checked })}
+                    disabled={!hasMACD}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className={`ml-3 ${hasMACD ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
+                    MACD {!hasMACD && '(无数据)'}
+                  </span>
+                </label>
+
+                {/* KDJ */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleIndicators.kdj}
+                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, kdj: e.target.checked })}
+                    disabled={!hasKDJ}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className={`ml-3 ${hasKDJ ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
+                    KDJ {!hasKDJ && '(无数据)'}
+                  </span>
+                </label>
+
+                {/* RSI */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleIndicators.rsi}
+                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, rsi: e.target.checked })}
+                    disabled={!hasRSI}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className={`ml-3 ${hasRSI ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
+                    RSI {!hasRSI && '(无数据)'}
+                  </span>
+                </label>
+
+                {/* BOLL */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleIndicators.boll}
+                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, boll: e.target.checked })}
+                    disabled={!hasBOLL}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className={`ml-3 ${hasBOLL ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
+                    布林带 (BOLL) {!hasBOLL && '(无数据)'}
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowIndicatorSettings(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  确定
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
