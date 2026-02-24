@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -382,9 +383,13 @@ export default function StockPriceCard({
           )}
         </div>
 
-        {/* 指标设置对话框 */}
-        {showIndicatorSettings && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowIndicatorSettings(false)}>
+        {/* 指标设置对话框（使用 Portal 渲染到 body，确保遮罩层正确覆盖） */}
+        {showIndicatorSettings && typeof window !== 'undefined' && createPortal(
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+            onClick={() => setShowIndicatorSettings(false)}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+          >
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">选择显示的指标</h3>
@@ -476,7 +481,8 @@ export default function StockPriceCard({
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* 图表渲染区域 */}
