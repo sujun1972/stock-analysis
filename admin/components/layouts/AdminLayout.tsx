@@ -13,7 +13,8 @@ import {
   Users,
   Tag,
   TrendingUp,
-  LineChart
+  LineChart,
+  Sparkles
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 
@@ -46,6 +47,11 @@ const navItems = [
     name: '概念管理',
     href: '/concepts',
     icon: Tag
+  },
+  {
+    name: 'AI配置',
+    href: '/ai-config',
+    icon: Sparkles
   },
   {
     name: '系统设置',

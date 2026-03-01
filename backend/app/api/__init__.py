@@ -5,6 +5,7 @@ API路由模块
 from fastapi import APIRouter
 
 from .endpoints import (
+    ai_strategy,
     auth,
     backtest,
     concepts,
@@ -57,5 +58,8 @@ router.include_router(market.router, prefix="/market", tags=["市场状态"])
 
 # 自动化实验路由
 router.include_router(experiment.router, prefix="/experiment", tags=["自动化实验"])
+
+# AI策略生成路由
+router.include_router(ai_strategy.router, prefix="/ai-strategy", tags=["AI策略生成"])
 
 __all__ = ["router"]

@@ -83,7 +83,19 @@ class StrategyCreate(BaseModel):
     def validate_category(cls, v):
         """验证类别"""
         if v is not None:
-            allowed = ["momentum", "reversal", "factor", "ml", "arbitrage", "hybrid"]
+            # 扩展类别列表，支持更多常见策略类型
+            allowed = [
+                "momentum",        # 动量策略
+                "reversal",        # 反转策略
+                "mean_reversion",  # 均值回归策略
+                "factor",          # 因子策略
+                "ml",              # 机器学习策略
+                "arbitrage",       # 套利策略
+                "hybrid",          # 混合策略
+                "trend_following", # 趋势跟踪策略
+                "breakout",        # 突破策略
+                "statistical"      # 统计套利策略
+            ]
             if v not in allowed:
                 raise ValueError(f"category 必须是以下之一: {', '.join(allowed)}")
         return v

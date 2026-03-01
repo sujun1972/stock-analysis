@@ -6,6 +6,7 @@
 - **时序数据库**：TimescaleDB（基于PostgreSQL）高性能存储历史行情数据
 - **技术分析**：使用 **TA-Lib** 计算60+种技术指标（趋势、动量、波动率、Alpha因子）
 - **机器学习**：LightGBM、GRU深度学习模型进行价格预测
+- **AI策略生成**：集成DeepSeek、Gemini等AI，一键生成量化策略代码
 - **回测引擎**：完整的策略回测框架，支持多策略组合
 - **Web API服务**：FastAPI后端提供RESTful API，支持数据下载、特征计算、模型训练、回测等
 - **前端界面**：Next.js 14 + TypeScript + Tailwind CSS 构建的现代化Web界面

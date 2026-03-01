@@ -533,6 +533,25 @@ class SecurityError(BackendError):
     """
 
 
+# ==================== AI服务相关异常 ====================
+
+
+class AIServiceError(BackendError):
+    """
+    AI服务错误
+
+    用于AI服务调用失败等场景。
+
+    Examples:
+        >>> raise AIServiceError(
+        ...     "AI策略生成失败",
+        ...     error_code="AI_GENERATION_FAILED",
+        ...     provider="deepseek",
+        ...     reason="API请求超时"
+        ... )
+    """
+
+
 # ==================== 便捷函数 ====================
 
 

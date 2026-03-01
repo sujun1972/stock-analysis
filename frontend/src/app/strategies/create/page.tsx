@@ -29,7 +29,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
-import AIStrategyPromptHelper from '@/components/strategies/AIStrategyPromptHelper'
+import AIStrategyPromptHelperV2 from '@/components/strategies/AIStrategyPromptHelperV2'
 
 // 动态导入 Monaco Editor (客户端组件)
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -62,6 +62,32 @@ function CreateStrategyContent() {
   const [code, setCode] = useState('')
   const [category, setCategory] = useState('')
   const [tags, setTags] = useState('')
+
+  // 处理AI生成的策略
+  const handleAIGenerated = (strategyCode: string, metadata: any) => {
+    setCode(strategyCode)
+
+    if (metadata) {
+      if (metadata.strategy_id) setName(metadata.strategy_id)
+      if (metadata.display_name) setDisplayName(metadata.display_name)
+      if (metadata.class_name) setClassName(metadata.class_name)
+      if (metadata.description) setDescription(metadata.description)
+      if (metadata.category) setCategory(metadata.category)
+      if (metadata.tags && Array.isArray(metadata.tags)) {
+        setTags(metadata.tags.join(', '))
+      }
+    }
+
+    toast({
+      title: '已填充表单',
+      description: '策略代码和元信息已自动填充，请检查并调整'
+    })
+
+    // 自动验证代码
+    setTimeout(() => {
+      handleValidate()
+    }, 500)
+  }
 
   useEffect(() => {
     // 如果是克隆模式,加载原策略
@@ -232,7 +258,7 @@ function CreateStrategyContent() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* AI策略生成助手 - 仅在自定义策略模式下显示 */}
         {source === 'custom' && (
-          <AIStrategyPromptHelper />
+          <AIStrategyPromptHelperV2 onStrategyGenerated={handleAIGenerated} />
         )}
 
         {/* 基本信息 */}
