@@ -1,6 +1,24 @@
 // ========== 统一策略类型定义 (V2.0) ==========
 
 /**
+ * 策略类别定义
+ * 与后端 backend/app/schemas/strategy.py 中的验证规则保持一致
+ * 共10种预定义类别，防止用户输入无效类别导致验证失败
+ */
+export const STRATEGY_CATEGORIES = [
+  { value: 'momentum', label: '动量策略', description: '基于价格动量的策略' },
+  { value: 'reversal', label: '反转策略', description: '基于价格反转的策略' },
+  { value: 'mean_reversion', label: '均值回归策略', description: '基于均值回归的策略' },
+  { value: 'factor', label: '因子策略', description: '基于多因子的策略' },
+  { value: 'ml', label: '机器学习策略', description: '基于机器学习模型的策略' },
+  { value: 'arbitrage', label: '套利策略', description: '基于套利机会的策略' },
+  { value: 'hybrid', label: '混合策略', description: '结合多种策略类型' },
+  { value: 'trend_following', label: '趋势跟踪策略', description: '跟踪市场趋势的策略' },
+  { value: 'breakout', label: '突破策略', description: '基于价格突破的策略' },
+  { value: 'statistical', label: '统计套利策略', description: '基于统计分析的策略' }
+] as const
+
+/**
  * 统一策略接口
  * 所有策略（内置/AI/自定义）都使用这个统一的接口
  */

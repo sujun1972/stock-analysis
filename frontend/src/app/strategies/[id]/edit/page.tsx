@@ -1,12 +1,12 @@
 /**
- * 策略创建页面 (V2.0)
- * 支持三种创建方式：基于内置模板、AI生成、自定义代码
+ * 策略编辑页面 (V2.0)
+ * 用于编辑现有策略的代码、元信息和配置
  */
 
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { useTheme } from 'next-themes'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
@@ -25,19 +25,16 @@ import {
 } from '@/components/ui/select'
 import {
   ArrowLeft,
-  Building2,
-  Sparkles,
-  Code,
   Save,
   CheckCircle,
   XCircle,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
 import { STRATEGY_CATEGORIES } from '@/types/strategy'
-import AIStrategyPromptHelperV2 from '@/components/strategies/AIStrategyPromptHelperV2'
 
 // 动态导入 Monaco Editor (客户端组件)
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -49,18 +46,18 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
   )
 })
 
-function CreateStrategyContent() {
+function EditStrategyContent() {
+  const params = useParams()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { toast } = useToast()
   const { theme } = useTheme()
+  const strategyId = parseInt(params.id as string)
 
-  const source = searchParams.get('source') || 'custom'
-  const cloneId = searchParams.get('clone')
-
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<any>(null)
+  const [strategy, setStrategy] = useState<Strategy | null>(null)
 
   // 表单字段
   const [name, setName] = useState('')
@@ -71,59 +68,35 @@ function CreateStrategyContent() {
   const [category, setCategory] = useState('')
   const [tags, setTags] = useState('')
 
-  // 处理AI生成的策略
-  const handleAIGenerated = (strategyCode: string, metadata: any) => {
-    setCode(strategyCode)
-
-    if (metadata) {
-      if (metadata.strategy_id) setName(metadata.strategy_id)
-      if (metadata.display_name) setDisplayName(metadata.display_name)
-      if (metadata.class_name) setClassName(metadata.class_name)
-      if (metadata.description) setDescription(metadata.description)
-      if (metadata.category) setCategory(metadata.category)
-      if (metadata.tags && Array.isArray(metadata.tags)) {
-        setTags(metadata.tags.join(', '))
-      }
-    }
-
-    toast({
-      title: '已填充表单',
-      description: '策略代码和元信息已自动填充，请检查并调整'
-    })
-
-    // 自动验证代码
-    setTimeout(() => {
-      handleValidate()
-    }, 500)
-  }
-
   useEffect(() => {
-    // 如果是克隆模式,加载原策略
-    if (cloneId) {
-      loadStrategyForClone(parseInt(cloneId))
-    }
-  }, [cloneId])
+    loadStrategy()
+  }, [strategyId])
 
-  const loadStrategyForClone = async (id: number) => {
+  const loadStrategy = async () => {
     try {
-      const response = await apiClient.getStrategy(id)
+      setLoading(true)
+      const response = await apiClient.getStrategy(strategyId)
       if (response.data) {
-        const original = response.data
-        setName(`${original.name}_copy`)
-        setDisplayName(`${original.display_name} (副本)`)
-        setClassName(original.class_name)
-        setDescription(original.description || '')
-        setCode(original.code)
-        setCategory(original.category || '')
-        setTags(original.tags?.join(', ') || '')
+        const s = response.data
+        setStrategy(s)
+        setName(s.name)
+        setDisplayName(s.display_name)
+        setClassName(s.class_name)
+        setDescription(s.description || '')
+        setCode(s.code)
+        setCategory(s.category || '')
+        setTags(s.tags?.join(', ') || '')
       }
     } catch (error) {
       console.error('Failed to load strategy:', error)
       toast({
         title: '加载失败',
-        description: '无法加载原始策略',
+        description: '无法加载策略详情',
         variant: 'destructive'
       })
+      router.push('/strategies')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -168,9 +141,21 @@ function CreateStrategyContent() {
     }
   }
 
-  // 提交创建
+  // 提交更新
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!strategy) return
+
+    // 内置策略不允许编辑
+    if (strategy.source_type === 'builtin') {
+      toast({
+        title: '编辑失败',
+        description: '内置策略不允许编辑',
+        variant: 'destructive'
+      })
+      return
+    }
 
     if (!name || !displayName || !className || !code) {
       toast({
@@ -182,14 +167,12 @@ function CreateStrategyContent() {
     }
 
     try {
-      setLoading(true)
-      const response = await apiClient.createStrategy({
+      setSaving(true)
+      const response = await apiClient.updateStrategy(strategyId, {
         name,
         display_name: displayName,
         class_name: className,
         code,
-        source_type: source as any,
-        strategy_type: 'entry', // 默认为入场策略
         description,
         category: category || undefined,
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined
@@ -197,45 +180,89 @@ function CreateStrategyContent() {
 
       if (response.data) {
         toast({
-          title: '创建成功',
-          description: '策略已成功创建'
+          title: '保存成功',
+          description: '策略已成功更新'
         })
-        router.push('/strategies')
+        router.push(`/strategies/${strategyId}/code`)
       }
     } catch (error: any) {
-      console.error('Failed to create strategy:', error)
+      console.error('Failed to update strategy:', error)
       toast({
-        title: '创建失败',
-        description: error.response?.data?.message || '无法创建策略',
+        title: '保存失败',
+        description: error.response?.data?.message || '无法更新策略',
         variant: 'destructive'
       })
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
-  // 获取来源图标
-  const getSourceIcon = () => {
-    switch (source) {
-      case 'builtin':
-        return <Building2 className="h-5 w-5" />
-      case 'ai':
-        return <Sparkles className="h-5 w-5" />
-      default:
-        return <Code className="h-5 w-5" />
-    }
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6 px-4 max-w-5xl">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <Loader2 className="inline-block h-8 w-8 animate-spin" />
+            <p className="mt-4 text-muted-foreground">加载中...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  // 获取来源标题
-  const getSourceTitle = () => {
-    switch (source) {
-      case 'builtin':
-        return '基于内置模板创建'
-      case 'ai':
-        return 'AI 生成策略'
-      default:
-        return '自定义代码策略'
-    }
+  if (!strategy) {
+    return (
+      <div className="container mx-auto py-6 px-4 max-w-5xl">
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">策略不存在</h3>
+              <p className="text-muted-foreground mb-6">
+                找不到该策略,可能已被删除
+              </p>
+              <Button onClick={() => router.push('/strategies')}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                返回策略列表
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // 内置策略不允许编辑
+  if (strategy.source_type === 'builtin') {
+    return (
+      <div className="container mx-auto py-6 px-4 max-w-5xl">
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
+              <h3 className="text-lg font-semibold mb-2">无法编辑内置策略</h3>
+              <p className="text-muted-foreground mb-6">
+                内置策略不允许直接编辑。您可以克隆此策略创建一个可编辑的副本。
+              </p>
+              <div className="flex gap-4 justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/strategies')}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回列表
+                </Button>
+                <Button
+                  onClick={() => router.push(`/strategies/create?clone=${strategyId}`)}
+                >
+                  克隆策略
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -244,37 +271,27 @@ function CreateStrategyContent() {
       <Button
         variant="ghost"
         className="mb-4"
-        onClick={() => router.push('/strategies')}
+        onClick={() => router.push(`/strategies/${strategyId}/code`)}
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        返回策略列表
+        返回策略详情
       </Button>
 
       {/* 页面标题 */}
-      <div className="flex items-center gap-3 mb-6">
-        {getSourceIcon()}
-        <div>
-          <h1 className="text-3xl font-bold">{getSourceTitle()}</h1>
-          {cloneId && (
-            <p className="text-muted-foreground mt-1">
-              正在克隆现有策略
-            </p>
-          )}
-        </div>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">编辑策略</h1>
+        <p className="text-muted-foreground mt-1">
+          修改策略代码和元信息
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* AI策略生成助手 - 仅在自定义策略模式下显示 */}
-        {source === 'custom' && (
-          <AIStrategyPromptHelperV2 onStrategyGenerated={handleAIGenerated} />
-        )}
-
         {/* 基本信息 */}
         <Card>
           <CardHeader>
             <CardTitle>基本信息</CardTitle>
             <CardDescription>
-              填写策略的基本信息和标识
+              修改策略的基本信息和标识
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -367,7 +384,7 @@ function CreateStrategyContent() {
               <div>
                 <CardTitle>策略代码 *</CardTitle>
                 <CardDescription>
-                  编写完整的 Python 策略类代码
+                  编辑 Python 策略类代码
                 </CardDescription>
               </div>
               <Button
@@ -419,40 +436,6 @@ function CreateStrategyContent() {
                 }}
               />
             </div>
-
-            {/* 代码模板提示 */}
-            {!code && (
-              <div className="bg-muted/50 border border-dashed rounded-lg p-4 text-sm text-muted-foreground">
-                <p className="font-medium mb-2">💡 代码模板提示：</p>
-                <pre className="text-xs overflow-x-auto">{`"""
-策略名称: 我的策略
-策略说明: 简要说明
-"""
-
-from typing import Optional, Dict, Any
-import pandas as pd
-import numpy as np
-from core.strategies.base_strategy import BaseStrategy
-
-class MyStrategy(BaseStrategy):
-    def __init__(self, name: str = "my_strategy", config: Dict[str, Any] = None):
-        super().__init__(name, config)
-        # 初始化参数
-
-    def calculate_scores(self, prices: pd.DataFrame,
-                        features: Optional[pd.DataFrame] = None,
-                        date: Optional[pd.Timestamp] = None) -> pd.Series:
-        # 计算股票评分
-        pass
-
-    def generate_signals(self, prices: pd.DataFrame,
-                        features: Optional[pd.DataFrame] = None,
-                        **kwargs) -> pd.DataFrame:
-        # 生成交易信号
-        pass
-`}</pre>
-              </div>
-            )}
 
             {/* 验证结果 */}
             {validationResult && (
@@ -513,25 +496,25 @@ class MyStrategy(BaseStrategy):
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push('/strategies')}
+            onClick={() => router.push(`/strategies/${strategyId}/code`)}
             className="flex-1"
           >
             取消
           </Button>
           <Button
             type="submit"
-            disabled={loading}
+            disabled={saving}
             className="flex-1"
           >
-            {loading ? (
+            {saving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                创建中...
+                保存中...
               </>
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                创建策略
+                保存修改
               </>
             )}
           </Button>
@@ -541,16 +524,10 @@ class MyStrategy(BaseStrategy):
   )
 }
 
-export default function CreateStrategyPage() {
+export default function EditStrategyPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    }>
-      <ProtectedRoute requireAuth={true}>
-        <CreateStrategyContent />
-      </ProtectedRoute>
-    </Suspense>
+    <ProtectedRoute requireAuth={true}>
+      <EditStrategyContent />
+    </ProtectedRoute>
   )
 }
