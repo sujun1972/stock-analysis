@@ -29,6 +29,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
+import AIStrategyPromptHelper from '@/components/strategies/AIStrategyPromptHelper'
 
 // 动态导入 Monaco Editor (客户端组件)
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -154,6 +155,7 @@ function CreateStrategyContent() {
         class_name: className,
         code,
         source_type: source as any,
+        strategy_type: 'entry', // 默认为入场策略
         description,
         category: category || undefined,
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined
@@ -228,6 +230,11 @@ function CreateStrategyContent() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* AI策略生成助手 - 仅在自定义策略模式下显示 */}
+        {source === 'custom' && (
+          <AIStrategyPromptHelper />
+        )}
+
         {/* 基本信息 */}
         <Card>
           <CardHeader>
