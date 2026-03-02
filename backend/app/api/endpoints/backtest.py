@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel, Field, validator
 
@@ -30,6 +30,7 @@ from app.models.api_response import ApiResponse
 from app.utils.data_cleaning import sanitize_float_values
 from app.repositories.strategy_execution_repository import StrategyExecutionRepository
 from app.api.error_handler import handle_api_errors
+from app.core.dependencies import get_current_user
 
 # 添加 core 项目到 Python 路径
 # 在 Docker 容器中，core 目录在 /app/core
@@ -244,7 +245,8 @@ async def run_backtest_main(
     slippage: float = Body(0.0, ge=0, description="滑点"),
     strict_mode: bool = Body(True, description="严格模式（代码验证）"),
     strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数（覆盖默认参数，用于ML模型ID等）"),
-    exit_strategy_ids: Optional[List[int]] = Body(None, description="离场策略ID列表（可选，支持多个）")
+    exit_strategy_ids: Optional[List[int]] = Body(None, description="离场策略ID列表（可选，支持多个）"),
+    current_user = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     运行回测
@@ -284,6 +286,10 @@ async def run_backtest_main(
         f"stocks={len(stock_pool)}, period={start_date}~{end_date}"
     )
 
+    # 创建执行记录
+    execution_id = None
+    execution_repo = StrategyExecutionRepository()
+
     try:
         # 1. 从 strategies 表加载策略
         from app.repositories.strategy_repository import StrategyRepository
@@ -313,6 +319,33 @@ async def run_backtest_main(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"策略验证未通过: {strategy_record['validation_status']}"
                 )
+
+        # 创建执行记录（status='running'）
+        execution_params = {
+            'strategy_id': strategy_id,
+            'stock_pool': stock_pool,
+            'start_date': start_date,
+            'end_date': end_date,
+            'initial_capital': initial_capital,
+            'rebalance_freq': rebalance_freq,
+            'commission_rate': commission_rate,
+            'stamp_tax_rate': stamp_tax_rate,
+            'min_commission': min_commission,
+            'slippage': slippage,
+            'strict_mode': strict_mode,
+            'strategy_params': strategy_params,
+            'exit_strategy_ids': exit_strategy_ids,
+        }
+
+        execution_id = execution_repo.create({
+            'execution_type': 'backtest',
+            'execution_params': execution_params,
+            'executed_by': current_user.username,
+        })
+        logger.info(f"[回测] 创建执行记录: execution_id={execution_id}")
+
+        # 更新状态为 running
+        execution_repo.update_status(execution_id, 'running')
 
         # 2. 加载策略实例
         strategy = None
@@ -951,9 +984,27 @@ async def run_backtest_main(
         if metrics and isinstance(metrics, dict):
             metrics['total_trades'] = len(trades)
 
+        # 保存执行结果到数据库
+        if execution_id:
+            try:
+                execution_repo.update_result(
+                    execution_id=execution_id,
+                    result={
+                        'equity_curve': equity_curve,
+                        'trades': trades,
+                        'stock_charts': stock_charts,
+                    },
+                    metrics=metrics
+                )
+                execution_repo.update_status(execution_id, 'completed')
+                logger.info(f"[回测] 执行记录已更新: execution_id={execution_id}")
+            except Exception as e:
+                logger.error(f"[回测] 更新执行记录失败: {e}", exc_info=True)
+
         return {
             "success": True,
             "data": {
+                "execution_id": execution_id,
                 "strategy_info": strategy_info,
                 "metrics": metrics,
                 "equity_curve": equity_curve,  # 权益曲线数据，用于K线图叠加显示
@@ -970,16 +1021,34 @@ async def run_backtest_main(
             "message": "回测完成"
         }
 
-    except HTTPException:
+    except HTTPException as he:
+        # 更新执行记录状态为失败
+        if execution_id:
+            try:
+                execution_repo.update_status(execution_id, 'failed', error_message=str(he.detail))
+            except Exception as update_error:
+                logger.error(f"[回测] 更新执行记录失败状态出错: {update_error}")
         raise
 
     except ValueError as e:
         error_msg = str(e).replace('{', '{{').replace('}', '}}')  # 转义大括号避免格式化错误
         logger.error(f"[回测] 参数错误: {error_msg}")
+        # 更新执行记录状态为失败
+        if execution_id:
+            try:
+                execution_repo.update_status(execution_id, 'failed', error_message=str(e))
+            except Exception as update_error:
+                logger.error(f"[回测] 更新执行记录失败状态出错: {update_error}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     except Exception as e:
         logger.error(f"[回测] 失败: {str(e)}", exc_info=True)
+        # 更新执行记录状态为失败
+        if execution_id:
+            try:
+                execution_repo.update_status(execution_id, 'failed', error_message=str(e))
+            except Exception as update_error:
+                logger.error(f"[回测] 更新执行记录失败状态出错: {update_error}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"回测失败: {str(e)}"
