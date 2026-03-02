@@ -8,6 +8,7 @@ from .endpoints import (
     ai_strategy,
     auth,
     backtest,
+    backtest_history,
     concepts,
     config,
     data,
@@ -40,6 +41,7 @@ router.include_router(concepts.router, prefix="/concepts", tags=["概念板块"]
 router.include_router(data.router, prefix="/data", tags=["data"])
 router.include_router(features.router, prefix="/features", tags=["features"])
 router.include_router(backtest.router, prefix="/backtest", tags=["backtest"])
+router.include_router(backtest_history.router, prefix="/backtest-history", tags=["回测历史"])
 router.include_router(strategy.router, prefix="/strategy", tags=["strategy"])
 
 # Phase 2: 统一策略 API (新架构)
