@@ -28,6 +28,8 @@ class StrategyExecutionRepository(BaseRepository):
         Returns:
             新创建记录的 ID
         """
+        from loguru import logger
+
         query = """
             INSERT INTO strategy_executions (
                 predefined_strategy_type, config_strategy_id, dynamic_strategy_id,
@@ -37,12 +39,20 @@ class StrategyExecutionRepository(BaseRepository):
             RETURNING id
         """
 
+        # 序列化execution_params
+        try:
+            execution_params_json = json.dumps(data['execution_params'])
+            logger.debug(f"Serialized execution_params length: {len(execution_params_json)}")
+        except Exception as e:
+            logger.error(f"Failed to serialize execution_params: {e}")
+            raise ValueError(f"Failed to serialize execution_params: {str(e)}")
+
         params = (
             data.get('predefined_strategy_type'),
             data.get('config_strategy_id'),
             data.get('dynamic_strategy_id'),
             data['execution_type'],
-            json.dumps(data['execution_params']),
+            execution_params_json,
             'pending',
             data.get('executed_by'),
         )

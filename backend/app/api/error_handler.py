@@ -101,32 +101,36 @@ def handle_api_errors(func: Callable) -> Callable:
 
         except ValueError as e:
             # 参数错误
-            logger.warning(f"参数错误: {str(e)}")
+            error_msg = str(e)
+            logger.warning("参数错误: %s", error_msg)
             raise HTTPException(
-                status_code=400, detail={"success": False, "message": f"参数错误: {str(e)}"}
+                status_code=400, detail={"success": False, "message": "参数错误: " + error_msg}
             )
 
         except (FileNotFoundError, KeyError) as e:
             # 资源不存在
             error_type = "文件" if isinstance(e, FileNotFoundError) else "资源"
-            logger.warning(f"{error_type}不存在: {str(e)}")
+            error_msg = str(e)
+            logger.warning("%s不存在: %s", error_type, error_msg)
             raise HTTPException(
                 status_code=404,
-                detail={"success": False, "message": f"{error_type}不存在: {str(e)}"},
+                detail={"success": False, "message": f"{error_type}不存在: " + error_msg},
             )
 
         except TypeError as e:
             # 类型错误
-            logger.warning(f"类型错误: {str(e)}")
+            error_msg = str(e)
+            logger.warning("类型错误: %s", error_msg)
             raise HTTPException(
-                status_code=400, detail={"success": False, "message": f"类型错误: {str(e)}"}
+                status_code=400, detail={"success": False, "message": "类型错误: " + error_msg}
             )
 
         except PermissionError as e:
             # 权限错误
-            logger.warning(f"权限不足: {str(e)}")
+            error_msg = str(e)
+            logger.warning("权限不足: %s", error_msg)
             raise HTTPException(
-                status_code=403, detail={"success": False, "message": f"权限不足: {str(e)}"}
+                status_code=403, detail={"success": False, "message": "权限不足: " + error_msg}
             )
 
         except Exception as e:
@@ -187,29 +191,33 @@ def handle_api_errors_sync(func: Callable) -> Callable:
             )
 
         except ValueError as e:
-            logger.warning(f"参数错误: {str(e)}")
+            error_msg = str(e)
+            logger.warning("参数错误: %s", error_msg)
             raise HTTPException(
-                status_code=400, detail={"success": False, "message": f"参数错误: {str(e)}"}
+                status_code=400, detail={"success": False, "message": "参数错误: " + error_msg}
             )
 
         except (FileNotFoundError, KeyError) as e:
             error_type = "文件" if isinstance(e, FileNotFoundError) else "资源"
-            logger.warning(f"{error_type}不存在: {str(e)}")
+            error_msg = str(e)
+            logger.warning("%s不存在: %s", error_type, error_msg)
             raise HTTPException(
                 status_code=404,
-                detail={"success": False, "message": f"{error_type}不存在: {str(e)}"},
+                detail={"success": False, "message": f"{error_type}不存在: " + error_msg},
             )
 
         except TypeError as e:
-            logger.warning(f"类型错误: {str(e)}")
+            error_msg = str(e)
+            logger.warning("类型错误: %s", error_msg)
             raise HTTPException(
-                status_code=400, detail={"success": False, "message": f"类型错误: {str(e)}"}
+                status_code=400, detail={"success": False, "message": "类型错误: " + error_msg}
             )
 
         except PermissionError as e:
-            logger.warning(f"权限不足: {str(e)}")
+            error_msg = str(e)
+            logger.warning("权限不足: %s", error_msg)
             raise HTTPException(
-                status_code=403, detail={"success": False, "message": f"权限不足: {str(e)}"}
+                status_code=403, detail={"success": False, "message": "权限不足: " + error_msg}
             )
 
         except Exception as e:
