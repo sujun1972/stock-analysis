@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import StrategyCard from '@/components/strategies/StrategyCard'
+import StrategyCategoryFilter from '@/components/strategies/StrategyCategoryFilter'
 import { apiClient } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
@@ -289,32 +290,10 @@ function MyStrategiesContent() {
             </Select>
 
             {/* 类别筛选 */}
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="选择类别" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部类别</SelectItem>
-                <SelectItem value="momentum">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    <span>动量策略</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="reversal">
-                  <div className="flex items-center gap-2">
-                    <TrendingDown className="h-4 w-4" />
-                    <span>反转策略</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="factor">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4" />
-                    <span>因子策略</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <StrategyCategoryFilter
+              value={categoryFilter}
+              onValueChange={setCategoryFilter}
+            />
           </div>
 
           {/* 活动筛选结果提示 */}
