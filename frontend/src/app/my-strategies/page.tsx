@@ -1,12 +1,12 @@
 /**
- * 策略中心页面 (V2.0)
- * 展示所有已启用的策略（内置/AI/自定义）
+ * 我的策略页面
+ * 展示当前用户创建的所有策略（包括启用和未启用的）
  */
 
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -15,60 +15,50 @@ import {
   Plus,
   Search,
   Code,
-  Sparkles,
-  Building2,
-  User,
   TrendingUp,
   TrendingDown,
   Activity,
-  Filter
+  Filter,
+  Lock,
+  Unlock
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import StrategyCard from '@/components/strategies/StrategyCard'
 import { apiClient } from '@/lib/api-client'
+import { useAuthStore } from '@/stores/auth-store'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import type { Strategy } from '@/types/strategy'
 
-export default function StrategiesPage() {
+function MyStrategiesContent() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuthStore()
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [userFilter, setUserFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [statistics, setStatistics] = useState<any>(null)
-  const [users, setUsers] = useState<Array<{id: number, username: string}>>([])
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [strategyTypeFilter, setStrategyTypeFilter] = useState<string>('all')
 
   // 加载策略列表
   useEffect(() => {
     loadStrategies()
-    loadStatistics()
-  }, [userFilter, categoryFilter])
+  }, [user])
 
   const loadStrategies = async () => {
+    if (!user) return
+
     try {
       setLoading(true)
       const params: any = {
-        is_enabled: true // 只加载已启用的策略
+        user_id: user.id // 只获取当前用户的策略
       }
-      if (userFilter !== 'all') params.user_id = parseInt(userFilter)
-      if (categoryFilter !== 'all') params.category = categoryFilter
 
       const response = await apiClient.getStrategies(params)
       if (response.data) {
         setStrategies(response.data)
-
-        // 提取唯一的用户列表
-        const uniqueUsers = Array.from(
-          new Map(
-            response.data
-              .filter((s: any) => s.user_id && s.username)
-              .map((s: any) => [s.user_id, { id: s.user_id, username: s.username }])
-          ).values()
-        )
-        setUsers(uniqueUsers)
       }
     } catch (error) {
       console.error('Failed to load strategies:', error)
@@ -82,17 +72,6 @@ export default function StrategiesPage() {
     }
   }
 
-  const loadStatistics = async () => {
-    try {
-      const response = await apiClient.getStrategyStatistics()
-      if (response.data) {
-        setStatistics(response.data)
-      }
-    } catch (error) {
-      console.error('Failed to load statistics:', error)
-    }
-  }
-
   // 过滤策略
   const filteredStrategies = useMemo(() => {
     return strategies.filter(strategy => {
@@ -102,9 +81,31 @@ export default function StrategiesPage() {
         strategy.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         strategy.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
 
-      return matchesSearch
+      const matchesCategory = categoryFilter === 'all' || strategy.category === categoryFilter
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'enabled' && strategy.is_enabled) ||
+        (statusFilter === 'disabled' && !strategy.is_enabled)
+      const matchesStrategyType =
+        strategyTypeFilter === 'all' || strategy.strategy_type === strategyTypeFilter
+
+      return matchesSearch && matchesCategory && matchesStatus && matchesStrategyType
     })
-  }, [strategies, searchQuery])
+  }, [strategies, searchQuery, categoryFilter, statusFilter, strategyTypeFilter])
+
+  // 统计信息
+  const statistics = useMemo(() => {
+    const total = strategies.length
+    const enabled = strategies.filter(s => s.is_enabled).length
+    const disabled = strategies.filter(s => !s.is_enabled).length
+    const byType = {
+      entry: strategies.filter(s => s.strategy_type === 'entry').length,
+      exit: strategies.filter(s => s.strategy_type === 'exit').length,
+      stock_selection: strategies.filter(s => s.strategy_type === 'stock_selection').length,
+    }
+
+    return { total, enabled, disabled, byType }
+  }, [strategies])
 
   // 处理策略删除
   const handleDelete = async (id: number) => {
@@ -119,7 +120,6 @@ export default function StrategiesPage() {
         description: '策略已被删除'
       })
       loadStrategies()
-      loadStatistics()
     } catch (error) {
       console.error('Failed to delete strategy:', error)
       toast({
@@ -135,14 +135,19 @@ export default function StrategiesPage() {
     router.push(`/strategies/create?clone=${id}`)
   }
 
+  // 处理策略编辑
+  const handleEdit = (id: number) => {
+    router.push(`/strategies/${id}/edit`)
+  }
+
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
       {/* 页面标题 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">策略中心</h1>
+          <h1 className="text-3xl font-bold tracking-tight">我的策略</h1>
           <p className="text-muted-foreground mt-2">
-            浏览所有已启用的交易策略
+            管理您创建的所有交易策略
           </p>
         </div>
 
@@ -156,62 +161,72 @@ export default function StrategiesPage() {
       </div>
 
       {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">总策略数</p>
-                  <p className="text-2xl font-bold">{statistics.total}</p>
-                </div>
-                <Activity className="h-8 w-8 text-muted-foreground" />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">总策略数</p>
+                <p className="text-2xl font-bold">{statistics.total}</p>
               </div>
-            </CardContent>
-          </Card>
+              <Activity className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">入场策略</p>
-                  <p className="text-2xl font-bold">{statistics.by_strategy_type?.entry || 0}</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-green-600" />
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">已启用</p>
+                <p className="text-2xl font-bold">{statistics.enabled}</p>
               </div>
-            </CardContent>
-          </Card>
+              <Unlock className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">离场策略</p>
-                  <p className="text-2xl font-bold">{statistics.by_strategy_type?.exit || 0}</p>
-                </div>
-                <TrendingDown className="h-8 w-8 text-red-600" />
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">已禁用</p>
+                <p className="text-2xl font-bold">{statistics.disabled}</p>
               </div>
-            </CardContent>
-          </Card>
+              <Lock className="h-8 w-8 text-gray-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">选股策略</p>
-                  <p className="text-2xl font-bold">{statistics.by_strategy_type?.stock_selection || 0}</p>
-                </div>
-                <Filter className="h-8 w-8 text-blue-600" />
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">入场策略</p>
+                <p className="text-2xl font-bold">{statistics.byType.entry}</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+              <TrendingUp className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">离场策略</p>
+                <p className="text-2xl font-bold">{statistics.byType.exit}</p>
+              </div>
+              <TrendingDown className="h-8 w-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* 搜索和筛选 */}
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* 搜索框 */}
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -223,21 +238,53 @@ export default function StrategiesPage() {
               />
             </div>
 
-            {/* 用户筛选 */}
-            <Select value={userFilter} onValueChange={setUserFilter}>
+            {/* 策略类型筛选 */}
+            <Select value={strategyTypeFilter} onValueChange={setStrategyTypeFilter}>
               <SelectTrigger>
-                <SelectValue placeholder="选择创建者" />
+                <SelectValue placeholder="选择策略类型" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部创建者</SelectItem>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id.toString()}>
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span>{user.username}</span>
-                    </div>
-                  </SelectItem>
-                ))}
+                <SelectItem value="all">全部类型</SelectItem>
+                <SelectItem value="entry">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    <span>入场策略</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="exit">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="h-4 w-4" />
+                    <span>离场策略</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="stock_selection">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4" />
+                    <span>选股策略</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* 状态筛选 */}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="选择状态" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="enabled">
+                  <div className="flex items-center gap-2">
+                    <Unlock className="h-4 w-4 text-green-600" />
+                    <span>已启用</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="disabled">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-gray-600" />
+                    <span>已禁用</span>
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
 
@@ -271,7 +318,7 @@ export default function StrategiesPage() {
           </div>
 
           {/* 活动筛选结果提示 */}
-          {(userFilter !== 'all' || categoryFilter !== 'all' || searchQuery) && (
+          {(statusFilter !== 'all' || categoryFilter !== 'all' || strategyTypeFilter !== 'all' || searchQuery) && (
             <div className="flex items-center gap-2 mt-4">
               <Badge variant="outline">
                 已筛选: {filteredStrategies.length} 个策略
@@ -280,8 +327,9 @@ export default function StrategiesPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setUserFilter('all')
+                  setStatusFilter('all')
                   setCategoryFilter('all')
+                  setStrategyTypeFilter('all')
                   setSearchQuery('')
                 }}
               >
@@ -307,11 +355,11 @@ export default function StrategiesPage() {
               <Code className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">暂无策略</h3>
               <p className="text-muted-foreground mb-6">
-                {searchQuery || userFilter !== 'all' || categoryFilter !== 'all'
+                {searchQuery || statusFilter !== 'all' || categoryFilter !== 'all' || strategyTypeFilter !== 'all'
                   ? '没有找到匹配的策略，请调整筛选条件'
                   : '还没有创建任何策略，立即创建您的第一个策略'}
               </p>
-              {!searchQuery && userFilter === 'all' && categoryFilter === 'all' && (
+              {!searchQuery && statusFilter === 'all' && categoryFilter === 'all' && strategyTypeFilter === 'all' && (
                 <Link href="/strategies/create">
                   <Button>
                     <Plus className="mr-2 h-4 w-4" />
@@ -331,10 +379,19 @@ export default function StrategiesPage() {
               onBacktest={(id) => router.push(`/backtest?type=unified&id=${id}`)}
               onDelete={handleDelete}
               onClone={handleClone}
+              onEdit={handleEdit}
             />
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+export default function MyStrategiesPage() {
+  return (
+    <ProtectedRoute requireAuth={true}>
+      <MyStrategiesContent />
+    </ProtectedRoute>
   )
 }

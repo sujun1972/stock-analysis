@@ -30,6 +30,7 @@ export function MobileNav() {
   const menuItems = [
     { href: "/", label: "首页" },
     { href: "/strategies", label: "策略中心" },
+    { href: "/my-strategies", label: "我的策略", requireAuth: true },
     { href: "/my-backtests", label: "我的回测", requireAuth: true },
     { href: "/ai-lab", label: "AI实验舱" },
     { href: "/stocks", label: "股票列表" },

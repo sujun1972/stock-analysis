@@ -693,6 +693,7 @@ class ApiClient {
     category?: string
     is_enabled?: boolean
     search?: string
+    user_id?: number
   }): Promise<ApiResponse<Strategy[]>> {
     const response = await axiosInstance.get('/api/strategies', { params })
     return response.data
