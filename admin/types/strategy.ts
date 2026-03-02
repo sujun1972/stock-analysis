@@ -49,6 +49,10 @@ export interface Strategy {
   created_at: string
   updated_at: string
   last_used_at?: string
+
+  // 用户信息
+  user_id?: number
+  username?: string
 }
 
 /**

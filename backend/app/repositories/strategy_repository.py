@@ -324,7 +324,7 @@ class StrategyRepository(BaseRepository):
             'display_name', 'description', 'code', 'class_name',
             'tags', 'default_params', 'validation_status',
             'validation_errors', 'validation_warnings', 'risk_level',
-            'is_enabled'
+            'is_enabled', 'user_id'
         ]
 
         for field in allowed_fields:

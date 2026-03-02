@@ -131,6 +131,7 @@ class StrategyUpdate(BaseModel):
     tags: Optional[List[str]] = Field(None, description="标签数组")
     default_params: Optional[Dict[str, Any]] = Field(None, description="默认参数")
     is_enabled: Optional[bool] = Field(None, description="是否启用")
+    user_id: Optional[int] = Field(None, description="用户ID")
 
     model_config = {
         "json_schema_extra": {

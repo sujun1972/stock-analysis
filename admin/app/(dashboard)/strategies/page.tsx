@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Filter, Edit, Trash2, Play, Code, AlertCircle } from 'lucide-react'
+import { Plus, Search, Filter, Edit, Trash2, Play, Code, AlertCircle, Users } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
+import { apiClient } from '@/lib/api-client'
 import {
   Select,
   SelectContent,
@@ -11,6 +12,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Check } from 'lucide-react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -58,6 +76,13 @@ const riskLevelColors = {
   high: 'bg-red-100 text-red-800',
 }
 
+interface User {
+  id: number
+  username: string
+  email: string
+  full_name?: string
+}
+
 export default function StrategiesPage() {
   const router = useRouter()
   const [strategies, setStrategies] = useState<Strategy[]>([])
@@ -70,6 +95,15 @@ export default function StrategiesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+
+  // 用户编辑对话框状态
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false)
+  const [editingStrategy, setEditingStrategy] = useState<Strategy | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<string>('')
+  const [users, setUsers] = useState<User[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [updatingUser, setUpdatingUser] = useState(false)
+  const [userSearchTerm, setUserSearchTerm] = useState('')
 
   // 获取策略列表
   const fetchStrategies = async () => {
@@ -111,6 +145,103 @@ export default function StrategiesPage() {
   useEffect(() => {
     fetchStrategies()
   }, [currentPage, searchTerm, filterStrategyType, filterSourceType, filterUserId])
+
+  /**
+   * 获取用户列表（支持后端搜索）
+   * @param searchQuery 搜索关键字，支持用户名、邮箱、全名搜索
+   */
+  const fetchUsers = async (searchQuery: string = '') => {
+    setLoadingUsers(true)
+    try {
+      const params = new URLSearchParams({
+        page: '1',
+        page_size: '50',
+      })
+
+      if (searchQuery) {
+        params.append('search', searchQuery)
+      }
+
+      const response = await apiClient.get<{
+        success: boolean
+        data: {
+          users: User[]
+          total: number
+          page: number
+          page_size: number
+        }
+      }>(`/api/users?${params}`)
+
+      // 处理两种可能的API响应格式
+      // 格式 1: { success: true, data: { users: [...] } }
+      // 格式 2: { users: [...], total: ..., page: ... }
+      let usersList: User[] = []
+
+      if ('success' in response.data && response.data.success && 'data' in response.data) {
+        usersList = response.data.data?.users || []
+      } else if ('users' in response.data) {
+        usersList = (response.data as any).users || []
+      }
+
+      setUsers(usersList)
+    } catch (error) {
+      console.error('获取用户列表失败:', error)
+      setError('获取用户列表失败：' + error)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  /**
+   * 防抖搜索用户（300ms延迟）
+   * 当用户输入搜索关键字时，延迟300ms后再发起API请求，避免频繁请求
+   */
+  useEffect(() => {
+    if (!editUserDialogOpen) return
+
+    const timer = setTimeout(() => {
+      fetchUsers(userSearchTerm)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [userSearchTerm, editUserDialogOpen])
+
+  /**
+   * 打开编辑用户对话框
+   * 用户列表会由 useEffect 自动加载
+   */
+  const handleEditUser = (strategy: Strategy) => {
+    setEditingStrategy(strategy)
+    setSelectedUserId(strategy.user_id?.toString() || 'system')
+    setUserSearchTerm('')
+    setEditUserDialogOpen(true)
+  }
+
+  /**
+   * 更新策略的用户归属
+   * 支持分配给用户或设置为系统策略（user_id = null）
+   */
+  const handleUpdateUser = async () => {
+    if (!editingStrategy) return
+
+    setUpdatingUser(true)
+    try {
+      const userId = selectedUserId === 'system' ? null : parseInt(selectedUserId)
+
+      await apiClient.put(`/api/strategies/${editingStrategy.id}`, {
+        user_id: userId,
+      })
+
+      await fetchStrategies()
+      setEditUserDialogOpen(false)
+      setEditingStrategy(null)
+    } catch (error) {
+      console.error('更新策略用户失败:', error)
+      setError('更新失败：' + error)
+    } finally {
+      setUpdatingUser(false)
+    }
+  }
 
   // 删除策略
   const handleDelete = async (id: number) => {
@@ -257,7 +388,7 @@ export default function StrategiesPage() {
                   类型
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  来源
+                  用户
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   验证状态
@@ -311,13 +442,14 @@ export default function StrategiesPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                        sourceTypeColors[strategy.source_type as keyof typeof sourceTypeColors] || 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {sourceTypeNames[strategy.source_type as keyof typeof sourceTypeNames] || strategy.source_type}
-                    </span>
+                    <div className="text-sm text-gray-900">
+                      {strategy.username || (
+                        <span className="text-gray-500 italic">系统</span>
+                      )}
+                    </div>
+                    {strategy.user_id && (
+                      <div className="text-xs text-gray-500">ID: {strategy.user_id}</div>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span
@@ -359,6 +491,13 @@ export default function StrategiesPage() {
                         title="编辑"
                       >
                         <Edit className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleEditUser(strategy)}
+                        className="text-purple-600 hover:text-purple-800"
+                        title="修改用户"
+                      >
+                        <Users className="h-5 w-5" />
                       </button>
                       {strategy.source_type !== 'builtin' && (
                         <button
@@ -404,6 +543,134 @@ export default function StrategiesPage() {
           </div>
         </div>
       )}
+
+      {/* 编辑用户对话框 */}
+      <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>修改策略用户</DialogTitle>
+            <DialogDescription>
+              为策略 "{editingStrategy?.display_name}" 分配或修改用户
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  选择用户（支持后端搜索）
+                </label>
+
+                {/* 搜索输入框 */}
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="搜索用户名、邮箱或全名..."
+                    value={userSearchTerm}
+                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* 用户列表 */}
+                <div className="max-h-[300px] overflow-y-auto rounded-lg border border-gray-300">
+                  {loadingUsers ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="text-sm text-gray-500">搜索中...</div>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200">
+                      {/* 系统策略选项 */}
+                      <div
+                        onClick={() => setSelectedUserId('system')}
+                        className={`flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-gray-50 ${
+                          selectedUserId === 'system' ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <Check
+                          className={`h-4 w-4 ${
+                            selectedUserId === 'system' ? 'text-blue-600 opacity-100' : 'opacity-0'
+                          }`}
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">系统策略</div>
+                          <div className="text-xs text-gray-500">无用户归属</div>
+                        </div>
+                      </div>
+
+                      {/* 用户列表 */}
+                      {users.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-sm text-gray-500">
+                          {userSearchTerm ? '未找到匹配的用户' : '暂无用户'}
+                        </div>
+                      ) : (
+                        users.map((user) => (
+                          <div
+                            key={user.id}
+                            onClick={() => setSelectedUserId(user.id.toString())}
+                            className={`flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-gray-50 ${
+                              selectedUserId === user.id.toString() ? 'bg-blue-50' : ''
+                            }`}
+                          >
+                            <Check
+                              className={`h-4 w-4 ${
+                                selectedUserId === user.id.toString()
+                                  ? 'text-blue-600 opacity-100'
+                                  : 'opacity-0'
+                              }`}
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">{user.username}</div>
+                              <div className="text-xs text-gray-500">
+                                {user.email}
+                                {user.full_name && ` · ${user.full_name}`}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+                <div className="font-medium">当前选择：</div>
+                <div className="mt-1">
+                  {selectedUserId === 'system' ? (
+                    <span className="italic">系统策略（无用户）</span>
+                  ) : (
+                    <>
+                      {users.find(u => u.id.toString() === selectedUserId)?.username || '未选择'}
+                      {selectedUserId && selectedUserId !== 'system' && ` (ID: ${selectedUserId})`}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setEditUserDialogOpen(false)}
+              disabled={updatingUser}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleUpdateUser}
+              disabled={updatingUser || loadingUsers}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {updatingUser ? '保存中...' : '保存'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
