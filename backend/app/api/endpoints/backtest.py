@@ -337,24 +337,13 @@ async def run_backtest_main(
             'exit_strategy_ids': exit_strategy_ids,
         }
 
-        # 根据策略类型设置相应的字段
+        # 创建执行记录数据
         execution_data = {
             'execution_type': 'backtest',
             'execution_params': execution_params,
             'executed_by': current_user.username,
+            'strategy_id': strategy_id,  # 使用统一的 strategy_id 字段
         }
-
-        # 设置策略字段（满足数据库约束：至少一个策略字段不为空）
-        source_type = strategy_record.get('source_type', 'custom')
-        if source_type == 'builtin':
-            # 内置策略使用 predefined_strategy_type
-            execution_data['predefined_strategy_type'] = strategy_record['name']
-        elif source_type == 'ai':
-            # AI策略也使用 dynamic_strategy_id
-            execution_data['dynamic_strategy_id'] = strategy_id
-        else:
-            # custom 或其他类型使用 dynamic_strategy_id
-            execution_data['dynamic_strategy_id'] = strategy_id
 
         execution_id = execution_repo.create(execution_data)
         logger.info(f"[回测] 创建执行记录: execution_id={execution_id}")

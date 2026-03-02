@@ -33,9 +33,9 @@ class StrategyExecutionRepository(BaseRepository):
         query = """
             INSERT INTO strategy_executions (
                 predefined_strategy_type, config_strategy_id, dynamic_strategy_id,
-                execution_type, execution_params, status, executed_by
+                strategy_id, execution_type, execution_params, status, executed_by
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """
 
@@ -52,6 +52,7 @@ class StrategyExecutionRepository(BaseRepository):
             data.get('predefined_strategy_type'),
             data.get('config_strategy_id'),
             data.get('dynamic_strategy_id'),
+            data.get('strategy_id'),
             data['execution_type'],
             execution_params_json,
             'pending',
