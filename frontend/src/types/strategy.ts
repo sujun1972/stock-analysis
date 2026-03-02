@@ -67,6 +67,10 @@ export interface Strategy {
   created_at: string
   updated_at: string
   last_used_at?: string
+
+  // 用户信息
+  user_id?: number
+  username?: string
 }
 
 /**
@@ -116,6 +120,11 @@ export interface StrategyStatistics {
     builtin: number
     ai: number
     custom: number
+  }
+  by_strategy_type: {
+    entry: number
+    exit: number
+    stock_selection: number
   }
   by_category: Record<string, number>
   enabled: number

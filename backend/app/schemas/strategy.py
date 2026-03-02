@@ -220,6 +220,10 @@ class StrategyResponse(BaseModel):
     updated_at: datetime = Field(..., description="更新时间")
     last_used_at: Optional[datetime] = Field(None, description="最后使用时间")
 
+    # 用户信息
+    user_id: Optional[int] = Field(None, description="用户ID")
+    username: Optional[str] = Field(None, description="用户名")
+
     model_config = {"from_attributes": True}
 
 
@@ -242,8 +246,13 @@ class StrategyListResponse(BaseModel):
     usage_count: int
     backtest_count: int
     avg_sharpe_ratio: Optional[float]
+    avg_annual_return: Optional[float]
     created_at: datetime
     updated_at: datetime
+
+    # 用户信息
+    user_id: Optional[int]
+    username: Optional[str]
 
     model_config = {"from_attributes": True}
 
@@ -255,6 +264,7 @@ class StrategyStatistics(BaseModel):
     enabled_count: int = Field(..., description="启用策略数")
     disabled_count: int = Field(..., description="禁用策略数")
     by_source: Dict[str, int] = Field(..., description="按来源分组统计")
+    by_strategy_type: Dict[str, int] = Field(..., description="按策略类型分组统计（entry/exit/stock_selection）")
     by_category: Dict[str, int] = Field(..., description="按类别分组统计")
     by_validation: Dict[str, int] = Field(..., description="按验证状态分组统计")
     by_risk: Dict[str, int] = Field(..., description="按风险等级分组统计")

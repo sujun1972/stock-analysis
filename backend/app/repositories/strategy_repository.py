@@ -109,15 +109,17 @@ class StrategyRepository(BaseRepository):
         """
         query = """
             SELECT
-                id, name, display_name, code, code_hash, class_name,
-                source_type, strategy_type, description, category, tags,
-                default_params, validation_status, validation_errors,
-                validation_warnings, risk_level, is_enabled,
-                usage_count, backtest_count, avg_sharpe_ratio, avg_annual_return,
-                version, parent_strategy_id, created_by,
-                created_at, updated_at, last_used_at
-            FROM strategies
-            WHERE id = %s
+                s.id, s.name, s.display_name, s.code, s.code_hash, s.class_name,
+                s.source_type, s.strategy_type, s.description, s.category, s.tags,
+                s.default_params, s.validation_status, s.validation_errors,
+                s.validation_warnings, s.risk_level, s.is_enabled,
+                s.usage_count, s.backtest_count, s.avg_sharpe_ratio, s.avg_annual_return,
+                s.version, s.parent_strategy_id, s.created_by,
+                s.created_at, s.updated_at, s.last_used_at,
+                s.user_id, u.username
+            FROM strategies s
+            LEFT JOIN users u ON s.user_id = u.id
+            WHERE s.id = %s
         """
 
         conn = self.db.get_connection()
@@ -146,15 +148,17 @@ class StrategyRepository(BaseRepository):
         """
         query = """
             SELECT
-                id, name, display_name, code, code_hash, class_name,
-                source_type, strategy_type, description, category, tags,
-                default_params, validation_status, validation_errors,
-                validation_warnings, risk_level, is_enabled,
-                usage_count, backtest_count, avg_sharpe_ratio, avg_annual_return,
-                version, parent_strategy_id, created_by,
-                created_at, updated_at, last_used_at
-            FROM strategies
-            WHERE name = %s
+                s.id, s.name, s.display_name, s.code, s.code_hash, s.class_name,
+                s.source_type, s.strategy_type, s.description, s.category, s.tags,
+                s.default_params, s.validation_status, s.validation_errors,
+                s.validation_warnings, s.risk_level, s.is_enabled,
+                s.usage_count, s.backtest_count, s.avg_sharpe_ratio, s.avg_annual_return,
+                s.version, s.parent_strategy_id, s.created_by,
+                s.created_at, s.updated_at, s.last_used_at,
+                s.user_id, u.username
+            FROM strategies s
+            LEFT JOIN users u ON s.user_id = u.id
+            WHERE s.name = %s
         """
 
         conn = self.db.get_connection()
@@ -251,26 +255,27 @@ class StrategyRepository(BaseRepository):
 
         # 选择字段（是否包含完整代码）
         if include_code:
-            select_fields = "*"
+            select_fields = "s.*, u.username"
         else:
             select_fields = """
-                id, name, display_name, class_name, source_type, strategy_type,
-                description, category, tags, validation_status,
-                risk_level, is_enabled, usage_count, backtest_count,
-                avg_sharpe_ratio, avg_annual_return, user_id, created_by,
-                created_at, updated_at
+                s.id, s.name, s.display_name, s.class_name, s.source_type, s.strategy_type,
+                s.description, s.category, s.tags, s.validation_status,
+                s.risk_level, s.is_enabled, s.usage_count, s.backtest_count,
+                s.avg_sharpe_ratio, s.avg_annual_return, s.user_id, s.created_by,
+                s.created_at, s.updated_at, u.username
             """
 
         # 计算总数
-        count_query = f"SELECT COUNT(*) FROM strategies WHERE {where_sql}"
+        count_query = f"SELECT COUNT(*) FROM strategies s WHERE {where_sql}"
 
         # 查询数据
         offset = (page - 1) * page_size
         data_query = f"""
             SELECT {select_fields}
-            FROM strategies
+            FROM strategies s
+            LEFT JOIN users u ON s.user_id = u.id
             WHERE {where_sql}
-            ORDER BY created_at DESC
+            ORDER BY s.created_at DESC
             LIMIT %s OFFSET %s
         """
 
@@ -482,6 +487,7 @@ class StrategyRepository(BaseRepository):
                 COUNT(*) FILTER (WHERE is_enabled = TRUE) as enabled_count,
                 COUNT(*) FILTER (WHERE is_enabled = FALSE) as disabled_count,
                 source_type,
+                strategy_type,
                 category,
                 validation_status,
                 risk_level
@@ -489,6 +495,7 @@ class StrategyRepository(BaseRepository):
             GROUP BY GROUPING SETS (
                 (),
                 (source_type),
+                (strategy_type),
                 (category),
                 (validation_status),
                 (risk_level)
@@ -508,21 +515,24 @@ class StrategyRepository(BaseRepository):
                 'enabled_count': 0,
                 'disabled_count': 0,
                 'by_source': {},
+                'by_strategy_type': {},
                 'by_category': {},
                 'by_validation': {},
                 'by_risk': {}
             }
 
             for row in rows:
-                total, enabled, disabled, source, cat, val, risk = row
+                total, enabled, disabled, source, strategy_type, cat, val, risk = row
 
-                if not any([source, cat, val, risk]):
+                if not any([source, strategy_type, cat, val, risk]):
                     # 总计
                     stats['total_count'] = total or 0
                     stats['enabled_count'] = enabled or 0
                     stats['disabled_count'] = disabled or 0
                 elif source:
                     stats['by_source'][source] = total
+                elif strategy_type:
+                    stats['by_strategy_type'][strategy_type] = total
                 elif cat:
                     stats['by_category'][cat] = total
                 elif val:

@@ -13,8 +13,6 @@ import { Badge } from '@/components/ui/badge'
 import {
   Code,
   Play,
-  Building2,
-  Sparkles,
   User,
   CheckCircle,
   XCircle,
@@ -40,30 +38,6 @@ const StrategyCard = memo(function StrategyCard({
   onDelete,
   onClone
 }: StrategyCardProps) {
-
-  // 获取来源类型图标
-  const getSourceIcon = () => {
-    switch (strategy.source_type) {
-      case 'builtin':
-        return <Building2 className="h-4 w-4" />
-      case 'ai':
-        return <Sparkles className="h-4 w-4" />
-      case 'custom':
-        return <User className="h-4 w-4" />
-    }
-  }
-
-  // 获取来源类型标签
-  const getSourceLabel = () => {
-    switch (strategy.source_type) {
-      case 'builtin':
-        return '内置'
-      case 'ai':
-        return 'AI生成'
-      case 'custom':
-        return '自定义'
-    }
-  }
 
   // 获取验证状态徽章
   const getValidationBadge = () => {
@@ -130,14 +104,15 @@ const StrategyCard = memo(function StrategyCard({
                 </Badge>
               )}
             </div>
-            <CardDescription>
+            <CardDescription className="line-clamp-2">
               {strategy.description || '暂无描述'}
             </CardDescription>
           </div>
           <div className="flex flex-col items-end gap-2">
+            {/* 创建者信息 */}
             <Badge variant="outline" className="flex items-center gap-1">
-              {getSourceIcon()}
-              <span>{getSourceLabel()}</span>
+              <User className="h-3 w-3" />
+              <span>{strategy.username || '未知用户'}</span>
             </Badge>
             {getValidationBadge()}
           </div>
@@ -207,9 +182,11 @@ const StrategyCard = memo(function StrategyCard({
           <Badge variant={strategy.is_enabled ? 'default' : 'secondary'}>
             {strategy.is_enabled ? '已启用' : '已禁用'}
           </Badge>
-          <span className="text-xs text-muted-foreground">
-            v{strategy.version}
-          </span>
+          {strategy.version && (
+            <span className="text-xs text-muted-foreground">
+              v{strategy.version}
+            </span>
+          )}
         </div>
       </CardContent>
 
