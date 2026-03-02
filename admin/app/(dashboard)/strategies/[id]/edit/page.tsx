@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { ArrowLeft, AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -348,17 +349,20 @@ export default function EditStrategyPage() {
             </div>
 
             <div>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+              <label className="flex items-center gap-3">
+                <Switch
                   checked={formData.is_enabled}
-                  onChange={(e) =>
-                    setFormData({ ...formData, is_enabled: e.target.checked })
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, is_enabled: checked })
                   }
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm font-medium text-gray-700">启用策略</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {formData.is_enabled ? '策略已启用' : '策略已禁用'}
+                </span>
               </label>
+              <p className="mt-1 text-xs text-gray-500">
+                禁用后，该策略将不会在前端策略中心显示，但已有的回测记录不受影响
+              </p>
             </div>
           </div>
 

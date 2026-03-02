@@ -374,12 +374,6 @@ export default function StrategyCodePage() {
                   <Badge>{strategy.risk_level}</Badge>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">启用状态</p>
-                  <Badge variant={strategy.is_enabled ? 'default' : 'secondary'}>
-                    {strategy.is_enabled ? '已启用' : '已禁用'}
-                  </Badge>
-                </div>
-                <div>
                   <p className="text-sm font-medium text-muted-foreground mb-1">回测次数</p>
                   <p className="font-medium">{strategy.backtest_count || 0}</p>
                 </div>

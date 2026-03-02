@@ -177,17 +177,14 @@ const StrategyCard = memo(function StrategyCard({
           </div>
         )}
 
-        {/* 状态标签 */}
-        <div className="flex items-center gap-2">
-          <Badge variant={strategy.is_enabled ? 'default' : 'secondary'}>
-            {strategy.is_enabled ? '已启用' : '已禁用'}
-          </Badge>
-          {strategy.version && (
+        {/* 版本信息 */}
+        {strategy.version && (
+          <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
               v{strategy.version}
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
 
       <CardFooter className="flex gap-2">

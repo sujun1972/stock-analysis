@@ -28,6 +28,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import { Switch } from '@/components/ui/switch'
 import { Check } from 'lucide-react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -264,6 +265,25 @@ export default function StrategiesPage() {
     }
   }
 
+  /**
+   * 切换策略启用/禁用状态
+   * 只有管理员可以控制策略的启用状态
+   * 禁用的策略不会在前端策略中心显示
+   */
+  const handleToggleEnabled = async (strategy: Strategy) => {
+    try {
+      await apiClient.put(`/api/strategies/${strategy.id}`, {
+        is_enabled: !strategy.is_enabled,
+      })
+
+      // 刷新列表以显示最新状态
+      await fetchStrategies()
+    } catch (error) {
+      console.error('切换策略状态失败:', error)
+      setError('切换状态失败：' + error)
+    }
+  }
+
   return (
     <div className="p-6">
       {/* 页面标题和操作按钮 */}
@@ -397,6 +417,9 @@ export default function StrategiesPage() {
                   风险等级
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  启用状态
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   统计
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -468,6 +491,17 @@ export default function StrategiesPage() {
                     >
                       {strategy.risk_level}
                     </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={strategy.is_enabled}
+                        onCheckedChange={() => handleToggleEnabled(strategy)}
+                      />
+                      <span className="text-sm text-gray-600">
+                        {strategy.is_enabled ? '已启用' : '已禁用'}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     <div>使用: {strategy.usage_count}</div>
