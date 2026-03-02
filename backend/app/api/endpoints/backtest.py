@@ -1027,31 +1027,32 @@ async def run_backtest_main(
             try:
                 execution_repo.update_status(execution_id, 'failed', error_message=str(he.detail))
             except Exception as update_error:
-                logger.error(f"[回测] 更新执行记录失败状态出错: {update_error}")
+                logger.error("[回测] 更新执行记录失败状态出错: %s", update_error)
         raise
 
     except ValueError as e:
-        error_msg = str(e).replace('{', '{{').replace('}', '}}')  # 转义大括号避免格式化错误
-        logger.error(f"[回测] 参数错误: {error_msg}")
+        error_msg = str(e)
+        logger.error("[回测] 参数错误: %s", error_msg)
         # 更新执行记录状态为失败
         if execution_id:
             try:
-                execution_repo.update_status(execution_id, 'failed', error_message=str(e))
+                execution_repo.update_status(execution_id, 'failed', error_message=error_msg)
             except Exception as update_error:
-                logger.error(f"[回测] 更新执行记录失败状态出错: {update_error}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+                logger.error("[回测] 更新执行记录失败状态出错: %s", update_error)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     except Exception as e:
-        logger.error(f"[回测] 失败: {str(e)}", exc_info=True)
+        error_msg = str(e)
+        logger.error("[回测] 失败: %s", error_msg, exc_info=True)
         # 更新执行记录状态为失败
         if execution_id:
             try:
-                execution_repo.update_status(execution_id, 'failed', error_message=str(e))
+                execution_repo.update_status(execution_id, 'failed', error_message=error_msg)
             except Exception as update_error:
-                logger.error(f"[回测] 更新执行记录失败状态出错: {update_error}")
+                logger.error("[回测] 更新执行记录失败状态出错: %s", update_error)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"回测失败: {str(e)}"
+            detail="回测失败: " + error_msg
         )
 
 

@@ -42,10 +42,11 @@ class StrategyExecutionRepository(BaseRepository):
         # 序列化execution_params
         try:
             execution_params_json = json.dumps(data['execution_params'])
-            logger.debug(f"Serialized execution_params length: {len(execution_params_json)}")
+            logger.debug("Serialized execution_params length: %d", len(execution_params_json))
         except Exception as e:
-            logger.error(f"Failed to serialize execution_params: {e}")
-            raise ValueError(f"Failed to serialize execution_params: {str(e)}")
+            error_msg = str(e)
+            logger.error("Failed to serialize execution_params: %s", error_msg)
+            raise ValueError("Failed to serialize execution_params: " + error_msg)
 
         params = (
             data.get('predefined_strategy_type'),
