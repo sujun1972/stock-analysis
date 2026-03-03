@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -12,16 +12,34 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 const Editor = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[600px] items-center justify-center rounded-lg border bg-gray-50">
+    <div className="flex h-[400px] items-center justify-center rounded-lg border bg-gray-50">
       <Loader className="h-8 w-8 animate-spin text-blue-600" />
     </div>
   ),
 })
 
+// 检测是否为移动设备
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
+
 export default function EditStrategyPage() {
   const params = useParams()
   const router = useRouter()
   const strategyId = params.id as string
+  const isMobile = useIsMobile()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -199,20 +217,11 @@ export default function EditStrategyPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* 页面头部 */}
-      <div className="mb-6 flex items-center gap-4">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          返回
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">编辑策略</h1>
-          <p className="text-sm text-gray-600">{originalStrategy?.name}</p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">编辑策略</h1>
+        <p className="mt-1 text-sm text-gray-600">{originalStrategy?.name}</p>
       </div>
 
       {/* 系统策略提示 */}
@@ -300,9 +309,9 @@ export default function EditStrategyPage() {
 
       {/* 表单 */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* 基本信息 */}
-          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
             <h3 className="text-lg font-semibold">基本信息</h3>
 
             <div>
@@ -367,7 +376,7 @@ export default function EditStrategyPage() {
           </div>
 
           {/* 参数配置 */}
-          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
             <h3 className="text-lg font-semibold">参数配置</h3>
 
             <div>
@@ -391,30 +400,46 @@ export default function EditStrategyPage() {
         </div>
 
         {/* 策略代码 */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <h3 className="mb-4 text-lg font-semibold">
             策略代码 {originalStrategy?.source_type === 'builtin' && '(只读)'}
           </h3>
           <div className="overflow-hidden rounded-lg border border-gray-300">
-            <Editor
-              height="600px"
-              defaultLanguage="python"
-              value={formData.code}
-              onChange={(value) => setFormData({ ...formData, code: value || '' })}
-              theme="vs-dark"
-              options={{
-                readOnly: originalStrategy?.source_type === 'builtin',
-                minimap: { enabled: true },
-                fontSize: 14,
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                tabSize: 4,
-                wordWrap: 'on',
-                formatOnPaste: true,
-                formatOnType: true,
-              }}
-            />
+            {isMobile ? (
+              <textarea
+                value={formData.code}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                readOnly={originalStrategy?.source_type === 'builtin'}
+                className="w-full h-[400px] bg-gray-900 text-green-400 font-mono text-sm p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+                disabled={originalStrategy?.source_type === 'builtin'}
+              />
+            ) : (
+              <Editor
+                height="400px"
+                defaultLanguage="python"
+                value={formData.code}
+                onChange={(value) => setFormData({ ...formData, code: value || '' })}
+                theme="vs-dark"
+                loading={<div className="flex h-[400px] items-center justify-center"><Loader className="h-8 w-8 animate-spin text-blue-600" /></div>}
+                options={{
+                  readOnly: originalStrategy?.source_type === 'builtin',
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  lineNumbers: 'on',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 4,
+                  wordWrap: 'on',
+                  formatOnPaste: false,
+                  formatOnType: false,
+                  quickSuggestions: false,
+                  suggestOnTriggerCharacters: false,
+                  acceptSuggestionOnCommitCharacter: false,
+                  acceptSuggestionOnEnter: 'off',
+                  snippetSuggestions: 'none',
+                }}
+              />
+            )}
           </div>
           {originalStrategy?.source_type !== 'builtin' && (
             <div className="mt-4 flex gap-2">
@@ -422,7 +447,7 @@ export default function EditStrategyPage() {
                 type="button"
                 onClick={handleValidate}
                 disabled={validating || !formData.code}
-                className="flex items-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center justify-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-sm sm:text-base text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
               >
                 {validating && <Loader className="h-4 w-4 animate-spin" />}
                 验证代码
@@ -432,11 +457,11 @@ export default function EditStrategyPage() {
         </div>
 
         {/* 提交按钮 */}
-        <div className="flex gap-4">
+        <div className="flex flex-row gap-2 sm:gap-3">
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 sm:px-6 py-2.5 text-sm sm:text-base text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? (
               <Loader className="h-4 w-4 animate-spin" />
@@ -447,8 +472,8 @@ export default function EditStrategyPage() {
           </button>
           <button
             type="button"
-            onClick={() => router.back()}
-            className="rounded-lg border border-gray-300 px-6 py-2 text-gray-700 hover:bg-gray-50"
+            onClick={() => router.push('/strategies')}
+            className="flex-1 sm:flex-initial rounded-lg border border-gray-300 px-4 sm:px-6 py-2.5 text-sm sm:text-base text-gray-700 hover:bg-gray-50"
           >
             取消
           </button>

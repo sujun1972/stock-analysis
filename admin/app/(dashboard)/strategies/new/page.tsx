@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, AlertCircle, CheckCircle, Loader } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -11,14 +11,32 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 const Editor = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[600px] items-center justify-center rounded-lg border bg-gray-50">
+    <div className="flex h-[400px] items-center justify-center rounded-lg border bg-gray-50">
       <Loader className="h-8 w-8 animate-spin text-blue-600" />
     </div>
   ),
 })
 
+// 检测是否为移动设备
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
+
 export default function NewStrategyPage() {
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [loading, setLoading] = useState(false)
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<any>(null)
@@ -134,20 +152,11 @@ export default function NewStrategyPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* 页面头部 */}
-      <div className="mb-6 flex items-center gap-4">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          返回
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">创建新策略</h1>
-          <p className="text-sm text-gray-600">填写策略信息并验证代码</p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">创建新策略</h1>
+        <p className="mt-1 text-sm text-gray-600">填写策略信息并验证代码</p>
       </div>
 
       {/* 错误提示 */}
@@ -223,9 +232,9 @@ export default function NewStrategyPage() {
 
       {/* 表单 */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* 基本信息 */}
-          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
             <h3 className="text-lg font-semibold">基本信息</h3>
 
             <div>
@@ -332,7 +341,7 @@ export default function NewStrategyPage() {
           </div>
 
           {/* 元信息 */}
-          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
             <h3 className="text-lg font-semibold">元信息</h3>
 
             <div>
@@ -396,29 +405,43 @@ export default function NewStrategyPage() {
         </div>
 
         {/* 策略代码 */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <h3 className="mb-4 text-lg font-semibold">
             策略代码 <span className="text-red-500">*</span>
           </h3>
           <div className="overflow-hidden rounded-lg border border-gray-300">
-            <Editor
-              height="600px"
-              defaultLanguage="python"
-              value={formData.code}
-              onChange={(value) => setFormData({ ...formData, code: value || '' })}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: true },
-                fontSize: 14,
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                tabSize: 4,
-                wordWrap: 'on',
-                formatOnPaste: true,
-                formatOnType: true,
-              }}
-              defaultValue={`# 示例：选股策略
+            {isMobile ? (
+              <textarea
+                value={formData.code}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                className="w-full h-[400px] bg-gray-900 text-green-400 font-mono text-sm p-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="# 示例:选股策略&#10;class MyStockSelectionStrategy:&#10;    &quot;&quot;&quot;&#10;    自定义选股策略&#10;    &quot;&quot;&quot;&#10;    def select_stocks(self, universe, features, date):&#10;        &quot;&quot;&quot;选择股票&quot;&quot;&quot;&#10;        # TODO: 实现你的选股逻辑&#10;        pass"
+              />
+            ) : (
+              <Editor
+                height="400px"
+                defaultLanguage="python"
+                value={formData.code}
+                onChange={(value) => setFormData({ ...formData, code: value || '' })}
+                theme="vs-dark"
+                loading={<div className="flex h-[400px] items-center justify-center"><Loader className="h-8 w-8 animate-spin text-blue-600" /></div>}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  lineNumbers: 'on',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 4,
+                  wordWrap: 'on',
+                  formatOnPaste: false,
+                  formatOnType: false,
+                  quickSuggestions: false,
+                  suggestOnTriggerCharacters: false,
+                  acceptSuggestionOnCommitCharacter: false,
+                  acceptSuggestionOnEnter: 'off',
+                  snippetSuggestions: 'none',
+                }}
+                defaultValue={`# 示例:选股策略
 class MyStockSelectionStrategy:
     """
     自定义选股策略
@@ -438,14 +461,15 @@ class MyStockSelectionStrategy:
         # TODO: 实现你的选股逻辑
         pass
 `}
-            />
+              />
+            )}
           </div>
           <div className="mt-4 flex gap-2">
             <button
               type="button"
               onClick={handleValidate}
               disabled={validating || !formData.code}
-              className="flex items-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-sm sm:text-base text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
             >
               {validating && <Loader className="h-4 w-4 animate-spin" />}
               验证代码
@@ -454,19 +478,23 @@ class MyStockSelectionStrategy:
         </div>
 
         {/* 提交按钮 */}
-        <div className="flex gap-4">
+        <div className="flex flex-row gap-2 sm:gap-3">
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 sm:px-6 py-2.5 text-sm sm:text-base text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading && <Loader className="h-4 w-4 animate-spin" />}
+            {loading ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
             创建策略
           </button>
           <button
             type="button"
-            onClick={() => router.back()}
-            className="rounded-lg border border-gray-300 px-6 py-2 text-gray-700 hover:bg-gray-50"
+            onClick={() => router.push('/strategies')}
+            className="flex-1 sm:flex-initial rounded-lg border border-gray-300 px-4 sm:px-6 py-2.5 text-sm sm:text-base text-gray-700 hover:bg-gray-50"
           >
             取消
           </button>
