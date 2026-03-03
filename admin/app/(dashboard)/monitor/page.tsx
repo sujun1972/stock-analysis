@@ -6,6 +6,11 @@
  * 2. 性能监控 - 显示数据库和Redis的响应时间，帮助快速识别性能问题
  * 3. 监控工具集成 - 提供Grafana和Prometheus的快速访问入口
  *
+ * 响应式设计：
+ * - 桌面端（≥768px）：多列网格布局，完整按钮文字
+ * - 移动端（<768px）：单列堆叠布局，简化按钮显示
+ * - 状态卡片：自动适配网格布局
+ *
  * 架构说明：
  * - Admin监控页面：适合日常巡检和快速故障排查
  * - Grafana：适合详细的性能分析、历史趋势查看和容量规划
@@ -172,40 +177,58 @@ export default function MonitorPage() {
   return (
         <div className="space-y-6">
           {/* 页面标题 */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                 系统监控
               </h1>
-              <p className="text-gray-600 dark:text-gray-300 mt-2">
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1 sm:mt-2">
                 实时查看系统健康状态和性能指标
               </p>
             </div>
-            <div className="flex gap-3">
+            {/* 桌面端按钮组 */}
+            <div className="hidden lg:flex gap-2">
               <Button
                 variant="outline"
                 onClick={openPrometheus}
+                size="sm"
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Prometheus
-                <ExternalLink className="h-3 w-3 ml-1" />
               </Button>
               <Button
                 variant="default"
                 onClick={openGrafana}
+                size="sm"
               >
                 <LineChart className="h-4 w-4 mr-2" />
-                Grafana 仪表板
-                <ExternalLink className="h-3 w-3 ml-1" />
+                Grafana
               </Button>
               <Button
                 variant={autoRefresh ? "default" : "outline"}
                 onClick={() => setAutoRefresh(!autoRefresh)}
+                size="sm"
               >
                 <Activity className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-pulse' : ''}`} />
-                {autoRefresh ? '自动刷新' : '手动模式'}
+                {autoRefresh ? '自动' : '手动'}
               </Button>
-              <Button onClick={loadMonitorData} disabled={isLoading}>
+              <Button onClick={loadMonitorData} disabled={isLoading} size="sm">
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                刷新
+              </Button>
+            </div>
+            {/* 移动端简化按钮组 */}
+            <div className="flex lg:hidden gap-2">
+              <Button
+                variant={autoRefresh ? "default" : "outline"}
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                size="sm"
+                className="flex-1"
+              >
+                <Activity className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-pulse' : ''}`} />
+                {autoRefresh ? '自动' : '手动'}
+              </Button>
+              <Button onClick={loadMonitorData} disabled={isLoading} size="sm" className="flex-1">
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 刷新
               </Button>
@@ -229,9 +252,9 @@ export default function MonitorPage() {
               : 'border-red-500 bg-red-50 dark:bg-red-900/10'
           }`}>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-2xl flex items-center gap-3">
-                  <Server className="h-8 w-8" />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle className="text-xl sm:text-2xl flex items-center gap-3">
+                  <Server className="h-6 w-6 sm:h-8 sm:w-8" />
                   系统总体状态
                 </CardTitle>
                 {getStatusBadge(overallStatus)}
@@ -241,12 +264,12 @@ export default function MonitorPage() {
               {error ? (
                 <div className="text-red-600 dark:text-red-400">{error}</div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-lg">
-                    <Database className="h-8 w-8 text-blue-600" />
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">数据库</div>
-                      <div className="font-semibold">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="flex items-center gap-3 p-3 sm:p-4 bg-white dark:bg-gray-800 rounded-lg">
+                    <Database className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">数据库</div>
+                      <div className="font-semibold truncate">
                         {getServiceStatus(health?.checks?.database).status === 'healthy' ? '正常' : '异常'}
                       </div>
                       {getServiceStatus(health?.checks?.database).responseTime && (
@@ -257,11 +280,11 @@ export default function MonitorPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-lg">
-                    <Zap className="h-8 w-8 text-red-600" />
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Redis</div>
-                      <div className="font-semibold">
+                  <div className="flex items-center gap-3 p-3 sm:p-4 bg-white dark:bg-gray-800 rounded-lg">
+                    <Zap className="h-6 w-6 sm:h-8 sm:w-8 text-red-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Redis</div>
+                      <div className="font-semibold truncate">
                         {getServiceStatus(health?.checks?.redis).status === 'healthy' ? '正常' : '异常'}
                       </div>
                       {getServiceStatus(health?.checks?.redis).responseTime && (
@@ -272,21 +295,21 @@ export default function MonitorPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-lg">
-                    <Cpu className="h-8 w-8 text-purple-600" />
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">核心服务</div>
-                      <div className="font-semibold">
+                  <div className="flex items-center gap-3 p-3 sm:p-4 bg-white dark:bg-gray-800 rounded-lg">
+                    <Cpu className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">核心服务</div>
+                      <div className="font-semibold truncate">
                         {getServiceStatus(health?.checks?.core_service).status === 'healthy' ? '正常' : '异常'}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-lg">
-                    <Activity className="h-8 w-8 text-green-600" />
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">熔断器</div>
-                      <div className="font-semibold">
+                  <div className="flex items-center gap-3 p-3 sm:p-4 bg-white dark:bg-gray-800 rounded-lg">
+                    <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">熔断器</div>
+                      <div className="font-semibold truncate">
                         {health?.checks?.circuit_breakers?.status || '未知'}
                       </div>
                     </div>
@@ -312,11 +335,11 @@ export default function MonitorPage() {
                 {/* Grafana 卡片 */}
                 <Card className="border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-colors">
                   <CardContent className="pt-6">
-                    <div className="flex items-start gap-4">
-                      <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                    <div className="flex flex-col sm:flex-row items-start gap-4">
+                      <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg shrink-0">
                         <LineChart className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 w-full min-w-0">
                         <h3 className="font-semibold text-lg mb-2">Grafana 仪表板</h3>
                         <p className="text-sm text-muted-foreground mb-4">
                           可视化监控仪表板，提供丰富的图表和自定义查询功能
@@ -343,11 +366,11 @@ export default function MonitorPage() {
                 {/* Prometheus 卡片 */}
                 <Card className="border-2 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600 transition-colors">
                   <CardContent className="pt-6">
-                    <div className="flex items-start gap-4">
-                      <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                    <div className="flex flex-col sm:flex-row items-start gap-4">
+                      <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg shrink-0">
                         <BarChart3 className="h-8 w-8 text-orange-600 dark:text-orange-400" />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 w-full min-w-0">
                         <h3 className="font-semibold text-lg mb-2">Prometheus</h3>
                         <p className="text-sm text-muted-foreground mb-4">
                           强大的监控和告警系统，支持 PromQL 查询语言
@@ -373,51 +396,51 @@ export default function MonitorPage() {
               </div>
 
               {/* 快速链接 */}
-              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                <h4 className="font-medium mb-3 flex items-center gap-2">
+              <div className="mt-6 p-3 sm:p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <h4 className="font-medium mb-3 flex items-center gap-2 text-sm sm:text-base">
                   <ExternalLink className="h-4 w-4" />
                   快速访问
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
                   <a
                     href="http://localhost:3001/d/stock-analysis-overview"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded min-w-0"
                   >
-                    <LineChart className="h-4 w-4 text-blue-600" />
-                    <span>Stock Analysis 仪表板</span>
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                    <LineChart className="h-4 w-4 text-blue-600 shrink-0" />
+                    <span className="truncate">Stock Analysis 仪表板</span>
+                    <ExternalLink className="h-3 w-3 ml-auto shrink-0" />
                   </a>
                   <a
                     href="http://localhost:9090/targets"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded min-w-0"
                   >
-                    <BarChart3 className="h-4 w-4 text-orange-600" />
-                    <span>Prometheus 目标状态</span>
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                    <BarChart3 className="h-4 w-4 text-orange-600 shrink-0" />
+                    <span className="truncate">Prometheus 目标状态</span>
+                    <ExternalLink className="h-3 w-3 ml-auto shrink-0" />
                   </a>
                   <a
                     href="http://localhost:8000/metrics"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded min-w-0"
                   >
-                    <Server className="h-4 w-4 text-green-600" />
-                    <span>Backend 原始指标</span>
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                    <Server className="h-4 w-4 text-green-600 shrink-0" />
+                    <span className="truncate">Backend 原始指标</span>
+                    <ExternalLink className="h-3 w-3 ml-auto shrink-0" />
                   </a>
                   <a
                     href="http://localhost:9090/graph"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                    className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded min-w-0"
                   >
-                    <Activity className="h-4 w-4 text-purple-600" />
-                    <span>Prometheus 查询</span>
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                    <Activity className="h-4 w-4 text-purple-600 shrink-0" />
+                    <span className="truncate">Prometheus 查询</span>
+                    <ExternalLink className="h-3 w-3 ml-auto shrink-0" />
                   </a>
                 </div>
               </div>
@@ -529,19 +552,19 @@ export default function MonitorPage() {
 
           {/* 监控说明 */}
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-blue-200 dark:border-blue-800">
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-start gap-3">
                 <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-3 text-lg">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-3 text-base sm:text-lg">
                     监控架构说明
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <div>
-                      <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 text-sm">
+                      <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 text-xs sm:text-sm">
                         健康检查（本页面）
                       </h4>
-                      <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1.5">
+                      <ul className="text-xs sm:text-sm text-blue-700 dark:text-blue-400 space-y-1 sm:space-y-1.5">
                         <li>• 自动每 10 秒刷新服务状态</li>
                         <li>• 监控数据库、Redis、核心服务</li>
                         <li>• 显示响应时间和连接状态</li>
@@ -549,10 +572,10 @@ export default function MonitorPage() {
                       </ul>
                     </div>
                     <div>
-                      <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 text-sm">
+                      <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 text-xs sm:text-sm">
                         性能指标（Grafana）
                       </h4>
-                      <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1.5">
+                      <ul className="text-xs sm:text-sm text-blue-700 dark:text-blue-400 space-y-1 sm:space-y-1.5">
                         <li>• 图表自动每 10 秒刷新数据</li>
                         <li>• 显示请求量、响应时间、错误率</li>
                         <li>• 支持自定义时间范围查询</li>
@@ -560,12 +583,17 @@ export default function MonitorPage() {
                       </ul>
                     </div>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
-                    <p className="text-sm text-blue-700 dark:text-blue-400">
-                      <strong>访问地址：</strong>
-                      Grafana: <code className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 rounded">http://localhost:3001</code>
-                      （默认账号：admin / admin123） |
-                      Prometheus: <code className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 rounded ml-2">http://localhost:9090</code>
+                  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-400 break-all">
+                      <strong>访问地址：</strong><br className="sm:hidden" />
+                      <span className="inline-block mt-1 sm:mt-0 sm:ml-2">
+                        Grafana: <code className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 rounded text-xs">http://localhost:3001</code>
+                        <span className="text-xs ml-1">（admin / admin123）</span>
+                      </span>
+                      <br className="sm:hidden" />
+                      <span className="inline-block mt-1 sm:mt-0 sm:ml-2">
+                        Prometheus: <code className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 rounded text-xs">http://localhost:9090</code>
+                      </span>
                     </p>
                   </div>
                 </div>

@@ -1,3 +1,17 @@
+/**
+ * 系统日志页面
+ *
+ * 功能：
+ * - 查看用户活动日志
+ * - 查看登录历史记录
+ * - 过滤和搜索日志
+ * - 显示今日活动统计
+ *
+ * 响应式设计：
+ * - 桌面端（≥768px）：表格视图，完整信息展示
+ * - 移动端（<768px）：卡片视图，紧凑信息展示
+ * - 统计卡片：自动适配网格布局
+ */
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -214,16 +228,16 @@ export default function LogsPage() {
   return (
         <div className="space-y-6">
           {/* 页面标题 */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                 系统日志
               </h1>
-              <p className="text-gray-600 dark:text-gray-300 mt-2">
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1 sm:mt-2">
                 查看用户活动和系统操作记录
               </p>
             </div>
-            <Button onClick={loadLogs} disabled={isLoading}>
+            <Button onClick={loadLogs} disabled={isLoading} className="w-full sm:w-auto">
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
               刷新
             </Button>
@@ -286,7 +300,7 @@ export default function LogsPage() {
           {/* 过滤器 */}
           <Card>
             <CardContent className="pt-6">
-              <div className="flex gap-4 items-end">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-end">
                 <div className="flex-1">
                   <label className="text-sm font-medium mb-2 block">搜索用户</label>
                   <div className="relative">
@@ -301,7 +315,7 @@ export default function LogsPage() {
                 </div>
 
                 {activeTab === 'activity' && (
-                  <div className="w-48">
+                  <div className="w-full sm:w-48">
                     <label className="text-sm font-medium mb-2 block">操作类型</label>
                     <Select value={actionTypeFilter} onValueChange={setActionTypeFilter}>
                       <SelectTrigger>
@@ -321,11 +335,15 @@ export default function LogsPage() {
                   </div>
                 )}
 
-                <Button variant="outline" onClick={() => {
-                  setSearchTerm('')
-                  setActionTypeFilter('all')
-                  setUserIdFilter('')
-                }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('')
+                    setActionTypeFilter('all')
+                    setUserIdFilter('')
+                  }}
+                  className="w-full sm:w-auto"
+                >
                   <Filter className="h-4 w-4 mr-2" />
                   清除过滤
                 </Button>
@@ -361,48 +379,94 @@ export default function LogsPage() {
                       暂无活动日志
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>时间</TableHead>
-                            <TableHead>用户</TableHead>
-                            <TableHead>操作类型</TableHead>
-                            <TableHead>资源类型</TableHead>
-                            <TableHead>资源ID</TableHead>
-                            <TableHead>IP地址</TableHead>
-                            <TableHead>详情</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredActivityLogs.map((log) => (
-                            <TableRow key={log.id}>
-                              <TableCell className="text-sm">
-                                {formatDate(log.created_at)}
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {log.username || `用户#${log.user_id}`}
-                              </TableCell>
-                              <TableCell>
-                                {getActionTypeBadge(log.action_type)}
-                              </TableCell>
-                              <TableCell className="text-sm">
-                                {log.resource_type || '-'}
-                              </TableCell>
-                              <TableCell className="text-sm">
-                                {log.resource_id || '-'}
-                              </TableCell>
-                              <TableCell className="text-sm font-mono">
-                                {log.ip_address || '-'}
-                              </TableCell>
-                              <TableCell className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                                {log.details ? JSON.stringify(log.details) : '-'}
-                              </TableCell>
+                    <>
+                      {/* 桌面端表格视图 */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>时间</TableHead>
+                              <TableHead>用户</TableHead>
+                              <TableHead>操作类型</TableHead>
+                              <TableHead>资源类型</TableHead>
+                              <TableHead>资源ID</TableHead>
+                              <TableHead>IP地址</TableHead>
+                              <TableHead>详情</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredActivityLogs.map((log) => (
+                              <TableRow key={log.id}>
+                                <TableCell className="text-sm">
+                                  {formatDate(log.created_at)}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {log.username || `用户#${log.user_id}`}
+                                </TableCell>
+                                <TableCell>
+                                  {getActionTypeBadge(log.action_type)}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {log.resource_type || '-'}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {log.resource_id || '-'}
+                                </TableCell>
+                                <TableCell className="text-sm font-mono">
+                                  {log.ip_address || '-'}
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                                  {log.details ? JSON.stringify(log.details) : '-'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* 移动端卡片视图 */}
+                      <div className="md:hidden space-y-3">
+                        {filteredActivityLogs.map((log) => (
+                          <div key={log.id} className="border rounded-lg p-4 bg-white dark:bg-gray-800 space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm">
+                                  {log.username || `用户#${log.user_id}`}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {formatDate(log.created_at)}
+                                </div>
+                              </div>
+                              {getActionTypeBadge(log.action_type)}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <span className="text-gray-500 text-xs">资源类型</span>
+                                <div className="font-medium">{log.resource_type || '-'}</div>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 text-xs">资源ID</span>
+                                <div className="font-medium">{log.resource_id || '-'}</div>
+                              </div>
+                            </div>
+
+                            {log.ip_address && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">IP: </span>
+                                <span className="font-mono">{log.ip_address}</span>
+                              </div>
+                            )}
+
+                            {log.details && (
+                              <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 p-2 rounded truncate">
+                                {JSON.stringify(log.details)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </TabsContent>
 
@@ -419,40 +483,76 @@ export default function LogsPage() {
                       暂无登录历史
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>登录时间</TableHead>
-                            <TableHead>用户</TableHead>
-                            <TableHead>状态</TableHead>
-                            <TableHead>IP地址</TableHead>
-                            <TableHead>浏览器/设备</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredLoginHistory.map((log) => (
-                            <TableRow key={log.id}>
-                              <TableCell className="text-sm">
-                                {formatDate(log.login_at)}
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {log.username || `用户#${log.user_id}`}
-                              </TableCell>
-                              <TableCell>
-                                {getStatusBadge(log.status)}
-                              </TableCell>
-                              <TableCell className="text-sm font-mono">
-                                {log.ip_address || '-'}
-                              </TableCell>
-                              <TableCell className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                                {log.user_agent || '-'}
-                              </TableCell>
+                    <>
+                      {/* 桌面端表格视图 */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>登录时间</TableHead>
+                              <TableHead>用户</TableHead>
+                              <TableHead>状态</TableHead>
+                              <TableHead>IP地址</TableHead>
+                              <TableHead>浏览器/设备</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredLoginHistory.map((log) => (
+                              <TableRow key={log.id}>
+                                <TableCell className="text-sm">
+                                  {formatDate(log.login_at)}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {log.username || `用户#${log.user_id}`}
+                                </TableCell>
+                                <TableCell>
+                                  {getStatusBadge(log.status)}
+                                </TableCell>
+                                <TableCell className="text-sm font-mono">
+                                  {log.ip_address || '-'}
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                                  {log.user_agent || '-'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* 移动端卡片视图 */}
+                      <div className="md:hidden space-y-3">
+                        {filteredLoginHistory.map((log) => (
+                          <div key={log.id} className="border rounded-lg p-4 bg-white dark:bg-gray-800 space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm">
+                                  {log.username || `用户#${log.user_id}`}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {formatDate(log.login_at)}
+                                </div>
+                              </div>
+                              {getStatusBadge(log.status)}
+                            </div>
+
+                            {log.ip_address && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">IP地址: </span>
+                                <span className="font-mono">{log.ip_address}</span>
+                              </div>
+                            )}
+
+                            {log.user_agent && (
+                              <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 p-2 rounded">
+                                <div className="text-gray-500 mb-1">浏览器/设备:</div>
+                                <div className="break-all">{log.user_agent}</div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </TabsContent>
               </Tabs>
