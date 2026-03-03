@@ -11,7 +11,6 @@ import { Loader2, TrendingUp, TrendingDown, Calendar, Clock, Trash2, Eye, AlertC
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import { extractApiError } from '@/lib/error-formatter'
-import BacktestDetailDialog from './BacktestDetailDialog'
 
 interface BacktestRecord {
   id: number
@@ -55,8 +54,6 @@ export default function BacktestHistoryContent() {
   const [total, setTotal] = useState(0)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [selectedRecord, setSelectedRecord] = useState<BacktestRecord | null>(null)
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
 
   // 加载回测历史
   const loadBacktestHistory = async () => {
@@ -100,27 +97,8 @@ export default function BacktestHistoryContent() {
   }
 
   // 查看详情
-  const handleViewDetail = async (record: BacktestRecord) => {
-    try {
-      const response = await apiClient.get(`/api/backtest-history/${record.id}`)
-
-      if (response.success) {
-        setSelectedRecord(response.data)
-        setDetailDialogOpen(true)
-      } else {
-        toast({
-          variant: 'destructive',
-          title: '加载详情失败',
-          description: response.message,
-        })
-      }
-    } catch (err: any) {
-      toast({
-        variant: 'destructive',
-        title: '加载详情失败',
-        description: extractApiError(err),
-      })
-    }
+  const handleViewDetail = (record: BacktestRecord) => {
+    router.push(`/backtest-results/${record.id}`)
   }
 
   // 删除记录
@@ -392,15 +370,6 @@ export default function BacktestHistoryContent() {
           )}
         </CardContent>
       </Card>
-
-      {/* 详情对话框 */}
-      {selectedRecord && (
-        <BacktestDetailDialog
-          record={selectedRecord}
-          open={detailDialogOpen}
-          onOpenChange={setDetailDialogOpen}
-        />
-      )}
     </div>
   )
 }
