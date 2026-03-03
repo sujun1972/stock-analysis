@@ -1,10 +1,29 @@
+/**
+ * 股票管理页面
+ *
+ * 功能：
+ * - 股票列表展示（分页、搜索、筛选、排序）
+ * - 同步股票列表和实时行情
+ * - 查看股票详细信息
+ * - 多维度筛选（市场、行业、概念、状态）
+ *
+ * 响应式设计：
+ * - 桌面端（≥768px）：表格视图，完整分页
+ * - 移动端（<768px）：卡片视图，简化分页
+ * - 按钮、筛选器、搜索框全面响应式适配
+ *
+ * 视觉优化：
+ * - 市场标签差异化配色（上海主板/深圳主板/创业板/科创板）
+ * - 操作按钮彩色化（蓝色同步/绿色刷新/灰色重置）
+ * - 价格涨跌颜色标识（红涨绿跌）
+ */
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Search, RefreshCw, Database, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
-import type { StockInfo, Concept, PaginatedResponse } from '@/types/stock'
+import type { StockInfo } from '@/types/stock'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -160,6 +179,17 @@ export default function StocksManagementPage() {
     return (amount / 100000000).toFixed(2) + ' 亿'
   }
 
+  // 获取市场标签样式
+  const getMarketBadgeClass = (market: string) => {
+    const marketStyles: Record<string, string> = {
+      '上海主板': 'bg-blue-100 text-blue-800 border-blue-200',
+      '深圳主板': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      '创业板': 'bg-purple-100 text-purple-800 border-purple-200',
+      '科创板': 'bg-orange-100 text-orange-800 border-orange-200',
+    }
+    return marketStyles[market] || 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+
   // 渲染分页按钮
   const renderPaginationButtons = () => {
     const buttons: JSX.Element[] = []
@@ -232,11 +262,13 @@ export default function StocksManagementPage() {
   return (
     <div className="space-y-6">
       {/* 页头 */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">股票管理</h1>
-        <p className="text-muted-foreground mt-2">
-          查看和管理所有股票数据，包括基本信息和实时行情
-        </p>
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">股票管理</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-2">
+            查看和管理所有股票数据，包括基本信息和实时行情
+          </p>
+        </div>
       </div>
 
       {/* 筛选和操作区 */}
@@ -247,7 +279,7 @@ export default function StocksManagementPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* 搜索框 */}
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -255,20 +287,21 @@ export default function StocksManagementPage() {
                   placeholder="搜索股票代码或名称..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && loadStocks()}
                   className="pl-9"
                 />
               </div>
             </div>
             <Button
-              variant="outline"
               onClick={handleResetFilters}
+              className="w-full sm:w-auto bg-gray-600 hover:bg-gray-700 text-white"
             >
               重置筛选
             </Button>
           </div>
 
           {/* 筛选器 */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="text-sm font-medium mb-2 block">市场</label>
               <Select value={marketFilter} onValueChange={setMarketFilter}>
@@ -335,11 +368,11 @@ export default function StocksManagementPage() {
           </div>
 
           {/* 操作按钮 */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Button
               onClick={handleSyncStocks}
               disabled={syncing}
-              variant="outline"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Database className="h-4 w-4 mr-2" />
               同步股票列表
@@ -347,9 +380,9 @@ export default function StocksManagementPage() {
             <Button
               onClick={handleSyncRealtime}
               disabled={syncing || stocks.length === 0}
-              variant="outline"
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
               同步当前页行情
             </Button>
           </div>
@@ -359,7 +392,7 @@ export default function StocksManagementPage() {
       {/* 股票列表 */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <CardTitle>股票列表</CardTitle>
               <CardDescription>
@@ -400,7 +433,8 @@ export default function StocksManagementPage() {
             </div>
           ) : (
             <>
-              <div className="rounded-md border">
+              {/* 桌面端表格视图 - 隐藏在小屏幕 */}
+              <div className="hidden md:block rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -453,7 +487,9 @@ export default function StocksManagementPage() {
                           </button>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{stock.market}</Badge>
+                          <Badge variant="outline" className={getMarketBadgeClass(stock.market)}>
+                            {stock.market}
+                          </Badge>
                         </TableCell>
                         <TableCell className={`text-right font-medium ${getPriceColor(stock.pct_change)}`}>
                           {formatPrice(stock.latest_price)}
@@ -493,29 +529,108 @@ export default function StocksManagementPage() {
                 </Table>
               </div>
 
+              {/* 移动端卡片视图 - 仅在小屏幕显示 */}
+              <div className="md:hidden space-y-4">
+                {stocks.map((stock) => (
+                  <div
+                    key={stock.code}
+                    className="border rounded-lg p-4 bg-white space-y-3 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => {
+                      setSelectedStock(stock)
+                      setDetailDialogOpen(true)
+                    }}
+                  >
+                    {/* 顶部：股票代码和名称 */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-base truncate">{stock.name}</div>
+                        <div className="text-sm text-gray-500 font-mono">{stock.code}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className={`text-lg font-bold ${getPriceColor(stock.pct_change)}`}>
+                          {formatPrice(stock.latest_price)}
+                        </div>
+                        <div className={`text-sm font-medium ${getPriceColor(stock.pct_change)}`}>
+                          {formatPctChange(stock.pct_change)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 市场和状态标签 */}
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className={getMarketBadgeClass(stock.market)}>
+                        {stock.market}
+                      </Badge>
+                      {stock.status === 'L' && <Badge variant="default">正常</Badge>}
+                      {stock.status === 'D' && <Badge variant="destructive">退市</Badge>}
+                      {stock.status === 'P' && <Badge variant="secondary">暂停</Badge>}
+                      {!stock.status && <Badge variant="outline">未知</Badge>}
+                    </div>
+
+                    {/* 成交信息 */}
+                    <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 rounded p-2">
+                      <div>
+                        <span className="text-gray-500">成交量: </span>
+                        <span className="font-medium">{formatVolume(stock.volume)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">成交额: </span>
+                        <span className="font-medium">{formatAmount(stock.amount)}</span>
+                      </div>
+                    </div>
+
+                    {/* 概念标签 */}
+                    {stock.concepts && stock.concepts.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-xs text-gray-500">所属概念</div>
+                        <div className="flex flex-wrap gap-1">
+                          {stock.concepts.slice(0, 4).map((concept) => (
+                            <Badge key={concept.code} variant="secondary" className="text-xs">
+                              {concept.name}
+                            </Badge>
+                          ))}
+                          {stock.concepts.length > 4 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{stock.concepts.length - 4}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
               {/* 分页 */}
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-muted-foreground">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                <div className="text-xs sm:text-sm text-muted-foreground">
                   显示第 {(currentPage - 1) * pageSize + 1} 到 {Math.min(currentPage * pageSize, totalStocks)} 条，共 {totalStocks} 条
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
+                    className="h-8"
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    上一页
+                    <span className="hidden sm:inline ml-1">上一页</span>
                   </Button>
-                  {renderPaginationButtons()}
+                  <div className="hidden sm:flex items-center gap-1">
+                    {renderPaginationButtons()}
+                  </div>
+                  <div className="sm:hidden text-sm font-medium px-2">
+                    {currentPage} / {totalPages}
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
+                    className="h-8"
                   >
-                    下一页
+                    <span className="hidden sm:inline mr-1">下一页</span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
