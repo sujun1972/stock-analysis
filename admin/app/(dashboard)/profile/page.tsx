@@ -11,9 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, AlertCircle, User, Lock, CheckCircle2 } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default function ProfilePage() {
   const { user, updateProfile } = useAuthStore()
@@ -26,17 +24,11 @@ export default function ProfilePage() {
     avatar_url: '',
   })
 
-  // 密码修改表单
-  const [passwordForm, setPasswordForm] = useState({
-    current_password: '',
-    new_password: '',
-    confirm_password: '',
-  })
-
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
+  // 加载用户信息到表单
   useEffect(() => {
     if (user) {
       setProfileForm({
@@ -51,7 +43,9 @@ export default function ProfilePage() {
     return null
   }
 
-  // 获取角色标签
+  /**
+   * 获取角色对应的标签配置
+   */
   const getRoleLabel = (role: string) => {
     const roleMap: Record<string, { label: string; variant: 'destructive' | 'default' | 'secondary' | 'outline' }> = {
       super_admin: { label: '超级管理员', variant: 'destructive' },
@@ -64,12 +58,16 @@ export default function ProfilePage() {
 
   const roleInfo = getRoleLabel(user.role)
 
-  // 获取用户名首字母
+  /**
+   * 获取用户名首字母用于头像显示
+   */
   const initials = user.full_name
     ? user.full_name.slice(0, 2).toUpperCase()
     : user.username.slice(0, 2).toUpperCase()
 
-  // 更新个人资料
+  /**
+   * 处理个人资料更新提交
+   */
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -81,51 +79,6 @@ export default function ProfilePage() {
       setSuccess('个人资料更新成功')
     } catch (err: any) {
       setError(err.message || '更新失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 修改密码
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
-
-    // 验证密码
-    if (passwordForm.new_password !== passwordForm.confirm_password) {
-      setError('两次输入的新密码不一致')
-      setLoading(false)
-      return
-    }
-
-    if (passwordForm.new_password.length < 6) {
-      setError('新密码长度至少为6位')
-      setLoading(false)
-      return
-    }
-
-    try {
-      await apiClient.post('/api/auth/change-password', {
-        current_password: passwordForm.current_password,
-        new_password: passwordForm.new_password,
-      })
-
-      setSuccess('密码修改成功,请重新登录')
-      setPasswordForm({
-        current_password: '',
-        new_password: '',
-        confirm_password: '',
-      })
-
-      // 3秒后跳转到登录页
-      setTimeout(() => {
-        useAuthStore.getState().logout()
-        router.push('/login')
-      }, 3000)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || '密码修改失败')
     } finally {
       setLoading(false)
     }
@@ -187,27 +140,13 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* 编辑表单 */}
-          <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="profile">
-                <User className="w-4 h-4 mr-2" />
-                编辑资料
-              </TabsTrigger>
-              <TabsTrigger value="password">
-                <Lock className="w-4 h-4 mr-2" />
-                修改密码
-              </TabsTrigger>
-            </TabsList>
-
-            {/* 编辑个人资料 */}
-            <TabsContent value="profile">
-              <Card>
-                <CardHeader>
-                  <CardTitle>编辑个人资料</CardTitle>
-                  <CardDescription>更新您的个人信息</CardDescription>
-                </CardHeader>
-                <CardContent>
+          {/* 编辑个人资料表单 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>编辑个人资料</CardTitle>
+              <CardDescription>更新您的个人信息</CardDescription>
+            </CardHeader>
+            <CardContent>
                   <form onSubmit={handleUpdateProfile} className="space-y-4">
                     {error && (
                       <Alert variant="destructive">
@@ -287,107 +226,6 @@ export default function ProfilePage() {
                   </form>
                 </CardContent>
               </Card>
-            </TabsContent>
-
-            {/* 修改密码 */}
-            <TabsContent value="password">
-              <Card>
-                <CardHeader>
-                  <CardTitle>修改密码</CardTitle>
-                  <CardDescription>为了账户安全,请定期修改密码</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleChangePassword} className="space-y-4">
-                    {error && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{error}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    {success && (
-                      <Alert className="bg-green-50 text-green-900 border-green-200">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <AlertDescription>{success}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    <div className="space-y-2">
-                      <Label htmlFor="current_password">当前密码</Label>
-                      <Input
-                        id="current_password"
-                        type="password"
-                        placeholder="请输入当前密码"
-                        value={passwordForm.current_password}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
-                        disabled={loading}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="new_password">新密码</Label>
-                      <Input
-                        id="new_password"
-                        type="password"
-                        placeholder="请输入新密码(至少6位)"
-                        value={passwordForm.new_password}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                        disabled={loading}
-                        required
-                        minLength={6}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm_password">确认新密码</Label>
-                      <Input
-                        id="confirm_password"
-                        type="password"
-                        placeholder="请再次输入新密码"
-                        value={passwordForm.confirm_password}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
-                        disabled={loading}
-                        required
-                        minLength={6}
-                      />
-                    </div>
-
-                    <Separator />
-
-                    <div className="flex justify-end gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setPasswordForm({
-                            current_password: '',
-                            new_password: '',
-                            confirm_password: '',
-                          })
-                          setError(null)
-                          setSuccess(null)
-                        }}
-                        disabled={loading}
-                      >
-                        重置
-                      </Button>
-                      <Button type="submit" disabled={loading}>
-                        {loading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            修改中...
-                          </>
-                        ) : (
-                          '修改密码'
-                        )}
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
         </div>
   )
 }

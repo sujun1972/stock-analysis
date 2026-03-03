@@ -1,7 +1,21 @@
+/**
+ * 顶部导航栏组件
+ *
+ * 功能：
+ * - 侧边栏切换按钮（大屏折叠，小屏滑入）
+ * - 用户信息展示（头像、姓名、角色）
+ * - 用户菜单（个人资料、修改密码、登出）
+ *
+ * @author Admin Team
+ * @since 2026-03-03
+ */
+
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
+import { useSidebarStore } from '@/stores/sidebar-store'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -12,11 +26,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { LogOut, User, Settings } from 'lucide-react'
+import { LogOut, User, Menu, KeyRound } from 'lucide-react'
+import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
 
 export function Header() {
   const router = useRouter()
   const { user, logout } = useAuthStore()
+  const { toggleSidebar } = useSidebarStore()
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -57,8 +74,19 @@ export function Header() {
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between px-4">
+      <div className="flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-4">
+          {/* 菜单切换按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="hover:bg-accent"
+          >
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">切换菜单</span>
+          </Button>
+
           <h1 className="text-xl font-bold">管理后台</h1>
         </div>
 
@@ -90,9 +118,9 @@ export function Header() {
                 <User className="mr-2 h-4 w-4" />
                 <span>个人资料</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/settings')}>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>设置</span>
+              <DropdownMenuItem onClick={() => setPasswordDialogOpen(true)}>
+                <KeyRound className="mr-2 h-4 w-4" />
+                <span>修改密码</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400">
@@ -103,6 +131,9 @@ export function Header() {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* 修改密码对话框 */}
+      <ChangePasswordDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} />
     </header>
   )
 }
