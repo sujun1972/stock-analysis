@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Clock, User, Calendar, AlertCircle, Eye, CheckCircle, XCircle } from 'lucide-react'
+import { Clock, User, Calendar, AlertCircle, Eye, CheckCircle, XCircle } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
@@ -67,14 +67,6 @@ export default function PendingReviewStrategiesPage() {
     <div className="p-6">
       {/* 页面头部 */}
       <div className="mb-6">
-        <button
-          onClick={() => router.back()}
-          className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          返回策略列表
-        </button>
-
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">待审核策略</h1>
@@ -85,20 +77,22 @@ export default function PendingReviewStrategiesPage() {
         </div>
       </div>
 
-      {/* 统计信息 */}
-      <div className="mb-6 rounded-lg bg-yellow-50 border border-yellow-200 p-4">
-        <div className="flex items-center gap-3">
-          <Clock className="h-6 w-6 text-yellow-600" />
-          <div>
-            <p className="font-semibold text-yellow-900">
-              当前共有 {totalCount} 个策略等待审核
-            </p>
-            <p className="text-sm text-yellow-700">
-              请及时处理发布申请，避免用户等待时间过长
-            </p>
+      {/* 统计信息 - 仅在有待审核策略时显示 */}
+      {!loading && totalCount > 0 && (
+        <div className="mb-6 rounded-lg bg-yellow-50 border border-yellow-200 p-4">
+          <div className="flex items-center gap-3">
+            <Clock className="h-6 w-6 text-yellow-600" />
+            <div>
+              <p className="font-semibold text-yellow-900">
+                当前共有 {totalCount} 个策略等待审核
+              </p>
+              <p className="text-sm text-yellow-700">
+                请及时处理发布申请，避免用户等待时间过长
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 错误提示 */}
       {error && (
