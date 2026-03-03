@@ -113,6 +113,8 @@ class StrategyRepository(BaseRepository):
                 s.source_type, s.strategy_type, s.description, s.category, s.tags,
                 s.default_params, s.validation_status, s.validation_errors,
                 s.validation_warnings, s.risk_level, s.is_enabled,
+                s.publish_status, s.publish_requested_at, s.publish_reviewed_at,
+                s.publish_reviewed_by, s.publish_reject_reason,
                 s.usage_count, s.backtest_count, s.avg_sharpe_ratio, s.avg_annual_return,
                 s.version, s.parent_strategy_id, s.created_by,
                 s.created_at, s.updated_at, s.last_used_at,
@@ -152,6 +154,8 @@ class StrategyRepository(BaseRepository):
                 s.source_type, s.strategy_type, s.description, s.category, s.tags,
                 s.default_params, s.validation_status, s.validation_errors,
                 s.validation_warnings, s.risk_level, s.is_enabled,
+                s.publish_status, s.publish_requested_at, s.publish_reviewed_at,
+                s.publish_reviewed_by, s.publish_reject_reason,
                 s.usage_count, s.backtest_count, s.avg_sharpe_ratio, s.avg_annual_return,
                 s.version, s.parent_strategy_id, s.created_by,
                 s.created_at, s.updated_at, s.last_used_at,
@@ -183,6 +187,7 @@ class StrategyRepository(BaseRepository):
         category: Optional[str] = None,
         is_enabled: Optional[bool] = None,
         validation_status: Optional[str] = None,
+        publish_status: Optional[str] = None,
         search: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
@@ -198,6 +203,7 @@ class StrategyRepository(BaseRepository):
             category: 类别过滤
             is_enabled: 是否启用过滤
             validation_status: 验证状态过滤
+            publish_status: 发布状态过滤 (draft/pending_review/approved/rejected)
             search: 搜索关键词（名称、描述）
             page: 页码（从1开始）
             page_size: 每页数量
@@ -246,6 +252,10 @@ class StrategyRepository(BaseRepository):
             where_clauses.append("validation_status = %s")
             params.append(validation_status)
 
+        if publish_status:
+            where_clauses.append("publish_status = %s")
+            params.append(publish_status)
+
         if search:
             where_clauses.append("(display_name ILIKE %s OR description ILIKE %s)")
             search_pattern = f"%{search}%"
@@ -260,7 +270,8 @@ class StrategyRepository(BaseRepository):
             select_fields = """
                 s.id, s.name, s.display_name, s.class_name, s.source_type, s.strategy_type,
                 s.description, s.category, s.tags, s.validation_status,
-                s.risk_level, s.is_enabled, s.usage_count, s.backtest_count,
+                s.risk_level, s.is_enabled, s.publish_status, s.publish_requested_at,
+                s.publish_reviewed_at, s.usage_count, s.backtest_count,
                 s.avg_sharpe_ratio, s.avg_annual_return, s.user_id, s.created_by,
                 s.created_at, s.updated_at, u.username
             """
@@ -569,6 +580,84 @@ class StrategyRepository(BaseRepository):
             exists = cursor.fetchone()[0]
             cursor.close()
             return exists
+        finally:
+            self.db.release_connection(conn)
+
+    def update_publish_status(
+        self,
+        strategy_id: int,
+        new_status: str,
+        reviewer_id: Optional[int] = None,
+        reject_reason: Optional[str] = None
+    ) -> None:
+        """
+        更新策略发布状态
+
+        Args:
+            strategy_id: 策略ID
+            new_status: 新的发布状态 (draft/pending_review/approved/rejected)
+            reviewer_id: 审核人用户ID（批准/拒绝时必填）
+            reject_reason: 拒绝原因（拒绝时必填）
+        """
+        update_fields = ["publish_status = %s", "updated_at = NOW()"]
+        params = [new_status]
+
+        if new_status == 'pending_review':
+            update_fields.append("publish_requested_at = NOW()")
+        elif new_status in ['approved', 'rejected']:
+            update_fields.append("publish_reviewed_at = NOW()")
+            update_fields.append("publish_reviewed_by = %s")
+            params.append(reviewer_id)
+            if new_status == 'rejected' and reject_reason:
+                update_fields.append("publish_reject_reason = %s")
+                params.append(reject_reason)
+        elif new_status == 'draft':
+            # 撤回申请时清空相关字段
+            update_fields.extend([
+                "publish_requested_at = NULL",
+                "publish_reviewed_at = NULL",
+                "publish_reviewed_by = NULL",
+                "publish_reject_reason = NULL"
+            ])
+
+        params.append(strategy_id)
+        update_sql = ", ".join(update_fields)
+        query = f"UPDATE strategies SET {update_sql} WHERE id = %s"
+
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            conn.commit()
+            cursor.close()
+        finally:
+            self.db.release_connection(conn)
+
+    def can_edit_strategy(self, strategy_id: int) -> bool:
+        """
+        检查策略是否可编辑
+
+        Args:
+            strategy_id: 策略ID
+
+        Returns:
+            是否可编辑
+        """
+        query = "SELECT publish_status FROM strategies WHERE id = %s"
+
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, (strategy_id,))
+            row = cursor.fetchone()
+            cursor.close()
+
+            if not row:
+                return False
+
+            publish_status = row[0]
+            # 只有 draft 和 rejected 状态可以编辑
+            return publish_status in ['draft', 'rejected']
         finally:
             self.db.release_connection(conn)
 

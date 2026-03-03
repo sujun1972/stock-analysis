@@ -152,7 +152,7 @@ export default function BacktestDetailDialog({ record, open, onOpenChange }: Bac
               </CardHeader>
               <CardContent>
                 {record.result?.trades && record.result.trades.length > 0 ? (
-                  <TradesTable trades={record.result.trades} />
+                  <TradesTable result={record.result} />
                 ) : (
                   <p className="text-center py-8 text-gray-500">暂无交易记录</p>
                 )}

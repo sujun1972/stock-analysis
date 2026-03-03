@@ -1344,6 +1344,59 @@ class ApiClient {
     const response = await axiosInstance.get('/api/logs/login-history', { params })
     return response.data
   }
+
+  // ========== 策略发布审核相关API ==========
+
+  /**
+   * 获取待审核策略列表
+   */
+  async getPendingReviewStrategies(params?: {
+    page?: number
+    page_size?: number
+  }): Promise<ApiResponse<Strategy[]> & { meta?: any }> {
+    const response = await axiosInstance.get('/api/admin/strategies/pending-review', { params })
+    return response.data
+  }
+
+  /**
+   * 批准策略发布
+   */
+  async approveStrategy(
+    strategyId: number,
+    data: { comment?: string; auto_enable?: boolean }
+  ): Promise<ApiResponse<{ strategy_id: number; publish_status: string; is_enabled: boolean }>> {
+    const response = await axiosInstance.post(`/api/admin/strategies/${strategyId}/approve`, data)
+    return response.data
+  }
+
+  /**
+   * 拒绝策略发布
+   */
+  async rejectStrategy(
+    strategyId: number,
+    data: { reason: string }
+  ): Promise<ApiResponse<{ strategy_id: number; publish_status: string; reject_reason: string }>> {
+    const response = await axiosInstance.post(`/api/admin/strategies/${strategyId}/reject`, data)
+    return response.data
+  }
+
+  /**
+   * 获取策略审核历史
+   */
+  async getStrategyReviewHistory(strategyId: number): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get(`/api/admin/strategies/${strategyId}/review-history`)
+    return response.data
+  }
+
+  /**
+   * 取消策略发布（管理员）
+   */
+  async unpublishStrategy(
+    strategyId: number
+  ): Promise<ApiResponse<{ strategy_id: number; publish_status: string; is_enabled: boolean }>> {
+    const response = await axiosInstance.post(`/api/admin/strategies/${strategyId}/unpublish`)
+    return response.data
+  }
 }
 
 // 导出单例

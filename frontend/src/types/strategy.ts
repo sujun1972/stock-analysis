@@ -54,6 +54,13 @@ export interface Strategy {
   risk_level: 'safe' | 'low' | 'medium' | 'high'
   is_enabled: boolean
 
+  // 发布状态
+  publish_status: 'draft' | 'pending_review' | 'approved' | 'rejected'
+  publish_requested_at?: string
+  publish_reviewed_at?: string
+  publish_reviewed_by?: number
+  publish_reject_reason?: string
+
   // 使用统计
   usage_count: number
   backtest_count: number
@@ -346,4 +353,37 @@ export interface DynamicStrategyStatistics {
   validation_failed: number
   validation_warnings: number
   recent_strategies: DynamicStrategy[]
+}
+
+// ========== 发布审核相关类型 (V2.1) ==========
+
+/**
+ * 发布审核记录
+ */
+export interface PublishReview {
+  id: number
+  strategy_id: number
+  reviewer_id: number
+  reviewer_username?: string
+  action: 'approve' | 'reject' | 'withdraw' | 'request_publish'
+  previous_status: string
+  new_status: string
+  comment?: string
+  created_at: string
+  metadata?: Record<string, any>
+}
+
+/**
+ * 批准策略请求
+ */
+export interface ApproveStrategyRequest {
+  comment?: string
+  auto_enable?: boolean
+}
+
+/**
+ * 拒绝策略请求
+ */
+export interface RejectStrategyRequest {
+  reason: string
 }

@@ -52,7 +52,8 @@ export default function StrategiesPage() {
     try {
       setLoading(true)
       const params: any = {
-        is_enabled: true // 只加载已启用的策略
+        is_enabled: true, // 只加载已启用的策略
+        publish_status: 'approved' // 只加载已发布的策略
       }
       if (userFilter !== 'all') params.user_id = parseInt(userFilter)
       if (categoryFilter !== 'all') params.category = categoryFilter

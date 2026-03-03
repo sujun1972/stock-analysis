@@ -229,6 +229,7 @@ async def list_strategies(
     category: Optional[str] = Query(None, description="类别过滤"),
     is_enabled: Optional[bool] = Query(None, description="是否启用过滤"),
     validation_status: Optional[str] = Query(None, description="验证状态过滤"),
+    publish_status: Optional[str] = Query(None, description="发布状态过滤: draft/pending_review/approved/rejected"),
     search: Optional[str] = Query(None, description="搜索关键词（名称、描述）"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -246,6 +247,7 @@ async def list_strategies(
         category: 类别过滤
         is_enabled: 是否启用过滤
         validation_status: 验证状态过滤
+        publish_status: 发布状态过滤
         search: 搜索关键词
         page: 页码
         page_size: 每页数量
@@ -271,6 +273,7 @@ async def list_strategies(
         category=category,
         is_enabled=is_enabled,
         validation_status=validation_status,
+        publish_status=publish_status,
         search=search,
         page=page,
         page_size=page_size,
@@ -332,7 +335,11 @@ async def update_strategy(strategy_id: int, data: StrategyUpdate) -> Dict[str, A
     更新指定策略
 
     如果更新了代码，会自动重新验证。
-    注意：内置策略（source_type=builtin）不允许修改代码。
+
+    权限规则：
+    - 内置策略不允许修改代码
+    - 已发布或待审核的策略不允许修改内容字段（代码、描述、标签、参数等）
+    - 管理字段（is_enabled、user_id）始终允许修改（管理员权限）
 
     Args:
         strategy_id: 策略ID
@@ -354,13 +361,7 @@ async def update_strategy(strategy_id: int, data: StrategyUpdate) -> Dict[str, A
             status_code=status.HTTP_404_NOT_FOUND, detail=f"策略不存在: strategy_id={strategy_id}"
         )
 
-    # 2. 内置策略不允许修改代码
-    if existing_strategy["source_type"] == "builtin" and data.code:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="内置策略不允许修改代码"
-        )
-
-    # 3. 准备更新数据
+    # 2. 准备更新数据
     update_data = data.dict(exclude_unset=True)
 
     if not update_data:
@@ -368,7 +369,34 @@ async def update_strategy(strategy_id: int, data: StrategyUpdate) -> Dict[str, A
             status_code=status.HTTP_400_BAD_REQUEST, detail="没有提供更新数据"
         )
 
-    # 4. 如果更新了代码，重新验证
+    # 3. 区分内容字段和管理字段
+    # 内容字段：代码、描述、标签、参数等（影响策略逻辑）
+    content_fields = ["code", "description", "tags", "default_params", "display_name"]
+    # 管理字段：启用状态、用户归属等（管理性质，不影响策略逻辑）
+    admin_fields = ["is_enabled", "user_id"]
+
+    # 检查是否只修改管理字段
+    is_admin_only_update = all(
+        field in admin_fields for field in update_data.keys()
+    )
+
+    # 4. 权限检查
+    publish_status = existing_strategy.get("publish_status", "draft")
+
+    # 内置策略不允许修改代码
+    if existing_strategy["source_type"] == "builtin" and data.code:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="内置策略不允许修改代码"
+        )
+
+    # 如果修改的是内容字段，且策略已发布或待审核，则禁止修改
+    if not is_admin_only_update and publish_status in ["pending_review", "approved"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"策略当前状态为 {publish_status}，不允许编辑内容。如需修改，请克隆该策略后进行编辑。"
+        )
+
+    # 5. 如果更新了代码，重新验证
     validation_data = None
     if "code" in update_data:
         sanitizer = CodeSanitizer()
@@ -393,7 +421,7 @@ async def update_strategy(strategy_id: int, data: StrategyUpdate) -> Dict[str, A
             f"重新验证代码: strategy_id={strategy_id}, " f"status={validation_data['status']}"
         )
 
-    # 5. 更新数据库
+    # 6. 更新数据库
     repo.update(strategy_id, update_data)
 
     logger.success(f"更新策略成功: strategy_id={strategy_id}")

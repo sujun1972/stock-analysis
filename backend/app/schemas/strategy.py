@@ -207,6 +207,13 @@ class StrategyResponse(BaseModel):
     risk_level: str = Field(..., description="风险等级")
     is_enabled: bool = Field(..., description="是否启用")
 
+    # 发布状态
+    publish_status: str = Field("draft", description="发布状态: draft/pending_review/approved/rejected")
+    publish_requested_at: Optional[datetime] = Field(None, description="申请发布时间")
+    publish_reviewed_at: Optional[datetime] = Field(None, description="审核完成时间")
+    publish_reviewed_by: Optional[int] = Field(None, description="审核人用户ID")
+    publish_reject_reason: Optional[str] = Field(None, description="拒绝原因")
+
     # 使用统计
     usage_count: int = Field(0, description="使用次数")
     backtest_count: int = Field(0, description="回测次数")
@@ -244,6 +251,12 @@ class StrategyListResponse(BaseModel):
     validation_status: str
     risk_level: str
     is_enabled: bool
+
+    # 发布状态
+    publish_status: str
+    publish_requested_at: Optional[datetime]
+    publish_reviewed_at: Optional[datetime]
+
     usage_count: int
     backtest_count: int
     avg_sharpe_ratio: Optional[float]
@@ -269,6 +282,56 @@ class StrategyStatistics(BaseModel):
     by_category: Dict[str, int] = Field(..., description="按类别分组统计")
     by_validation: Dict[str, int] = Field(..., description="按验证状态分组统计")
     by_risk: Dict[str, int] = Field(..., description="按风险等级分组统计")
+
+
+# ==================== 发布审核相关模型 ====================
+
+
+class PublishReviewCreate(BaseModel):
+    """创建审核记录请求模型"""
+
+    strategy_id: int = Field(..., description="策略ID")
+    action: str = Field(..., description="操作类型: approve/reject/withdraw")
+    comment: Optional[str] = Field(None, description="审核意见或拒绝原因")
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, v):
+        """验证操作类型"""
+        allowed = ["approve", "reject", "withdraw"]
+        if v not in allowed:
+            raise ValueError(f"action 必须是以下之一: {', '.join(allowed)}")
+        return v
+
+
+class PublishReviewResponse(BaseModel):
+    """审核记录响应模型"""
+
+    id: int = Field(..., description="记录ID")
+    strategy_id: int = Field(..., description="策略ID")
+    reviewer_id: int = Field(..., description="审核人用户ID")
+    reviewer_username: Optional[str] = Field(None, description="审核人用户名")
+    action: str = Field(..., description="操作类型: approve/reject/withdraw")
+    previous_status: str = Field(..., description="审核前状态")
+    new_status: str = Field(..., description="审核后状态")
+    comment: Optional[str] = Field(None, description="审核意见或拒绝原因")
+    created_at: datetime = Field(..., description="创建时间")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="额外元数据")
+
+    model_config = {"from_attributes": True}
+
+
+class ApproveStrategyRequest(BaseModel):
+    """批准策略请求模型"""
+
+    comment: Optional[str] = Field(None, description="批准意见")
+    auto_enable: bool = Field(False, description="是否自动启用策略")
+
+
+class RejectStrategyRequest(BaseModel):
+    """拒绝策略请求模型"""
+
+    reason: str = Field(..., description="拒绝原因", min_length=1)
 
 
 # ==================== 简化回测请求 ====================

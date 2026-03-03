@@ -27,11 +27,15 @@ import {
   AlertCircle,
   Edit,
   Trash2,
-  Loader2
+  Loader2,
+  Send,
+  RotateCcw
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
+import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 // 动态导入 Monaco Editor (客户端组件)
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -139,6 +143,48 @@ export default function StrategyCodePage() {
     }
   }
 
+  // 申请发布
+  const handleRequestPublish = async () => {
+    if (!strategy) return
+
+    try {
+      await apiClient.requestPublishStrategy(strategyId)
+      toast({
+        title: '申请成功',
+        description: '策略已提交审核，请等待管理员审核'
+      })
+      loadStrategy() // 刷新策略状态
+    } catch (error: any) {
+      console.error('Failed to request publish:', error)
+      toast({
+        title: '申请失败',
+        description: error.response?.data?.detail || '提交失败，请稍后重试',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  // 撤回申请
+  const handleWithdrawPublish = async () => {
+    if (!strategy) return
+
+    try {
+      await apiClient.withdrawPublishRequest(strategyId)
+      toast({
+        title: '撤回成功',
+        description: '已撤回发布申请'
+      })
+      loadStrategy() // 刷新策略状态
+    } catch (error: any) {
+      console.error('Failed to withdraw publish:', error)
+      toast({
+        title: '撤回失败',
+        description: error.response?.data?.detail || '撤回失败，请稍后重试',
+        variant: 'destructive'
+      })
+    }
+  }
+
   // 获取来源图标
   const getSourceIcon = () => {
     if (!strategy) return null
@@ -238,6 +284,7 @@ export default function StrategyCodePage() {
             </div>
             <div className="flex flex-col items-end gap-2">
               {getValidationBadge()}
+              <PublishStatusBadge status={strategy.publish_status} />
               <Badge variant="outline">{strategy.category || '未分类'}</Badge>
             </div>
           </div>
@@ -380,21 +427,21 @@ export default function StrategyCodePage() {
               </div>
 
               {/* 性能指标 */}
-              {(strategy.avg_sharpe_ratio || strategy.avg_annual_return) && (
+              {(strategy.avg_sharpe_ratio != null || strategy.avg_annual_return != null) && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground mb-2">平均表现</p>
                   <div className="grid grid-cols-2 gap-4">
-                    {strategy.avg_sharpe_ratio && (
+                    {strategy.avg_sharpe_ratio != null && (
                       <div>
                         <p className="text-sm text-muted-foreground">夏普率</p>
-                        <p className="text-xl font-bold">{strategy.avg_sharpe_ratio.toFixed(2)}</p>
+                        <p className="text-xl font-bold">{Number(strategy.avg_sharpe_ratio).toFixed(2)}</p>
                       </div>
                     )}
-                    {strategy.avg_annual_return && (
+                    {strategy.avg_annual_return != null && (
                       <div>
                         <p className="text-sm text-muted-foreground">年化收益</p>
                         <p className="text-xl font-bold">
-                          {(strategy.avg_annual_return * 100).toFixed(2)}%
+                          {(Number(strategy.avg_annual_return) * 100).toFixed(2)}%
                         </p>
                       </div>
                     )}
@@ -438,6 +485,16 @@ export default function StrategyCodePage() {
         </TabsContent>
       </Tabs>
 
+      {/* 拒绝原因提示 */}
+      {strategy.publish_status === 'rejected' && strategy.publish_reject_reason && (
+        <Alert variant="destructive" className="mt-6">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>拒绝原因：</strong>{strategy.publish_reject_reason}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* 操作按钮 */}
       <Card className="mt-6">
         <CardContent className="pt-6">
@@ -460,21 +517,49 @@ export default function StrategyCodePage() {
 
             {strategy.source_type !== 'builtin' && (
               <>
-                <Button
-                  variant="outline"
-                  onClick={() => router.push(`/strategies/${strategy.id}/edit`)}
-                >
-                  <Edit className="mr-2 h-4 w-4" />
-                  编辑
-                </Button>
+                {/* 申请发布按钮（仅 draft 和 rejected 状态，且验证通过） */}
+                {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') &&
+                  strategy.validation_status === 'passed' && (
+                    <Button
+                      onClick={handleRequestPublish}
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      申请发布
+                    </Button>
+                  )}
 
-                <Button
-                  variant="destructive"
-                  onClick={handleDelete}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  删除
-                </Button>
+                {/* 撤回申请按钮（仅 pending_review 状态） */}
+                {strategy.publish_status === 'pending_review' && (
+                  <Button
+                    variant="outline"
+                    onClick={handleWithdrawPublish}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    撤回申请
+                  </Button>
+                )}
+
+                {/* 编辑按钮（仅 draft 和 rejected 可编辑） */}
+                {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') && (
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/strategies/${strategy.id}/edit`)}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    编辑
+                  </Button>
+                )}
+
+                {/* 删除按钮（仅 draft 和 rejected 可删除） */}
+                {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') && (
+                  <Button
+                    variant="destructive"
+                    onClick={handleDelete}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    删除
+                  </Button>
+                )}
               </>
             )}
           </div>

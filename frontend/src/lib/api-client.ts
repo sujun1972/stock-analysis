@@ -692,6 +692,7 @@ class ApiClient {
     strategy_type?: 'entry' | 'exit'
     category?: string
     is_enabled?: boolean
+    publish_status?: 'draft' | 'pending_review' | 'approved' | 'rejected'
     search?: string
     user_id?: number
   }): Promise<ApiResponse<Strategy[]>> {
@@ -1160,6 +1161,36 @@ class ApiClient {
    */
   async getQuota(): Promise<ApiResponse<any>> {
     const response = await axiosInstance.get('/api/profile/quota')
+    return response.data
+  }
+
+  // ========== 策略发布相关API ==========
+
+  /**
+   * 申请发布策略
+   */
+  async requestPublishStrategy(strategyId: number): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post(`/api/strategies/${strategyId}/request-publish`)
+    return response.data
+  }
+
+  /**
+   * 撤回发布申请
+   */
+  async withdrawPublishRequest(strategyId: number): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post(`/api/strategies/${strategyId}/withdraw-publish`)
+    return response.data
+  }
+
+  /**
+   * 获取我的策略列表
+   */
+  async getMyStrategies(params?: {
+    publish_status?: 'draft' | 'pending_review' | 'approved' | 'rejected'
+    page?: number
+    page_size?: number
+  }): Promise<ApiResponse<Strategy[]>> {
+    const response = await axiosInstance.get('/api/strategies/my-strategies', { params })
     return response.data
   }
 }

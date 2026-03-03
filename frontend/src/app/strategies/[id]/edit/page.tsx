@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Select,
   SelectContent,
@@ -251,6 +252,43 @@ function EditStrategyContent() {
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   返回列表
+                </Button>
+                <Button
+                  onClick={() => router.push(`/strategies/create?clone=${strategyId}`)}
+                >
+                  克隆策略
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // 已发布或待审核的策略不允许编辑
+  if (strategy.publish_status === 'pending_review' || strategy.publish_status === 'approved') {
+    const statusText = strategy.publish_status === 'pending_review' ? '待审核' : '已发布'
+    return (
+      <div className="container mx-auto py-6 px-4 max-w-5xl">
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
+              <h3 className="text-lg font-semibold mb-2">无法编辑{statusText}的策略</h3>
+              <p className="text-muted-foreground mb-6">
+                {strategy.publish_status === 'pending_review'
+                  ? '策略正在审核中，如需修改请先撤回发布申请。'
+                  : '已发布的策略不允许直接编辑，以确保稳定性。您可以克隆此策略创建一个可编辑的副本。'
+                }
+              </p>
+              <div className="flex gap-4 justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/strategies/${strategyId}/code`)}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回策略详情
                 </Button>
                 <Button
                   onClick={() => router.push(`/strategies/create?clone=${strategyId}`)}

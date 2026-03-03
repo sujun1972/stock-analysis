@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Filter, Edit, Trash2, Play, Code, AlertCircle, Users } from 'lucide-react'
+import { Plus, Search, Filter, Edit, Trash2, Play, Code, AlertCircle, Users, ClipboardList, Ban } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
+import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
 import {
   Select,
   SelectContent,
@@ -93,6 +94,7 @@ export default function StrategiesPage() {
   const [filterStrategyType, setFilterStrategyType] = useState<string>('')
   const [filterSourceType, setFilterSourceType] = useState<string>('')
   const [filterUserId, setFilterUserId] = useState<string>('')
+  const [filterPublishStatus, setFilterPublishStatus] = useState<string>('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -119,6 +121,7 @@ export default function StrategiesPage() {
       if (filterStrategyType) params.append('strategy_type', filterStrategyType)
       if (filterSourceType) params.append('source_type', filterSourceType)
       if (filterUserId) params.append('user_id', filterUserId)
+      if (filterPublishStatus) params.append('publish_status', filterPublishStatus)
 
       const response = await fetch(`${API_BASE_URL}/api/strategies?${params}`, {
         headers: {
@@ -145,7 +148,7 @@ export default function StrategiesPage() {
 
   useEffect(() => {
     fetchStrategies()
-  }, [currentPage, searchTerm, filterStrategyType, filterSourceType, filterUserId])
+  }, [currentPage, searchTerm, filterStrategyType, filterSourceType, filterUserId, filterPublishStatus])
 
   /**
    * 获取用户列表（支持后端搜索）
@@ -284,6 +287,25 @@ export default function StrategiesPage() {
     }
   }
 
+  /**
+   * 取消策略发布
+   * 将已发布的策略撤回到草稿状态
+   */
+  const handleUnpublish = async (strategy: Strategy) => {
+    if (!confirm(`确定要取消发布策略 "${strategy.display_name}" 吗？\n\n取消后策略将变为草稿状态，并自动禁用。用户需要重新申请发布。`)) {
+      return
+    }
+
+    try {
+      await apiClient.unpublishStrategy(strategy.id)
+      alert('策略已取消发布')
+      await fetchStrategies()
+    } catch (error: any) {
+      console.error('取消发布失败:', error)
+      alert(error.response?.data?.detail || '取消发布失败，请稍后重试')
+    }
+  }
+
   return (
     <div className="p-6">
       {/* 页面标题和操作按钮 */}
@@ -294,17 +316,26 @@ export default function StrategiesPage() {
             管理选股策略、入场策略和离场策略
           </p>
         </div>
-        <button
-          onClick={() => router.push('/strategies/new')}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          <Plus className="h-5 w-5" />
-          创建策略
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => router.push('/strategies/pending-review')}
+            className="flex items-center gap-2 rounded-lg bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700"
+          >
+            <ClipboardList className="h-5 w-5" />
+            待审核列表
+          </button>
+          <button
+            onClick={() => router.push('/strategies/new')}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            <Plus className="h-5 w-5" />
+            创建策略
+          </button>
+        </div>
       </div>
 
       {/* 搜索和过滤 */}
-      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         {/* 搜索框 */}
         <div className="relative lg:col-span-2">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
@@ -355,6 +386,26 @@ export default function StrategiesPage() {
             <SelectItem value="builtin">系统内置</SelectItem>
             <SelectItem value="ai">AI生成</SelectItem>
             <SelectItem value="custom">用户自定义</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* 发布状态过滤 */}
+        <Select
+          value={filterPublishStatus || 'all'}
+          onValueChange={(value) => {
+            setFilterPublishStatus(value === 'all' ? '' : value)
+            setCurrentPage(1)
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="所有发布状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">所有发布状态</SelectItem>
+            <SelectItem value="draft">草稿</SelectItem>
+            <SelectItem value="pending_review">待审核</SelectItem>
+            <SelectItem value="approved">已发布</SelectItem>
+            <SelectItem value="rejected">已拒绝</SelectItem>
           </SelectContent>
         </Select>
 
@@ -415,6 +466,9 @@ export default function StrategiesPage() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   风险等级
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  发布状态
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   启用状态
@@ -493,6 +547,12 @@ export default function StrategiesPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
+                    <PublishStatusBadge
+                      status={strategy.publish_status as any}
+                      size="sm"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={strategy.is_enabled}
@@ -533,6 +593,15 @@ export default function StrategiesPage() {
                       >
                         <Users className="h-5 w-5" />
                       </button>
+                      {strategy.publish_status === 'approved' && (
+                        <button
+                          onClick={() => handleUnpublish(strategy)}
+                          className="text-orange-600 hover:text-orange-800"
+                          title="取消发布"
+                        >
+                          <Ban className="h-5 w-5" />
+                        </button>
+                      )}
                       {strategy.source_type !== 'builtin' && (
                         <button
                           onClick={() => handleDelete(strategy.id)}

@@ -5,6 +5,7 @@ API路由模块
 from fastapi import APIRouter
 
 from .endpoints import (
+    admin_strategy_review,
     ai_strategy,
     auth,
     backtest,
@@ -23,6 +24,7 @@ from .endpoints import (
     strategies,  # Phase 2: 统一策略 API
     strategy,
     strategy_configs,
+    strategy_publish,
     sync,
     users,
 )
@@ -46,6 +48,8 @@ router.include_router(strategy.router, prefix="/strategy", tags=["strategy"])
 
 # Phase 2: 统一策略 API (新架构)
 router.include_router(strategies.router, prefix="/strategies", tags=["统一策略系统"])
+router.include_router(strategy_publish.router, prefix="/strategies", tags=["策略发布"])
+router.include_router(admin_strategy_review.router, prefix="/admin/strategies", tags=["管理员审核"])
 
 # Core v6.0 路由 (将逐步废弃)
 router.include_router(strategy_configs.router, prefix="/strategy-configs", tags=["策略配置 (旧)"])
