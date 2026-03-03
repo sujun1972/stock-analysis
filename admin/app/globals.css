@@ -58,3 +58,21 @@
     font-family: Arial, Helvetica, sans-serif;
   }
 }
+
+/* 侧边栏子菜单悬浮效果 */
+@layer components {
+  /* 大屏幕下：鼠标悬停显示子菜单 */
+  @media (min-width: 768px) {
+    .menu-item-with-submenu:hover .submenu-dropdown {
+      opacity: 1;
+      visibility: visible;
+    }
+  }
+
+  /* 小屏幕下：隐藏悬浮子菜单 */
+  @media (max-width: 767px) {
+    .submenu-dropdown {
+      display: none !important;
+    }
+  }
+}

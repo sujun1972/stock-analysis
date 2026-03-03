@@ -157,7 +157,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           "bg-gray-900 text-white flex flex-col transition-all duration-300",
           // 大屏幕 (md+): 相对定位，收起时显示图标，展开时显示全部
           "md:relative md:flex",
-          isCollapsed ? "md:w-20" : "md:w-64",
+          isCollapsed ? "md:w-20 md:overflow-visible" : "md:w-64",
           // 小屏幕: 固定定位，从左侧滑入/滑出
           "fixed left-0 top-0 h-full z-40 w-64",
           isCollapsed ? "md:translate-x-0 -translate-x-full" : "translate-x-0"
@@ -191,8 +191,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* 导航菜单 */}
         <nav className={cn(
-          "flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden",
-          isCollapsed && "md:p-2"
+          "flex-1 p-4 space-y-1 overflow-y-auto",
+          isCollapsed && "md:p-2 md:overflow-visible"
         )}>
           {navItems.map((item) => {
             const Icon = item.icon
@@ -202,12 +202,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             // 有子菜单的项
             if (item.children) {
               return (
-                <div key={item.name}>
+                <div key={item.name} className="relative menu-item-with-submenu">
                   {/* 父菜单项 */}
                   <button
                     onClick={() => toggleMenu(item.name)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all group relative",
+                      "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
                       active
                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50'
                         : 'text-gray-300 hover:bg-gray-800 hover:text-white',
@@ -231,17 +231,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         isOpen && "rotate-180"
                       )} />
                     )}
+                  </button>
 
-                    {/* 收起时的悬浮子菜单 - 仅大屏幕 */}
-                    {isCollapsed && item.children && (
-                      <div className="hidden md:block absolute left-full ml-2 bg-gray-800 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-50 min-w-[180px] py-2 shadow-xl border border-gray-700">
-                        <div className={cn(
-                          "px-3 py-2 text-xs font-semibold border-b border-gray-700 flex items-center gap-2",
-                          active ? "text-blue-400" : "text-gray-400"
-                        )}>
-                          <Icon className="w-3 h-3" />
-                          {item.name}
-                        </div>
+                  {/* 收起时的悬浮子菜单 - 仅大屏幕 */}
+                  {isCollapsed && item.children && (
+                    <div className="submenu-dropdown absolute left-full top-0 ml-2 bg-gray-800 rounded-lg z-[100] min-w-[200px] py-1 shadow-xl border border-gray-700 opacity-0 invisible transition-all duration-200">
+                      <div className={cn(
+                        "px-3 py-2 text-xs font-semibold border-b border-gray-700 flex items-center gap-2",
+                        active ? "text-blue-400" : "text-gray-400"
+                      )}>
+                        <Icon className="w-3 h-3" />
+                        {item.name}
+                      </div>
+                      <div className="py-1">
                         {item.children.map((child) => {
                           const ChildIcon = child.icon
                           const childActive = child.href && pathname.startsWith(child.href)
@@ -249,8 +251,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             <Link
                               key={child.href}
                               href={child.href!}
+                              onClick={handleMenuClick}
                               className={cn(
-                                "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
+                                "flex items-center gap-3 px-4 py-2.5 text-sm transition-colors",
                                 childActive
                                   ? 'bg-blue-600 text-white'
                                   : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -262,8 +265,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           )
                         })}
                       </div>
-                    )}
-                  </button>
+                    </div>
+                  )}
 
                   {/* 子菜单项 - 仅展开状态显示 */}
                   {!isCollapsed && isOpen && (
