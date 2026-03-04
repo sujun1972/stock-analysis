@@ -63,6 +63,12 @@ function BacktestContent() {
   const [isRunning, setIsRunning] = useState(false)
   const [result, setResult] = useState<any>(null)
 
+  // 异步回测状态
+  const [isAsync, setIsAsync] = useState(false)  // 是否使用异步模式
+  const [taskId, setTaskId] = useState<string | null>(null)  // Celery任务ID
+  const [taskStatus, setTaskStatus] = useState<string>('idle')  // 任务状态
+  const [progress, setProgress] = useState({ current: 0, total: 100, status: '' })  // 进度信息
+
   // ML策略ID（从数据库查询）
   const [mlStrategyId, setMlStrategyId] = useState<number | null>(null)
 
@@ -201,6 +207,68 @@ function BacktestContent() {
     loadStrategyData()
   }, [strategyType, strategyId])
 
+  // 轮询任务状态
+  useEffect(() => {
+    if (!taskId || taskStatus === 'SUCCESS' || taskStatus === 'FAILURE') {
+      return
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusData = await apiClient.getBacktestStatus(taskId)
+
+        setTaskStatus(statusData.status)
+
+        if (statusData.status === 'PROGRESS' && statusData.progress) {
+          setProgress(statusData.progress)
+        }
+
+        if (statusData.status === 'SUCCESS') {
+          setResult(statusData.result)
+          setIsRunning(false)
+          clearInterval(pollInterval)
+          toast({
+            title: '回测完成',
+            description: '异步回测任务已完成，请查看结果'
+          })
+        } else if (statusData.status === 'FAILURE') {
+          setIsRunning(false)
+          clearInterval(pollInterval)
+          toast({
+            title: '回测失败',
+            description: statusData.error || '任务执行失败',
+            variant: 'destructive'
+          })
+        }
+      } catch (error: any) {
+        console.error('轮询任务状态失败:', error)
+      }
+    }, 2000) // 每2秒轮询一次
+
+    return () => clearInterval(pollInterval)
+  }, [taskId, taskStatus])
+
+  // 取消异步回测任务
+  const handleCancelBacktest = async () => {
+    if (!taskId) return
+
+    try {
+      await apiClient.cancelBacktest(taskId)
+      setIsRunning(false)
+      setTaskStatus('CANCELLED')
+      toast({
+        title: '已取消',
+        description: '回测任务已取消'
+      })
+    } catch (error: any) {
+      toast({
+        title: '取消失败',
+        description: extractApiError(error, '取消任务失败'),
+        variant: 'destructive'
+      })
+    }
+  }
+
   const handleRunBacktest = async () => {
     // 验证参数
     if (stockPool.length === 0) {
@@ -240,6 +308,12 @@ function BacktestContent() {
       return
     }
 
+    // 判断是否使用异步模式（股票数量 > 10 或时间跨度 > 1年）
+    const daysDiff = Math.floor(
+      (new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / (1000 * 60 * 60 * 24)
+    )
+    const shouldUseAsync = stockPool.length > 10 || daysDiff > 365
+
     // 构建请求参数
     const request: any = {
       stock_pool: stockPool,
@@ -254,9 +328,12 @@ function BacktestContent() {
     // 根据策略类型设置不同的参数
     setIsRunning(true)
     setResult(null)
-    try {
-      let response: any
+    setTaskId(null)
+    setTaskStatus('idle')
+    setProgress({ current: 0, total: 100, status: '' })
 
+    try {
+      // 根据策略类型构建请求
       if (strategyType === 'ml') {
         // ML模型回测：使用内置的ml_model策略
         if (!mlStrategyId) {
@@ -269,51 +346,47 @@ function BacktestContent() {
           return
         }
 
-        // 使用统一回测接口，传递ml_model策略ID和模型ID
-        // strategyId 是 URL 中的 ML 模型 ID
-        response = await apiClient.runUnifiedBacktest({
-          strategy_id: mlStrategyId,  // ml_model 策略的数据库 ID
-          stock_pool: stockPool,
-          start_date: dateRange.start,
-          end_date: dateRange.end,
-          initial_capital: initialCapital,
-          rebalance_freq: rebalanceFreq,
-          // 通过 strategy_params 传递模型 ID
-          strategy_params: {
-            model_id: strategyId  // ML 模型的 ID (来自 URL 参数)
-          },
-          // 添加离场策略IDs（如果有选择）
-          exit_strategy_ids: exitStrategyIds.length > 0 ? exitStrategyIds : undefined
-        })
+        request.strategy_id = mlStrategyId
+        request.strategy_params = { model_id: strategyId }
+      } else if (strategyType === 'predefined') {
+        request.strategy_type = 'predefined'
+        request.strategy_name = strategyId!
+        request.strategy_config = strategyConfig
+      } else if (strategyType === 'unified') {
+        request.strategy_id = parseInt(strategyId!)
       } else {
-        // 其他类型的策略回测：使用统一回测API
-        if (strategyType === 'predefined') {
-          request.strategy_type = 'predefined'
-          request.strategy_name = strategyId!
-          request.strategy_config = strategyConfig
-        } else if (strategyType === 'unified') {
-          // 统一策略使用新的 API (V2.0)
-          request.strategy_id = parseInt(strategyId!)
-        } else {
-          // config 和 dynamic 类型使用旧的 API (V1.0)
-          request.strategy_type = strategyType
-          request.strategy_id = parseInt(strategyId!)
-        }
-
-        response = await apiClient.runUnifiedBacktest(request)
+        request.strategy_type = strategyType
+        request.strategy_id = parseInt(strategyId!)
       }
-      if (response.success && response.data) {
-        setResult(response.data)
+
+      // 选择同步或异步模式
+      if (shouldUseAsync || isAsync) {
+        // 使用异步模式
+        const asyncResponse = await apiClient.runAsyncBacktest(request)
+        setTaskId(asyncResponse.task_id)
+        setTaskStatus('PENDING')
+        setIsAsync(true)
         toast({
-          title: '回测完成',
-          description: '策略回测已完成,请查看结果'
+          title: '任务已提交',
+          description: '回测任务已在后台运行，请稍候...',
         })
       } else {
-        toast({
-          title: '回测失败',
-          description: response.error || '未知错误',
-          variant: 'destructive'
-        })
+        // 使用同步模式
+        const response = await apiClient.runUnifiedBacktest(request)
+        if (response.success && response.data) {
+          setResult(response.data)
+          toast({
+            title: '回测完成',
+            description: '策略回测已完成,请查看结果'
+          })
+        } else {
+          toast({
+            title: '回测失败',
+            description: response.error || '未知错误',
+            variant: 'destructive'
+          })
+        }
+        setIsRunning(false)
       }
     } catch (error: any) {
       // 格式化错误信息，处理 Pydantic 验证错误等复杂对象
@@ -322,7 +395,6 @@ function BacktestContent() {
         description: extractApiError(error, '网络错误'),
         variant: 'destructive'
       })
-    } finally {
       setIsRunning(false)
     }
   }
@@ -609,7 +681,7 @@ function BacktestContent() {
         />
 
         {/* 运行回测按钮 */}
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-4">
           <Button
             onClick={handleRunBacktest}
             disabled={isRunning || isLoadingStrategy || !!strategyError}
@@ -619,6 +691,15 @@ function BacktestContent() {
             {isRunning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isRunning ? '回测中...' : '运行回测'}
           </Button>
+          {isRunning && taskId && (
+            <Button
+              onClick={handleCancelBacktest}
+              variant="destructive"
+              size="lg"
+            >
+              取消任务
+            </Button>
+          )}
         </div>
 
         {/* 4. 回测结果 */}
@@ -627,16 +708,35 @@ function BacktestContent() {
             <div className="flex flex-col items-center justify-center space-y-4">
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
               <div>
-                <CardTitle className="text-2xl">正在运行回测...</CardTitle>
+                <CardTitle className="text-2xl">
+                  {taskStatus === 'PENDING' ? '任务排队中...' : '正在运行回测...'}
+                </CardTitle>
                 <CardDescription className="mt-2 text-base">
-                  正在计算策略回测结果，这可能需要几分钟时间
+                  {taskStatus === 'PROGRESS' && progress.status
+                    ? progress.status
+                    : '正在计算策略回测结果，这可能需要几分钟时间'}
                 </CardDescription>
               </div>
-              <div className="text-sm text-muted-foreground mt-4">
-                <p>• 正在加载历史数据</p>
-                <p>• 正在执行策略信号</p>
-                <p>• 正在计算绩效指标</p>
-              </div>
+              {taskStatus === 'PROGRESS' && progress.total > 0 && (
+                <div className="w-full max-w-md">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                    <div
+                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {progress.current} / {progress.total}
+                  </p>
+                </div>
+              )}
+              {!isAsync && (
+                <div className="text-sm text-muted-foreground mt-4">
+                  <p>• 正在加载历史数据</p>
+                  <p>• 正在执行策略信号</p>
+                  <p>• 正在计算绩效指标</p>
+                </div>
+              )}
             </div>
           </Card>
         ) : result ? (

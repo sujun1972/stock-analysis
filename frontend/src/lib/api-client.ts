@@ -935,6 +935,44 @@ class ApiClient {
     return response.data
   }
 
+  /**
+   * 运行异步回测（立即返回task_id，适用于大规模回测）
+   */
+  async runAsyncBacktest(params: BacktestRequest): Promise<{
+    task_id: string
+    execution_id: number
+    status: string
+    message: string
+  }> {
+    const response = await axiosInstance.post('/api/backtest/async', params)
+    return response.data
+  }
+
+  /**
+   * 查询异步回测任务状态
+   * @param taskId - Celery任务ID
+   */
+  async getBacktestStatus(taskId: string): Promise<{
+    task_id: string
+    status: 'PENDING' | 'PROGRESS' | 'SUCCESS' | 'FAILURE'
+    result?: any
+    error?: string
+    progress?: { current: number; total: number; status: string }
+    message?: string
+  }> {
+    const response = await axiosInstance.get(`/api/backtest/status/${taskId}`)
+    return response.data
+  }
+
+  /**
+   * 取消正在执行的异步回测任务
+   * @param taskId - Celery任务ID
+   */
+  async cancelBacktest(taskId: string): Promise<{ message: string; task_id: string }> {
+    const response = await axiosInstance.delete(`/api/backtest/cancel/${taskId}`)
+    return response.data
+  }
+
   // ========== 回测相关API（旧版，向后兼容）==========
 
   /**

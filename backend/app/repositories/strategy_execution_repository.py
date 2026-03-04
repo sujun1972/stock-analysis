@@ -24,6 +24,7 @@ class StrategyExecutionRepository(BaseRepository):
                 - config_strategy_id (int, optional): 配置策略ID
                 - dynamic_strategy_id (int, optional): 动态策略ID
                 - executed_by (str, optional): 执行人
+                - task_id (str, optional): Celery 任务ID
 
         Returns:
             新创建记录的 ID
@@ -33,9 +34,9 @@ class StrategyExecutionRepository(BaseRepository):
         query = """
             INSERT INTO strategy_executions (
                 predefined_strategy_type, config_strategy_id, dynamic_strategy_id,
-                strategy_id, execution_type, execution_params, status, executed_by
+                strategy_id, execution_type, execution_params, status, executed_by, task_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """
 
@@ -57,6 +58,7 @@ class StrategyExecutionRepository(BaseRepository):
             execution_params_json,
             'pending',
             data.get('executed_by'),
+            data.get('task_id'),
         )
 
         conn = self.db.get_connection()
@@ -85,7 +87,7 @@ class StrategyExecutionRepository(BaseRepository):
                 id, predefined_strategy_type, config_strategy_id, dynamic_strategy_id,
                 execution_type, execution_params, status, result, metrics,
                 error_message, execution_duration_ms,
-                executed_by, started_at, completed_at, created_at
+                executed_by, started_at, completed_at, created_at, task_id
             FROM strategy_executions
             WHERE id = %s
         """
@@ -111,7 +113,70 @@ class StrategyExecutionRepository(BaseRepository):
             'started_at': row[12].isoformat() if row[12] else None,
             'completed_at': row[13].isoformat() if row[13] else None,
             'created_at': row[14].isoformat() if row[14] else None,
+            'task_id': row[15],
         }
+
+    def get_by_task_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """
+        根据 Celery task_id 获取执行记录
+
+        Args:
+            task_id: Celery 任务 ID
+
+        Returns:
+            执行记录字典，不存在则返回 None
+        """
+        query = """
+            SELECT
+                id, predefined_strategy_type, config_strategy_id, dynamic_strategy_id,
+                execution_type, execution_params, status, result, metrics,
+                error_message, execution_duration_ms,
+                executed_by, started_at, completed_at, created_at, task_id
+            FROM strategy_executions
+            WHERE task_id = %s
+        """
+
+        results = self.execute_query(query, (task_id,))
+        if not results:
+            return None
+
+        row = results[0]
+        return {
+            'id': row[0],
+            'predefined_strategy_type': row[1],
+            'config_strategy_id': row[2],
+            'dynamic_strategy_id': row[3],
+            'execution_type': row[4],
+            'execution_params': row[5],
+            'status': row[6],
+            'result': row[7],
+            'metrics': row[8],
+            'error_message': row[9],
+            'execution_duration_ms': row[10],
+            'executed_by': row[11],
+            'started_at': row[12].isoformat() if row[12] else None,
+            'completed_at': row[13].isoformat() if row[13] else None,
+            'created_at': row[14].isoformat() if row[14] else None,
+            'task_id': row[15],
+        }
+
+    def update_task_id(self, execution_id: int, task_id: str) -> int:
+        """
+        更新执行记录的 task_id
+
+        Args:
+            execution_id: 执行记录 ID
+            task_id: Celery 任务 ID
+
+        Returns:
+            受影响的行数
+        """
+        query = """
+            UPDATE strategy_executions
+            SET task_id = %s
+            WHERE id = %s
+        """
+        return self.execute_update(query, (task_id, execution_id))
 
     def list_by_config_strategy(
         self,

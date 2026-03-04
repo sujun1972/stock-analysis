@@ -9,11 +9,13 @@ A股AI量化交易系统 - 完整的前后端分离架构
 ### Backend（后端）
 - **API框架**: FastAPI (高性能异步)
 - **数据库**: PostgreSQL 16 + TimescaleDB
+- **任务队列**: Celery 5.3 + Redis (异步回测)
 - **数据处理**: Pandas, NumPy
 - **机器学习**: LightGBM, scikit-learn
 - **技术分析**: TA-Lib (可选)
 - **数据源**: AkShare, Tushare, yfinance
 - **容器化**: Docker + Docker Compose
+- **监控**: Flower (Celery任务监控)
 
 ### Frontend（前端 - 待实现）
 - **框架**: React / Vue / Next.js (待选择)
@@ -24,8 +26,9 @@ A股AI量化交易系统 - 完整的前后端分离架构
 ### Infrastructure（基础设施）
 - **容器编排**: Docker Compose
 - **数据库**: TimescaleDB (时序数据优化)
+- **消息队列**: Redis (Celery broker + result backend)
 - **反向代理**: Nginx (可选)
-- **缓存**: Redis (可选)
+- **缓存**: Redis (共享实例)
 
 ---
 
@@ -40,16 +43,22 @@ stock-analysis/
 │   │   │   ├── data.py        # 数据下载和查询API
 │   │   │   ├── features.py    # 特征工程API
 │   │   │   ├── models.py      # 模型训练和预测API
-│   │   │   └── backtest.py    # 回测API
+│   │   │   └── backtest.py    # 回测API (支持同步/异步)
 │   │   ├── core/             # 核心配置
-│   │   │   └── config.py     # 应用配置
+│   │   │   ├── config.py     # 应用配置
+│   │   │   └── migrations.py # 数据库迁移管理器
+│   │   ├── tasks/            # Celery异步任务
+│   │   │   └── backtest_tasks.py  # 异步回测任务
 │   │   ├── models/           # 数据库模型（暂未使用）
 │   │   ├── schemas/          # Pydantic数据模型
 │   │   ├── services/         # 业务逻辑层
 │   │   │   ├── data_service.py
 │   │   │   ├── database_service.py
 │   │   │   └── feature_service.py
+│   │   ├── celery_app.py     # Celery应用配置
 │   │   └── main.py           # 应用入口
+│   ├── migrations/           # 数据库迁移脚本
+│   │   └── V012__add_celery_task_support.sql
 │   ├── src/                  # Docker挂载目录 (core/src → /app/src)
 │   ├── Dockerfile            # Docker镜像定义
 │   ├── requirements.txt      # Backend Python依赖

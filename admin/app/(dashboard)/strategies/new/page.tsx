@@ -4,6 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -293,35 +300,43 @@ export default function NewStrategyPage() {
               <label className="block text-sm font-medium text-gray-700">
                 策略类型 <span className="text-red-500">*</span>
               </label>
-              <select
+              <Select
                 required
                 value={formData.strategy_type}
-                onChange={(e) =>
-                  setFormData({ ...formData, strategy_type: e.target.value })
+                onValueChange={(value) =>
+                  setFormData({ ...formData, strategy_type: value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="stock_selection">选股策略</option>
-                <option value="entry">入场策略</option>
-                <option value="exit">离场策略</option>
-              </select>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue placeholder="选择策略类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="stock_selection">选股策略</SelectItem>
+                  <SelectItem value="entry">入场策略</SelectItem>
+                  <SelectItem value="exit">离场策略</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 来源类型
               </label>
-              <select
+              <Select
                 value={formData.source_type}
-                onChange={(e) =>
-                  setFormData({ ...formData, source_type: e.target.value })
+                onValueChange={(value) =>
+                  setFormData({ ...formData, source_type: value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="custom">用户自定义</option>
-                <option value="ai">AI生成</option>
-                <option value="builtin">系统内置</option>
-              </select>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue placeholder="选择来源类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">用户自定义</SelectItem>
+                  <SelectItem value="ai">AI生成</SelectItem>
+                  <SelectItem value="builtin">系统内置</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

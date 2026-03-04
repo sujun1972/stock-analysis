@@ -64,6 +64,18 @@ async def startup_event():
     logger.info(f"🔗 数据库: {settings.DATABASE_HOST}:{settings.DATABASE_PORT}")
     logger.info(f"✅ API文档: http://localhost:8000/api/docs")
 
+    # 自动执行数据库迁移
+    try:
+        logger.info("🔄 检查数据库迁移...")
+        from app.core.migrations import run_migrations
+
+        if run_migrations():
+            logger.info("✅ 数据库迁移完成")
+        else:
+            logger.error("❌ 数据库迁移失败，但应用将继续启动")
+    except Exception as e:
+        logger.error(f"❌ 数据库迁移出错: {e}")
+
     # 重置遗留的同步状态（如果容器重启导致状态卡在running）
     try:
         from app.services.config_service import ConfigService
