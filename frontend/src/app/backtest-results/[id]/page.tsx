@@ -18,8 +18,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import BacktestResultView, { TradesTable } from '@/components/backtest/BacktestResultView'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
@@ -128,11 +127,7 @@ export default function BacktestResultPage() {
         <div className="container-custom py-8">
           <Card className="max-w-2xl mx-auto">
             <CardContent className="py-12 text-center">
-              <p className="text-red-600 mb-4">{error || '回测记录不存在'}</p>
-              <Button onClick={() => router.push('/my-backtests')}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                返回回测列表
-              </Button>
+              <p className="text-red-600">{error || '回测记录不存在'}</p>
             </CardContent>
           </Card>
         </div>
@@ -167,16 +162,8 @@ export default function BacktestResultPage() {
   return (
     <ProtectedRoute>
       <div className="container-custom py-8">
-        {/* 面包屑和标题 */}
+        {/* 标题 */}
         <div className="mb-6">
-          <Button
-            variant="ghost"
-            onClick={() => router.push('/my-backtests')}
-            className="mb-4"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            返回回测列表
-          </Button>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             回测详情
           </h1>
