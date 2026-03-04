@@ -68,6 +68,7 @@ function BacktestContent() {
   const [taskId, setTaskId] = useState<string | null>(null)  // Celery任务ID
   const [taskStatus, setTaskStatus] = useState<string>('idle')  // 任务状态
   const [progress, setProgress] = useState({ current: 0, total: 100, status: '' })  // 进度信息
+  const [executionId, setExecutionId] = useState<number | null>(null)  // 执行记录ID，用于跳转结果页面
 
   // ML策略ID（从数据库查询）
   const [mlStrategyId, setMlStrategyId] = useState<number | null>(null)
@@ -207,7 +208,7 @@ function BacktestContent() {
     loadStrategyData()
   }, [strategyType, strategyId])
 
-  // 轮询任务状态
+  // 轮询任务状态 (后台轮询，不影响用户导航)
   useEffect(() => {
     if (!taskId || taskStatus === 'SUCCESS' || taskStatus === 'FAILURE') {
       return
@@ -224,18 +225,33 @@ function BacktestContent() {
         }
 
         if (statusData.status === 'SUCCESS') {
-          setResult(statusData.result)
           setIsRunning(false)
           clearInterval(pollInterval)
+
+          // 提取execution_id用于跳转
+          const execId = statusData.execution_id || statusData.result?.execution_id
+          if (execId) {
+            setExecutionId(execId)
+          }
+
+          // 显示可点击的toast，跳转到结果页面
           toast({
-            title: '回测完成',
-            description: '异步回测任务已完成，请查看结果'
+            title: '✅ 回测完成',
+            description: '点击查看详细结果',
+            action: execId ? (
+              <Button
+                size="sm"
+                onClick={() => router.push(`/backtest-results?id=${execId}`)}
+              >
+                查看结果
+              </Button>
+            ) : undefined,
           })
         } else if (statusData.status === 'FAILURE') {
           setIsRunning(false)
           clearInterval(pollInterval)
           toast({
-            title: '回测失败',
+            title: '❌ 回测失败',
             description: statusData.error || '任务执行失败',
             variant: 'destructive'
           })
@@ -246,7 +262,7 @@ function BacktestContent() {
     }, 2000) // 每2秒轮询一次
 
     return () => clearInterval(pollInterval)
-  }, [taskId, taskStatus])
+  }, [taskId, taskStatus, router, toast])
 
   // 取消异步回测任务
   const handleCancelBacktest = async () => {
@@ -270,6 +286,21 @@ function BacktestContent() {
   }
 
   const handleRunBacktest = async () => {
+    // 检查是否有未完成的任务
+    if (isRunning && taskId) {
+      toast({
+        title: '⚠️ 有正在执行的回测',
+        description: '请等待当前回测完成或取消后再开始新的回测',
+        variant: 'destructive',
+        action: (
+          <Button size="sm" variant="outline" onClick={handleCancelBacktest}>
+            取消当前任务
+          </Button>
+        )
+      })
+      return
+    }
+
     // 验证参数
     if (stockPool.length === 0) {
       toast({
@@ -364,16 +395,28 @@ function BacktestContent() {
         // 使用异步模式
         const asyncResponse = await apiClient.runAsyncBacktest(request)
         setTaskId(asyncResponse.task_id)
+        setExecutionId(asyncResponse.execution_id)  // 保存execution_id
         setTaskStatus('PENDING')
         setIsAsync(true)
         toast({
-          title: '任务已提交',
-          description: '回测任务已在后台运行，请稍候...',
+          title: '🚀 任务已提交',
+          description: `回测任务已在后台运行，您可以自由导航到其他页面。完成后会提示您查看结果。`,
         })
       } else {
         // 使用同步模式
         const response = await apiClient.runUnifiedBacktest(request)
         if (response.success && response.data) {
+          // 同步模式：保存execution_id并跳转到结果页面
+          const execId = response.data.execution_id
+          if (execId) {
+            toast({
+              title: '✅ 回测完成',
+              description: '正在跳转到结果页面...',
+            })
+            router.push(`/backtest-results?id=${execId}`)
+            return
+          }
+          // 降级：如果没有execution_id，显示在当前页面
           setResult(response.data)
           toast({
             title: '回测完成',
@@ -702,7 +745,7 @@ function BacktestContent() {
           )}
         </div>
 
-        {/* 4. 回测结果 */}
+        {/* 4. 回测状态提示 */}
         {isRunning ? (
           <Card className="p-12 text-center">
             <div className="flex flex-col items-center justify-center space-y-4">
@@ -716,6 +759,11 @@ function BacktestContent() {
                     ? progress.status
                     : '正在计算策略回测结果，这可能需要几分钟时间'}
                 </CardDescription>
+                {isAsync && (
+                  <CardDescription className="mt-2 text-sm text-blue-600">
+                    💡 您可以自由导航到其他页面，任务将在后台继续执行
+                  </CardDescription>
+                )}
               </div>
               {taskStatus === 'PROGRESS' && progress.total > 0 && (
                 <div className="w-full max-w-md">
@@ -739,15 +787,30 @@ function BacktestContent() {
               )}
             </div>
           </Card>
-        ) : result ? (
-          <>
-            <BacktestResultView result={result} />
-
-            {/* 交易明细表格 */}
-            {result.trades && result.trades.length > 0 && (
-              <TradesTable result={result} />
-            )}
-          </>
+        ) : executionId ? (
+          // 回测完成，显示跳转按钮
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="rounded-full bg-green-100 p-3">
+                <svg className="h-16 w-16 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <CardTitle className="text-2xl text-green-600">回测完成</CardTitle>
+                <CardDescription className="mt-2 text-base">
+                  回测任务已成功完成，点击下方按钮查看详细结果
+                </CardDescription>
+              </div>
+              <Button
+                size="lg"
+                onClick={() => router.push(`/backtest-results?id=${executionId}`)}
+                className="mt-4"
+              >
+                查看回测结果
+              </Button>
+            </div>
+          </Card>
         ) : (
           <Card className="p-12 text-center">
             <svg
