@@ -23,6 +23,7 @@ import BacktestResultView, { TradesTable } from '@/components/backtest/BacktestR
 import ExitStrategySelector from '@/components/backtest/ExitStrategySelector'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useBacktestTask } from '@/contexts/BacktestTaskContext'
 
 /**
  * 策略来源类型
@@ -38,6 +39,7 @@ function BacktestContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { addTask, hasActiveTasks } = useBacktestTask()
 
   // URL参数: type(策略类型) 和 id(策略/模型ID)
   const strategyType = searchParams.get('type') as StrategySourceType | null
@@ -208,7 +210,8 @@ function BacktestContent() {
     loadStrategyData()
   }, [strategyType, strategyId])
 
-  // 轮询任务状态 (后台轮询，不影响用户导航)
+  // 本地轮询任务状态（仅在当前页面显示实时进度）
+  // 全局轮询由 BacktestTaskContext 处理
   useEffect(() => {
     if (!taskId || taskStatus === 'SUCCESS' || taskStatus === 'FAILURE') {
       return
@@ -233,28 +236,9 @@ function BacktestContent() {
           if (execId) {
             setExecutionId(execId)
           }
-
-          // 显示可点击的toast，跳转到结果页面
-          toast({
-            title: '✅ 回测完成',
-            description: '点击查看详细结果',
-            action: execId ? (
-              <Button
-                size="sm"
-                onClick={() => router.push(`/backtest-results?id=${execId}`)}
-              >
-                查看结果
-              </Button>
-            ) : undefined,
-          })
         } else if (statusData.status === 'FAILURE') {
           setIsRunning(false)
           clearInterval(pollInterval)
-          toast({
-            title: '❌ 回测失败',
-            description: statusData.error || '任务执行失败',
-            variant: 'destructive'
-          })
         }
       } catch (error: any) {
         console.error('轮询任务状态失败:', error)
@@ -262,7 +246,7 @@ function BacktestContent() {
     }, 2000) // 每2秒轮询一次
 
     return () => clearInterval(pollInterval)
-  }, [taskId, taskStatus, router, toast])
+  }, [taskId, taskStatus])
 
   // 取消异步回测任务
   const handleCancelBacktest = async () => {
@@ -286,7 +270,18 @@ function BacktestContent() {
   }
 
   const handleRunBacktest = async () => {
-    // 检查是否有未完成的任务
+    // 检查是否有未完成的任务（包括全局后台任务）
+    if (hasActiveTasks()) {
+      toast({
+        title: '⚠️ 有正在执行的回测任务',
+        description: '您有正在后台运行的回测任务，请等待完成后再开始新的回测',
+        variant: 'destructive',
+        duration: 5000,
+      })
+      return
+    }
+
+    // 额外检查当前页面的任务状态
     if (isRunning && taskId) {
       toast({
         title: '⚠️ 有正在执行的回测',
@@ -398,6 +393,10 @@ function BacktestContent() {
         setExecutionId(asyncResponse.execution_id)  // 保存execution_id
         setTaskStatus('PENDING')
         setIsAsync(true)
+
+        // 注册到全局任务监控
+        addTask(asyncResponse.task_id, asyncResponse.execution_id)
+
         toast({
           title: '🚀 任务已提交',
           description: `回测任务已在后台运行，您可以自由导航到其他页面。完成后会提示您查看结果。`,
@@ -413,7 +412,7 @@ function BacktestContent() {
               title: '✅ 回测完成',
               description: '正在跳转到结果页面...',
             })
-            router.push(`/backtest-results?id=${execId}`)
+            router.push(`/backtest-results/${execId}`)
             return
           }
           // 降级：如果没有execution_id，显示在当前页面
@@ -804,7 +803,7 @@ function BacktestContent() {
               </div>
               <Button
                 size="lg"
-                onClick={() => router.push(`/backtest-results?id=${executionId}`)}
+                onClick={() => router.push(`/backtest-results/${executionId}`)}
                 className="mt-4"
               >
                 查看回测结果

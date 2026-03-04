@@ -8,6 +8,7 @@ import { DesktopNav } from "@/components/desktop-nav";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { StockSearch } from "@/components/stock-search";
+import { BacktestTaskProvider } from "@/contexts/BacktestTaskContext";
 
 export const metadata: Metadata = {
   title: "A股AI量化交易系统",
@@ -24,12 +25,13 @@ export default function RootLayout({
       <body className="antialiased">
         <ErrorBoundary>
           <QueryProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
+            <BacktestTaskProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
               <div className="min-h-screen flex flex-col">
             <header className="bg-blue-600 text-white shadow-lg">
             <div className="container-custom py-4">
@@ -73,7 +75,8 @@ export default function RootLayout({
           </footer>
               </div>
               <Toaster />
-            </ThemeProvider>
+              </ThemeProvider>
+            </BacktestTaskProvider>
           </QueryProvider>
         </ErrorBoundary>
       </body>
