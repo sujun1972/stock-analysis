@@ -97,6 +97,8 @@ export default function BacktestResultPage() {
         setLoading(true)
         setError(null)
         const response = await apiClient.get(`/api/backtest-history/${id}`)
+        // 后端返回格式: { success: true, data: {...} }
+        // apiClient.get() 已经返回了 response.data，所以这里需要再访问 .data
         setRecord(response.data)
       } catch (err: any) {
         console.error('获取回测详情失败:', err)

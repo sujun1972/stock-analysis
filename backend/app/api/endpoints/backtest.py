@@ -602,9 +602,12 @@ def execute_backtest_core(
 
     trades = sanitize_float_values(trades)
 
-    # 生成K线图表数据（最多前10只股票）
+    # 生成K线图表数据（包含所有股票的K线、买卖信号）
+    # 注意：移除了之前 [:10] 的限制，现在生成所有股票的图表以支持完整的回测分析
     stock_charts = {}
-    for code in stock_pool[:10]:
+    logger.info(f"开始生成K线图表数据，股票池大小: {len(stock_pool)}")
+
+    for code in stock_pool:
         try:
             stock_data = market_data[market_data['code'] == code].copy()
             if stock_data.empty:
@@ -652,6 +655,7 @@ def execute_backtest_core(
             logger.warning(f"生成股票 {code} 图表数据失败: {e}")
             continue
 
+    logger.info(f"K线图表生成完成，成功生成 {len(stock_charts)} 个股票的图表（股票池: {len(stock_pool)}）")
     stock_charts = sanitize_float_values(stock_charts)
 
     # 修正metrics中的total_trades，使用实际交易记录数量
@@ -1619,9 +1623,12 @@ async def run_backtest_main(
 
             trades = sanitize_float_values(trades)
 
-            # 生成K线图表数据（最多前10只股票）
+            # 生成K线图表数据（包含所有股票的K线、买卖信号）
+            # 注意：移除了之前 [:10] 的限制，现在生成所有股票的图表以支持完整的回测分析
             stock_charts = {}
-            for code in stock_pool[:10]:
+            logger.info(f"[异步回测] 开始生成K线图表数据，股票池大小: {len(stock_pool)}")
+
+            for code in stock_pool:
                 try:
                     stock_data = market_data[market_data['code'] == code].copy()
                     if stock_data.empty:
@@ -1666,9 +1673,10 @@ async def run_backtest_main(
                     }
 
                 except Exception as e:
-                    logger.warning(f"生成股票 {code} 图表数据失败: {e}")
+                    logger.warning(f"[异步回测] 生成股票 {code} 图表数据失败: {e}")
                     continue
 
+            logger.info(f"[异步回测] K线图表生成完成，成功生成 {len(stock_charts)} 个股票的图表（股票池: {len(stock_pool)}）")
             stock_charts = sanitize_float_values(stock_charts)
 
         except Exception as e:
