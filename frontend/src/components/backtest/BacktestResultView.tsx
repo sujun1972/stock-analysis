@@ -76,7 +76,12 @@ const BacktestResultView = memo(function BacktestResultView({
       {/* 股票K线图表和交易信号（包含权益曲线） */}
       {result.stock_charts && Object.keys(result.stock_charts).length > 0 && (
         <StockChartsCarousel
-          stockCharts={result.stock_charts}
+          stockCodes={Object.keys(result.stock_charts)}
+          dateRange={{
+            start: result.backtest_params?.start_date,
+            end: result.backtest_params?.end_date
+          }}
+          signalData={result.stock_charts}
           equityCurve={result.equity_curve}
           trades={result.trades}
         />

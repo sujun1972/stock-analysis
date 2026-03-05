@@ -71,6 +71,7 @@ interface EquityCurvePoint {
 interface StockPriceCardProps {
   stockCode: string
   stockName?: string
+  dateRange?: { start: string; end: string }  // 可选的日期范围（回测模式使用）
   defaultChartType?: 'daily' | 'minute'
   showHeader?: boolean
   showCard?: boolean  // 是否显示外层卡片（默认true）
@@ -78,10 +79,9 @@ interface StockPriceCardProps {
   onIndicatorsChange?: (indicators: string[]) => void
   // 回测模式相关（可选）
   backtestMode?: boolean
+  backtestKlineData?: FeatureData[]  // 回测模式下的K线数据（优先使用，与信号精确匹配）
   signalPoints?: SignalPoints
   equityCurve?: EquityCurvePoint[]
-  // 外部提供的数据（可选，用于回测模式）
-  externalData?: FeatureData[]
 }
 
 /**
@@ -110,7 +110,9 @@ interface StockPriceCardProps {
  * <StockPriceCard
  *   stockCode="000001"
  *   stockName="平安银行"
+ *   dateRange={{ start: '2024-01-01', end: '2024-12-31' }}
  *   backtestMode={true}
+ *   backtestKlineData={[...]}  // 回测返回的K线数据（与信号精确匹配）
  *   signalPoints={{ buy: [...], sell: [...] }}
  *   equityCurve={[...]}
  * />
@@ -132,15 +134,16 @@ interface StockPriceCardProps {
 export default function StockPriceCard({
   stockCode,
   stockName,
+  dateRange,
   defaultChartType = 'daily',
   showHeader = true,
   showCard = true,
   className = '',
   onIndicatorsChange,
   backtestMode = false,
+  backtestKlineData,
   signalPoints,
   equityCurve,
-  externalData,
 }: StockPriceCardProps) {
   // 图表类型（日线/分时）
   const [chartType, setChartType] = useState<'daily' | 'minute'>(defaultChartType)
@@ -238,17 +241,110 @@ export default function StockPriceCard({
 
   // 加载日线数据
   const loadDailyData = async () => {
-    // 如果提供了外部数据（回测模式），直接使用
-    if (externalData && externalData.length > 0) {
-      setFeatures(externalData)
-      return
-    }
-
-    // 否则从API加载
     try {
       setIsLoading(true)
       setError(null)
-      const response = await apiClient.getFeatures(stockCode, { limit: 500 })
+
+      /**
+       * 回测模式：双数据源智能合并策略
+       *
+       * 问题背景：
+       * - 回测K线数据：包含OHLCV和MA，与买卖信号精确对应，但缺少技术指标
+       * - API完整数据：包含所有技术指标，但可能与回测信号的日期范围不完全匹配
+       *
+       * 解决方案：
+       * 1. 使用回测数据的OHLCV（保证与信号点对应）
+       * 2. 从API获取技术指标数据
+       * 3. 按日期合并两个数据源
+       */
+      if (backtestMode && backtestKlineData && backtestKlineData.length > 0) {
+        const params: any = { limit: 500 }
+        if (dateRange?.end) {
+          params.end_date = dateRange.end
+        }
+
+        try {
+          // 步骤1: 从API获取完整的技术指标数据
+          const response = await apiClient.getFeatures(stockCode, params)
+          const apiData = response.data
+
+          // 步骤2: 创建日期映射表（用于O(1)查找）
+          const apiDataMap = new Map<string, FeatureData>()
+          apiData.forEach(item => {
+            // 统一日期格式为 YYYY-MM-DD（移除时间部分）
+            const dateKey = item.date.split(' ')[0].split('T')[0]
+            apiDataMap.set(dateKey, item)
+          })
+
+          // 步骤3: 智能合并数据
+          const mergedData = backtestKlineData.map(backtestItem => {
+            const dateKey = backtestItem.date.split(' ')[0].split('T')[0]
+            const apiItem = apiDataMap.get(dateKey)
+
+            return {
+              // 使用回测数据的OHLCV（与信号精确对应）
+              date: backtestItem.date,
+              open: backtestItem.open,
+              high: backtestItem.high,
+              low: backtestItem.low,
+              close: backtestItem.close,
+              volume: backtestItem.volume,
+              // MA优先使用回测数据，回退到API数据
+              MA5: backtestItem.MA5 ?? apiItem?.MA5 ?? null,
+              MA20: backtestItem.MA20 ?? apiItem?.MA20 ?? null,
+              MA60: backtestItem.MA60 ?? apiItem?.MA60 ?? null,
+              // 技术指标从API数据获取
+              MACD: apiItem?.MACD ?? null,
+              MACD_SIGNAL: apiItem?.MACD_SIGNAL ?? null,
+              MACD_HIST: apiItem?.MACD_HIST ?? null,
+              KDJ_K: apiItem?.KDJ_K ?? null,
+              KDJ_D: apiItem?.KDJ_D ?? null,
+              KDJ_J: apiItem?.KDJ_J ?? null,
+              RSI6: apiItem?.RSI6 ?? null,
+              RSI12: apiItem?.RSI12 ?? null,
+              RSI24: apiItem?.RSI24 ?? null,
+              BOLL_UPPER: apiItem?.BOLL_UPPER ?? null,
+              BOLL_MIDDLE: apiItem?.BOLL_MIDDLE ?? null,
+              BOLL_LOWER: apiItem?.BOLL_LOWER ?? null
+            }
+          })
+
+          setFeatures(mergedData)
+        } catch (apiError) {
+          // API加载失败时的降级处理：仍然显示回测K线和信号，但技术指标不可用
+          console.error('加载技术指标失败，降级使用回测K线数据:', apiError)
+          const basicData = backtestKlineData.map(d => ({
+            ...d,
+            MA5: d.MA5 ?? null,
+            MA20: d.MA20 ?? null,
+            MA60: d.MA60 ?? null,
+            MACD: null,
+            MACD_SIGNAL: null,
+            MACD_HIST: null,
+            KDJ_K: null,
+            KDJ_D: null,
+            KDJ_J: null,
+            RSI6: null,
+            RSI12: null,
+            RSI24: null,
+            BOLL_UPPER: null,
+            BOLL_MIDDLE: null,
+            BOLL_LOWER: null
+          }))
+          setFeatures(basicData)
+        }
+
+        setIsLoading(false)
+        return
+      }
+
+      // 普通模式：直接从API加载完整数据
+      const params: any = { limit: 500 }
+      if (dateRange?.end) {
+        params.end_date = dateRange.end
+      }
+
+      const response = await apiClient.getFeatures(stockCode, params)
       setFeatures(response.data)
     } catch (err) {
       console.error('加载日线数据失败:', err)
@@ -283,7 +379,7 @@ export default function StockPriceCard({
     } else {
       loadMinuteData()
     }
-  }, [stockCode, chartType, externalData])
+  }, [stockCode, chartType, dateRange, backtestKlineData])
 
   // 分时图周期变化时重新聚合数据
   useEffect(() => {

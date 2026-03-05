@@ -5,15 +5,15 @@
  * 功能特性：
  * - 多股票轮播展示（支持上一页/下一页/股票选择下拉框）
  * - 显示买卖信号标记点
- * - 显示权益曲线（在第一个股票图表中显示）
+ * - 显示权益曲线
  * - 自动提取股票名称并在图表中显示
  * - 使用 Card 布局统一样式
  *
- * 重构说明：
- * - 使用 StockPriceCard 组件替代 BacktestKLineChart
- * - 统一了图表组件，提升代码复用性
- * - 支持技术指标分析（MACD/KDJ/RSI/BOLL等）
- * - 标题和控制栏放在 Card 内部，避免布局混乱
+ * 数据流设计：
+ * - 只传递股票代码和买卖信号数据（轻量级）
+ * - StockPriceCard 组件自主从后端获取K线和技术指标数据
+ * - 回测K线数据（来自后端）与API技术指标数据智能合并
+ * - 保证买卖信号与K线数据精确对应
  */
 
 'use client'
@@ -25,7 +25,13 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import StockPriceCard from '@/components/StockPriceCard'
 import { StockCombobox } from './StockCombobox'
 
-// K线数据接口（来自后端）
+// 信号点接口
+interface SignalPoint {
+  date: string
+  price: number
+}
+
+// K线数据接口
 interface KLineData {
   date: string
   open: number
@@ -38,14 +44,8 @@ interface KLineData {
   MA60?: number | null
 }
 
-// 信号点接口
-interface SignalPoint {
-  date: string
-  price: number
-}
-
-// 单个股票的图表数据
-interface StockChartData {
+// 单个股票的信号数据（包含K线数据）
+interface StockSignalData {
   kline_data: KLineData[]
   buy_signals: SignalPoint[]
   sell_signals: SignalPoint[]
@@ -71,13 +71,14 @@ interface TradeRecord {
 
 // 组件Props
 interface StockChartsCarouselProps {
-  stockCharts: Record<string, StockChartData>
+  stockCodes: string[]  // 股票代码列表
+  dateRange?: { start: string; end: string }  // 可选的日期范围
+  signalData: Record<string, StockSignalData>  // 买卖信号数据
   equityCurve?: EquityCurvePoint[]
   trades?: TradeRecord[]  // 添加 trades 参数用于获取股票名称
 }
 
-export default function StockChartsCarousel({ stockCharts, equityCurve, trades }: StockChartsCarouselProps) {
-  const stockCodes = Object.keys(stockCharts)
+export default function StockChartsCarousel({ stockCodes, dateRange, signalData, equityCurve, trades }: StockChartsCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
 
   // 从交易记录中提取股票代码与名称的映射（使用 useMemo 优化）
@@ -115,7 +116,7 @@ export default function StockChartsCarousel({ stockCharts, equityCurve, trades }
   }
 
   const currentStockCode = stockCodes[currentIndex]
-  const currentChartData = stockCharts[currentStockCode]
+  const currentSignalData = signalData[currentStockCode]
   const currentStockName = stockNameMap.get(currentStockCode) || currentStockCode
 
   const handlePrevious = () => {
@@ -124,34 +125,6 @@ export default function StockChartsCarousel({ stockCharts, equityCurve, trades }
 
   const handleNext = () => {
     setCurrentIndex((prev) => (prev < stockCodes.length - 1 ? prev + 1 : 0))
-  }
-
-  /**
-   * 数据格式转换：KLineData -> FeatureData
-   *
-   * 回测数据只包含基础K线数据（OHLCV + MA），需要补充技术指标字段
-   * 将缺失的技术指标字段设为 null，保持与 FeatureData 接口一致
-   *
-   * @param klineData 回测返回的K线数据
-   * @returns StockPriceCard/EChartsStockChart 所需的完整数据格式
-   */
-  const convertToFeatureData = (klineData: KLineData[]) => {
-    return klineData.map(d => ({
-      ...d,
-      // 补充技术指标字段（回测数据中不包含）
-      MACD: null,
-      MACD_SIGNAL: null,
-      MACD_HIST: null,
-      KDJ_K: null,
-      KDJ_D: null,
-      KDJ_J: null,
-      RSI6: null,
-      RSI12: null,
-      RSI24: null,
-      BOLL_UPPER: null,
-      BOLL_MIDDLE: null,
-      BOLL_LOWER: null
-    }))
   }
 
   return (
@@ -200,22 +173,21 @@ export default function StockChartsCarousel({ stockCharts, equityCurve, trades }
 
       {/* 卡片内容：图表 */}
       <CardContent>
-        {currentChartData && (
-          <StockPriceCard
-            stockCode={currentStockCode}
-            stockName={currentStockName}
-            defaultChartType="daily"
-            showHeader={false}  // 不显示头部，因为外层Card已经有了
-            showCard={false}    // 不显示内部卡片，因为外层已经有Card
-            backtestMode={true}
-            signalPoints={{
-              buy: currentChartData.buy_signals || [],
-              sell: currentChartData.sell_signals || []
-            }}
-            equityCurve={equityCurve}
-            externalData={convertToFeatureData(currentChartData.kline_data)}
-          />
-        )}
+        <StockPriceCard
+          stockCode={currentStockCode}
+          stockName={currentStockName}
+          dateRange={dateRange}
+          defaultChartType="daily"
+          showHeader={false}  // 不显示头部，因为外层Card已经有了
+          showCard={false}    // 不显示内部卡片，因为外层已经有Card
+          backtestMode={true}
+          backtestKlineData={currentSignalData?.kline_data}
+          signalPoints={{
+            buy: currentSignalData?.buy_signals || [],
+            sell: currentSignalData?.sell_signals || []
+          }}
+          equityCurve={equityCurve}
+        />
       </CardContent>
     </Card>
   )
