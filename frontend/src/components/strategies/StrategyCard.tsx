@@ -29,6 +29,8 @@ interface StrategyCardProps {
   onEdit?: (id: number) => void
   onDelete?: (id: number) => void
   onClone?: (id: number) => void
+  currentUserId?: number  // 当前登录用户的ID
+  isAdmin?: boolean       // 是否为管理员
 }
 
 const StrategyCard = memo(function StrategyCard({
@@ -36,7 +38,9 @@ const StrategyCard = memo(function StrategyCard({
   onBacktest,
   onEdit,
   onDelete,
-  onClone
+  onClone,
+  currentUserId,
+  isAdmin = false
 }: StrategyCardProps) {
 
   // 获取验证状态徽章
@@ -89,6 +93,9 @@ const StrategyCard = memo(function StrategyCard({
 
   // 判断是否为离场策略
   const isExitStrategy = strategy.strategy_type === 'exit'
+
+  // 判断当前用户是否有权限编辑/删除该策略
+  const canModify = isAdmin || (currentUserId && strategy.user_id === currentUserId)
 
   return (
     <Card className="hover:shadow-lg transition-shadow">
@@ -223,8 +230,8 @@ const StrategyCard = memo(function StrategyCard({
           </Button>
         )}
 
-        {/* 编辑按钮（仅自定义和AI策略） */}
-        {strategy.source_type !== 'builtin' && onEdit && (
+        {/* 编辑按钮（仅自定义和AI策略，且用户有权限） */}
+        {strategy.source_type !== 'builtin' && onEdit && canModify && (
           <Button
             size="sm"
             variant="outline"
@@ -234,8 +241,8 @@ const StrategyCard = memo(function StrategyCard({
           </Button>
         )}
 
-        {/* 删除按钮（仅自定义和AI策略） */}
-        {strategy.source_type !== 'builtin' && onDelete && (
+        {/* 删除按钮（仅自定义和AI策略，且用户有权限） */}
+        {strategy.source_type !== 'builtin' && onDelete && canModify && (
           <Button
             size="sm"
             variant="destructive"

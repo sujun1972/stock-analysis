@@ -30,10 +30,13 @@ import StrategyCard from '@/components/strategies/StrategyCard'
 import StrategyCategoryFilter from '@/components/strategies/StrategyCategoryFilter'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
+import { useAuthStore, isAdmin } from '@/stores/auth-store'
 
 export default function StrategiesPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuthStore()
+  const userIsAdmin = isAdmin()
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -311,6 +314,8 @@ export default function StrategiesPage() {
               onBacktest={(id) => router.push(`/backtest?type=unified&id=${id}`)}
               onDelete={handleDelete}
               onClone={handleClone}
+              currentUserId={user?.id}
+              isAdmin={userIsAdmin}
             />
           ))}
         </div>

@@ -20,10 +20,12 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 
 from app.api.error_handler import handle_api_errors
+from app.core.dependencies import get_current_user
+from app.models.user import User
 from app.repositories.strategy_repository import StrategyRepository
 from app.schemas.strategy import (
     StrategyCreate,
@@ -436,14 +438,20 @@ async def update_strategy(strategy_id: int, data: StrategyUpdate) -> Dict[str, A
 
 @router.delete("/{strategy_id}", summary="删除策略")
 @handle_api_errors
-async def delete_strategy(strategy_id: int) -> Dict[str, Any]:
+async def delete_strategy(
+    strategy_id: int,
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
     """
     删除指定策略
 
-    注意：内置策略（source_type=builtin）不允许删除。
+    权限要求：
+    - 必须是策略的创建者，或者是管理员用户
+    - 内置策略不允许删除
 
     Args:
         strategy_id: 策略ID
+        current_user: 当前登录用户
 
     Returns:
         {
@@ -466,10 +474,23 @@ async def delete_strategy(strategy_id: int) -> Dict[str, Any]:
             status_code=status.HTTP_403_FORBIDDEN, detail="内置策略不允许删除"
         )
 
-    # 3. 删除数据库记录
+    # 3. 检查权限：必须是策略创建者或管理员
+    is_admin = current_user.role in ['admin', 'super_admin']
+    is_owner = existing_strategy.get('user_id') == current_user.id
+
+    if not is_admin and not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有策略创建者或管理员可以删除策略"
+        )
+
+    # 4. 删除数据库记录
     repo.delete(strategy_id)
 
-    logger.warning(f"删除策略: strategy_id={strategy_id}, name={existing_strategy['name']}")
+    logger.warning(
+        f"删除策略: strategy_id={strategy_id}, name={existing_strategy['name']}, "
+        f"deleted_by={current_user.username} (id={current_user.id})"
+    )
 
     return {"success": True, "message": "策略删除成功"}
 
