@@ -1,17 +1,26 @@
 /**
  * 股票K线图表轮播组件
- * 支持多个股票的K线图展示，带分页功能
+ * 在回测结果页面中展示多个股票的K线图、交易信号和权益曲线
+ *
+ * 功能特性：
+ * - 多股票轮播展示（支持上一页/下一页/股票选择下拉框）
+ * - 显示买卖信号标记点
+ * - 显示权益曲线（在第一个股票图表中显示）
+ * - 自动提取股票名称并在图表中显示
+ * - 使用 Card 布局统一样式
  *
  * 重构说明：
  * - 使用 StockPriceCard 组件替代 BacktestKLineChart
  * - 统一了图表组件，提升代码复用性
  * - 支持技术指标分析（MACD/KDJ/RSI/BOLL等）
+ * - 标题和控制栏放在 Card 内部，避免布局混乱
  */
 
 'use client'
 
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import StockPriceCard from '@/components/StockPriceCard'
 import { StockCombobox } from './StockCombobox'
@@ -107,6 +116,7 @@ export default function StockChartsCarousel({ stockCharts, equityCurve, trades }
 
   const currentStockCode = stockCodes[currentIndex]
   const currentChartData = stockCharts[currentStockCode]
+  const currentStockName = stockNameMap.get(currentStockCode) || currentStockCode
 
   const handlePrevious = () => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : stockCodes.length - 1))
@@ -145,62 +155,68 @@ export default function StockChartsCarousel({ stockCharts, equityCurve, trades }
   }
 
   return (
-    <div className="space-y-4">
-      {/* 轮播控制栏 */}
-      {stockCodes.length > 1 && (
+    <Card>
+      {/* 卡片头部：标题和控制栏 */}
+      <CardHeader>
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">股票K线图、交易信号与权益曲线</h3>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrevious}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm text-muted-foreground min-w-[100px] text-center">
-              {currentIndex + 1} / {stockCodes.length}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNext}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            {/* 股票选择下拉框 */}
-            <StockCombobox
-              value={currentStockCode}
-              onValueChange={(value) => {
-                const selectedIndex = stockCodes.indexOf(value)
-                if (selectedIndex !== -1) {
-                  setCurrentIndex(selectedIndex)
-                }
-              }}
-              options={stockOptions}
-              placeholder="选择股票"
-              width="w-[200px]"
-            />
-          </div>
+          <CardTitle>股票K线图、交易信号与权益曲线</CardTitle>
+          {/* 多股票时显示轮播控制 */}
+          {stockCodes.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrevious}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground min-w-[100px] text-center">
+                {currentIndex + 1} / {stockCodes.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNext}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              {/* 股票选择下拉框 */}
+              <StockCombobox
+                value={currentStockCode}
+                onValueChange={(value) => {
+                  const selectedIndex = stockCodes.indexOf(value)
+                  if (selectedIndex !== -1) {
+                    setCurrentIndex(selectedIndex)
+                  }
+                }}
+                options={stockOptions}
+                placeholder="选择股票"
+                width="w-[200px]"
+              />
+            </div>
+          )}
         </div>
-      )}
+      </CardHeader>
 
-      {/* 使用 StockPriceCard 替代 BacktestKLineChart */}
-      {currentChartData && (
-        <StockPriceCard
-          stockCode={currentStockCode}
-          stockName={currentStockCode}
-          defaultChartType="daily"
-          showHeader={stockCodes.length === 1}  // 单个股票时显示头部
-          backtestMode={true}
-          signalPoints={{
-            buy: currentChartData.buy_signals || [],
-            sell: currentChartData.sell_signals || []
-          }}
-          equityCurve={equityCurve}
-          externalData={convertToFeatureData(currentChartData.kline_data)}
-        />
-      )}
-    </div>
+      {/* 卡片内容：图表 */}
+      <CardContent>
+        {currentChartData && (
+          <StockPriceCard
+            stockCode={currentStockCode}
+            stockName={currentStockName}
+            defaultChartType="daily"
+            showHeader={false}  // 不显示头部，因为外层Card已经有了
+            showCard={false}    // 不显示内部卡片，因为外层已经有Card
+            backtestMode={true}
+            signalPoints={{
+              buy: currentChartData.buy_signals || [],
+              sell: currentChartData.sell_signals || []
+            }}
+            equityCurve={equityCurve}
+            externalData={convertToFeatureData(currentChartData.kline_data)}
+          />
+        )}
+      </CardContent>
+    </Card>
   )
 }

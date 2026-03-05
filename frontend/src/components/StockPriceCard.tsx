@@ -73,6 +73,7 @@ interface StockPriceCardProps {
   stockName?: string
   defaultChartType?: 'daily' | 'minute'
   showHeader?: boolean
+  showCard?: boolean  // 是否显示外层卡片（默认true）
   className?: string
   onIndicatorsChange?: (indicators: string[]) => void
   // 回测模式相关（可选）
@@ -92,18 +93,20 @@ interface StockPriceCardProps {
  * - 分时图支持多周期（1/5/15/30/60分钟）
  * - 自动加载和缓存数据
  * - 支持回测模式（显示买卖信号和权益曲线）
+ * - 支持嵌套布局（可选择是否显示外层卡片）
  *
  * @example
  * ```tsx
- * // 普通模式
+ * // 普通模式（带卡片）
  * <StockPriceCard
  *   stockCode="000001"
  *   stockName="平安银行"
  *   defaultChartType="daily"
  *   showHeader={true}
+ *   showCard={true}  // 默认值
  * />
  *
- * // 回测模式
+ * // 回测模式（带卡片）
  * <StockPriceCard
  *   stockCode="000001"
  *   stockName="平安银行"
@@ -111,6 +114,19 @@ interface StockPriceCardProps {
  *   signalPoints={{ buy: [...], sell: [...] }}
  *   equityCurve={[...]}
  * />
+ *
+ * // 嵌入模式（不显示卡片，适合放在其他Card内）
+ * <Card>
+ *   <CardHeader>自定义标题</CardHeader>
+ *   <CardContent>
+ *     <StockPriceCard
+ *       stockCode="000001"
+ *       stockName="平安银行"
+ *       showCard={false}  // 不显示内部卡片
+ *       showHeader={false}  // 不显示内部标题
+ *     />
+ *   </CardContent>
+ * </Card>
  * ```
  */
 export default function StockPriceCard({
@@ -118,6 +134,7 @@ export default function StockPriceCard({
   stockName,
   defaultChartType = 'daily',
   showHeader = true,
+  showCard = true,
   className = '',
   onIndicatorsChange,
   backtestMode = false,
@@ -341,39 +358,32 @@ export default function StockPriceCard({
     }
   }
 
-  return (
-    <Card className={className}>
-      {showHeader && (
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              <span>股价走势</span>
-              {stockName && (
-                <Badge variant="outline" className="ml-2">
-                  {stockName} ({stockCode})
-                </Badge>
-              )}
-            </CardTitle>
-          </div>
-        </CardHeader>
-      )}
-
-      <CardContent className="space-y-4">
+  // 图表内容部分
+  const chartContent = (
+    <div className="space-y-4">
         {/* 图表类型切换和控制栏 */}
         <div className="flex items-center justify-between gap-3">
-          <Tabs value={chartType} onValueChange={(value) => setChartType(value as 'daily' | 'minute')}>
-            <TabsList>
-              <TabsTrigger value="daily" className="flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4" />
-                <span>日线图</span>
-              </TabsTrigger>
-              <TabsTrigger value="minute" className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4" />
-                <span>分时图</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex items-center gap-3">
+            <Tabs value={chartType} onValueChange={(value) => setChartType(value as 'daily' | 'minute')}>
+              <TabsList>
+                <TabsTrigger value="daily" className="flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4" />
+                  <span>日线图</span>
+                </TabsTrigger>
+                <TabsTrigger value="minute" className="flex items-center gap-1.5">
+                  <Clock className="w-4 h-4" />
+                  <span>分时图</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {/* 当不显示卡片时，在这里显示股票信息 */}
+            {!showCard && stockName && (
+              <Badge variant="outline" className="text-sm">
+                {stockName} ({stockCode})
+              </Badge>
+            )}
+          </div>
 
           {/* 右侧：控制选项（分时图周期 或 日线图指标设置） */}
           {chartType === 'minute' ? (
@@ -546,6 +556,35 @@ export default function StockPriceCard({
             <span>股票代码：{stockCode}</span>
           </div>
         </div>
+      </div>
+  )
+
+  // 如果不显示卡片，直接返回内容
+  if (!showCard) {
+    return chartContent
+  }
+
+  // 显示卡片
+  return (
+    <Card className={className}>
+      {showHeader && (
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              <span>股价走势</span>
+              {stockName && (
+                <Badge variant="outline" className="ml-2">
+                  {stockName} ({stockCode})
+                </Badge>
+              )}
+            </CardTitle>
+          </div>
+        </CardHeader>
+      )}
+
+      <CardContent>
+        {chartContent}
       </CardContent>
     </Card>
   )
