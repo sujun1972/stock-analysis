@@ -10,11 +10,11 @@
 
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import StockPriceCard from '@/components/StockPriceCard'
+import { StockCombobox } from './StockCombobox'
 
 // K线数据接口（来自后端）
 interface KLineData {
@@ -50,15 +50,56 @@ interface EquityCurvePoint {
   holdings?: number
 }
 
+// 交易记录接口（用于提取股票名称）
+interface TradeRecord {
+  stock_code?: string
+  code?: string
+  symbol?: string
+  stock_name?: string
+  name?: string
+  [key: string]: any
+}
+
 // 组件Props
 interface StockChartsCarouselProps {
   stockCharts: Record<string, StockChartData>
   equityCurve?: EquityCurvePoint[]
+  trades?: TradeRecord[]  // 添加 trades 参数用于获取股票名称
 }
 
-export default function StockChartsCarousel({ stockCharts, equityCurve }: StockChartsCarouselProps) {
+export default function StockChartsCarousel({ stockCharts, equityCurve, trades }: StockChartsCarouselProps) {
   const stockCodes = Object.keys(stockCharts)
   const [currentIndex, setCurrentIndex] = useState(0)
+
+  // 从交易记录中提取股票代码与名称的映射（使用 useMemo 优化）
+  const stockNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    if (trades) {
+      trades.forEach((trade) => {
+        const code = trade.stock_code || trade.code || trade.symbol
+        const name = trade.stock_name || trade.name
+        if (code && name && !map.has(code)) {
+          map.set(code, name)
+        }
+      })
+    }
+    return map
+  }, [trades])
+
+  // 准备 Combobox 的选项数据
+  const stockOptions = useMemo(() => {
+    return stockCodes.map((code) => {
+      const name = stockNameMap.get(code)
+      const label = name ? `${name}(${code})` : code
+      // searchText 包含代码和名称，方便搜索
+      const searchText = name ? `${code} ${name} ${label}` : code
+      return {
+        value: code,
+        label,
+        searchText
+      }
+    })
+  }, [stockCodes, stockNameMap])
 
   if (stockCodes.length === 0) {
     return null
@@ -127,6 +168,19 @@ export default function StockChartsCarousel({ stockCharts, equityCurve }: StockC
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
+            {/* 股票选择下拉框 */}
+            <StockCombobox
+              value={currentStockCode}
+              onValueChange={(value) => {
+                const selectedIndex = stockCodes.indexOf(value)
+                if (selectedIndex !== -1) {
+                  setCurrentIndex(selectedIndex)
+                }
+              }}
+              options={stockOptions}
+              placeholder="选择股票"
+              width="w-[200px]"
+            />
           </div>
         </div>
       )}
@@ -146,23 +200,6 @@ export default function StockChartsCarousel({ stockCharts, equityCurve }: StockC
           equityCurve={equityCurve}
           externalData={convertToFeatureData(currentChartData.kline_data)}
         />
-      )}
-
-      {/* 快速导航 */}
-      {stockCodes.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {stockCodes.map((code, index) => (
-            <Button
-              key={code}
-              variant={index === currentIndex ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setCurrentIndex(index)}
-              className="text-xs"
-            >
-              {code}
-            </Button>
-          ))}
-        </div>
       )}
     </div>
   )

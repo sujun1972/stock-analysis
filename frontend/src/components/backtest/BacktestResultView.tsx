@@ -17,11 +17,19 @@
 
 'use client'
 
-import { memo, useState } from 'react'
+import { memo, useState, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import { StockCombobox } from './StockCombobox'
 
 // 动态导入图表组件
 const PerformanceMetrics = dynamic(() => import('@/components/PerformanceMetrics'), {
@@ -70,6 +78,7 @@ const BacktestResultView = memo(function BacktestResultView({
         <StockChartsCarousel
           stockCharts={result.stock_charts}
           equityCurve={result.equity_curve}
+          trades={result.trades}
         />
       )}
 
@@ -133,6 +142,49 @@ export const TradesTable = memo(function TradesTable({ result }: { result: any }
       result.trades?.map((t: any) => t.stock_code || t.code || t.symbol).filter(Boolean) || []
     )
   ).sort()
+
+  // 从交易记录中提取股票代码与名称的映射（使用 useMemo 优化）
+  const stockNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    if (result.trades) {
+      result.trades.forEach((trade: any) => {
+        const code = trade.stock_code || trade.code || trade.symbol
+        const name = trade.stock_name || trade.name
+        if (code && name && !map.has(code)) {
+          map.set(code, name)
+        }
+      })
+    }
+    return map
+  }, [result.trades])
+
+  // 准备股票过滤下拉框的选项数据
+  const stockFilterOptions = useMemo(() => {
+    // 添加"全部"选项
+    const options = [{
+      value: 'all',
+      label: `全部 (${result.trades?.length || 0})`,
+      searchText: `全部 all`
+    }]
+
+    // 添加各个股票选项
+    allStocks.forEach((stock) => {
+      const name = stockNameMap.get(stock)
+      const count = result.trades?.filter((t: any) =>
+        (t.stock_code || t.code || t.symbol) === stock
+      ).length || 0
+      const label = name ? `${name}(${stock}) (${count})` : `${stock} (${count})`
+      const searchText = name ? `${stock} ${name} ${label}` : `${stock} ${label}`
+
+      options.push({
+        value: stock,
+        label,
+        searchText
+      })
+    })
+
+    return options
+  }, [allStocks, stockNameMap, result.trades])
 
   // 提取所有唯一的交易原因
   const allReasons = Array.from(
@@ -242,26 +294,16 @@ export const TradesTable = memo(function TradesTable({ result }: { result: any }
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   股票:
                 </label>
-                <select
+                <StockCombobox
                   value={selectedStock}
-                  onChange={(e) => {
-                    setSelectedStock(e.target.value)
+                  onValueChange={(value) => {
+                    setSelectedStock(value)
                     resetPage()
                   }}
-                  className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">全部 ({result.trades?.length || 0})</option>
-                  {allStocks.map((stock) => {
-                    const count = result.trades?.filter((t: any) =>
-                      (t.stock_code || t.code || t.symbol) === stock
-                    ).length || 0
-                    return (
-                      <option key={stock} value={stock}>
-                        {stock} ({count})
-                      </option>
-                    )
-                  })}
-                </select>
+                  options={stockFilterOptions}
+                  placeholder="选择股票"
+                  width="w-[220px]"
+                />
               </div>
             )}
 
@@ -270,18 +312,22 @@ export const TradesTable = memo(function TradesTable({ result }: { result: any }
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 方向:
               </label>
-              <select
+              <Select
                 value={selectedDirection}
-                onChange={(e) => {
-                  setSelectedDirection(e.target.value)
+                onValueChange={(value) => {
+                  setSelectedDirection(value)
                   resetPage()
                 }}
-                className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">全部</option>
-                <option value="buy">买入</option>
-                <option value="sell">卖出</option>
-              </select>
+                <SelectTrigger className="w-[110px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  <SelectItem value="buy">买入</SelectItem>
+                  <SelectItem value="sell">卖出</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* 原因过滤 */}
@@ -290,21 +336,25 @@ export const TradesTable = memo(function TradesTable({ result }: { result: any }
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   原因:
                 </label>
-                <select
+                <Select
                   value={selectedReason}
-                  onChange={(e) => {
-                    setSelectedReason(e.target.value)
+                  onValueChange={(value) => {
+                    setSelectedReason(value)
                     resetPage()
                   }}
-                  className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="all">全部</option>
-                  {allReasons.map((reason) => (
-                    <option key={reason} value={reason}>
-                      {translateReason(reason, reason)}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-[140px] h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    {allReasons.map((reason) => (
+                      <SelectItem key={reason} value={reason}>
+                        {translateReason(reason, reason)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
