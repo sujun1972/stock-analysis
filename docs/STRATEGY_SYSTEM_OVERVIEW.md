@@ -363,5 +363,92 @@ Phase 4: 优化与上线 (1-2周)
 
 ---
 
-**最后更新**: 2026-02-08
-**下一步**: 团队评审 → 确定优先级 → 启动实施
+## ✅ 实施状态更新 (2026-03-07)
+
+### 已完成：完全数据库驱动的策略系统
+
+**实施日期**: 2026-03-07
+**状态**: ✅ 已部署生产环境
+
+#### 核心架构变更
+
+**旧架构** (本地文件驱动):
+```
+Backend API → StrategyFactory → 本地 .py 文件
+```
+
+**新架构** (数据库驱动):
+```
+Backend API → StrategyDynamicLoader → PostgreSQL → exec() → 策略实例
+```
+
+#### 关键组件
+
+1. **StrategyDynamicLoader** ([backend/app/services/strategy_loader.py](../backend/app/services/strategy_loader.py))
+   - 统一的策略加载入口
+   - 支持入场策略和离场策略
+   - 代码哈希验证 (SHA-256)
+   - 安全的命名空间隔离
+   - 自定义配置参数覆盖
+
+2. **数据库迁移** ([backend/migrations/V010__insert_builtin_strategies.sql](../backend/migrations/V010__insert_builtin_strategies.sql))
+   - 8个内置策略完整代码存储
+   - 自动处理冲突 (ON CONFLICT DO UPDATE)
+   - 默认 `publish_status='approved'`
+
+3. **简化的回测API** ([backend/app/api/endpoints/backtest.py](../backend/app/api/endpoints/backtest.py))
+   - 删除 ~80 行重复代码
+   - 统一使用 StrategyDynamicLoader
+   - 错误处理更一致
+
+#### 已迁移策略
+
+**入场策略 (3个)**:
+- 动量入场策略 (MomentumStrategy)
+- 均值回归入场策略 (MeanReversionStrategy)
+- 多因子入场策略 (MultiFactorStrategy)
+
+**离场策略 (5个)**:
+- 止损离场策略 (StopLossExitStrategy)
+- 止盈离场策略 (TakeProfitExitStrategy)
+- 持仓时长离场策略 (HoldingPeriodExitStrategy)
+- 移动止损离场策略 (TrailingStopExitStrategy)
+- 自适应离场策略 (AdaptiveExitStrategy)
+
+#### 实现的功能
+
+- ✅ 所有策略代码存储在数据库
+- ✅ 所有策略通过动态加载运行
+- ✅ 移除 Core 层对本地策略文件的依赖
+- ✅ 用户可以创建/编辑/删除策略
+- ✅ 系统启动时无需本地策略文件
+- ✅ 代码版本可追溯 (code_hash)
+- ✅ 多租户支持 (user_id 绑定)
+
+#### 技术成果
+
+- **代码减少**: ~300 行
+- **架构灵活性**: ⬆️⬆️⬆️
+- **可维护性**: ⬆️⬆️
+- **用户体验**: ⬆️⬆️⬆️
+
+#### 下一步计划
+
+1. **安全增强** (P1):
+   - [ ] 添加代码安全验证 (AST 分析)
+   - [ ] 限制导入为白名单模块
+   - [ ] 添加 exec() 超时限制
+
+2. **性能优化** (P2):
+   - [ ] 添加策略实例缓存
+   - [ ] 优化代码加载性能
+
+3. **用户体验** (P3):
+   - [ ] 前端策略编辑器 (Monaco Editor)
+   - [ ] 策略版本管理
+   - [ ] 策略性能统计
+
+---
+
+**最后更新**: 2026-03-07
+**状态**: ✅ 数据库驱动架构已完成，系统运行稳定

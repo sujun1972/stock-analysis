@@ -154,54 +154,15 @@ def execute_backtest_core(
     if str(core_path) not in sys.path:
         sys.path.insert(0, str(core_path))
 
+    # 使用统一的策略动态加载器
+    from app.services.strategy_loader import StrategyDynamicLoader
+
     if strategy_record['source_type'] in ['builtin', 'ai', 'custom']:
-        # 所有策略类型都使用统一的动态加载方式
         try:
-            # 导入 core 模块（实际路径是 src）
-            from src.strategies.base_strategy import BaseStrategy
-            from src.strategies.signal_generator import SignalGenerator
-            import src.strategies
-
-            # 创建命名空间，预导入常用模块和 core 模块
-            namespace = {
-                '__builtins__': __builtins__,
-                'pd': pd,
-                'np': __import__('numpy'),
-                'logger': logger,
-                'BaseStrategy': BaseStrategy,
-                'SignalGenerator': SignalGenerator,
-            }
-
-            # 修复策略代码中的导入路径（将 core. 替换为 src.）
-            code = strategy_record['code']
-            code = code.replace('from core.', 'from src.')
-            code = code.replace('import core.', 'import src.')
-
-            # 执行代码
-            exec(code, namespace)
-
-            # 获取策略类
-            strategy_class = namespace.get(strategy_record['class_name'])
-            if not strategy_class:
-                raise ValueError(f"策略类 {strategy_record['class_name']} 未找到")
-
-            # 解析默认参数
-            default_params = strategy_record.get('default_params', {})
-            if isinstance(default_params, str):
-                import json
-                default_params = json.loads(default_params) if default_params else {}
-
-            # 合并策略参数：优先使用传入的参数，否则使用默认参数
-            strategy_name = strategy_record['name']
-            strategy_config = default_params or {}
-            if strategy_params:
-                strategy_config.update(strategy_params)
-                logger.info(f"使用自定义策略参数: {strategy_params}")
-
-            strategy = strategy_class(name=strategy_name, config=strategy_config)
-
-            logger.info(f"成功加载{strategy_record['source_type']}策略: {strategy_record['name']}")
-
+            strategy = StrategyDynamicLoader.load_strategy(
+                strategy_record=strategy_record,
+                custom_config=strategy_params
+            )
         except Exception as e:
             logger.error(f"加载策略失败: {e}", exc_info=True)
             raise ValueError(f"加载策略失败: {str(e)}")
@@ -373,51 +334,14 @@ def execute_backtest_core(
     if progress_callback:
         progress_callback(7, 11, '加载离场策略...')
 
-    # 7. 加载离场策略（如果指定）
+    # 7. 加载离场策略（如果指定）- 使用统一加载器
     exit_manager = None
     if exit_strategy_ids and len(exit_strategy_ids) > 0:
         try:
-            from src.ml.exit_strategy import CompositeExitManager
-
-            exit_strategies = []
-            for exit_id in exit_strategy_ids:
-                exit_record = repo.get_by_id(exit_id)
-                if not exit_record:
-                    logger.warning(f"离场策略不存在: exit_strategy_id={exit_id}")
-                    continue
-
-                if exit_record['strategy_type'] != 'exit':
-                    logger.warning(f"策略 {exit_id} 不是离场策略，跳过")
-                    continue
-
-                # 动态执行离场策略代码
-                try:
-                    exec_globals = {}
-                    exec(exit_record['code'], exec_globals)
-                    exit_class = exec_globals[exit_record['class_name']]
-
-                    # 使用默认参数实例化
-                    default_params = exit_record.get('default_params', {})
-                    if isinstance(default_params, str):
-                        import json
-                        default_params = json.loads(default_params)
-
-                    exit_instance = exit_class(**default_params) if default_params else exit_class()
-                    exit_strategies.append(exit_instance)
-                    logger.info(f"成功加载离场策略: {exit_record['display_name']}")
-
-                except Exception as e:
-                    logger.error(f"加载离场策略失败 {exit_id}: {e}", exc_info=True)
-                    continue
-
-            if exit_strategies:
-                exit_manager = CompositeExitManager(
-                    exit_strategies=exit_strategies,
-                    enable_reverse_entry=True,
-                    enable_risk_control=True
-                )
-                logger.info(f"[回测核心] 已加载 {len(exit_strategies)} 个离场策略")
-
+            exit_manager = StrategyDynamicLoader.load_exit_manager(
+                exit_strategy_ids=exit_strategy_ids,
+                repo=repo
+            )
         except Exception as e:
             logger.warning(f"[回测核心] 加载离场策略失败: {e}", exc_info=True)
 
