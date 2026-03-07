@@ -19,7 +19,6 @@ import {
   Download,
   Play,
   ArrowLeft,
-  Building2,
   Sparkles,
   User,
   CheckCircle,
@@ -113,12 +112,7 @@ export default function StrategyCodePage() {
 
   // 删除策略
   const handleDelete = async () => {
-    if (!strategy || strategy.source_type === 'builtin') {
-      toast({
-        title: '操作失败',
-        description: '内置策略不允许删除',
-        variant: 'destructive'
-      })
+    if (!strategy) {
       return
     }
 
@@ -189,8 +183,6 @@ export default function StrategyCodePage() {
   const getSourceIcon = () => {
     if (!strategy) return null
     switch (strategy.source_type) {
-      case 'builtin':
-        return <Building2 className="h-5 w-5" />
       case 'ai':
         return <Sparkles className="h-5 w-5" />
       case 'custom':
@@ -515,52 +507,48 @@ export default function StrategyCodePage() {
               创建变体
             </Button>
 
-            {strategy.source_type !== 'builtin' && (
-              <>
-                {/* 申请发布按钮（仅 draft 和 rejected 状态，且验证通过） */}
-                {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') &&
-                  strategy.validation_status === 'passed' && (
-                    <Button
-                      onClick={handleRequestPublish}
-                    >
-                      <Send className="mr-2 h-4 w-4" />
-                      申请发布
-                    </Button>
-                  )}
+            {/* 申请发布按钮（仅 draft 和 rejected 状态，且验证通过） */}
+            {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') &&
+              strategy.validation_status === 'passed' && (
+                <Button
+                  onClick={handleRequestPublish}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  申请发布
+                </Button>
+              )}
 
-                {/* 撤回申请按钮（仅 pending_review 状态） */}
-                {strategy.publish_status === 'pending_review' && (
-                  <Button
-                    variant="outline"
-                    onClick={handleWithdrawPublish}
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    撤回申请
-                  </Button>
-                )}
+            {/* 撤回申请按钮（仅 pending_review 状态） */}
+            {strategy.publish_status === 'pending_review' && (
+              <Button
+                variant="outline"
+                onClick={handleWithdrawPublish}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                撤回申请
+              </Button>
+            )}
 
-                {/* 编辑按钮（仅 draft 和 rejected 可编辑） */}
-                {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') && (
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/strategies/${strategy.id}/edit`)}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    编辑
-                  </Button>
-                )}
+            {/* 编辑按钮（仅 draft 和 rejected 可编辑） */}
+            {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') && (
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/strategies/${strategy.id}/edit`)}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                编辑
+              </Button>
+            )}
 
-                {/* 删除按钮（仅 draft 和 rejected 可删除） */}
-                {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') && (
-                  <Button
-                    variant="destructive"
-                    onClick={handleDelete}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    删除
-                  </Button>
-                )}
-              </>
+            {/* 删除按钮（仅 draft 和 rejected 可删除） */}
+            {(strategy.publish_status === 'draft' || strategy.publish_status === 'rejected') && (
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                删除
+              </Button>
             )}
           </div>
         </CardContent>

@@ -34,7 +34,7 @@ export interface Strategy {
   class_name: string
 
   // 来源分类
-  source_type: 'builtin' | 'ai' | 'custom'
+  source_type: 'ai' | 'custom'
 
   // 策略类型（新增：区分入场策略和离场策略）
   strategy_type: 'entry' | 'exit'
@@ -88,7 +88,7 @@ export interface CreateStrategyRequest {
   display_name: string
   code: string
   class_name: string
-  source_type: 'builtin' | 'ai' | 'custom'
+  source_type: 'ai' | 'custom'
   strategy_type: 'entry' | 'exit'  // 新增：策略类型
   description?: string
   category?: string
@@ -124,7 +124,6 @@ export interface StrategyValidationResponse {
 export interface StrategyStatistics {
   total: number
   by_source: {
-    builtin: number
     ai: number
     custom: number
   }

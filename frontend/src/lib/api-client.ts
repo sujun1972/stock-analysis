@@ -688,7 +688,7 @@ class ApiClient {
    * 获取统一策略列表
    */
   async getStrategies(params?: {
-    source_type?: 'builtin' | 'ai' | 'custom'
+    source_type?: 'ai' | 'custom'
     strategy_type?: 'entry' | 'exit'
     category?: string
     is_enabled?: boolean

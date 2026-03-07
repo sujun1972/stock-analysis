@@ -148,16 +148,6 @@ function EditStrategyContent() {
 
     if (!strategy) return
 
-    // 内置策略不允许编辑
-    if (strategy.source_type === 'builtin') {
-      toast({
-        title: '编辑失败',
-        description: '内置策略不允许编辑',
-        variant: 'destructive'
-      })
-      return
-    }
-
     if (!name || !displayName || !className || !code) {
       toast({
         title: '提交失败',
@@ -226,39 +216,6 @@ function EditStrategyContent() {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 返回策略列表
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  // 内置策略不允许编辑
-  if (strategy.source_type === 'builtin') {
-    return (
-      <div className="container mx-auto py-6 px-4 max-w-5xl">
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center">
-              <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">无法编辑内置策略</h3>
-              <p className="text-muted-foreground mb-6">
-                内置策略不允许直接编辑。您可以克隆此策略创建一个可编辑的副本。
-              </p>
-              <div className="flex gap-4 justify-center">
-                <Button
-                  variant="outline"
-                  onClick={() => router.push('/strategies')}
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  返回列表
-                </Button>
-                <Button
-                  onClick={() => router.push(`/strategies/create?clone=${strategyId}`)}
-                >
-                  克隆策略
-                </Button>
-              </div>
             </div>
           </CardContent>
         </Card>

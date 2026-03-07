@@ -79,7 +79,7 @@ function BacktestContent() {
   useEffect(() => {
     const loadMLStrategyId = async () => {
       try {
-        const response = await apiClient.getStrategies({ source_type: 'builtin' })
+        const response = await apiClient.getStrategies({})
         if (response.success && response.data) {
           const mlStrategy = response.data.find((s: any) => s.name === 'ml_model')
           if (mlStrategy) {

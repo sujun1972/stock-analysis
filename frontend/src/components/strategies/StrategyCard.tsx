@@ -230,8 +230,8 @@ const StrategyCard = memo(function StrategyCard({
           </Button>
         )}
 
-        {/* 编辑按钮（仅自定义和AI策略，且用户有权限） */}
-        {strategy.source_type !== 'builtin' && onEdit && canModify && (
+        {/* 编辑按钮（用户有权限时可编辑） */}
+        {onEdit && canModify && (
           <Button
             size="sm"
             variant="outline"
@@ -241,8 +241,8 @@ const StrategyCard = memo(function StrategyCard({
           </Button>
         )}
 
-        {/* 删除按钮（仅自定义和AI策略，且用户有权限） */}
-        {strategy.source_type !== 'builtin' && onDelete && canModify && (
+        {/* 删除按钮（用户有权限时可删除） */}
+        {onDelete && canModify && (
           <Button
             size="sm"
             variant="destructive"
