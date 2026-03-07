@@ -1,6 +1,18 @@
 /**
  * 策略中心页面 (V2.0)
- * 展示所有已启用的策略（内置/AI/自定义）
+ *
+ * 功能:
+ * - Tab 导航切换入场/离场策略
+ * - 全宽列表卡片展示策略详情
+ * - 分页功能(每页10条)
+ * - 搜索和筛选功能
+ * - 支持查看代码、回测、克隆、编辑、删除等操作
+ *
+ * URL 参数:
+ * - type: entry(入场策略) | exit(离场策略), 默认为 entry
+ *
+ * @version 2.0
+ * @date 2026-03-07
  */
 
 'use client'
@@ -11,6 +23,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis
+} from '@/components/ui/pagination'
 import {
   Plus,
   Search,
@@ -24,9 +46,9 @@ import {
   Filter
 } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
-import StrategyCard from '@/components/strategies/StrategyCard'
+import StrategyListCard from '@/components/strategies/StrategyListCard'
 import StrategyCategoryFilter from '@/components/strategies/StrategyCategoryFilter'
 import { apiClient } from '@/lib/api-client'
 import type { Strategy } from '@/types/strategy'
@@ -34,6 +56,7 @@ import { useAuthStore, isAdmin } from '@/stores/auth-store'
 
 export default function StrategiesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const { user } = useAuthStore()
   const userIsAdmin = isAdmin()
@@ -45,18 +68,27 @@ export default function StrategiesPage() {
   const [statistics, setStatistics] = useState<any>(null)
   const [users, setUsers] = useState<Array<{id: number, username: string}>>([])
 
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
+  // 从 URL 获取策略类型（entry/exit）
+  const strategyType = searchParams.get('type') || 'entry'
+
   // 加载策略列表
   useEffect(() => {
     loadStrategies()
     loadStatistics()
-  }, [userFilter, categoryFilter])
+    setCurrentPage(1) // 重置分页
+  }, [userFilter, categoryFilter, strategyType])
 
   const loadStrategies = async () => {
     try {
       setLoading(true)
       const params: any = {
         is_enabled: true, // 只加载已启用的策略
-        publish_status: 'approved' // 只加载已发布的策略
+        publish_status: 'approved', // 只加载已发布的策略
+        strategy_type: strategyType // 根据 tab 筛选策略类型
       }
       if (userFilter !== 'all') params.user_id = parseInt(userFilter)
       if (categoryFilter !== 'all') params.category = categoryFilter
@@ -111,7 +143,75 @@ export default function StrategiesPage() {
     })
   }, [strategies, searchQuery])
 
-  // 处理策略删除
+  // 分页处理
+  const totalPages = Math.ceil(filteredStrategies.length / itemsPerPage)
+  const paginatedStrategies = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return filteredStrategies.slice(startIndex, endIndex)
+  }, [filteredStrategies, currentPage, itemsPerPage])
+
+  /**
+   * 处理 Tab 切换
+   * 通过更新 URL 参数来切换策略类型
+   */
+  const handleTabChange = (value: string) => {
+    router.push(`/strategies?type=${value}`)
+  }
+
+  /**
+   * 处理分页切换
+   * 切换页面并滚动到顶部
+   */
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  /**
+   * 生成分页页码数组
+   * 智能显示页码,超过7页时使用省略号
+   * @returns 页码数组,包含数字和 'ellipsis'
+   */
+  const getPageNumbers = () => {
+    const pages: (number | 'ellipsis')[] = []
+    const maxVisible = 7
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i)
+        }
+        pages.push('ellipsis')
+        pages.push(totalPages)
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1)
+        pages.push('ellipsis')
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i)
+        }
+      } else {
+        pages.push(1)
+        pages.push('ellipsis')
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i)
+        }
+        pages.push('ellipsis')
+        pages.push(totalPages)
+      }
+    }
+
+    return pages
+  }
+
+  /**
+   * 处理策略删除
+   * 删除后重新加载策略列表和统计信息
+   */
   const handleDelete = async (id: number) => {
     if (!confirm('确定要删除这个策略吗？此操作不可恢复。')) {
       return
@@ -135,7 +235,10 @@ export default function StrategiesPage() {
     }
   }
 
-  // 处理策略克隆
+  /**
+   * 处理策略克隆
+   * 跳转到创建页面并携带克隆ID
+   */
   const handleClone = (id: number) => {
     router.push(`/strategies/create?clone=${id}`)
   }
@@ -160,58 +263,30 @@ export default function StrategiesPage() {
         </Link>
       </div>
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">总策略数</p>
-                  <p className="text-2xl font-bold">{statistics.total}</p>
-                </div>
-                <Activity className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
+      {/* Tab 导航 */}
+      <Tabs value={strategyType} onValueChange={handleTabChange} className="mb-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="entry" className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            入场策略
+            {statistics?.by_strategy_type?.entry && (
+              <Badge variant="secondary" className="ml-1">
+                {statistics.by_strategy_type.entry}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="exit" className="flex items-center gap-2">
+            <TrendingDown className="h-4 w-4" />
+            离场策略
+            {statistics?.by_strategy_type?.exit && (
+              <Badge variant="secondary" className="ml-1">
+                {statistics.by_strategy_type.exit}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">入场策略</p>
-                  <p className="text-2xl font-bold">{statistics.by_strategy_type?.entry || 0}</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">离场策略</p>
-                  <p className="text-2xl font-bold">{statistics.by_strategy_type?.exit || 0}</p>
-                </div>
-                <TrendingDown className="h-8 w-8 text-red-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">选股策略</p>
-                  <p className="text-2xl font-bold">{statistics.by_strategy_type?.stock_selection || 0}</p>
-                </div>
-                <Filter className="h-8 w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* 搜索和筛选 */}
       <Card className="mb-6">
@@ -292,7 +367,7 @@ export default function StrategiesPage() {
               <p className="text-muted-foreground mb-6">
                 {searchQuery || userFilter !== 'all' || categoryFilter !== 'all'
                   ? '没有找到匹配的策略，请调整筛选条件'
-                  : '还没有创建任何策略，立即创建您的第一个策略'}
+                  : `还没有创建任何${strategyType === 'entry' ? '入场' : '离场'}策略，立即创建您的第一个策略`}
               </p>
               {!searchQuery && userFilter === 'all' && categoryFilter === 'all' && (
                 <Link href="/strategies/create">
@@ -306,19 +381,73 @@ export default function StrategiesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredStrategies.map((strategy) => (
-            <StrategyCard
-              key={strategy.id}
-              strategy={strategy}
-              onBacktest={(id) => router.push(`/backtest?type=unified&id=${id}`)}
-              onDelete={handleDelete}
-              onClone={handleClone}
-              currentUserId={user?.id}
-              isAdmin={userIsAdmin}
-            />
-          ))}
-        </div>
+        <>
+          {/* 策略列表（全宽卡片） */}
+          <div className="space-y-4 mb-6">
+            {paginatedStrategies.map((strategy) => (
+              <StrategyListCard
+                key={strategy.id}
+                strategy={strategy}
+                onBacktest={(id) => router.push(`/backtest?type=unified&id=${id}`)}
+                onEdit={(id) => router.push(`/strategies/${id}/edit`)}
+                onDelete={handleDelete}
+                onClone={handleClone}
+                currentUserId={user?.id}
+                isAdmin={userIsAdmin}
+              />
+            ))}
+          </div>
+
+          {/* 分页控件 */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                显示 {Math.min((currentPage - 1) * itemsPerPage + 1, filteredStrategies.length)} -{' '}
+                {Math.min(currentPage * itemsPerPage, filteredStrategies.length)} 条，共 {filteredStrategies.length} 条
+              </div>
+
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+
+                  {getPageNumbers().map((page, index) => {
+                    if (page === 'ellipsis') {
+                      return (
+                        <PaginationItem key={`ellipsis-${index}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )
+                    }
+
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          onClick={() => handlePageChange(page as number)}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  })}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
+                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
