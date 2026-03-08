@@ -173,36 +173,34 @@ def execute_backtest_core(
         progress_callback(3, 11, '加载市场数据...')
 
     # 3. 加载市场数据
-    import asyncio
     market_data = pd.DataFrame()
     start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
     end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
 
-    # 在同步环境中调用异步函数
-    async def load_market_data():
-        nonlocal market_data
-        for code in stock_pool:
-            try:
-                code_data = await data_adapter.get_daily_data(
-                    code=code,
-                    start_date=start_dt,
-                    end_date=end_dt
-                )
-                if not code_data.empty:
-                    # 确保DatetimeIndex转为date列
-                    if isinstance(code_data.index, pd.DatetimeIndex):
-                        code_data = code_data.reset_index()
+    # 使用同步方式加载数据，避免事件循环冲突
+    # 说明：execute_backtest_core 是同步函数，但可能被异步 FastAPI 端点调用
+    # 如果在这里创建新的事件循环会导致 "Cannot run the event loop while another loop is running" 错误
+    # 因此直接调用 query_manager 的同步方法，而不是通过 DataAdapter 的异步包装
+    query_manager = data_adapter.query_manager
+    if query_manager is None:
+        raise ValueError("数据库连接不可用")
 
-                    code_data['code'] = code
-                    market_data = pd.concat([market_data, code_data], ignore_index=True)
-            except Exception as e:
-                logger.warning(f"加载股票 {code} 数据失败: {e}")
+    for code in stock_pool:
+        try:
+            code_data = query_manager.load_daily_data(
+                stock_code=code,
+                start_date=start_dt.strftime("%Y-%m-%d"),
+                end_date=end_dt.strftime("%Y-%m-%d")
+            )
+            if not code_data.empty:
+                # 确保DatetimeIndex转为date列
+                if isinstance(code_data.index, pd.DatetimeIndex):
+                    code_data = code_data.reset_index()
 
-    # 运行异步数据加载
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(load_market_data())
-    loop.close()
+                code_data['code'] = code
+                market_data = pd.concat([market_data, code_data], ignore_index=True)
+        except Exception as e:
+            logger.warning(f"加载股票 {code} 数据失败: {e}")
 
     if market_data.empty:
         raise ValueError(f"未找到股票池的历史数据")

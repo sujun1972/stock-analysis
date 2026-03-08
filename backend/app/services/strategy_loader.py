@@ -77,6 +77,21 @@ class StrategyDynamicLoader:
         # 2. 准备命名空间（隔离执行环境，预导入常用模块）
         import pandas as pd
         import numpy as np
+        import types
+
+        # 注册 core 模块别名，支持数据库中策略代码使用 core.* 路径
+        # 背景：数据库中的策略代码使用 'from core.strategies import ...'
+        # 但实际模块在 Docker 容器的 /app/core/src 中
+        # 这里创建 core -> src 的映射，让两种导入路径都能工作
+        core_module = types.ModuleType('core')
+        import src.strategies
+        import src.ml
+        core_module.strategies = src.strategies
+        core_module.ml = src.ml
+
+        sys.modules['core'] = core_module
+        sys.modules['core.strategies'] = src.strategies
+        sys.modules['core.ml'] = src.ml
 
         namespace = {
             '__builtins__': __builtins__,
