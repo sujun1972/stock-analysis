@@ -219,10 +219,21 @@ def execute_backtest_core(
     # 去重：同一天同一股票只保留最后一条记录
     market_data = market_data.drop_duplicates(subset=['trade_date', 'code'], keep='last')
 
-    # Pivot to wide format: index=dates, columns=stock codes, values=close prices
-    prices = market_data.pivot(index='trade_date', columns='code', values='close').sort_index()
+    # Pivot to wide format: index=dates, columns=stock codes
+    # 策略可能需要完整的 OHLCV 数据，所以提供一个包含所有列的 DataFrame 结构
+    # 使用 concat 创建多层列结构：prices['open'], prices['close'] 等
+    ohlcv_dfs = {
+        'open': market_data.pivot(index='trade_date', columns='code', values='open').sort_index(),
+        'high': market_data.pivot(index='trade_date', columns='code', values='high').sort_index(),
+        'low': market_data.pivot(index='trade_date', columns='code', values='low').sort_index(),
+        'close': market_data.pivot(index='trade_date', columns='code', values='close').sort_index(),
+        'volume': market_data.pivot(index='trade_date', columns='code', values='volume').sort_index()
+    }
 
-    logger.info(f"[回测核心] 价格数据: {len(prices)} 天 x {len(prices.columns)} 只股票")
+    # 合并成多层列结构的 DataFrame
+    prices = pd.concat(ohlcv_dfs, axis=1, keys=ohlcv_dfs.keys())
+
+    logger.info(f"[回测核心] 价格数据: {len(prices)} 天 x {len(prices['close'].columns)} 只股票")
 
     if progress_callback:
         progress_callback(5, 11, '计算特征数据...')
@@ -276,8 +287,8 @@ def execute_backtest_core(
                     features_data = {}
 
                     for factor in factor_columns:
-                        factor_data = pd.DataFrame(index=all_dates, columns=prices.columns)
-                        for code in prices.columns:
+                        factor_data = pd.DataFrame(index=all_dates, columns=prices['close'].columns)
+                        for code in prices['close'].columns:
                             if code in features_dict:
                                 stock_features = features_dict[code]
                                 if factor in stock_features.columns:
@@ -319,7 +330,7 @@ def execute_backtest_core(
             signals = momentum_raw
     elif hasattr(strategy, 'calculate_scores'):
         # 其他策略：使用通用评分方法（指定dtype避免object类型）
-        signals = pd.DataFrame(index=prices.index, columns=prices.columns, dtype=float)
+        signals = pd.DataFrame(index=prices.index, columns=prices['close'].columns, dtype=float)
         for date in prices.index:
             scores = strategy.calculate_scores(prices, date=date)
             signals.loc[date] = scores
@@ -1139,10 +1150,21 @@ async def run_backtest_main(
         # 去重：同一天同一股票只保留最后一条记录
         market_data = market_data.drop_duplicates(subset=['trade_date', 'code'], keep='last')
 
-        # Pivot to wide format: index=dates, columns=stock codes, values=close prices
-        prices = market_data.pivot(index='trade_date', columns='code', values='close').sort_index()
+        # Pivot to wide format: index=dates, columns=stock codes
+        # 策略可能需要完整的 OHLCV 数据，所以提供一个包含所有列的 DataFrame 结构
+        # 使用 concat 创建多层列结构：prices['open'], prices['close'] 等
+        ohlcv_dfs = {
+            'open': market_data.pivot(index='trade_date', columns='code', values='open').sort_index(),
+            'high': market_data.pivot(index='trade_date', columns='code', values='high').sort_index(),
+            'low': market_data.pivot(index='trade_date', columns='code', values='low').sort_index(),
+            'close': market_data.pivot(index='trade_date', columns='code', values='close').sort_index(),
+            'volume': market_data.pivot(index='trade_date', columns='code', values='volume').sort_index()
+        }
 
-        logger.info(f"[回测] 价格数据: {len(prices)} 天 x {len(prices.columns)} 只股票")
+        # 合并成多层列结构的 DataFrame
+        prices = pd.concat(ohlcv_dfs, axis=1, keys=ohlcv_dfs.keys())
+
+        logger.info(f"[回测] 价格数据: {len(prices)} 天 x {len(prices['close'].columns)} 只股票")
 
         # 5. 计算特征数据（如果策略需要）
         features = None
@@ -1199,8 +1221,8 @@ async def run_backtest_main(
                         features_data = {}
 
                         for factor in factor_columns:
-                            factor_data = pd.DataFrame(index=all_dates, columns=prices.columns)
-                            for code in prices.columns:
+                            factor_data = pd.DataFrame(index=all_dates, columns=prices['close'].columns)
+                            for code in prices['close'].columns:
                                 if code in features_dict:
                                     stock_features = features_dict[code]
                                     if factor in stock_features.columns:
@@ -1240,7 +1262,7 @@ async def run_backtest_main(
                 signals = momentum_raw
         elif hasattr(strategy, 'calculate_scores'):
             # 其他策略：使用通用评分方法（指定dtype避免object类型）
-            signals = pd.DataFrame(index=prices.index, columns=prices.columns, dtype=float)
+            signals = pd.DataFrame(index=prices.index, columns=prices['close'].columns, dtype=float)
             for date in prices.index:
                 scores = strategy.calculate_scores(prices, date=date)
                 signals.loc[date] = scores

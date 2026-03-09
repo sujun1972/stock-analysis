@@ -56,9 +56,70 @@ class CodeSanitizer:
         '__code__', '__globals__', '__closure__',
     }
 
+    # 允许的 pandas DataFrame/Series 方法
+    ALLOWED_PANDAS_METHODS = {
+        # 核心类构造器
+        'Series', 'DataFrame', 'Index', 'MultiIndex', 'DatetimeIndex',
+        # 数据访问
+        'loc', 'iloc', 'at', 'iat', 'get', 'values', 'index', 'columns',
+        # 数据选择
+        'head', 'tail', 'sample', 'nlargest', 'nsmallest', 'query',
+        # 数据统计
+        'mean', 'median', 'std', 'var', 'min', 'max', 'sum', 'count',
+        'quantile', 'describe', 'corr', 'cov', 'skew', 'kurt',
+        # 数据转换
+        'abs', 'round', 'clip', 'rank', 'pct_change', 'diff', 'shift',
+        'rolling', 'expanding', 'ewm', 'resample', 'astype', 'apply',
+        # 数据处理
+        'fillna', 'dropna', 'isna', 'isnull', 'notna', 'notnull',
+        'replace', 'interpolate', 'bfill', 'ffill', 'pad',
+        # 数据合并
+        'merge', 'join', 'concat', 'append', 'groupby', 'pivot',
+        # 布尔操作
+        'any', 'all', 'between', 'isin', 'str', 'dt',
+        # 时间处理
+        'to_datetime', 'to_timedelta', 'date_range', 'period_range',
+        # 其他常用
+        'sort_values', 'sort_index', 'reset_index', 'set_index',
+        'drop', 'copy', 'T', 'transpose', 'squeeze', 'to_numpy',
+        'tolist', 'items', 'iterrows', 'itertuples',
+    }
+
+    # 允许的 numpy 方法
+    ALLOWED_NUMPY_METHODS = {
+        # 数组创建
+        'array', 'zeros', 'ones', 'empty', 'arange', 'linspace',
+        # 数学函数
+        'abs', 'sqrt', 'exp', 'log', 'log10', 'log2', 'power',
+        'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'arctan2',
+        # 统计函数
+        'mean', 'median', 'std', 'var', 'min', 'max', 'sum',
+        'percentile', 'quantile', 'corrcoef', 'cov',
+        # 数组操作
+        'reshape', 'transpose', 'concatenate', 'stack', 'vstack', 'hstack',
+        'split', 'squeeze', 'expand_dims', 'where', 'select',
+        # 逻辑函数
+        'isnan', 'isinf', 'isfinite', 'all', 'any', 'logical_and',
+        'logical_or', 'logical_not', 'logical_xor',
+        # 其他
+        'clip', 'round', 'floor', 'ceil', 'sign', 'diff',
+    }
+
+    # 允许的 logger 方法
+    ALLOWED_LOGGER_METHODS = {
+        'debug', 'info', 'warning', 'error', 'critical', 'success',
+    }
+
+    # 允许的 BaseStrategy 方法（可以在策略中调用）
+    ALLOWED_STRATEGY_METHODS = {
+        'filter_stocks', 'validate_signals', 'get_position_weights',
+        'backtest', 'get_metadata', 'get_strategy_info',
+    }
+
     def __init__(self):
         self.validation_errors: List[str] = []
         self.validation_warnings: List[str] = []
+        self.method_calls: Dict[str, int] = {}  # 记录方法调用次数
 
     def sanitize(
         self,
@@ -182,11 +243,24 @@ class CodeSanitizer:
                         )
                         risk_level = 'high'
 
+                # 检查方法调用
+                elif isinstance(node.func, ast.Attribute):
+                    method_name = node.func.attr
+                    self._check_method_call(node.func, method_name)
+                    risk_level = max(risk_level, 'low', key=self._risk_order) if self.validation_warnings else risk_level
+
             # 检查属性访问
             elif isinstance(node, ast.Attribute):
                 if node.attr in self.FORBIDDEN_ATTRIBUTES:
                     self.validation_errors.append(
                         f"禁止访问属性: {node.attr}"
+                    )
+                    risk_level = 'high'
+
+                # 检查是否使用 self.logger（应该使用全局 logger）
+                elif node.attr == 'logger' and isinstance(node.value, ast.Name) and node.value.id == 'self':
+                    self.validation_errors.append(
+                        "禁止使用 self.logger，请使用全局 logger 变量"
                     )
                     risk_level = 'high'
 
@@ -200,6 +274,68 @@ class CodeSanitizer:
                                 risk_level = 'high'
 
         return risk_level
+
+    def _check_method_call(self, node: ast.Attribute, method_name: str):
+        """
+        检查方法调用是否在允许列表中
+
+        Args:
+            node: AST 属性节点
+            method_name: 方法名
+        """
+        # 记录方法调用
+        self.method_calls[method_name] = self.method_calls.get(method_name, 0) + 1
+
+        # 获取调用对象的名称
+        obj_name = None
+        if isinstance(node.value, ast.Name):
+            obj_name = node.value.id
+        elif isinstance(node.value, ast.Attribute):
+            obj_name = node.value.attr
+
+        # 检查常见的允许方法
+        allowed_methods = (
+            self.ALLOWED_PANDAS_METHODS |
+            self.ALLOWED_NUMPY_METHODS |
+            self.ALLOWED_LOGGER_METHODS |
+            self.ALLOWED_STRATEGY_METHODS
+        )
+
+        # 检查是否是明确禁止的危险方法
+        DANGEROUS_METHODS = {
+            'eval', 'exec', 'compile', '__import__', 'open', 'file',
+            'system', 'popen', 'subprocess', 'shell',
+        }
+
+        # 如果是 logger 方法调用
+        if obj_name == 'logger':
+            if method_name not in self.ALLOWED_LOGGER_METHODS:
+                self.validation_warnings.append(
+                    f"未知的 logger 方法: logger.{method_name}，建议使用: {', '.join(sorted(self.ALLOWED_LOGGER_METHODS))}"
+                )
+        # 如果是 pd/pandas 方法
+        elif obj_name in ['pd', 'pandas']:
+            # 只对明确危险的方法发出警告，其他都允许
+            if method_name in DANGEROUS_METHODS:
+                self.validation_errors.append(
+                    f"禁止的 pandas 方法: pd.{method_name}"
+                )
+        # 如果是 np/numpy 方法
+        elif obj_name in ['np', 'numpy']:
+            # 只对明确危险的方法发出警告，其他都允许
+            if method_name in DANGEROUS_METHODS:
+                self.validation_errors.append(
+                    f"禁止的 numpy 方法: np.{method_name}"
+                )
+        # 如果是 self 方法调用
+        elif obj_name == 'self':
+            # 允许所有 self 方法（包括私有方法）
+            pass
+        # 其他方法调用，检查是否在禁止列表中
+        elif method_name in self.FORBIDDEN_ATTRIBUTES:
+            self.validation_errors.append(
+                f"禁止调用方法: {method_name}"
+            )
 
     def _check_string_literals(self, code: str):
         """检查字符串字面量中的可疑内容"""
@@ -225,11 +361,12 @@ class CodeSanitizer:
         return order.get(level, 0)
 
     def _build_result(self, is_safe: bool, code: str, risk_level: str) -> Dict:
-        """构建返回��果"""
+        """构建返回结果"""
         return {
             'safe': is_safe,
             'sanitized_code': code,
             'errors': self.validation_errors,
             'warnings': self.validation_warnings,
-            'risk_level': risk_level
+            'risk_level': risk_level,
+            'method_calls': self.method_calls  # 方法调用统计
         }

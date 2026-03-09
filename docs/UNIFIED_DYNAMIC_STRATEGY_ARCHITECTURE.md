@@ -959,6 +959,63 @@ async def run_backtest(
     return results
 ```
 
+### 5.3 回测数据格式
+
+回测系统为策略提供**多层列结构**的价格数据，支持完整的 OHLCV 数据访问：
+
+```python
+# 数据结构
+prices = pd.DataFrame with MultiIndex columns
+    - Level 0: ['open', 'high', 'low', 'close', 'volume']
+    - Level 1: stock codes ['600000.SH', '600001.SH', ...]
+
+# 访问方式
+prices['close']              # DataFrame: index=dates, columns=stocks
+prices['close'].columns      # ['600000.SH', '600001.SH', ...]
+prices['close']['600000.SH'] # Series: 600000.SH 的收盘价时间序列
+prices['open'][stock]        # 访问开盘价
+prices['high'][stock]        # 访问最高价
+prices['low'][stock]         # 访问最低价
+prices['volume'][stock]      # 访问成交量
+```
+
+**实现位置**：`backend/app/api/endpoints/backtest.py`
+
+```python
+# 将原始market_data pivot成多层列结构
+ohlcv_dfs = {
+    'open': market_data.pivot(index='trade_date', columns='code', values='open').sort_index(),
+    'high': market_data.pivot(index='trade_date', columns='code', values='high').sort_index(),
+    'low': market_data.pivot(index='trade_date', columns='code', values='low').sort_index(),
+    'close': market_data.pivot(index='trade_date', columns='code', values='close').sort_index(),
+    'volume': market_data.pivot(index='trade_date', columns='code', values='volume').sort_index()
+}
+
+# 合并成多层列结构
+prices = pd.concat(ohlcv_dfs, axis=1, keys=ohlcv_dfs.keys())
+```
+
+**策略使用示例**：
+
+```python
+class MyStrategy(BaseStrategy):
+    def calculate_scores(self, prices, features=None, date=None):
+        # 验证数据格式
+        required_columns = ['open', 'high', 'low', 'close', 'volume']
+        if not all(col in prices.columns for col in required_columns):
+            raise ValueError(f"价格数据必须包含: {required_columns}")
+
+        # 遍历所有股票
+        for stock in prices['close'].columns:
+            open_price = prices['open'][stock]
+            high_price = prices['high'][stock]
+            low_price = prices['low'][stock]
+            close_price = prices['close'][stock]
+            volume = prices['volume'][stock]
+
+            # 计算指标...
+```
+
 ---
 
 ## 六、实施路线图

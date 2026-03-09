@@ -231,6 +231,7 @@ class AIStrategyService:
 from typing import Optional, Dict, Any
 import pandas as pd
 import numpy as np
+from loguru import logger
 from core.strategies.base_strategy import BaseStrategy
 ```
 
@@ -326,6 +327,47 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
    - 计算指标后验证：`if pd.isna(indicator): continue`
    - 检查数据长度：`if len(data) < min_length: continue`
    - 避免除零：使用 `(denominator + 1e-9)`
+
+4. **日志记录** (重要):
+   - ✅ 必须使用全局 `logger` 变量，例如：`logger.info("message")`
+   - ❌ 禁止使用 `self.logger`（会导致安全验证失败）
+   - 允许的 logger 方法：`debug`, `info`, `warning`, `error`, `critical`, `success`
+   - 示例：
+     ```python
+     logger.info(f"策略参数: {self.config.custom_params}")
+     logger.warning("数据不足，跳过计算")
+     logger.error(f"计算失败: {str(e)}")
+     ```
+
+5. **允许使用的库和方法** (采用宽松策略):
+
+   **Pandas 库** - ✅ 几乎所有方法都允许:
+   - 核心类: `pd.Series()`, `pd.DataFrame()`, `pd.Index()`, `pd.DatetimeIndex()`
+   - 时间处理: `pd.to_datetime()`, `pd.date_range()`, `pd.period_range()`
+   - 所有 DataFrame/Series 方法: `loc`, `iloc`, `fillna`, `rolling`, `groupby`, `merge` 等
+   - 示例:
+     ```python
+     df = pd.DataFrame(data)
+     series = pd.Series(values)
+     result = df.groupby('category').mean()
+     ```
+
+   **NumPy 库** - ✅ 几乎所有方法都允许:
+   - 数组创建: `np.array()`, `np.zeros()`, `np.ones()`, `np.arange()`
+   - 数学函数: `np.mean()`, `np.std()`, `np.sqrt()`, `np.exp()`, `np.log()`
+   - 逻辑函数: `np.where()`, `np.isnan()`, `np.all()`, `np.any()`
+
+   **BaseStrategy 方法** - ✅ 允许所有:
+   - 基类方法: `self.filter_stocks()`, `self.validate_signals()`, `self.get_position_weights()`
+   - 配置访问: `self.config.custom_params.get()`
+   - 自定义私有方法: 允许定义和调用任何 `self._xxx()` 方法
+
+6. **禁止使用的内容**:
+   - ❌ 文件操作: `open`, `read`, `write`
+   - ❌ 系统调用: `os.system`, `subprocess`, `exec`, `eval`
+   - ❌ 网络请求: `requests`, `urllib`, `socket`
+   - ❌ 不安全的属性: `__dict__`, `__class__`, `__globals__`
+   - ❌ 使用 `self.logger`（必须用全局 `logger`）
 
 **现在请根据以上模板和我的策略需求，生成完整的策略代码和元信息。**"""
 
