@@ -51,5 +51,11 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载回测任务模块失败: {e}")
 
+try:
+    from app.tasks import ai_strategy_tasks
+    logger.info(f"✅ 已加载AI策略生成任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载AI策略生成任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])

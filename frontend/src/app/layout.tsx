@@ -9,6 +9,8 @@ import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { StockSearch } from "@/components/stock-search";
 import { BacktestTaskProvider } from "@/contexts/BacktestTaskContext";
+import { AIGenerationTaskProvider } from "@/contexts/AIGenerationTaskContext";
+import { AIGenerationTaskMonitor } from "@/components/AIGenerationTaskMonitor";
 
 export const metadata: Metadata = {
   title: "A股AI量化交易系统",
@@ -26,13 +28,16 @@ export default function RootLayout({
         <ErrorBoundary>
           <QueryProvider>
             <BacktestTaskProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
-              <div className="min-h-screen flex flex-col">
+              <AIGenerationTaskProvider>
+                <ThemeProvider
+                  attribute="class"
+                  defaultTheme="system"
+                  enableSystem
+                  disableTransitionOnChange
+                >
+                <div className="min-h-screen flex flex-col">
+                {/* 全局AI生成任务监控器 */}
+                <AIGenerationTaskMonitor />
             <header className="bg-blue-600 text-white shadow-lg">
             <div className="container-custom py-4">
               <div className="flex items-center justify-between gap-4">
@@ -73,9 +78,10 @@ export default function RootLayout({
               </p>
             </div>
           </footer>
-              </div>
-              <Toaster />
-              </ThemeProvider>
+                </div>
+                <Toaster />
+                </ThemeProvider>
+              </AIGenerationTaskProvider>
             </BacktestTaskProvider>
           </QueryProvider>
         </ErrorBoundary>

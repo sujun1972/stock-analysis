@@ -1231,6 +1231,55 @@ class ApiClient {
     const response = await axiosInstance.get('/api/strategies/my-strategies', { params })
     return response.data
   }
+
+  // ========== AI策略生成异步API ==========
+
+  /**
+   * 异步生成AI策略（立即返回task_id）
+   */
+  async generateStrategyAsync(params: {
+    strategy_requirement: string
+    provider?: string
+    use_custom_prompt?: boolean
+    custom_prompt_template?: string
+  }): Promise<{
+    task_id: string
+    status: string
+    message: string
+    provider_used: string
+  }> {
+    const response = await axiosInstance.post('/api/ai-strategy/async-generate', params)
+    return response.data
+  }
+
+  /**
+   * 查询AI策略生成任务状态
+   */
+  async getAIGenerationStatus(taskId: string): Promise<{
+    task_id: string
+    status: 'PENDING' | 'PROGRESS' | 'SUCCESS' | 'FAILURE'
+    message: string
+    strategy_code?: string
+    strategy_metadata?: any
+    tokens_used?: number
+    generation_time?: number
+    provider_used?: string
+    error?: string
+  }> {
+    const response = await axiosInstance.get(`/api/ai-strategy/status/${taskId}`)
+    return response.data
+  }
+
+  /**
+   * 取消AI策略生成任务
+   */
+  async cancelAIGeneration(taskId: string): Promise<{
+    message: string
+    task_id: string
+  }> {
+    const response = await axiosInstance.delete(`/api/ai-strategy/cancel/${taskId}`)
+    return response.data
+  }
 }
 
 // 导出单例

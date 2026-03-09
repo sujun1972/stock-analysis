@@ -3,8 +3,9 @@ AI策略生成API端点
 """
 
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from loguru import logger
+from celery.result import AsyncResult
 
 from app.api.error_handler import handle_api_errors
 from app.schemas.ai_config import (
@@ -17,6 +18,8 @@ from app.schemas.ai_config import (
 from app.repositories.ai_config_repository import ai_config_repository
 from app.services.ai_service import ai_strategy_service
 from app.core.exceptions import AIServiceError
+from app.celery_app import celery_app
+from app.tasks.ai_strategy_tasks import generate_strategy_async
 
 router = APIRouter()
 
@@ -308,3 +311,184 @@ async def get_default_provider():
         "updated_at": config.updated_at,
     }
     return AIProviderConfigResponse(**config_dict)
+
+
+# ============ 异步AI策略生成端点 ============
+
+@router.post("/async-generate", status_code=status.HTTP_202_ACCEPTED)
+@handle_api_errors
+async def generate_strategy_async_endpoint(request: AIStrategyGenerateRequest):
+    """
+    异步生成策略代码（立即返回task_id）
+
+    流程：
+    1. 验证AI提供商配置
+    2. 提交Celery异步任务
+    3. 立即返回task_id
+    4. 客户端轮询 GET /ai-strategy/status/{task_id} 获取进度和结果
+
+    Args:
+        request: 策略生成请求
+            - strategy_requirement: 策略需求描述
+            - provider: 指定AI提供商（可选）
+            - use_custom_prompt: 是否使用自定义提示词模板
+            - custom_prompt_template: 自定义提示词模板（可选）
+
+    Returns:
+        {
+            "task_id": "abc-123-def",
+            "status": "pending",
+            "message": "AI策略生成任务已提交",
+            "provider_used": "deepseek"
+        }
+    """
+    try:
+        # 获取AI提供商配置
+        if request.provider:
+            provider_config_obj = ai_config_repository.get_by_provider(request.provider)
+            if not provider_config_obj:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"未找到AI提供商配置: {request.provider}"
+                )
+        else:
+            provider_config_obj = ai_config_repository.get_default()
+            if not provider_config_obj:
+                raise HTTPException(
+                    status_code=404,
+                    detail="未配置默认AI提供商，请先在管理页面配置"
+                )
+
+        if not provider_config_obj.is_active:
+            raise HTTPException(
+                status_code=400,
+                detail=f"AI提供商 {provider_config_obj.provider} 未启用"
+            )
+
+        # 构建配置字典
+        provider_config = {
+            "provider": provider_config_obj.provider,
+            "api_key": provider_config_obj.api_key,
+            "api_base_url": provider_config_obj.api_base_url,
+            "model_name": provider_config_obj.model_name,
+            "max_tokens": provider_config_obj.max_tokens,
+            "temperature": provider_config_obj.temperature / 100.0,
+            "timeout": provider_config_obj.timeout,
+        }
+
+        # 提交Celery异步任务（立即返回）
+        task = generate_strategy_async.delay(
+            strategy_requirement=request.strategy_requirement,
+            provider_config=provider_config,
+            custom_prompt_template=(
+                request.custom_prompt_template if request.use_custom_prompt else None
+            )
+        )
+
+        logger.info(
+            f"AI策略生成任务已提交 [task_id={task.id}], "
+            f"provider={provider_config_obj.provider}"
+        )
+
+        return {
+            "task_id": task.id,
+            "status": "pending",
+            "message": f"AI策略生成任务已提交，使用提供商: {provider_config_obj.provider}",
+            "provider_used": provider_config_obj.provider
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"提交AI策略生成任务失败: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"任务提交失败: {str(e)}")
+
+
+@router.get("/status/{task_id}")
+@handle_api_errors
+async def get_generation_status(task_id: str):
+    """
+    查询AI策略生成任务状态
+
+    Args:
+        task_id: Celery任务ID
+
+    Returns:
+        - PENDING: 任务排队中
+        - PROGRESS: 生成中（包含进度信息）
+        - SUCCESS: 成功（包含完整结果）
+        - FAILURE: 失败（包含错误信息）
+    """
+    try:
+        task = AsyncResult(task_id, app=celery_app)
+
+        response = {
+            "task_id": task_id,
+            "status": task.state
+        }
+
+        if task.state == 'PENDING':
+            response["message"] = "任务排队中，等待AI服务..."
+
+        elif task.state == 'PROGRESS':
+            # 返回进度信息（只返回状态文字，不返回具体进度百分比）
+            info = task.info or {}
+            response["message"] = info.get('status', 'AI策略生成进行中...')
+
+        elif task.state == 'SUCCESS':
+            # 返回完整结果
+            result = task.result
+            response["strategy_code"] = result.get('strategy_code')
+            response["strategy_metadata"] = result.get('strategy_metadata')
+            response["tokens_used"] = result.get('tokens_used')
+            response["generation_time"] = result.get('generation_time')
+            response["provider_used"] = result.get('provider_used')
+            response["message"] = "策略生成成功"
+
+        elif task.state == 'FAILURE':
+            # 返回错误信息
+            error = str(task.info) if task.info else "未知错误"
+            response["error"] = error
+            response["message"] = f"策略生成失败: {error}"
+
+        else:
+            response["message"] = f"未知状态: {task.state}"
+
+        return response
+
+    except Exception as e:
+        logger.error(f"查询任务状态失败 [task_id={task_id}]: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"查询状态失败: {str(e)}")
+
+
+@router.delete("/cancel/{task_id}")
+@handle_api_errors
+async def cancel_generation_task(task_id: str):
+    """
+    取消AI策略生成任务
+
+    Args:
+        task_id: Celery任务ID
+
+    Returns:
+        {"message": "任务已取消", "task_id": "..."}
+    """
+    try:
+        task = AsyncResult(task_id, app=celery_app)
+
+        if task.state in ['PENDING', 'PROGRESS']:
+            task.revoke(terminate=True)
+            logger.info(f"AI策略生成任务已取消 [task_id={task_id}]")
+            return {
+                "message": "任务已取消",
+                "task_id": task_id
+            }
+        else:
+            return {
+                "message": f"任务当前状态为 {task.state}，无法取消",
+                "task_id": task_id
+            }
+
+    except Exception as e:
+        logger.error(f"取消任务失败 [task_id={task_id}]: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"取消任务失败: {str(e)}")
