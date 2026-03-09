@@ -16,12 +16,14 @@
 import hashlib
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from pydantic import BaseModel, Field, validator
 
 from app.api.error_handler import handle_api_errors
+from app.core.dependencies import get_current_user
 from app.core_adapters.dynamic_strategy_adapter import DynamicStrategyAdapter
+from app.models.user import User
 from app.repositories.dynamic_strategy_repository import DynamicStrategyRepository
 
 router = APIRouter()
@@ -208,14 +210,18 @@ async def validate_code(request: ValidateCodeRequest) -> Dict[str, Any]:
 
 @router.post("", summary="创建动态策略", status_code=status.HTTP_201_CREATED)
 @handle_api_errors
-async def create_dynamic_strategy(data: DynamicStrategyCreate) -> Dict[str, Any]:
+async def create_dynamic_strategy(
+    data: DynamicStrategyCreate,
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
     """
     创建新的动态代码策略
 
-    自动进行代码验证和安全检查。
+    自动进行代码验证和安全检查，并绑定到当前登录用户。
 
     Args:
         data: 动态策略数据
+        current_user: 当前登录用户
 
     Returns:
         {
@@ -270,13 +276,16 @@ async def create_dynamic_strategy(data: DynamicStrategyCreate) -> Dict[str, Any]
         'validation_warnings': validation_result.get('warnings'),
         'category': data.category,
         'tags': data.tags,
+        'user_id': current_user.id,  # 绑定用户ID
+        'created_by': current_user.username,  # 绑定创建用户名
     }
 
     strategy_id = repo.create(strategy_data)
 
     logger.success(
         f"创建动态策略成功: strategy_id={strategy_id}, "
-        f"name={data.strategy_name}, validation={validation_result['status']}"
+        f"name={data.strategy_name}, user={current_user.username} (id={current_user.id}), "
+        f"validation={validation_result['status']}"
     )
 
     return {
@@ -296,6 +305,7 @@ async def list_dynamic_strategies(
     is_enabled: Optional[bool] = Query(None, description="是否启用过滤"),
     status_filter: Optional[str] = Query(None, alias="status", description="状态过滤"),
     category: Optional[str] = Query(None, description="分类过滤"),
+    created_by: Optional[str] = Query(None, description="创建者过滤（用户名）"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量")
 ) -> Dict[str, Any]:
@@ -309,6 +319,7 @@ async def list_dynamic_strategies(
         is_enabled: 是否启用过滤
         status_filter: 状态过滤
         category: 分类过滤
+        created_by: 创建者过滤（传入用户名，可用于显示"我的策略"）
         page: 页码
         page_size: 每页数量
 
@@ -330,13 +341,15 @@ async def list_dynamic_strategies(
         validation_status=validation_status,
         is_enabled=is_enabled,
         status=status_filter,
+        created_by=created_by,
         page=page,
         page_size=page_size
     )
 
     logger.info(
         f"获取动态策略列表: page={page}, "
-        f"page_size={page_size}, total={result['meta']['total']}"
+        f"page_size={page_size}, created_by={created_by}, "
+        f"total={result['meta']['total']}"
     )
 
     return {
@@ -417,16 +430,21 @@ async def get_strategy_code(strategy_id: int) -> Dict[str, Any]:
 @handle_api_errors
 async def update_dynamic_strategy(
     strategy_id: int,
-    data: DynamicStrategyUpdate
+    data: DynamicStrategyUpdate,
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     更新指定动态策略
 
     如果更新了代码，会自动重新验证。
 
+    权限要求：
+    - 必须是策略的创建者，或者是管理员用户
+
     Args:
         strategy_id: 策略ID
         data: 更新数据
+        current_user: 当前登录用户
 
     Returns:
         {
@@ -439,8 +457,18 @@ async def update_dynamic_strategy(
     adapter = DynamicStrategyAdapter()
     existing_strategy = await adapter.get_strategy_metadata(strategy_id)
 
-    # 2. 准备更新数据
-    update_data = data.dict(exclude_unset=True)
+    # 2. 权限检查：必须是策略创建者或管理员
+    is_admin = current_user.role in ['admin', 'super_admin']
+    is_creator = existing_strategy.get('created_by') == current_user.username
+
+    if not is_admin and not is_creator:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有策略创建者或管理员可以修改策略"
+        )
+
+    # 3. 准备更新数据
+    update_data = data.model_dump(exclude_unset=True)
 
     if not update_data:
         raise HTTPException(
@@ -448,7 +476,7 @@ async def update_dynamic_strategy(
             detail="没有提供更新数据"
         )
 
-    # 3. 如果更新了代码，重新验证
+    # 4. 如果更新了代码，重新验证
     validation_result = None
     if 'generated_code' in update_data:
         validation_result = await adapter.validate_strategy_code(
@@ -471,11 +499,15 @@ async def update_dynamic_strategy(
             f"status={validation_result['status']}"
         )
 
-    # 4. 更新数据库
+    # 5. 更新数据库
     repo = DynamicStrategyRepository()
+    update_data['updated_by'] = current_user.username  # 记录更新者
     repo.update(strategy_id, update_data)
 
-    logger.success(f"更新动态策略成功: strategy_id={strategy_id}")
+    logger.success(
+        f"更新动态策略成功: strategy_id={strategy_id}, "
+        f"updated_by={current_user.username} (id={current_user.id})"
+    )
 
     response = {
         "success": True,
@@ -490,12 +522,19 @@ async def update_dynamic_strategy(
 
 @router.delete("/{strategy_id}", summary="删除动态策略")
 @handle_api_errors
-async def delete_dynamic_strategy(strategy_id: int) -> Dict[str, Any]:
+async def delete_dynamic_strategy(
+    strategy_id: int,
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
     """
     删除指定动态策略
 
+    权限要求：
+    - 必须是策略的创建者，或者是管理员用户
+
     Args:
         strategy_id: 策略ID
+        current_user: 当前登录用户
 
     Returns:
         {
@@ -505,13 +544,27 @@ async def delete_dynamic_strategy(strategy_id: int) -> Dict[str, Any]:
     """
     # 1. 检查策略是否存在
     adapter = DynamicStrategyAdapter()
-    await adapter.get_strategy_metadata(strategy_id)
+    existing_strategy = await adapter.get_strategy_metadata(strategy_id)
 
-    # 2. 删除数据库记录
+    # 2. 权限检查：必须是策略创建者或管理员
+    is_admin = current_user.role in ['admin', 'super_admin']
+    is_creator = existing_strategy.get('created_by') == current_user.username
+
+    if not is_admin and not is_creator:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有策略创建者或管理员可以删除策略"
+        )
+
+    # 3. 删除数据库记录
     repo = DynamicStrategyRepository()
     repo.delete(strategy_id)
 
-    logger.warning(f"删除动态策略: strategy_id={strategy_id}")
+    logger.warning(
+        f"删除动态策略: strategy_id={strategy_id}, "
+        f"strategy_name={existing_strategy.get('strategy_name')}, "
+        f"deleted_by={current_user.username} (id={current_user.id})"
+    )
 
     return {
         "success": True,

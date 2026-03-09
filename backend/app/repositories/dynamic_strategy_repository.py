@@ -39,6 +39,7 @@ class DynamicStrategyRepository(BaseRepository):
                 - validation_warnings (dict, optional): 验证警告
                 - tags (list, optional): 标签列表
                 - category (str, optional): 分类
+                - user_id (int, optional): 用户ID
                 - created_by (str, optional): 创建人
 
         Returns:
@@ -53,9 +54,9 @@ class DynamicStrategyRepository(BaseRepository):
                 generated_code, code_hash,
                 user_prompt, ai_model, ai_prompt, generation_tokens, generation_cost,
                 validation_status, validation_errors, validation_warnings,
-                tags, category, created_by
+                tags, category, user_id, created_by
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """
 
@@ -76,6 +77,7 @@ class DynamicStrategyRepository(BaseRepository):
             json.dumps(data.get('validation_warnings')) if data.get('validation_warnings') else None,
             data.get('tags', []),
             data.get('category'),
+            data.get('user_id'),  # 新增：用户ID
             data.get('created_by'),
         )
 
@@ -195,6 +197,7 @@ class DynamicStrategyRepository(BaseRepository):
         validation_status: Optional[str] = None,
         is_enabled: Optional[bool] = None,
         status: Optional[str] = None,
+        created_by: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
     ) -> Dict[str, Any]:
@@ -205,6 +208,7 @@ class DynamicStrategyRepository(BaseRepository):
             validation_status: 验证状态过滤
             is_enabled: 是否启用过滤
             status: 状态过滤
+            created_by: 创建者过滤（用户名）
             page: 页码（从1开始）
             page_size: 每页数量
 
@@ -225,6 +229,10 @@ class DynamicStrategyRepository(BaseRepository):
         if status:
             conditions.append("status = %s")
             params.append(status)
+
+        if created_by:
+            conditions.append("created_by = %s")
+            params.append(created_by)
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 

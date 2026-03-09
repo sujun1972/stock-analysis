@@ -223,6 +223,7 @@ class DynamicStrategyAdapter:
         validation_status: Optional[str] = None,
         is_enabled: Optional[bool] = None,
         status: Optional[str] = None,
+        created_by: Optional[str] = None,
         page: int = 1,
         page_size: int = 20
     ) -> Dict[str, Any]:
@@ -233,6 +234,7 @@ class DynamicStrategyAdapter:
             validation_status: 验证状态过滤
             is_enabled: 是否启用过滤
             status: 状态过滤
+            created_by: 创建者过滤（用户名）
             page: 页码
             page_size: 每页数量
 
@@ -245,6 +247,7 @@ class DynamicStrategyAdapter:
                 validation_status=validation_status,
                 is_enabled=is_enabled,
                 status=status,
+                created_by=created_by,
                 page=page,
                 page_size=page_size
             )
