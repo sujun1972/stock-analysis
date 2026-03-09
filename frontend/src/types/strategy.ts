@@ -94,6 +94,7 @@ export interface CreateStrategyRequest {
   category?: string
   tags?: string[]
   default_params?: Record<string, any>
+  user_id?: number  // 新增：创建者用户ID（可选，不传则为系统策略）
 }
 
 /**

@@ -35,9 +35,9 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
-import type { Strategy } from '@/types/strategy'
 import { STRATEGY_CATEGORIES } from '@/types/strategy'
 import AIStrategyPromptHelperV2 from '@/components/strategies/AIStrategyPromptHelperV2'
+import { useAuthStore } from '@/stores/auth-store'
 
 // 动态导入 Monaco Editor (客户端组件)
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -54,6 +54,7 @@ function CreateStrategyContent() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { theme } = useTheme()
+  const { user } = useAuthStore()
 
   const source = searchParams.get('source') || 'custom'
   const cloneId = searchParams.get('clone')
@@ -192,7 +193,8 @@ function CreateStrategyContent() {
         strategy_type: 'entry', // 默认为入场策略
         description,
         category: category || undefined,
-        tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined
+        tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+        user_id: user?.id  // 传递当前用户ID
       })
 
       if (response.data) {

@@ -85,28 +85,71 @@ export default function StrategiesPage() {
   const loadStrategies = async () => {
     try {
       setLoading(true)
-      const params: any = {
-        is_enabled: true, // 只加载已启用的策略
-        publish_status: 'approved', // 只加载已发布的策略
-        strategy_type: strategyType // 根据 tab 筛选策略类型
-      }
-      if (userFilter !== 'all') params.user_id = parseInt(userFilter)
-      if (categoryFilter !== 'all') params.category = categoryFilter
 
-      const response = await apiClient.getStrategies(params)
-      if (response.data) {
-        setStrategies(response.data)
+      let allStrategies: Strategy[] = []
 
-        // 提取唯一的用户列表
-        const uniqueUsers = Array.from(
-          new Map(
-            response.data
-              .filter((s: any) => s.user_id && s.username)
-              .map((s: any) => [s.user_id, { id: s.user_id, username: s.username }])
-          ).values()
-        )
-        setUsers(uniqueUsers)
+      // 构建通用筛选参数
+      const buildCommonParams = () => ({
+        strategy_type: strategyType,
+        category: categoryFilter !== 'all' ? categoryFilter : undefined
+      })
+
+      if (user?.id && userFilter === 'all') {
+        // 已登录用户：同时获取"我的策略"和"已发布的策略"
+        const [myStrategiesResponse, publishedResponse] = await Promise.all([
+          // 我的所有策略（包含草稿状态）
+          apiClient.getStrategies({
+            user_id: user.id,
+            ...buildCommonParams()
+          }),
+          // 其他人已发布的策略
+          apiClient.getStrategies({
+            publish_status: 'approved',
+            is_enabled: true,
+            ...buildCommonParams()
+          })
+        ])
+
+        // 合并并去重（我的策略优先）
+        const myStrategies = myStrategiesResponse.data || []
+        const publishedStrategies = publishedResponse.data || []
+
+        const strategyMap = new Map<number, Strategy>()
+        myStrategies.forEach(s => strategyMap.set(s.id, s))
+        publishedStrategies.forEach(s => {
+          if (!strategyMap.has(s.id)) {
+            strategyMap.set(s.id, s)
+          }
+        })
+
+        allStrategies = Array.from(strategyMap.values())
+      } else {
+        // 未登录用户或应用了用户筛选
+        const params: any = buildCommonParams()
+
+        if (userFilter !== 'all') {
+          params.user_id = parseInt(userFilter)
+        } else if (!user?.id) {
+          // 未登录用户只能看已发布的策略
+          params.publish_status = 'approved'
+          params.is_enabled = true
+        }
+
+        const response = await apiClient.getStrategies(params)
+        allStrategies = response.data || []
       }
+
+      setStrategies(allStrategies)
+
+      // 提取唯一的用户列表用于筛选
+      const uniqueUsers = Array.from(
+        new Map(
+          allStrategies
+            .filter(s => s.user_id && s.username)
+            .map(s => [s.user_id, { id: s.user_id!, username: s.username! }])
+        ).values()
+      )
+      setUsers(uniqueUsers)
     } catch (error) {
       console.error('Failed to load strategies:', error)
       toast({
