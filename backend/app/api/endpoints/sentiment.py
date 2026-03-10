@@ -412,3 +412,208 @@ async def sentiment_health_check():
                 "database_connected": False
             }
         }
+
+
+# ========== 情绪周期相关（新增）==========
+
+try:
+    from app.services.sentiment_cycle_service import SentimentCycleService
+    cycle_service = SentimentCycleService()
+    _cycle_service_available = True
+except Exception as e:
+    logger.warning(f"情绪周期服务不可用: {e}")
+    _cycle_service_available = False
+
+
+@router.get("/cycle/current")
+async def get_current_cycle():
+    """
+    获取当前情绪周期阶段
+
+    Returns:
+        当前市场情绪周期数据
+    """
+    if not _cycle_service_available:
+        raise HTTPException(status_code=503, detail="情绪周期服务不可用")
+
+    try:
+        cycle = cycle_service.get_cycle_stage()
+
+        if 'error' in cycle:
+            return {
+                "code": 404,
+                "message": cycle['error'],
+                "data": None
+            }
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": cycle
+        }
+
+    except Exception as e:
+        logger.error(f"获取当前情绪周期失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/cycle/trend")
+async def get_cycle_trend(
+    days: int = Query(30, ge=7, le=90, description="天数")
+):
+    """
+    获取情绪周期趋势（近N天）
+
+    Returns:
+        趋势图数据
+    """
+    if not _cycle_service_available:
+        raise HTTPException(status_code=503, detail="情绪周期服务不可用")
+
+    try:
+        trend = cycle_service.get_cycle_trend(days=days)
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": trend
+        }
+
+    except Exception as e:
+        logger.error(f"获取情绪周期趋势失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== 游资分析相关（新增）==========
+
+@router.get("/hot-money/institution-top")
+async def get_institution_top_stocks(
+    date: Optional[str] = Query(None, description="日期"),
+    limit: int = Query(3, ge=1, le=10)
+):
+    """
+    获取机构净买入排行
+
+    Returns:
+        机构净买入前N的个股
+    """
+    if not _cycle_service_available:
+        raise HTTPException(status_code=503, detail="情绪周期服务不可用")
+
+    try:
+        ranking = cycle_service.get_institution_ranking(
+            date=date,
+            limit=limit
+        )
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": ranking
+        }
+
+    except Exception as e:
+        logger.error(f"获取机构排行失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hot-money/top-tier-limit-up")
+async def get_top_tier_limit_up_stocks(
+    date: Optional[str] = Query(None, description="日期"),
+    seat_type: str = Query("top_tier", description="席位类型"),
+    limit: int = Query(10, ge=1, le=50)
+):
+    """
+    获取顶级游资主导打板的个股
+
+    Args:
+        date: 日期
+        seat_type: 席位类型 (top_tier/famous)
+        limit: 返回数量
+
+    Returns:
+        游资打板排行榜
+    """
+    if not _cycle_service_available:
+        raise HTTPException(status_code=503, detail="情绪周期服务不可用")
+
+    try:
+        ranking = cycle_service.get_hot_money_ranking(
+            date=date,
+            seat_type=seat_type,
+            limit=limit
+        )
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": ranking
+        }
+
+    except Exception as e:
+        logger.error(f"获取游资打板排行失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hot-money/activity-ranking")
+async def get_hot_money_activity_ranking(
+    days: int = Query(30, ge=7, le=90, description="统计天数"),
+    limit: int = Query(20, ge=1, le=50)
+):
+    """
+    获取游资活跃度排行榜
+
+    Returns:
+        游资活跃度排行
+    """
+    if not _cycle_service_available:
+        raise HTTPException(status_code=503, detail="情绪周期服务不可用")
+
+    try:
+        ranking = cycle_service.get_hot_money_activity_ranking(
+            days=days,
+            limit=limit
+        )
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": ranking
+        }
+
+    except Exception as e:
+        logger.error(f"获取游资活跃度排行失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cycle/calculate")
+async def calculate_cycle(
+    date: str = Query(..., description="日期(YYYY-MM-DD)")
+):
+    """
+    手动触发情绪周期计算
+
+    Args:
+        date: 日期
+
+    Returns:
+        计算结果
+    """
+    if not _cycle_service_available:
+        raise HTTPException(status_code=503, detail="情绪周期服务不可用")
+
+    try:
+        cycle_service.sync_cycle_calculation(date)
+
+        # 返回计算结果
+        cycle = cycle_service.get_cycle_stage(date)
+
+        return {
+            "code": 200,
+            "message": "计算成功",
+            "data": cycle
+        }
+
+    except Exception as e:
+        logger.error(f"计算情绪周期失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

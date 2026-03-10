@@ -75,8 +75,19 @@ const navItems: NavItem[] = [
   },
   {
     name: '市场情绪',
-    href: '/sentiment',
-    icon: Zap
+    icon: Zap,
+    children: [
+      {
+        name: '情绪数据',
+        href: '/sentiment',
+        icon: Activity
+      },
+      {
+        name: '情绪周期',
+        href: '/sentiment-cycle',
+        icon: TrendingUp
+      }
+    ]
   },
   {
     name: '系统设置',

@@ -187,3 +187,187 @@ export interface ApiResponse<T = any> {
   message: string
   data?: T
 }
+
+// ==================== 情绪周期类型（新增）====================
+
+// 情绪周期数据
+export interface SentimentCycle {
+  trade_date: string
+  cycle_stage: 'freezing' | 'starting' | 'fermenting' | 'retreating'
+  cycle_stage_cn: '冰点' | '启动' | '发酵' | '退潮'
+  confidence_score: number
+
+  // 计算指标
+  limit_up_count: number
+  limit_down_count: number
+  limit_ratio: number
+  blast_count: number
+  blast_rate: number
+  max_continuous_days: number
+  max_continuous_count: number
+  continuous_growth_rate: number
+
+  // 核心指数
+  money_making_index: number  // 0-100
+  sentiment_score: number  // 0-100
+
+  // 阶段统计
+  stage_duration_days: number
+  previous_stage?: string
+  stage_change_date?: string
+
+  // 市场统计
+  total_stocks: number
+  rise_count: number
+  fall_count: number
+  rise_fall_ratio: number
+  total_amount: number
+  amount_change_rate: number
+
+  // 详细分析
+  analysis_result?: {
+    stage_reason?: string
+    key_indicators?: {
+      limit_up_strength?: string
+      continuous_height?: string
+      blast_pressure?: string
+      money_making_effect?: string
+    }
+    market_characteristics?: string[]
+    risk_warning?: string
+  }
+}
+
+// 情绪周期趋势点
+export interface SentimentCycleTrendPoint {
+  date: string
+  stage: string
+  money_making_index: number
+  sentiment_score: number
+  limit_up_count: number
+  max_continuous_days: number
+}
+
+// 情绪周期统计
+export interface SentimentCycleStatistics {
+  stage_distribution: Array<{
+    stage: string
+    days: number
+    avg_money_making_index: number
+    avg_sentiment_score: number
+  }>
+  overall_stats: {
+    avg_money_making_index: number
+    avg_sentiment_score: number
+    avg_limit_up_count: number
+    avg_continuous_days: number
+  }
+}
+
+// ==================== 游资相关类型（新增）====================
+
+// 游资席位
+export interface HotMoneySeat {
+  seat_name: string
+  seat_type: 'top_tier' | 'famous' | 'retail_base' | 'institution' | 'unknown'
+  seat_label: string
+  city?: string
+  broker?: string
+  branch_office?: string
+
+  // 统计信息
+  appearance_count: number
+  total_buy_amount: number
+  total_sell_amount: number
+  net_amount: number
+  win_rate?: number
+  avg_hold_days?: number
+
+  // 席位特征
+  trade_style?: string
+  specialty_sectors?: string[]
+  tags?: string[]
+  last_appearance_date?: string
+  description?: string
+
+  // 活跃度（排行用）
+  activity_score?: number
+  rank?: number
+}
+
+// 机构净买入个股
+export interface InstitutionTopStock {
+  stock_code: string
+  stock_name: string
+  close_price: number
+  price_change: number
+  net_buy_amount: number
+  institution_count: number
+  institution_seats: Array<{
+    seat_name: string
+    buy_amount: number
+    rank: number
+  }>
+  reason: string
+}
+
+// 游资打板个股
+export interface HotMoneyLimitUpStock {
+  stock_code: string
+  stock_name: string
+  close_price: number
+  price_change: number
+  is_limit_up: boolean
+  hot_money_count: number
+  total_buy_amount: number
+  hot_money_seats: Array<{
+    seat_name: string
+    seat_label: string
+    buy_amount: number
+    rank: number
+  }>
+  reason: string
+}
+
+// 每日综合分析报告
+export interface DailySentimentAnalysis {
+  trade_date: string
+  summary: {
+    cycle_stage: string
+    money_making_index: number
+    sentiment_score: number
+    confidence: number
+    stage_duration: number
+  }
+  institution: {
+    top_stocks: InstitutionTopStock[]
+    net_buy: number
+    stock_count: number
+  }
+  hot_money: {
+    top_tier_stocks: HotMoneyLimitUpStock[]
+    total_buy: number
+    appearance_count: number
+  }
+  retail_base: {
+    stocks: HotMoneyLimitUpStock[]
+    total_buy: number
+  }
+  activity: {
+    top_tier_count: number
+    top_tier_buy_amount: number
+    institution_count: number
+    institution_buy_amount: number
+    retail_base_count: number
+    famous_count: number
+    total_records: number
+  }
+  characteristics: {
+    cycle_stage: string
+    money_making_index: number
+    sentiment_score: number
+    confidence: number
+    features: string[]
+  }
+  analysis_detail: any
+}

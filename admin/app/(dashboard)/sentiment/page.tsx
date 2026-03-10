@@ -85,7 +85,19 @@ export default function SentimentManagementPage() {
       </div>
 
       {/* 快捷入口卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow border-purple-200"
+              onClick={() => window.location.href = '/sentiment-cycle'}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">情绪周期</CardTitle>
+            <Activity className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">周期分析</div>
+            <p className="text-xs text-muted-foreground mt-1">赚钱效应与资金动向</p>
+          </CardContent>
+        </Card>
+
         <Card className="cursor-pointer hover:shadow-md transition-shadow border-green-200"
               onClick={() => window.location.href = '/sentiment/limit-up'}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
