@@ -87,7 +87,7 @@ export default function SentimentManagementPage() {
       {/* 快捷入口卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="cursor-pointer hover:shadow-md transition-shadow border-purple-200"
-              onClick={() => window.location.href = '/sentiment-cycle'}>
+              onClick={() => window.location.href = '/sentiment/cycle'}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">情绪周期</CardTitle>
             <Activity className="h-4 w-4 text-purple-600" />

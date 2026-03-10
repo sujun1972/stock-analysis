@@ -44,7 +44,7 @@ export default function LimitUpPoolPage() {
   return (
     <div className="space-y-6 p-6">
       {/* 返回按钮 */}
-      <Link href="/sentiment">
+      <Link href="/sentiment/data">
         <Button variant="ghost" size="sm">
           <ArrowLeft className="mr-2 h-4 w-4" />
           返回情绪总览

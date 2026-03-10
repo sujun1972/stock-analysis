@@ -58,7 +58,24 @@
 - 概念成分股查看
 - 股票数量统计
 
-### 8. 数据同步 (/sync)
+### 8. 市场情绪 (/sentiment)
+- **情绪数据** (/sentiment/data)
+  - 市场情绪指标监控（涨跌停、破板率、连板高度）
+  - 涨停板池和龙虎榜数据查看
+  - 实时情绪数据同步
+  - 快捷入口导航
+- **情绪周期** (/sentiment/cycle)
+  - 市场情绪周期分析和可视化
+  - 赚钱效应指数（MEI）计算和趋势展示
+  - 游资动向追踪
+  - 情绪阶段判断（冰点期、回暖期、高潮期、退潮期）
+- **AI分析** (/sentiment/ai-analysis)
+  - AI驱动的市场情绪深度分析
+  - 多模型支持（OpenAI、Deepseek等）
+  - 自动生成分析报告
+  - 历史分析记录管理
+
+### 9. 数据同步 (/sync)
 - 数据初始化 (/sync/initialize)
 - 新股列表同步 (/sync/new-stocks)
 - 退市列表同步 (/sync/delisted-stocks)
@@ -140,6 +157,17 @@ admin/
 │   │   └── page.tsx
 │   ├── concepts/          # 概念管理
 │   │   └── page.tsx
+│   ├── sentiment/         # 市场情绪
+│   │   ├── data/          # 情绪数据
+│   │   │   └── page.tsx
+│   │   ├── cycle/         # 情绪周期
+│   │   │   └── page.tsx
+│   │   ├── ai-analysis/   # AI分析
+│   │   │   └── page.tsx
+│   │   ├── limit-up/      # 涨停板池
+│   │   │   └── page.tsx
+│   │   └── dragon-tiger/  # 龙虎榜
+│   │       └── page.tsx
 │   ├── logs/              # 系统日志
 │   │   └── page.tsx
 │   └── monitor/           # 性能监控

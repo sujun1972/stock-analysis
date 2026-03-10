@@ -146,8 +146,6 @@ export default function SentimentAIAnalysisPage() {
       // apiClient.get() 已经返回 response.data，所以这里直接得到的是数据
       const data = await apiClient.get('/api/ai-strategy/providers')
 
-      console.log('AI Providers data:', data)
-
       // 确保是数组
       if (!Array.isArray(data)) {
         console.error('AI Providers data is not an array:', data)
@@ -157,7 +155,6 @@ export default function SentimentAIAnalysisPage() {
       }
 
       const providers = data.filter((p: AIProvider) => p.is_active)
-      console.log('Active providers:', providers)
 
       setAiProviders(providers)
 

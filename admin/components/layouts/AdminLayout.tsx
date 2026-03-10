@@ -79,12 +79,12 @@ const navItems: NavItem[] = [
     children: [
       {
         name: '情绪数据',
-        href: '/sentiment',
+        href: '/sentiment/data',
         icon: Activity
       },
       {
         name: '情绪周期',
-        href: '/sentiment-cycle',
+        href: '/sentiment/cycle',
         icon: TrendingUp
       },
       {
