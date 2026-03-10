@@ -145,13 +145,46 @@ AI策略生成功能允许用户通过后端API直接调用AI（如DeepSeek、Ge
 
 ## 初始化配置
 
-系统已预配置DeepSeek作为默认AI提供商：
+### 方式 1：通过初始化脚本（推荐）
 
-- **API Key**: `sk-4f697b5dd887435ab027612dc63779fd`
-- **模型**: `deepseek-chat`
-- **状态**: 已启用并设为默认
+运行初始化脚本，从环境变量读取 API Key 并创建配置：
 
-如需添加其他AI提供商，请使用创建API端点。
+```bash
+# 确保 .env 文件中已配置 DEEPSEEK_API_KEY
+python backend/scripts/init_ai_config.py
+```
+
+### 方式 2：通过管理后台
+
+1. 访问管理后台 http://localhost:3002
+2. 进入「AI 配置」页面
+3. 添加 DeepSeek 或其他 AI 提供商，填入你的 API Key
+
+### 方式 3：通过 API
+
+使用创建 API 端点手动添加配置：
+
+```bash
+curl -X POST http://localhost:8000/api/ai-strategy/providers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "deepseek",
+    "display_name": "DeepSeek",
+    "api_key": "你的API Key",
+    "api_base_url": "https://api.deepseek.com/v1",
+    "model_name": "deepseek-chat",
+    "max_tokens": 8000,
+    "temperature": 0.7,
+    "is_active": true,
+    "is_default": true,
+    "priority": 100,
+    "rate_limit": 10,
+    "timeout": 60,
+    "description": "DeepSeek AI - 高性价比的中文AI模型"
+  }'
+```
+
+**注意**：请使用你自己的 API Key，不要使用共享密钥。
 
 ## 使用示例
 

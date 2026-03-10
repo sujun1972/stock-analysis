@@ -1,8 +1,9 @@
 """
 初始化AI配置
-添加默认的DeepSeek配置
+从环境变量读取API Key并添加默认的AI提供商配置
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -22,25 +23,33 @@ def init_ai_config():
         print(f"✅ DeepSeek配置已存在，跳过初始化")
         return
 
-    # 创建DeepSeek配置
-    deepseek_config = {
-        "provider": "deepseek",
-        "display_name": "DeepSeek",
-        "api_key": "sk-4f697b5dd887435ab027612dc63779fd",
-        "api_base_url": "https://api.deepseek.com/v1",
-        "model_name": "deepseek-chat",
-        "max_tokens": 8000,
-        "temperature": 0.7,
-        "is_active": True,
-        "is_default": True,
-        "priority": 100,
-        "rate_limit": 10,
-        "timeout": 60,
-        "description": "DeepSeek AI - 高性价比的中文AI模型"
-    }
+    # 从环境变量读取 DeepSeek API Key
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("DATA_DEEPSEEK_API_KEY")
 
-    created = ai_config_repository.create(deepseek_config)
-    print(f"✅ 成功创建DeepSeek配置: {created.provider}")
+    if not deepseek_api_key:
+        print("⚠️  未找到 DEEPSEEK_API_KEY 环境变量，跳过DeepSeek配置")
+        print("💡 提示：请在 .env 文件中设置 DEEPSEEK_API_KEY 或 DATA_DEEPSEEK_API_KEY")
+        print("💡 或者通过管理后台 Web 界面手动添加 AI 提供商配置")
+    else:
+        # 创建DeepSeek配置
+        deepseek_config = {
+            "provider": "deepseek",
+            "display_name": "DeepSeek",
+            "api_key": deepseek_api_key,  # 从环境变量读取
+            "api_base_url": "https://api.deepseek.com/v1",
+            "model_name": "deepseek-chat",
+            "max_tokens": 8000,
+            "temperature": 0.7,
+            "is_active": True,
+            "is_default": True,
+            "priority": 100,
+            "rate_limit": 10,
+            "timeout": 60,
+            "description": "DeepSeek AI - 高性价比的中文AI模型"
+        }
+
+        created = ai_config_repository.create(deepseek_config)
+        print(f"✅ 成功创建DeepSeek配置: {created.provider}")
 
     # 可选：创建Gemini配置（需要用户自己填写API Key）
     gemini_existing = ai_config_repository.get_by_provider("gemini")
