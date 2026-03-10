@@ -617,3 +617,89 @@ async def calculate_cycle(
     except Exception as e:
         logger.error(f"计算情绪周期失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================
+# AI分析相关端点
+# =====================================================
+
+@router.get("/ai-analysis/{date}")
+async def get_ai_analysis(date: str):
+    """
+    获取指定日期的AI情绪分析报告
+
+    Args:
+        date: 日期 (YYYY-MM-DD)
+
+    Returns:
+        AI分析报告（四个灵魂拷问）
+    """
+    try:
+        from app.services.sentiment_ai_analysis_service import sentiment_ai_analysis_service
+
+        result = sentiment_ai_analysis_service.get_ai_analysis(date)
+
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"{date} 无AI分析数据，请先生成分析"
+            )
+
+        return {
+            "code": 200,
+            "message": "获取成功",
+            "data": result
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取AI分析失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ai-analysis/generate")
+async def generate_ai_analysis(
+    date: str = None,
+    provider: str = "deepseek"
+):
+    """
+    手动触发AI情绪分析生成
+
+    Args:
+        date: 日期 (YYYY-MM-DD)，默认为今天
+        provider: AI提供商 (deepseek/gemini/openai)
+
+    Returns:
+        生成结果
+    """
+    try:
+        from app.services.sentiment_ai_analysis_service import sentiment_ai_analysis_service
+        from datetime import datetime
+
+        if not date:
+            date = datetime.now().strftime('%Y-%m-%d')
+
+        logger.info(f"手动触发AI分析: {date}, 提供商: {provider}")
+
+        result = await sentiment_ai_analysis_service.generate_ai_analysis(
+            trade_date=date,
+            provider=provider
+        )
+
+        if result.get('success'):
+            return {
+                "code": 200,
+                "message": "AI分析生成成功",
+                "data": result
+            }
+        else:
+            return {
+                "code": 400,
+                "message": result.get('error', '生成失败'),
+                "data": result
+            }
+
+    except Exception as e:
+        logger.error(f"生成AI分析失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

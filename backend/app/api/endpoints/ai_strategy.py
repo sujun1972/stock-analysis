@@ -69,7 +69,7 @@ async def generate_strategy(request: AIStrategyGenerateRequest):
             "api_base_url": provider_config_obj.api_base_url,
             "model_name": provider_config_obj.model_name,
             "max_tokens": provider_config_obj.max_tokens,
-            "temperature": provider_config_obj.temperature / 100.0,  # 转换回0-1范围
+            "temperature": float(provider_config_obj.temperature),  # 转换回0-1范围
             "timeout": provider_config_obj.timeout,
         }
 
@@ -125,7 +125,7 @@ async def list_ai_providers():
             "api_base_url": config.api_base_url,
             "model_name": config.model_name,
             "max_tokens": config.max_tokens,
-            "temperature": config.temperature / 100.0,
+            "temperature": float(config.temperature),
             "is_active": config.is_active,
             "is_default": config.is_default,
             "priority": config.priority,
@@ -164,7 +164,7 @@ async def get_ai_provider(provider: str):
         "api_base_url": config.api_base_url,
         "model_name": config.model_name,
         "max_tokens": config.max_tokens,
-        "temperature": config.temperature / 100.0,
+        "temperature": float(config.temperature),
         "is_active": config.is_active,
         "is_default": config.is_default,
         "priority": config.priority,
@@ -207,7 +207,7 @@ async def create_ai_provider(config: AIProviderConfigCreate):
         "api_base_url": created_config.api_base_url,
         "model_name": created_config.model_name,
         "max_tokens": created_config.max_tokens,
-        "temperature": created_config.temperature / 100.0,
+        "temperature": float(config.temperature),
         "is_active": created_config.is_active,
         "is_default": created_config.is_default,
         "priority": created_config.priority,
@@ -247,7 +247,7 @@ async def update_ai_provider(provider: str, config: AIProviderConfigUpdate):
         "api_base_url": updated_config.api_base_url,
         "model_name": updated_config.model_name,
         "max_tokens": updated_config.max_tokens,
-        "temperature": updated_config.temperature / 100.0,
+        "temperature": float(config.temperature),
         "is_active": updated_config.is_active,
         "is_default": updated_config.is_default,
         "priority": updated_config.priority,
@@ -300,7 +300,7 @@ async def get_default_provider():
         "api_base_url": config.api_base_url,
         "model_name": config.model_name,
         "max_tokens": config.max_tokens,
-        "temperature": config.temperature / 100.0,
+        "temperature": float(config.temperature),
         "is_active": config.is_active,
         "is_default": config.is_default,
         "priority": config.priority,
@@ -372,7 +372,7 @@ async def generate_strategy_async_endpoint(request: AIStrategyGenerateRequest):
             "api_base_url": provider_config_obj.api_base_url,
             "model_name": provider_config_obj.model_name,
             "max_tokens": provider_config_obj.max_tokens,
-            "temperature": provider_config_obj.temperature / 100.0,
+            "temperature": float(provider_config_obj.temperature),
             "timeout": provider_config_obj.timeout,
         }
 

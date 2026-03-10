@@ -86,6 +86,11 @@ const navItems: NavItem[] = [
         name: '情绪周期',
         href: '/sentiment-cycle',
         icon: TrendingUp
+      },
+      {
+        name: 'AI分析',
+        href: '/sentiment/ai-analysis',
+        icon: Sparkles
       }
     ]
   },

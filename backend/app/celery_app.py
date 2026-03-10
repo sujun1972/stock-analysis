@@ -64,6 +64,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载市场情绪任务模块失败: {e}")
 
+try:
+    from app.tasks import sentiment_ai_analysis_task
+    logger.info(f"✅ 已加载情绪AI分析任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载情绪AI分析任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 
@@ -75,6 +81,19 @@ celery_app.conf.beat_schedule = {
         'schedule': crontab(
             hour=9,       # UTC 9点 = 北京时间17点
             minute=30,
+            day_of_week='1-5'  # 周一到周五
+        ),
+        'options': {
+            'expires': 3600,  # 1小时后过期
+        }
+    },
+
+    # 每日18:00（北京时间）执行市场情绪AI分析
+    'daily-sentiment-ai-analysis-18-00': {
+        'task': 'sentiment.ai_analysis_18_00',
+        'schedule': crontab(
+            hour=10,      # UTC 10点 = 北京时间18点
+            minute=0,
             day_of_week='1-5'  # 周一到周五
         ),
         'options': {
