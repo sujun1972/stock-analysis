@@ -4,6 +4,7 @@ Celery 应用配置
 """
 
 from celery import Celery
+from celery.schedules import crontab
 from loguru import logger
 
 from app.core.config import settings
@@ -57,5 +58,27 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载AI策略生成任务模块失败: {e}")
 
+try:
+    from app.tasks import sentiment_tasks
+    logger.info(f"✅ 已加载市场情绪任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载市场情绪任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
+
+# Celery Beat定时任务调度配置
+celery_app.conf.beat_schedule = {
+    # 每日17:30（北京时间）同步市场情绪数据
+    'daily-sentiment-sync-17-30': {
+        'task': 'sentiment.daily_sync_17_30',
+        'schedule': crontab(
+            hour=9,       # UTC 9点 = 北京时间17点
+            minute=30,
+            day_of_week='1-5'  # 周一到周五
+        ),
+        'options': {
+            'expires': 3600,  # 1小时后过期
+        }
+    },
+}

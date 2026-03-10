@@ -4,6 +4,7 @@
 
 - **多数据源支持**：**AkShare**（推荐，免费无限制）、Tushare Pro、yfinance
 - **时序数据库**：TimescaleDB（基于PostgreSQL）高性能存储历史行情数据
+- **市场情绪监测**：自动采集涨停板池、龙虎榜、机构动向等市场情绪数据，支持定时同步
 - **技术分析**：使用 **TA-Lib** 计算60+种技术指标（趋势、动量、波动率、Alpha因子）
 - **机器学习**：LightGBM、GRU深度学习模型进行价格预测
 - **AI策略生成**：集成DeepSeek、Gemini等AI，一键生成量化策略代码
@@ -48,6 +49,7 @@ stock-analysis/
 │   │   ├── features/  # 特征工程（技术指标、Alpha因子）
 │   │   ├── models/    # 机器学习模型（LightGBM、GRU）
 │   │   ├── backtest/  # 回测引擎
+│   │   ├── sentiment/ # 市场情绪数据抓取（涨停板池、龙虎榜）
 │   │   ├── data_fetcher.py
 │   │   └── main.py
 │   ├── scripts/       # 辅助脚本
@@ -78,6 +80,12 @@ stock-analysis/
 ### 数据获取层 ([core/src/data_fetcher.py](core/src/data_fetcher.py))
 - 多数据源支持：AkShare（推荐）、Tushare、yfinance
 - 智能缓存和错误重试机制
+
+### 市场情绪分析层 ([core/src/sentiment/](core/src/sentiment/))
+- `fetcher.py`：市场情绪数据抓取器（涨停板池、龙虎榜、机构席位明细）
+- `models.py`：情绪数据模型定义
+- 支持每日17:30自动同步，通过Celery Beat定时调度
+- 机构投资者行为追踪和分析
 
 ### 特征工程层 ([core/src/features/](core/src/features/))
 - `technical_indicators.py`：60+种技术指标（MA、MACD、RSI、KDJ、布林带、ATR等）

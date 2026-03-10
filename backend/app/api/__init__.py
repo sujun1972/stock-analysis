@@ -20,6 +20,7 @@ from .endpoints import (
     ml,
     profile,
     scheduler,
+    sentiment,
     stocks,
     strategies,  # Phase 2: 统一策略 API
     strategy,
@@ -67,5 +68,8 @@ router.include_router(experiment.router, prefix="/experiment", tags=["自动化�
 
 # AI策略生成路由
 router.include_router(ai_strategy.router, prefix="/ai-strategy", tags=["AI策略生成"])
+
+# 市场情绪路由
+router.include_router(sentiment.router, prefix="/sentiment", tags=["市场情绪"])
 
 __all__ = ["router"]

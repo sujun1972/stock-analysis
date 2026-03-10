@@ -29,7 +29,8 @@ import {
   Tag,
   TrendingUp,
   LineChart,
-  Sparkles
+  Sparkles,
+  Zap
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -71,6 +72,11 @@ const navItems: NavItem[] = [
     name: '概念管理',
     href: '/concepts',
     icon: Tag
+  },
+  {
+    name: '市场情绪',
+    href: '/sentiment',
+    icon: Zap
   },
   {
     name: '系统设置',
