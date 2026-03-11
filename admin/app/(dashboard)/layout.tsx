@@ -1,7 +1,9 @@
 'use client'
 
+import { QueryClientProvider } from '@tanstack/react-query'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { queryClient } from '@/lib/react-query-config'
 
 export default function DashboardLayout({
   children,
@@ -9,10 +11,12 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <ProtectedRoute requireAdmin>
-      <AdminLayout>
-        {children}
-      </AdminLayout>
-    </ProtectedRoute>
+    <QueryClientProvider client={queryClient}>
+      <ProtectedRoute requireAdmin>
+        <AdminLayout>
+          {children}
+        </AdminLayout>
+      </ProtectedRoute>
+    </QueryClientProvider>
   )
 }

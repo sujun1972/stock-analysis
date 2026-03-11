@@ -24,6 +24,9 @@ from loguru import logger
 from src.database.connection_pool_manager import ConnectionPoolManager
 from app.services.ai_service import AIStrategyService
 from app.core.exceptions import AIServiceError
+from app.services.llm_call_logger import llm_call_logger
+from app.schemas.llm_call_log import BusinessType, CallStatus
+from app.core.database import get_db
 
 
 class SentimentAIAnalysisService:
@@ -156,15 +159,17 @@ class SentimentAIAnalysisService:
         self,
         trade_date: str,
         provider: str = "deepseek",
-        model: str = None
+        model: str = None,
+        user_id: str = None
     ) -> Dict[str, Any]:
         """
-        生成AI盘后分析
+        生成AI盘后分析（带LLM调用日志记录）
 
         Args:
             trade_date: 交易日期（YYYY-MM-DD）
             provider: AI提供商（deepseek/gemini/openai）
             model: 模型名称（可选，使用默认）
+            user_id: 触发用户ID（可选，None表示定时任务触发）
 
         Returns:
             {
@@ -175,9 +180,14 @@ class SentimentAIAnalysisService:
                 "ai_model": "deepseek-chat",
                 "tokens_used": 1500,
                 "generation_time": 5.2,
+                "call_id": "uuid",  # LLM调用日志ID
                 "error": "错误信息（如果失败）"
             }
         """
+        call_id = None
+        start_time_log = None
+        db = None
+
         try:
             logger.info(f"开始生成 {trade_date} 的AI情绪分析...")
 
@@ -196,9 +206,35 @@ class SentimentAIAnalysisService:
             # 3. 获取AI提供商配置
             provider_config = self._get_provider_config(provider, model)
 
-            # 4. 调用AI生成情绪分析文本
-            # 注意：直接调用AI客户端获取文本响应，不使用generate_strategy()
-            # 因为generate_strategy()是用于生成策略代码的，会额外解析Python代码
+            # 4. 创建LLM调用日志（调用前）
+            try:
+                from datetime import date as date_type
+                db = next(get_db())
+
+                call_parameters = {
+                    "temperature": provider_config.get("temperature", 0.7),
+                    "max_tokens": provider_config.get("max_tokens", 4000),
+                    "timeout": provider_config.get("timeout", 60)
+                }
+
+                call_id, start_time_log = llm_call_logger.create_log_entry(
+                    db=db,
+                    business_type=BusinessType.SENTIMENT_ANALYSIS,
+                    provider=provider,
+                    model_name=provider_config.get("model_name", model or "deepseek-chat"),
+                    call_parameters=call_parameters,
+                    prompt_text=prompt,
+                    caller_service="SentimentAIAnalysisService",
+                    caller_function="generate_ai_analysis",
+                    business_date=date_type.fromisoformat(trade_date),
+                    user_id=user_id,
+                    is_scheduled=(user_id is None)
+                )
+                logger.info(f"LLM调用日志已创建: {call_id}")
+            except Exception as log_error:
+                logger.warning(f"创建LLM调用日志失败（不影响主流程）: {log_error}")
+
+            # 5. 调用AI生成情绪分析文本
             logger.info(f"调用 {provider} AI服务生成情绪分析...")
 
             client = self.ai_strategy_service.create_client(provider, provider_config)
@@ -211,10 +247,10 @@ class SentimentAIAnalysisService:
             if not ai_response_text or not isinstance(ai_response_text, str):
                 raise ValueError(f"AI返回内容无效: {type(ai_response_text)}")
 
-            # 5. 解析JSON结果（从AI返回的文本中提取JSON）
+            # 6. 解析JSON结果（从AI返回的文本中提取JSON）
             analysis_result = self._parse_ai_response(ai_response_text)
 
-            # 6. 存储到数据库
+            # 7. 存储到数据库
             self._save_ai_analysis(
                 trade_date=trade_date,
                 analysis_result=analysis_result,
@@ -225,6 +261,21 @@ class SentimentAIAnalysisService:
                 generation_time=round(generation_time, 2)
             )
 
+            # 8. 更新LLM调用日志为成功状态
+            if call_id and start_time_log and db:
+                try:
+                    llm_call_logger.update_log_success(
+                        db=db,
+                        call_id=call_id,
+                        start_time=start_time_log,
+                        response_text=ai_response_text,
+                        parsed_result=analysis_result,
+                        tokens_total=tokens_used
+                    )
+                    logger.info(f"LLM调用日志已更新为成功: {call_id}")
+                except Exception as log_error:
+                    logger.warning(f"更新LLM调用日志失败（不影响主流程）: {log_error}")
+
             logger.success(f"{trade_date} AI情绪分析生成成功")
 
             return {
@@ -234,16 +285,37 @@ class SentimentAIAnalysisService:
                 "ai_provider": provider,
                 "ai_model": provider_config.get('model_name', 'unknown'),
                 "tokens_used": tokens_used,
-                "generation_time": round(generation_time, 2)
+                "generation_time": round(generation_time, 2),
+                "call_id": call_id
             }
 
         except Exception as e:
             logger.error(f"生成AI分析失败: {str(e)}", exc_info=True)
+
+            # 更新LLM调用日志为失败状态
+            if call_id and start_time_log and db:
+                try:
+                    llm_call_logger.update_log_failure(
+                        db=db,
+                        call_id=call_id,
+                        start_time=start_time_log,
+                        status=CallStatus.FAILED,
+                        error_code=type(e).__name__,
+                        error_message=str(e)
+                    )
+                    logger.info(f"LLM调用日志已更新为失败: {call_id}")
+                except Exception as log_error:
+                    logger.warning(f"更新LLM调用日志失败: {log_error}")
+
             return {
                 "success": False,
                 "trade_date": trade_date,
-                "error": str(e)
+                "error": str(e),
+                "call_id": call_id
             }
+        finally:
+            if db:
+                db.close()
 
     def _fetch_sentiment_data(self, trade_date: str) -> Optional[Dict[str, Any]]:
         """从数据库读取完整情绪数据"""

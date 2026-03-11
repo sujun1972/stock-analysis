@@ -16,6 +16,7 @@ from .endpoints import (
     dynamic_strategies,
     experiment,
     features,
+    llm_logs,
     market,
     ml,
     premarket,
@@ -75,5 +76,8 @@ router.include_router(sentiment.router, prefix="/sentiment", tags=["市场情绪
 
 # 盘前预期管理路由
 router.include_router(premarket.router, prefix="/premarket", tags=["盘前预期管理"])
+
+# LLM调用日志路由
+router.include_router(llm_logs.router, tags=["LLM调用日志"])
 
 __all__ = ["router"]

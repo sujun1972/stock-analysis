@@ -73,10 +73,17 @@ disable-model-invocation: false
    - RESTful API 设计
    - 异步任务处理
 
-✅ 前端界面（开发中）
+✅ 前端界面
    - Next.js + TypeScript
    - 数据可视化
    - 交互式分析
+   - Admin管理后台
+
+✅ LLM调用日志
+   - 记录所有AI模型调用（DeepSeek/Gemini/OpenAI）
+   - Tokens消耗和成本追踪
+   - 调用历史和性能分析
+   - Admin后台可视化查看
 ```
 
 #### 技术栈选型
@@ -319,6 +326,8 @@ docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c "
 | `stock_info` | 股票基本信息 | ❌ | code (PK) |
 | `stock_daily` | 日线数据 | ✅ | (code, date) |
 | `stock_features` | 特征数据 | ✅ | (code, date, type) |
+| `llm_call_logs` | LLM调用日志 | ✅ | (call_id, start_time) |
+| `llm_pricing_config` | LLM定价配置 | ❌ | (provider, model) |
 
 **TimescaleDB 优化：**
 

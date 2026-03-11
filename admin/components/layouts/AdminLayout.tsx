@@ -34,7 +34,9 @@ import {
   LineChart,
   Sparkles,
   Zap,
-  Clock
+  Clock,
+  ScrollText,
+  Brain
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -125,9 +127,20 @@ const navItems: NavItem[] = [
     icon: Database
   },
   {
-    name: '系统日志',
-    href: '/logs',
-    icon: FileText
+    name: '日志管理',
+    icon: FileText,
+    children: [
+      {
+        name: '系统日志',
+        href: '/logs/system',
+        icon: ScrollText
+      },
+      {
+        name: 'LLM调用日志',
+        href: '/logs/llm-calls',
+        icon: Brain
+      }
+    ]
   },
   {
     name: '性能监控',
