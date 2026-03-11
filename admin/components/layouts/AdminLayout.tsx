@@ -1,20 +1,23 @@
 /**
  * 管理后台主布局组件
  *
- * 功能：
+ * 功能特性：
  * - 响应式侧边栏（大屏折叠为图标，小屏滑入滑出）
  * - 两级菜单导航（支持子菜单展开/收起）
- * - 菜单状态持久化（localStorage）
+ * - 智能菜单展开：根据当前路径自动展开所属菜单
+ * - 路由响应式：切换页面时自动更新菜单展开状态
  * - 小屏幕点击菜单自动收起
  * - 收起状态下显示悬浮提示
+ * - 侧边栏状态持久化（localStorage）
  *
  * @author Admin Team
  * @since 2026-03-03
+ * @updated 2026-03-11 优化菜单自动展开逻辑，调整菜单结构
  */
 
 'use client'
 
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -92,13 +95,13 @@ const navItems: NavItem[] = [
         name: 'AI分析',
         href: '/sentiment/ai-analysis',
         icon: Sparkles
+      },
+      {
+        name: '盘前预期',
+        href: '/sentiment/premarket',
+        icon: Clock
       }
     ]
-  },
-  {
-    name: '盘前预期',
-    href: '/premarket',
-    icon: Clock
   },
   {
     name: '系统设置',
@@ -136,7 +139,39 @@ const navItems: NavItem[] = [
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname()
   const { isCollapsed, setCollapsed } = useSidebarStore()
-  const [openMenus, setOpenMenus] = useState<string[]>(['系统设置'])
+
+  /**
+   * 根据当前路径自动计算应该展开的菜单
+   * 返回包含当前活跃页面的父菜单名称数组
+   *
+   * @returns 需要展开的菜单名称数组
+   */
+  const getInitialOpenMenus = (): string[] => {
+    const openMenus: string[] = []
+    navItems.forEach(item => {
+      if (item.children) {
+        const hasActiveChild = item.children.some(
+          child => child.href && pathname.startsWith(child.href)
+        )
+        if (hasActiveChild) {
+          openMenus.push(item.name)
+        }
+      }
+    })
+    return openMenus
+  }
+
+  const [openMenus, setOpenMenus] = useState<string[]>(() => getInitialOpenMenus())
+
+  /**
+   * 监听路径变化，自动展开/收起对应的菜单
+   * 确保当前页面所属的菜单始终展开，其他菜单自动收起
+   */
+  useEffect(() => {
+    const activeMenus = getInitialOpenMenus()
+    setOpenMenus(activeMenus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
 
   /**
    * 判断菜单项是否处于激活状态
