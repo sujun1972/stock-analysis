@@ -30,7 +30,8 @@ import {
   TrendingUp,
   LineChart,
   Sparkles,
-  Zap
+  Zap,
+  Clock
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -93,6 +94,11 @@ const navItems: NavItem[] = [
         icon: Sparkles
       }
     ]
+  },
+  {
+    name: '盘前预期',
+    href: '/premarket',
+    icon: Clock
   },
   {
     name: '系统设置',

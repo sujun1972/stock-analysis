@@ -70,6 +70,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载情绪AI分析任务模块失败: {e}")
 
+try:
+    from app.tasks import premarket_tasks
+    logger.info(f"✅ 已加载盘前预期管理任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载盘前任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 
@@ -98,6 +104,19 @@ celery_app.conf.beat_schedule = {
         ),
         'options': {
             'expires': 3600,  # 1小时后过期
+        }
+    },
+
+    # 每日8:00（北京时间）执行盘前完整工作流
+    'premarket-full-workflow-8-00': {
+        'task': 'premarket.full_workflow_8_00',
+        'schedule': crontab(
+            hour=0,       # UTC 0点 = 北京时间 8点
+            minute=0,
+            day_of_week='1-5'  # 周一到周五
+        ),
+        'options': {
+            'expires': 7200,  # 2小时后过期
         }
     },
 }

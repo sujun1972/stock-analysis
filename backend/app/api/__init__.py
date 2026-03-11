@@ -18,6 +18,7 @@ from .endpoints import (
     features,
     market,
     ml,
+    premarket,
     profile,
     scheduler,
     sentiment,
@@ -71,5 +72,8 @@ router.include_router(ai_strategy.router, prefix="/ai-strategy", tags=["AI策略
 
 # 市场情绪路由
 router.include_router(sentiment.router, prefix="/sentiment", tags=["市场情绪"])
+
+# 盘前预期管理路由
+router.include_router(premarket.router, prefix="/premarket", tags=["盘前预期管理"])
 
 __all__ = ["router"]
