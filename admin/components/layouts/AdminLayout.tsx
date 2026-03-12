@@ -118,6 +118,11 @@ const navItems: NavItem[] = [
         name: 'AI 配置',
         href: '/settings/ai-config',
         icon: Sparkles
+      },
+      {
+        name: '提示词管理',
+        href: '/settings/prompt-templates',
+        icon: FileText
       }
     ]
   },

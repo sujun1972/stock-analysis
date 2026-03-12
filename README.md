@@ -8,6 +8,7 @@
 - **技术分析**：使用 **TA-Lib** 计算60+种技术指标（趋势、动量、波动率、Alpha因子）
 - **机器学习**：LightGBM、GRU深度学习模型进行价格预测
 - **AI策略生成**：集成DeepSeek、Gemini等AI，一键生成量化策略代码
+- **LLM提示词管理**：完整的提示词模板管理系统，支持在线编辑、版本控制、性能追踪
 - **回测引擎**：完整的策略回测框架，支持多策略组合
 - **Web API服务**：FastAPI后端提供RESTful API，支持数据下载、特征计算、模型训练、回测等
 - **前端界面**：Next.js 14 + TypeScript + Tailwind CSS 构建的现代化Web界面
@@ -115,6 +116,7 @@ stock-analysis/
 ### 管理后台 ([admin/](admin/))
 - 基于Next.js 14的独立管理后台
 - 提供用户管理、概念标签管理、数据同步、系统监控等功能
+- **LLM提示词模板管理**：在线编辑、版本控制、性能追踪（详见 [文档](docs/PROMPT_TEMPLATE_SYSTEM.md)）
 - 支持JWT认证和权限管理
 
 ## 🛠️ 技术栈

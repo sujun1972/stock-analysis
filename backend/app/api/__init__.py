@@ -21,6 +21,7 @@ from .endpoints import (
     ml,
     premarket,
     profile,
+    prompt_templates,
     scheduler,
     sentiment,
     stocks,
@@ -79,5 +80,8 @@ router.include_router(premarket.router, prefix="/premarket", tags=["盘前预期
 
 # LLM调用日志路由
 router.include_router(llm_logs.router, tags=["LLM调用日志"])
+
+# 提示词模板管理路由
+router.include_router(prompt_templates.router, prefix="/prompt-templates", tags=["提示词模板管理"])
 
 __all__ = ["router"]

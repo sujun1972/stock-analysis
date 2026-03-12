@@ -3,7 +3,7 @@ LLM调用日志数据模型
 记录所有AI模型调用的详细信息
 """
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, TIMESTAMP, Numeric, Date
+from sqlalchemy import Column, Integer, String, Text, Boolean, TIMESTAMP, Numeric, Date, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
@@ -38,6 +38,10 @@ class LLMCallLog(Base):
     prompt_text = Column(Text, nullable=False)
     prompt_length = Column(Integer)
     prompt_hash = Column(String(64))
+
+    # 提示词模板关联
+    prompt_template_id = Column(Integer, ForeignKey("llm_prompt_templates.id"), index=True)
+    prompt_template_version = Column(String(20))
 
     # 输出内容
     response_text = Column(Text)
