@@ -15,6 +15,7 @@ import { zhCN } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
+import { addTaskToQueue } from "@/hooks/use-task-polling"
 
 interface AIProvider {
   id: number
@@ -85,6 +86,7 @@ export default function SentimentAIAnalysisPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingProviders, setIsLoadingProviders] = useState(true)
+  const [taskId, setTaskId] = useState<string | null>(null)
 
   // 格式化日期为 YYYY-MM-DD
   const formatDate = (d: Date) => format(d, "yyyy-MM-dd")
@@ -104,9 +106,7 @@ export default function SentimentAIAnalysisPage() {
         setAnalysisData(null)
       } else {
         setAnalysisData(null)
-        if (response.message) {
-          console.info(`${dateStr}: ${response.message}`)
-        }
+        // 其他错误静默处理
       }
     } catch (error: any) {
       // 仅对网络错误或服务器异常显示错误提示，404则静默处理
@@ -119,34 +119,88 @@ export default function SentimentAIAnalysisPage() {
     }
   }
 
-  // 生成AI分析
+  // 生成AI分析（异步提交）
   const handleGenerate = async () => {
     const dateStr = formatDate(date)
     setIsGenerating(true)
-
-    // 显示加载提示并保存 ID，用于后续关闭避免 toast 重叠
-    const loadingToastId = toast.info("正在调用AI生成分析，请稍候...")
 
     try {
       const response = await apiClient.post("/api/sentiment/ai-analysis/generate", null, {
         params: { date: dateStr, provider: aiProvider }
       })
 
-      // 先关闭加载提示，再显示结果，确保 toast 顺序展示不重叠
-      toast.dismiss(loadingToastId)
+      if (response.code === 200 && response.data?.task_id) {
+        const newTaskId = response.data.task_id
+        setTaskId(newTaskId)
 
-      if (response.code === 200) {
-        toast.success("AI分析生成成功")
-        loadAnalysis()
+        // 加入全局轮询队列（项目级轮询，跨页面）
+        addTaskToQueue(newTaskId, `AI分析生成（${dateStr}）`)
+
+        toast.success("分析任务已提交", {
+          description: "正在后台生成，完成时将自动通知",
+          duration: 4000,
+        })
+
+        // 开始轮询任务状态（仅用于当前页面实时反馈）
+        pollTaskStatus(newTaskId, dateStr)
+      } else if (response.code === 409) {
+        toast.warning("分析任务正在执行中", {
+          description: "请稍候或刷新页面查看进度",
+          duration: 4000,
+        })
       } else {
-        toast.error(response.message || "生成失败")
+        toast.error(response.message || "提交失败")
       }
     } catch (error: any) {
-      toast.dismiss(loadingToastId)
-      toast.error("生成失败：" + (error.response?.data?.detail || error.message))
+      toast.error("提交失败：" + (error.response?.data?.detail || error.message))
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  // 轮询任务状态（页面内实时反馈）
+  const pollTaskStatus = async (taskId: string, dateStr: string) => {
+    const maxAttempts = 200 // 最多轮询10分钟（200次 × 3秒）
+    let attempts = 0
+
+    const intervalId = setInterval(async () => {
+      attempts++
+
+      try {
+        const statusRes = await apiClient.get(`/api/sentiment/sync/status/${taskId}`)
+
+        if (statusRes.code === 200 && statusRes.data) {
+          const { status, result } = statusRes.data
+
+          if (status === 'SUCCESS') {
+            clearInterval(intervalId)
+
+            // 任务成功，自动刷新数据
+            if (result?.success) {
+              await loadAnalysis()
+              toast.info("数据已刷新", {
+                description: "AI分析结果已加载到页面",
+                duration: 3000,
+              })
+            }
+
+            setTaskId(null)
+          } else if (status === 'FAILURE') {
+            clearInterval(intervalId)
+            setTaskId(null)
+            // 错误 toast 由全局轮询处理
+          }
+        }
+
+        // 超时停止轮询
+        if (attempts >= maxAttempts) {
+          clearInterval(intervalId)
+          setTaskId(null)
+        }
+      } catch (error) {
+        console.error('轮询任务状态失败:', error)
+      }
+    }, 3000) // 每3秒轮询一次
   }
 
   // 加载AI提供商列表
@@ -303,13 +357,13 @@ export default function SentimentAIAnalysisPage() {
             <div className="flex gap-2 items-end">
               <Button
                 onClick={handleGenerate}
-                disabled={isGenerating || aiProviders.length === 0}
+                disabled={isGenerating || taskId !== null || aiProviders.length === 0}
                 className="min-w-[120px]"
               >
-                {isGenerating ? (
+                {isGenerating || taskId !== null ? (
                   <>
                     <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin" />
-                    生成中...
+                    {isGenerating ? '提交中...' : '生成中...'}
                   </>
                 ) : (
                   <>
@@ -329,6 +383,17 @@ export default function SentimentAIAnalysisPage() {
               </Button>
             </div>
           </div>
+
+          {/* 任务进行中提示 */}
+          {taskId && (
+            <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-900/10">
+              <RefreshCwIcon className="h-4 w-4 animate-spin text-blue-500" />
+              <AlertTitle className="text-blue-700 dark:text-blue-400">正在生成AI分析</AlertTitle>
+              <AlertDescription className="text-blue-600 dark:text-blue-300">
+                任务正在后台执行，您可以离开此页面。生成完成时将自动通知您。
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* 元信息 */}
           {analysisData && (

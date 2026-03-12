@@ -289,7 +289,7 @@ async def sync_trading_calendar(
 @router.get("/sync/status/{task_id}")
 async def get_sync_task_status(task_id: str):
     """
-    查询同步任务状态
+    查询同步任务状态（支持数据同步和AI分析任务）
 
     Args:
         task_id: 任务ID
@@ -321,6 +321,16 @@ async def get_sync_task_status(task_id: str):
             response_data["message"] = "任务完成"
             response_data["progress"] = 100
             response_data["result"] = info  # 任务返回的结果
+
+            # 针对AI分析任务，返回更友好的结果格式
+            if isinstance(info, dict) and 'ai_provider' in info:
+                response_data["result"] = {
+                    "success": True,
+                    "date": info.get('date'),
+                    "ai_provider": info.get('ai_provider'),
+                    "tokens_used": info.get('tokens_used'),
+                    "generation_time": info.get('generation_time')
+                }
         elif state == 'FAILURE':
             response_data["message"] = "任务失败"
             response_data["progress"] = 0
@@ -738,42 +748,176 @@ async def generate_ai_analysis(
     provider: str = "deepseek"
 ):
     """
-    手动触发AI情绪分析生成
+    手动触发AI情绪分析生成（异步任务）
 
     Args:
         date: 日期 (YYYY-MM-DD)，默认为今天
         provider: AI提供商 (deepseek/gemini/openai)
 
     Returns:
-        生成结果
+        任务ID和状态，用于后续轮询
     """
     try:
-        from app.services.sentiment_ai_analysis_service import sentiment_ai_analysis_service
-        from datetime import datetime
+        from app.tasks.sentiment_ai_analysis_task import daily_sentiment_ai_analysis_task
+        from celery.result import AsyncResult
 
         if not date:
             date = datetime.now().strftime('%Y-%m-%d')
 
-        logger.info(f"手动触发AI分析: {date}, 提供商: {provider}")
+        logger.info(f"手动触发AI分析（异步）: {date}, 提供商: {provider}")
 
-        result = await sentiment_ai_analysis_service.generate_ai_analysis(
-            trade_date=date,
-            provider=provider
+        # 生成固定任务ID（便于查询和去重）
+        task_id = f"ai_analysis_{date}_{provider}"
+
+        # 检查是否已有任务正在执行
+        existing_task = AsyncResult(task_id)
+        if existing_task.state in ['PENDING', 'STARTED']:
+            logger.warning(f"AI分析任务已在执行中: {task_id}")
+            return {
+                "code": 409,
+                "message": "AI分析任务正在执行中，请稍候",
+                "data": {
+                    "task_id": task_id,
+                    "date": date,
+                    "status": "running"
+                }
+            }
+
+        # 提交 Celery 异步任务
+        task = daily_sentiment_ai_analysis_task.apply_async(
+            args=[date, provider, 0],  # 第三个参数是 retry_count
+            task_id=task_id
         )
 
-        if result.get('success'):
-            return {
-                "code": 200,
-                "message": "AI分析生成成功",
-                "data": result
+        logger.info(f"AI分析任务已提交: {task_id}")
+
+        return {
+            "code": 200,
+            "message": "AI分析任务已提交，正在后台生成",
+            "data": {
+                "task_id": task.id,
+                "date": date,
+                "provider": provider,
+                "status": "pending"
             }
-        else:
-            return {
-                "code": 400,
-                "message": result.get('error', '生成失败'),
-                "data": result
-            }
+        }
 
     except Exception as e:
-        logger.error(f"生成AI分析失败: {e}")
+        logger.error(f"提交AI分析任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tasks/active")
+async def get_active_tasks():
+    """
+    获取所有正在执行的异步任务列表
+
+    用于前端启动时恢复任务轮询状态
+
+    Returns:
+        正在执行的任务列表
+    """
+    try:
+        from celery.result import AsyncResult
+        from app.celery_app import celery_app
+
+        active_tasks = []
+
+        # 获取 Celery Inspector
+        inspect = celery_app.control.inspect()
+
+        # 获取所有活动任务（正在执行 + 等待中）
+        active = inspect.active()  # 正在执行的任务
+        reserved = inspect.reserved()  # 已预留但未执行的任务
+
+        if active:
+            for worker, tasks in active.items():
+                for task in tasks:
+                    task_id = task.get('id')
+                    task_name = task.get('name', '')
+
+                    # 解析任务类型和显示名称
+                    display_name = _get_task_display_name(task_id, task_name)
+
+                    active_tasks.append({
+                        "task_id": task_id,
+                        "task_name": task_name,
+                        "display_name": display_name,
+                        "status": "running",
+                        "worker": worker
+                    })
+
+        if reserved:
+            for worker, tasks in reserved.items():
+                for task in tasks:
+                    task_id = task.get('id')
+                    task_name = task.get('name', '')
+
+                    # 解析任务类型和显示名称
+                    display_name = _get_task_display_name(task_id, task_name)
+
+                    active_tasks.append({
+                        "task_id": task_id,
+                        "task_name": task_name,
+                        "display_name": display_name,
+                        "status": "pending",
+                        "worker": worker
+                    })
+
+        logger.info(f"获取到 {len(active_tasks)} 个活动任务")
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "total": len(active_tasks),
+                "tasks": active_tasks
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取活动任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _get_task_display_name(task_id: str, task_name: str) -> str:
+    """
+    根据任务ID和任务名称生成友好的显示名称
+
+    Args:
+        task_id: 任务ID
+        task_name: 任务名称
+
+    Returns:
+        显示名称
+    """
+    # AI分析任务
+    if task_id.startswith('ai_analysis_'):
+        parts = task_id.split('_')
+        if len(parts) >= 3:
+            date = parts[2]
+            return f"AI分析生成（{date}）"
+        return "AI分析生成"
+
+    # 数据同步任务
+    if task_id.startswith('manual_sentiment_sync_'):
+        parts = task_id.split('_')
+        if len(parts) >= 4:
+            date = parts[3]
+            return f"情绪数据同步（{date}）"
+        return "情绪数据同步"
+
+    # 回测任务
+    if 'backtest' in task_name.lower():
+        return "策略回测"
+
+    # AI策略生成任务
+    if 'ai_strategy' in task_name.lower():
+        return "AI策略生成"
+
+    # 盘前任务
+    if 'premarket' in task_name.lower():
+        return "盘前预期管理"
+
+    # 默认使用任务名称
+    return task_name.replace('_', ' ').title()

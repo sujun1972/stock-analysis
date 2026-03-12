@@ -24,7 +24,11 @@ let pollingInterval: NodeJS.Timeout | null = null
  */
 async function pollTaskStatus(taskId: string, taskName: string): Promise<boolean> {
   try {
-    const response = await apiClient.getSyncTaskStatus(taskId)
+    // 根据 taskId 前缀判断调用不同的 API
+    // AI分析任务使用通用状态查询接口
+    const response = taskId.startsWith('ai_analysis_')
+      ? await apiClient.get(`/api/sentiment/sync/status/${taskId}`)
+      : await apiClient.getSyncTaskStatus(taskId)
 
     if (response.code !== 200 || !response.data) {
       return false
@@ -36,7 +40,20 @@ async function pollTaskStatus(taskId: string, taskName: string): Promise<boolean
     if (status === 'SUCCESS') {
       const taskResult = result || {}
 
-      if (taskResult.status === 'success') {
+      // AI分析任务特殊处理
+      if (taskId.startsWith('ai_analysis_')) {
+        if (taskResult.success) {
+          toast.success(`${taskName}完成`, {
+            description: `${taskResult.date || ''} AI分析已生成 | Tokens: ${taskResult.tokens_used || 0}`,
+            duration: 5000,
+          })
+        } else {
+          toast.warning(`${taskName}完成但有警告`, {
+            description: taskResult.error || message || '请查看详情',
+            duration: 5000,
+          })
+        }
+      } else if (taskResult.status === 'success') {
         toast.success(`${taskName}完成`, {
           description: `${taskResult.date || ''} 数据同步成功`,
           duration: 5000,
@@ -145,6 +162,43 @@ export function addTaskToQueue(taskId: string, taskName: string) {
 }
 
 /**
+ * 从后端恢复正在执行的任务
+ */
+async function restoreActiveTasks() {
+  try {
+    const response = await apiClient.get('/api/sentiment/tasks/active')
+
+    if (response.code === 200 && response.data?.tasks) {
+      const tasks = response.data.tasks
+
+      if (tasks.length > 0) {
+        console.log(`🔄 恢复 ${tasks.length} 个正在执行的任务到轮询队列`)
+      }
+
+      tasks.forEach((task: any) => {
+        const { task_id, display_name } = task
+
+        // 添加到全局队列（避免重复）
+        if (!globalTaskQueue.has(task_id)) {
+          globalTaskQueue.set(task_id, {
+            taskId: task_id,
+            taskName: display_name || '未知任务',
+            startTime: Date.now(),
+          })
+        }
+      })
+
+      // 如果有任务，启动轮询
+      if (globalTaskQueue.size > 0) {
+        startPolling()
+      }
+    }
+  } catch (error) {
+    console.error('恢复活动任务失败:', error)
+  }
+}
+
+/**
  * 全局任务轮询 Hook
  *
  * 在应用根组件中使用，确保任务轮询持续运行
@@ -158,6 +212,9 @@ export function useTaskPolling() {
     }
 
     isInitialized.current = true
+
+    // 启动时恢复正在执行的任务
+    restoreActiveTasks()
 
     // 立即检查一次
     pollAllTasks()
