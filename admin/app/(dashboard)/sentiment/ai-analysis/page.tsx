@@ -124,12 +124,16 @@ export default function SentimentAIAnalysisPage() {
     const dateStr = formatDate(date)
     setIsGenerating(true)
 
-    try {
-      toast.info("正在调用AI生成分析，请稍候...")
+    // 显示加载提示并保存 ID，用于后续关闭避免 toast 重叠
+    const loadingToastId = toast.info("正在调用AI生成分析，请稍候...")
 
+    try {
       const response = await apiClient.post("/api/sentiment/ai-analysis/generate", null, {
         params: { date: dateStr, provider: aiProvider }
       })
+
+      // 先关闭加载提示，再显示结果，确保 toast 顺序展示不重叠
+      toast.dismiss(loadingToastId)
 
       if (response.code === 200) {
         toast.success("AI分析生成成功")
@@ -138,6 +142,7 @@ export default function SentimentAIAnalysisPage() {
         toast.error(response.message || "生成失败")
       }
     } catch (error: any) {
+      toast.dismiss(loadingToastId)
       toast.error("生成失败：" + (error.response?.data?.detail || error.message))
     } finally {
       setIsGenerating(false)

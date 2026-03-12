@@ -154,12 +154,16 @@ export default function PremarketPage() {
     const dateStr = formatDate(date)
     setIsSyncing(true)
 
-    try {
-      toast.info("正在同步盘前数据...")
+    // 显示加载提示并保存 ID，用于后续关闭避免 toast 重叠
+    const loadingToastId = toast.info("正在同步盘前数据...")
 
+    try {
       const response = await apiClient.post<ApiResponse<SyncResult>>(
         `/api/premarket/sync?date=${dateStr}`
       )
+
+      // 先关闭加载提示，再显示结果，确保 toast 顺序展示不重叠
+      toast.dismiss(loadingToastId)
 
       if (response.code === 200) {
         toast.success(response.message || "同步成功")
@@ -169,6 +173,7 @@ export default function PremarketPage() {
         toast.error(response.message || "同步失败")
       }
     } catch (error: any) {
+      toast.dismiss(loadingToastId)
       toast.error("同步失败：" + (error.response?.data?.detail || error.message))
     } finally {
       setIsSyncing(false)
@@ -180,12 +185,16 @@ export default function PremarketPage() {
     const dateStr = formatDate(date)
     setIsGenerating(true)
 
-    try {
-      toast.info("正在调用AI生成碰撞分析，请稍候...")
+    // 显示加载提示并保存 ID，用于后续关闭避免 toast 重叠
+    const loadingToastId = toast.info("正在调用AI生成碰撞分析，请稍候...")
 
+    try {
       const response = await apiClient.post<ApiResponse<any>>(
         `/api/premarket/collision-analysis/generate?date=${dateStr}&provider=${aiProvider}`
       )
+
+      // 先关闭加载提示，再显示结果，确保 toast 顺序展示不重叠
+      toast.dismiss(loadingToastId)
 
       if (response.code === 200) {
         toast.success("碰撞分析生成成功")
@@ -195,6 +204,7 @@ export default function PremarketPage() {
         toast.error(response.message || "生成失败")
       }
     } catch (error: any) {
+      toast.dismiss(loadingToastId)
       toast.error("生成失败：" + (error.response?.data?.detail || error.message))
     } finally {
       setIsGenerating(false)
