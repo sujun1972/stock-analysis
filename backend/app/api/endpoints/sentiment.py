@@ -640,10 +640,12 @@ async def get_ai_analysis(date: str):
         result = sentiment_ai_analysis_service.get_ai_analysis(date)
 
         if not result:
-            raise HTTPException(
-                status_code=404,
-                detail=f"{date} 无AI分析数据，请先生成分析"
-            )
+            # 无数据时返回统一的404响应格式，避免前端显示不必要的错误提示
+            return {
+                "code": 404,
+                "message": f"{date} 暂无AI分析数据",
+                "data": None
+            }
 
         return {
             "code": 200,
@@ -651,8 +653,6 @@ async def get_ai_analysis(date: str):
             "data": result
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"获取AI分析失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

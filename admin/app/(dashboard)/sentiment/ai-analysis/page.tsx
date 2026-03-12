@@ -97,16 +97,21 @@ export default function SentimentAIAnalysisPage() {
     try {
       const response = await apiClient.get(`/api/sentiment/ai-analysis/${dateStr}`)
 
-      if (response.code === 200) {
+      if (response.code === 200 && response.data) {
         setAnalysisData(response.data)
+      } else if (response.code === 404) {
+        // 暂无数据是正常情况，静默处理，不显示错误提示
+        setAnalysisData(null)
       } else {
         setAnalysisData(null)
-        toast.info(`${dateStr} 暂无AI分析数据`)
+        if (response.message) {
+          console.info(`${dateStr}: ${response.message}`)
+        }
       }
     } catch (error: any) {
-      if (error.response?.status === 404) {
-        setAnalysisData(null)
-      } else {
+      // 仅对网络错误或服务器异常显示错误提示，404则静默处理
+      setAnalysisData(null)
+      if (error.response?.status !== 404) {
         toast.error("加载失败：" + (error.response?.data?.detail || error.message))
       }
     } finally {
