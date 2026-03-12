@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -336,7 +337,8 @@ export default function SentimentManagementPage() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:shadow-md transition-shadow border-orange-200">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow border-orange-200"
+                onClick={() => sentiments[0]?.trade_date && router.push(`/sentiment/limit-up?date=${sentiments[0].trade_date}#blast-stocks`)}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">炸板率</CardTitle>
               <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -390,6 +392,7 @@ export default function SentimentManagementPage() {
                       <TableHead>成交额(亿)</TableHead>
                       <TableHead>涨停</TableHead>
                       <TableHead>炸板率</TableHead>
+                      <TableHead>操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -435,16 +438,27 @@ export default function SentimentManagementPage() {
                           {item.total_amount ? (item.total_amount / 100000000).toFixed(0) : '-'}
                         </TableCell>
                         <TableCell>
-                          <span className="text-green-600 font-medium">
-                            {item.limit_up_count || 0}
-                          </span>
+                          <Link href={`/sentiment/limit-up?date=${item.trade_date}`}>
+                            <span className="text-green-600 font-medium cursor-pointer hover:underline">
+                              {item.limit_up_count || 0}
+                            </span>
+                          </Link>
                         </TableCell>
                         <TableCell>
-                          {item.blast_rate !== undefined ? (
-                            <Badge variant={item.blast_rate > 0.3 ? 'destructive' : 'secondary'}>
-                              {(item.blast_rate * 100).toFixed(1)}%
-                            </Badge>
-                          ) : '-'}
+                          <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
+                            {item.blast_rate !== undefined ? (
+                              <Badge variant={item.blast_rate > 0.3 ? 'destructive' : 'secondary'} className="cursor-pointer hover:opacity-80">
+                                {(item.blast_rate * 100).toFixed(1)}%
+                              </Badge>
+                            ) : '-'}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Link href={`/sentiment/dragon-tiger?date=${item.trade_date}`}>
+                            <Button variant="outline" size="sm">
+                              龙虎榜
+                            </Button>
+                          </Link>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -475,15 +489,26 @@ export default function SentimentManagementPage() {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">涨停家数</span>
-                        <span className="text-green-600 font-medium">{item.limit_up_count || 0}</span>
+                        <Link href={`/sentiment/limit-up?date=${item.trade_date}`}>
+                          <span className="text-green-600 font-medium">{item.limit_up_count || 0}</span>
+                        </Link>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">炸板率</span>
-                        {item.blast_rate !== undefined ? (
-                          <Badge variant={item.blast_rate > 0.3 ? 'destructive' : 'secondary'}>
-                            {(item.blast_rate * 100).toFixed(1)}%
-                          </Badge>
-                        ) : '-'}
+                        <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
+                          {item.blast_rate !== undefined ? (
+                            <Badge variant={item.blast_rate > 0.3 ? 'destructive' : 'secondary'}>
+                              {(item.blast_rate * 100).toFixed(1)}%
+                            </Badge>
+                          ) : '-'}
+                        </Link>
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <Link href={`/sentiment/dragon-tiger?date=${item.trade_date}`} className="w-full">
+                          <Button variant="outline" size="sm" className="w-full">
+                            龙虎榜
+                          </Button>
+                        </Link>
                       </div>
                     </CardContent>
                   </Card>

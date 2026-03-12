@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -12,9 +13,10 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 
 export default function LimitUpPoolPage() {
+  const searchParams = useSearchParams()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0])
 
   const loadData = async () => {
     setLoading(true)
@@ -40,6 +42,22 @@ export default function LimitUpPoolPage() {
   useEffect(() => {
     loadData()
   }, [date])
+
+  // 数据加载完成后，处理锚点滚动
+  useEffect(() => {
+    if (!loading && data) {
+      // 延迟一小段时间确保DOM已渲染
+      setTimeout(() => {
+        const hash = window.location.hash
+        if (hash) {
+          const element = document.querySelector(hash)
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        }
+      }, 100)
+    }
+  }, [loading, data])
 
   return (
     <div className="space-y-6 p-6">
@@ -227,7 +245,7 @@ export default function LimitUpPoolPage() {
 
           {/* 炸板股票列表 */}
           {data.blast_stocks && data.blast_stocks.length > 0 && (
-            <Card>
+            <Card id="blast-stocks">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <AlertCircle className="h-5 w-5 text-orange-600" />

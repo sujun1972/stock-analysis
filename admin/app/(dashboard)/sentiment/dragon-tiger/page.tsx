@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -12,9 +13,10 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 
 export default function DragonTigerListPage() {
+  const searchParams = useSearchParams()
   const [records, setRecords] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
 
