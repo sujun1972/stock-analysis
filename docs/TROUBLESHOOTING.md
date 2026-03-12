@@ -639,6 +639,166 @@ pip install --upgrade -r requirements.txt
 
 ---
 
+## 🎨 Frontend / Admin 相关问题
+
+### 10. Admin页面API数据不显示
+
+**症状：**
+- 页面加载正常，但表格/列表中无数据显示
+- API返回正常（浏览器Network标签显示200 OK）
+- Console没有明显错误
+
+**常见场景：**
+LLM调用日志页面（`/logs/llm-calls`）显示"暂无数据"，但API返回了数据。
+
+**原因：**
+API客户端（`api-client.ts`）的响应处理和组件中的数据访问路径不一致。
+
+**诊断步骤：**
+
+1. **检查浏览器开发者工具：**
+```javascript
+// 打开Console，查看是否有数据访问错误
+// F12 → Console标签
+
+// 典型错误信息：
+// Cannot read property 'logs' of undefined
+// logsData?.data?.logs is undefined
+```
+
+2. **检查Network标签：**
+```javascript
+// F12 → Network标签 → 找到对应API请求
+// 查看Response结构是否符合预期
+
+// 后端返回结构：
+{
+  "success": true,
+  "data": {
+    "logs": [...],
+    "pagination": {...}
+  }
+}
+```
+
+3. **检查数据访问路径：**
+```typescript
+// 错误示例 - API客户端和组件访问路径不一致
+
+// api-client.ts (返回 response.data)
+async get<T>(url: string): Promise<ApiResponse<T>> {
+  const response = await axiosInstance.get(url)
+  return response.data  // 已经是后端JSON
+}
+
+// llm-logs-api.ts (❌ 错误 - 多访问了一层.data)
+export async function getLLMCallLogs(params) {
+  const response = await apiClient.get('/api/llm-logs/list')
+  return response.data  // ❌ 相当于 response.data.data (undefined!)
+}
+
+// 组件中 (期望访问 response.data.logs)
+const logs = logsData?.data?.logs || []  // ❌ 实际访问的是 undefined.logs
+```
+
+**解决方案：**
+
+**修复API函数的返回值：**
+
+```typescript
+// llm-logs-api.ts (✅ 正确)
+export async function getLLMCallLogs(params: LLMCallLogQuery = {}) {
+  const queryParams = new URLSearchParams()
+  // ... 构建参数
+
+  // 注意：apiClient.get 返回的已经是 response.data
+  // response 结构是 { success: true, data: { logs: [...], pagination: {...} } }
+  const response = await apiClient.get(`/api/llm-logs/list?${queryParams}`)
+
+  return response as {  // ✅ 直接返回，不要再访问.data
+    success: boolean
+    data: {
+      logs: LLMCallLog[]
+      pagination: { ... }
+    }
+  }
+}
+```
+
+**数据流向：**
+```
+后端返回: { success: true, data: { logs: [...] } }
+     ↓
+axios: response.data = 上面的JSON
+     ↓
+apiClient.get(): 返回 response.data (已经是完整JSON)
+     ↓
+getLLMCallLogs(): 返回 apiClient.get() 的结果
+     ↓
+组件: logsData.data.logs ✅ 正确访问到数组
+```
+
+**通用修复模式：**
+
+1. **检查API客户端基础方法：**
+```typescript
+// admin/lib/api-client.ts
+async get<T>(url: string): Promise<ApiResponse<T>> {
+  const response = await axiosInstance.get(url)
+  return response.data  // 如果这里返回 response.data
+}
+```
+
+2. **API包装函数应该：**
+```typescript
+// ✅ 正确 - 直接返回
+export async function getXXX() {
+  const response = await apiClient.get('/api/xxx')
+  return response  // 不要再访问.data
+}
+
+// ❌ 错误 - 多访问了一层
+export async function getXXX() {
+  const response = await apiClient.get('/api/xxx')
+  return response.data  // 相当于 response.data.data
+}
+```
+
+3. **组件中访问：**
+```typescript
+// 如果API函数返回完整响应对象
+const data = responseData?.data?.items || []
+
+// 如果API函数已经提取了data字段
+const data = responseData?.items || []
+```
+
+**验证修复：**
+
+```bash
+# 1. 清除浏览器缓存和Next.js缓存
+rm -rf admin/.next
+cd admin && npm run dev
+
+# 2. 打开浏览器开发者工具
+# F12 → Console标签
+
+# 3. 刷新页面，应该能看到数据
+# 检查Console中是否有以下类型的日志：
+# logsData: {success: true, data: {logs: Array(20), pagination: {...}}}
+# logs: Array(20) [{...}, {...}, ...]
+```
+
+**其他可能受影响的页面：**
+- 用户管理页面
+- 定时任务页面
+- 策略管理页面
+- 回测历史页面
+
+如果这些页面也出现数据不显示问题，使用相同的诊断和修复方法。
+
+---
+
 ## 📚 相关文档
 
 - [README.md](README.md) - 项目主文档

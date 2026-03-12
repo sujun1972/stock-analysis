@@ -120,6 +120,20 @@ export interface CostAnalysis {
 
 /**
  * 查询LLM调用日志列表
+ *
+ * @param params - 查询参数（业务类型、提供商、状态、日期范围、分页等）
+ * @returns 包含日志列表和分页信息的响应对象
+ *
+ * @example
+ * ```typescript
+ * const result = await getLLMCallLogs({
+ *   business_type: 'sentiment_analysis',
+ *   provider: 'deepseek',
+ *   page: 1,
+ *   page_size: 20
+ * })
+ * console.log(result.data.logs) // LLMCallLog[]
+ * ```
  */
 export async function getLLMCallLogs(params: LLMCallLogQuery = {}) {
   const queryParams = new URLSearchParams()
@@ -132,9 +146,11 @@ export async function getLLMCallLogs(params: LLMCallLogQuery = {}) {
   queryParams.append('page', String(params.page || 1))
   queryParams.append('page_size', String(params.page_size || 20))
 
+  // 注意：apiClient.get 返回的已经是 response.data（见 api-client.ts:302）
+  // 所以这里的 response 结构是 { success: true, data: { logs: [...], pagination: {...} } }
   const response = await apiClient.get(`/api/llm-logs/list?${queryParams.toString()}`)
 
-  return response.data as {
+  return response as {
     success: boolean
     data: {
       logs: LLMCallLog[]
@@ -150,6 +166,9 @@ export async function getLLMCallLogs(params: LLMCallLogQuery = {}) {
 
 /**
  * 获取单条日志详情
+ *
+ * @param callId - 调用ID（UUID格式）
+ * @returns LLM调用日志详情
  */
 export async function getLLMCallLogDetail(callId: string) {
   const response = await apiClient.get(`/api/llm-logs/detail/${callId}`)
@@ -157,7 +176,11 @@ export async function getLLMCallLogDetail(callId: string) {
 }
 
 /**
- * 获取统计数据
+ * 获取LLM调用统计数据
+ *
+ * @param startDate - 开始日期（YYYY-MM-DD格式，可选）
+ * @param endDate - 结束日期（YYYY-MM-DD格式，可选）
+ * @returns 按日期/业务类型/提供商分组的统计数据数组
  */
 export async function getLLMStatistics(startDate?: string, endDate?: string) {
   const queryParams = new URLSearchParams()
@@ -169,7 +192,17 @@ export async function getLLMStatistics(startDate?: string, endDate?: string) {
 }
 
 /**
- * 获取概览数据（Dashboard用）
+ * 获取LLM调用概览数据（用于Dashboard展示）
+ *
+ * @param days - 统计最近N天的数据（默认7天）
+ * @returns 包含总调用次数、成功率、Token消耗、成本等概览数据
+ *
+ * @example
+ * ```typescript
+ * const summary = await getLLMSummary(7)
+ * console.log(summary.overview.total_calls) // 总调用次数
+ * console.log(summary.overview.success_rate) // 成功率
+ * ```
  */
 export async function getLLMSummary(days: number = 7) {
   const response = await apiClient.get(`/api/llm-logs/summary?days=${days}`)
@@ -177,7 +210,10 @@ export async function getLLMSummary(days: number = 7) {
 }
 
 /**
- * 获取最近的调用记录
+ * 获取最近的LLM调用记录
+ *
+ * @param limit - 返回记录数量限制（默认10条）
+ * @returns 最近的LLM调用日志列表（按时间倒序）
  */
 export async function getRecentLLMCalls(limit: number = 10) {
   const response = await apiClient.get(`/api/llm-logs/recent?limit=${limit}`)
@@ -185,7 +221,22 @@ export async function getRecentLLMCalls(limit: number = 10) {
 }
 
 /**
- * 成本分析
+ * 获取LLM调用成本分析
+ *
+ * @param params - 分析参数
+ * @param params.start_date - 开始日期（可选）
+ * @param params.end_date - 结束日期（可选）
+ * @param params.group_by - 分组维度（provider/business_type/model，默认provider）
+ * @returns 按指定维度分组的成本分析数据
+ *
+ * @example
+ * ```typescript
+ * const analysis = await getCostAnalysis({
+ *   group_by: 'provider',
+ *   start_date: '2024-01-01',
+ *   end_date: '2024-01-31'
+ * })
+ * ```
  */
 export async function getCostAnalysis(params: {
   start_date?: string
