@@ -13,6 +13,7 @@ from loguru import logger
 
 from app.celery_app import celery_app
 from app.services.sentiment_service import MarketSentimentService
+from app.core.redis_lock import redis_lock
 
 
 class SentimentSyncTask(Task):
@@ -50,14 +51,26 @@ def daily_sentiment_sync_task(self):
 
         logger.info(f"========== [Celery] 开始执行17:30情绪数据同步任务: {date_str} ==========")
 
-        # 创建服务实例
-        service = MarketSentimentService()
+        # 使用分布式锁防止并发执行（手动同步和自动同步不会冲突）
+        lock_key = f"sentiment_sync:{date_str}"
 
-        # 运行异步任务
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(
-            service.sync_daily_sentiment(date=date_str)
-        )
+        with redis_lock.acquire(lock_key, timeout=600, blocking=False) if redis_lock else _dummy_context() as acquired:
+            if not acquired and redis_lock:
+                logger.warning(f"⚠️  {date_str} 情绪数据同步任务已在执行中，跳过本次调度")
+                return {
+                    "status": "skipped",
+                    "reason": "任务正在执行中（分布式锁）",
+                    "date": date_str
+                }
+
+            # 创建服务实例
+            service = MarketSentimentService()
+
+            # 运行异步任务
+            loop = asyncio.get_event_loop()
+            result = loop.run_until_complete(
+                service.sync_daily_sentiment(date=date_str)
+            )
 
         # 判断结果
         if not result.get('is_trading_day'):
@@ -107,6 +120,88 @@ def daily_sentiment_sync_task(self):
         raise self.retry(exc=e)
 
 
+@celery_app.task(
+    base=SentimentSyncTask,
+    name="sentiment.manual_sync",
+    bind=True
+)
+def manual_sentiment_sync_task(self, date: str = None):
+    """
+    手动触发的情绪数据同步任务（Admin界面使用）
+
+    Args:
+        date: 日期字符串 (YYYY-MM-DD)，默认为今天
+
+    Returns:
+        同步结果
+    """
+    try:
+        if not date:
+            beijing_tz = pytz.timezone('Asia/Shanghai')
+            now = datetime.now(beijing_tz)
+            date = now.strftime('%Y-%m-%d')
+
+        logger.info(f"========== [手动同步] 开始执行情绪数据同步: {date} ==========")
+
+        # 使用分布式锁防止并发
+        lock_key = f"sentiment_sync:{date}"
+
+        with redis_lock.acquire(lock_key, timeout=600, blocking=False) if redis_lock else _dummy_context() as acquired:
+            if not acquired and redis_lock:
+                logger.warning(f"⚠️  {date} 情绪数据同步任务已在执行中")
+                return {
+                    "status": "locked",  # 特殊状态：锁被占用
+                    "reason": "数据同步任务正在执行中，请稍后再试",
+                    "date": date,
+                    "message": "已有同步任务正在进行，请等待其完成"
+                }
+
+            # 创建服务实例
+            service = MarketSentimentService()
+
+            # 运行异步任务
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    service.sync_daily_sentiment(date=date)
+                )
+            finally:
+                loop.close()
+
+            # 判断结果
+            if not result.get('is_trading_day'):
+                logger.info(f"[手动同步] {date} 非交易日")
+                return {
+                    "status": "skipped",
+                    "reason": "非交易日",
+                    "date": date,
+                    "is_trading_day": False
+                }
+
+            if result.get('success'):
+                logger.success(f"[手动同步] {date} 情绪数据同步成功")
+                _log_task_execution(date, 'success', result)
+
+                return {
+                    "status": "success",
+                    "date": date,
+                    "data": result,
+                    "is_trading_day": True
+                }
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                logger.error(f"[手动同步] {date} 同步失败: {error_msg}")
+                _log_task_execution(date, 'failed', result)
+
+                raise Exception(error_msg)
+
+    except Exception as e:
+        logger.error(f"[手动同步] 任务执行异常: {e}")
+        _log_task_execution(date or 'unknown', 'error', {'error': str(e)})
+        raise self.retry(exc=e)
+
+
 @celery_app.task(name="sentiment.calendar_sync")
 def sync_trading_calendar_task(years: list):
     """
@@ -139,6 +234,14 @@ def sync_trading_calendar_task(years: list):
     except Exception as e:
         logger.error(f"[Celery] 交易日历同步失败: {e}")
         raise
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def _dummy_context():
+    """空上下文管理器（当 Redis 不可用时使用）"""
+    yield True
 
 
 def _log_task_execution(date: str, status: str, result: dict):
@@ -174,13 +277,15 @@ def _log_task_execution(date: str, status: str, result: dict):
         if task_row:
             task_id = task_row[0]
 
-            # 插入执行历史
+            # 插入执行历史（补充必要的 task_name 和 module 字段）
             cursor.execute("""
                 INSERT INTO task_execution_history (
-                    task_id, execution_time, status, result_summary
-                ) VALUES (%s, NOW(), %s, %s)
+                    task_id, task_name, module, status, started_at, result_summary
+                ) VALUES (%s, %s, %s, %s, NOW(), %s)
             """, (
                 task_id,
+                'daily_sentiment_sync',
+                'sentiment',
                 status,
                 str(result)[:500]  # 截断过长的结果
             ))

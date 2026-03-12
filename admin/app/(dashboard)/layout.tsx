@@ -3,6 +3,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { TaskPollingProvider } from '@/components/TaskPollingProvider'
 import { queryClient } from '@/lib/react-query-config'
 
 export default function DashboardLayout({
@@ -13,9 +14,11 @@ export default function DashboardLayout({
   return (
     <QueryClientProvider client={queryClient}>
       <ProtectedRoute requireAdmin>
-        <AdminLayout>
-          {children}
-        </AdminLayout>
+        <TaskPollingProvider>
+          <AdminLayout>
+            {children}
+          </AdminLayout>
+        </TaskPollingProvider>
       </ProtectedRoute>
     </QueryClientProvider>
   )

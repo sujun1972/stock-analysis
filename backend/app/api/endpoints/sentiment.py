@@ -286,46 +286,120 @@ async def sync_trading_calendar(
 
 # ========== 数据同步 ==========
 
+@router.get("/sync/status/{task_id}")
+async def get_sync_task_status(task_id: str):
+    """
+    查询同步任务状态
+
+    Args:
+        task_id: 任务ID
+
+    Returns:
+        任务状态信息
+    """
+    try:
+        from celery.result import AsyncResult
+
+        task_result = AsyncResult(task_id)
+
+        # 获取任务状态
+        state = task_result.state
+        info = task_result.info
+
+        response_data = {
+            "task_id": task_id,
+            "status": state,  # PENDING, STARTED, SUCCESS, FAILURE, RETRY
+        }
+
+        if state == 'PENDING':
+            response_data["message"] = "任务等待中"
+            response_data["progress"] = 0
+        elif state == 'STARTED':
+            response_data["message"] = "任务执行中"
+            response_data["progress"] = 50
+        elif state == 'SUCCESS':
+            response_data["message"] = "任务完成"
+            response_data["progress"] = 100
+            response_data["result"] = info  # 任务返回的结果
+        elif state == 'FAILURE':
+            response_data["message"] = "任务失败"
+            response_data["progress"] = 0
+            response_data["error"] = str(info) if info else "未知错误"
+        elif state == 'RETRY':
+            response_data["message"] = "任务重试中"
+            response_data["progress"] = 25
+        else:
+            response_data["message"] = f"未知状态: {state}"
+            response_data["progress"] = 0
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": response_data
+        }
+
+    except Exception as e:
+        logger.error(f"查询任务状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/sync")
 async def sync_sentiment_data(
-    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)"),
-    background_tasks: BackgroundTasks = None
+    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)")
 ):
     """
-    手动触发情绪数据同步
+    手动触发情绪数据同步（异步任务）
 
     Args:
         date: 日期，默认为今天
-        background_tasks: 后台任务
 
     Returns:
-        同步结果
+        任务ID，用于后续查询任务状态
     """
     try:
+        from app.tasks.sentiment_tasks import manual_sentiment_sync_task
+        from app.core.redis_lock import redis_lock
+
         if not date:
             date = datetime.now().strftime('%Y-%m-%d')
 
-        logger.info(f"手动触发情绪数据同步: {date}")
+        logger.info(f"手动触发情绪数据同步（异步）: {date}")
 
-        # 同步执行（Admin手动触发时需要立即看到结果）
-        result = await sentiment_service.sync_daily_sentiment(date)
+        # 检查是否有同步任务正在执行（双层保护：API层 + 任务层）
+        lock_key = f"sentiment_sync:{date}"
+        if redis_lock:
+            is_locked = redis_lock.redis.exists(lock_key)
 
-        if result.get("success"):
-            return {
-                "code": 200,
-                "message": "数据同步成功",
-                "data": result
+            if is_locked:
+                logger.warning(f"⚠️  {date} 数据同步任务已在执行中，拒绝重复提交")
+                return {
+                    "code": 409,  # Conflict
+                    "message": "数据同步任务正在执行中",
+                    "data": {
+                        "date": date,
+                        "status": "locked",
+                        "reason": "已有同步任务正在进行，请等待其完成后再试"
+                    }
+                }
+
+        # 提交到 Celery 异步执行
+        task = manual_sentiment_sync_task.apply_async(
+            args=[date],
+            task_id=f"manual_sentiment_sync_{date}"  # 使用固定ID，便于查询
+        )
+
+        return {
+            "code": 200,
+            "message": "同步任务已提交",
+            "data": {
+                "task_id": task.id,
+                "date": date,
+                "status": "pending"
             }
-        else:
-            error_msg = result.get("error", "未知错误")
-            return {
-                "code": 500,
-                "message": f"数据同步失败: {error_msg}",
-                "data": result
-            }
+        }
 
     except Exception as e:
-        logger.error(f"同步情绪数据失败: {e}")
+        logger.error(f"提交同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

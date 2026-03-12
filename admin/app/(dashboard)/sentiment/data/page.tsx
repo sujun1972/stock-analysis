@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, TrendingUp, TrendingDown, Activity, AlertCircle } from 'lucide-react'
+import { RefreshCw, TrendingUp, Activity, AlertCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
-import { format } from 'date-fns'
 import type { MarketSentiment } from '@/types/sentiment'
+import { addTaskToQueue } from '@/hooks/use-task-polling'
 
 export default function SentimentManagementPage() {
   const [sentiments, setSentiments] = useState<MarketSentiment[]>([])
@@ -19,6 +19,28 @@ export default function SentimentManagementPage() {
   const [total, setTotal] = useState(0)
 
   const pageSize = 20
+
+  // 计算北京时间 17:30 对应的本地时间
+  const getLocalTimeFromBeijing = () => {
+    // 创建一个北京时间 17:30 的日期对象
+    const today = new Date()
+    const beijingTime = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+    beijingTime.setHours(17, 30, 0, 0)
+
+    // 获取当前时区偏移量（分钟）
+    const localOffset = new Date().getTimezoneOffset()
+    const beijingOffset = -480 // 北京时间是 UTC+8 = -480 分钟
+    const offsetDiff = beijingOffset - localOffset
+
+    // 转换为本地时间
+    const localTime = new Date(beijingTime.getTime() + offsetDiff * 60 * 1000)
+
+    return localTime.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  }
 
   // 加载数据
   const loadSentiments = async () => {
@@ -43,20 +65,44 @@ export default function SentimentManagementPage() {
     }
   }
 
-  // 手动同步
+  // 手动同步（异步任务）
   const handleSync = async () => {
     setSyncing(true)
     try {
       const response = await apiClient.syncSentimentData()
-      if (response.code === 200) {
-        toast.success('同步成功')
-        await loadSentiments()
-      } else {
-        toast.error(response.message || '同步失败')
+
+      // 成功提交任务
+      if (response.code === 200 && response.data) {
+        const { task_id, date } = response.data
+
+        // 显示任务提交成功的提示
+        toast.info('同步任务已提交', {
+          description: `正在同步 ${date} 的数据，请稍候...`,
+          duration: 3000,
+        })
+
+        // 添加任务到全局轮询队列
+        addTaskToQueue(task_id, '市场情绪数据同步')
+
+        // 延迟刷新列表（给任务一些执行时间）
+        setTimeout(() => {
+          loadSentiments()
+        }, 2000)
+      }
+      // 任务正在执行中（锁冲突）
+      else if (response.code === 409) {
+        toast.warning('同步任务正在执行中', {
+          description: response.data?.reason || '已有同步任务正在进行，请等待其完成后再试',
+          duration: 5000,
+        })
+      }
+      // 其他错误
+      else {
+        toast.error(response.message || '提交同步任务失败')
       }
     } catch (error: any) {
-      console.error('同步失败:', error)
-      toast.error('同步失败: ' + (error.message || '网络错误'))
+      console.error('提交同步任务失败:', error)
+      toast.error('提交失败: ' + (error.message || '网络错误'))
     } finally {
       setSyncing(false)
     }
@@ -75,7 +121,7 @@ export default function SentimentManagementPage() {
         <div>
           <h1 className="text-3xl font-bold">市场情绪管理</h1>
           <p className="text-muted-foreground mt-1">
-            管理每日17:30采集的市场情绪指标数据
+            管理每日 <span className="font-medium text-foreground">17:30</span> (北京时间 UTC+8，本地时间 <span className="font-medium text-foreground">{getLocalTimeFromBeijing()}</span>) 采集的市场情绪指标数据
           </p>
         </div>
         <Button onClick={handleSync} disabled={syncing}>

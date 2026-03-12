@@ -1389,6 +1389,14 @@ class ApiClient {
   }
 
   /**
+   * 查询同步任务状态
+   */
+  async getSyncTaskStatus(taskId: string): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get(`/api/sentiment/sync/status/${taskId}`)
+    return response.data
+  }
+
+  /**
    * 获取涨停板池
    */
   async getLimitUpPool(date?: string): Promise<ApiResponse<any>> {

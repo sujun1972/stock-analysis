@@ -31,13 +31,14 @@ class SentimentAIAnalysisTask(Task):
     name="sentiment.ai_analysis_18_00",
     bind=True
 )
-def daily_sentiment_ai_analysis_task(self, date: str = None, provider: str = "deepseek"):
+def daily_sentiment_ai_analysis_task(self, date: str = None, provider: str = "deepseek", retry_count: int = 0):
     """
     每日18:00执行市场情绪AI分析任务
 
     Args:
         date: 分析日期（可选，默认为当天）
         provider: AI提供商（deepseek/gemini/openai）
+        retry_count: 当前重试次数（内部使用）
 
     Returns:
         分析结果字典
@@ -88,17 +89,49 @@ def daily_sentiment_ai_analysis_task(self, date: str = None, provider: str = "de
             }
         else:
             error_msg = result.get('error', 'Unknown error')
-            logger.error(f"情绪AI分析失败: {error_msg}")
 
-            # 记录失败
+            # 如果是数据缺失，智能重试等待依赖任务完成
+            if "无情绪数据" in error_msg:
+                max_data_wait_retries = 3  # 最多等待3次（5分钟 × 3 = 15分钟）
+
+                if retry_count < max_data_wait_retries:
+                    retry_delay = 300  # 5分钟后重试
+                    logger.warning(
+                        f"📊 {date} 情绪数据尚未就绪 | "
+                        f"重试 {retry_count + 1}/{max_data_wait_retries} | "
+                        f"将在 {retry_delay}秒 后重试 | "
+                        f"可能原因：17:30数据采集任务延迟或失败"
+                    )
+
+                    # 抛出异常并延迟重试
+                    raise self.retry(
+                        exc=Exception(f"等待依赖数据: {error_msg}"),
+                        countdown=retry_delay,
+                        kwargs={'date': date, 'provider': provider, 'retry_count': retry_count + 1}
+                    )
+                else:
+                    # 超过重试次数，永久跳过
+                    logger.error(
+                        f"❌ {date} 情绪数据持续缺失 | "
+                        f"已重试 {max_data_wait_retries} 次，放弃AI分析 | "
+                        f"建议：检查 sentiment.daily_sync_17_30 任务状态和日志"
+                    )
+                    _log_task_execution(date, 'skipped', {
+                        **result,
+                        'reason': f'依赖数据缺失（已重试{max_data_wait_retries}次）',
+                        'dependency_task': 'sentiment.daily_sync_17_30'
+                    })
+                    return {
+                        "status": "skipped",
+                        "reason": f"数据缺失，已重试{max_data_wait_retries}次",
+                        "dependency": "sentiment.daily_sync_17_30"
+                    }
+
+            # 其他错误记录为失败
+            logger.error(f"情绪AI分析失败: {error_msg}")
             _log_task_execution(date, 'failed', result)
 
-            # 如果是数据缺失，不重试
-            if "无情绪数据" in error_msg:
-                logger.warning(f"{date} 情绪数据缺失，跳过AI分析")
-                return {"status": "skipped", "reason": error_msg}
-
-            # 其他错误，抛出异常触发重试
+            # 抛出异常触发重试
             raise Exception(error_msg)
 
     except Exception as e:
@@ -148,15 +181,15 @@ def _log_task_execution(date: str, status: str, result: dict):
 
         task_id = task_row[0]
 
-        # 记录执行历史
+        # 记录执行历史（补充必要的 task_name 和 module 字段）
         result_summary = json.dumps(result, ensure_ascii=False)[:500]  # 截断到500字节
 
         cursor.execute("""
             INSERT INTO task_execution_history (
-                task_id, executed_at, status, result_summary
+                task_id, task_name, module, status, started_at, result_summary
             )
-            VALUES (%s, NOW(), %s, %s)
-        """, (task_id, status, result_summary))
+            VALUES (%s, %s, %s, %s, NOW(), %s)
+        """, (task_id, 'sentiment.ai_analysis_18_00', 'sentiment', status, result_summary))
 
         conn.commit()
         cursor.close()
