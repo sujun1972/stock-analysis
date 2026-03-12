@@ -396,5 +396,136 @@ docker-compose restart backend
 
 ---
 
-**更新时间**：2026-03-10
+### 问题5：保存AI配置时出现500错误
+
+**错误类型**：多种可能的错误情况
+
+#### 5.1 温度值(Temperature)数据库溢出错误
+
+**错误现象**：保存AI配置时后端返回500错误
+
+**Backend日志**：
+```
+numeric field overflow: A field with precision 3, scale 2 must round to an absolute value less than 10^1
+```
+
+**根本原因**：
+- 数据库字段定义为 `NUMERIC(3,2)`（支持0.00-9.99）
+- 代码错误地将温度值乘以100（0.7 → 70）再存入数据库
+- 70超过了字段的最大值9.99，导致溢出
+
+**已修复**（2026-03-12）：
+- ✅ 移除了 `ai_config_repository.py` 中的温度值转换（乘100操作）
+- ✅ 直接存储0-1范围的温度值，数据库字段足以支持
+- ✅ 修复文件：`backend/app/repositories/ai_config_repository.py`（第78-79行、104-106行）
+
+**如果仍有此问题**：
+```bash
+# 检查数据库中的温度值
+docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c \
+  "SELECT provider, temperature FROM ai_provider_configs;"
+
+# 如果看到超出范围的值（如70），手动修正：
+docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c \
+  "UPDATE ai_provider_configs SET temperature = 0.7 WHERE temperature > 2;"
+
+# 重启backend
+docker-compose restart backend
+```
+
+#### 5.2 错误日志记录导致KeyError
+
+**错误现象**：保存AI配置失败，日志显示KeyError
+
+**Backend日志**：
+```
+KeyError: "'display_name'"
+```
+
+**根本原因**：
+- 数据库错误消息中包含大括号（如SQL HINT中的 `{display_name}`）
+- loguru的f-string格式化将大括号误认为是格式化占位符
+- 导致在记录日志时抛出KeyError
+
+**已修复**（2026-03-12）：
+- ✅ 在记录错误日志前，先转义错误消息中的花括号：`raw_error.replace("{", "{{").replace("}", "}}")`
+- ✅ 修复文件：`backend/app/api/error_handler.py`（第142-144行、228-230行）
+- ✅ 同时修复了异步和同步版本的错误处理装饰器
+
+**技术细节**：
+```python
+# 修复前（会导致KeyError）
+logger.error(f"服务器错误 [ID:{error_id}]: {raw_error}", exc_info=True)
+
+# 修复后（安全记录含大括号的错误）
+safe_raw_error = raw_error.replace("{", "{{").replace("}", "}}")
+logger.error(f"服务器错误 [ID:{error_id}]: {safe_raw_error}", exc_info=True)
+```
+
+#### 5.3 更新配置时返回旧的温度值
+
+**错误现象**：更新AI配置后，API返回的温度值仍然是旧值
+
+**根本原因**：
+- 代码使用了更新前的 `config.temperature` 而不是更新后的 `updated_config.temperature`
+
+**已修复**（2026-03-12）：
+- ✅ 修正响应数据使用 `updated_config.temperature`
+- ✅ 修复文件：`backend/app/api/endpoints/ai_strategy.py`（第250行）
+
+---
+
+### 问题6：LLM调用日志无法记录（外键约束错误）
+
+**错误现象**：AI分析生成成功，但LLM调用日志表没有记录
+
+**Backend日志**：
+```
+Foreign key associated with column 'llm_call_logs.prompt_template_id' could not find table 'llm_prompt_templates'
+```
+
+**根本原因**：
+- `llm_call_log.py` 和 `llm_prompt_template.py` 使用了不同的 `declarative_base()` 实例
+- SQLAlchemy要求外键关联的两个模型必须使用同一个Base实例
+- 外键约束导致表创建失败
+
+**已修复**（2026-03-12）：
+- ✅ 临时移除了 `prompt_template_id` 的外键约束，保留为普通Integer字段
+- ✅ 添加了TODO注释：统一所有模型使用同一个Base实例后再添加外键约束
+- ✅ 修复文件：`backend/app/models/llm_call_log.py`（第43-46行）
+
+**技术细节**：
+```python
+# 修复前（会导致表创建失败）
+prompt_template_id = Column(Integer, ForeignKey("llm_prompt_templates.id"), index=True)
+
+# 修复后（临时移除外键约束）
+# 注意：由于使用了不同的declarative_base()，暂时移除ForeignKey约束
+# TODO: 统一所有模型使用同一个Base实例后再添加外键约束
+prompt_template_id = Column(Integer, index=True)
+```
+
+**长期解决方案**（TODO）：
+1. 创建统一的 `Base` 实例在 `app/models/base.py`
+2. 所有模型文件导入并使用同一个Base
+3. 恢复外键约束以保证数据完整性
+
+**如果仍有此问题**：
+```bash
+# 检查LLM日志表是否存在
+docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c \
+  "\d llm_call_logs"
+
+# 如果表不存在或结构有问题，重建：
+docker-compose restart backend
+
+# 验证日志记录功能
+# 生成一次AI分析，然后检查：
+docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c \
+  "SELECT COUNT(*) FROM llm_call_logs;"
+```
+
+---
+
+**更新时间**：2026-03-12
 **适用版本**：v2.0+

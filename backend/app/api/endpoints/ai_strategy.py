@@ -247,7 +247,7 @@ async def update_ai_provider(provider: str, config: AIProviderConfigUpdate):
         "api_base_url": updated_config.api_base_url,
         "model_name": updated_config.model_name,
         "max_tokens": updated_config.max_tokens,
-        "temperature": float(config.temperature),
+        "temperature": float(updated_config.temperature),  # 修复：使用updated_config而不是config
         "is_active": updated_config.is_active,
         "is_default": updated_config.is_default,
         "priority": updated_config.priority,

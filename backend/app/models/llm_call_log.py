@@ -40,7 +40,9 @@ class LLMCallLog(Base):
     prompt_hash = Column(String(64))
 
     # 提示词模板关联
-    prompt_template_id = Column(Integer, ForeignKey("llm_prompt_templates.id"), index=True)
+    # 注意：由于使用了不同的declarative_base()，暂时移除ForeignKey约束
+    # TODO: 统一所有模型使用同一个Base实例后再添加外键约束
+    prompt_template_id = Column(Integer, index=True)
     prompt_template_version = Column(String(20))
 
     # 输出内容

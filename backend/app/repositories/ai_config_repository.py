@@ -75,9 +75,8 @@ class AIConfigRepository:
                 )
                 session.execute(stmt)
 
-            # 温度参数转换 (0-1 -> 0-100)
-            if "temperature" in config_data:
-                config_data["temperature"] = int(config_data["temperature"] * 100)
+            # 温度参数无需转换，直接存储0-1范围的值
+            # (数据库字段 NUMERIC(3,2) 支持0.00-9.99的范围)
 
             config = AIProviderConfig(**config_data)
             session.add(config)
@@ -102,9 +101,8 @@ class AIConfigRepository:
                 )
                 session.execute(stmt)
 
-            # 温度参数转换
-            if "temperature" in update_data:
-                update_data["temperature"] = int(update_data["temperature"] * 100)
+            # 温度参数无需转换，直接存储0-1范围的值
+            # (数据库字段 NUMERIC(3,2) 支持0.00-9.99的范围)
 
             # 移除None值
             update_data = {k: v for k, v in update_data.items() if v is not None}

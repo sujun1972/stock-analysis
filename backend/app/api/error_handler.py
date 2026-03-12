@@ -139,7 +139,9 @@ def handle_api_errors(func: Callable) -> Callable:
             raw_error = str(e)
 
             # 记录完整错误到日志（包含敏感信息，仅用于调试）
-            logger.error(f"服务器错误 [ID:{error_id}]: {raw_error}", exc_info=True)
+            # 将错误消息中的花括号转义，避免被loguru当作格式化占位符
+            safe_raw_error = raw_error.replace("{", "{{").replace("}", "}}")
+            logger.error(f"服务器错误 [ID:{error_id}]: {safe_raw_error}", exc_info=True)
 
             # 清理错误消息，移除敏感信息
             safe_message = _sanitize_error_message(raw_error)
@@ -225,7 +227,9 @@ def handle_api_errors_sync(func: Callable) -> Callable:
             raw_error = str(e)
 
             # 记录完整错误到日志
-            logger.error(f"服务器错误 [ID:{error_id}]: {raw_error}", exc_info=True)
+            # 将错误消息中的花括号转义，避免被loguru当作格式化占位符
+            safe_raw_error = raw_error.replace("{", "{{").replace("}", "}}")
+            logger.error(f"服务器错误 [ID:{error_id}]: {safe_raw_error}", exc_info=True)
 
             # 清理错误消息
             safe_message = _sanitize_error_message(raw_error)
