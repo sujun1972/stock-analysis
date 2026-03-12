@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -12,6 +13,7 @@ import type { MarketSentiment } from '@/types/sentiment'
 import { addTaskToQueue } from '@/hooks/use-task-polling'
 
 export default function SentimentManagementPage() {
+  const router = useRouter()
   const [sentiments, setSentiments] = useState<MarketSentiment[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -292,7 +294,7 @@ export default function SentimentManagementPage() {
         /* 正常显示统计卡片 */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="cursor-pointer hover:shadow-md transition-shadow border-purple-200"
-                onClick={() => window.location.href = '/sentiment/cycle'}>
+                onClick={() => router.push('/sentiment/cycle')}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">情绪周期</CardTitle>
               <Activity className="h-4 w-4 text-purple-600" />
@@ -304,7 +306,7 @@ export default function SentimentManagementPage() {
           </Card>
 
           <Card className="cursor-pointer hover:shadow-md transition-shadow border-green-200"
-                onClick={() => window.location.href = '/sentiment/limit-up'}>
+                onClick={() => router.push('/sentiment/limit-up')}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">涨停板池</CardTitle>
               <TrendingUp className="h-4 w-4 text-green-600" />
@@ -323,7 +325,7 @@ export default function SentimentManagementPage() {
           </Card>
 
           <Card className="cursor-pointer hover:shadow-md transition-shadow border-blue-200"
-                onClick={() => window.location.href = '/sentiment/dragon-tiger'}>
+                onClick={() => router.push('/sentiment/dragon-tiger')}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">龙虎榜</CardTitle>
               <Activity className="h-4 w-4 text-blue-600" />
