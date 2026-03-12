@@ -79,6 +79,31 @@ Backend 项目的 Claude Code Skills 集合，用于指导 AI 助手在开发过
       return ApiResponse.success(data=stock)
   ```
 
+### 4. [data-sanitization](data-sanitization.md)
+**数据清理与序列化指南**
+
+- **适用场景**: 所有涉及数据库查询和 API 响应的代码
+- **核心内容**:
+  - 处理 PostgreSQL numeric 类型的 NaN/Infinity 值
+  - 确保数据符合 JSON 标准
+  - 递归清理嵌套数据结构
+  - 数据质量监控和预防
+- **快速开始**:
+  ```python
+  from decimal import Decimal
+  import math
+
+  @staticmethod
+  def _sanitize_dict(data: Dict) -> Dict:
+      """递归清理字典中的特殊浮点数值"""
+      # 将 NaN/Infinity 转换为 None
+      # 确保数据可以正确序列化为 JSON
+
+  # 在返回数据前应用清理
+  result = self._sanitize_dict(query_result)
+  return result
+  ```
+
 ---
 
 ## 🎯 Skills 使用指南

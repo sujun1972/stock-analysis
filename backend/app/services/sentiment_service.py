@@ -6,8 +6,10 @@
 
 import asyncio
 import json
+import math
 import os
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Dict, List, Optional
 
 from loguru import logger
@@ -49,6 +51,64 @@ class MarketSentimentService:
             self._pool_manager = ConnectionPoolManager(db_config)
             self._fetcher = SentimentDataFetcher(self._pool_manager)
         return self._fetcher
+
+    @staticmethod
+    def _sanitize_float_value(value):
+        """
+        清理特殊浮点数值，使其符合 JSON 标准
+
+        PostgreSQL 的 numeric 类型支持存储 NaN 和 Infinity，
+        但这些值不符合 JSON 标准，会导致序列化失败。
+        此方法将特殊浮点数转换为 None (JSON 中的 null)。
+
+        Args:
+            value: 任意值
+
+        Returns:
+            清理后的值（NaN/Infinity -> None）
+        """
+        # 处理 Decimal 类型（PostgreSQL numeric 类型）
+        if isinstance(value, Decimal):
+            # 检查 Decimal 是否为 NaN 或 Infinity
+            if value.is_nan() or value.is_infinite():
+                return None
+            # 正常的 Decimal 保持不变，让 FastAPI 处理
+            return value
+
+        # 处理 float 类型
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                return None
+
+        return value
+
+    @staticmethod
+    def _sanitize_dict(data: Dict) -> Dict:
+        """
+        递归清理字典中的特殊浮点数值
+
+        Args:
+            data: 字典数据
+
+        Returns:
+            清理后的字典
+        """
+        if not isinstance(data, dict):
+            return data
+
+        sanitized = {}
+        for key, value in data.items():
+            if isinstance(value, dict):
+                sanitized[key] = MarketSentimentService._sanitize_dict(value)
+            elif isinstance(value, list):
+                sanitized[key] = [
+                    MarketSentimentService._sanitize_dict(item) if isinstance(item, dict)
+                    else MarketSentimentService._sanitize_float_value(item)
+                    for item in value
+                ]
+            else:
+                sanitized[key] = MarketSentimentService._sanitize_float_value(value)
+        return sanitized
 
     # ========== 1. 数据同步相关 ==========
 
@@ -157,7 +217,7 @@ class MarketSentimentService:
             cursor.close()
             self._pool_manager.release_connection(conn)
 
-            return {
+            result = {
                 "date": date,
                 "market_data": self._row_to_dict(market_data, cursor.description) if market_data else None,
                 "limit_up_data": self._row_to_dict(limit_up_data, cursor.description) if limit_up_data else None,
@@ -166,6 +226,9 @@ class MarketSentimentService:
                     "institution_count": dragon_tiger_stats[1] if dragon_tiger_stats else 0
                 }
             }
+
+            # 清理特殊浮点数值
+            return self._sanitize_dict(result)
 
         except Exception as e:
             logger.error(f"查询情绪报告失败: {e}")
@@ -239,6 +302,8 @@ class MarketSentimentService:
                 # 处理日期格式
                 if 'trade_date' in item and item['trade_date']:
                     item['trade_date'] = item['trade_date'].strftime('%Y-%m-%d')
+                # 清理特殊浮点数值
+                item = self._sanitize_dict(item)
                 items.append(item)
 
             cursor.close()
@@ -294,7 +359,8 @@ class MarketSentimentService:
             if 'blast_stocks' in data and isinstance(data['blast_stocks'], str):
                 data['blast_stocks'] = json.loads(data['blast_stocks'])
 
-            return data
+            # 清理特殊浮点数值
+            return self._sanitize_dict(data)
 
         except Exception as e:
             logger.error(f"查询涨停板详情失败: {e}")
@@ -377,6 +443,8 @@ class MarketSentimentService:
                     item['top_buyers'] = json.loads(item['top_buyers'])
                 if 'top_sellers' in item and isinstance(item['top_sellers'], str):
                     item['top_sellers'] = json.loads(item['top_sellers'])
+                # 清理特殊浮点数值（NaN, Infinity）
+                item = self._sanitize_dict(item)
                 items.append(item)
 
             cursor.close()
@@ -513,7 +581,7 @@ class MarketSentimentService:
             cursor.close()
             self._pool_manager.release_connection(conn)
 
-            return {
+            result = {
                 "period": {
                     "start_date": start_date,
                     "end_date": end_date
@@ -538,6 +606,9 @@ class MarketSentimentService:
                     for row in trend_rows
                 ]
             }
+
+            # 清理特殊浮点数值
+            return self._sanitize_dict(result)
 
         except Exception as e:
             logger.error(f"统计分析失败: {e}")
