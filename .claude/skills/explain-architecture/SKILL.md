@@ -79,6 +79,12 @@ disable-model-invocation: false
    - 交互式分析
    - Admin管理后台
 
+✅ 异步任务管理
+   - Celery + Redis 分布式任务队列
+   - 支持数据同步、AI分析、回测等长时间任务
+   - 实时进度跟踪和状态更新
+   - 全局任务面板（跨页面持久化）
+
 ✅ LLM调用日志
    - 记录所有AI模型调用（DeepSeek/Gemini/OpenAI）
    - Tokens消耗和成本追踪
@@ -95,6 +101,8 @@ disable-model-invocation: false
 | **Frontend** | Next.js 14 | SSR/SSG支持、App Router、开发体验好 |
 | **ML框架** | LightGBM | 速度快、内存效率高、适合表格数据 |
 | **数据处理** | Pandas + NumPy | 生态成熟、向量化操作高效 |
+| **任务队列** | Celery + Redis | 异步任务处理、分布式锁、进度跟踪 |
+| **状态管理** | Zustand | React状态管理、任务队列持久化 |
 | **部署** | Docker Compose | 一键启动、环境隔离、易于维护 |
 
 ### 第二部分：项目结构详解
@@ -387,7 +395,165 @@ cat backend/app/api/endpoints/stocks.py | head -50
 }
 ```
 
-### 第七部分：开发工作流
+### 第七部分：异步任务管理系统
+
+#### 系统架构
+
+```
+Admin Frontend (React)
+    ↓ (提交任务)
+Backend API (FastAPI)
+    ↓ (创建 Celery 任务)
+Celery Worker
+    ↓ (执行任务)
+Redis (任务队列 + 结果存储)
+    ↓ (轮询状态)
+Frontend 任务轮询器 (useTaskPolling)
+    ↓ (更新 UI)
+Zustand Store (全局状态)
+```
+
+#### 核心组件
+
+**后端：**
+- `backend/app/celery_app.py` - Celery 应用配置
+- `backend/app/tasks/sync_tasks.py` - 数据同步任务
+- `backend/app/tasks/sentiment_tasks.py` - 情绪数据任务
+- `backend/app/tasks/ai_strategy_tasks.py` - AI策略生成任务
+- `backend/app/tasks/backtest_tasks.py` - 回测任务
+
+**前端（Admin）：**
+- `admin/stores/task-store.ts` - Zustand 任务状态管理
+- `admin/hooks/use-task-polling.ts` - 全局任务轮询 Hook
+- `admin/components/TaskStatusIcon.tsx` - 头部任务图标
+- `admin/components/TaskPanel.tsx` - 任务面板
+
+#### 工作流程示例：日线数据同步
+
+```typescript
+// 1. 用户点击"同步"按钮
+const handleDailySync = async () => {
+  // 调用 API 启动异步任务
+  const response = await apiClient.syncDailyBatch({
+    start_date: '2024-01-01',
+    end_date: '2024-12-31'
+  })
+
+  // 2. 获取 task_id
+  const { task_id, display_name } = response.data
+
+  // 3. 添加到全局任务队列
+  addTaskToQueue(task_id, 'sync.daily_batch', display_name, 'sync')
+
+  // 4. 显示 Toast 提示
+  toast.success('任务已启动', {
+    description: '日线数据批量同步任务已在后台执行'
+  })
+}
+
+// 5. useTaskPolling 自动轮询任务状态（每3秒）
+pollTaskStatus(task_id)
+  ↓
+GET /api/sentiment/sync/status/{task_id}
+  ↓
+返回: { status: 'PROGRESS', progress: 45, ... }
+  ↓
+更新 Zustand Store
+  ↓
+TaskStatusIcon 显示进度（旋转图标 + 徽章数量）
+  ↓
+任务完成后显示 Toast 通知
+  ↓
+3秒后自动从任务列表移除
+```
+
+#### 关键特性
+
+**1. 分布式锁（防止并发执行）**
+```python
+# backend/app/tasks/sync_tasks.py
+with redis_lock.acquire(lock_key, timeout=3600, blocking=False):
+    if not acquired:
+        return {"status": "locked", "message": "已有同步任务正在进行"}
+    # 执行任务...
+```
+
+**2. 进度报告**
+```python
+# 每10只股票更新一次进度
+self.update_state(
+    state='PROGRESS',
+    meta={
+        'current': i + 1,
+        'total': total,
+        'percent': percent,
+        'status': f'同步中... ({i + 1}/{total})'
+    }
+)
+```
+
+**3. 任务自动恢复**
+```typescript
+// admin/hooks/use-task-polling.ts
+async function restoreActiveTasks() {
+  // 应用启动时查询后端正在执行的任务
+  const response = await apiClient.get('/api/sentiment/tasks/active')
+
+  // 添加到 Zustand Store
+  tasks.forEach((task) => {
+    taskStore.addTask(task)
+  })
+
+  // 启动轮询
+  startPolling()
+}
+```
+
+**4. 跨页面持久化**
+- 使用 Zustand Store 管理全局状态
+- 任务轮询在 Layout 层级运行
+- 用户切换页面时任务继续执行和显示
+
+**5. 任务分类**
+```typescript
+type TaskType = 'sync' | 'sentiment' | 'ai_analysis' | 'backtest' | 'premarket'
+
+// 每种类型有不同的图标和颜色
+getTaskTypeIcon(type: TaskType) {
+  switch (type) {
+    case 'sync': return <DatabaseIcon />
+    case 'sentiment': return <ActivityIcon />
+    case 'ai_analysis': return <BrainCircuitIcon />
+    case 'backtest': return <TrendingUpIcon />
+    ...
+  }
+}
+```
+
+#### Docker Compose 配置
+
+```yaml
+# Celery Worker（执行任务）
+celery_worker:
+  command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+  environment:
+    - PYTHONPATH=/app/core:/app
+  volumes:
+    - ./backend/app:/app/app:rw
+    - ./core:/app/core:ro
+
+# Celery Beat（定时任务调度）
+celery_beat:
+  command: celery -A app.celery_app beat --loglevel=info
+
+# Flower（任务监控面板）
+flower:
+  command: celery -A app.celery_app flower --port=5555
+  ports:
+    - "5555:5555"
+```
+
+### 第八部分：开发工作流
 
 #### 添加新功能的标准流程
 
@@ -443,7 +609,7 @@ start = time.time()
 print(f"耗时: {time.time() - start:.2f}s")
 ```
 
-### 第八部分：常见问题解答
+### 第九部分：常见问题解答
 
 **Q1: 为什么要用 TimescaleDB 而不是普通 PostgreSQL？**
 
@@ -493,7 +659,7 @@ df_cached = cache.load(stock_code, config)  # 秒级返回
 # 如果配置改变（如新增指标），缓存自动失效
 ```
 
-### 第九部分：性能优化策略
+### 第十部分：性能优化策略
 
 #### 1. 数据库查询优化
 
@@ -530,7 +696,7 @@ returns = df['close'].pct_change()
 # - 自动失效机制
 ```
 
-### 第十部分：学习路径建议
+### 第十一部分：学习路径建议
 
 **对于新人：**
 

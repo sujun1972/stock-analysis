@@ -122,49 +122,79 @@ async def abort_sync():
 @handle_api_errors
 async def sync_stock_list():
     """
-    同步股票列表
+    异步同步股票列表
 
     Returns:
-        同步结果，包含获取的股票总数
+        任务ID和任务名称
     """
-    service = StockListSyncService()
-    result = await service.sync_stock_list()
+    from app.tasks.sync_tasks import sync_stock_list_task
 
-    return {"code": 200, "message": "success", "data": result}
+    # 启动异步任务
+    task = sync_stock_list_task.delay()
+
+    return {
+        "code": 200,
+        "message": "股票列表同步任务已启动",
+        "data": {
+            "task_id": task.id,
+            "task_name": "股票列表同步",
+            "display_name": "股票列表同步"
+        }
+    }
 
 
 @router.post("/new-stocks")
 @handle_api_errors
 async def sync_new_stocks(request: SyncNewStocksRequest):
     """
-    同步新股列表
+    异步同步新股列表
 
     Args:
         request: 新股同步请求
             - days: 最近天数 (默认 30 天)
 
     Returns:
-        同步结果，包含获取的新股总数
+        任务ID和任务名称
     """
-    service = StockListSyncService()
-    result = await service.sync_new_stocks(days=request.days)
+    from app.tasks.sync_tasks import sync_new_stocks_task
 
-    return {"code": 200, "message": "success", "data": result}
+    # 启动异步任务
+    task = sync_new_stocks_task.delay(days=request.days)
+
+    return {
+        "code": 200,
+        "message": "新股列表同步任务已启动",
+        "data": {
+            "task_id": task.id,
+            "task_name": "新股列表同步",
+            "display_name": f"新股列表同步(最近{request.days}天)"
+        }
+    }
 
 
 @router.post("/delisted-stocks")
 @handle_api_errors
 async def sync_delisted_stocks():
     """
-    同步退市股票列表
+    异步同步退市股票列表
 
     Returns:
-        同步结果，包含退市股票总数
+        任务ID和任务名称
     """
-    service = StockListSyncService()
-    result = await service.sync_delisted_stocks()
+    from app.tasks.sync_tasks import sync_delisted_stocks_task
 
-    return {"code": 200, "message": "success", "data": result}
+    # 启动异步任务
+    task = sync_delisted_stocks_task.delay()
+
+    return {
+        "code": 200,
+        "message": "退市股票列表同步任务已启动",
+        "data": {
+            "task_id": task.id,
+            "task_name": "退市股票同步",
+            "display_name": "退市股票列表同步"
+        }
+    }
 
 
 # ==================== Daily Data Sync Endpoints ====================
@@ -174,7 +204,7 @@ async def sync_delisted_stocks():
 @handle_api_errors
 async def sync_daily_batch(request: SyncDailyBatchRequest):
     """
-    批量同步日线数据
+    异步批量同步日线数据
 
     Args:
         request: 批量同步请求
@@ -184,20 +214,35 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
             - years: 历史年数 (仅在未提供start_date时使用)
 
     Returns:
-        同步结果统计
+        任务ID和任务名称
     """
-    service = DailySyncService()
-    result = await service.sync_batch(
-        codes=request.codes,
+    from app.tasks.sync_tasks import sync_daily_batch_task
+
+    # 构建任务显示名称
+    if request.start_date and request.end_date:
+        date_range = f"{request.start_date} ~ {request.end_date}"
+        display_name = f"日线数据同步({date_range})"
+    elif request.years:
+        display_name = f"日线数据同步(最近{request.years}年)"
+    else:
+        display_name = "日线数据批量同步"
+
+    # 启动异步任务
+    task = sync_daily_batch_task.delay(
         start_date=request.start_date,
         end_date=request.end_date,
-        years=request.years,
+        years=request.years
     )
 
-    if result["aborted"]:
-        return {"code": 200, "message": "同步已中止", "data": result}
-    else:
-        return {"code": 200, "message": "success", "data": result}
+    return {
+        "code": 200,
+        "message": "日线数据批量同步任务已启动",
+        "data": {
+            "task_id": task.id,
+            "task_name": "日线数据批量同步",
+            "display_name": display_name
+        }
+    }
 
 
 @router.post("/daily/{code}")

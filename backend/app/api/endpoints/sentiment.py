@@ -838,11 +838,13 @@ async def get_active_tasks():
 
                     # 解析任务类型和显示名称
                     display_name = _get_task_display_name(task_id, task_name)
+                    task_type = _get_task_type(task_name)
 
                     active_tasks.append({
                         "task_id": task_id,
                         "task_name": task_name,
                         "display_name": display_name,
+                        "task_type": task_type,
                         "status": "running",
                         "worker": worker
                     })
@@ -855,11 +857,13 @@ async def get_active_tasks():
 
                     # 解析任务类型和显示名称
                     display_name = _get_task_display_name(task_id, task_name)
+                    task_type = _get_task_type(task_name)
 
                     active_tasks.append({
                         "task_id": task_id,
                         "task_name": task_name,
                         "display_name": display_name,
+                        "task_type": task_type,
                         "status": "pending",
                         "worker": worker
                     })
@@ -880,6 +884,30 @@ async def get_active_tasks():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_task_type(task_name: str) -> str:
+    """
+    根据任务名称获取任务类型
+
+    Args:
+        task_name: 任务名称
+
+    Returns:
+        任务类型 (sync, ai_analysis, backtest, other)
+    """
+    if task_name.startswith('sync.'):
+        return 'sync'
+    elif task_name.startswith('sentiment.'):
+        return 'sentiment'
+    elif 'ai_analysis' in task_name or 'ai_strategy' in task_name:
+        return 'ai_analysis'
+    elif 'backtest' in task_name:
+        return 'backtest'
+    elif 'premarket' in task_name:
+        return 'premarket'
+    else:
+        return 'other'
+
+
 def _get_task_display_name(task_id: str, task_name: str) -> str:
     """
     根据任务ID和任务名称生成友好的显示名称
@@ -891,15 +919,35 @@ def _get_task_display_name(task_id: str, task_name: str) -> str:
     Returns:
         显示名称
     """
-    # AI分析任务
+    # 根据任务名称（Celery 注册的任务名）生成显示名称
+    task_name_mapping = {
+        "sync.stock_list": "股票列表同步",
+        "sync.daily_batch": "日线数据批量同步",
+        "sync.new_stocks": "新股列表同步",
+        "sync.delisted_stocks": "退市股票同步",
+        "sentiment.daily_sync_17_30": "情绪数据定时同步",
+        "sentiment.manual_sync": "情绪数据手动同步",
+        "backtest.run_strategy": "策略回测",
+        "ai_strategy.generate": "AI策略生成",
+        "premarket.daily_analysis": "盘前预期分析"
+    }
+
+    # 优先使用任务名称映射
+    if task_name in task_name_mapping:
+        return task_name_mapping[task_name]
+
+    # AI分析任务（通过 task_id 识别）
     if task_id.startswith('ai_analysis_'):
         parts = task_id.split('_')
         if len(parts) >= 3:
             date = parts[2]
+            provider = parts[3] if len(parts) >= 4 else ""
+            if provider:
+                return f"AI分析生成（{date} - {provider}）"
             return f"AI分析生成（{date}）"
         return "AI分析生成"
 
-    # 数据同步任务
+    # 手动情绪同步任务（通过 task_id 识别）
     if task_id.startswith('manual_sentiment_sync_'):
         parts = task_id.split('_')
         if len(parts) >= 4:

@@ -7,6 +7,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
+import akshare as ak
 import pandas as pd
 from loguru import logger
 

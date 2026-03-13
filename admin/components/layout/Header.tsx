@@ -28,6 +28,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogOut, User, Menu, KeyRound } from 'lucide-react'
 import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
+import { TaskStatusIcon } from '@/components/TaskStatusIcon'
 
 export function Header() {
   const router = useRouter()
@@ -91,6 +92,9 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* 任务状态图标 */}
+          <TaskStatusIcon />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-10 gap-2">

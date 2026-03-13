@@ -1,97 +1,114 @@
 /**
- * 全局任务轮询 Hook
+ * 全局任务轮询 Hook（升级版）
  *
- * 用于轮询 Celery 任务状态，即使离开页面也会继续轮询
- * 任务完成时显示全局 toast 通知
+ * 功能：
+ * 1. 轮询所有 Celery 任务状态，即使离开页面也会继续轮询
+ * 2. 任务完成时显示全局 toast 通知
+ * 3. 使用 Zustand Store 管理任务状态
+ * 4. 应用启动时自动恢复活动任务
+ * 5. 支持任务进度实时更新
  */
 
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
+import { useTaskStore, Task, TaskType, TaskStatus } from '@/stores/task-store'
 
-export interface TaskInfo {
-  taskId: string
-  taskName: string
-  startTime: number
-}
-
-// 全局任务队列（存储在内存中，跨页面共享）
-const globalTaskQueue: Map<string, TaskInfo> = new Map()
 let pollingInterval: NodeJS.Timeout | null = null
 
 /**
  * 轮询单个任务状态
  */
-async function pollTaskStatus(taskId: string, taskName: string): Promise<boolean> {
+async function pollTaskStatus(taskId: string): Promise<boolean> {
   try {
-    // 根据 taskId 前缀判断调用不同的 API
-    // AI分析任务使用通用状态查询接口
-    const response = taskId.startsWith('ai_analysis_')
-      ? await apiClient.get(`/api/sentiment/sync/status/${taskId}`)
-      : await apiClient.getSyncTaskStatus(taskId)
+    // 调用统一的任务状态查询接口
+    const response = await apiClient.get(`/api/sentiment/sync/status/${taskId}`)
 
     if (response.code !== 200 || !response.data) {
       return false
     }
 
-    const { status, message, result } = response.data
+    const { status, message, result, progress } = response.data
+    const taskStore = useTaskStore.getState()
 
-    // 任务完成
+    // 更新任务状态
+    if (status === 'PROGRESS' || status === 'STARTED') {
+      // 任务进行中
+      taskStore.updateTask(taskId, {
+        status: 'progress',
+        progress: progress || (result?.percent || 50)
+      })
+      return false // 继续轮询
+    }
+
     if (status === 'SUCCESS') {
-      const taskResult = result || {}
+      // 任务成功完成
+      const task = taskStore.tasks.get(taskId)
+      const taskName = task?.displayName || '未知任务'
 
-      // AI分析任务特殊处理
-      if (taskId.startsWith('ai_analysis_')) {
-        if (taskResult.success) {
-          toast.success(`${taskName}完成`, {
-            description: `${taskResult.date || ''} AI分析已生成 | Tokens: ${taskResult.tokens_used || 0}`,
-            duration: 5000,
-          })
-        } else {
-          toast.warning(`${taskName}完成但有警告`, {
-            description: taskResult.error || message || '请查看详情',
-            duration: 5000,
-          })
-        }
-      } else if (taskResult.status === 'success') {
+      taskStore.updateTask(taskId, {
+        status: 'success',
+        progress: 100,
+        result
+      })
+
+      // 显示成功通知
+      if (result?.status === 'success') {
         toast.success(`${taskName}完成`, {
-          description: `${taskResult.date || ''} 数据同步成功`,
-          duration: 5000,
+          description: generateSuccessMessage(result),
+          duration: 5000
         })
-      } else if (taskResult.status === 'skipped') {
+      } else if (result?.status === 'skipped') {
         toast.info(`${taskName}已跳过`, {
-          description: taskResult.reason || '非交易日',
-          duration: 5000,
+          description: result.reason || '非交易日',
+          duration: 5000
         })
-      } else if (taskResult.status === 'locked') {
-        // 任务因锁冲突被跳过
+      } else if (result?.status === 'locked') {
         toast.warning(`${taskName}未执行`, {
-          description: taskResult.message || '已有同步任务正在进行',
-          duration: 5000,
+          description: result.message || '已有同步任务正在进行',
+          duration: 5000
         })
       } else {
-        toast.warning(`${taskName}完成`, {
+        toast.success(`${taskName}完成`, {
           description: message || '任务已完成',
-          duration: 5000,
+          duration: 5000
         })
       }
 
-      return true // 任务完成，移除
+      // 3秒后自动移除已完成任务
+      setTimeout(() => {
+        taskStore.removeTask(taskId)
+      }, 3000)
+
+      return true // 任务完成，停止轮询
     }
 
-    // 任务失败
     if (status === 'FAILURE') {
-      const errorMsg = response.data.error || '未知错误'
+      // 任务失败
+      const task = taskStore.tasks.get(taskId)
+      const taskName = task?.displayName || '未知任务'
+      const errorMsg = response.data.error || message || '未知错误'
+
+      taskStore.updateTask(taskId, {
+        status: 'failure',
+        error: errorMsg
+      })
+
       toast.error(`${taskName}失败`, {
         description: errorMsg,
-        duration: 7000,
+        duration: 7000
       })
-      return true // 任务失败，移除
+
+      // 5秒后自动移除失败任务
+      setTimeout(() => {
+        taskStore.removeTask(taskId)
+      }, 5000)
+
+      return true // 任务失败，停止轮询
     }
 
     // 任务仍在进行中
     return false
-
   } catch (error) {
     console.error(`轮询任务 ${taskId} 状态失败:`, error)
     return false
@@ -99,10 +116,41 @@ async function pollTaskStatus(taskId: string, taskName: string): Promise<boolean
 }
 
 /**
+ * 生成成功消息
+ */
+function generateSuccessMessage(result: any): string {
+  if (result.date && result.tokens_used) {
+    // AI分析任务
+    return `${result.date} AI分析已生成 | Tokens: ${result.tokens_used}`
+  } else if (result.success !== undefined && result.total !== undefined) {
+    // 同步任务
+    const parts = []
+    if (result.date_range) {
+      parts.push(`范围: ${result.date_range}`)
+    }
+    parts.push(`成功: ${result.success}`)
+    if (result.failed > 0) {
+      parts.push(`失败: ${result.failed}`)
+    }
+    if (result.skipped > 0) {
+      parts.push(`跳过: ${result.skipped}`)
+    }
+    parts.push(`总计: ${result.total}`)
+    return parts.join(' | ')
+  } else if (result.date) {
+    return `${result.date} 数据同步成功`
+  }
+  return '任务完成'
+}
+
+/**
  * 轮询所有任务
  */
 async function pollAllTasks() {
-  if (globalTaskQueue.size === 0) {
+  const taskStore = useTaskStore.getState()
+  const activeTasks = taskStore.getActiveTasks()
+
+  if (activeTasks.length === 0) {
     // 没有任务时停止轮询
     if (pollingInterval) {
       clearInterval(pollingInterval)
@@ -113,27 +161,31 @@ async function pollAllTasks() {
 
   const tasksToRemove: string[] = []
 
-  for (const [taskId, taskInfo] of globalTaskQueue.entries()) {
-    const shouldRemove = await pollTaskStatus(taskId, taskInfo.taskName)
+  for (const task of activeTasks) {
+    const shouldRemove = await pollTaskStatus(task.taskId)
 
     if (shouldRemove) {
-      tasksToRemove.push(taskId)
+      tasksToRemove.push(task.taskId)
     } else {
-      // 检查任务是否超时（超过 10 分钟）
-      const elapsedTime = Date.now() - taskInfo.startTime
-      if (elapsedTime > 10 * 60 * 1000) {
-        toast.error(`${taskInfo.taskName}超时`, {
-          description: '任务执行时间超过 10 分钟',
-          duration: 7000,
+      // 检查任务是否超时（超过 30 分钟）
+      const elapsedTime = Date.now() - task.startTime
+      if (elapsedTime > 30 * 60 * 1000) {
+        toast.error(`${task.displayName}超时`, {
+          description: '任务执行时间超过 30 分钟',
+          duration: 7000
         })
-        tasksToRemove.push(taskId)
+        taskStore.updateTask(task.taskId, {
+          status: 'failure',
+          error: '任务超时'
+        })
+        tasksToRemove.push(task.taskId)
       }
     }
   }
 
   // 移除已完成/失败的任务
-  tasksToRemove.forEach(taskId => {
-    globalTaskQueue.delete(taskId)
+  tasksToRemove.forEach((taskId) => {
+    taskStore.removeTask(taskId)
   })
 }
 
@@ -151,11 +203,21 @@ function startPolling() {
 /**
  * 添加任务到轮询队列
  */
-export function addTaskToQueue(taskId: string, taskName: string) {
-  globalTaskQueue.set(taskId, {
+export function addTaskToQueue(
+  taskId: string,
+  taskName: string,
+  displayName?: string,
+  taskType: TaskType = 'other'
+) {
+  const taskStore = useTaskStore.getState()
+
+  taskStore.addTask({
     taskId,
     taskName,
-    startTime: Date.now(),
+    displayName: displayName || taskName,
+    taskType,
+    status: 'pending',
+    startTime: Date.now()
   })
 
   startPolling()
@@ -170,26 +232,30 @@ async function restoreActiveTasks() {
 
     if (response.code === 200 && response.data?.tasks) {
       const tasks = response.data.tasks
+      const taskStore = useTaskStore.getState()
 
       if (tasks.length > 0) {
         console.log(`🔄 恢复 ${tasks.length} 个正在执行的任务到轮询队列`)
       }
 
       tasks.forEach((task: any) => {
-        const { task_id, display_name } = task
+        const { task_id, task_name, display_name, task_type, status } = task
 
-        // 添加到全局队列（避免重复）
-        if (!globalTaskQueue.has(task_id)) {
-          globalTaskQueue.set(task_id, {
+        // 添加到 Store（避免重复）
+        if (!taskStore.tasks.has(task_id)) {
+          taskStore.addTask({
             taskId: task_id,
-            taskName: display_name || '未知任务',
-            startTime: Date.now(),
+            taskName: task_name,
+            displayName: display_name || task_name || '未知任务',
+            taskType: (task_type as TaskType) || 'other',
+            status: (status === 'running' ? 'running' : 'pending') as TaskStatus,
+            startTime: Date.now()
           })
         }
       })
 
       // 如果有任务，启动轮询
-      if (globalTaskQueue.size > 0) {
+      if (taskStore.getActiveTaskCount() > 0) {
         startPolling()
       }
     }
@@ -220,7 +286,8 @@ export function useTaskPolling() {
     pollAllTasks()
 
     // 开始轮询
-    if (globalTaskQueue.size > 0) {
+    const taskStore = useTaskStore.getState()
+    if (taskStore.getActiveTaskCount() > 0) {
       startPolling()
     }
 
@@ -228,7 +295,6 @@ export function useTaskPolling() {
   }, [])
 
   return {
-    addTask: addTaskToQueue,
-    activeTasks: globalTaskQueue.size,
+    addTask: addTaskToQueue
   }
 }

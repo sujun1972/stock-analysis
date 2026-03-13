@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DatePicker } from '@/components/ui/date-picker'
 import { format, subDays, subMonths, subYears } from 'date-fns'
+import { addTaskToQueue } from '@/hooks/use-task-polling'
 
 /**
  * 模块同步状态接口（用于股票列表同步）
@@ -88,13 +90,7 @@ export default function InitializePage() {
   // ========== 股票列表同步逻辑 ==========
   useEffect(() => {
     loadStockListStatus()
-    const interval = setInterval(() => {
-      if (stockListStatus?.status === 'running') {
-        loadStockListStatus()
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [stockListStatus?.status])
+  }, [])
 
   const loadStockListStatus = async () => {
     try {
@@ -108,48 +104,42 @@ export default function InitializePage() {
   }
 
   const handleStockListSync = async () => {
-    setIsStockListLoading(true)
-    setStockListError(null)
-    setStockListSuccess(null)
+    try {
+      setIsStockListLoading(true)
+      setStockListError(null)
+      setStockListSuccess(null)
 
-    // 启动同步请求（不等待完成）
-    apiClient.syncStockList()
-      .then((response) => {
-        if (response.data) {
-          setStockListSuccess(`成功同步股票列表！共获取 ${response.data.total || 0} 只股票`)
-          setTimeout(() => setStockListSuccess(null), 5000)
-        }
-        setIsStockListLoading(false)
-      })
-      .catch((err: any) => {
-        const errorMessage = err.response?.data?.detail || err.message || '同步股票列表失败'
-        setStockListError(errorMessage)
-        console.error('Stock list sync error:', err)
-        setIsStockListLoading(false)
-      })
+      // 启动异步任务
+      const response = await apiClient.syncStockList()
 
-    // 立即开始轮询状态（每2秒一次）
-    const pollInterval = setInterval(async () => {
-      await loadStockListStatus()
-      if (stockListStatus?.status && stockListStatus.status !== 'running') {
-        clearInterval(pollInterval)
+      if (response.code === 200 && response.data?.task_id) {
+        const { task_id, display_name } = response.data
+
+        // 添加到全局任务队列
+        addTaskToQueue(task_id, 'sync.stock_list', display_name, 'sync')
+
+        // 显示成功提示
+        toast.success('任务已启动', {
+          description: '股票列表同步任务已在后台执行，您可以在右上角查看进度',
+          duration: 5000
+        })
+
+        setStockListSuccess('同步任务已启动，请在右上角任务图标查看进度')
       }
-    }, 2000)
-
-    // 30秒后强制停止轮询（防止无限轮询）
-    setTimeout(() => clearInterval(pollInterval), 30000)
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
+      setStockListError(errorMessage)
+      toast.error('启动任务失败', { description: errorMessage })
+      console.error('Stock list sync error:', err)
+    } finally {
+      setIsStockListLoading(false)
+    }
   }
 
   // ========== 日线数据同步逻辑 ==========
   useEffect(() => {
     loadDailySyncStatus()
-    const interval = setInterval(() => {
-      if (dailySyncStatus?.status === 'running') {
-        loadDailySyncStatus()
-      }
-    }, 3000) // 每3秒刷新一次进度
-    return () => clearInterval(interval)
-  }, [dailySyncStatus?.status])
+  }, [])
 
   const loadDailySyncStatus = async () => {
     try {
@@ -168,42 +158,35 @@ export default function InitializePage() {
       setDailyError(null)
       setDailySuccess(null)
 
-      // 立即更新状态为同步中
-      setDailySyncStatus({
-        status: 'running',
-        last_sync_date: dailySyncStatus?.last_sync_date || '',
-        progress: 0,
-        total: 0,
-        completed: 0
-      })
-
       // 格式化日期为 YYYY-MM-DD
       const formattedStartDate = format(startDate, 'yyyy-MM-dd')
       const formattedEndDate = format(endDate, 'yyyy-MM-dd')
 
+      // 启动异步任务
       const response = await apiClient.syncDailyBatch({
         start_date: formattedStartDate,
         end_date: formattedEndDate
       })
 
-      if (response.data) {
-        const { success, failed, skipped, total, aborted } = response.data
-        const skipMsg = skipped > 0 ? `，跳过: ${skipped} 只（数据已完整）` : ''
-        const abortMsg = aborted ? '（已中止）' : ''
-        setDailySuccess(`同步完成${abortMsg}！成功: ${success} 只，失败: ${failed} 只${skipMsg}，总计: ${total} 只`)
+      if (response.code === 200 && response.data?.task_id) {
+        const { task_id, display_name } = response.data
+
+        // 添加到全局任务队列
+        addTaskToQueue(task_id, 'sync.daily_batch', display_name, 'sync')
+
+        // 显示成功提示
+        toast.success('任务已启动', {
+          description: '日线数据批量同步任务已在后台执行，您可以在右上角查看进度',
+          duration: 5000
+        })
+
+        setDailySuccess('同步任务已启动，请在右上角任务图标查看进度')
       }
-
-      // 重新加载最新状态
-      await loadDailySyncStatus()
-
-      setTimeout(() => setDailySuccess(null), 8000)
     } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || err.message || '批量同步日线数据失败'
+      const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
       setDailyError(errorMessage)
+      toast.error('启动任务失败', { description: errorMessage })
       console.error('Daily sync error:', err)
-
-      // 重置状态
-      await loadDailySyncStatus()
     } finally {
       setIsDailyLoading(false)
     }
