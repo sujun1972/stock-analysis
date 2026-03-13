@@ -492,21 +492,28 @@ self.update_state(
 )
 ```
 
-**3. 任务自动恢复**
+**3. 任务自动发现与恢复**
 ```typescript
 // admin/hooks/use-task-polling.ts
-async function restoreActiveTasks() {
-  // 应用启动时查询后端正在执行的任务
+// 应用启动时恢复正在执行的任务
+async function restoreActiveTasks(silent = false) {
   const response = await apiClient.get('/api/sentiment/tasks/active')
 
-  // 添加到 Zustand Store
   tasks.forEach((task) => {
-    taskStore.addTask(task)
+    if (!taskStore.tasks.has(task.task_id)) {
+      taskStore.addTask(task)
+      // 发现新任务时通知用户
+      if (silent) {
+        toast.info('检测到新任务', { description: task.display_name })
+      }
+    }
   })
 
-  // 启动轮询
   startPolling()
 }
+
+// 定期检查后端新任务（如定时任务启动）
+startTaskDiscovery() // 每30秒检查一次
 ```
 
 **4. 跨页面持久化**

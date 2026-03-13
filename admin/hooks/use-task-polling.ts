@@ -7,14 +7,22 @@
  * 3. 使用 Zustand Store 管理任务状态
  * 4. 应用启动时自动恢复活动任务
  * 5. 支持任务进度实时更新
+ * 6. 定期检查后端新启动的任务（如定时任务）
  */
 
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
-import { useTaskStore, Task, TaskType, TaskStatus } from '@/stores/task-store'
+import { useTaskStore, TaskType, TaskStatus } from '@/stores/task-store'
 
+// 配置常量
+const TASK_POLLING_INTERVAL = 3000 // 任务状态轮询间隔（3秒）
+const TASK_DISCOVERY_INTERVAL = 30000 // 任务发现间隔（30秒）
+const TASK_TIMEOUT = 30 * 60 * 1000 // 任务超时时间（30分钟）
+
+// 全局定时器
 let pollingInterval: NodeJS.Timeout | null = null
+let discoveryInterval: NodeJS.Timeout | null = null
 
 /**
  * 轮询单个任务状态
@@ -167,9 +175,9 @@ async function pollAllTasks() {
     if (shouldRemove) {
       tasksToRemove.push(task.taskId)
     } else {
-      // 检查任务是否超时（超过 30 分钟）
+      // 检查任务是否超时
       const elapsedTime = Date.now() - task.startTime
-      if (elapsedTime > 30 * 60 * 1000) {
+      if (elapsedTime > TASK_TIMEOUT) {
         toast.error(`${task.displayName}超时`, {
           description: '任务执行时间超过 30 分钟',
           duration: 7000
@@ -190,14 +198,38 @@ async function pollAllTasks() {
 }
 
 /**
- * 开始轮询
+ * 开始轮询任务状态
  */
 function startPolling() {
   if (pollingInterval) {
     return // 已经在轮询中
   }
 
-  pollingInterval = setInterval(pollAllTasks, 3000) // 每 3 秒轮询一次
+  pollingInterval = setInterval(pollAllTasks, TASK_POLLING_INTERVAL)
+}
+
+/**
+ * 开始定期发现新任务
+ * 用于检测后端自动启动的定时任务
+ */
+function startTaskDiscovery() {
+  if (discoveryInterval) {
+    return // 已经在运行中
+  }
+
+  discoveryInterval = setInterval(() => {
+    restoreActiveTasks(true) // 静默模式，只在发现新任务时通知
+  }, TASK_DISCOVERY_INTERVAL)
+}
+
+/**
+ * 停止任务发现
+ */
+function stopTaskDiscovery() {
+  if (discoveryInterval) {
+    clearInterval(discoveryInterval)
+    discoveryInterval = null
+  }
 }
 
 /**
@@ -225,23 +257,21 @@ export function addTaskToQueue(
 
 /**
  * 从后端恢复正在执行的任务
+ * @param silent 静默模式（不显示通知和日志）
  */
-async function restoreActiveTasks() {
+async function restoreActiveTasks(silent = false) {
   try {
     const response = await apiClient.get('/api/sentiment/tasks/active')
 
-    if (response.code === 200 && response.data?.tasks) {
+    if (response.data?.tasks) {
       const tasks = response.data.tasks
       const taskStore = useTaskStore.getState()
-
-      if (tasks.length > 0) {
-        console.log(`🔄 恢复 ${tasks.length} 个正在执行的任务到轮询队列`)
-      }
+      let newTasksCount = 0
 
       tasks.forEach((task: any) => {
         const { task_id, task_name, display_name, task_type, status } = task
 
-        // 添加到 Store（避免重复）
+        // 避免重复添加已存在的任务
         if (!taskStore.tasks.has(task_id)) {
           taskStore.addTask({
             taskId: task_id,
@@ -251,6 +281,15 @@ async function restoreActiveTasks() {
             status: (status === 'running' ? 'running' : 'pending') as TaskStatus,
             startTime: Date.now()
           })
+          newTasksCount++
+
+          // 静默模式下只在发现新任务时通知
+          if (silent && newTasksCount === 1) {
+            toast.info('检测到新任务', {
+              description: display_name || task_name || '未知任务',
+              duration: 3000
+            })
+          }
         }
       })
 
@@ -291,7 +330,13 @@ export function useTaskPolling() {
       startPolling()
     }
 
-    // 组件卸载时不停止轮询（因为这是全局的）
+    // 启动任务发现机制（定期检查后端是否有新任务）
+    startTaskDiscovery()
+
+    // 组件卸载时清理
+    return () => {
+      stopTaskDiscovery()
+    }
   }, [])
 
   return {
