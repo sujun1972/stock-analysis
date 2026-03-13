@@ -276,8 +276,11 @@ axiosInstance.interceptors.response.use(
     }
 
     // 其他错误统一处理
+    // 404 错误通常表示数据不存在，这是正常情况，不需要在控制台打印错误
     if (error.response) {
-      console.error('API Error:', error.response.data)
+      if (error.response.status !== 404) {
+        console.error('API Error:', error.response.data)
+      }
     } else if (error.request) {
       console.error('Network Error:', error.request)
     } else {

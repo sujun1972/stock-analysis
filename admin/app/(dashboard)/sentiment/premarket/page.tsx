@@ -102,29 +102,30 @@ export default function PremarketPage() {
     setIsLoading(true)
 
     try {
-      // 并行加载所有数据
+      // 并行加载所有数据，使用 Promise.allSettled 确保单个请求失败不影响其他请求
+      // 404 错误会被 axios 拦截器静默处理，不会在控制台显示
       const [overnightRes, analysisRes, newsRes] = await Promise.allSettled([
-        apiClient.get<ApiResponse<OvernightData>>(`/api/premarket/overnight-data/${dateStr}`),
-        apiClient.get<ApiResponse<CollisionAnalysis>>(`/api/premarket/collision-analysis/${dateStr}`),
-        apiClient.get<ApiResponse<NewsListResponse>>(`/api/premarket/news/${dateStr}`)
+        apiClient.get(`/api/premarket/overnight-data/${dateStr}`),
+        apiClient.get(`/api/premarket/collision-analysis/${dateStr}`),
+        apiClient.get(`/api/premarket/news/${dateStr}`)
       ])
 
       // 处理外盘数据
-      if (overnightRes.status === 'fulfilled' && overnightRes.value.code === 200) {
+      if (overnightRes.status === 'fulfilled' && overnightRes.value?.code === 200) {
         setOvernightData(overnightRes.value.data)
       } else {
         setOvernightData(null)
       }
 
       // 处理碰撞分析
-      if (analysisRes.status === 'fulfilled' && analysisRes.value.code === 200) {
+      if (analysisRes.status === 'fulfilled' && analysisRes.value?.code === 200) {
         setCollisionAnalysis(analysisRes.value.data)
       } else {
         setCollisionAnalysis(null)
       }
 
       // 处理新闻列表
-      if (newsRes.status === 'fulfilled' && newsRes.value.code === 200) {
+      if (newsRes.status === 'fulfilled' && newsRes.value?.code === 200) {
         setNewsList(newsRes.value.data?.news || [])
       } else {
         setNewsList([])
