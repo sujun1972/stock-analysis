@@ -70,7 +70,7 @@ class StockListSyncService:
                 )
 
             # 使用重试工具获取股票列表
-            stock_list = await retry_async(
+            stock_list_response = await retry_async(
                 asyncio.to_thread,
                 provider.get_stock_list,
                 max_retries=3,
@@ -78,6 +78,15 @@ class StockListSyncService:
                 delay_strategy="linear",
                 on_retry=on_retry_callback,
             )
+
+            # 检查响应状态并提取数据
+            if not stock_list_response.is_success():
+                raise ExternalAPIError(
+                    stock_list_response.error_message or "获取股票列表失败",
+                    error_code=stock_list_response.error_code or "API_ERROR",
+                )
+
+            stock_list = stock_list_response.data  # 从 Response 对象中提取 DataFrame
 
             # 保存到数据库
             count = await asyncio.to_thread(
@@ -188,7 +197,7 @@ class StockListSyncService:
                 )
 
             # 使用重试工具获取新股列表
-            new_stocks = await retry_async(
+            new_stocks_response = await retry_async(
                 asyncio.to_thread,
                 provider.get_new_stocks,
                 days,
@@ -197,6 +206,15 @@ class StockListSyncService:
                 delay_strategy="linear",
                 on_retry=on_retry_callback,
             )
+
+            # 检查响应状态并提取数据
+            if not new_stocks_response.is_success():
+                raise ExternalAPIError(
+                    new_stocks_response.error_message or "获取新股列表失败",
+                    error_code=new_stocks_response.error_code or "API_ERROR",
+                )
+
+            new_stocks = new_stocks_response.data  # 从 Response 对象中提取 DataFrame
 
             # 保存到数据库（新股自动添加到股票基础表）
             count = await asyncio.to_thread(
@@ -289,7 +307,7 @@ class StockListSyncService:
                 )
 
             # 使用重试工具获取退市股票列表
-            delisted_stocks = await retry_async(
+            delisted_stocks_response = await retry_async(
                 asyncio.to_thread,
                 provider.get_delisted_stocks,
                 max_retries=3,
@@ -297,6 +315,15 @@ class StockListSyncService:
                 delay_strategy="linear",
                 on_retry=on_retry_callback,
             )
+
+            # 检查响应状态并提取数据
+            if not delisted_stocks_response.is_success():
+                raise ExternalAPIError(
+                    delisted_stocks_response.error_message or "获取退市股票列表失败",
+                    error_code=delisted_stocks_response.error_code or "API_ERROR",
+                )
+
+            delisted_stocks = delisted_stocks_response.data  # 从 Response 对象中提取 DataFrame
 
             # 更新数据库中股票的状态为"退市"
             count = 0
