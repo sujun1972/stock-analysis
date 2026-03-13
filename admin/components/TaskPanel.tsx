@@ -134,7 +134,7 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[400px] sm:w-[540px]">
+      <SheetContent className="w-full sm:w-[540px] sm:max-w-[90vw]">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Loader2Icon className="h-5 w-5 animate-spin text-blue-600" />
@@ -145,20 +145,21 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
 
         <div className="mt-6 space-y-4">
           {/* 操作栏 */}
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-muted-foreground">
-              活动: {activeTasks.length} | 已完成: {completedTasks.length}
+          <div className="flex justify-between items-center gap-2">
+            <div className="text-sm text-muted-foreground flex-shrink-0">
+              <span className="hidden sm:inline">活动: {activeTasks.length} | 已完成: {completedTasks.length}</span>
+              <span className="sm:hidden">{activeTasks.length} / {completedTasks.length}</span>
             </div>
             <div className="flex gap-2">
               {completedTasks.length > 0 && (
-                <Button variant="outline" size="sm" onClick={clearCompletedTasks}>
-                  <Trash2Icon className="h-4 w-4 mr-2" />
-                  清除已完成
+                <Button variant="outline" size="sm" onClick={clearCompletedTasks} title="清除已完成">
+                  <Trash2Icon className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">清除已完成</span>
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={handleRefresh}>
-                <RefreshCwIcon className="h-4 w-4 mr-2" />
-                刷新
+              <Button variant="outline" size="sm" onClick={handleRefresh} title="刷新">
+                <RefreshCwIcon className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">刷新</span>
               </Button>
             </div>
           </div>
@@ -186,22 +187,22 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
                     {activeTasks.map((task) => (
                       <Card key={task.taskId} className="mb-3">
                         <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 {getTaskTypeIcon(task.taskType)}
                                 <span className="text-xs text-muted-foreground">
                                   {getTaskTypeLabel(task.taskType)}
                                 </span>
                               </div>
-                              <CardTitle className="text-base">{task.displayName}</CardTitle>
-                              <CardDescription className="text-xs mt-1 font-mono">
+                              <CardTitle className="text-base truncate">{task.displayName}</CardTitle>
+                              <CardDescription className="text-xs mt-1 font-mono truncate">
                                 ID: {task.taskId.substring(0, 16)}...
                               </CardDescription>
                             </div>
                             <Badge
                               variant="outline"
-                              className={`${getStatusColor(task.status)} text-white border-0`}
+                              className={`${getStatusColor(task.status)} text-white border-0 flex-shrink-0`}
                             >
                               {getStatusText(task.status)}
                             </Badge>
@@ -249,19 +250,19 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
                     {completedTasks.map((task) => (
                       <Card key={task.taskId} className="mb-3 opacity-75">
                         <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 {getTaskTypeIcon(task.taskType)}
                                 <span className="text-xs text-muted-foreground">
                                   {getTaskTypeLabel(task.taskType)}
                                 </span>
                               </div>
-                              <CardTitle className="text-base">{task.displayName}</CardTitle>
+                              <CardTitle className="text-base truncate">{task.displayName}</CardTitle>
                             </div>
                             <Badge
                               variant="outline"
-                              className={`${getStatusColor(task.status)} text-white border-0`}
+                              className={`${getStatusColor(task.status)} text-white border-0 flex-shrink-0`}
                             >
                               {task.status === 'success' ? (
                                 <CheckCircle2Icon className="h-3 w-3 mr-1" />
@@ -274,7 +275,7 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
                         </CardHeader>
                         {task.error && (
                           <CardContent className="py-2 px-4 bg-red-50 dark:bg-red-900/20">
-                            <p className="text-xs text-red-800 dark:text-red-200">{task.error}</p>
+                            <p className="text-xs text-red-800 dark:text-red-200 break-words">{task.error}</p>
                           </CardContent>
                         )}
                       </Card>
