@@ -205,6 +205,53 @@ export default function InitializePage() {
     }
   }
 
+  // ========== 情绪数据批量同步相关状态 ==========
+  const [sentimentSyncing, setSentimentSyncing] = useState(false)
+  const [sentimentError, setSentimentError] = useState<string | null>(null)
+  const [sentimentSuccess, setSentimentSuccess] = useState<string | null>(null)
+
+  // 情绪数据同步日期范围
+  const [sentimentStartDate, setSentimentStartDate] = useState<Date>(() => subDays(new Date(), 7))
+  const [sentimentEndDate, setSentimentEndDate] = useState<Date>(new Date())
+
+  // 情绪数据批量同步
+  const handleSentimentBatchSync = async () => {
+    try {
+      setSentimentSyncing(true)
+      setSentimentError(null)
+      setSentimentSuccess(null)
+
+      const formattedStartDate = format(sentimentStartDate, 'yyyy-MM-dd')
+      const formattedEndDate = format(sentimentEndDate, 'yyyy-MM-dd')
+
+      const response = await apiClient.syncSentimentBatch({
+        start_date: formattedStartDate,
+        end_date: formattedEndDate
+      })
+
+      if (response.code === 200 && response.data?.task_id) {
+        const { task_id, display_name } = response.data
+
+        // 添加到全局任务队列
+        addTaskToQueue(task_id, 'sentiment.batch_sync', display_name, 'sentiment')
+
+        toast.success('任务已启动', {
+          description: '情绪数据批量同步任务已在后台执行，您可以在右上角查看进度',
+          duration: 5000
+        })
+
+        setSentimentSuccess('同步任务已启动，请在右上角任务图标查看进度')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
+      setSentimentError(errorMessage)
+      toast.error('启动任务失败', { description: errorMessage })
+      console.error('Sentiment batch sync error:', err)
+    } finally {
+      setSentimentSyncing(false)
+    }
+  }
+
   // ========== 工具函数 ==========
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -598,6 +645,119 @@ export default function InitializePage() {
                       <li>同步会覆盖更新现有数据</li>
                       <li>注意API限流问题</li>
                       <li>自动过滤退市和停牌股票</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ========== 步骤3: 情绪数据批量同步 ========== */}
+      <Card className="border-2 border-orange-200 dark:border-orange-800">
+        <CardHeader>
+          <div className="flex items-center">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-orange-600 text-white font-bold mr-3">
+              3
+            </div>
+            <CardTitle className="text-xl">
+              情绪数据批量同步
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-gray-600 dark:text-gray-400">
+            批量同步历史日期的市场情绪数据（大盘指数、涨停板池、龙虎榜）
+          </p>
+
+          {/* 错误提示 */}
+          {sentimentError && (
+            <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <AlertDescription className="text-red-800 dark:text-red-200">
+                {sentimentError}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 成功提示 */}
+          {sentimentSuccess && (
+            <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                {sentimentSuccess}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 同步参数配置 */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">同步日期范围</h3>
+
+            {/* 日期范围选择 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>起始日期</Label>
+                <DatePicker
+                  date={sentimentStartDate}
+                  onDateChange={(date) => date && setSentimentStartDate(date)}
+                  placeholder="选择起始日期"
+                  disabled={sentimentSyncing}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>结束日期</Label>
+                <DatePicker
+                  date={sentimentEndDate}
+                  onDateChange={(date) => date && setSentimentEndDate(date)}
+                  placeholder="选择结束日期"
+                  disabled={sentimentSyncing}
+                />
+              </div>
+            </div>
+
+            {/* 日期范围提示 */}
+            <Alert className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
+              <AlertDescription className="text-sm text-orange-800 dark:text-orange-300">
+                <strong>当前选择：</strong>从 {format(sentimentStartDate, 'yyyy年MM月dd日')} 至 {format(sentimentEndDate, 'yyyy年MM月dd日')}
+                <br />
+                <strong>提示：</strong>系统会自动跳过非交易日，只同步交易日的情绪数据
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          {/* 开始同步按钮 */}
+          <Button
+            onClick={handleSentimentBatchSync}
+            disabled={sentimentSyncing}
+            className="w-full md:w-auto"
+          >
+            {sentimentSyncing ? '同步中...' : '开始批量同步'}
+          </Button>
+
+          {/* 数据说明 */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                查看数据说明
+              </summary>
+              <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>大盘指数（上证、深成、创业板）</li>
+                      <li>涨停板池（涨停、炸板、连板）</li>
+                      <li>龙虎榜（机构、游资席位）</li>
+                      <li>市场情绪指标</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>仅同步交易日数据</li>
+                      <li>建议按需同步近期数据</li>
+                      <li>同步完成后可在"情绪数据"页面查看</li>
+                      <li>注意数据源API限流</li>
                     </ul>
                   </div>
                 </div>

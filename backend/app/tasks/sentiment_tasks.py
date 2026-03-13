@@ -143,6 +143,18 @@ def manual_sentiment_sync_task(self, date: str = None):
 
         logger.info(f"========== [手动同步] 开始执行情绪数据同步: {date} ==========")
 
+        # 更新任务状态为开始
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'message': f'开始同步 {date} 的情绪数据',
+                'progress': 0,
+                'current': 0,
+                'total': 3,  # 3个步骤：大盘数据、涨停板池、龙虎榜
+                'date': date
+            }
+        )
+
         # 使用分布式锁防止并发
         lock_key = f"sentiment_sync:{date}"
 
@@ -156,6 +168,18 @@ def manual_sentiment_sync_task(self, date: str = None):
                     "message": "已有同步任务正在进行，请等待其完成"
                 }
 
+            # 更新进度：检查交易日
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'message': f'检查 {date} 是否为交易日',
+                    'progress': 10,
+                    'current': 0,
+                    'total': 3,
+                    'date': date
+                }
+            )
+
             # 创建服务实例
             service = MarketSentimentService()
 
@@ -163,9 +187,55 @@ def manual_sentiment_sync_task(self, date: str = None):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
+                # 由于无法在 fetcher 内部直接更新 Celery 状态，
+                # 我们在每个步骤前后更新进度
+
+                # 步骤1: 同步大盘数据
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'message': f'正在抓取大盘数据 (1/3)',
+                        'progress': 25,
+                        'current': 1,
+                        'total': 3,
+                        'date': date
+                    }
+                )
+
+                # 执行完整同步
                 result = loop.run_until_complete(
                     service.sync_daily_sentiment(date=date)
                 )
+
+                # 根据同步的表来判断进度
+                synced_count = len(result.get('synced_tables', []))
+
+                # 步骤2: 涨停板池
+                if synced_count >= 1:
+                    self.update_state(
+                        state='PROGRESS',
+                        meta={
+                            'message': f'正在抓取涨停板池 (2/3)',
+                            'progress': 50,
+                            'current': 2,
+                            'total': 3,
+                            'date': date
+                        }
+                    )
+
+                # 步骤3: 龙虎榜
+                if synced_count >= 2:
+                    self.update_state(
+                        state='PROGRESS',
+                        meta={
+                            'message': f'正在抓取龙虎榜 (3/3)',
+                            'progress': 75,
+                            'current': 3,
+                            'total': 3,
+                            'date': date
+                        }
+                    )
+
             finally:
                 loop.close()
 
@@ -200,6 +270,142 @@ def manual_sentiment_sync_task(self, date: str = None):
         logger.error(f"[手动同步] 任务执行异常: {e}")
         _log_task_execution(date or 'unknown', 'error', {'error': str(e)})
         raise self.retry(exc=e)
+
+
+@celery_app.task(
+    base=SentimentSyncTask,
+    name="sentiment.batch_sync",
+    bind=True
+)
+def batch_sentiment_sync_task(self, start_date: str, end_date: str):
+    """
+    批量同步情绪数据任务（支持日期范围）
+
+    Args:
+        start_date: 起始日期 (YYYY-MM-DD)
+        end_date: 结束日期 (YYYY-MM-DD)
+
+    Returns:
+        批量同步结果
+    """
+    try:
+        logger.info(f"========== [批量同步] 开始执行情绪数据批量同步: {start_date} ~ {end_date} ==========")
+
+        # 生成日期列表
+        from datetime import datetime, timedelta
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+
+        date_list = []
+        current_dt = start_dt
+        while current_dt <= end_dt:
+            date_list.append(current_dt.strftime('%Y-%m-%d'))
+            current_dt += timedelta(days=1)
+
+        total_dates = len(date_list)
+        logger.info(f"[批量同步] 共需同步 {total_dates} 个日期")
+
+        # 初始化进度
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'message': f'开始批量同步 {start_date} ~ {end_date}',
+                'progress': 0,
+                'current': 0,
+                'total': total_dates,
+                'start_date': start_date,
+                'end_date': end_date,
+                'details': {
+                    'success_count': 0,
+                    'failed_count': 0,
+                    'skipped_count': 0
+                }
+            }
+        )
+
+        # 创建服务实例
+        service = MarketSentimentService()
+
+        # 统计结果
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+        failed_dates = []
+
+        # 逐个同步
+        for idx, date in enumerate(date_list, start=1):
+            try:
+                # 更新进度
+                progress = int((idx / total_dates) * 100)
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'message': f'正在同步 {date} ({idx}/{total_dates})',
+                        'progress': progress,
+                        'current': idx,
+                        'total': total_dates,
+                        'start_date': start_date,
+                        'end_date': end_date,
+                        'current_date': date,
+                        'details': {
+                            'success_count': success_count,
+                            'failed_count': failed_count,
+                            'skipped_count': skipped_count
+                        }
+                    }
+                )
+
+                logger.info(f"[批量同步] 正在同步 {date} ({idx}/{total_dates})")
+
+                # 运行异步任务
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(
+                        service.sync_daily_sentiment(date=date)
+                    )
+                finally:
+                    loop.close()
+
+                # 判断结果
+                if not result.get('is_trading_day'):
+                    skipped_count += 1
+                    logger.info(f"[批量同步] {date} 非交易日，跳过")
+                elif result.get('success'):
+                    success_count += 1
+                    logger.success(f"[批量同步] {date} 同步成功")
+                else:
+                    failed_count += 1
+                    failed_dates.append(date)
+                    logger.error(f"[批量同步] {date} 同步失败: {result.get('error')}")
+
+                # 添加延迟，避免API限流
+                import time
+                time.sleep(1)
+
+            except Exception as e:
+                failed_count += 1
+                failed_dates.append(date)
+                logger.error(f"[批量同步] {date} 同步异常: {e}")
+
+        # 返回最终结果
+        logger.success(f"========== [批量同步] 完成 ==========")
+        logger.info(f"成功: {success_count}, 失败: {failed_count}, 跳过: {skipped_count}")
+
+        return {
+            "status": "success",
+            "start_date": start_date,
+            "end_date": end_date,
+            "total": total_dates,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "skipped_count": skipped_count,
+            "failed_dates": failed_dates
+        }
+
+    except Exception as e:
+        logger.error(f"[批量同步] 任务执行异常: {e}")
+        raise
 
 
 @celery_app.task(name="sentiment.calendar_sync")

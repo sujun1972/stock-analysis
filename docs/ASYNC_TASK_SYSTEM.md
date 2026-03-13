@@ -40,9 +40,31 @@ celery_app = Celery(
 返回任务状态：
 - `PENDING`：等待执行
 - `STARTED`：正在执行
+- `PROGRESS`：执行中（带进度信息）
 - `SUCCESS`：执行成功
 - `FAILURE`：执行失败
 - `RETRY`：重试中
+
+**PROGRESS 状态响应示例**：
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "task_id": "batch_sentiment_sync_2024-01-01_2024-01-31_xxx",
+    "status": "PROGRESS",
+    "message": "正在同步 2024-01-15 (15/31)",
+    "progress": 48,
+    "current": 15,
+    "total": 31,
+    "details": {
+      "success_count": 10,
+      "failed_count": 2,
+      "skipped_count": 3
+    }
+  }
+}
+```
 
 #### 3. 活动任务列表 API
 
@@ -168,13 +190,30 @@ useEffect(() => {
 
 系统支持多种异步任务：
 
-| 任务类型 | Task ID 前缀 | 显示名称 |
-|---------|-------------|---------|
-| AI分析 | `ai_analysis_` | AI分析生成（日期） |
-| 数据同步 | `manual_sentiment_sync_` | 情绪数据同步（日期） |
-| 策略回测 | - | 策略回测 |
-| AI策略生成 | - | AI策略生成 |
-| 盘前预期 | - | 盘前预期管理 |
+| 任务类型 | Task ID 前缀 | 显示名称 | 进度支持 |
+|---------|-------------|---------|---------|
+| AI分析 | `ai_analysis_` | AI分析生成（日期） | ❌ |
+| 单日期同步 | `manual_sentiment_sync_` | 情绪数据同步（日期） | ✅ |
+| 批量同步 | `batch_sentiment_sync_` | 情绪数据批量同步（日期范围） | ✅ |
+| 策略回测 | - | 策略回测 | ❌ |
+| AI策略生成 | - | AI策略生成 | ❌ |
+| 盘前预期 | - | 盘前预期管理 | ❌ |
+
+### 批量同步任务
+
+**API 端点**：`POST /api/sentiment/sync/batch?start_date=2024-01-01&end_date=2024-01-31`
+
+**任务特性**：
+- 支持日期范围批量同步
+- 实时进度更新（显示当前同步的日期和整体进度）
+- 自动跳过非交易日
+- 统计成功、失败、跳过的数量
+- 防止 API 限流（每个日期之间有延迟）
+
+**使用场景**：
+- 系统初始化时批量导入历史数据
+- 补充缺失的历史情绪数据
+- 定期批量更新近期数据
 
 ## 扩展指南
 

@@ -308,7 +308,7 @@ async def get_sync_task_status(task_id: str):
 
         response_data = {
             "task_id": task_id,
-            "status": state,  # PENDING, STARTED, SUCCESS, FAILURE, RETRY
+            "status": state,  # PENDING, STARTED, SUCCESS, FAILURE, RETRY, PROGRESS
         }
 
         if state == 'PENDING':
@@ -316,7 +316,20 @@ async def get_sync_task_status(task_id: str):
             response_data["progress"] = 0
         elif state == 'STARTED':
             response_data["message"] = "任务执行中"
-            response_data["progress"] = 50
+            response_data["progress"] = 10
+        elif state == 'PROGRESS':
+            # 自定义进度状态，从 info 中获取详细信息
+            if isinstance(info, dict):
+                response_data["message"] = info.get('message', '任务执行中')
+                response_data["progress"] = info.get('progress', 0)
+                response_data["current"] = info.get('current', 0)
+                response_data["total"] = info.get('total', 0)
+                # 如果有详细信息，也一并返回
+                if 'details' in info:
+                    response_data["details"] = info['details']
+            else:
+                response_data["message"] = "任务执行中"
+                response_data["progress"] = 0
         elif state == 'SUCCESS':
             response_data["message"] = "任务完成"
             response_data["progress"] = 100
@@ -410,6 +423,72 @@ async def sync_sentiment_data(
 
     except Exception as e:
         logger.error(f"提交同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync/batch")
+async def sync_sentiment_batch(
+    start_date: str = Query(..., description="起始日期(YYYY-MM-DD)"),
+    end_date: str = Query(..., description="结束日期(YYYY-MM-DD)")
+):
+    """
+    批量同步情绪数据（异步任务）
+
+    Args:
+        start_date: 起始日期
+        end_date: 结束日期
+
+    Returns:
+        任务ID，用于后续查询任务状态
+    """
+    try:
+        from app.tasks.sentiment_tasks import batch_sentiment_sync_task
+        import uuid
+
+        logger.info(f"手动触发情绪数据批量同步（异步）: {start_date} ~ {end_date}")
+
+        # 验证日期格式
+        try:
+            datetime.strptime(start_date, '%Y-%m-%d')
+            datetime.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            return {
+                "code": 400,
+                "message": "日期格式错误，请使用 YYYY-MM-DD 格式",
+                "data": None
+            }
+
+        # 验证日期范围
+        if start_date > end_date:
+            return {
+                "code": 400,
+                "message": "起始日期不能晚于结束日期",
+                "data": None
+            }
+
+        # 生成唯一任务ID
+        task_id = f"batch_sentiment_sync_{start_date}_{end_date}_{uuid.uuid4().hex[:8]}"
+
+        # 提交到 Celery 异步执行
+        task = batch_sentiment_sync_task.apply_async(
+            args=[start_date, end_date],
+            task_id=task_id
+        )
+
+        return {
+            "code": 200,
+            "message": "批量同步任务已提交",
+            "data": {
+                "task_id": task.id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "status": "pending",
+                "display_name": f"情绪数据批量同步 ({start_date} ~ {end_date})"
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"提交批量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

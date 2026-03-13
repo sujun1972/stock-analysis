@@ -1398,6 +1398,19 @@ class ApiClient {
   }
 
   /**
+   * 批量同步情绪数据
+   */
+  async syncSentimentBatch(params: {
+    start_date: string
+    end_date: string
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.post('/api/sentiment/sync/batch', null, {
+      params
+    })
+    return response.data
+  }
+
+  /**
    * 查询同步任务状态
    */
   async getSyncTaskStatus(taskId: string): Promise<ApiResponse<any>> {
