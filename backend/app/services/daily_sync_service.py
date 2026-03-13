@@ -59,7 +59,7 @@ class DailySyncService:
 
         # 获取日线数据 (添加30秒超时)
         try:
-            df = await asyncio.wait_for(
+            response = await asyncio.wait_for(
                 asyncio.to_thread(
                     provider.get_daily_data,
                     code=code,
@@ -71,6 +71,15 @@ class DailySyncService:
             )
         except asyncio.TimeoutError:
             raise TimeoutError(f"{code}: 数据获取超时")
+
+        # 检查响应状态并提取数据
+        if not response.is_success():
+            raise ExternalAPIError(
+                response.error_message or f"{code}: 获取日线数据失败",
+                error_code=response.error_code or "API_ERROR",
+            )
+
+        df = response.data  # 从 Response 对象中提取 DataFrame
 
         if df.empty:
             raise ValueError(f"{code}: 无数据")
@@ -201,7 +210,7 @@ class DailySyncService:
 
                 # 获取日线数据 (添加30秒超时)
                 try:
-                    df = await asyncio.wait_for(
+                    response = await asyncio.wait_for(
                         asyncio.to_thread(
                             provider.get_daily_data,
                             code=code,
@@ -215,6 +224,15 @@ class DailySyncService:
                     logger.error(f"  ✗ {code}: 数据获取超时 (30秒)")
                     failed_count += 1
                     continue
+
+                # 检查响应状态并提取数据
+                if not response.is_success():
+                    error_msg = response.error_message or "获取日线数据失败"
+                    logger.error(f"  ✗ {code}: {error_msg}")
+                    failed_count += 1
+                    continue
+
+                df = response.data  # 从 Response 对象中提取 DataFrame
 
                 if not df.empty:
                     # 保存到数据库

@@ -104,6 +104,35 @@ Backend 项目的 Claude Code Skills 集合，用于指导 AI 助手在开发过
   return result
   ```
 
+### 5. [provider-integration](provider-integration.md)
+**数据提供者 (Provider) 集成指南**
+
+- **适用场景**: 所有需要调用 core 项目数据提供者的服务
+- **核心内容**:
+  - 正确处理 Provider 返回的 Response 对象
+  - 异步调用模式和超时控制
+  - 错误处理和状态检查
+  - 与 ExternalAPIError 集成
+- **快速开始**:
+  ```python
+  from src.providers import DataProviderFactory
+  from app.core.exceptions import ExternalAPIError
+
+  provider = DataProviderFactory.create_provider(source="akshare")
+
+  # 调用 API
+  response = await asyncio.to_thread(provider.get_daily_data, code="000001")
+
+  # 检查状态并提取数据
+  if not response.is_success():
+      raise ExternalAPIError(
+          response.error_message or "获取数据失败",
+          error_code=response.error_code or "API_ERROR"
+      )
+
+  df = response.data
+  ```
+
 ---
 
 ## 🎯 Skills 使用指南

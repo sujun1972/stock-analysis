@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 from src.providers import DataProviderFactory
 
-from app.core.exceptions import DatabaseError
+from app.core.exceptions import DatabaseError, ExternalAPIError
 from app.services.config_service import ConfigService
 from app.services.data_service import DataDownloadService
 
@@ -58,13 +58,22 @@ class RealtimeSyncService:
         logger.info(f"同步 {code} {period}分钟数据")
 
         # 获取分时数据
-        df = await asyncio.to_thread(
+        response = await asyncio.to_thread(
             provider.get_minute_data,
             code=code,
             period=period,
             start_date=start_date,
             end_date=end_date,
         )
+
+        # 检查响应状态并提取数据
+        if not response.is_success():
+            raise ExternalAPIError(
+                response.error_message or f"{code}: 获取分时数据失败",
+                error_code=response.error_code or "API_ERROR",
+            )
+
+        df = response.data
 
         if df.empty:
             raise ValueError(f"{code}: 无分时数据")
@@ -160,7 +169,7 @@ class RealtimeSyncService:
 
         # 获取实时行情（使用增量保存回调）
         try:
-            df = await asyncio.wait_for(
+            response = await asyncio.wait_for(
                 asyncio.to_thread(
                     provider.get_realtime_quotes, codes=codes_to_update, save_callback=save_callback
                 ),
@@ -207,6 +216,15 @@ class RealtimeSyncService:
                 }
             else:
                 raise TimeoutError(error_msg)
+
+        # 检查响应状态并提取数据
+        if not response.is_success():
+            raise ExternalAPIError(
+                response.error_message or "获取实时行情失败",
+                error_code=response.error_code or "API_ERROR",
+            )
+
+        df = response.data
 
         if df.empty:
             raise ValueError("无实时行情数据")

@@ -58,7 +58,15 @@ class DataDownloadService:
             await self._ensure_provider()
 
             # 使用配置的数据源获取股票列表
-            stock_info_df = await asyncio.to_thread(self.provider.get_stock_list)
+            response = await asyncio.to_thread(self.provider.get_stock_list)
+
+            # 检查响应状态并提取数据
+            if not response.is_success():
+                raise ValueError(
+                    response.error_message or "获取股票列表失败"
+                )
+
+            stock_info_df = response.data
 
             if stock_info_df is None or stock_info_df.empty:
                 raise ValueError("获取股票列表失败，返回数据为空")
