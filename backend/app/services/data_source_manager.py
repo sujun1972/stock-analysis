@@ -1,6 +1,12 @@
 """
 数据源管理器
 负责数据源配置的验证和管理
+
+功能说明：
+1. 支持6种数据源配置：主数据源、分时、实时、涨停板池、龙虎榜、盘前
+2. Token安全管理：返回给前端时自动掩码（如 d038****...****f3ad）
+3. "留空不修改"模式：允许更新配置但不修改Token
+4. 数据源验证：确保所选数据源在支持列表中
 """
 
 import asyncio
@@ -38,23 +44,62 @@ class DataSourceManager:
 
     # ==================== 数据源配置查询 ====================
 
-    async def get_data_source_config(self) -> Dict:
+    @staticmethod
+    def _mask_token(token: str) -> str:
+        """
+        脱敏 Token（仅用于返回给前端显示）
+
+        安全策略：
+        - 短Token（<=8字符）：全部替换为星号
+        - 长Token（>8字符）：仅保留前4位和后4位，中间用星号替换
+        - 例如：d038...f3ad (48字符) -> d038****************f3ad
+
+        Args:
+            token: 原始 Token
+
+        Returns:
+            脱敏后的 Token
+        """
+        if not token:
+            return ""
+        if len(token) <= 8:
+            return "*" * len(token)
+        return f"{token[:4]}{'*' * (len(token) - 8)}{token[-4:]}"
+
+    async def get_data_source_config(self, mask_token: bool = True) -> Dict:
         """
         获取数据源配置
 
+        Args:
+            mask_token: 是否对 Token 进行脱敏处理（默认 True）
+
         Returns:
-            Dict: 包含 data_source、minute_data_source、realtime_data_source 和 tushare_token
+            Dict: 包含所有数据源配置
         """
         try:
-            keys = ["data_source", "minute_data_source", "realtime_data_source", "tushare_token"]
+            keys = [
+                "data_source",
+                "minute_data_source",
+                "realtime_data_source",
+                "limit_up_data_source",
+                "top_list_data_source",
+                "premarket_data_source",
+                "tushare_token"
+            ]
 
             configs = await asyncio.to_thread(self.config_repo.get_configs_by_keys, keys)
+
+            # 获取原始 Token
+            raw_token = configs.get("tushare_token") or ""
 
             return {
                 "data_source": configs.get("data_source") or "akshare",
                 "minute_data_source": configs.get("minute_data_source") or "akshare",
                 "realtime_data_source": configs.get("realtime_data_source") or "akshare",
-                "tushare_token": configs.get("tushare_token") or "",
+                "limit_up_data_source": configs.get("limit_up_data_source") or "tushare",  # 默认tushare（用户有5000积分）
+                "top_list_data_source": configs.get("top_list_data_source") or "tushare",  # 默认tushare
+                "premarket_data_source": configs.get("premarket_data_source") or "akshare",  # 默认akshare（外盘数据）
+                "tushare_token": self._mask_token(raw_token) if mask_token else raw_token,
             }
 
         except DatabaseError:
@@ -98,12 +143,12 @@ class DataSourceManager:
 
     async def get_tushare_token(self) -> str:
         """
-        获取 Tushare Token
+        获取 Tushare Token（内部使用，不脱敏）
 
         Returns:
             Token 字符串
         """
-        config = await self.get_data_source_config()
+        config = await self.get_data_source_config(mask_token=False)
         return config["tushare_token"]
 
     # ==================== 数据源验证 ====================
@@ -156,16 +201,34 @@ class DataSourceManager:
         data_source: str,
         minute_data_source: Optional[str] = None,
         realtime_data_source: Optional[str] = None,
+        limit_up_data_source: Optional[str] = None,
+        top_list_data_source: Optional[str] = None,
+        premarket_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
     ) -> Dict:
         """
         更新数据源配置
 
+        支持6种数据源的独立配置：
+        1. 主数据源：日线数据、股票列表、概念板块等
+        2. 分时数据源：分钟级K线数据
+        3. 实时数据源：实时行情数据
+        4. 涨停板池数据源：涨停板池数据（新增）
+        5. 龙虎榜数据源：龙虎榜数据（新增）
+        6. 盘前数据源：盘前外盘数据（新增）
+
+        安全特性：
+        - Token留空不修改：如果tushare_token为None，则保持原有Token不变
+        - Token掩码：返回给前端的Token自动掩码处理
+
         Args:
-            data_source: 主数据源 ('akshare' 或 'tushare')，用于历史数据、股票列表等
-            minute_data_source: 分时数据源 ('akshare' 或 'tushare')，用于分时K线
-            realtime_data_source: 实时数据源 ('akshare' 或 'tushare')，用于实时行情
-            tushare_token: Tushare Token (可选)
+            data_source: 主数据源 ('akshare' 或 'tushare')
+            minute_data_source: 分时数据源（可选）
+            realtime_data_source: 实时数据源（可选）
+            limit_up_data_source: 涨停板池数据源（可选）
+            top_list_data_source: 龙虎榜数据源（可选）
+            premarket_data_source: 盘前数据源（可选）
+            tushare_token: Tushare Token（可选，留空不修改原有Token）
 
         Returns:
             Dict: 更新后的配置
@@ -185,6 +248,18 @@ class DataSourceManager:
             if realtime_data_source:
                 self.validate_data_source(realtime_data_source)
 
+            # 验证涨停板池数据源
+            if limit_up_data_source:
+                self.validate_data_source(limit_up_data_source)
+
+            # 验证龙虎榜数据源
+            if top_list_data_source:
+                self.validate_data_source(top_list_data_source)
+
+            # 验证盘前数据源
+            if premarket_data_source:
+                self.validate_data_source(premarket_data_source)
+
             # 验证 Tushare 配置
             await self.validate_tushare_config(data_source, tushare_token)
 
@@ -197,6 +272,15 @@ class DataSourceManager:
             if realtime_data_source:
                 updates["realtime_data_source"] = realtime_data_source
 
+            if limit_up_data_source:
+                updates["limit_up_data_source"] = limit_up_data_source
+
+            if top_list_data_source:
+                updates["top_list_data_source"] = top_list_data_source
+
+            if premarket_data_source:
+                updates["premarket_data_source"] = premarket_data_source
+
             if tushare_token:
                 updates["tushare_token"] = tushare_token
 
@@ -206,8 +290,11 @@ class DataSourceManager:
             logger.info(
                 f"✓ 数据源已更新: "
                 f"主数据源={data_source}, "
-                f"分时数据源={minute_data_source or '未更改'}, "
-                f"实时数据源={realtime_data_source or '未更改'}"
+                f"分时={minute_data_source or '未更改'}, "
+                f"实时={realtime_data_source or '未更改'}, "
+                f"涨停板={limit_up_data_source or '未更改'}, "
+                f"龙虎榜={top_list_data_source or '未更改'}, "
+                f"盘前={premarket_data_source or '未更改'}"
             )
 
             return await self.get_data_source_config()

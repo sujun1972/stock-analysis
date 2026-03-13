@@ -1,5 +1,3 @@
-import tushare as ts
-import akshare as ak
 import pandas as pd
 import os
 from typing import Optional
@@ -7,11 +5,13 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from loguru import logger
 
-# 导入新配置系统
+# 导入配置系统
 try:
     from .config.settings import get_settings
+    from .config.data_source_helper import create_provider, get_data_source_config
 except ImportError:
     from src.config.settings import get_settings
+    from src.config.data_source_helper import create_provider, get_data_source_config
 
 # 导入Response和异常类
 try:
@@ -23,7 +23,6 @@ except ImportError:
 
 # 获取配置实例
 settings = get_settings()
-TUSHARE_TOKEN = settings.TUSHARE_TOKEN or ""
 DATABASE_CONFIG = {
     'host': settings.DATABASE_HOST,
     'port': settings.DATABASE_PORT,
@@ -32,23 +31,41 @@ DATABASE_CONFIG = {
     'password': settings.DATABASE_PASSWORD
 }
 
-def fetch_akshare_stock_list(save_path: str = "./a_stock_list.csv",
-                             save_to_db: bool = False) -> Response:
+# 获取数据源配置
+_data_source_config = get_data_source_config()
+DATA_SOURCE = _data_source_config["data_source"]
+TUSHARE_TOKEN = _data_source_config["tushare_token"]
+
+def fetch_stock_list(save_path: str = "./a_stock_list.csv",
+                    save_to_db: bool = False,
+                    source: Optional[str] = None) -> Response:
     """
-    使用AkShare获取全部A股股票列表并保存到本地CSV文件和/或数据库（推荐，免费无限制）
+    获取全部A股股票列表并保存到本地CSV文件和/或数据库
+
+    支持从配置的数据源获取（akshare/tushare）
 
     参数:
         save_path: 保存CSV文件的路径，默认为当前目录下的a_stock_list.csv
         save_to_db: 是否保存到数据库，默认为False
+        source: 强制指定数据源（None=使用配置的数据源）
 
     返回:
         Response: 成功返回股票列表，失败返回错误信息
     """
     try:
-        logger.info("正在使用AkShare获取A股列表数据...")
+        actual_source = source or DATA_SOURCE
+        logger.info(f"正在获取A股列表数据（数据源：{actual_source}）...")
 
-        # 使用AkShare获取A股实时行情数据（包含所有上市股票）
-        stock_zh_a_spot_em_df = ak.stock_zh_a_spot_em()
+        # 根据数据源获取股票列表
+        if actual_source == "tushare":
+            provider = create_provider("data")
+            df = provider.get_stock_list()
+            # Tushare已经返回标准格式，直接使用
+            a_stocks = df
+        else:
+            # 使用AkShare获取
+            import akshare as ak
+            stock_zh_a_spot_em_df = ak.stock_zh_a_spot_em()
 
         # 创建标准化的DataFrame
         a_stocks = pd.DataFrame()

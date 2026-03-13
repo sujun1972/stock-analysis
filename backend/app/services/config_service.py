@@ -120,6 +120,9 @@ class ConfigService:
         data_source: str,
         minute_data_source: Optional[str] = None,
         realtime_data_source: Optional[str] = None,
+        limit_up_data_source: Optional[str] = None,
+        top_list_data_source: Optional[str] = None,
+        premarket_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
     ) -> Dict:
         """
@@ -129,6 +132,9 @@ class ConfigService:
             data_source: 主数据源 ('akshare' 或 'tushare')
             minute_data_source: 分时数据源
             realtime_data_source: 实时数据源
+            limit_up_data_source: 涨停板池数据源
+            top_list_data_source: 龙虎榜数据源
+            premarket_data_source: 盘前数据源
             tushare_token: Tushare Token (可选)
 
         Returns:
@@ -138,6 +144,9 @@ class ConfigService:
             data_source=data_source,
             minute_data_source=minute_data_source,
             realtime_data_source=realtime_data_source,
+            limit_up_data_source=limit_up_data_source,
+            top_list_data_source=top_list_data_source,
+            premarket_data_source=premarket_data_source,
             tushare_token=tushare_token,
         )
 

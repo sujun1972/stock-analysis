@@ -1,24 +1,25 @@
 """
 数据下载服务
-封装数据下载功能
+封装数据下载功能（支持配置化数据源）
 """
 
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-import akshare as ak
 import pandas as pd
 from loguru import logger
 
 # 使用docker-compose挂载的/app/src目录
 from src.database.db_manager import DatabaseManager
+from src.providers import DataProviderFactory
 
 from app.core.exceptions import DatabaseError, DataSyncError, ExternalAPIError
+from app.services.data_source_manager import DataSourceManager
 
 
 class DataDownloadService:
-    """数据下载服务类"""
+    """数据下载服务类（支持配置化数据源）"""
 
     def __init__(self, db: Optional[DatabaseManager] = None):
         """
@@ -28,7 +29,20 @@ class DataDownloadService:
             db: DatabaseManager 实例（可选，用于依赖注入）
         """
         self.db = db or DatabaseManager()
+        self.data_source_manager = DataSourceManager(db)
+        self.provider = None  # 延迟初始化
         logger.info("✓ DataDownloadService initialized")
+
+    async def _ensure_provider(self):
+        """确保数据提供者已初始化"""
+        if self.provider is None:
+            config = await self.data_source_manager.get_data_source_config()
+            self.provider = DataProviderFactory.create_provider(
+                source=config["data_source"],
+                token=config["tushare_token"],
+                retry_count=3
+            )
+            logger.info(f"✓ 数据提供者已创建: {config['data_source']}")
 
     async def download_stock_list(self) -> Dict:
         """
@@ -40,8 +54,11 @@ class DataDownloadService:
         try:
             logger.info("开始下载股票列表...")
 
-            # 在线程池中执行（避免阻塞）
-            stock_info_df = await asyncio.to_thread(ak.stock_info_a_code_name)
+            # 确保数据提供者已初始化
+            await self._ensure_provider()
+
+            # 使用配置的数据源获取股票列表
+            stock_info_df = await asyncio.to_thread(self.provider.get_stock_list)
 
             if stock_info_df is None or stock_info_df.empty:
                 raise ValueError("获取股票列表失败，返回数据为空")

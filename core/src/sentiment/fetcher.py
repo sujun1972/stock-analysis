@@ -1,10 +1,10 @@
 """
 市场情绪数据抓取器
 
-负责从AkShare等数据源抓取市场情绪相关数据。
+负责从配置的数据源抓取市场情绪相关数据。
+支持通过admin配置数据源（akshare/tushare）
 """
 
-import akshare as ak
 import pandas as pd
 import json
 import time
@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple, Optional
 from loguru import logger
 
 from ..database.connection_pool_manager import ConnectionPoolManager
+from ..config.data_source_helper import create_provider, get_data_source_config
 from .models import (
     MarketIndices,
     LimitUpPool,
@@ -23,7 +24,7 @@ from .models import (
 
 
 class SentimentDataFetcher:
-    """市场情绪数据抓取器"""
+    """市场情绪数据抓取器（支持配置化数据源）"""
 
     def __init__(self, pool_manager: ConnectionPoolManager):
         """
@@ -33,7 +34,19 @@ class SentimentDataFetcher:
             pool_manager: 数据库连接池管理器
         """
         self.pool_manager = pool_manager
-        self.rate_limit_delay = 0.3  # AkShare限流延迟（秒）
+        self.rate_limit_delay = 0.3  # 数据源限流延迟（秒）
+
+        # 从配置获取数据源
+        self.config = get_data_source_config()
+        self.data_source = self.config["data_source"]
+
+        # 创建数据提供者
+        try:
+            self.provider = create_provider("data")
+            logger.info(f"✓ 情绪数据抓取器初始化成功，使用数据源: {self.data_source}")
+        except Exception as e:
+            logger.warning(f"创建数据提供者失败，将在需要时重试: {e}")
+            self.provider = None
 
     # ========== 1. 交易日历相关 ==========
 
@@ -50,8 +63,24 @@ class SentimentDataFetcher:
         try:
             logger.info(f"开始同步{year}年交易日历...")
 
-            # 获取交易日历数据
-            df = ak.tool_trade_date_hist_sina()
+            # 使用配置的数据源获取交易日历
+            if self.data_source == "akshare":
+                import akshare as ak
+                df = ak.tool_trade_date_hist_sina()
+            elif self.data_source == "tushare":
+                # Tushare获取交易日历
+                df = self.provider.api_client.query(
+                    'trade_cal',
+                    exchange='SSE',
+                    start_date=f'{year}0101',
+                    end_date=f'{year}1231',
+                    is_open='1'
+                )
+                # 转换为统一格式
+                df = df.rename(columns={'cal_date': 'trade_date'})
+                df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
+            else:
+                raise ValueError(f"不支持的数据源: {self.data_source}")
 
             # 过滤指定年份
             df['trade_date'] = pd.to_datetime(df['trade_date'])
@@ -81,7 +110,7 @@ class SentimentDataFetcher:
             cursor.close()
             self.pool_manager.release_connection(conn)
 
-            logger.success(f"{year}年交易日历同步完成，插入{inserted_count}条记录")
+            logger.success(f"{year}年交易日历同步完成，插入{inserted_count}条记录 (数据源: {self.data_source})")
             return inserted_count
 
         except Exception as e:
@@ -136,40 +165,80 @@ class SentimentDataFetcher:
             大盘指数数据
         """
         try:
-            logger.info("开始抓取大盘指数数据...")
-
-            # 获取实时指数行情
-            df = ak.stock_zh_index_spot_em()
-
-            # 查找三大指数
-            sh_data = df[df['代码'] == '000001'].iloc[0] if '000001' in df['代码'].values else None
-            sz_data = df[df['代码'] == '399001'].iloc[0] if '399001' in df['代码'].values else None
-            cyb_data = df[df['代码'] == '399006'].iloc[0] if '399006' in df['代码'].values else None
+            logger.info(f"开始抓取大盘指数数据 (数据源: {self.data_source})...")
 
             if not date_str:
                 date_str = datetime.now().strftime('%Y-%m-%d')
 
-            market_indices = MarketIndices(
-                trade_date=date_str,
-                # 上证指数
-                sh_index_close=float(sh_data['最新价']) if sh_data is not None else 0.0,
-                sh_index_change=float(sh_data['涨跌幅']) if sh_data is not None else 0.0,
-                sh_index_amplitude=float(sh_data['振幅']) if sh_data is not None else 0.0,
-                sh_index_volume=int(sh_data['成交量']) if sh_data is not None else 0,
-                sh_index_amount=float(sh_data['成交额']) if sh_data is not None else 0.0,
-                # 深成指数
-                sz_index_close=float(sz_data['最新价']) if sz_data is not None else 0.0,
-                sz_index_change=float(sz_data['涨跌幅']) if sz_data is not None else 0.0,
-                sz_index_amplitude=float(sz_data['振幅']) if sz_data is not None else 0.0,
-                sz_index_volume=int(sz_data['成交量']) if sz_data is not None else 0,
-                sz_index_amount=float(sz_data['成交额']) if sz_data is not None else 0.0,
-                # 创业板指数
-                cyb_index_close=float(cyb_data['最新价']) if cyb_data is not None else 0.0,
-                cyb_index_change=float(cyb_data['涨跌幅']) if cyb_data is not None else 0.0,
-                cyb_index_amplitude=float(cyb_data['振幅']) if cyb_data is not None else 0.0,
-                cyb_index_volume=int(cyb_data['成交量']) if cyb_data is not None else 0,
-                cyb_index_amount=float(cyb_data['成交额']) if cyb_data is not None else 0.0,
-            )
+            # 使用配置的数据源获取指数数据
+            if self.data_source == "akshare":
+                import akshare as ak
+                df = ak.stock_zh_index_spot_em()
+
+                # 查找三大指数
+                sh_data = df[df['代码'] == '000001'].iloc[0] if '000001' in df['代码'].values else None
+                sz_data = df[df['代码'] == '399001'].iloc[0] if '399001' in df['代码'].values else None
+                cyb_data = df[df['代码'] == '399006'].iloc[0] if '399006' in df['代码'].values else None
+
+                market_indices = MarketIndices(
+                    trade_date=date_str,
+                    # 上证指数
+                    sh_index_close=float(sh_data['最新价']) if sh_data is not None else 0.0,
+                    sh_index_change=float(sh_data['涨跌幅']) if sh_data is not None else 0.0,
+                    sh_index_amplitude=float(sh_data['振幅']) if sh_data is not None else 0.0,
+                    sh_index_volume=int(sh_data['成交量']) if sh_data is not None else 0,
+                    sh_index_amount=float(sh_data['成交额']) if sh_data is not None else 0.0,
+                    # 深成指数
+                    sz_index_close=float(sz_data['最新价']) if sz_data is not None else 0.0,
+                    sz_index_change=float(sz_data['涨跌幅']) if sz_data is not None else 0.0,
+                    sz_index_amplitude=float(sz_data['振幅']) if sz_data is not None else 0.0,
+                    sz_index_volume=int(sz_data['成交量']) if sz_data is not None else 0,
+                    sz_index_amount=float(sz_data['成交额']) if sz_data is not None else 0.0,
+                    # 创业板指数
+                    cyb_index_close=float(cyb_data['最新价']) if cyb_data is not None else 0.0,
+                    cyb_index_change=float(cyb_data['涨跌幅']) if cyb_data is not None else 0.0,
+                    cyb_index_amplitude=float(cyb_data['振幅']) if cyb_data is not None else 0.0,
+                    cyb_index_volume=int(cyb_data['成交量']) if cyb_data is not None else 0,
+                    cyb_index_amount=float(cyb_data['成交额']) if cyb_data is not None else 0.0,
+                )
+
+            elif self.data_source == "tushare":
+                # Tushare获取指数行情
+                indices = ['000001.SH', '399001.SZ', '399006.SZ']  # 上证、深成、创业板
+                df = self.provider.api_client.query(
+                    'index_daily',
+                    ts_code=','.join(indices),
+                    trade_date=date_str.replace('-', ''),
+                )
+
+                # 解析数据
+                sh_data = df[df['ts_code'] == '000001.SH'].iloc[0] if len(df[df['ts_code'] == '000001.SH']) > 0 else None
+                sz_data = df[df['ts_code'] == '399001.SZ'].iloc[0] if len(df[df['ts_code'] == '399001.SZ']) > 0 else None
+                cyb_data = df[df['ts_code'] == '399006.SZ'].iloc[0] if len(df[df['ts_code'] == '399006.SZ']) > 0 else None
+
+                market_indices = MarketIndices(
+                    trade_date=date_str,
+                    # 上证指数
+                    sh_index_close=float(sh_data['close']) if sh_data is not None else 0.0,
+                    sh_index_change=float(sh_data['pct_chg']) if sh_data is not None else 0.0,
+                    sh_index_amplitude=0.0,  # Tushare没有振幅字段
+                    sh_index_volume=int(sh_data['vol']) if sh_data is not None else 0,
+                    sh_index_amount=float(sh_data['amount']) if sh_data is not None else 0.0,
+                    # 深成指数
+                    sz_index_close=float(sz_data['close']) if sz_data is not None else 0.0,
+                    sz_index_change=float(sz_data['pct_chg']) if sz_data is not None else 0.0,
+                    sz_index_amplitude=0.0,
+                    sz_index_volume=int(sz_data['vol']) if sz_data is not None else 0,
+                    sz_index_amount=float(sz_data['amount']) if sz_data is not None else 0.0,
+                    # 创业板指数
+                    cyb_index_close=float(cyb_data['close']) if cyb_data is not None else 0.0,
+                    cyb_index_change=float(cyb_data['pct_chg']) if cyb_data is not None else 0.0,
+                    cyb_index_amplitude=0.0,
+                    cyb_index_volume=int(cyb_data['vol']) if cyb_data is not None else 0,
+                    cyb_index_amount=float(cyb_data['amount']) if cyb_data is not None else 0.0,
+                )
+            else:
+                raise ValueError(f"不支持的数据源: {self.data_source}")
 
             # 计算两市总成交
             market_indices.total_volume = (
@@ -313,6 +382,8 @@ class SentimentDataFetcher:
         """
         抓取涨停板池数据
 
+        注意：涨停板池是AkShare特有功能，如果配置了Tushare会自动降级使用AkShare
+
         Args:
             date_str: 日期字符串
 
@@ -324,6 +395,12 @@ class SentimentDataFetcher:
 
             if not date_str:
                 date_str = datetime.now().strftime('%Y-%m-%d')
+
+            # 涨停板池是AkShare特有功能，即使配置了Tushare也使用AkShare
+            if self.data_source == "tushare":
+                logger.warning("涨停板池功能仅AkShare支持，自动降级使用AkShare")
+
+            import akshare as ak
 
             # 1. 获取涨停板池
             df_limit_up = ak.stock_zt_pool_em(date=date_str.replace('-', ''))
@@ -461,6 +538,8 @@ class SentimentDataFetcher:
         """
         抓取龙虎榜数据（包含席位明细）
 
+        注意：龙虎榜详细数据是AkShare特有功能，如果配置了Tushare会自动降级使用AkShare
+
         Args:
             date_str: 日期字符串 (YYYY-MM-DD)
 
@@ -469,6 +548,12 @@ class SentimentDataFetcher:
         """
         try:
             logger.info(f"开始抓取龙虎榜数据: {date_str}")
+
+            # 龙虎榜详细数据是AkShare特有功能，即使配置了Tushare也使用AkShare
+            if self.data_source == "tushare":
+                logger.warning("龙虎榜详细数据仅AkShare支持，自动降级使用AkShare")
+
+            import akshare as ak
 
             # 获取龙虎榜数据（使用start_date和end_date查询单日数据）
             date_formatted = date_str.replace('-', '')
@@ -496,6 +581,7 @@ class SentimentDataFetcher:
                 institution_count = 0
 
                 try:
+                    import akshare as ak
                     # 抓取买入席位（前5名）
                     time.sleep(0.3)  # 限速
                     df_buy = ak.stock_lhb_stock_detail_em(symbol=stock_code, date=date_formatted, flag='买入')

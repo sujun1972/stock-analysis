@@ -21,6 +21,9 @@ class DataSourceConfigRequest(BaseModel):
     data_source: str
     minute_data_source: Optional[str] = None
     realtime_data_source: Optional[str] = None
+    limit_up_data_source: Optional[str] = None
+    top_list_data_source: Optional[str] = None
+    premarket_data_source: Optional[str] = None
     tushare_token: Optional[str] = None
 
 
@@ -62,12 +65,15 @@ async def update_data_source_config(request: DataSourceConfigRequest):
         data_source=request.data_source,
         minute_data_source=request.minute_data_source,
         realtime_data_source=request.realtime_data_source,
+        limit_up_data_source=request.limit_up_data_source,
+        top_list_data_source=request.top_list_data_source,
+        premarket_data_source=request.premarket_data_source,
         tushare_token=request.tushare_token,
     )
 
     return ApiResponse.success(
         data=config,
-        message=f"成功切换数据源：主数据源={request.data_source}，分时数据源={request.minute_data_source or '未更改'}，实时数据源={request.realtime_data_source or '未更改'}",
+        message=f"成功切换数据源：主={request.data_source}, 涨停板={request.limit_up_data_source or '未更改'}, 龙虎榜={request.top_list_data_source or '未更改'}",
     )
 
 

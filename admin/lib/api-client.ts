@@ -562,6 +562,9 @@ class ApiClient {
     data_source: string
     minute_data_source: string
     realtime_data_source: string
+    limit_up_data_source?: string
+    top_list_data_source?: string
+    premarket_data_source?: string
     tushare_token: string
   }>> {
     const response = await axiosInstance.get('/api/config/source')
@@ -575,6 +578,9 @@ class ApiClient {
     data_source: string
     minute_data_source?: string
     realtime_data_source?: string
+    limit_up_data_source?: string
+    top_list_data_source?: string
+    premarket_data_source?: string
     tushare_token?: string
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/config/source', params)

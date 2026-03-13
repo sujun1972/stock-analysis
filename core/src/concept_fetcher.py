@@ -3,21 +3,20 @@
 概念板块数据采集器
 
 功能说明：
-- 从AkShare获取概念板块数据（使用东方财富数据源）
+- 从配置的数据源获取概念板块数据（支持AkShare和Tushare）
 - 保存概念板块列表到数据库
 - 保存股票-概念多对多关系
 - 支持按股票代码查询所属概念
 - 支持获取所有概念列表
 
 数据源说明：
-- 推荐使用东方财富(em)数据源：466个概念，完整成分股数据，免费
-- 同花顺(ths)数据源：375个概念，但成分股API已失效
+- AkShare（推荐）：使用东方财富，466个概念，完整成分股数据，免费
+- Tushare（需5000积分）：使用concept接口，概念数据完整
 
 作者: Stock Analysis System
-版本: 1.1.0
+版本: 2.0.0（支持配置化数据源）
 """
 
-import akshare as ak
 import pandas as pd
 from typing import Optional
 from loguru import logger
@@ -26,14 +25,16 @@ try:
     from .utils.response import Response
     from .exceptions import DataProviderError
     from .database.connection_pool_manager import ConnectionPoolManager
+    from .config.data_source_helper import create_provider, get_data_source_config
 except ImportError:
     from src.utils.response import Response
     from src.exceptions import DataProviderError
     from src.database.connection_pool_manager import ConnectionPoolManager
+    from src.config.data_source_helper import create_provider, get_data_source_config
 
 
 class ConceptFetcher:
-    """概念板块数据采集器"""
+    """概念板块数据采集器（支持配置化数据源）"""
 
     def __init__(self, pool_manager: ConnectionPoolManager):
         """
@@ -43,6 +44,18 @@ class ConceptFetcher:
             pool_manager: 数据库连接池管理器
         """
         self.pool_manager = pool_manager
+
+        # 从配置获取数据源
+        self.config = get_data_source_config()
+        self.data_source = self.config["data_source"]
+
+        # 创建数据提供者
+        try:
+            self.provider = create_provider("data")
+            logger.info(f"✓ 概念采集器初始化成功，使用数据源: {self.data_source}")
+        except Exception as e:
+            logger.warning(f"创建数据提供者失败，将在需要时重试: {e}")
+            self.provider = None
 
     @staticmethod
     def _normalize_stock_code(stock_code: str) -> str:
@@ -64,47 +77,68 @@ class ConceptFetcher:
             return f"{stock_code}.SH" if stock_code.startswith('6') else f"{stock_code}.SZ"
         return stock_code
 
-    def fetch_and_save_concepts(self, source: str = 'em') -> Response:
+    def fetch_and_save_concepts(self, source: Optional[str] = None) -> Response:
         """
         获取并保存概念板块数据
 
         Args:
-            source: 数据源，推荐使用 'em'（东方财富，466个概念，完整成分股）
-                   'ths'（同花顺，375个概念，但成分股API已失效）
+            source: 数据源（可选）
+                   - None: 使用配置的数据源
+                   - 'em': 强制使用AkShare东方财富
+                   - 'ths': 强制使用AkShare同花顺（不推荐，成分股API已失效）
 
         Returns:
             Response: 包含操作结果的响应对象
         """
         try:
-            logger.info(f"开始获取概念板块数据（数据源：{source}）...")
+            # 如果未指定source，使用配置的数据源
+            if source is None:
+                actual_source = self.data_source
+            else:
+                actual_source = source
 
-            # 1. 获取概念列表
-            if source == 'em':
-                # 推荐：东方财富数据源（466个概念，成分股API可用）
+            logger.info(f"开始获取概念板块数据（数据源：{actual_source}）...")
+
+            # 1. 根据数据源获取概念列表
+            if actual_source == "tushare":
+                # 使用Tushare获取概念列表
+                concept_df = self.provider.api_client.query('concept')
+                # 字段映射：ts_code -> 代码, name -> 名称
+                concept_df = concept_df.rename(columns={'ts_code': '代码', 'name': '名称'})
+                source_label = 'tushare'
+
+            elif actual_source == "akshare" or source == 'em':
+                # 使用AkShare东方财富数据源（推荐）
+                import akshare as ak
                 concept_df = ak.stock_board_concept_name_em()
-                # 东方财富字段映射：'板块名称' -> 概念名称
                 concept_df = concept_df.rename(columns={'板块名称': '名称', '板块代码': '代码'})
+                source_label = 'em'
+
             elif source == 'ths':
-                # 同花顺数据源（375个概念，但成分股API已失效，不推荐）
+                # 使用AkShare同花顺数据源（不推荐）
+                import akshare as ak
                 logger.warning("⚠️ 同花顺成分股API已失效，建议使用东方财富数据源(source='em')")
                 concept_df = ak.stock_board_concept_name_ths()
+                source_label = 'ths'
+
             else:
                 return Response.error(
-                    error=f"不支持的数据源: {source}，请使用 'em' 或 'ths'",
+                    error=f"不支持的数据源: {actual_source}",
                     error_code="INVALID_DATA_SOURCE"
                 )
 
             logger.info(f"获取到 {len(concept_df)} 个概念板块")
 
             # 2. 保存概念列表到数据库
-            saved_concepts = self._save_concepts_to_db(concept_df, source)
+            saved_concepts = self._save_concepts_to_db(concept_df, source_label)
 
-            # 3. 获取并保存每个概念的成分股（仅东方财富可用）
+            # 3. 获取并保存每个概念的成分股
             total_relationships = 0
 
             if source == 'ths':
                 logger.warning("⚠️ 同花顺成分股API不可用，跳过成分股同步")
-            else:
+            elif actual_source == "tushare":
+                # 使用Tushare获取概念成分股
                 for idx, row in concept_df.iterrows():
                     try:
                         concept_code = row.get('代码') or row.get('code')
@@ -116,11 +150,40 @@ class ConceptFetcher:
 
                         logger.info(f"正在获取概念 [{concept_name}] 的成分股... ({idx+1}/{len(concept_df)})")
 
-                        # 获取概念成分股（仅东方财富）
+                        # 获取概念成分股
+                        stocks_df = self.provider.api_client.query('concept_detail', ts_code=concept_code)
+
+                        if stocks_df is not None and not stocks_df.empty:
+                            # 字段映射：ts_code -> 代码
+                            stocks_df = stocks_df.rename(columns={'ts_code': '代码'})
+                            count = self._save_stock_concept_relationships(
+                                stocks_df, concept_code, concept_name
+                            )
+                            total_relationships += count
+                            logger.info(f"  └─ 保存 {count} 条股票关系")
+
+                    except Exception as e:
+                        logger.error(f"获取概念 [{concept_name}] 的成分股失败: {e}")
+                        continue
+
+            else:
+                # 使用AkShare东方财富获取概念成分股
+                import akshare as ak
+                for idx, row in concept_df.iterrows():
+                    try:
+                        concept_code = row.get('代码') or row.get('code')
+                        concept_name = row.get('名称') or row.get('name')
+
+                        if not concept_code or not concept_name:
+                            logger.warning(f"跳过无效概念（缺少代码或名称）: {row}")
+                            continue
+
+                        logger.info(f"正在获取概念 [{concept_name}] 的成分股... ({idx+1}/{len(concept_df)})")
+
+                        # 获取概念成分股（东方财富）
                         stocks_df = ak.stock_board_concept_cons_em(symbol=concept_name)
 
                         if stocks_df is not None and not stocks_df.empty:
-                            # 保存股票-概念关系
                             count = self._save_stock_concept_relationships(
                                 stocks_df, concept_code, concept_name
                             )

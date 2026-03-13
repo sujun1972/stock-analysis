@@ -8,11 +8,13 @@
 - 美股三大指数
 - 盘前核心新闻(财联社/金十快讯)
 
+注意：盘前外盘数据主要使用AkShare数据源
+      即使配置了Tushare，外盘数据也会自动降级使用AkShare
+
 作者: AI Strategy Team
 创建日期: 2026-03-11
 """
 
-import akshare as ak
 import pandas as pd
 import json
 import time
@@ -21,11 +23,12 @@ from typing import Dict, List, Optional
 from loguru import logger
 
 from ..database.connection_pool_manager import ConnectionPoolManager
+from ..config.data_source_helper import get_data_source_config
 from .models import OvernightData, PremarketNews, PremarketSyncResult
 
 
 class PremarketDataFetcher:
-    """盘前外盘数据抓取器"""
+    """盘前外盘数据抓取器（支持配置化数据源）"""
 
     def __init__(self, pool_manager: ConnectionPoolManager):
         """
@@ -35,7 +38,17 @@ class PremarketDataFetcher:
             pool_manager: 数据库连接池管理器
         """
         self.pool_manager = pool_manager
-        self.rate_limit_delay = 0.5  # AkShare限流延迟（秒）
+        self.rate_limit_delay = 0.5  # 数据源限流延迟（秒）
+
+        # 从配置获取数据源
+        self.config = get_data_source_config()
+        self.data_source = self.config["data_source"]
+
+        # 盘前外盘数据主要使用AkShare
+        if self.data_source == "tushare":
+            logger.info("盘前外盘数据使用AkShare（Tushare不支持外盘数据）")
+
+        logger.info(f"✓ 盘前数据抓取器初始化成功，数据源: AkShare (外盘数据)")
 
         # 强情绪关键词列表
         self.CRITICAL_KEYWORDS = [
