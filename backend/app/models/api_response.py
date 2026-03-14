@@ -13,6 +13,27 @@ from app.utils.data_cleaning import sanitize_float_values
 T = TypeVar("T")
 
 
+class DeprecationWarning(BaseModel):
+    """API 弃用警告信息"""
+
+    deprecated: bool = Field(True, description="是否已弃用")
+    deprecated_since: str = Field(..., description="弃用开始版本")
+    removal_date: Optional[str] = Field(None, description="计划移除日期 (YYYY-MM-DD)")
+    alternative: Optional[str] = Field(None, description="替代的新 API 路径")
+    reason: Optional[str] = Field(None, description="弃用原因")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "deprecated": True,
+                "deprecated_since": "2.0",
+                "removal_date": "2026-06-01",
+                "alternative": "/api/strategies",
+                "reason": "使用新的统一策略系统",
+            }
+        }
+
+
 class ApiResponse(BaseModel, Generic[T]):
     """
     统一的 API 响应模型
@@ -46,6 +67,8 @@ class ApiResponse(BaseModel, Generic[T]):
         default_factory=lambda: datetime.now().isoformat(), description="响应时间戳"
     )
     request_id: Optional[str] = Field(None, description="请求ID")
+    api_version: Optional[str] = Field(None, description="API 版本号")
+    deprecation: Optional[DeprecationWarning] = Field(None, description="弃用警告信息")
 
     class Config:
         json_schema_extra = {
@@ -62,7 +85,12 @@ class ApiResponse(BaseModel, Generic[T]):
 
     @classmethod
     def success(
-        cls, data: Optional[T] = None, message: str = "success", request_id: Optional[str] = None
+        cls,
+        data: Optional[T] = None,
+        message: str = "success",
+        request_id: Optional[str] = None,
+        api_version: Optional[str] = None,
+        deprecation: Optional[DeprecationWarning] = None,
     ) -> "ApiResponse[T]":
         """
         创建成功响应
@@ -71,11 +99,20 @@ class ApiResponse(BaseModel, Generic[T]):
             data: 响应数据
             message: 成功消息（默认 "success"）
             request_id: 请求ID
+            api_version: API 版本号
+            deprecation: 弃用警告信息
 
         Returns:
             ApiResponse: 成功响应对象
         """
-        return cls(code=200, message=message, data=data, request_id=request_id)
+        return cls(
+            code=200,
+            message=message,
+            data=data,
+            request_id=request_id,
+            api_version=api_version,
+            deprecation=deprecation,
+        )
 
     @classmethod
     def error(
@@ -373,6 +410,12 @@ class ApiResponse(BaseModel, Generic[T]):
 
         if self.timestamp:
             result["timestamp"] = self.timestamp
+
+        if self.api_version:
+            result["api_version"] = self.api_version
+
+        if self.deprecation:
+            result["deprecation"] = self.deprecation.model_dump()
 
         return result
 

@@ -20,6 +20,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, validator
 
 from app.api.error_handler import handle_api_errors
+from app.core.api_versioning import deprecated
 from app.core_adapters.config_strategy_adapter import ConfigStrategyAdapter
 from app.repositories.strategy_config_repository import StrategyConfigRepository
 
@@ -127,6 +128,12 @@ class ValidateConfigRequest(BaseModel):
 
 
 @router.get("/types", summary="获取可用的策略类型")
+@deprecated(
+    deprecated_since="2.0",
+    removal_date="2026-09-01",
+    alternative="/api/strategies/types",
+    reason="使用新的统一策略系统API",
+)
 @handle_api_errors
 async def get_strategy_types() -> Dict[str, Any]:
     """
@@ -162,6 +169,12 @@ async def get_strategy_types() -> Dict[str, Any]:
 
 
 @router.post("/validate", summary="验证策略配置", status_code=status.HTTP_200_OK)
+@deprecated(
+    deprecated_since="2.0",
+    removal_date="2026-09-01",
+    alternative="/api/strategies/validate",
+    reason="使用新的统一策略系统API",
+)
 @handle_api_errors
 async def validate_config(request: ValidateConfigRequest) -> Dict[str, Any]:
     """
@@ -200,6 +213,12 @@ async def validate_config(request: ValidateConfigRequest) -> Dict[str, Any]:
 
 
 @router.post("", summary="创建策略配置", status_code=status.HTTP_201_CREATED)
+@deprecated(
+    deprecated_since="2.0",
+    removal_date="2026-09-01",
+    alternative="/api/strategies",
+    reason="使用新的统一策略系统API",
+)
 @handle_api_errors
 async def create_config(data: StrategyConfigCreate) -> Dict[str, Any]:
     """

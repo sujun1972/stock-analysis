@@ -21,6 +21,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, validator
 
 from app.api.error_handler import handle_api_errors
+from app.core.api_versioning import deprecated
 from app.core.dependencies import get_current_user
 from app.core_adapters.dynamic_strategy_adapter import DynamicStrategyAdapter
 from app.models.user import User
@@ -167,6 +168,12 @@ async def get_statistics() -> Dict[str, Any]:
 
 
 @router.post("/validate", summary="验证策略代码", status_code=status.HTTP_200_OK)
+@deprecated(
+    deprecated_since="2.0",
+    removal_date="2026-09-01",
+    alternative="/api/strategies/validate",
+    reason="使用新的统一策略系统API",
+)
 @handle_api_errors
 async def validate_code(request: ValidateCodeRequest) -> Dict[str, Any]:
     """
@@ -209,6 +216,12 @@ async def validate_code(request: ValidateCodeRequest) -> Dict[str, Any]:
 
 
 @router.post("", summary="创建动态策略", status_code=status.HTTP_201_CREATED)
+@deprecated(
+    deprecated_since="2.0",
+    removal_date="2026-09-01",
+    alternative="/api/strategies",
+    reason="使用新的统一策略系统API",
+)
 @handle_api_errors
 async def create_dynamic_strategy(
     data: DynamicStrategyCreate,

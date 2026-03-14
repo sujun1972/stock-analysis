@@ -15,6 +15,8 @@ Backend 项目使用基于 Pydantic 的 `ApiResponse` 类提供统一的 API 响
 - ✅ 请求 ID 追踪
 - ✅ 分页响应支持
 - ✅ 与异常系统集成
+- ✅ **API 版本管理** (v2.0 新增)
+- ✅ **API 弃用警告** (v2.0 新增)
 
 ---
 
@@ -682,9 +684,71 @@ async def validate_features(request: DataValidationRequest):
 
 ---
 
-## 🚀 扩展功能
+## 🚀 扩展功能 (v2.0)
 
-### ApiResponse 新增的 warning 方法
+### 1. API 版本管理
+
+使用 `@api_version` 装饰器标记 API 版本：
+
+```python
+from app.core.api_versioning import api_version
+
+@router.get("/strategies")
+@api_version("2.0")
+async def list_strategies():
+    return ApiResponse.success(
+        data=strategies,
+        api_version="2.0"  # 可选：在数据中也包含版本
+    )
+```
+
+响应格式：
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {...},
+  "api_version": "2.0",
+  "timestamp": "2026-03-14T12:00:00"
+}
+```
+
+### 2. API 弃用警告
+
+使用 `@deprecated` 装饰器标记已弃用的 API：
+
+```python
+from app.core.api_versioning import deprecated
+
+@router.get("/old-endpoint")
+@deprecated(
+    deprecated_since="2.0",
+    removal_date="2026-09-01",
+    alternative="/api/new-endpoint",
+    reason="使用新的统一策略系统"
+)
+async def old_endpoint():
+    return {"data": "..."}
+```
+
+响应格式：
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {...},
+  "deprecation": {
+    "deprecated": true,
+    "deprecated_since": "2.0",
+    "removal_date": "2026-09-01",
+    "alternative": "/api/new-endpoint",
+    "reason": "使用新的统一策略系统"
+  },
+  "timestamp": "2026-03-14T12:00:00"
+}
+```
+
+### 3. ApiResponse 新增的 warning 方法
 
 ```python
 # app/models/api_response.py 中新增
@@ -743,12 +807,14 @@ def warning(
 ## 📚 相关资源
 
 - ApiResponse 源码: [app/models/api_response.py](backend/app/models/api_response.py)
+- API 版本管理: [app/core/api_versioning.py](backend/app/core/api_versioning.py)
 - 异常处理 Skill: [exception-handling.md](exception-handling.md)
 - API 错误处理: [app/api/error_handler.py](backend/app/api/error_handler.py)
-- 文档: [backend/app/models/README_API_RESPONSE.md](backend/app/models/README_API_RESPONSE.md)
+- **API 迁移指南**: [backend/docs/API_MIGRATION_GUIDE.md](backend/docs/API_MIGRATION_GUIDE.md) (v2.0)
+- **API 响应格式规范**: [backend/docs/API_RESPONSE_FORMAT.md](backend/docs/API_RESPONSE_FORMAT.md) (v2.0)
 
 ---
 
-**版本**: 1.0.0
-**创建日期**: 2026-02-01
+**版本**: 2.0.0
+**更新日期**: 2026-03-14
 **维护者**: Stock Analysis Team
