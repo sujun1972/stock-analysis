@@ -133,25 +133,34 @@ export default function SentimentAIAnalysisPage() {
         const newTaskId = response.data.task_id
         setTaskId(newTaskId)
 
-        // 加入全局轮询队列（项目级轮询，跨页面）
-        addTaskToQueue(newTaskId, `AI分析生成（${dateStr}）`)
+        // 获取AI提供商显示名称
+        const providerDisplay = aiProviders.find(p => p.provider === aiProvider)?.display_name || aiProvider
 
-        toast.success("分析任务已提交", {
-          description: "正在后台生成，完成时将自动通知",
-          duration: 4000,
+        // 加入全局轮询队列（项目级轮询，跨页面）
+        addTaskToQueue(
+          newTaskId,
+          `sentiment.ai_analysis_18_00`,
+          `AI分析生成（${dateStr} - ${providerDisplay}）`,
+          'ai_analysis'
+        )
+
+        toast.success("AI分析任务已提交", {
+          description: `正在生成 ${dateStr} 的分析报告，可在异步任务管理中查看进度`,
+          duration: 5000,
         })
 
         // 开始轮询任务状态（仅用于当前页面实时反馈）
         pollTaskStatus(newTaskId, dateStr)
       } else if (response.code === 409) {
         toast.warning("分析任务正在执行中", {
-          description: "请稍候或刷新页面查看进度",
+          description: "已有AI分析任务正在执行，请等待完成或查看异步任务管理",
           duration: 4000,
         })
       } else {
         toast.error(response.message || "提交失败")
       }
     } catch (error: any) {
+      console.error("提交AI分析任务失败:", error)
       toast.error("提交失败：" + (error.response?.data?.detail || error.message))
     } finally {
       setIsGenerating(false)
@@ -170,7 +179,12 @@ export default function SentimentAIAnalysisPage() {
         const statusRes = await apiClient.get(`/api/sentiment/sync/status/${taskId}`)
 
         if (statusRes.code === 200 && statusRes.data) {
-          const { status, result } = statusRes.data
+          const { status, result, message, progress } = statusRes.data
+
+          // 更新进度信息（可选：在UI中显示进度）
+          if (status === 'PROGRESS' || status === 'STARTED') {
+            console.log(`AI分析任务进度: ${progress || 0}% - ${message || '执行中'}`)
+          }
 
           if (status === 'SUCCESS') {
             clearInterval(intervalId)
@@ -178,9 +192,14 @@ export default function SentimentAIAnalysisPage() {
             // 任务成功，自动刷新数据
             if (result?.success) {
               await loadAnalysis()
-              toast.info("数据已刷新", {
-                description: "AI分析结果已加载到页面",
-                duration: 3000,
+              toast.success("AI分析完成", {
+                description: `${dateStr} 的分析报告已生成，数据已刷新`,
+                duration: 4000,
+              })
+            } else if (result?.status === 'skipped') {
+              toast.info("任务已跳过", {
+                description: result.reason || "非交易日或数据缺失",
+                duration: 4000,
               })
             }
 
@@ -188,7 +207,8 @@ export default function SentimentAIAnalysisPage() {
           } else if (status === 'FAILURE') {
             clearInterval(intervalId)
             setTaskId(null)
-            // 错误 toast 由全局轮询处理
+            // 错误 toast 由全局轮询处理，这里只做清理
+            console.error('AI分析任务失败:', statusRes.data.error || message)
           }
         }
 
@@ -196,9 +216,23 @@ export default function SentimentAIAnalysisPage() {
         if (attempts >= maxAttempts) {
           clearInterval(intervalId)
           setTaskId(null)
+          toast.warning("轮询超时", {
+            description: "任务可能仍在执行，请稍后刷新页面或查看异步任务管理",
+            duration: 5000,
+          })
         }
       } catch (error) {
         console.error('轮询任务状态失败:', error)
+
+        // 连续失败多次后停止轮询
+        if (attempts > 5) {
+          clearInterval(intervalId)
+          setTaskId(null)
+          toast.error("轮询失败", {
+            description: "无法获取任务状态，请检查网络连接或查看异步任务管理",
+            duration: 5000,
+          })
+        }
       }
     }, 3000) // 每3秒轮询一次
   }

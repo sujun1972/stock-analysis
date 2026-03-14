@@ -34,6 +34,10 @@ celery_app.conf.update(
     # 结果过期时间
     result_expires=86400,  # 24小时后过期
 
+    # 结果持久化配置
+    result_backend=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/1",  # 确保结果被保存
+    result_persistent=True,  # 持久化任务结果
+
     # 任务执行配置
     task_acks_late=True,  # 任务执行完成后才确认
     worker_prefetch_multiplier=1,  # 每次只预取1个任务（防止长任务阻塞）

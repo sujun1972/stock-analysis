@@ -873,8 +873,9 @@ async def generate_ai_analysis(
 
         # 检查是否已有任务正在执行
         existing_task = AsyncResult(task_id)
-        if existing_task.state in ['PENDING', 'STARTED']:
-            logger.warning(f"AI分析任务已在执行中: {task_id}")
+        # PENDING 是默认状态，不代表任务存在，只检查真正运行中的状态
+        if existing_task.state in ['STARTED', 'PROGRESS', 'RETRY']:
+            logger.warning(f"AI分析任务已在执行中: {task_id}, 状态: {existing_task.state}")
             return {
                 "code": 409,
                 "message": "AI分析任务正在执行中，请稍候",
@@ -884,6 +885,11 @@ async def generate_ai_analysis(
                     "status": "running"
                 }
             }
+
+        # 如果任务已完成或失败，先撤销旧任务结果，避免ID冲突
+        if existing_task.state in ['SUCCESS', 'FAILURE']:
+            logger.info(f"撤销已完成的任务结果: {task_id}, 旧状态: {existing_task.state}")
+            existing_task.forget()  # 清除任务结果，允许使用相同ID
 
         # 提交 Celery 异步任务
         task = daily_sentiment_ai_analysis_task.apply_async(
@@ -999,6 +1005,9 @@ def _get_task_type(task_name: str) -> str:
     if task_name.startswith('sync.'):
         return 'sync'
     elif task_name.startswith('sentiment.'):
+        # 细分 sentiment 任务类型
+        if 'ai_analysis' in task_name:
+            return 'ai_analysis'
         return 'sentiment'
     elif 'ai_analysis' in task_name or 'ai_strategy' in task_name:
         return 'ai_analysis'
@@ -1030,6 +1039,7 @@ def _get_task_display_name(task_id: str, task_name: str) -> str:
         "sync.concept": "概念数据同步",
         "sentiment.daily_sync_17_30": "情绪数据定时同步",
         "sentiment.manual_sync": "情绪数据手动同步",
+        "sentiment.ai_analysis_18_00": "情绪AI分析（定时任务）",
         "backtest.run_strategy": "策略回测",
         "ai_strategy.generate": "AI策略生成",
         "premarket.daily_analysis": "盘前预期分析"

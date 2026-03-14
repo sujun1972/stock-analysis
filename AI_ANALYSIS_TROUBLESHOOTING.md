@@ -529,3 +529,134 @@ docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c \
 
 **更新时间**：2026-03-12
 **适用版本**：v2.0+
+
+---
+
+### 问题5：AI分析任务提交后无法在异步任务管理中追踪
+
+**错误现象**（2026-03-14）：
+- 点击"生成分析"按钮后，显示toast提示
+- 任务不出现在"异步任务管理"列表中
+- 前端轮询一直返回 `PENDING` 状态
+- 用户感觉"没有之后了"
+
+**根本原因**：
+1. **后端任务类型识别错误**：`sentiment.ai_analysis_18_00` 被识别为 `sentiment` 类型而非 `ai_analysis` 类型
+2. **任务显示名称缺失**：未在映射表中添加AI分析任务的显示名称
+3. **前端参数传递不完整**：`addTaskToQueue` 未传递完整的任务类型参数
+4. **Celery任务状态检查错误**：`PENDING` 状态误判导致重复提交被拒绝
+5. **任务进度未更新**：任务执行过程中没有更新中间状态
+
+**已修复**（2026-03-14）：
+
+#### 修复1：后端任务类型识别
+**文件**：`backend/app/api/endpoints/sentiment.py` (Line 1001-1005)
+```python
+# 修复前
+elif task_name.startswith('sentiment.'):
+    return 'sentiment'  # ❌ 所有sentiment任务都是'sentiment'类型
+
+# 修复后
+elif task_name.startswith('sentiment.'):
+    # 细分 sentiment 任务类型
+    if 'ai_analysis' in task_name:
+        return 'ai_analysis'  # ✅ 正确识别AI分析任务
+    return 'sentiment'
+```
+
+#### 修复2：添加任务显示名称映射
+**文件**：`backend/app/api/endpoints/sentiment.py` (Line 1033)
+```python
+task_name_mapping = {
+    # ... 其他映射
+    "sentiment.ai_analysis_18_00": "情绪AI分析（定时任务）",  # ✅ 新增
+}
+```
+
+#### 修复3：前端完整传递任务参数
+**文件**：`admin/app/(dashboard)/sentiment/ai-analysis/page.tsx` (Line 140-145)
+```typescript
+// 修复前
+addTaskToQueue(newTaskId, `AI分析生成（${dateStr}）`)
+
+// 修复后
+addTaskToQueue(
+  newTaskId,
+  `sentiment.ai_analysis_18_00`,           // ✅ 任务名称
+  `AI分析生成（${dateStr} - ${providerDisplay}）`,  // ✅ 显示名称
+  'ai_analysis'                            // ✅ 任务类型
+)
+```
+
+#### 修复4：优化Celery任务状态检查
+**文件**：`backend/app/api/endpoints/sentiment.py` (Line 876-892)
+```python
+# 修复前：PENDING是默认状态，会误判
+if existing_task.state in ['PENDING', 'STARTED']:
+
+# 修复后：只检查真正运行中的状态
+if existing_task.state in ['STARTED', 'PROGRESS', 'RETRY']:
+    return 409  # 任务确实在执行中
+
+# 如果任务已完成，清除旧结果
+if existing_task.state in ['SUCCESS', 'FAILURE']:
+    existing_task.forget()  # 允许使用相同ID重新提交
+```
+
+#### 修复5：添加任务进度更新
+**文件**：`backend/app/tasks/sentiment_ai_analysis_task.py` (Line 57-72)
+```python
+# 更新任务状态为STARTED
+self.update_state(
+    state='STARTED',
+    meta={'message': f'开始生成{date}的AI分析', 'progress': 10}
+)
+
+# 更新进度：正在调用AI服务
+self.update_state(
+    state='PROGRESS',
+    meta={'message': f'正在调用{provider} AI服务生成分析', 'progress': 50}
+)
+```
+
+#### 修复6：Celery结果持久化配置
+**文件**：`backend/app/celery_app.py` (Line 37-39)
+```python
+# 结果持久化配置
+result_backend=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/1",
+result_persistent=True,  # 持久化任务结果
+```
+
+**修复效果**：
+- ✅ 任务正确出现在"异步任务管理"列表中
+- ✅ 任务类型显示为"AI分析"（蓝色标签）
+- ✅ 显示名称友好：`AI分析生成（2026-03-13 - DeepSeek）`
+- ✅ 实时进度追踪：STARTED → PROGRESS → SUCCESS
+- ✅ 任务完成后全局toast通知
+- ✅ 完整的异步任务体验
+
+**验证步骤**：
+```bash
+# 1. 提交AI分析任务
+# 访问：http://localhost:3000/sentiment/ai-analysis
+# 选择日期和AI提供商，点击"生成分析"
+
+# 2. 检查异步任务管理
+# 访问：http://localhost:3000/tasks
+# 应该看到任务，类型为"ai_analysis"，蓝色标签
+
+# 3. 验证任务结果
+docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c \
+  "SELECT trade_date, ai_provider, tokens_used, status FROM market_sentiment_ai_analysis ORDER BY created_at DESC LIMIT 3;"
+```
+
+**涉及文件**：
+- `backend/app/api/endpoints/sentiment.py`
+- `backend/app/tasks/sentiment_ai_analysis_task.py`
+- `backend/app/celery_app.py`
+- `admin/app/(dashboard)/sentiment/ai-analysis/page.tsx`
+
+---
+
+**更新时间**：2026-03-14
+**适用版本**：v2.1+

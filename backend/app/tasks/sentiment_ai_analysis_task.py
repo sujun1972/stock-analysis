@@ -54,11 +54,23 @@ def daily_sentiment_ai_analysis_task(self, date: str = None, provider: str = "de
 
         logger.info(f"开始执行18:00情绪AI分析任务: {date}, AI提供商: {provider}")
 
+        # 更新任务状态为STARTED
+        self.update_state(
+            state='STARTED',
+            meta={'message': f'开始生成{date}的AI分析', 'progress': 10}
+        )
+
         # 创建事件循环并运行异步任务
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
+            # 更新进度：正在调用AI服务
+            self.update_state(
+                state='PROGRESS',
+                meta={'message': f'正在调用{provider} AI服务生成分析', 'progress': 50}
+            )
+
             result = loop.run_until_complete(
                 sentiment_ai_analysis_service.generate_ai_analysis(
                     trade_date=date,
