@@ -90,6 +90,13 @@ export default function InitializePage() {
   // ========== 股票列表同步逻辑 ==========
   useEffect(() => {
     loadStockListStatus()
+
+    // 定期刷新股票列表状态（每3秒）
+    const interval = setInterval(() => {
+      loadStockListStatus()
+    }, 3000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const loadStockListStatus = async () => {
@@ -125,6 +132,9 @@ export default function InitializePage() {
         })
 
         setStockListSuccess('同步任务已启动，请在右上角任务图标查看进度')
+
+        // 立即刷新状态以显示"同步中"
+        await loadStockListStatus()
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
@@ -139,6 +149,13 @@ export default function InitializePage() {
   // ========== 日线数据同步逻辑 ==========
   useEffect(() => {
     loadDailySyncStatus()
+
+    // 定期刷新日线同步状态（每3秒）
+    const interval = setInterval(() => {
+      loadDailySyncStatus()
+    }, 3000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const loadDailySyncStatus = async () => {

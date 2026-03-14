@@ -73,7 +73,7 @@ class TushareAPIClient:
 
         try:
             tushare.set_token(self.token)
-            self.pro = tushare.pro_api(self.token)
+            self.pro = tushare.pro_api()  # 不传参数，使用set_token设置的全局token
             logger.info("Tushare API 客户端初始化成功")
         except Exception as e:
             logger.error(f"Tushare API 初始化失败: {e}")

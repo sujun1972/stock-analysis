@@ -89,7 +89,8 @@ def sync_stock_list_task(self: Task):
         }
 
     except Exception as e:
-        logger.error(f"[Celery] 股票列表同步失败: {str(e)}", exc_info=True)
+        # 使用 repr() 避免异常信息中的花括号与 f-string 格式化冲突
+        logger.error(f"[Celery] 股票列表同步失败: {repr(e)}", exc_info=True)
         raise
 
 
@@ -240,7 +241,7 @@ def sync_daily_batch_task(self: Task, start_date: str = None, end_date: str = No
         }
 
     except Exception as e:
-        logger.error(f"[Celery] 日线数据批量同步失败: {str(e)}", exc_info=True)
+        logger.error(f"[Celery] 日线数据批量同步失败: {repr(e)}", exc_info=True)
         raise
 
 
@@ -291,7 +292,7 @@ def sync_new_stocks_task(self: Task, days: int = 30):
         }
 
     except Exception as e:
-        logger.error(f"[Celery] 新股列表同步失败: {str(e)}", exc_info=True)
+        logger.error(f"[Celery] 新股列表同步失败: {repr(e)}", exc_info=True)
         raise
 
 
@@ -338,7 +339,7 @@ def sync_delisted_stocks_task(self: Task):
         }
 
     except Exception as e:
-        logger.error(f"[Celery] 退市股票列表同步失败: {str(e)}", exc_info=True)
+        logger.error(f"[Celery] 退市股票列表同步失败: {repr(e)}", exc_info=True)
         raise
 
 
@@ -400,5 +401,5 @@ def sync_concept_task(self: Task, source: Optional[str] = None):
         }
 
     except Exception as e:
-        logger.error(f"[Celery] 概念数据同步失败: {str(e)}", exc_info=True)
+        logger.error(f"[Celery] 概念数据同步失败: {repr(e)}", exc_info=True)
         raise
