@@ -1,6 +1,17 @@
 """
-配置管理服务（重构版）
-使用 Facade 模式委托给专门的服务类
+配置管理服务（重构版 - Facade 模式）
+委托给专门的服务类，保持向后兼容
+
+重构说明：
+- 使用 Facade 模式委托给专门的服务
+- SystemConfigService: 通用系统配置
+- DataSourceConfigService: 数据源配置（原 DataSourceManager）
+- SyncStatusManager: 同步状态管理（保持不变）
+- 保持与原 ConfigService 的接口完全兼容
+
+注意：
+- 此类标记为 @deprecated，推荐直接使用具体的服务类
+- 但为了向后兼容，所有原有接口保持不变
 """
 
 import asyncio
@@ -10,33 +21,41 @@ from loguru import logger
 from src.database.db_manager import DatabaseManager
 
 from app.core.exceptions import ConfigError, DatabaseError
-from app.repositories.config_repository import ConfigRepository
-from app.services.data_source_manager import DataSourceManager
+from app.services.data_source_config_service import DataSourceConfigService
 from app.services.sync_status_manager import SyncStatusManager
+from app.services.system_config_service import SystemConfigService
 
 
 class ConfigService:
     """
-    配置管理服务（Facade模式）
+    配置管理服务（Facade 模式 - 向后兼容）
 
-    将配置管理、数据源管理和同步状态管理功能委托给专门的服务类，
-    提供统一的接口供API层调用。
+    @deprecated 推荐直接使用具体的服务类：
+    - SystemConfigService: 系统配置
+    - DataSourceConfigService: 数据源配置
+    - SyncStatusManager: 同步状态
+
+    此类保留用于向后兼容，将调用委托给专门的服务。
     """
 
     def __init__(self, db: Optional[DatabaseManager] = None):
-        """初始化服务
+        """
+        初始化服务（Facade 模式）
 
         Args:
             db: DatabaseManager 实例（可选，用于依赖注入）
         """
         # 委托给专门的服务
-        self.config_repo = ConfigRepository(db)
-        self.data_source_manager = DataSourceManager(db)
+        self.system_config = SystemConfigService(db)
+        self.data_source_config = DataSourceConfigService(db)
         self.sync_status_manager = SyncStatusManager(db)
 
-        logger.info("✓ ConfigService initialized")
+        # 保留旧的引用名（向后兼容）
+        self.data_source_manager = self.data_source_config
 
-    # ==================== 通用配置接口 ====================
+        logger.info("✓ ConfigService initialized (Facade mode)")
+
+    # ==================== 通用配置接口（委托给 SystemConfigService）====================
 
     async def get_config(self, key: str) -> Optional[str]:
         """
@@ -48,16 +67,7 @@ class ConfigService:
         Returns:
             Optional[str]: 配置值，不存在则返回 None
         """
-        try:
-            return await asyncio.to_thread(self.config_repo.get_config_value, key)
-        except DatabaseError:
-            # 数据库错误向上传播
-            raise
-        except Exception as e:
-            logger.error(f"获取配置失败 ({key}): {e}")
-            raise ConfigError(
-                f"配置获取失败: {key}", error_code="CONFIG_FETCH_FAILED", key=key, reason=str(e)
-            )
+        return await self.system_config.get_config(key)
 
     async def get_all_configs(self) -> Dict[str, str]:
         """
@@ -66,16 +76,7 @@ class ConfigService:
         Returns:
             Dict[str, str]: 配置字典
         """
-        try:
-            return await asyncio.to_thread(self.config_repo.get_all_configs)
-        except DatabaseError:
-            # 数据库错误向上传播
-            raise
-        except Exception as e:
-            logger.error(f"获取所有配置失败: {e}")
-            raise ConfigError(
-                "所有配置获取失败", error_code="ALL_CONFIG_FETCH_FAILED", reason=str(e)
-            )
+        return await self.system_config.get_all_configs()
 
     async def set_config(self, key: str, value: str) -> bool:
         """
@@ -88,32 +89,21 @@ class ConfigService:
         Returns:
             bool: 是否成功
         """
-        try:
-            rows = await asyncio.to_thread(self.config_repo.set_config_value, key, value)
-            return rows > 0
-        except DatabaseError:
-            # 数据库错误向上传播
-            raise
-        except Exception as e:
-            logger.error(f"设置配置失败 ({key}): {e}")
-            raise ConfigError(
-                f"配置设置失败: {key}",
-                error_code="CONFIG_SET_FAILED",
-                key=key,
-                value=value,
-                reason=str(e),
-            )
+        return await self.system_config.set_config(key, value)
 
-    # ==================== 数据源配置接口 ====================
+    # ==================== 数据源配置接口（委托给 DataSourceConfigService）====================
 
-    async def get_data_source_config(self) -> Dict:
+    async def get_data_source_config(self, mask_token: bool = True) -> Dict:
         """
         获取数据源配置
+
+        Args:
+            mask_token: 是否对 Token 进行脱敏处理（默认 True）
 
         Returns:
             Dict: 包含 data_source、minute_data_source、realtime_data_source 和 tushare_token
         """
-        return await self.data_source_manager.get_data_source_config()
+        return await self.data_source_config.get_data_source_config(mask_token=mask_token)
 
     async def update_data_source(
         self,
@@ -123,6 +113,7 @@ class ConfigService:
         limit_up_data_source: Optional[str] = None,
         top_list_data_source: Optional[str] = None,
         premarket_data_source: Optional[str] = None,
+        concept_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
     ) -> Dict:
         """
@@ -130,27 +121,29 @@ class ConfigService:
 
         Args:
             data_source: 主数据源 ('akshare' 或 'tushare')
-            minute_data_source: 分时数据源
-            realtime_data_source: 实时数据源
-            limit_up_data_source: 涨停板池数据源
-            top_list_data_source: 龙虎榜数据源
-            premarket_data_source: 盘前数据源
+            minute_data_source: 分时数据源（可选）
+            realtime_data_source: 实时数据源（可选）
+            limit_up_data_source: 涨停板池数据源（可选）
+            top_list_data_source: 龙虎榜数据源（可选）
+            premarket_data_source: 盘前数据源（可选）
+            concept_data_source: 概念数据源（可选）
             tushare_token: Tushare Token (可选)
 
         Returns:
             Dict: 更新后的配置
         """
-        return await self.data_source_manager.update_data_source(
+        return await self.data_source_config.update_data_source(
             data_source=data_source,
             minute_data_source=minute_data_source,
             realtime_data_source=realtime_data_source,
             limit_up_data_source=limit_up_data_source,
             top_list_data_source=top_list_data_source,
             premarket_data_source=premarket_data_source,
+            concept_data_source=concept_data_source,
             tushare_token=tushare_token,
         )
 
-    # ==================== 同步状态接口 ====================
+    # ==================== 同步状态接口（委托给 SyncStatusManager）====================
 
     async def get_sync_status(self) -> Dict:
         """
