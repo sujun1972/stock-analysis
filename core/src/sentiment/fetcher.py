@@ -99,8 +99,8 @@ class SentimentDataFetcher:
                 trade_date = row['trade_date'].strftime('%Y-%m-%d')
 
                 cursor.execute("""
-                    INSERT INTO trading_calendar (trade_date, is_trading_day, exchange, day_type)
-                    VALUES (%s, true, 'SSE', '工作日')
+                    INSERT INTO trading_calendar (trade_date, is_trading_day, market, reason)
+                    VALUES (%s, true, 'A股', '交易日')
                     ON CONFLICT (trade_date) DO NOTHING
                 """, (trade_date,))
 

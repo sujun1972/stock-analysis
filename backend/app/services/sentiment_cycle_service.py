@@ -485,3 +485,75 @@ class SentimentCycleService:
         except Exception as e:
             logger.error(f"获取最新交易日失败: {e}")
             return datetime.now().strftime('%Y-%m-%d')
+
+    def is_trading_day(self, date: str) -> bool:
+        """
+        检查指定日期是否为交易日
+
+        Args:
+            date: 日期 (YYYY-MM-DD)
+
+        Returns:
+            bool: 是否为交易日
+        """
+        try:
+            conn = self.pool_manager.get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT is_trading_day
+                FROM trading_calendar
+                WHERE trade_date = %s
+            """, (date,))
+
+            row = cursor.fetchone()
+            cursor.close()
+            self.pool_manager.release_connection(conn)
+
+            return row[0] if row else False
+
+        except Exception as e:
+            logger.error(f"检查交易日失败: {e}")
+            return False
+
+    def get_nearest_trading_date(self, date: str, direction: str = 'before') -> Optional[str]:
+        """
+        获取距离指定日期最近的交易日
+
+        Args:
+            date: 日期 (YYYY-MM-DD)
+            direction: 方向 ('before': 之前最近的交易日, 'after': 之后最近的交易日)
+
+        Returns:
+            str: 最近的交易日，如果没有则返回 None
+        """
+        try:
+            conn = self.pool_manager.get_connection()
+            cursor = conn.cursor()
+
+            if direction == 'before':
+                cursor.execute("""
+                    SELECT trade_date
+                    FROM trading_calendar
+                    WHERE is_trading_day = true AND trade_date <= %s
+                    ORDER BY trade_date DESC
+                    LIMIT 1
+                """, (date,))
+            else:  # after
+                cursor.execute("""
+                    SELECT trade_date
+                    FROM trading_calendar
+                    WHERE is_trading_day = true AND trade_date >= %s
+                    ORDER BY trade_date ASC
+                    LIMIT 1
+                """, (date,))
+
+            row = cursor.fetchone()
+            cursor.close()
+            self.pool_manager.release_connection(conn)
+
+            return row[0].strftime('%Y-%m-%d') if row else None
+
+        except Exception as e:
+            logger.error(f"获取最近交易日失败: {e}")
+            return None

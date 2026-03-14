@@ -766,14 +766,37 @@ async def calculate_cycle(
         raise HTTPException(status_code=503, detail="情绪周期服务不可用")
 
     try:
+        # 检查是否为交易日，如果不是，自动转换为最近的交易日
+        original_date = date
+        is_trading = cycle_service.is_trading_day(date)
+
+        if not is_trading:
+            # 获取之前最近的交易日
+            nearest_date = cycle_service.get_nearest_trading_date(date, direction='before')
+
+            if not nearest_date:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{date} 非交易日，且无法找到之前的交易日"
+                )
+
+            logger.info(f"{date} 非交易日，自动使用最近交易日 {nearest_date}")
+            date = nearest_date
+
+        # 执行计算
         cycle_service.sync_cycle_calculation(date)
 
         # 返回计算结果
         cycle = cycle_service.get_cycle_stage(date)
 
+        # 如果日期被调整，在消息中说明
+        message = "计算成功"
+        if original_date != date:
+            message = f"{original_date} 非交易日，已计算最近交易日 {date} 的数据"
+
         return {
             "code": 200,
-            "message": "计算成功",
+            "message": message,
             "data": cycle
         }
 

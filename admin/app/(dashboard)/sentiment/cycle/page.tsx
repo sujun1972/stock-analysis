@@ -19,6 +19,7 @@ export default function SentimentCyclePage() {
   const [loading, setLoading] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [currentCycle, setCurrentCycle] = useState<SentimentCycle | null>(null)
   const [institutionTop, setInstitutionTop] = useState<InstitutionTopStock[]>([])
   const [hotMoneyTop, setHotMoneyTop] = useState<HotMoneyLimitUpStock[]>([])
@@ -83,6 +84,8 @@ export default function SentimentCyclePage() {
   // 计算情绪周期
   const calculateCycle = async () => {
     setCalculating(true)
+    setError(null)
+    setInfoMessage(null)
     try {
       const today = new Date().toISOString().split('T')[0]
       const res = await fetch(`${API_BASE}/api/sentiment/cycle/calculate?date=${today}`, {
@@ -91,7 +94,15 @@ export default function SentimentCyclePage() {
       const data = await res.json()
 
       if (data.code === 200) {
-        setError(null)
+        // 显示成功消息（如果日期被自动调整，会包含说明）
+        if (data.message && data.message !== '计算成功') {
+          // 使用信息提示显示调整信息
+          setInfoMessage(data.message)
+          setTimeout(() => setInfoMessage(null), 6000)
+        } else {
+          setInfoMessage('计算成功')
+          setTimeout(() => setInfoMessage(null), 3000)
+        }
         // 计算成功后刷新数据
         await refreshAll()
       } else {
@@ -169,6 +180,18 @@ export default function SentimentCyclePage() {
           </Button>
         </div>
       </div>
+
+      {/* 信息提示 */}
+      {infoMessage && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="py-4">
+            <div className="flex items-center space-x-2 text-blue-800">
+              <AlertCircle className="h-5 w-5" />
+              <span>{infoMessage}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 错误提示 */}
       {error && (

@@ -47,8 +47,12 @@ curl http://localhost:8000/api/sentiment/cycle/current
 # 计算指定日期的情绪周期
 curl -X POST "http://localhost:8000/api/sentiment/cycle/calculate?date=2026-03-10"
 
+# 自动处理非交易日（系统会自动转换为最近交易日）
+curl -X POST "http://localhost:8000/api/sentiment/cycle/calculate?date=2026-03-14"
+# 响应: "2026-03-14 非交易日，已计算最近交易日 2026-03-13 的数据"
+
 # 通过Admin页面计算
-点击"计算周期"按钮
+点击"计算周期"按钮（自动处理非交易日）
 ```
 
 ### 场景3: 查询游资动向
@@ -67,7 +71,27 @@ curl "http://localhost:8000/api/sentiment/hot-money/activity-ranking?days=30&lim
 
 ### 第一步：检查数据准备
 
-验证是否有市场情绪基础数据：
+#### 1.1 验证交易日历数据
+
+交易日历是情绪周期分析的基础，用于自动识别交易日和非交易日：
+
+```bash
+docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c "
+SELECT COUNT(*) as total_days,
+       MIN(trade_date) as earliest,
+       MAX(trade_date) as latest
+FROM trading_calendar
+WHERE is_trading_day = true;
+"
+```
+
+**如果交易日历为空**，先同步交易日历：
+```bash
+# 同步2024-2026年交易日历
+curl -X POST "http://localhost:8000/api/sentiment/calendar/sync?years=2024&years=2025&years=2026"
+```
+
+#### 1.2 验证市场情绪基础数据
 
 ```bash
 docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c "
@@ -76,13 +100,13 @@ SELECT
     limit_up_count,
     limit_down_count,
     blast_rate
-FROM market_sentiment
+FROM market_sentiment_daily
 ORDER BY trade_date DESC
 LIMIT 5;
 "
 ```
 
-**如果没有数据**，先同步市场情绪数据：
+**如果没有数据**，同步市场情绪数据：
 ```bash
 curl -X POST http://localhost:8000/api/sentiment/sync
 ```
@@ -225,9 +249,10 @@ LIMIT 10;
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/api/sentiment/cycle/current` | GET | 获取当前情绪周期 |
+| `/api/sentiment/cycle/current` | GET | 获取当前情绪周期（自动返回最近交易日） |
 | `/api/sentiment/cycle/trend?days=30` | GET | 获取趋势数据 |
-| `/api/sentiment/cycle/calculate?date=YYYY-MM-DD` | POST | 计算情绪周期 |
+| `/api/sentiment/cycle/calculate?date=YYYY-MM-DD` | POST | 计算情绪周期（自动处理非交易日） |
+| `/api/sentiment/calendar/sync?years=2024&years=2025` | POST | 同步交易日历 |
 | `/api/sentiment/hot-money/institution-top` | GET | 机构排行 |
 | `/api/sentiment/hot-money/top-tier-limit-up` | GET | 游资打板排行 |
 | `/api/sentiment/hot-money/activity-ranking` | GET | 游资活跃度排行 |
@@ -248,9 +273,14 @@ LIMIT 10;
 ## 数据库表结构
 
 ### 主要表
-1. **market_sentiment_cycle** - 情绪周期记录
-2. **hot_money_seats** - 游资席位字典
-3. **hot_money_operations** - 游资操作记录
+1. **trading_calendar** - 交易日历（核心依赖表）
+   - `trade_date`: 交易日期
+   - `is_trading_day`: 是否交易日
+   - `market`: 市场（A股）
+   - `reason`: 说明
+2. **market_sentiment_cycle** - 情绪周期记录
+3. **hot_money_seats** - 游资席位字典
+4. **hot_money_operations** - 游资操作记录
 
 ### 视图
 - **daily_sentiment_cycle_summary** - 每日摘要
@@ -265,7 +295,19 @@ LIMIT 10;
 1. 确保有市场情绪基础数据
 2. 点击"计算周期"按钮或调用API
 
-### Q2: 计算失败
+### Q2: 提示"非交易日，且无法找到之前的交易日"
+**原因**: 交易日历表(`trading_calendar`)为空
+
+**解决**:
+```bash
+# 同步交易日历（2024-2026年）
+curl -X POST "http://localhost:8000/api/sentiment/calendar/sync?years=2024&years=2025&years=2026"
+
+# 验证同步成功
+docker-compose exec timescaledb psql -U stock_user -d stock_analysis -c "SELECT COUNT(*) FROM trading_calendar WHERE is_trading_day = true;"
+```
+
+### Q3: 计算失败
 **原因**: 缺少涨停板池或龙虎榜数据
 
 **解决**:
@@ -277,7 +319,7 @@ curl -X POST http://localhost:8000/api/sentiment/sync
 curl -X POST "http://localhost:8000/api/sentiment/cycle/calculate?date=$(date +%Y-%m-%d)"
 ```
 
-### Q3: 游资数据为空
+### Q4: 游资数据为空
 **原因**: 龙虎榜数据未分类
 
 **解决**: 系统会自动根据游资字典进行分类，确保龙虎榜数据已同步
