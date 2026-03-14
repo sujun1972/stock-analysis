@@ -90,14 +90,17 @@ export default function InitializePage() {
   // ========== 股票列表同步逻辑 ==========
   useEffect(() => {
     loadStockListStatus()
-
-    // 定期刷新股票列表状态（每3秒）
-    const interval = setInterval(() => {
-      loadStockListStatus()
-    }, 3000)
-
-    return () => clearInterval(interval)
   }, [])
+
+  // 智能轮询：仅在任务进行中时轮询
+  useEffect(() => {
+    if (stockListStatus?.status === 'running') {
+      const interval = setInterval(() => {
+        loadStockListStatus()
+      }, 3000)
+      return () => clearInterval(interval)
+    }
+  }, [stockListStatus?.status])
 
   const loadStockListStatus = async () => {
     try {
@@ -149,14 +152,17 @@ export default function InitializePage() {
   // ========== 日线数据同步逻辑 ==========
   useEffect(() => {
     loadDailySyncStatus()
-
-    // 定期刷新日线同步状态（每3秒）
-    const interval = setInterval(() => {
-      loadDailySyncStatus()
-    }, 3000)
-
-    return () => clearInterval(interval)
   }, [])
+
+  // 智能轮询：仅在任务进行中时轮询
+  useEffect(() => {
+    if (dailySyncStatus?.status === 'running') {
+      const interval = setInterval(() => {
+        loadDailySyncStatus()
+      }, 3000)
+      return () => clearInterval(interval)
+    }
+  }, [dailySyncStatus?.status])
 
   const loadDailySyncStatus = async () => {
     try {
