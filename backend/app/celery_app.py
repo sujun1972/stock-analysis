@@ -125,4 +125,20 @@ celery_app.conf.beat_schedule = {
             'expires': 7200,  # 2小时后过期
         }
     },
+
+    # 每日凌晨2:00（北京时间）同步概念数据
+    'daily-concept-sync-2-00': {
+        'task': 'sync.concept',
+        'schedule': crontab(
+            hour=18,      # UTC 18点 = 北京时间 2点（次日）
+            minute=0,
+            day_of_week='1-5'  # 周一到周五
+        ),
+        'kwargs': {
+            'source': None  # 使用系统配置的数据源
+        },
+        'options': {
+            'expires': 3600,  # 1小时后过期
+        }
+    },
 }

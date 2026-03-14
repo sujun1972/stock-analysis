@@ -6,10 +6,12 @@
 - 批量日线数据同步
 - 新股列表同步
 - 退市股票同步
+- 概念数据同步
 """
 
 import asyncio
 from datetime import datetime
+from typing import Optional
 from celery import Task
 from loguru import logger
 
@@ -337,4 +339,66 @@ def sync_delisted_stocks_task(self: Task):
 
     except Exception as e:
         logger.error(f"[Celery] 退市股票列表同步失败: {str(e)}", exc_info=True)
+        raise
+
+
+@celery_app.task(
+    base=SyncTask,
+    name="sync.concept",
+    bind=True
+)
+def sync_concept_task(self: Task, source: Optional[str] = None):
+    """
+    异步同步概念数据
+
+    Args:
+        source: 数据源（None=使用配置，em=东方财富，tushare=Tushare）
+
+    Returns:
+        {
+            "status": "success|locked",
+            "concepts_count": 概念数量,
+            "relationships_count": 股票关系数量,
+            "data_source": 数据源
+        }
+    """
+    try:
+        logger.info("========== [Celery] 开始执行概念数据同步任务 ==========")
+
+        # 使用分布式锁防止并发执行
+        lock_key = "sync:concept"
+
+        with redis_lock.acquire(lock_key, timeout=1800, blocking=False) if redis_lock else _DummyContext() as acquired:
+            if not acquired and redis_lock:
+                logger.warning("⚠️  概念数据同步任务已在执行中，跳过本次执行")
+                return {
+                    "status": "locked",
+                    "message": "已有同步任务正在进行"
+                }
+
+            # 创建服务实例
+            from app.services.concept_sync_service import ConceptSyncService
+            service = ConceptSyncService()
+
+            # 运行异步任务
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    service.sync_concepts(source=source, task_id=self.request.id)
+                )
+            finally:
+                loop.close()
+
+        logger.info(f"[Celery] 概念数据同步完成: {result}")
+
+        return {
+            "status": "success",
+            "concepts_count": result.get("concepts_count", 0),
+            "relationships_count": result.get("relationships_count", 0),
+            "data_source": result.get("data_source", "")
+        }
+
+    except Exception as e:
+        logger.error(f"[Celery] 概念数据同步失败: {str(e)}", exc_info=True)
         raise

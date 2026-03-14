@@ -4,7 +4,7 @@
 提供概念管理、查询和更新功能
 """
 
-from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Query, HTTPException
 from typing import List, Optional
 import sys
 from pathlib import Path
@@ -266,51 +266,91 @@ async def get_stock_concepts(stock_code: str):
 
 @router.post("/sync")
 async def sync_concepts(
-    background_tasks: BackgroundTasks,
     source: Optional[str] = Query(
         None,
-        description="数据源（可选）：None=使用系统配置，em=东方财富（推荐），ths=同花顺（成分股API已失效），tushare=Tushare Pro（需5000积分）"
+        description="数据源（可选）：None=使用系统配置，em=东方财富（推荐），tushare=Tushare Pro（需5000积分）"
     )
 ):
     """
-    同步概念数据（后台任务）
+    同步概念数据（异步任务）
 
     Args:
         source: 数据源（可选）
-               - None: 使用系统配置的主数据源（推荐）
+               - None: 使用系统配置的概念数据源（推荐）
                - 'em': 强制使用AkShare东方财富（466个概念，完整成分股，免费）
-               - 'ths': 强制使用AkShare同花顺（375个概念，成分股API已失效）
                - 'tushare': 强制使用Tushare Pro（需5000积分，数据稳定）
 
     Returns:
-        任务提交成功信息
+        任务ID和状态
     """
     try:
-        def sync_task():
-            fetcher = ConceptFetcher(pool_manager)
-            # source=None 时，ConceptFetcher 会自动使用配置的数据源
-            result = fetcher.fetch_and_save_concepts(source=source)
-            if result.is_success():
-                print(f"✅ 概念数据同步完成: {result.message}")
-            else:
-                print(f"❌ 概念数据同步失败: {result.error}")
+        # 导入 Celery 任务
+        from app.tasks.sync_tasks import sync_concept_task
 
-        # 添加后台任务
-        background_tasks.add_task(sync_task)
+        # 提交异步任务
+        task = sync_concept_task.apply_async(kwargs={'source': source})
 
-        source_display = source or "系统配置的数据源"
+        source_display = source or "系统配置的概念数据源"
 
         return {
             "code": 200,
-            "message": "概念数据同步任务已提交，正在后台执行",
+            "message": "概念数据同步任务已提交",
             "data": {
+                "task_id": task.id,
                 "source": source_display,
-                "status": "processing"
+                "status": "pending"
             }
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"提交同步任务失败: {str(e)}")
+
+
+@router.get("/sync/status/{task_id}")
+async def get_sync_status(task_id: str):
+    """
+    查询概念同步任务状态
+
+    Args:
+        task_id: 任务ID
+
+    Returns:
+        任务状态和进度
+    """
+    try:
+        from celery.result import AsyncResult
+        from app.celery_app import celery_app
+
+        task_result = AsyncResult(task_id, app=celery_app)
+
+        response = {
+            "task_id": task_id,
+            "state": task_result.state,
+            "status": task_result.state
+        }
+
+        if task_result.state == 'PENDING':
+            response["message"] = "任务等待中..."
+        elif task_result.state == 'STARTED':
+            response["message"] = "任务执行中..."
+        elif task_result.state == 'PROGRESS':
+            response["message"] = "任务进行中..."
+            response["progress"] = task_result.info.get('progress', 0) if task_result.info else 0
+        elif task_result.state == 'SUCCESS':
+            response["message"] = "任务完成"
+            response["result"] = task_result.result
+        elif task_result.state == 'FAILURE':
+            response["message"] = "任务失败"
+            response["error"] = str(task_result.info)
+
+        return {
+            "code": 200,
+            "message": "查询成功",
+            "data": response
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询任务状态失败: {str(e)}")
 
 
 @router.put("/stock/{stock_code}/concepts")

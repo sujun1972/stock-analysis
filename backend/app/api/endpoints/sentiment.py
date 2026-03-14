@@ -1004,6 +1004,7 @@ def _get_task_display_name(task_id: str, task_name: str) -> str:
         "sync.daily_batch": "日线数据批量同步",
         "sync.new_stocks": "新股列表同步",
         "sync.delisted_stocks": "退市股票同步",
+        "sync.concept": "概念数据同步",
         "sentiment.daily_sync_17_30": "情绪数据定时同步",
         "sentiment.manual_sync": "情绪数据手动同步",
         "backtest.run_strategy": "策略回测",

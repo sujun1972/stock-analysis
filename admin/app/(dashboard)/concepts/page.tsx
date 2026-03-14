@@ -15,7 +15,7 @@
  */
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,6 +41,7 @@ import { Plus, Search, RefreshCw, Edit, Trash2, ChevronLeft, ChevronRight } from
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import type { Concept } from '@/types/stock'
+import { useTaskStore } from '@/stores/task-store'
 
 export default function ConceptsPage() {
   const [concepts, setConcepts] = useState<Concept[]>([])
@@ -50,6 +51,10 @@ export default function ConceptsPage() {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const pageSize = 50
+
+  // 获取任务 store
+  const tasks = useTaskStore((state) => state.tasks)
+  const currentSyncTaskRef = useRef<string | null>(null)
 
   // 对话框状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -85,6 +90,33 @@ export default function ConceptsPage() {
     loadConcepts()
   }, [page, search])
 
+  // 检查是否有正在进行的概念同步任务
+  const hasSyncingTask = Array.from(tasks.values()).some(
+    (task) =>
+      task.taskName === 'sync.concept' &&
+      (task.status === 'pending' || task.status === 'running' || task.status === 'progress')
+  )
+
+  // 监听任务完成，自动刷新列表
+  useEffect(() => {
+    // 如果有当前同步任务ID
+    if (currentSyncTaskRef.current) {
+      const task = tasks.get(currentSyncTaskRef.current)
+
+      // 任务完成（成功或失败）
+      if (task && (task.status === 'success' || task.status === 'failure')) {
+        if (task.status === 'success') {
+          toast.success('概念数据同步完成，正在刷新列表...')
+          loadConcepts()
+        } else if (task.status === 'failure') {
+          toast.error('概念数据同步失败: ' + (task.error || '未知错误'))
+        }
+        // 清除任务ID引用
+        currentSyncTaskRef.current = null
+      }
+    }
+  }, [tasks])
+
   // 搜索时重置到第一页
   const handleSearch = (value: string) => {
     setSearch(value)
@@ -93,16 +125,20 @@ export default function ConceptsPage() {
 
   // 同步概念数据（使用系统配置的数据源）
   const handleSync = async () => {
-    setLoading(true)
     try {
       // 不传source参数，让后端使用系统配置的数据源
-      await apiClient.syncConcepts()
-      toast.success('概念数据同步任务已提交，将使用系统配置的数据源')
-      setTimeout(() => loadConcepts(), 2000)
+      const response = await apiClient.syncConcepts()
+
+      // 保存任务ID，用于后续监听（后端返回格式：response.data.task_id）
+      const taskId = response?.data?.task_id || response?.task_id
+      if (taskId) {
+        currentSyncTaskRef.current = taskId
+        toast.success('概念数据同步任务已提交，请在任务面板查看进度')
+      } else {
+        toast.success('概念数据同步任务已提交')
+      }
     } catch (error: any) {
       toast.error('同步失败: ' + (error.message || '未知错误'))
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -194,10 +230,19 @@ export default function ConceptsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={handleSync} variant="outline" disabled={loading} className="flex-1 sm:flex-none">
-                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">同步概念数据</span>
-                <span className="sm:hidden">同步</span>
+              <Button
+                onClick={handleSync}
+                variant="outline"
+                disabled={hasSyncingTask}
+                className="flex-1 sm:flex-none"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${hasSyncingTask ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">
+                  {hasSyncingTask ? '同步中...' : '同步概念数据'}
+                </span>
+                <span className="sm:hidden">
+                  {hasSyncingTask ? '同步中' : '同步'}
+                </span>
               </Button>
               <Button onClick={() => setIsCreateDialogOpen(true)} className="flex-1 sm:flex-none">
                 <Plus className="mr-2 h-4 w-4" />
