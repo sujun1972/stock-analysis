@@ -6,17 +6,14 @@
 
 import asyncio
 from typing import Dict, Optional
+
 from loguru import logger
 
-from app.services.config_service import ConfigService
-from app.utils.retry import retry_async
+from app.services.base_sync_service import BaseSyncService
 
 
-class ConceptSyncService:
+class ConceptSyncService(BaseSyncService):
     """概念同步服务（支持任务追踪和重试）"""
-
-    def __init__(self):
-        self.config_service = ConfigService()
 
     async def sync_concepts(
         self,
@@ -41,14 +38,14 @@ class ConceptSyncService:
 
         try:
             # 1. 获取数据源配置
-            config = await self.config_service.get_data_source_config()
+            config = await self.get_config()
             actual_source = source or config.get("concept_data_source", config["data_source"])
 
-            logger.info(f"开始同步概念数据（数据源：{actual_source}）")
+            self.log_info(f"开始同步概念数据（数据源：{actual_source}）")
 
             # 2. 创建同步任务记录
             if task_id:
-                await self.config_service.create_sync_task(
+                await self.create_task(
                     task_id=task_id,
                     module=module,
                     data_source=actual_source
@@ -81,27 +78,17 @@ class ConceptSyncService:
                 max_conn=10
             )
 
-            # 5. 定义重试回调
-            async def on_retry_callback(retry_count, max_retries, error):
-                if task_id:
-                    await self.config_service.update_sync_task(
-                        task_id=task_id,
-                        error_message=f"重试 {retry_count}/{max_retries}: {error}",
-                        progress=int((retry_count / max_retries) * 50)
-                    )
-                logger.warning(f"概念同步重试 {retry_count}/{max_retries}: {error}")
-
-            # 6. 使用重试机制执行同步（最多3次重试）
+            # 5. 使用重试机制执行同步（最多3次重试）
             try:
                 fetcher = ConceptFetcher(pool_manager)
 
                 # 在线程中执行同步操作
-                response = await retry_async(
+                response = await self.retry_operation(
                     asyncio.to_thread,
                     fetcher.fetch_and_save_concepts,
                     source=actual_source,
-                    max_retries=3,
-                    on_retry=on_retry_callback
+                    task_id=task_id,
+                    max_retries=3
                 )
 
                 if not response.is_success():
@@ -109,13 +96,11 @@ class ConceptSyncService:
                     error_msg = getattr(response, 'error_detail', None) or getattr(response, 'error', '同步失败')
                     raise Exception(str(error_msg))
 
-                # 7. 更新任务状态为完成
+                # 6. 更新任务状态为完成
                 if task_id:
-                    await self.config_service.update_sync_task(
+                    await self.complete_task(
                         task_id=task_id,
-                        status="completed",
-                        total_count=response.data.get('concepts_count', 0),
-                        progress=100
+                        total=response.data.get('concepts_count', 0)
                     )
 
                 result = {
@@ -136,10 +121,6 @@ class ConceptSyncService:
 
             # 更新任务状态为失败
             if task_id:
-                await self.config_service.update_sync_task(
-                    task_id=task_id,
-                    status="failed",
-                    error_message=str(e)
-                )
+                await self.fail_task(task_id=task_id, error_message=str(e))
 
             raise

@@ -4,18 +4,16 @@
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from loguru import logger
-from src.providers import DataProviderFactory
 
 from app.core.exceptions import DatabaseError, ExternalAPIError
-from app.services.config_service import ConfigService
-from app.services.data_service import DataDownloadService
+from app.services.base_sync_service import BaseSyncService
 
 
-class RealtimeSyncService:
+class RealtimeSyncService(BaseSyncService):
     """
     实时行情同步服务
 
@@ -25,11 +23,6 @@ class RealtimeSyncService:
     - 渐进式更新
     - 增量保存
     """
-
-    def __init__(self):
-        """初始化实时行情同步服务"""
-        self.config_service = ConfigService()
-        self.data_service = DataDownloadService()
 
     async def sync_minute_data(self, code: str, period: str = "5", days: int = 5) -> Dict:
         """
@@ -44,48 +37,44 @@ class RealtimeSyncService:
             同步结果字典
         """
         # 获取数据源配置
-        config = await self.config_service.get_data_source_config()
+        config = await self.get_config()
 
         # 创建数据提供者（使用分时数据源配置）
-        provider = DataProviderFactory.create_provider(
-            source=config["minute_data_source"], token=config.get("tushare_token", "")
+        provider = self.create_data_provider(
+            source=config["minute_data_source"],
+            token=config.get("tushare_token", "")
         )
 
         # 计算日期范围
+        date_range = self.calculate_date_range(days=days)
         end_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d 09:30:00")
+        start_date = datetime.strptime(date_range["start"], "%Y%m%d").strftime("%Y-%m-%d 09:30:00")
 
-        logger.info(f"同步 {code} {period}分钟数据")
+        self.log_info(f"同步 {code} {period}分钟数据")
 
         # 获取分时数据
-        response = await asyncio.to_thread(
+        response = await self.run_in_thread(
             provider.get_minute_data,
             code=code,
             period=period,
             start_date=start_date,
-            end_date=end_date,
+            end_date=end_date
         )
 
         # 检查响应状态并提取数据
-        if not response.is_success():
-            raise ExternalAPIError(
-                response.error_message or f"{code}: 获取分时数据失败",
-                error_code=response.error_code or "API_ERROR",
-            )
-
-        df = response.data
+        df = self.check_and_extract_data(response, f"{code}: 获取分时数据")
 
         if df.empty:
             raise ValueError(f"{code}: 无分时数据")
 
         # TODO: 保存分时数据到数据库
-        # count = await asyncio.to_thread(
+        # count = await self.run_in_thread(
         #     self.data_service.db.save_minute_data,
         #     df,
         #     code
         # )
 
-        logger.info(f"✓ {code}: {len(df)} 条分时记录")
+        self.log_success(f"{code}: {len(df)} 条分时记录")
 
         return {"code": code, "period": period, "records": len(df)}
 
@@ -107,17 +96,18 @@ class RealtimeSyncService:
             更新结果字典
         """
         # 获取数据源配置
-        config = await self.config_service.get_data_source_config()
+        config = await self.get_config()
 
         # 实时行情使用专门的实时数据源配置（默认为 AkShare，因为 Tushare 有访问限制）
         realtime_source = config.get("realtime_data_source", "akshare")
 
         # 创建数据提供者
-        provider = DataProviderFactory.create_provider(
-            source=realtime_source, token=config.get("tushare_token", "")
+        provider = self.create_data_provider(
+            source=realtime_source,
+            token=config.get("tushare_token", "")
         )
 
-        logger.info("更新实时行情...")
+        self.log_info("更新实时行情...")
         logger.warning(f"使用实时数据源: {realtime_source}")
 
         # 确定要更新的股票代码
@@ -126,20 +116,21 @@ class RealtimeSyncService:
         # 如果启用了优先更新最旧数据的模式
         if update_oldest and not codes:
             batch_size_val = batch_size or 100
-            logger.info(f"渐进式更新模式：获取最早更新的 {batch_size_val} 只股票...")
+            self.log_info(f"渐进式更新模式：获取最早更新的 {batch_size_val} 只股票...")
 
-            codes_to_update = await asyncio.to_thread(
-                self.data_service.db.get_oldest_realtime_stocks, limit=batch_size_val
+            codes_to_update = await self.run_in_thread(
+                self.data_service.db.get_oldest_realtime_stocks,
+                limit=batch_size_val
             )
 
-            logger.info(f"将更新 {len(codes_to_update)} 只股票的实时行情")
+            self.log_info(f"将更新 {len(codes_to_update)} 只股票的实时行情")
 
         # 根据是否指定代码选择不同的超时时间
         if codes_to_update and len(codes_to_update) <= 500:
             # 小批量更新，动态计算超时时间
             # 每只股票约1.5秒（0.3秒请求 + 网络延迟），再加30秒缓冲
             timeout = len(codes_to_update) * 1.5 + 30
-            logger.info(
+            self.log_info(
                 f"批量更新 {len(codes_to_update)} 只股票"
                 f"（预计耗时约{len(codes_to_update) * 0.3 / 60:.1f}分钟）..."
             )
@@ -160,24 +151,23 @@ class RealtimeSyncService:
                 saved_count += 1
             except DatabaseError as e:
                 # 数据库错误记录但不中断
-                logger.warning(
-                    f"增量保存 {quote.get('code', 'Unknown')} 失败 (数据库错误): {e.message if hasattr(e, 'message') else str(e)}"
-                )
+                error_msg = e.message if hasattr(e, 'message') else str(e)
+                logger.warning(f"增量保存 {quote.get('code', 'Unknown')} 失败 (数据库错误): {error_msg}")
             except Exception as e:
                 # 其他错误记录但不中断（保证增量保存的容错性）
                 logger.warning(f"增量保存 {quote.get('code', 'Unknown')} 失败: {e}")
 
         # 获取实时行情（使用增量保存回调）
         try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    provider.get_realtime_quotes, codes=codes_to_update, save_callback=save_callback
-                ),
-                timeout=timeout,
+            response = await self.run_in_thread(
+                provider.get_realtime_quotes,
+                codes=codes_to_update,
+                save_callback=save_callback,
+                timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError as e:
             # 超时时，部分数据已经通过回调保存
-            error_msg = f"实时行情获取超时（{timeout:.0f}秒）"
+            error_msg = str(e)
 
             if realtime_source.lower() == "akshare":
                 if codes_to_update and len(codes_to_update) <= 500:
@@ -218,19 +208,13 @@ class RealtimeSyncService:
                 raise TimeoutError(error_msg)
 
         # 检查响应状态并提取数据
-        if not response.is_success():
-            raise ExternalAPIError(
-                response.error_message or "获取实时行情失败",
-                error_code=response.error_code or "API_ERROR",
-            )
-
-        df = response.data
+        df = self.check_and_extract_data(response, "获取实时行情")
 
         if df.empty:
             raise ValueError("无实时行情数据")
 
         # 数据已通过回调增量保存，这里只记录日志
-        logger.info(f"✓ 实时行情更新完成: {saved_count} 只股票（增量保存）")
+        self.log_success(f"实时行情更新完成: {saved_count} 只股票（增量保存）")
 
         return {
             "total": saved_count,

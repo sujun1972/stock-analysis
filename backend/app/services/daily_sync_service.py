@@ -4,18 +4,16 @@
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from loguru import logger
-from src.providers import DataProviderFactory
 
 from app.core.exceptions import DatabaseError, ExternalAPIError
-from app.services.config_service import ConfigService
-from app.services.data_service import DataDownloadService
+from app.services.base_sync_service import BaseSyncService
 
 
-class DailySyncService:
+class DailySyncService(BaseSyncService):
     """
     日线数据同步服务
 
@@ -26,11 +24,6 @@ class DailySyncService:
     - 进度追踪
     - 中止控制
     """
-
-    def __init__(self):
-        """初始化日线数据同步服务"""
-        self.config_service = ConfigService()
-        self.data_service = DataDownloadService()
 
     async def sync_single_stock(self, code: str, years: int = 5) -> Dict:
         """
@@ -44,50 +37,45 @@ class DailySyncService:
             同步结果字典
         """
         # 获取数据源配置
-        config = await self.config_service.get_data_source_config()
+        config = await self.get_config()
 
         # 创建数据提供者
-        provider = DataProviderFactory.create_provider(
-            source=config["data_source"], token=config.get("tushare_token", "")
+        provider = self.create_data_provider(
+            source=config["data_source"],
+            token=config.get("tushare_token", "")
         )
 
         # 计算日期范围
-        end_date = datetime.now().strftime("%Y%m%d")
-        start_date = (datetime.now() - timedelta(days=years * 365)).strftime("%Y%m%d")
+        date_range = self.calculate_date_range(years=years)
+        start_date = date_range["start"]
+        end_date = date_range["end"]
 
-        logger.info(f"同步 {code} 日线数据 ({start_date} - {end_date})")
+        self.log_info(f"同步 {code} 日线数据 ({start_date} - {end_date})")
 
         # 获取日线数据 (添加30秒超时)
-        try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    provider.get_daily_data,
-                    code=code,
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust="qfq",
-                ),
-                timeout=30.0,  # 30秒超时
-            )
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"{code}: 数据获取超时")
+        response = await self.run_in_thread(
+            provider.get_daily_data,
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
+            adjust="qfq",
+            timeout=30.0
+        )
 
         # 检查响应状态并提取数据
-        if not response.is_success():
-            raise ExternalAPIError(
-                response.error_message or f"{code}: 获取日线数据失败",
-                error_code=response.error_code or "API_ERROR",
-            )
-
-        df = response.data  # 从 Response 对象中提取 DataFrame
+        df = self.check_and_extract_data(response, f"{code}: 获取日线数据")
 
         if df.empty:
             raise ValueError(f"{code}: 无数据")
 
         # 保存到数据库
-        count = await asyncio.to_thread(self.data_service.db.save_daily_data, df, code)
+        count = await self.run_in_thread(
+            self.data_service.db.save_daily_data,
+            df,
+            code
+        )
 
-        logger.info(f"✓ {code}: {count} 条记录")
+        self.log_success(f"{code}: {count} 条记录")
 
         return {"code": code, "records": count}
 
@@ -111,22 +99,25 @@ class DailySyncService:
             同步结果统计
         """
         # 获取数据源配置
-        config = await self.config_service.get_data_source_config()
+        config = await self.get_config()
 
         # 创建数据提供者
-        provider = DataProviderFactory.create_provider(
-            source=config["data_source"], token=config.get("tushare_token", "")
+        provider = self.create_data_provider(
+            source=config["data_source"],
+            token=config.get("tushare_token", "")
         )
 
         # 获取要同步的股票代码（只获取正常状态和非停牌股票）
         if codes is None:
-            stock_list_df = await asyncio.to_thread(self.data_service.db.get_stock_list)
+            stock_list_df = await self.run_in_thread(
+                self.data_service.db.get_stock_list
+            )
             # 过滤：只同步状态为"正常"或空字符串的股票（排除退市、停牌等）
             normal_stocks = stock_list_df[
                 stock_list_df["status"].isin(["正常", ""]) | stock_list_df["status"].isna()
             ]
             codes = normal_stocks["code"].tolist()
-            logger.info(f"从 {len(stock_list_df)} 只股票中筛选出 {len(codes)} 只正常股票")
+            self.log_info(f"从 {len(stock_list_df)} 只股票中筛选出 {len(codes)} 只正常股票")
 
         total = len(codes)
         success_count = 0
@@ -134,28 +125,26 @@ class DailySyncService:
         skipped_count = 0
 
         # 清除之前的中止标志
-        await self.config_service.clear_sync_abort_flag()
+        await self.clear_abort_flag()
 
         # 更新同步状态
-        await self.config_service.update_sync_status(
-            status="running", progress=0, total=total, completed=0
+        await self.update_global_status(
+            status="running",
+            progress=0,
+            total=total,
+            completed=0
         )
 
         # 计算日期范围
-        if end_date:
-            end_date_formatted = end_date.replace("-", "")
-        else:
-            end_date_formatted = datetime.now().strftime("%Y%m%d")
+        date_range = self.calculate_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            years=years
+        )
+        start_date_formatted = date_range["start"]
+        end_date_formatted = date_range["end"]
 
-        if start_date:
-            start_date_formatted = start_date.replace("-", "")
-        else:
-            years_val = years if years else 5
-            start_date_formatted = (datetime.now() - timedelta(days=years_val * 365)).strftime(
-                "%Y%m%d"
-            )
-
-        logger.info(
+        self.log_info(
             f"开始批量同步 {total} 只股票的日线数据 ({start_date_formatted} 至 {end_date_formatted})"
         )
 
@@ -170,20 +159,20 @@ class DailySyncService:
         for idx, code in enumerate(codes, 1):
             try:
                 # 检查是否收到中止请求
-                if await self.config_service.check_sync_abort_flag():
-                    logger.warning(f"⚠️ 收到中止请求，停止同步（已完成 {idx-1}/{total}）")
+                if await self.check_abort_flag():
+                    self.log_warning(f"收到中止请求，停止同步（已完成 {idx-1}/{total}）")
                     aborted = True
                     break
 
                 logger.info(f"[{idx}/{total}] 检查 {code}")
 
                 # 检查数据完整性
-                completeness = await asyncio.to_thread(
+                completeness = await self.run_in_thread(
                     self.data_service.db.check_daily_data_completeness,
                     code=code,
                     start_date=start_date_formatted,
                     end_date=end_date_formatted,
-                    min_expected_days=min_expected_days,
+                    min_expected_days=min_expected_days
                 )
 
                 # 如果数据已经完整，跳过
@@ -197,7 +186,7 @@ class DailySyncService:
 
                     # 更新进度
                     progress = int((idx / total) * 100)
-                    await self.config_service.update_sync_status(progress=progress, completed=idx)
+                    await self.update_global_status(progress=progress, completed=idx)
                     continue
 
                 # 如果有部分数据，提示更新
@@ -209,34 +198,25 @@ class DailySyncService:
                     logger.info(f"  + {code}: 无数据，开始同步...")
 
                 # 获取日线数据 (添加30秒超时)
-                try:
-                    response = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            provider.get_daily_data,
-                            code=code,
-                            start_date=start_date_formatted,
-                            end_date=end_date_formatted,
-                            adjust="qfq",
-                        ),
-                        timeout=30.0,  # 单个股票数据获取超时30秒
-                    )
-                except asyncio.TimeoutError:
-                    logger.error(f"  ✗ {code}: 数据获取超时 (30秒)")
-                    failed_count += 1
-                    continue
+                response = await self.run_in_thread(
+                    provider.get_daily_data,
+                    code=code,
+                    start_date=start_date_formatted,
+                    end_date=end_date_formatted,
+                    adjust="qfq",
+                    timeout=30.0
+                )
 
                 # 检查响应状态并提取数据
-                if not response.is_success():
-                    error_msg = response.error_message or "获取日线数据失败"
-                    logger.error(f"  ✗ {code}: {error_msg}")
-                    failed_count += 1
-                    continue
-
-                df = response.data  # 从 Response 对象中提取 DataFrame
+                df = self.check_and_extract_data(response, f"{code}: 获取日线数据")
 
                 if not df.empty:
                     # 保存到数据库
-                    count = await asyncio.to_thread(self.data_service.db.save_daily_data, df, code)
+                    count = await self.run_in_thread(
+                        self.data_service.db.save_daily_data,
+                        df,
+                        code
+                    )
                     logger.info(f"  ✓ {code}: {count} 条记录")
                     success_count += 1
                 else:
@@ -245,18 +225,18 @@ class DailySyncService:
 
                 # 更新进度
                 progress = int((idx / total) * 100)
-                await self.config_service.update_sync_status(progress=progress, completed=idx)
+                await self.update_global_status(progress=progress, completed=idx)
 
                 # 请求间隔
                 await asyncio.sleep(0.3)
 
-            except asyncio.TimeoutError:
-                # 超时错误（已在代码中捕获，这里不会触发）
-                logger.error(f"  ✗ {code}: 超时")
+            except TimeoutError as e:
+                logger.error(f"  ✗ {code}: {str(e)}")
                 failed_count += 1
             except (ExternalAPIError, DatabaseError) as e:
                 # API或数据库错误，记录但继续处理其他股票
-                logger.error(f"  ✗ {code}: {e.message if hasattr(e, 'message') else str(e)}")
+                error_msg = e.message if hasattr(e, 'message') else str(e)
+                logger.error(f"  ✗ {code}: {error_msg}")
                 failed_count += 1
             except Exception as e:
                 # 其他未预期错误，记录但继续处理其他股票
@@ -264,15 +244,16 @@ class DailySyncService:
                 failed_count += 1
 
         # 清除中止标志
-        await self.config_service.clear_sync_abort_flag()
+        await self.clear_abort_flag()
 
         # 根据是否中止来更新状态
         if aborted:
-            await self.config_service.update_sync_status(
-                status="aborted", last_sync_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            await self.update_global_status(
+                status="aborted",
+                last_sync_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             )
-            logger.warning(
-                f"⚠️ 同步已中止: 成功 {success_count} (跳过 {skipped_count}), "
+            self.log_warning(
+                f"同步已中止: 成功 {success_count} (跳过 {skipped_count}), "
                 f"失败 {failed_count}, 总计 {total}"
             )
 
@@ -285,14 +266,14 @@ class DailySyncService:
             }
         else:
             # 更新同步状态为完成
-            await self.config_service.update_sync_status(
+            await self.update_global_status(
                 status="completed",
                 last_sync_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                progress=100,
+                progress=100
             )
 
-            logger.info(
-                f"✓ 批量同步完成: 成功 {success_count} (跳过 {skipped_count}), 失败 {failed_count}"
+            self.log_success(
+                f"批量同步完成: 成功 {success_count} (跳过 {skipped_count}), 失败 {failed_count}"
             )
 
             return {
