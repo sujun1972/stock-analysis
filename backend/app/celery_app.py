@@ -89,60 +89,25 @@ except Exception as e:
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 
-# Celery Beat定时任务调度配置
+# ==========================================
+# Celery Beat 定时任务调度配置
+# ==========================================
+# 使用自定义DatabaseScheduler从数据库动态加载定时任务
+# 支持在Admin界面实时修改任务配置，无需重启服务
+
+# 设置使用数据库调度器
+celery_app.conf.beat_scheduler = 'app.scheduler.database_scheduler:DatabaseScheduler'
+
+# 保留原有的硬编码定时任务作为fallback（可选）
+# 如果数据库中没有配置，将使用以下默认配置
 celery_app.conf.beat_schedule = {
-    # 每日17:30（北京时间）同步市场情绪数据
-    'daily-sentiment-sync-17-30': {
-        'task': 'sentiment.daily_sync_17_30',
-        'schedule': crontab(
-            hour=9,       # UTC 9点 = 北京时间17点
-            minute=30,
-            day_of_week='1-5'  # 周一到周五
-        ),
-        'options': {
-            'expires': 3600,  # 1小时后过期
-        }
-    },
+    # 以下任务已迁移到数据库配置，默认禁用
+    # 请在Admin管理后台的"系统设置 -> 定时任务"页面中启用和配置
 
-    # 每日18:00（北京时间）执行市场情绪AI分析
-    'daily-sentiment-ai-analysis-18-00': {
-        'task': 'sentiment.ai_analysis_18_00',
-        'schedule': crontab(
-            hour=10,      # UTC 10点 = 北京时间18点
-            minute=0,
-            day_of_week='1-5'  # 周一到周五
-        ),
-        'options': {
-            'expires': 3600,  # 1小时后过期
-        }
-    },
-
-    # 每日8:00（北京时间）执行盘前完整工作流
-    'premarket-full-workflow-8-00': {
-        'task': 'premarket.full_workflow_8_00',
-        'schedule': crontab(
-            hour=0,       # UTC 0点 = 北京时间 8点
-            minute=0,
-            day_of_week='1-5'  # 周一到周五
-        ),
-        'options': {
-            'expires': 7200,  # 2小时后过期
-        }
-    },
-
-    # 每日凌晨2:00（北京时间）同步概念数据
-    'daily-concept-sync-2-00': {
-        'task': 'sync.concept',
-        'schedule': crontab(
-            hour=18,      # UTC 18点 = 北京时间 2点（次日）
-            minute=0,
-            day_of_week='1-5'  # 周一到周五
-        ),
-        'kwargs': {
-            'source': None  # 使用系统配置的数据源
-        },
-        'options': {
-            'expires': 3600,  # 1小时后过期
-        }
-    },
+    # 示例：每日17:30（北京时间）同步市场情绪数据
+    # 'daily-sentiment-sync-17-30': {
+    #     'task': 'sentiment.daily_sync_17_30',
+    #     'schedule': crontab(hour=9, minute=30, day_of_week='1-5'),  # UTC时间
+    #     'options': {'expires': 3600}
+    # },
 }

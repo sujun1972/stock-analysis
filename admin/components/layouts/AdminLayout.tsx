@@ -123,6 +123,11 @@ const navItems: NavItem[] = [
         name: '提示词管理',
         href: '/settings/prompt-templates',
         icon: FileText
+      },
+      {
+        name: '定时任务',
+        href: '/settings/scheduler',
+        icon: Clock
       }
     ]
   },

@@ -107,6 +107,23 @@ export default function SchedulerSettingsPage() {
         </p>
       </div>
 
+      {/* 动态配置说明 */}
+      <div className="card bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+        <div className="flex items-start gap-3">
+          <div className="text-green-600 dark:text-green-400 text-2xl">🚀</div>
+          <div>
+            <h3 className="text-lg font-semibold text-green-900 dark:text-green-200 mb-2">
+              动态配置说明
+            </h3>
+            <div className="text-sm text-green-800 dark:text-green-300 space-y-1">
+              <p>• 定时任务配置支持<strong>实时生效</strong>，修改后约30秒内自动同步，无需重启服务</p>
+              <p>• 启用/禁用任务、修改Cron表达式或参数后，系统会自动加载新配置</p>
+              <p>• 时间使用UTC标准时区，北京时间需减8小时（例：北京9点 = UTC 1点）</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 错误提示 */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
@@ -139,10 +156,10 @@ export default function SchedulerSettingsPage() {
                     Cron 表达式
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    上次运行
+                    执行时间
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    状态
+                    运行状态
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     启用
@@ -174,11 +191,22 @@ export default function SchedulerSettingsPage() {
                       </code>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        {task.last_run_at || '未运行'}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        运行 {task.run_count} 次
+                      <div className="text-sm space-y-1">
+                        {task.last_run_at && (
+                          <div className="text-gray-700 dark:text-gray-300">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">上次: </span>
+                            {task.last_run_at}
+                          </div>
+                        )}
+                        {task.next_run_at && (
+                          <div className="text-blue-700 dark:text-blue-300">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">下次: </span>
+                            {task.next_run_at}
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          已运行 {task.run_count} 次
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">

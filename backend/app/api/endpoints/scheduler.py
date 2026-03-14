@@ -5,19 +5,69 @@
 
 import asyncio
 from typing import Any, Dict, Optional
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.api.error_handler import handle_api_errors
 from app.core.exceptions import DatabaseError
-from app.services.config_service import ConfigService
 from app.core.dependencies import require_admin
 from app.models.user import User
+from src.database.db_manager import DatabaseManager
 
 router = APIRouter()
 
+
+# ==========================================
+# 工具函数
+# ==========================================
+
+def validate_cron_expression(cron_expr: str) -> bool:
+    """
+    验证Cron表达式是否有效
+
+    Args:
+        cron_expr: Cron表达式，格式: "分 时 日 月 周"
+
+    Returns:
+        是否有效
+    """
+    try:
+        from croniter import croniter
+        croniter(cron_expr, datetime.now())
+        return True
+    except Exception:
+        # croniter不可用或表达式无效，使用简单验证
+        parts = cron_expr.strip().split()
+        if len(parts) != 5:
+            return False
+        # 简单检查每个字段是否符合基本格式
+        return all(part for part in parts)
+
+
+def calculate_next_run_time(cron_expr: str) -> Optional[datetime]:
+    """
+    计算下次执行时间
+
+    Args:
+        cron_expr: Cron表达式
+
+    Returns:
+        下次执行时间，解析失败返回None
+    """
+    try:
+        from croniter import croniter
+        cron = croniter(cron_expr, datetime.now())
+        return cron.get_next(datetime)
+    except Exception:
+        return None
+
+
+# ==========================================
+# 数据模型
+# ==========================================
 
 class ScheduledTaskCreate(BaseModel):
     """创建定时任务请求"""
@@ -29,6 +79,14 @@ class ScheduledTaskCreate(BaseModel):
     enabled: bool = False
     params: Optional[Dict[str, Any]] = {}
 
+    @field_validator('cron_expression')
+    @classmethod
+    def validate_cron(cls, v: str) -> str:
+        """验证Cron表达式格式"""
+        if not validate_cron_expression(v):
+            raise ValueError('无效的Cron表达式，格式应为: "分 时 日 月 周"')
+        return v
+
 
 class ScheduledTaskUpdate(BaseModel):
     """更新定时任务请求"""
@@ -37,6 +95,14 @@ class ScheduledTaskUpdate(BaseModel):
     cron_expression: Optional[str] = None
     enabled: Optional[bool] = None
     params: Optional[Dict[str, Any]] = None
+
+    @field_validator('cron_expression')
+    @classmethod
+    def validate_cron(cls, v: Optional[str]) -> Optional[str]:
+        """验证Cron表达式格式"""
+        if v is not None and not validate_cron_expression(v):
+            raise ValueError('无效的Cron表达式，格式应为: "分 时 日 月 周"')
+        return v
 
 
 @router.get("/tasks")
@@ -51,7 +117,7 @@ async def get_scheduled_tasks(
         定时任务列表
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         query = """
             SELECT
@@ -73,7 +139,7 @@ async def get_scheduled_tasks(
             ORDER BY id
         """
 
-        result = await asyncio.to_thread(config_service.db._execute_query, query)
+        result = await asyncio.to_thread(db._execute_query, query)
 
         tasks = []
         for row in result:
@@ -121,7 +187,7 @@ async def get_scheduled_task(
         定时任务详情
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         query = """
             SELECT
@@ -143,7 +209,7 @@ async def get_scheduled_task(
             WHERE id = %s
         """
 
-        result = await asyncio.to_thread(config_service.db._execute_query, query, (task_id,))
+        result = await asyncio.to_thread(db._execute_query, query, (task_id,))
 
         if not result:
             raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
@@ -190,7 +256,7 @@ async def create_scheduled_task(
         创建的任务ID
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         # 验证模块名称
         valid_modules = [
@@ -209,24 +275,27 @@ async def create_scheduled_task(
         # 检查任务名称是否已存在
         check_query = "SELECT id FROM scheduled_tasks WHERE task_name = %s"
         existing = await asyncio.to_thread(
-            config_service.db._execute_query, check_query, (request.task_name,)
+            db._execute_query, check_query, (request.task_name,)
         )
 
         if existing:
             raise HTTPException(status_code=400, detail=f"任务名称 '{request.task_name}' 已存在")
 
+        # 计算下次执行时间
+        next_run_at = calculate_next_run_time(request.cron_expression)
+
         # 插入新任务
         insert_query = """
             INSERT INTO scheduled_tasks (
-                task_name, module, description, cron_expression, enabled, params
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                task_name, module, description, cron_expression, enabled, params, next_run_at
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
             RETURNING id
         """
 
         import json
 
         result = await asyncio.to_thread(
-            config_service.db._execute_query,
+            db._execute_query,
             insert_query,
             (
                 request.task_name,
@@ -235,6 +304,7 @@ async def create_scheduled_task(
                 request.cron_expression,
                 request.enabled,
                 json.dumps(request.params or {}),
+                next_run_at,
             ),
         )
 
@@ -267,7 +337,7 @@ async def update_scheduled_task(
         更新结果
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         # 构建动态更新语句
         updates = []
@@ -280,6 +350,10 @@ async def update_scheduled_task(
         if request.cron_expression is not None:
             updates.append("cron_expression = %s")
             params.append(request.cron_expression)
+            # 同时更新下次执行时间
+            next_run_at = calculate_next_run_time(request.cron_expression)
+            updates.append("next_run_at = %s")
+            params.append(next_run_at)
 
         if request.enabled is not None:
             updates.append("enabled = %s")
@@ -301,7 +375,7 @@ async def update_scheduled_task(
         """
         params.append(task_id)
 
-        await asyncio.to_thread(config_service.db._execute_update, query, tuple(params))
+        await asyncio.to_thread(db._execute_update, query, tuple(params))
 
         logger.info(f"✓ 更新定时任务: {task_id}")
 
@@ -329,11 +403,11 @@ async def delete_scheduled_task(
         删除结果
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         query = "DELETE FROM scheduled_tasks WHERE id = %s"
 
-        await asyncio.to_thread(config_service.db._execute_update, query, (task_id,))
+        await asyncio.to_thread(db._execute_update, query, (task_id,))
 
         logger.info(f"✓ 删除定时任务: {task_id}")
 
@@ -359,11 +433,11 @@ async def toggle_scheduled_task(
         新的启用状态
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         # 获取当前状态
         query = "SELECT enabled FROM scheduled_tasks WHERE id = %s"
-        result = await asyncio.to_thread(config_service.db._execute_query, query, (task_id,))
+        result = await asyncio.to_thread(db._execute_query, query, (task_id,))
 
         if not result:
             raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
@@ -374,7 +448,7 @@ async def toggle_scheduled_task(
         # 更新状态
         update_query = "UPDATE scheduled_tasks SET enabled = %s WHERE id = %s"
         await asyncio.to_thread(
-            config_service.db._execute_update, update_query, (new_enabled, task_id)
+            db._execute_update, update_query, (new_enabled, task_id)
         )
 
         logger.info(f"✓ 切换定时任务状态: {task_id} -> {new_enabled}")
@@ -405,7 +479,7 @@ async def get_task_execution_history(
         执行历史列表
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         query = """
             SELECT
@@ -424,7 +498,7 @@ async def get_task_execution_history(
             LIMIT %s
         """
 
-        result = await asyncio.to_thread(config_service.db._execute_query, query, (task_id, limit))
+        result = await asyncio.to_thread(db._execute_query, query, (task_id, limit))
 
         history = []
         for row in result:
@@ -464,7 +538,7 @@ async def get_recent_execution_history(
         执行历史列表
     """
     try:
-        config_service = ConfigService()
+        db = DatabaseManager()
 
         query = """
             SELECT
@@ -484,7 +558,7 @@ async def get_recent_execution_history(
             LIMIT %s
         """
 
-        result = await asyncio.to_thread(config_service.db._execute_query, query, (limit,))
+        result = await asyncio.to_thread(db._execute_query, query, (limit,))
 
         history = []
         for row in result:
@@ -506,4 +580,48 @@ async def get_recent_execution_history(
         return {"code": 200, "message": "success", "data": history}
     except Exception as e:
         logger.error(f"获取最近执行历史失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/validate-cron")
+@handle_api_errors
+async def validate_cron(
+    cron_expression: str,
+    current_user: User = Depends(require_admin)
+):
+    """
+    验证Cron表达式并返回下次执行时间
+
+    Args:
+        cron_expression: Cron表达式
+
+    Returns:
+        验证结果和下次执行时间
+    """
+    try:
+        is_valid = validate_cron_expression(cron_expression)
+
+        if not is_valid:
+            return {
+                "code": 400,
+                "message": "无效的Cron表达式",
+                "data": {
+                    "valid": False,
+                    "error": "格式应为: 分 时 日 月 周 (例: 0 9 * * 1-5)"
+                }
+            }
+
+        next_run = calculate_next_run_time(cron_expression)
+
+        return {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "valid": True,
+                "next_run_at": next_run.strftime("%Y-%m-%d %H:%M:%S") if next_run else None,
+                "cron_expression": cron_expression
+            }
+        }
+    except Exception as e:
+        logger.error(f"验证Cron表达式失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

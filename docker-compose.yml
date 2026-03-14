@@ -189,14 +189,15 @@ services:
         reservations:
           memory: 512M
 
-  # Celery Beat 定时任务调度器（可选）
+  # Celery Beat 定时任务调度器（使用DatabaseScheduler从数据库读取配置）
   celery_beat:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: stock_celery_beat
     restart: unless-stopped
-    command: celery -A app.celery_app beat --loglevel=info
+    # 使用自定义DatabaseScheduler，支持从数据库动态加载定时任务
+    command: celery -A app.celery_app beat --loglevel=info --scheduler=app.scheduler.database_scheduler:DatabaseScheduler
     environment:
       - ENVIRONMENT=development
       - DATABASE_HOST=timescaledb
@@ -214,7 +215,10 @@ services:
     networks:
       - stock_network
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
 
   # Flower Celery 监控面板（可选）
   flower:
