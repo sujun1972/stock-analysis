@@ -272,7 +272,7 @@ class DataDownloadService:
         use_akshare_direct: bool = True
     ) -> Dict:
         """
-        批量下载股票数据
+        批量下载股票数据（串行模式，带延迟避免限流）
 
         Args:
             codes: 股票代码列表（None表示全部）
@@ -303,7 +303,7 @@ class DataDownloadService:
             success_count = 0
             failed_count = 0
 
-            logger.info(f"开始批量下载 {total} 只股票...")
+            logger.info(f"开始批量下载 {total} 只股票（串行模式）...")
 
             for idx, code in enumerate(codes, 1):
                 logger.info(f"[{idx}/{total}] 处理 {code}")
@@ -348,6 +348,127 @@ class DataDownloadService:
             raise DataSyncError(
                 "批量下载失败",
                 error_code="BATCH_DOWNLOAD_FAILED",
+                total=total if 'total' in locals() else 0,
+                success=success_count if 'success_count' in locals() else 0,
+                failed=failed_count if 'failed_count' in locals() else 0,
+                reason=str(e),
+            )
+
+    async def download_batch_concurrent(
+        self,
+        codes: Optional[List[str]] = None,
+        years: int = 5,
+        max_stocks: Optional[int] = None,
+        max_concurrent: int = 10,
+        batch_size: int = 50,
+        module: str = "main",
+        use_akshare_direct: bool = True
+    ) -> Dict:
+        """
+        并发批量下载股票数据（高性能模式）
+
+        Args:
+            codes: 股票代码列表（None表示全部）
+            years: 下载年数
+            max_stocks: 最大下载数量
+            max_concurrent: 最大并发数（默认10）
+            batch_size: 批次大小（默认50）
+            module: 使用的数据源模块（默认 'main'）
+            use_akshare_direct: 是否直接使用akshare（默认True）
+
+        Returns:
+            {success: int, failed: int, total: int, duration_seconds: float, message: str}
+
+        Raises:
+            DatabaseError: 数据库操作失败
+            DataSyncError: 批量下载失败
+        """
+        import time
+        start_time = time.time()
+
+        try:
+            # 如果没有指定codes，从数据库获取
+            if codes is None:
+                stock_list_df = await asyncio.to_thread(self.stock_repo.get_stock_list)
+                codes = stock_list_df["code"].tolist()
+
+            # 限制数量
+            if max_stocks:
+                codes = codes[:max_stocks]
+
+            total = len(codes)
+            success_count = 0
+            failed_count = 0
+            failed_codes = []
+
+            logger.info(f"开始并发批量下载 {total} 只股票（并发数: {max_concurrent}）...")
+
+            # 信号量控制并发数
+            semaphore = asyncio.Semaphore(max_concurrent)
+
+            async def download_with_semaphore(code: str) -> bool:
+                """带信号量控制的下载"""
+                async with semaphore:
+                    try:
+                        result = await self.download_single_stock(
+                            code,
+                            years,
+                            module=module,
+                            use_akshare_direct=use_akshare_direct
+                        )
+                        return result is not None
+                    except Exception as e:
+                        logger.error(f"  ✗ {code} 下载失败: {e}")
+                        return False
+
+            # 分批处理
+            for i in range(0, total, batch_size):
+                batch = codes[i:i + batch_size]
+                batch_num = i // batch_size + 1
+                total_batches = (total + batch_size - 1) // batch_size
+
+                logger.info(f"处理批次 {batch_num}/{total_batches}: {len(batch)} 只股票")
+
+                # 并发下载当前批次
+                tasks = [download_with_semaphore(code) for code in batch]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # 统计结果
+                for code, result in zip(batch, results):
+                    if isinstance(result, Exception):
+                        failed_count += 1
+                        failed_codes.append(code)
+                        logger.error(f"  ✗ {code}: {result}")
+                    elif result:
+                        success_count += 1
+                        logger.debug(f"  ✓ {code}")
+                    else:
+                        failed_count += 1
+                        failed_codes.append(code)
+
+            duration = time.time() - start_time
+
+            logger.info(
+                f"✓ 并发批量下载完成: 成功 {success_count}/{total}, "
+                f"失败 {failed_count}/{total}, 耗时 {duration:.2f}s"
+            )
+
+            return {
+                "success": success_count,
+                "failed": failed_count,
+                "total": total,
+                "duration_seconds": round(duration, 2),
+                "failed_codes": failed_codes[:20],  # 最多返回20个失败代码
+                "message": f"并发批量下载完成: 成功 {success_count}/{total}, 耗时 {duration:.2f}s"
+            }
+
+        except DatabaseError:
+            raise
+        except Exception as e:
+            logger.error(f"并发批量下载失败: {e}")
+            raise DataSyncError(
+                "并发批量下载失败",
+                error_code="CONCURRENT_BATCH_DOWNLOAD_FAILED",
                 total=total if 'total' in locals() else 0,
                 success=success_count if 'success_count' in locals() else 0,
                 failed=failed_count if 'failed_count' in locals() else 0,

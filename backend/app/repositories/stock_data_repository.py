@@ -22,6 +22,8 @@ from loguru import logger
 from psycopg2 import DatabaseError as PsycopgDatabaseError
 from src.database.db_manager import DatabaseManager
 
+from app.core.cache import cache
+from app.core.config import settings
 from app.core.exceptions import DatabaseError
 from app.repositories.base_repository import BaseRepository
 
@@ -50,9 +52,47 @@ class StockDataRepository(BaseRepository):
 
     # ==================== 股票列表操作 ====================
 
+    async def get_stock_list_cached(self, market: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取股票列表（带缓存）
+
+        Args:
+            market: 市场类型（可选，如 '上海主板'、'深圳主板'、'创业板'等）
+
+        Returns:
+            股票列表 DataFrame
+
+        Raises:
+            DatabaseError: 数据库操作失败
+        """
+        import asyncio
+
+        # 生成缓存键
+        cache_key = f"stock_list:{market or 'all'}"
+
+        # 尝试从缓存获取
+        cached_data = await cache.get(cache_key)
+        if cached_data is not None:
+            logger.debug(f"从缓存获取股票列表 (market={market})")
+            return pd.DataFrame(cached_data)
+
+        # 缓存未命中，从数据库获取
+        logger.debug(f"从数据库获取股票列表 (market={market})")
+        df = await asyncio.to_thread(self.get_stock_list, market)
+
+        # 保存到缓存（DataFrame 转为字典列表）
+        if not df.empty:
+            await cache.set(
+                cache_key,
+                df.to_dict('records'),
+                ttl=settings.CACHE_STOCK_LIST_TTL
+            )
+
+        return df
+
     def get_stock_list(self, market: Optional[str] = None) -> pd.DataFrame:
         """
-        获取股票列表
+        获取股票列表（无缓存）
 
         Args:
             market: 市场类型（可选，如 '上海主板'、'深圳主板'、'创业板'等）
@@ -79,6 +119,30 @@ class StockDataRepository(BaseRepository):
                 market=market,
                 reason=str(e)
             )
+
+    async def save_stock_list_and_clear_cache(self, stock_df: pd.DataFrame) -> int:
+        """
+        保存股票列表到数据库并清除缓存
+
+        Args:
+            stock_df: 股票列表 DataFrame，必须包含列: code, name, market
+
+        Returns:
+            保存的股票数量
+
+        Raises:
+            ValueError: DataFrame格式不正确
+            DatabaseError: 数据库操作失败
+        """
+        import asyncio
+
+        # 保存到数据库
+        count = await asyncio.to_thread(self.save_stock_list, stock_df)
+
+        # 清除相关缓存
+        await cache.delete_pattern("stock_list:*")
+        logger.debug("已清除股票列表缓存")
+        return count
 
     def save_stock_list(self, stock_df: pd.DataFrame) -> int:
         """
@@ -214,6 +278,61 @@ class StockDataRepository(BaseRepository):
 
     # ==================== 日线数据操作 ====================
 
+    async def get_daily_data_cached(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> pd.DataFrame:
+        """
+        获取日线数据（带缓存）
+
+        Args:
+            code: 股票代码
+            start_date: 起始日期（格式：YYYY-MM-DD，可选）
+            end_date: 结束日期（格式：YYYY-MM-DD，可选）
+            limit: 最大记录数（可选）
+
+        Returns:
+            日线数据 DataFrame
+        """
+        import asyncio
+        import hashlib
+
+        # 生成缓存键（基于参数哈希）
+        params_str = f"{code}:{start_date}:{end_date}:{limit}"
+        params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
+        cache_key = f"daily_data:{code}:{params_hash}"
+
+        # 尝试从缓存获取
+        cached_data = await cache.get(cache_key)
+        if cached_data is not None:
+            logger.debug(f"从缓存获取日线数据 (code={code})")
+            return pd.DataFrame(cached_data)
+
+        # 缓存未命中，从数据库获取
+        logger.debug(f"从数据库获取日线数据 (code={code})")
+        df = await asyncio.to_thread(
+            self.get_daily_data,
+            code,
+            start_date,
+            end_date,
+            limit
+        )
+
+        # 保存到缓存
+        if not df.empty:
+            # 重置索引以便序列化
+            df_to_cache = df.reset_index()
+            await cache.set(
+                cache_key,
+                df_to_cache.to_dict('records'),
+                ttl=settings.CACHE_DAILY_DATA_TTL
+            )
+
+        return df
+
     def get_daily_data(
         self,
         code: str,
@@ -257,6 +376,27 @@ class StockDataRepository(BaseRepository):
                 end_date=end_date,
                 reason=str(e)
             )
+
+    async def save_daily_data_and_clear_cache(self, data: pd.DataFrame, code: str) -> int:
+        """
+        保存日线数据并清除缓存
+
+        Args:
+            data: 日线数据 DataFrame
+            code: 股票代码
+
+        Returns:
+            保存的记录数
+        """
+        import asyncio
+
+        # 保存到数据库
+        count = await asyncio.to_thread(self.save_daily_data, data, code)
+
+        # 清除该股票的缓存
+        await cache.delete_pattern(f"daily_data:{code}:*")
+        logger.debug(f"已清除 {code} 的日线数据缓存")
+        return count
 
     def save_daily_data(self, data: pd.DataFrame, code: str) -> int:
         """

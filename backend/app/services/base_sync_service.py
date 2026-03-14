@@ -413,3 +413,109 @@ class BaseSyncService(ABC):
         progress = int((current / total) * 100) if total > 0 else 0
         item_str = f" {item}" if item else ""
         logger.info(f"[{current}/{total}]{item_str} ({progress}%)")
+
+    # ==================== 并发批量处理 ====================
+
+    async def batch_process_concurrent(
+        self,
+        items: list,
+        process_func: Callable,
+        max_concurrent: int = 10,
+        batch_size: int = 50,
+        task_id: Optional[str] = None,
+        item_name: str = "项目"
+    ) -> Dict:
+        """
+        并发批量处理通用方法
+
+        Args:
+            items: 要处理的项目列表
+            process_func: 处理单个项目的异步函数 (item) -> bool
+            max_concurrent: 最大并发数
+            batch_size: 批次大小
+            task_id: 任务ID（可选，用于进度更新）
+            item_name: 项目名称（用于日志）
+
+        Returns:
+            {
+                "total": int,
+                "success": int,
+                "failed": int,
+                "failed_items": list,
+                "duration_seconds": float
+            }
+        """
+        import time
+        start_time = time.time()
+
+        total = len(items)
+        success_count = 0
+        failed_count = 0
+        failed_items = []
+
+        logger.info(f"开始并发处理 {total} 个{item_name}（并发数: {max_concurrent}）...")
+
+        # 信号量控制并发数
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def process_with_semaphore(item):
+            """带信号量控制的处理"""
+            async with semaphore:
+                try:
+                    result = await process_func(item)
+                    return result
+                except Exception as e:
+                    logger.error(f"  ✗ 处理 {item} 失败: {e}")
+                    return False
+
+        # 分批处理
+        for i in range(0, total, batch_size):
+            batch = items[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (total + batch_size - 1) // batch_size
+
+            logger.info(f"处理批次 {batch_num}/{total_batches}: {len(batch)} 个{item_name}")
+
+            # 并发处理当前批次
+            tasks = [process_with_semaphore(item) for item in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # 统计结果
+            for item, result in zip(batch, results):
+                if isinstance(result, Exception):
+                    failed_count += 1
+                    failed_items.append(item)
+                    logger.error(f"  ✗ {item}: {result}")
+                elif result:
+                    success_count += 1
+                    logger.debug(f"  ✓ {item}")
+                else:
+                    failed_count += 1
+                    failed_items.append(item)
+
+            # 更新任务进度
+            if task_id:
+                current = min(i + batch_size, total)
+                progress = int((current / total) * 100)
+                await self.update_task(
+                    task_id=task_id,
+                    progress=progress,
+                    total_count=total,
+                    success_count=success_count,
+                    failed_count=failed_count
+                )
+
+        duration = time.time() - start_time
+
+        logger.info(
+            f"✓ 并发处理完成: 成功 {success_count}/{total}, "
+            f"失败 {failed_count}/{total}, 耗时 {duration:.2f}s"
+        )
+
+        return {
+            "total": total,
+            "success": success_count,
+            "failed": failed_count,
+            "failed_items": failed_items[:20],  # 最多返回20个失败项
+            "duration_seconds": round(duration, 2)
+        }
