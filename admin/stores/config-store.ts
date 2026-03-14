@@ -5,11 +5,16 @@
 
 import { create } from 'zustand';
 import { apiClient } from '@/lib/api-client';
+import logger from '@/lib/logger';
 
 export interface DataSourceConfig {
   data_source: string;
   minute_data_source: string;
   realtime_data_source: string;
+  limit_up_data_source?: string;
+  top_list_data_source?: string;
+  premarket_data_source?: string;
+  concept_data_source?: string;
   tushare_token: string;
 }
 
@@ -76,7 +81,7 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
         isLoading: false,
         error: errorMessage,
       });
-      console.error('Failed to fetch data source config:', error);
+      logger.error('Failed to fetch data source config', error);
       throw error;
     }
   },

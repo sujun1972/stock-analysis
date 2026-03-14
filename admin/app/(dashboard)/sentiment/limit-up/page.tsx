@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,6 +11,7 @@ import { ArrowLeft, TrendingUp, AlertCircle, Zap } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import logger from '@/lib/logger'
 
 export default function LimitUpPoolPage() {
   const searchParams = useSearchParams()
@@ -18,30 +19,30 @@ export default function LimitUpPoolPage() {
   const [loading, setLoading] = useState(true)
   const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await apiClient.getLimitUpPool(date)
+      const res = await apiClient.getLimitUpPool(date) as any
 
-      if (response.code === 200 && response.data) {
-        setData(response.data)
-      } else if (response.code === 404) {
+      if (res.code === 200 && res.data) {
+        setData(res.data)
+      } else if (res.code === 404) {
         setData(null)
         toast.info(`${date} 没有涨停板数据`)
       } else {
-        toast.error(response.message || '加载失败')
+        toast.error(res.message || '加载失败')
       }
     } catch (error: any) {
-      console.error('加载涨停板数据失败:', error)
+      logger.error('加载涨停板数据失败', error)
       toast.error('加载失败: ' + (error.message || '网络错误'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [date])
 
   useEffect(() => {
     loadData()
-  }, [date])
+  }, [loadData])
 
   // 数据加载完成后，处理锚点滚动
   useEffect(() => {

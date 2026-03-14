@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, Users, Building2, AlertCircle } from 'lucide-react'
+import logger from '@/lib/logger'
 import type {
   SentimentCycle,
   InstitutionTopStock,
@@ -37,7 +38,7 @@ export default function SentimentCyclePage() {
         setError('暂无情绪周期数据，请先采集数据并计算')
       }
     } catch (error) {
-      console.error('获取当前情绪周期失败:', error)
+      logger.error('获取当前情绪周期失败', error)
       setError('获取情绪周期数据失败')
     }
   }
@@ -51,7 +52,7 @@ export default function SentimentCyclePage() {
         setInstitutionTop(data.data || [])
       }
     } catch (error) {
-      console.error('获取机构排行失败:', error)
+      logger.error('获取机构排行失败', error)
     }
   }
 
@@ -64,7 +65,7 @@ export default function SentimentCyclePage() {
         setHotMoneyTop(data.data || [])
       }
     } catch (error) {
-      console.error('获取游资打板排行失败:', error)
+      logger.error('获取游资打板排行失败', error)
     }
   }
 
@@ -77,7 +78,7 @@ export default function SentimentCyclePage() {
         setHotMoneyRanking(data.data || [])
       }
     } catch (error) {
-      console.error('获取游资活跃度排行失败:', error)
+      logger.error('获取游资活跃度排行失败', error)
     }
   }
 
@@ -109,7 +110,7 @@ export default function SentimentCyclePage() {
         setError(data.message || '计算失败')
       }
     } catch (error) {
-      console.error('计算情绪周期失败:', error)
+      logger.error('计算情绪周期失败', error)
       setError('计算失败，请稍后重试')
     } finally {
       setCalculating(false)
@@ -117,7 +118,7 @@ export default function SentimentCyclePage() {
   }
 
   // 刷新所有数据
-  const refreshAll = async () => {
+  const refreshAll = useCallback(async () => {
     setLoading(true)
     try {
       await Promise.all([
@@ -129,11 +130,11 @@ export default function SentimentCyclePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     refreshAll()
-  }, [])
+  }, [refreshAll])
 
   // 获取阶段颜色
   const getStageColor = (stage: string) => {

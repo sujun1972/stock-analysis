@@ -18,6 +18,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
+import logger from '@/lib/logger'
 import {
   RefreshCwIcon,
   CheckCircle2Icon,
@@ -47,10 +48,10 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
   // 手动刷新任务列表
   const handleRefresh = async () => {
     try {
-      const response = await apiClient.get('/api/sentiment/tasks/active')
-      if (response.code === 200 && response.data?.tasks) {
+      const res = await apiClient.get('/api/sentiment/tasks/active') as any
+      if (res.code === 200 && res.data?.tasks) {
         const taskStore = useTaskStore.getState()
-        response.data.tasks.forEach((task: any) => {
+        res.data.tasks.forEach((task: any) => {
           if (!taskStore.tasks.has(task.task_id)) {
             taskStore.addTask({
               taskId: task.task_id,
@@ -64,7 +65,7 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
         })
       }
     } catch (error) {
-      console.error('刷新任务列表失败:', error)
+      logger.error('刷新任务列表失败', error)
     }
   }
 

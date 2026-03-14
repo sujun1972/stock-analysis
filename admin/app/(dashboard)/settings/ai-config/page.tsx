@@ -17,7 +17,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Check, X, Key, Sparkles, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -85,11 +85,7 @@ export default function AIConfigPage() {
     description: ''
   })
 
-  useEffect(() => {
-    fetchProviders()
-  }, [])
-
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/ai-strategy/providers`)
       if (!response.ok) throw new Error('获取AI提供商列表失败')
@@ -104,7 +100,11 @@ export default function AIConfigPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    fetchProviders()
+  }, [fetchProviders])
 
   const handleCreate = () => {
     setEditingProvider(null)

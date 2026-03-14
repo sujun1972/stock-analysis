@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import logger from '@/lib/logger'
 
 interface ModuleSyncStatus {
   status: string
@@ -53,7 +54,7 @@ export default function NewStocksSyncPage() {
         setSyncStatus(response.data)
       }
     } catch (err) {
-      console.error('Failed to load sync status:', err)
+      logger.error('Failed to load sync status', err)
     }
   }
 
@@ -65,7 +66,7 @@ export default function NewStocksSyncPage() {
         setScheduledTask(task || null)
       }
     } catch (err) {
-      console.error('Failed to load scheduled task:', err)
+      logger.error('Failed to load scheduled task', err)
     }
   }
 
@@ -96,7 +97,7 @@ export default function NewStocksSyncPage() {
       .catch((err: any) => {
         const errorMessage = err.response?.data?.detail || err.message || '同步新股列表失败'
         setError(errorMessage)
-        console.error('Sync error:', err)
+        logger.error('Sync error', err)
         setIsLoading(false)
       })
 

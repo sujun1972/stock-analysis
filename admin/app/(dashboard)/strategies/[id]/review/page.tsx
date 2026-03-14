@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -43,7 +44,7 @@ export default function StrategyReviewPage() {
   const [showRejectForm, setShowRejectForm] = useState(false)
 
   // 加载策略详情
-  const fetchStrategy = async () => {
+  const fetchStrategy = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -52,15 +53,15 @@ export default function StrategyReviewPage() {
         setStrategy(response.data)
       }
     } catch (error: any) {
-      console.error('获取策略详情失败:', error)
+      logger.error('获取策略详情失败', error)
       setError(error.response?.data?.detail || '加载失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [strategyId])
 
   // 加载审核历史
-  const fetchReviewHistory = async () => {
+  const fetchReviewHistory = useCallback(async () => {
     try {
       const response: any = await apiClient.getStrategyReviewHistory(strategyId)
       if (Array.isArray(response)) {
@@ -69,14 +70,14 @@ export default function StrategyReviewPage() {
         setReviewHistory(response.data)
       }
     } catch (error) {
-      console.error('获取审核历史失败:', error)
+      logger.error('获取审核历史失败', error)
     }
-  }
+  }, [strategyId])
 
   useEffect(() => {
     fetchStrategy()
     fetchReviewHistory()
-  }, [strategyId])
+  }, [fetchStrategy, fetchReviewHistory])
 
   // 批准策略
   const handleApprove = async () => {
@@ -137,7 +138,7 @@ export default function StrategyReviewPage() {
       await fetchStrategy()
       await fetchReviewHistory()
     } catch (error: any) {
-      console.error('取消发布失败:', error)
+      logger.error('取消发布失败', error)
       alert(error.response?.data?.detail || '取消发布失败，请稍后重试')
     } finally {
       setUnpublishing(false)

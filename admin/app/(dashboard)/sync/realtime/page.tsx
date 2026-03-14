@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -37,7 +38,7 @@ export default function RealtimeSyncPage() {
         setSyncStatus(response.data)
       }
     } catch (err) {
-      console.error('Failed to load sync status:', err)
+      logger.error('Failed to load sync status', err)
     }
   }
 
@@ -64,7 +65,7 @@ export default function RealtimeSyncPage() {
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.message || '获取实时行情失败'
       setError(errorMessage)
-      console.error('Sync error:', err)
+      logger.error('Sync error', err)
     } finally {
       setIsLoading(false)
     }

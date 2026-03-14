@@ -19,7 +19,7 @@
  */
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { Search, RefreshCw, Database, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
@@ -63,7 +63,7 @@ export default function StocksManagementPage() {
   const totalPages = Math.ceil(totalStocks / pageSize)
 
   // 加载股票列表
-  const loadStocks = async () => {
+  const loadStocks = useCallback(async () => {
     setLoading(true)
     try {
       const params: any = {
@@ -87,7 +87,7 @@ export default function StocksManagementPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, pageSize, search, marketFilter, industryFilter, conceptFilter, statusFilter, sortBy, sortOrder])
 
   // 同步股票列表
   const handleSyncStocks = async () => {
@@ -129,7 +129,7 @@ export default function StocksManagementPage() {
   // 当筛选条件或分页变化时重新加载
   useEffect(() => {
     loadStocks()
-  }, [currentPage, pageSize, search, marketFilter, industryFilter, conceptFilter, statusFilter, sortBy, sortOrder])
+  }, [loadStocks])
 
   // 重置筛选
   const handleResetFilters = () => {

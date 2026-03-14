@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import {
   Activity,
   Database,
@@ -46,7 +47,7 @@ export default function AdminDashboard() {
         todayTasks: 0
       })
     } catch (error) {
-      console.error('加载统计数据失败:', error)
+      logger.error('加载统计数据失败', error)
     } finally {
       setLoading(false)
     }

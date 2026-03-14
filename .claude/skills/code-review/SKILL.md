@@ -29,6 +29,8 @@ disable-model-invocation: false
    - 导入路径一致性（core.src.xxx）
    - 错误处理模式
    - 日志记录规范
+     - Backend: 使用 loguru
+     - Admin: 使用 logger 系统（禁止 console.log/error）
    - 文档字符串完整性
 
 4. **安全检查**
@@ -101,26 +103,37 @@ grep -r "^from \.\." core/src --include="*.py" | head -10
 ### 第四步：TypeScript/JavaScript 代码检查
 
 ```bash
-cd frontend
+# Admin 前端检查
+cd admin
 
 # ESLint 检查
-echo "=== ESLint 检查 ==="
+echo "=== Admin ESLint 检查 ==="
 npm run lint
 
-# 如果需要自动修复
-# npm run lint -- --fix
-
 # TypeScript 编译检查
-echo "=== TypeScript 类型检查 ==="
+echo "=== Admin TypeScript 类型检查 ==="
 npx tsc --noEmit
+
+# 构建测试
+echo "=== Admin 构建测试 ==="
+npm run build
+
+# 检查是否使用了禁止的 console 调用
+echo "=== 检查 console 使用 ==="
+grep -r "console\.\(log\|error\|warn\)" app components lib hooks stores --include="*.ts" --include="*.tsx" \
+  --exclude-dir=node_modules \
+  | grep -v "sentry.*config" \
+  | grep -v "lib/logger.ts" \
+  || echo "✅ 未发现禁止的 console 调用"
 ```
 
 **常见问题：**
-- 未使用的变量
-- Missing依赖在 useEffect
+- 未使用的变量/参数
+- useEffect缺少依赖项
 - 缺少 key 属性
-- any 类型使用
+- 滥用 any 类型
 - 异步函数未处理错误
+- 使用 console.log/error（应使用 logger）
 
 ### 第五步：安全漏洞扫描
 
@@ -309,13 +322,51 @@ autoflake --in-place --remove-unused-variables core/src/**/*.py
 ### TypeScript 代码格式化
 
 ```bash
-cd frontend
+cd admin
 
 # 自动修复 ESLint 问题
 npm run lint -- --fix
 
-# Prettier 格式化
-npx prettier --write "src/**/*.{ts,tsx}"
+# Prettier 格式化（如果配置了）
+npx prettier --write "app/**/*.{ts,tsx}" "components/**/*.{ts,tsx}" "lib/**/*.{ts,tsx}"
+```
+
+**Admin 项目特定规范：**
+
+```typescript
+// ❌ 禁止使用 console
+console.log('debug info')
+console.error('error message')
+
+// ✅ 使用统一 logger
+import logger from '@/lib/logger'
+logger.info('debug info')
+logger.error('error message', error)
+
+// ❌ 禁止在 useEffect 中缺少依赖
+useEffect(() => {
+  loadData()
+}, []) // Warning: missing dependency 'loadData'
+
+// ✅ 使用 useCallback 包装函数
+const loadData = useCallback(async () => {
+  // ...
+}, [/* dependencies */])
+
+useEffect(() => {
+  loadData()
+}, [loadData])
+
+// ❌ 禁止忽略构建错误
+// next.config.mjs
+typescript: {
+  ignoreBuildErrors: true  // 禁止！
+}
+
+// ✅ 启用严格检查
+typescript: {
+  ignoreBuildErrors: false
+}
 ```
 
 ## 配置 Pre-commit Hooks

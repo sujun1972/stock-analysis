@@ -16,11 +16,12 @@
  */
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, Filter, Edit, Trash2, Code, AlertCircle, Users, ClipboardList, Ban, MoreVertical, Info } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -137,7 +138,7 @@ export default function StrategiesPage() {
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null)
 
   // 获取策略列表
-  const fetchStrategies = async () => {
+  const fetchStrategies = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -168,15 +169,15 @@ export default function StrategiesPage() {
         setTotalCount(result.meta.total)
       }
     } catch (error) {
-      console.error('获取策略列表失败:', error)
+      logger.error('获取策略列表失败', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, searchTerm, filterStrategyType, filterSourceType, filterUserId, filterPublishStatus])
 
   useEffect(() => {
     fetchStrategies()
-  }, [currentPage, searchTerm, filterStrategyType, filterSourceType, filterUserId, filterPublishStatus])
+  }, [fetchStrategies])
 
   /**
    * 获取用户列表（支持后端搜索）
@@ -209,15 +210,15 @@ export default function StrategiesPage() {
       // 格式 2: { users: [...], total: ..., page: ... }
       let usersList: User[] = []
 
-      if ('success' in response.data && response.data.success && 'data' in response.data) {
+      if (response.data && 'success' in response.data && response.data.success && 'data' in response.data) {
         usersList = response.data.data?.users || []
-      } else if ('users' in response.data) {
+      } else if (response.data && 'users' in response.data) {
         usersList = (response.data as any).users || []
       }
 
       setUsers(usersList)
     } catch (error) {
-      console.error('获取用户列表失败:', error)
+      logger.error('获取用户列表失败', error)
       setError('获取用户列表失败：' + error)
     } finally {
       setLoadingUsers(false)
@@ -276,7 +277,7 @@ export default function StrategiesPage() {
       setEditUserDialogOpen(false)
       setEditingStrategy(null)
     } catch (error) {
-      console.error('更新策略用户失败:', error)
+      logger.error('更新策略用户失败', error)
       setError('更新失败：' + error)
     } finally {
       setUpdatingUser(false)
@@ -299,7 +300,7 @@ export default function StrategiesPage() {
       // 刷新列表
       fetchStrategies()
     } catch (error) {
-      console.error('删除策略失败:', error)
+      logger.error('删除策略失败', error)
       setError('删除失败：' + error)
     }
   }
@@ -318,7 +319,7 @@ export default function StrategiesPage() {
       // 刷新列表以显示最新状态
       await fetchStrategies()
     } catch (error) {
-      console.error('切换策略状态失败:', error)
+      logger.error('切换策略状态失败', error)
       setError('切换状态失败：' + error)
     }
   }
@@ -337,7 +338,7 @@ export default function StrategiesPage() {
       alert('策略已取消发布')
       await fetchStrategies()
     } catch (error: any) {
-      console.error('取消发布失败:', error)
+      logger.error('取消发布失败', error)
       alert(error.response?.data?.detail || '取消发布失败，请稍后重试')
     }
   }
@@ -825,7 +826,7 @@ export default function StrategiesPage() {
           <DialogHeader>
             <DialogTitle>修改策略用户</DialogTitle>
             <DialogDescription>
-              为策略 "{editingStrategy?.display_name}" 分配或修改用户
+              为策略 &ldquo;{editingStrategy?.display_name}&rdquo; 分配或修改用户
             </DialogDescription>
           </DialogHeader>
 

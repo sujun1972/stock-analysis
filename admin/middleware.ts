@@ -7,6 +7,16 @@ const publicPaths = ['/login']
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // 忽略Next.js开发工具的特殊请求
+  if (pathname.includes('__nextjs_original-stack-frame')) {
+    return new NextResponse(null, { status: 404 })
+  }
+
+  // 忽略浏览器扩展的请求
+  if (pathname.includes('.well-known/appspecific')) {
+    return new NextResponse(null, { status: 404 })
+  }
+
   // 检查是否为公开路径
   if (publicPaths.some(path => pathname.startsWith(path))) {
     return NextResponse.next()

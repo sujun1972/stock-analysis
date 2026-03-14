@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
+import logger from '@/lib/logger'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,12 +31,14 @@ export default function LoginPage() {
         alert('您没有访问管理后台的权限')
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user, router])
 
   // 清除错误
   useEffect(() => {
     return () => clearError()
-  }, [clearError])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,7 +51,7 @@ export default function LoginPage() {
       // useEffect会处理跳转逻辑
     } catch (err) {
       // 错误已经在store中处理
-      console.error('Login failed:', err)
+      logger.error('Login failed', err)
     }
   }
 

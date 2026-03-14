@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,6 +11,7 @@ import { ArrowLeft, Activity, Building2, TrendingUp, TrendingDown } from 'lucide
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import logger from '@/lib/logger'
 
 export default function DragonTigerListPage() {
   const searchParams = useSearchParams()
@@ -22,32 +23,32 @@ export default function DragonTigerListPage() {
 
   const pageSize = 20
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await apiClient.getDragonTigerList({
+      const res = await apiClient.getDragonTigerList({
         date,
         page,
         limit: pageSize
-      })
+      }) as any
 
-      if (response.code === 200 && response.data) {
-        setRecords(response.data.items || [])
-        setTotal(response.data.total || 0)
+      if (res.code === 200 && res.data) {
+        setRecords(res.data.items || [])
+        setTotal(res.data.total || 0)
       } else {
-        toast.error(response.message || '加载失败')
+        toast.error(res.message || '加载失败')
       }
     } catch (error: any) {
-      console.error('加载龙虎榜失败:', error)
+      logger.error('加载龙虎榜失败', error)
       toast.error('加载失败: ' + (error.message || '网络错误'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [date, page])
 
   useEffect(() => {
     loadData()
-  }, [date, page])
+  }, [loadData])
 
   const totalPages = Math.ceil(total / pageSize)
 

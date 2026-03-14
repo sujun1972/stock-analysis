@@ -20,6 +20,7 @@
 
 import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -111,7 +112,7 @@ export default function MonitorPage() {
       setLastUpdate(new Date())
     } catch (err: any) {
       setError(err.message || '加载监控数据失败')
-      console.error('Failed to load monitor data:', err)
+      logger.error('Failed to load monitor data', err)
     } finally {
       setIsLoading(false)
     }

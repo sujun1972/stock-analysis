@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +28,7 @@ import { zhCN } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
+import logger from "@/lib/logger"
 import type {
   OvernightData,
   CollisionAnalysis,
@@ -72,7 +73,7 @@ export default function PremarketPage() {
       const data = await apiClient.get('/api/ai-strategy/providers')
 
       if (!Array.isArray(data)) {
-        console.error('AI Providers data is not an array:', data)
+        logger.error('AI Providers data is not an array', data)
         toast.error("AI配置数据格式错误")
         setAiProviders([])
         return
@@ -88,7 +89,7 @@ export default function PremarketPage() {
         setAiProvider(providers[0].provider)
       }
     } catch (error: any) {
-      console.error('Load AI Providers Error:', error)
+      logger.error('Load AI Providers Error', error)
       toast.error("加载AI配置失败：" + (error.response?.data?.detail || error.message))
       setAiProviders([])
     } finally {
@@ -97,7 +98,7 @@ export default function PremarketPage() {
   }
 
   // 加载所有数据
-  const loadAllData = async (targetDate?: Date) => {
+  const loadAllData = useCallback(async (targetDate?: Date) => {
     const dateStr = formatDate(targetDate || date)
     setIsLoading(true)
 
@@ -111,42 +112,42 @@ export default function PremarketPage() {
       ])
 
       // 处理外盘数据
-      if (overnightRes.status === 'fulfilled' && overnightRes.value?.code === 200) {
-        setOvernightData(overnightRes.value.data)
+      if (overnightRes.status === 'fulfilled' && (overnightRes.value as any)?.code === 200) {
+        setOvernightData((overnightRes.value as any).data)
       } else {
         setOvernightData(null)
       }
 
       // 处理碰撞分析
-      if (analysisRes.status === 'fulfilled' && analysisRes.value?.code === 200) {
-        setCollisionAnalysis(analysisRes.value.data)
+      if (analysisRes.status === 'fulfilled' && (analysisRes.value as any)?.code === 200) {
+        setCollisionAnalysis((analysisRes.value as any).data)
       } else {
         setCollisionAnalysis(null)
       }
 
       // 处理新闻列表
-      if (newsRes.status === 'fulfilled' && newsRes.value?.code === 200) {
-        setNewsList(newsRes.value.data?.news || [])
+      if (newsRes.status === 'fulfilled' && (newsRes.value as any)?.code === 200) {
+        setNewsList((newsRes.value as any).data?.news || [])
       } else {
         setNewsList([])
       }
     } catch (error: any) {
-      console.error('Load data error:', error)
+      logger.error('Load data error', error)
       toast.error("加载数据失败")
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [date])
 
   // 加载历史记录
   const loadHistory = async () => {
     try {
-      const response = await apiClient.get<ApiResponse<AnalysisHistory[]>>('/api/premarket/history?limit=10')
+      const response = await apiClient.get<ApiResponse<AnalysisHistory[]>>('/api/premarket/history?limit=10') as any
       if (response.code === 200 && response.data) {
         setHistory(response.data)
       }
     } catch (error: any) {
-      console.error('Load history error:', error)
+      logger.error('Load history error', error)
     }
   }
 
@@ -159,19 +160,19 @@ export default function PremarketPage() {
     const loadingToastId = toast.info("正在同步盘前数据...")
 
     try {
-      const response = await apiClient.post<ApiResponse<SyncResult>>(
+      const res = await apiClient.post<ApiResponse<SyncResult>>(
         `/api/premarket/sync?date=${dateStr}`
-      )
+      ) as any
 
       // 先关闭加载提示，再显示结果，确保 toast 顺序展示不重叠
       toast.dismiss(loadingToastId)
 
-      if (response.code === 200) {
-        toast.success(response.message || "同步成功")
+      if (res.code === 200) {
+        toast.success(res.message || "同步成功")
         // 重新加载数据
         await loadAllData()
       } else {
-        toast.error(response.message || "同步失败")
+        toast.error(res.message || "同步失败")
       }
     } catch (error: any) {
       toast.dismiss(loadingToastId)
@@ -190,19 +191,19 @@ export default function PremarketPage() {
     const loadingToastId = toast.info("正在调用AI生成碰撞分析，请稍候...")
 
     try {
-      const response = await apiClient.post<ApiResponse<any>>(
+      const res = await apiClient.post<ApiResponse<any>>(
         `/api/premarket/collision-analysis/generate?date=${dateStr}&provider=${aiProvider}`
-      )
+      ) as any
 
       // 先关闭加载提示，再显示结果，确保 toast 顺序展示不重叠
       toast.dismiss(loadingToastId)
 
-      if (response.code === 200) {
+      if (res.code === 200) {
         toast.success("碰撞分析生成成功")
         await loadAllData()
         await loadHistory()
       } else {
-        toast.error(response.message || "生成失败")
+        toast.error(res.message || "生成失败")
       }
     } catch (error: any) {
       toast.dismiss(loadingToastId)
@@ -217,6 +218,7 @@ export default function PremarketPage() {
     loadProviders()
     loadAllData()
     loadHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 日期变化时加载
@@ -399,7 +401,7 @@ export default function PremarketPage() {
               <AlertTriangleIcon className="h-4 w-4" />
               <AlertTitle>暂无数据</AlertTitle>
               <AlertDescription>
-                {formatDate(date)} 暂无碰撞分析数据，请先同步盘前数据，然后点击"生成碰撞分析"按钮。
+                {formatDate(date)} 暂无碰撞分析数据，请先同步盘前数据，然后点击&ldquo;生成碰撞分析&rdquo;按钮。
               </AlertDescription>
             </Alert>
           ) : (
@@ -630,7 +632,7 @@ export default function PremarketPage() {
               <AlertTriangleIcon className="h-4 w-4" />
               <AlertTitle>暂无数据</AlertTitle>
               <AlertDescription>
-                请先点击"同步盘前数据"按钮获取隔夜外盘数据
+                请先点击&ldquo;同步盘前数据&rdquo;按钮获取隔夜外盘数据
               </AlertDescription>
             </Alert>
           ) : (
@@ -771,7 +773,7 @@ export default function PremarketPage() {
               <AlertTriangleIcon className="h-4 w-4" />
               <AlertTitle>暂无数据</AlertTitle>
               <AlertDescription>
-                请先点击"同步盘前数据"按钮获取盘前核心新闻
+                请先点击&ldquo;同步盘前数据&rdquo;按钮获取盘前核心新闻
               </AlertDescription>
             </Alert>
           ) : (

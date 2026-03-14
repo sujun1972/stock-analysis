@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { X, Plus, Trash2, Save, Loader2, Tag } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import type { StockInfo, Concept } from '@/types/stock'
 import {
   Dialog,
@@ -44,7 +45,7 @@ export function StockDetailDialog({
   const [selectedConceptId, setSelectedConceptId] = useState<string>('')
 
   // 加载股票的概念
-  const loadStockConcepts = async () => {
+  const loadStockConcepts = useCallback(async () => {
     if (!stock?.code) return
 
     setLoading(true)
@@ -52,20 +53,20 @@ export function StockDetailDialog({
       const concepts = await apiClient.getStockConcepts(stock.code)
       setStockConcepts(concepts || [])
     } catch (error: any) {
-      console.error('加载股票概念失败:', error)
+      logger.error('加载股票概念失败', error)
       toast.error('加载股票概念失败: ' + (error.message || '未知错误'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [stock?.code])
 
   // 加载所有概念
   const loadAllConcepts = async () => {
     try {
-      const response = await apiClient.getConceptsList({ limit: 500 })
+      const response = await apiClient.getConceptsList({ page_size: 500 })
       setAllConcepts(response.items || [])
     } catch (error: any) {
-      console.error('加载概念列表失败:', error)
+      logger.error('加载概念列表失败', error)
     }
   }
 
@@ -122,7 +123,8 @@ export function StockDetailDialog({
       loadStockConcepts()
       loadAllConcepts()
     }
-  }, [open, stock?.code])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, stock, loadStockConcepts])
 
   // 过滤出未添加的概念
   const availableConcepts = allConcepts.filter(

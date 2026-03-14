@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { useConfigStore } from '@/stores/config-store'
+import logger from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -214,7 +215,7 @@ export default function SettingsPage() {
       ))
 
     } catch (err: any) {
-      console.error('测试失败:', err)
+      logger.error('测试失败', err)
     } finally {
       setIsTesting(false)
     }

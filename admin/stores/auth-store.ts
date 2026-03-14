@@ -17,6 +17,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 // 先设置API客户端实例
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 
 if (typeof window !== 'undefined') {
   ;(window as any).__apiClientInstance = apiClient
@@ -177,7 +178,7 @@ export const useAuthStore = create<AuthStore>()(
 
         if (!refreshToken) {
           const error = new Error('没有刷新令牌');
-          console.error('Token refresh failed: no refresh token available');
+          logger.error('Token refresh failed: no refresh token available');
           throw error;
         }
 
@@ -201,11 +202,11 @@ export const useAuthStore = create<AuthStore>()(
           // Zustand persist 中间件会自动保存到 localStorage (键名: 'auth-storage')
         } catch (error: any) {
           // Token刷新失败，清除登录状态
-          console.error('Token refresh failed:', error.message || error);
+          logger.error('Token refresh failed', error.message || error);
 
           // 记录错误详情以便调试
           if (error.response) {
-            console.error('Refresh error response:', {
+            logger.error('Refresh error response', {
               status: error.response.status,
               data: error.response.data,
             });

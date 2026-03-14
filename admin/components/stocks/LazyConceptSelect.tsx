@@ -17,6 +17,7 @@ import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import type { Concept } from '@/types/stock'
 
 interface LazyConceptSelectProps {
@@ -66,7 +67,8 @@ export function LazyConceptSelect({
     if (value && value !== 'all' && !selectedConcept) {
       loadSelectedConcept()
     }
-  }, [value])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, selectedConcept])
 
   const loadSelectedConcept = async () => {
     if (value === 'all') return
@@ -85,7 +87,7 @@ export function LazyConceptSelect({
         setSelectedConcept(concept)
       }
     } catch (error) {
-      console.error('加载选中概念失败:', error)
+      logger.error('加载选中概念失败', error)
     }
   }
 
@@ -108,7 +110,7 @@ export function LazyConceptSelect({
       setHasMore(pageNum < response.total_pages)
       setPage(pageNum)
     } catch (error) {
-      console.error('加载概念列表失败:', error)
+      logger.error('加载概念列表失败', error)
     } finally {
       setLoading(false)
     }
@@ -119,7 +121,8 @@ export function LazyConceptSelect({
     if (open && concepts.length === 0) {
       loadConcepts()
     }
-  }, [open])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, concepts.length])
 
   // 搜索防抖
   React.useEffect(() => {

@@ -14,7 +14,7 @@
  */
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -81,11 +81,7 @@ export default function LogsPage() {
   const [userIdFilter, setUserIdFilter] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState<string>('')
 
-  useEffect(() => {
-    loadLogs()
-  }, [activeTab, actionTypeFilter, userIdFilter])
-
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -161,7 +157,11 @@ export default function LogsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [activeTab, actionTypeFilter])
+
+  useEffect(() => {
+    loadLogs()
+  }, [loadLogs])
 
   const getActionTypeBadge = (actionType: string) => {
     const colors: Record<string, string> = {

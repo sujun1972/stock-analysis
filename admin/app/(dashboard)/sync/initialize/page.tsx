@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -109,7 +110,7 @@ export default function InitializePage() {
         setStockListStatus(response.data)
       }
     } catch (err) {
-      console.error('Failed to load stock list status:', err)
+      logger.error('Failed to load stock list status', err)
     }
   }
 
@@ -120,10 +121,10 @@ export default function InitializePage() {
       setStockListSuccess(null)
 
       // 启动异步任务
-      const response = await apiClient.syncStockList()
+      const res = await apiClient.syncStockList() as any
 
-      if (response.code === 200 && response.data?.task_id) {
-        const { task_id, display_name } = response.data
+      if (res.code === 200 && res.data?.task_id) {
+        const { task_id, display_name } = res.data
 
         // 添加到全局任务队列
         addTaskToQueue(task_id, 'sync.stock_list', display_name, 'sync')
@@ -143,7 +144,7 @@ export default function InitializePage() {
       const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
       setStockListError(errorMessage)
       toast.error('启动任务失败', { description: errorMessage })
-      console.error('Stock list sync error:', err)
+      logger.error('Stock list sync error', err)
     } finally {
       setIsStockListLoading(false)
     }
@@ -171,7 +172,7 @@ export default function InitializePage() {
         setDailySyncStatus(response.data)
       }
     } catch (err) {
-      console.error('Failed to load daily sync status:', err)
+      logger.error('Failed to load daily sync status', err)
     }
   }
 
@@ -186,13 +187,13 @@ export default function InitializePage() {
       const formattedEndDate = format(endDate, 'yyyy-MM-dd')
 
       // 启动异步任务
-      const response = await apiClient.syncDailyBatch({
+      const res = await apiClient.syncDailyBatch({
         start_date: formattedStartDate,
         end_date: formattedEndDate
-      })
+      }) as any
 
-      if (response.code === 200 && response.data?.task_id) {
-        const { task_id, display_name } = response.data
+      if (res.code === 200 && res.data?.task_id) {
+        const { task_id, display_name } = res.data
 
         // 添加到全局任务队列
         addTaskToQueue(task_id, 'sync.daily_batch', display_name, 'sync')
@@ -209,7 +210,7 @@ export default function InitializePage() {
       const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
       setDailyError(errorMessage)
       toast.error('启动任务失败', { description: errorMessage })
-      console.error('Daily sync error:', err)
+      logger.error('Daily sync error', err)
     } finally {
       setIsDailyLoading(false)
     }
@@ -223,7 +224,7 @@ export default function InitializePage() {
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.message || '中止同步失败'
       setDailyError(errorMessage)
-      console.error('Abort sync error:', err)
+      logger.error('Abort sync error', err)
       setTimeout(() => setDailyError(null), 5000)
     }
   }
@@ -247,13 +248,13 @@ export default function InitializePage() {
       const formattedStartDate = format(sentimentStartDate, 'yyyy-MM-dd')
       const formattedEndDate = format(sentimentEndDate, 'yyyy-MM-dd')
 
-      const response = await apiClient.syncSentimentBatch({
+      const res = await apiClient.syncSentimentBatch({
         start_date: formattedStartDate,
         end_date: formattedEndDate
-      })
+      }) as any
 
-      if (response.code === 200 && response.data?.task_id) {
-        const { task_id, display_name } = response.data
+      if (res.code === 200 && res.data?.task_id) {
+        const { task_id, display_name } = res.data
 
         // 添加到全局任务队列
         addTaskToQueue(task_id, 'sentiment.batch_sync', display_name, 'sentiment')
@@ -269,7 +270,7 @@ export default function InitializePage() {
       const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
       setSentimentError(errorMessage)
       toast.error('启动任务失败', { description: errorMessage })
-      console.error('Sentiment batch sync error:', err)
+      logger.error('Sentiment batch sync error', err)
     } finally {
       setSentimentSyncing(false)
     }
@@ -779,7 +780,7 @@ export default function InitializePage() {
                     <ul className="list-disc list-inside mt-1 space-y-1">
                       <li>仅同步交易日数据</li>
                       <li>建议按需同步近期数据</li>
-                      <li>同步完成后可在"情绪数据"页面查看</li>
+                      <li>同步完成后可在&ldquo;情绪数据&rdquo;页面查看</li>
                       <li>注意数据源API限流</li>
                     </ul>
                   </div>

@@ -4,7 +4,7 @@
  * 提示词模板管理 - 列表页面
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -37,7 +37,7 @@ export default function PromptTemplatesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
   // 加载模板列表
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     try {
       setLoading(true)
       const params: any = {}
@@ -61,11 +61,11 @@ export default function PromptTemplatesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [businessTypeFilter, statusFilter, toast])
 
   useEffect(() => {
     loadTemplates()
-  }, [businessTypeFilter, statusFilter])
+  }, [loadTemplates])
 
   // 激活模板
   const handleActivate = async (id: number, setAsDefault: boolean = false) => {

@@ -36,6 +36,13 @@ export interface Strategy {
   risk_level: 'safe' | 'low' | 'medium' | 'high'
   is_enabled: boolean
 
+  // 发布状态（用于策略审核）
+  publish_status?: 'draft' | 'pending_review' | 'approved' | 'rejected'
+  publish_requested_at?: string
+  reject_reason?: string
+  reviewed_by?: string
+  reviewed_at?: string
+
   // 使用统计
   usage_count: number
   backtest_count: number

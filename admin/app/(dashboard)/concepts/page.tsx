@@ -15,7 +15,7 @@
  */
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -68,7 +68,7 @@ export default function ConceptsPage() {
   })
 
   // 加载概念列表
-  const loadConcepts = async () => {
+  const loadConcepts = useCallback(async () => {
     setLoading(true)
     try {
       const response = await apiClient.getConceptsList({
@@ -84,11 +84,11 @@ export default function ConceptsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, search])
 
   useEffect(() => {
     loadConcepts()
-  }, [page, search])
+  }, [loadConcepts])
 
   // 检查是否有正在进行的概念同步任务
   const hasSyncingTask = Array.from(tasks.values()).some(
@@ -115,7 +115,7 @@ export default function ConceptsPage() {
         currentSyncTaskRef.current = null
       }
     }
-  }, [tasks])
+  }, [tasks, loadConcepts])
 
   // 搜索时重置到第一页
   const handleSearch = (value: string) => {
@@ -130,7 +130,7 @@ export default function ConceptsPage() {
       const response = await apiClient.syncConcepts()
 
       // 保存任务ID，用于后续监听（后端返回格式：response.data.task_id）
-      const taskId = response?.data?.task_id || response?.task_id
+      const taskId = (response?.data as any)?.task_id || (response as any)?.task_id
       if (taskId) {
         currentSyncTaskRef.current = taskId
         toast.success('概念数据同步任务已提交，请在任务面板查看进度')

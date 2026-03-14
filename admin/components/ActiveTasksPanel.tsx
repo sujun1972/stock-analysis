@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { RefreshCwIcon, ListIcon, CheckCircle2Icon, XCircleIcon, ClockIcon } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 
 interface ActiveTask {
   task_id: string
@@ -31,15 +32,15 @@ export function ActiveTasksPanel() {
   const loadActiveTasks = async () => {
     setIsLoading(true)
     try {
-      const response = await apiClient.get('/api/sentiment/tasks/active')
+      const res = await apiClient.get('/api/sentiment/tasks/active') as any
 
-      if (response.code === 200 && response.data?.tasks) {
-        setTasks(response.data.tasks)
+      if (res.code === 200 && res.data?.tasks) {
+        setTasks(res.data.tasks)
       } else {
         setTasks([])
       }
     } catch (error) {
-      console.error('加载活动任务失败:', error)
+      logger.error('加载活动任务失败', error)
       setTasks([])
     } finally {
       setIsLoading(false)

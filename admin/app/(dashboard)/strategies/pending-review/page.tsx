@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Clock, User, Calendar, AlertCircle, Eye, CheckCircle, XCircle } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
 import { Button } from '@/components/ui/button'
 
@@ -18,7 +19,7 @@ export default function PendingReviewStrategiesPage() {
   const [totalCount, setTotalCount] = useState(0)
 
   // 获取待审核策略列表
-  const fetchPendingStrategies = async () => {
+  const fetchPendingStrategies = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -35,16 +36,16 @@ export default function PendingReviewStrategiesPage() {
         }
       }
     } catch (error: any) {
-      console.error('获取待审核策略列表失败:', error)
+      logger.error('获取待审核策略列表失败', error)
       setError(error.response?.data?.detail || '加载失败，请稍后重试')
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage])
 
   useEffect(() => {
     fetchPendingStrategies()
-  }, [currentPage])
+  }, [fetchPendingStrategies])
 
   // 查看策略详情（跳转到审核页面）
   const handleReview = (strategyId: number) => {

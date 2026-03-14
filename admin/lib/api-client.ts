@@ -41,6 +41,7 @@ import type {
   SentimentStatistics,
 } from '@/types/sentiment'
 import { isTokenExpiringSoon } from './jwt-utils'
+import logger from '@/lib/logger'
 
 /**
  * API基础URL配置
@@ -119,7 +120,7 @@ axiosInstance.interceptors.request.use(
                   }
                 }
               } catch (error) {
-                console.error('Token预刷新失败，将在401时重试:', error)
+                logger.error('Token预刷新失败，将在401时重试', error)
                 processQueue(error, null)
                 // 预刷新失败不阻断请求，使用旧token继续，让响应拦截器处理401
               } finally {
@@ -131,7 +132,7 @@ axiosInstance.interceptors.request.use(
           }
         }
       } catch (error) {
-        console.error('Failed to parse auth storage:', error)
+        logger.error('Failed to parse auth storage', error)
       }
     }
     return config
@@ -236,7 +237,7 @@ axiosInstance.interceptors.response.use(
         return axiosInstance(originalRequest)
       } catch (refreshError: any) {
         // Token刷新失败，需要重新登录
-        console.error('Token refresh failed, redirecting to login...', refreshError)
+        logger.error('Token refresh failed, redirecting to login', refreshError)
 
         // 处理队列中的请求，全部拒绝
         processQueue(refreshError, null)
@@ -257,7 +258,7 @@ axiosInstance.interceptors.response.use(
             })
           } catch (toastError) {
             // toast 不可用时，使用 alert 作为后备
-            console.warn('Toast not available, using alert instead')
+            logger.warn('Toast not available, using alert instead')
           }
 
           // 延迟重定向，让用户有时间看到提示
@@ -279,12 +280,12 @@ axiosInstance.interceptors.response.use(
     // 404 错误通常表示数据不存在，这是正常情况，不需要在控制台打印错误
     if (error.response) {
       if (error.response.status !== 404) {
-        console.error('API Error:', error.response.data)
+        logger.error('API Error', error.response.data)
       }
     } else if (error.request) {
-      console.error('Network Error:', error.request)
+      logger.error('Network Error', error.request)
     } else {
-      console.error('Error:', error.message)
+      logger.error('Error', error.message)
     }
     return Promise.reject(error)
   }

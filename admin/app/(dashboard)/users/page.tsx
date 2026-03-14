@@ -15,7 +15,7 @@
  */
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -119,7 +119,7 @@ export default function UsersPage() {
   })
 
   // 加载用户列表
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true)
     try {
       const params: any = {
@@ -138,11 +138,11 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, search, roleFilter])
 
   useEffect(() => {
     loadUsers()
-  }, [page, roleFilter])
+  }, [loadUsers])
 
   // 搜索
   const handleSearch = () => {

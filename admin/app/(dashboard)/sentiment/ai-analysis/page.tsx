@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
 import { addTaskToQueue } from "@/hooks/use-task-polling"
+import logger from "@/lib/logger"
 
 interface AIProvider {
   id: number
@@ -92,12 +93,12 @@ export default function SentimentAIAnalysisPage() {
   const formatDate = (d: Date) => format(d, "yyyy-MM-dd")
 
   // 加载分析数据
-  const loadAnalysis = async (targetDate?: Date) => {
+  const loadAnalysis = useCallback(async (targetDate?: Date) => {
     const dateStr = formatDate(targetDate || date)
     setIsLoading(true)
 
     try {
-      const response = await apiClient.get(`/api/sentiment/ai-analysis/${dateStr}`)
+      const response = await apiClient.get(`/api/sentiment/ai-analysis/${dateStr}`) as any
 
       if (response.code === 200 && response.data) {
         setAnalysisData(response.data)
@@ -117,7 +118,7 @@ export default function SentimentAIAnalysisPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [date])
 
   // 生成AI分析（异步提交）
   const handleGenerate = async () => {
@@ -127,7 +128,7 @@ export default function SentimentAIAnalysisPage() {
     try {
       const response = await apiClient.post("/api/sentiment/ai-analysis/generate", null, {
         params: { date: dateStr, provider: aiProvider }
-      })
+      }) as any
 
       if (response.code === 200 && response.data?.task_id) {
         const newTaskId = response.data.task_id
@@ -160,7 +161,7 @@ export default function SentimentAIAnalysisPage() {
         toast.error(response.message || "提交失败")
       }
     } catch (error: any) {
-      console.error("提交AI分析任务失败:", error)
+      logger.error("提交AI分析任务失败", error)
       toast.error("提交失败：" + (error.response?.data?.detail || error.message))
     } finally {
       setIsGenerating(false)
@@ -176,14 +177,14 @@ export default function SentimentAIAnalysisPage() {
       attempts++
 
       try {
-        const statusRes = await apiClient.get(`/api/sentiment/sync/status/${taskId}`)
+        const statusRes = await apiClient.get(`/api/sentiment/sync/status/${taskId}`) as any
 
         if (statusRes.code === 200 && statusRes.data) {
           const { status, result, message, progress } = statusRes.data
 
           // 更新进度信息（可选：在UI中显示进度）
           if (status === 'PROGRESS' || status === 'STARTED') {
-            console.log(`AI分析任务进度: ${progress || 0}% - ${message || '执行中'}`)
+            logger.info(`AI分析任务进度: ${progress || 0}% - ${message || '执行中'}`)
           }
 
           if (status === 'SUCCESS') {
@@ -208,7 +209,7 @@ export default function SentimentAIAnalysisPage() {
             clearInterval(intervalId)
             setTaskId(null)
             // 错误 toast 由全局轮询处理，这里只做清理
-            console.error('AI分析任务失败:', statusRes.data.error || message)
+            logger.error('AI分析任务失败', statusRes.data.error || message)
           }
         }
 
@@ -222,7 +223,7 @@ export default function SentimentAIAnalysisPage() {
           })
         }
       } catch (error) {
-        console.error('轮询任务状态失败:', error)
+        logger.error('轮询任务状态失败', error)
 
         // 连续失败多次后停止轮询
         if (attempts > 5) {
@@ -246,7 +247,7 @@ export default function SentimentAIAnalysisPage() {
 
       // 确保是数组
       if (!Array.isArray(data)) {
-        console.error('AI Providers data is not an array:', data)
+        logger.error('AI Providers data is not an array', data)
         toast.error("AI配置数据格式错误")
         setAiProviders([])
         return
@@ -264,7 +265,7 @@ export default function SentimentAIAnalysisPage() {
         setAiProvider(providers[0].provider)
       }
     } catch (error: any) {
-      console.error('Load AI Providers Error:', error)
+      logger.error('Load AI Providers Error', error)
       toast.error("加载AI配置失败：" + (error.response?.data?.detail || error.message))
       setAiProviders([])
     } finally {
@@ -276,6 +277,7 @@ export default function SentimentAIAnalysisPage() {
   useEffect(() => {
     loadProviders()
     loadAnalysis()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 日期变化时加载
@@ -467,7 +469,7 @@ export default function SentimentAIAnalysisPage() {
           <AlertTriangleIcon className="h-4 w-4" />
           <AlertTitle>暂无数据</AlertTitle>
           <AlertDescription>
-            {formatDate(date)} 暂无AI分析数据，请点击"生成分析"按钮创建分析报告。
+            {formatDate(date)} 暂无AI分析数据，请点击&ldquo;生成分析&rdquo;按钮创建分析报告。
           </AlertDescription>
         </Alert>
       ) : (

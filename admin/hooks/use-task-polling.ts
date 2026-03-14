@@ -14,6 +14,7 @@ import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
 import { useTaskStore, TaskType, TaskStatus } from '@/stores/task-store'
+import logger from '@/lib/logger'
 
 // 配置常量
 const TASK_POLLING_INTERVAL = 3000 // 任务状态轮询间隔（3秒）
@@ -30,13 +31,13 @@ let discoveryInterval: NodeJS.Timeout | null = null
 async function pollTaskStatus(taskId: string): Promise<boolean> {
   try {
     // 调用统一的任务状态查询接口
-    const response = await apiClient.get(`/api/sentiment/sync/status/${taskId}`)
+    const res = await apiClient.get(`/api/sentiment/sync/status/${taskId}`) as any
 
-    if (response.code !== 200 || !response.data) {
+    if (res.code !== 200 || !res.data) {
       return false
     }
 
-    const { status, message, result, progress } = response.data
+    const { status, message, result, progress } = res.data
     const taskStore = useTaskStore.getState()
 
     // 更新任务状态
@@ -95,7 +96,7 @@ async function pollTaskStatus(taskId: string): Promise<boolean> {
       // 任务失败
       const task = taskStore.tasks.get(taskId)
       const taskName = task?.displayName || '未知任务'
-      const errorMsg = response.data.error || message || '未知错误'
+      const errorMsg = res.data.error || message || '未知错误'
 
       taskStore.updateTask(taskId, {
         status: 'failure',
@@ -118,7 +119,7 @@ async function pollTaskStatus(taskId: string): Promise<boolean> {
     // 任务仍在进行中
     return false
   } catch (error) {
-    console.error(`轮询任务 ${taskId} 状态失败:`, error)
+    logger.error(`轮询任务 ${taskId} 状态失败`, error)
     return false
   }
 }
@@ -261,10 +262,10 @@ export function addTaskToQueue(
  */
 async function restoreActiveTasks(silent = false) {
   try {
-    const response = await apiClient.get('/api/sentiment/tasks/active')
+    const res = await apiClient.get('/api/sentiment/tasks/active') as any
 
-    if (response.data?.tasks) {
-      const tasks = response.data.tasks
+    if (res.data?.tasks) {
+      const tasks = res.data.tasks
       const taskStore = useTaskStore.getState()
       let newTasksCount = 0
 
@@ -299,7 +300,7 @@ async function restoreActiveTasks(silent = false) {
       }
     }
   } catch (error) {
-    console.error('恢复活动任务失败:', error)
+    logger.error('恢复活动任务失败', error)
   }
 }
 

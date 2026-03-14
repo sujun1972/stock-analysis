@@ -17,9 +17,10 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import logger from '@/lib/logger'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,11 +72,7 @@ export default function PromptTemplateEditPage() {
   const [newVarDesc, setNewVarDesc] = useState('')
   const [isOptional, setIsOptional] = useState(false)
 
-  useEffect(() => {
-    loadTemplate()
-  }, [templateId])
-
-  const loadTemplate = async () => {
+  const loadTemplate = useCallback(async () => {
     try {
       setLoading(true)
       const data = await promptTemplateApi.get(templateId)
@@ -101,7 +98,7 @@ export default function PromptTemplateEditPage() {
         tags: data.tags || []
       })
     } catch (error) {
-      console.error('Failed to load template:', error)
+      logger.error('Failed to load template', error)
       toast({
         title: '加载失败',
         description: '无法加载模板数据',
@@ -110,7 +107,11 @@ export default function PromptTemplateEditPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [templateId, toast])
+
+  useEffect(() => {
+    loadTemplate()
+  }, [loadTemplate])
 
   const handleSave = async () => {
     try {
@@ -122,7 +123,7 @@ export default function PromptTemplateEditPage() {
       })
       router.push('/settings/prompt-templates')
     } catch (error) {
-      console.error('Failed to save template:', error)
+      logger.error('Failed to save template', error)
       toast({
         title: '保存失败',
         description: '无法保存模板',
@@ -149,7 +150,7 @@ export default function PromptTemplateEditPage() {
         description: '模板渲染结果已生成'
       })
     } catch (error) {
-      console.error('Failed to preview template:', error)
+      logger.error('Failed to preview template', error)
       toast({
         title: '预览失败',
         description: '模板渲染出错，请检查语法',

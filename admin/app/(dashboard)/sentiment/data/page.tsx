@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import type { MarketSentiment } from '@/types/sentiment'
 import { addTaskToQueue } from '@/hooks/use-task-polling'
+import logger from '@/lib/logger'
 
 export default function SentimentManagementPage() {
   const router = useRouter()
@@ -29,16 +30,16 @@ export default function SentimentManagementPage() {
   }
 
   // 获取今天的日期字符串（北京时间）
-  const getTodayDate = () => {
+  const getTodayDate = useCallback(() => {
     const beijingTime = getBeijingTime()
     const year = beijingTime.getFullYear()
     const month = String(beijingTime.getMonth() + 1).padStart(2, '0')
     const day = String(beijingTime.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}` // YYYY-MM-DD
-  }
+  }, [])
 
   // 判断当前市场状态和应该显示的数据
-  const getMarketStatus = () => {
+  const getMarketStatus = useCallback(() => {
     const beijingTime = getBeijingTime()
     const hour = beijingTime.getHours()
     const minute = beijingTime.getMinutes()
@@ -107,7 +108,7 @@ export default function SentimentManagementPage() {
       showDate: false,
       shouldHideStats: false
     }
-  }
+  }, [sentiments, getTodayDate])
 
   // 计算北京时间 17:30 对应的本地时间（用于页面提示）
   const getLocalTimeFromBeijing = () => {
@@ -138,47 +139,47 @@ export default function SentimentManagementPage() {
     }, 60000) // 60秒
 
     return () => clearInterval(timer)
-  }, [sentiments]) // 当 sentiments 变化时重新计算
+  }, [sentiments, getMarketStatus]) // 当 sentiments 变化时重新计算
 
   // 当数据加载完成后，更新市场状态
   useEffect(() => {
     if (!loading && sentiments.length > 0) {
       setMarketStatus(getMarketStatus())
     }
-  }, [loading, sentiments])
+  }, [loading, sentiments, getMarketStatus])
 
   // 加载数据
-  const loadSentiments = async () => {
+  const loadSentiments = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await apiClient.getSentimentList({
+      const res = await apiClient.getSentimentList({
         page,
         limit: pageSize
       }) as any
 
-      if (response.code === 200 && response.data) {
-        setSentiments(response.data.items || [])
-        setTotal(response.data.total || 0)
+      if (res.code === 200 && res.data) {
+        setSentiments(res.data.items || [])
+        setTotal(res.data.total || 0)
       } else {
-        toast.error(response.message || '加载失败')
+        toast.error(res.message || '加载失败')
       }
     } catch (error: any) {
-      console.error('加载情绪数据失败:', error)
+      logger.error('加载情绪数据失败', error)
       toast.error('加载失败: ' + (error.message || '网络错误'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [page])
 
   // 手动同步（异步任务）
   const handleSync = async () => {
     setSyncing(true)
     try {
-      const response = await apiClient.syncSentimentData() as any
+      const res = await apiClient.syncSentimentData() as any
 
       // 成功提交任务
-      if (response.code === 200 && response.data) {
-        const { task_id, date } = response.data
+      if (res.code === 200 && res.data) {
+        const { task_id, date } = res.data
 
         // 显示任务提交成功的提示
         toast.info('同步任务已提交', {
@@ -195,18 +196,18 @@ export default function SentimentManagementPage() {
         }, 2000)
       }
       // 任务正在执行中（锁冲突）
-      else if (response.code === 409) {
+      else if (res.code === 409) {
         toast.warning('同步任务正在执行中', {
-          description: response.data?.reason || '已有同步任务正在进行，请等待其完成后再试',
+          description: res.data?.reason || '已有同步任务正在进行，请等待其完成后再试',
           duration: 5000,
         })
       }
       // 其他错误
       else {
-        toast.error(response.message || '提交同步任务失败')
+        toast.error(res.message || '提交同步任务失败')
       }
     } catch (error: any) {
-      console.error('提交同步任务失败:', error)
+      logger.error('提交同步任务失败', error)
       toast.error('提交失败: ' + (error.message || '网络错误'))
     } finally {
       setSyncing(false)
@@ -215,7 +216,7 @@ export default function SentimentManagementPage() {
 
   useEffect(() => {
     loadSentiments()
-  }, [page])
+  }, [loadSentiments])
 
   const totalPages = Math.ceil(total / pageSize)
 

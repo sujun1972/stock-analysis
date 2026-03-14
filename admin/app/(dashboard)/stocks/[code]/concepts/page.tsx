@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,14 +23,14 @@ export default function StockConceptsPage() {
   const [saving, setSaving] = useState(false)
 
   // 加载数据
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       // 并行加载股票信息、股票概念和所有概念
       const [stockInfoData, conceptsData, allConceptsData] = await Promise.all([
         apiClient.getStock(code),
         apiClient.getStockConcepts(code),
-        apiClient.getConceptsList({ limit: 200 })
+        apiClient.getConceptsList({ page_size: 200 })
       ])
 
       setStockInfo(stockInfoData)
@@ -42,13 +42,13 @@ export default function StockConceptsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [code])
 
   useEffect(() => {
     if (code) {
       loadData()
     }
-  }, [code])
+  }, [code, loadData])
 
   // 切换概念选择状态
   const toggleConceptSelection = (conceptId: number) => {

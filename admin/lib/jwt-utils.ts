@@ -3,6 +3,8 @@
  * 用于解析和检查 JWT token 的有效性
  */
 
+import logger from '@/lib/logger'
+
 interface JWTPayload {
   exp?: number // 过期时间（Unix 时间戳，秒）
   iat?: number // 签发时间（Unix 时间戳，秒）
@@ -20,7 +22,7 @@ export function decodeJWT(token: string): JWTPayload | null {
     // JWT 格式: header.payload.signature
     const parts = token.split('.')
     if (parts.length !== 3) {
-      console.error('Invalid JWT format: expected 3 parts')
+      logger.error('Invalid JWT format: expected 3 parts')
       return null
     }
 
@@ -36,7 +38,7 @@ export function decodeJWT(token: string): JWTPayload | null {
 
     return JSON.parse(jsonPayload)
   } catch (error) {
-    console.error('Failed to decode JWT:', error)
+    logger.error('Failed to decode JWT', error)
     return null
   }
 }
