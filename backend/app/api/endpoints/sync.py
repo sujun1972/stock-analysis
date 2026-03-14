@@ -5,7 +5,7 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.api.error_handler import handle_api_errors
@@ -13,6 +13,8 @@ from app.services.config_service import ConfigService
 from app.services.daily_sync_service import DailySyncService
 from app.services.realtime_sync_service import RealtimeSyncService
 from app.services.stock_list_sync_service import StockListSyncService
+from app.core.dependencies import require_admin
+from app.models.user import User
 
 router = APIRouter()
 
@@ -55,7 +57,9 @@ class SyncNewStocksRequest(BaseModel):
 
 @router.get("/status")
 @handle_api_errors
-async def get_sync_status():
+async def get_sync_status(
+    current_user: User = Depends(require_admin)
+):
     """
     获取同步状态（全局）
 
@@ -70,7 +74,10 @@ async def get_sync_status():
 
 @router.get("/status/{module}")
 @handle_api_errors
-async def get_module_sync_status(module: str):
+async def get_module_sync_status(
+    module: str,
+    current_user: User = Depends(require_admin)
+):
     """
     获取特定模块的同步状态
 
@@ -95,7 +102,9 @@ async def get_module_sync_status(module: str):
 
 @router.post("/abort")
 @handle_api_errors
-async def abort_sync():
+async def abort_sync(
+    current_user: User = Depends(require_admin)
+):
     """
     中止当前正在运行的同步任务
 
@@ -120,7 +129,9 @@ async def abort_sync():
 
 @router.post("/stock-list")
 @handle_api_errors
-async def sync_stock_list():
+async def sync_stock_list(
+    current_user: User = Depends(require_admin)
+):
     """
     异步同步股票列表
 
@@ -145,7 +156,10 @@ async def sync_stock_list():
 
 @router.post("/new-stocks")
 @handle_api_errors
-async def sync_new_stocks(request: SyncNewStocksRequest):
+async def sync_new_stocks(
+    request: SyncNewStocksRequest,
+    current_user: User = Depends(require_admin)
+):
     """
     异步同步新股列表
 
@@ -174,7 +188,9 @@ async def sync_new_stocks(request: SyncNewStocksRequest):
 
 @router.post("/delisted-stocks")
 @handle_api_errors
-async def sync_delisted_stocks():
+async def sync_delisted_stocks(
+    current_user: User = Depends(require_admin)
+):
     """
     异步同步退市股票列表
 
@@ -202,7 +218,10 @@ async def sync_delisted_stocks():
 
 @router.post("/daily/batch")
 @handle_api_errors
-async def sync_daily_batch(request: SyncDailyBatchRequest):
+async def sync_daily_batch(
+    request: SyncDailyBatchRequest,
+    current_user: User = Depends(require_admin)
+):
     """
     异步批量同步日线数据
 
@@ -247,7 +266,11 @@ async def sync_daily_batch(request: SyncDailyBatchRequest):
 
 @router.post("/daily/{code}")
 @handle_api_errors
-async def sync_daily_stock(code: str, years: int = 5):
+async def sync_daily_stock(
+    code: str,
+    years: int = 5,
+    current_user: User = Depends(require_admin)
+):
     """
     同步单只股票日线数据
 
@@ -269,7 +292,11 @@ async def sync_daily_stock(code: str, years: int = 5):
 
 @router.post("/minute/{code}")
 @handle_api_errors
-async def sync_minute_data(code: str, request: SyncMinuteRequest):
+async def sync_minute_data(
+    code: str,
+    request: SyncMinuteRequest,
+    current_user: User = Depends(require_admin)
+):
     """
     同步分时数据
 
@@ -290,7 +317,10 @@ async def sync_minute_data(code: str, request: SyncMinuteRequest):
 
 @router.post("/realtime")
 @handle_api_errors
-async def sync_realtime_quotes(request: SyncRealtimeRequest):
+async def sync_realtime_quotes(
+    request: SyncRealtimeRequest,
+    current_user: User = Depends(require_admin)
+):
     """
     更新实时行情
 
@@ -320,7 +350,11 @@ async def sync_realtime_quotes(request: SyncRealtimeRequest):
 
 @router.get("/history")
 @handle_api_errors
-async def get_sync_history(limit: int = 20, offset: int = 0):
+async def get_sync_history(
+    limit: int = 20,
+    offset: int = 0,
+    current_user: User = Depends(require_admin)
+):
     """
     获取同步历史记录
 

@@ -15,13 +15,15 @@
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from pydantic import BaseModel, Field, validator
 
 from app.api.error_handler import handle_api_errors
 from app.core.api_versioning import deprecated
+from app.core.dependencies import get_current_active_user
 from app.core_adapters.config_strategy_adapter import ConfigStrategyAdapter
+from app.models.user import User
 from app.repositories.strategy_config_repository import StrategyConfigRepository
 
 router = APIRouter()
@@ -220,7 +222,10 @@ async def validate_config(request: ValidateConfigRequest) -> Dict[str, Any]:
     reason="使用新的统一策略系统API",
 )
 @handle_api_errors
-async def create_config(data: StrategyConfigCreate) -> Dict[str, Any]:
+async def create_config(
+    data: StrategyConfigCreate,
+    current_user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
     """
     创建新的策略配置
 
@@ -375,7 +380,8 @@ async def get_config(config_id: int) -> Dict[str, Any]:
 @handle_api_errors
 async def update_config(
     config_id: int,
-    data: StrategyConfigUpdate
+    data: StrategyConfigUpdate,
+    current_user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """
     更新指定配置
@@ -438,7 +444,10 @@ async def update_config(
 
 @router.delete("/{config_id}", summary="删除配置")
 @handle_api_errors
-async def delete_config(config_id: int) -> Dict[str, Any]:
+async def delete_config(
+    config_id: int,
+    current_user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
     """
     删除指定配置
 
@@ -475,7 +484,10 @@ async def delete_config(config_id: int) -> Dict[str, Any]:
 
 @router.post("/{config_id}/test", summary="测试配置", status_code=status.HTTP_200_OK)
 @handle_api_errors
-async def test_config(config_id: int) -> Dict[str, Any]:
+async def test_config(
+    config_id: int,
+    current_user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
     """
     测试配置是否能成功创建策略
 

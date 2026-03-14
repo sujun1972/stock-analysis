@@ -16,11 +16,13 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.core_adapters.feature_adapter import FeatureAdapter
+from app.core.dependencies import get_current_active_user
 from app.models.api_response import ApiResponse
+from app.models.user import User
 
 router = APIRouter()
 
@@ -36,6 +38,7 @@ async def get_features(
     end_date: Optional[str] = None,
     feature_type: Optional[str] = None,
     limit: int = 500,
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票特征数据（支持懒加载）
@@ -135,6 +138,7 @@ async def calculate_features(
     end_date: Optional[str] = None,
     feature_types: List[str] = ["technical", "alpha"],
     include_transforms: bool = False,
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     计算股票特征（支持批量计算）
@@ -254,6 +258,7 @@ async def select_features(
     target_column: str = "close",
     n_features: int = 50,
     method: str = "correlation",
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     特征选择（基于重要性）

@@ -6,12 +6,14 @@ import asyncio
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.api.error_handler import handle_api_errors
+from app.core.dependencies import get_current_active_user
+from app.models.user import User
 from app.repositories.batch_repository import BatchRepository
 from app.repositories.experiment_repository import ExperimentRepository
 from app.services.experiment_service import ExperimentService
@@ -51,7 +53,7 @@ class BatchStartRequest(BaseModel):
 
 @router.post("/batch")
 @handle_api_errors
-async def create_batch(request: BatchCreateRequest):
+async def create_batch(request: BatchCreateRequest, current_user: User = Depends(get_current_active_user)):
     """
     创建实验批次
 
@@ -94,7 +96,7 @@ async def create_batch(request: BatchCreateRequest):
 
 @router.get("/batch/{batch_id}")
 @handle_api_errors
-async def get_batch_info(batch_id: int):
+async def get_batch_info(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """获取批次详细信息"""
     try:
         info = await experiment_service.get_batch_info(batch_id)
@@ -113,7 +115,10 @@ async def get_batch_info(batch_id: int):
 @router.get("/batches")
 @handle_api_errors
 async def list_batches(
-    page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100), status: Optional[str] = None
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user)
 ):
     """列出所有批次"""
     try:
@@ -147,7 +152,7 @@ async def list_batches(
 
 @router.delete("/batch/{batch_id}")
 @handle_api_errors
-async def delete_batch(batch_id: int):
+async def delete_batch(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """删除批次（级联删除所有实验）"""
     try:
         # 使用 Repository 删除批次
@@ -166,7 +171,10 @@ async def delete_batch(batch_id: int):
 @router.post("/batch/{batch_id}/start")
 @handle_api_errors
 async def start_batch(
-    batch_id: int, background_tasks: BackgroundTasks, request: Optional[BatchStartRequest] = None
+    batch_id: int,
+    background_tasks: BackgroundTasks,
+    request: Optional[BatchStartRequest] = None,
+    current_user: User = Depends(get_current_active_user)
 ):
     """启动批次（后台任务）"""
     try:
@@ -184,14 +192,14 @@ async def start_batch(
 
 @router.post("/batch/{batch_id}/pause")
 @handle_api_errors
-async def pause_batch(batch_id: int):
+async def pause_batch(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """暂停批次（暂未实现）"""
     raise HTTPException(status_code=501, detail="暂停功能尚未实现")
 
 
 @router.post("/batch/{batch_id}/cancel")
 @handle_api_errors
-async def cancel_batch(batch_id: int):
+async def cancel_batch(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """取消批次"""
     try:
         # 更新批次状态为 'cancelled'
@@ -216,7 +224,10 @@ async def cancel_batch(batch_id: int):
 @router.get("/batch/{batch_id}/experiments")
 @handle_api_errors
 async def list_experiments(
-    batch_id: int, status: Optional[str] = None, limit: int = Query(50, ge=1, le=500)
+    batch_id: int,
+    status: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=500),
+    current_user: User = Depends(get_current_active_user)
 ):
     """列出批次下的实验"""
     try:
@@ -245,6 +256,7 @@ async def get_top_models(
     min_annual_return: Optional[float] = None,
     min_win_rate: Optional[float] = None,
     min_ic: Optional[float] = None,
+    current_user: User = Depends(get_current_active_user)
 ):
     """获取Top模型"""
     try:
@@ -271,7 +283,7 @@ async def get_top_models(
 
 @router.get("/batch/{batch_id}/report")
 @handle_api_errors
-async def generate_report(batch_id: int):
+async def generate_report(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """生成实验报告"""
     try:
         ranker = ModelRanker()
@@ -286,7 +298,7 @@ async def generate_report(batch_id: int):
 
 @router.get("/batch/{batch_id}/parameter-importance")
 @handle_api_errors
-async def get_parameter_importance(batch_id: int):
+async def get_parameter_importance(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """获取参数重要性分析"""
     try:
         ranker = ModelRanker()
@@ -307,7 +319,7 @@ async def get_parameter_importance(batch_id: int):
 
 @router.get("/batch/{batch_id}/stream")
 @handle_api_errors
-async def stream_batch_progress(batch_id: int):
+async def stream_batch_progress(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """SSE流式推送批次进度"""
 
     async def event_generator():
@@ -350,7 +362,7 @@ async def stream_batch_progress(batch_id: int):
 
 @router.get("/templates")
 @handle_api_errors
-async def get_templates():
+async def get_templates(current_user: User = Depends(get_current_active_user)):
     """获取参数空间模板"""
     templates = {
         "minimal_test": {
@@ -384,7 +396,7 @@ async def get_templates():
 
 @router.get("/{experiment_id}")
 @handle_api_errors
-async def get_experiment_detail(experiment_id: int):
+async def get_experiment_detail(experiment_id: int, current_user: User = Depends(get_current_active_user)):
     """
     获取单个实验的详细信息
 
@@ -408,7 +420,7 @@ async def get_experiment_detail(experiment_id: int):
 
 @router.delete("/{experiment_id}")
 @handle_api_errors
-async def delete_experiment(experiment_id: int):
+async def delete_experiment(experiment_id: int, current_user: User = Depends(get_current_active_user)):
     """
     删除单个实验
 

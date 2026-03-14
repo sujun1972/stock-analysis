@@ -8,6 +8,8 @@ from loguru import logger
 from celery.result import AsyncResult
 
 from app.api.error_handler import handle_api_errors
+from app.core.dependencies import get_current_active_user, require_admin
+from app.models.user import User
 from app.schemas.ai_config import (
     AIProviderConfigCreate,
     AIProviderConfigUpdate,
@@ -28,7 +30,10 @@ router = APIRouter()
 
 @router.post("/generate", response_model=AIStrategyGenerateResponse)
 @handle_api_errors
-async def generate_strategy(request: AIStrategyGenerateRequest):
+async def generate_strategy(
+    request: AIStrategyGenerateRequest,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     使用AI生成策略代码
 
@@ -105,7 +110,7 @@ async def generate_strategy(request: AIStrategyGenerateRequest):
 
 @router.get("/providers", response_model=List[AIProviderConfigResponse])
 @handle_api_errors
-async def list_ai_providers():
+async def list_providers(current_user: User = Depends(require_admin)):
     """
     获取所有AI提供商配置列表
 
@@ -142,7 +147,7 @@ async def list_ai_providers():
 
 @router.get("/providers/{provider}", response_model=AIProviderConfigResponse)
 @handle_api_errors
-async def get_ai_provider(provider: str):
+async def get_provider(provider: str, current_user: User = Depends(require_admin)):
     """
     获取指定AI提供商配置
 
@@ -179,7 +184,10 @@ async def get_ai_provider(provider: str):
 
 @router.post("/providers", response_model=AIProviderConfigResponse, status_code=201)
 @handle_api_errors
-async def create_ai_provider(config: AIProviderConfigCreate):
+async def create_provider(
+    config: AIProviderConfigCreate,
+    current_user: User = Depends(require_admin)
+):
     """
     创建AI提供商配置
 
@@ -222,7 +230,11 @@ async def create_ai_provider(config: AIProviderConfigCreate):
 
 @router.put("/providers/{provider}", response_model=AIProviderConfigResponse)
 @handle_api_errors
-async def update_ai_provider(provider: str, config: AIProviderConfigUpdate):
+async def update_provider(
+    provider: str,
+    config: AIProviderConfigUpdate,
+    current_user: User = Depends(require_admin)
+):
     """
     更新AI提供商配置
 
@@ -262,7 +274,7 @@ async def update_ai_provider(provider: str, config: AIProviderConfigUpdate):
 
 @router.delete("/providers/{provider}")
 @handle_api_errors
-async def delete_ai_provider(provider: str):
+async def delete_provider(provider: str, current_user: User = Depends(require_admin)):
     """
     删除AI提供商配置
 
@@ -281,7 +293,7 @@ async def delete_ai_provider(provider: str):
 
 @router.get("/providers/default/info", response_model=AIProviderConfigResponse)
 @handle_api_errors
-async def get_default_provider():
+async def get_default_provider_info(current_user: User = Depends(require_admin)):
     """
     获取默认AI提供商配置
 
@@ -317,7 +329,10 @@ async def get_default_provider():
 
 @router.post("/async-generate", status_code=status.HTTP_202_ACCEPTED)
 @handle_api_errors
-async def generate_strategy_async_endpoint(request: AIStrategyGenerateRequest):
+async def async_generate_strategy(
+    request: AIStrategyGenerateRequest,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     异步生成策略代码（立即返回task_id）
 
@@ -406,7 +421,7 @@ async def generate_strategy_async_endpoint(request: AIStrategyGenerateRequest):
 
 @router.get("/status/{task_id}")
 @handle_api_errors
-async def get_generation_status(task_id: str):
+async def get_task_status(task_id: str, current_user: User = Depends(get_current_active_user)):
     """
     查询AI策略生成任务状态
 
@@ -463,7 +478,7 @@ async def get_generation_status(task_id: str):
 
 @router.delete("/cancel/{task_id}")
 @handle_api_errors
-async def cancel_generation_task(task_id: str):
+async def cancel_task(task_id: str, current_user: User = Depends(get_current_active_user)):
     """
     取消AI策略生成任务
 

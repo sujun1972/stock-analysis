@@ -4,7 +4,7 @@
 提供市场情绪数据的查询和同步接口。
 """
 
-from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Query, HTTPException, BackgroundTasks, Depends
 from typing import Optional, List
 from datetime import datetime
 
@@ -12,6 +12,8 @@ from loguru import logger
 
 from app.services.sentiment_service import MarketSentimentService
 from app.core.exceptions import DatabaseError, ExternalAPIError
+from app.core.dependencies import get_current_active_user, require_admin
+from app.models.user import User
 
 
 router = APIRouter()
@@ -22,7 +24,8 @@ sentiment_service = MarketSentimentService()
 
 @router.get("/daily")
 async def get_daily_sentiment(
-    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)，默认为今天")
+    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)，默认为今天"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取指定日期的市场情绪数据
@@ -52,7 +55,8 @@ async def get_sentiment_list(
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
     start_date: Optional[str] = Query(None, description="开始日期"),
-    end_date: Optional[str] = Query(None, description="结束日期")
+    end_date: Optional[str] = Query(None, description="结束日期"),
+    current_user: User = Depends(require_admin)
 ):
     """
     分页查询情绪数据列表（Admin管理界面用）
@@ -83,7 +87,8 @@ async def get_sentiment_list(
 
 @router.get("/limit-up")
 async def get_limit_up_pool(
-    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)")
+    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取涨停板池数据
@@ -116,7 +121,8 @@ async def get_limit_up_pool(
 
 @router.get("/limit-up/trend")
 async def get_limit_up_trend(
-    days: int = Query(30, ge=7, le=90, description="天数")
+    days: int = Query(30, ge=7, le=90, description="天数"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取涨停板趋势（近N天）
@@ -153,7 +159,8 @@ async def get_dragon_tiger_list(
     stock_code: Optional[str] = Query(None, description="股票代码"),
     has_institution: Optional[bool] = Query(None, description="是否有机构参与"),
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100)
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     查询龙虎榜数据
@@ -183,7 +190,8 @@ async def get_dragon_tiger_list(
 @router.get("/dragon-tiger/stock/{stock_code}")
 async def get_stock_dragon_tiger_history(
     stock_code: str,
-    days: int = Query(90, ge=1, le=365, description="查询天数")
+    days: int = Query(90, ge=1, le=365, description="查询天数"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     查询个股龙虎榜历史
@@ -221,7 +229,8 @@ async def get_stock_dragon_tiger_history(
 @router.get("/calendar")
 async def get_trading_calendar(
     year: Optional[int] = Query(None, description="年份"),
-    month: Optional[int] = Query(None, description="月份")
+    month: Optional[int] = Query(None, description="月份"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     查询交易日历
@@ -256,7 +265,8 @@ async def get_trading_calendar(
 
 @router.post("/calendar/sync")
 async def sync_trading_calendar(
-    years: List[int] = Query([datetime.now().year], description="年份列表")
+    years: List[int] = Query([datetime.now().year], description="年份列表"),
+    current_user: User = Depends(require_admin)
 ):
     """
     同步交易日历
@@ -287,7 +297,10 @@ async def sync_trading_calendar(
 # ========== 数据同步 ==========
 
 @router.get("/sync/status/{task_id}")
-async def get_sync_task_status(task_id: str):
+async def get_sync_task_status(
+    task_id: str,
+    current_user: User = Depends(require_admin)
+):
     """
     查询同步任务状态（支持数据同步和AI分析任务）
 
@@ -368,7 +381,8 @@ async def get_sync_task_status(task_id: str):
 
 @router.post("/sync")
 async def sync_sentiment_data(
-    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)")
+    date: Optional[str] = Query(None, description="日期(YYYY-MM-DD)"),
+    current_user: User = Depends(require_admin)
 ):
     """
     手动触发情绪数据同步（异步任务）
@@ -429,7 +443,8 @@ async def sync_sentiment_data(
 @router.post("/sync/batch")
 async def sync_sentiment_batch(
     start_date: str = Query(..., description="起始日期(YYYY-MM-DD)"),
-    end_date: str = Query(..., description="结束日期(YYYY-MM-DD)")
+    end_date: str = Query(..., description="结束日期(YYYY-MM-DD)"),
+    current_user: User = Depends(require_admin)
 ):
     """
     批量同步情绪数据（异步任务）
@@ -497,7 +512,8 @@ async def sync_sentiment_batch(
 @router.get("/statistics")
 async def get_sentiment_statistics(
     start_date: str = Query(..., description="开始日期(YYYY-MM-DD)"),
-    end_date: str = Query(..., description="结束日期(YYYY-MM-DD)")
+    end_date: str = Query(..., description="结束日期(YYYY-MM-DD)"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取情绪数据统计分析
@@ -589,7 +605,9 @@ except Exception as e:
 
 
 @router.get("/cycle/current")
-async def get_current_cycle():
+async def get_current_cycle(
+    current_user: User = Depends(get_current_active_user)
+):
     """
     获取当前情绪周期阶段
 
@@ -622,7 +640,8 @@ async def get_current_cycle():
 
 @router.get("/cycle/trend")
 async def get_cycle_trend(
-    days: int = Query(30, ge=7, le=90, description="天数")
+    days: int = Query(30, ge=7, le=90, description="天数"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取情绪周期趋势（近N天）
@@ -751,7 +770,8 @@ async def get_hot_money_activity_ranking(
 
 @router.post("/cycle/calculate")
 async def calculate_cycle(
-    date: str = Query(..., description="日期(YYYY-MM-DD)")
+    date: str = Query(..., description="日期(YYYY-MM-DD)"),
+    current_user: User = Depends(require_admin)
 ):
     """
     手动触发情绪周期计算
@@ -810,7 +830,10 @@ async def calculate_cycle(
 # =====================================================
 
 @router.get("/ai-analysis/{date}")
-async def get_ai_analysis(date: str):
+async def get_ai_analysis(
+    date: str,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     获取指定日期的AI情绪分析报告
 
@@ -847,7 +870,8 @@ async def get_ai_analysis(date: str):
 @router.post("/ai-analysis/generate")
 async def generate_ai_analysis(
     date: str = None,
-    provider: str = "deepseek"
+    provider: str = "deepseek",
+    current_user: User = Depends(require_admin)
 ):
     """
     手动触发AI情绪分析生成（异步任务）
@@ -916,7 +940,9 @@ async def generate_ai_analysis(
 
 
 @router.get("/tasks/active")
-async def get_active_tasks():
+async def get_active_tasks(
+    current_user: User = Depends(require_admin)
+):
     """
     获取所有正在执行的异步任务列表
 

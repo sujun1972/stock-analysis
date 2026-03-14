@@ -14,7 +14,7 @@
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Depends
 from loguru import logger
 
 from app.core.exceptions import DataNotFoundError, DataSyncError, ExternalAPIError
@@ -23,6 +23,8 @@ from app.models.api_response import ApiResponse
 from app.services.concurrent_data_service import ConcurrentDataService
 from app.middleware.rate_limiter import limiter, normal_limit
 from app.core.circuit_breaker import db_breaker, with_circuit_breaker
+from app.core.dependencies import get_current_active_user, require_admin
+from app.models.user import User
 
 router = APIRouter()
 
@@ -41,6 +43,7 @@ async def get_daily_data(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     limit: int = Query(500, ge=1, le=5000, description="最大返回记录数"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票日线数据
@@ -144,6 +147,7 @@ async def download_data(
     years: Optional[int] = Query(None, ge=1, le=20, description="下载年数（与日期范围二选一）"),
     max_stocks: Optional[int] = Query(None, ge=1, le=10000, description="最大下载数量"),
     batch_size: int = Query(50, ge=1, le=200, description="批量下载大小"),
+    current_user: User = Depends(require_admin)
 ):
     """
     批量下载股票数据
@@ -277,6 +281,7 @@ async def get_minute_data(
     trade_date: Optional[date] = Query(None, description="交易日期"),
     period: str = Query("1min", description="周期（1min/5min/15min/30min/60min）"),
     limit: int = Query(240, ge=1, le=1000, description="最大返回记录数"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票分钟数据
@@ -375,6 +380,7 @@ async def check_data_integrity(
     code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
+    current_user: User = Depends(require_admin)
 ):
     """
     检查股票数据完整性
@@ -431,6 +437,7 @@ async def get_batch_daily_data(
     codes: List[str] = Query(..., description="股票代码列表", min_items=1, max_items=100),
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     批量获取多只股票的日线数据（并发优化）
@@ -524,6 +531,7 @@ async def batch_download_data(
     end_date: Optional[date] = Query(None, description="结束日期"),
     years: Optional[int] = Query(None, ge=1, le=20, description="下载年数"),
     batch_size: int = Query(50, ge=1, le=100, description="批量下载大小"),
+    current_user: User = Depends(require_admin)
 ):
     """
     批量下载股票数据（并发优化）

@@ -17,6 +17,8 @@ from app.schemas.llm_call_log import (
 from app.services.llm_call_logger import llm_call_logger
 from app.models.llm_call_log import LLMCallLog
 from app.core.logging_config import get_logger
+from app.core.dependencies import require_admin
+from app.models.user import User
 
 logger = get_logger()
 
@@ -32,7 +34,8 @@ async def get_llm_logs(
     end_date: Optional[date] = Query(None, description="结束日期"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """
     查询LLM调用日志列表
@@ -72,7 +75,8 @@ async def get_llm_logs(
 @router.get("/detail/{call_id}", response_model=LLMCallLogResponse, summary="获取单条日志详情")
 async def get_llm_log_detail(
     call_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """获取单条日志的完整详情"""
     log = db.query(LLMCallLog).filter(LLMCallLog.call_id == call_id).first()
@@ -86,7 +90,8 @@ async def get_llm_log_detail(
 async def get_llm_statistics(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """
     获取LLM调用统计数据
@@ -104,7 +109,8 @@ async def get_llm_statistics(
 @router.get("/summary", summary="获取LLM调用概览")
 async def get_llm_summary(
     days: int = Query(7, ge=1, le=90, description="统计天数"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """
     获取LLM调用概览（Dashboard用）
@@ -208,7 +214,8 @@ async def get_llm_summary(
 @router.get("/recent", summary="获取最近的LLM调用记录")
 async def get_recent_logs(
     limit: int = Query(10, ge=1, le=50, description="返回数量"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """获取最近的LLM调用记录（用于实时监控）"""
     try:
@@ -228,7 +235,8 @@ async def get_cost_analysis(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     group_by: str = Query("provider", description="分组方式: provider, business_type, model"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """
     成本分析

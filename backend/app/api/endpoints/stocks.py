@@ -16,10 +16,12 @@ from typing import Optional, List, Dict, Any
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
+from app.core.dependencies import get_current_active_user, require_admin
+from app.models.user import User
 
 router = APIRouter()
 
@@ -492,6 +494,7 @@ async def get_stock_daily_data(
     start_date: Optional[str] = Query(None, description="开始日期，格式: YYYY-MM-DD，默认为最近100个交易日"),
     end_date: Optional[str] = Query(None, description="结束日期，格式: YYYY-MM-DD，默认为今天"),
     limit: int = Query(100, ge=1, le=1000, description="最大记录数，范围: 1-1000，默认100"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票日线数据
@@ -548,7 +551,9 @@ async def get_stock_daily_data(
 
 
 @router.post("/update")
-async def update_stock_list():
+async def update_stock_list(
+    current_user: User = Depends(require_admin)
+):
     """
     更新股票列表（从数据源获取最新列表）
 
@@ -634,6 +639,7 @@ async def get_minute_data(
     code: str,
     trade_date: Optional[str] = Query(None, description="交易日期，格式: YYYY-MM-DD，默认为今天"),
     period: str = Query("1min", description="分钟周期，可选值: 1min, 5min, 15min, 30min, 60min"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票分时数据

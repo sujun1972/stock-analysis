@@ -7,13 +7,15 @@ import json
 from typing import Optional
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from loguru import logger
 
 from app.api.error_handler import handle_api_errors
+from app.core.dependencies import get_current_active_user
 from app.core.exceptions import DatabaseError, DataNotFoundError
+from app.models.user import User
 from app.models.ml_models import (
     MLPredictionRequest,
     MLPredictionResponse,
@@ -33,7 +35,11 @@ experiment_service = ExperimentService()
 
 @router.post("/train", response_model=MLTrainingTaskResponse)
 @handle_api_errors
-async def create_training_task(request: MLTrainingTaskCreate, background_tasks: BackgroundTasks):
+async def create_training_task(
+    request: MLTrainingTaskCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     创建训练任务
 
@@ -55,7 +61,7 @@ async def create_training_task(request: MLTrainingTaskCreate, background_tasks: 
 
 @router.get("/tasks/{task_id}", response_model=MLTrainingTaskResponse)
 @handle_api_errors
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, current_user: User = Depends(get_current_active_user)):
     """
     获取任务状态
 
@@ -71,7 +77,11 @@ async def get_task_status(task_id: str):
 
 @router.get("/tasks")
 @handle_api_errors
-async def list_tasks(status: Optional[str] = None, limit: int = 50):
+async def list_tasks(
+    status: Optional[str] = None,
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     列出训练任务
 
@@ -85,7 +95,7 @@ async def list_tasks(status: Optional[str] = None, limit: int = 50):
 
 @router.delete("/tasks/{task_id}")
 @handle_api_errors
-async def delete_task(task_id: str):
+async def delete_task(task_id: str, current_user: User = Depends(get_current_active_user)):
     """
     删除任务
 
@@ -101,7 +111,7 @@ async def delete_task(task_id: str):
 
 @router.get("/tasks/{task_id}/stream")
 @handle_api_errors
-async def stream_task_progress(task_id: str):
+async def stream_task_progress(task_id: str, current_user: User = Depends(get_current_active_user)):
     """
     流式推送训练进度（SSE）
 
@@ -156,7 +166,7 @@ async def stream_task_progress(task_id: str):
 
 @router.post("/predict", response_model=MLPredictionResponse)
 @handle_api_errors
-async def predict(request: MLPredictionRequest):
+async def predict(request: MLPredictionRequest, current_user: User = Depends(get_current_active_user)):
     """
     使用训练好的模型进行预测
 
@@ -206,6 +216,7 @@ async def list_models(
     page_size: int = 20,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "desc",
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     列出可用的模型（支持分页和排序）
@@ -434,7 +445,12 @@ async def get_available_features():
 
 @router.get("/features/snapshot")
 @handle_api_errors
-async def get_feature_snapshot(symbol: str, date: str, model_id: Optional[str] = None):
+async def get_feature_snapshot(
+    symbol: str,
+    date: str,
+    model_id: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     获取指定日期的特征快照
 

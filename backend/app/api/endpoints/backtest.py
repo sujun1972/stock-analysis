@@ -30,7 +30,8 @@ from app.models.api_response import ApiResponse
 from app.utils.data_cleaning import sanitize_float_values
 from app.repositories.strategy_execution_repository import StrategyExecutionRepository
 from app.api.error_handler import handle_api_errors
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_active_user
+from app.models.user import User
 
 # 添加 core 项目到 Python 路径
 # 在 Docker 容器中，core 目录在 /app/core
@@ -851,7 +852,7 @@ async def run_backtest_main(
     strict_mode: bool = Body(True, description="严格模式（代码验证）"),
     strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数（覆盖默认参数，用于ML模型ID等）"),
     exit_strategy_ids: Optional[List[int]] = Body(None, description="离场策略ID列表（可选，支持多个）"),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """
     运行回测
@@ -1761,6 +1762,7 @@ async def calculate_metrics(
     dates: List[str] = Body(..., description="日期序列"),
     trades: List[Dict[str, Any]] = Body(default_factory=list, description="交易记录"),
     positions: List[Dict[str, Any]] = Body(default_factory=list, description="持仓记录"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     计算回测绩效指标
@@ -1822,7 +1824,10 @@ async def calculate_metrics(
 
 
 @router.post("/parallel")
-async def run_parallel_backtest(request: ParallelBacktestRequest):
+async def run_parallel_backtest(
+    request: ParallelBacktestRequest,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     运行并行回测（多策略/多参数）
 
@@ -1910,7 +1915,10 @@ async def run_parallel_backtest(request: ParallelBacktestRequest):
 
 
 @router.post("/optimize")
-async def optimize_strategy_params(request: OptimizeParamsRequest):
+async def optimize_strategy_params(
+    request: OptimizeParamsRequest,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     优化策略参数
 
@@ -1973,7 +1981,10 @@ async def optimize_strategy_params(request: OptimizeParamsRequest):
 
 
 @router.post("/cost-analysis")
-async def analyze_trading_costs(request: CostAnalysisRequest):
+async def analyze_trading_costs(
+    request: CostAnalysisRequest,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     分析交易成本
 
@@ -2027,6 +2038,7 @@ async def calculate_risk_metrics(
     returns: List[float] = Body(..., description="收益率序列"),
     dates: List[str] = Body(..., description="日期序列"),
     positions: List[Dict[str, Any]] = Body(default_factory=list, description="持仓记录"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     计算风险指标
@@ -2078,7 +2090,10 @@ async def calculate_risk_metrics(
 
 
 @router.post("/trade-statistics")
-async def get_trade_statistics(request: TradeStatisticsRequest):
+async def get_trade_statistics(
+    request: TradeStatisticsRequest,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     获取交易统计
 
@@ -2146,7 +2161,7 @@ async def start_async_backtest(
     strict_mode: bool = Body(True, description="严格模式（代码验证）"),
     strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数"),
     exit_strategy_ids: Optional[List[int]] = Body(None, description="离场策略ID列表（可选，支持多个）"),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """
     启动异步回测任务（立即返回）
@@ -2227,7 +2242,7 @@ async def start_async_backtest(
 @handle_api_errors
 async def get_backtest_status(
     task_id: str,
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """
     查询异步回测任务状态
@@ -2301,7 +2316,7 @@ async def get_backtest_status(
 @handle_api_errors
 async def cancel_async_backtest(
     task_id: str,
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """
     取消正在执行的异步回测任务

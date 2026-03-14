@@ -24,6 +24,8 @@ from app.schemas.llm_prompt_template import (
 )
 from app.services.prompt_template_service import get_prompt_template_service
 from app.core.exceptions import DataNotFoundError, ValidationError
+from app.core.dependencies import require_admin
+from app.models.user import User
 
 router = APIRouter()
 service = get_prompt_template_service()
@@ -35,7 +37,8 @@ def list_templates(
     is_active: Optional[bool] = Query(None, description="是否启用"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """获取提示词模板列表"""
     try:
@@ -57,7 +60,8 @@ def list_templates(
 @router.get("/{template_id}", response_model=PromptTemplateResponse)
 def get_template(
     template_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """获取模板详情"""
     try:
@@ -72,7 +76,8 @@ def get_template(
 @router.post("/", response_model=PromptTemplateResponse, status_code=201)
 def create_template(
     template_data: PromptTemplateCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """创建新模板"""
     try:
@@ -88,7 +93,8 @@ def create_template(
 def update_template(
     template_id: int,
     updates: PromptTemplateUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """更新模板"""
     try:
@@ -106,7 +112,8 @@ def update_template(
 def create_version(
     template_id: int,
     version_data: PromptTemplateVersionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """基于现有模板创建新版本"""
     try:
@@ -124,7 +131,8 @@ def create_version(
 def activate_template(
     template_id: int,
     set_as_default: bool = Query(False, description="是否设为默认模板"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """激活模板"""
     try:
@@ -141,7 +149,8 @@ def activate_template(
 @router.post("/{template_id}/deactivate", response_model=PromptTemplateResponse)
 def deactivate_template(
     template_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """停用模板"""
     try:
@@ -158,7 +167,8 @@ def deactivate_template(
 @router.delete("/{template_id}", status_code=204)
 def delete_template(
     template_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """删除模板"""
     try:
@@ -176,7 +186,8 @@ def delete_template(
 def preview_template(
     template_id: int,
     preview_request: PromptTemplatePreviewRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """预览渲染后的提示词"""
     try:
@@ -195,7 +206,8 @@ def preview_template(
 @router.get("/{template_id}/statistics", response_model=PromptTemplateStatistics)
 def get_template_statistics(
     template_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """获取模板的性能统计"""
     try:
@@ -211,7 +223,8 @@ def get_template_statistics(
 def get_template_history(
     template_id: int,
     limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """获取模板的修改历史"""
     try:
@@ -224,6 +237,8 @@ def get_template_history(
 
 
 @router.get("/business-types/all", response_model=list[str])
-def get_business_types():
+def get_business_types(
+    current_user: User = Depends(require_admin)
+):
     """获取所有业务类型"""
     return BusinessTypeEnum.all()

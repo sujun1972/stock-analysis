@@ -5,12 +5,14 @@
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.services.config_service import ConfigService
+from app.core.dependencies import require_admin
+from app.models.user import User
 
 router = APIRouter()
 
@@ -29,7 +31,9 @@ class DataSourceConfigRequest(BaseModel):
 
 @router.get("/source")
 @handle_api_errors
-async def get_data_source_config():
+async def get_data_source_config(
+    current_user: User = Depends(require_admin)
+):
     """
     获取数据源配置
 
@@ -44,7 +48,10 @@ async def get_data_source_config():
 
 @router.post("/source")
 @handle_api_errors
-async def update_data_source_config(request: DataSourceConfigRequest):
+async def update_data_source_config(
+    request: DataSourceConfigRequest,
+    current_user: User = Depends(require_admin)
+):
     """
     更新数据源配置
 
@@ -79,7 +86,9 @@ async def update_data_source_config(request: DataSourceConfigRequest):
 
 @router.get("/all")
 @handle_api_errors
-async def get_all_configs():
+async def get_all_configs(
+    current_user: User = Depends(require_admin)
+):
     """
     获取所有系统配置
 
@@ -94,7 +103,9 @@ async def get_all_configs():
 
 @router.get("/sync-status")
 @handle_api_errors
-async def get_sync_status():
+async def get_sync_status(
+    current_user: User = Depends(require_admin)
+):
     """
     获取同步状态
 

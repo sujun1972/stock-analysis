@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 
 from app.api.error_handler import handle_api_errors
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_active_user
 from app.models.user import User
 from app.repositories.strategy_repository import StrategyRepository
 from app.schemas.strategy import (
@@ -80,7 +80,10 @@ async def get_statistics() -> Dict[str, Any]:
 
 @router.post("/validate", summary="验证策略代码", status_code=status.HTTP_200_OK)
 @handle_api_errors
-async def validate_code(request: ValidateCodeRequest) -> Dict[str, Any]:
+async def validate_code(
+    request: ValidateCodeRequest,
+    current_user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
     """
     验证策略代码的安全性和正确性
 
@@ -137,7 +140,10 @@ async def validate_code(request: ValidateCodeRequest) -> Dict[str, Any]:
 
 @router.post("", summary="创建策略", status_code=status.HTTP_201_CREATED)
 @handle_api_errors
-async def create_strategy(data: StrategyCreate) -> Dict[str, Any]:
+async def create_strategy(
+    data: StrategyCreate,
+    current_user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
     """
     创建新策略
 
@@ -332,7 +338,11 @@ async def get_strategy(strategy_id: int) -> Dict[str, Any]:
 
 @router.put("/{strategy_id}", summary="更新策略")
 @handle_api_errors
-async def update_strategy(strategy_id: int, data: StrategyUpdate) -> Dict[str, Any]:
+async def update_strategy(
+    strategy_id: int,
+    data: StrategyUpdate,
+    current_user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
     """
     更新指定策略
 
@@ -545,7 +555,9 @@ async def get_strategy_code(strategy_id: int) -> Dict[str, Any]:
 @router.post("/{strategy_id}/test", summary="测试策略", status_code=status.HTTP_200_OK)
 @handle_api_errors
 async def test_strategy(
-    strategy_id: int, strict_mode: bool = Query(True, description="严格模式")
+    strategy_id: int,
+    strict_mode: bool = Query(True, description="严格模式"),
+    current_user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """
     测试策略是否能成功创建

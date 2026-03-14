@@ -4,10 +4,13 @@
 提供概念管理、查询和更新功能
 """
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import List, Optional
 import sys
 from pathlib import Path
+
+from app.core.dependencies import require_admin
+from app.models.user import User
 
 # 添加 core 模块到路径
 core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
@@ -269,7 +272,8 @@ async def sync_concepts(
     source: Optional[str] = Query(
         None,
         description="数据源（可选）：None=使用系统配置，em=东方财富（推荐），tushare=Tushare Pro（需5000积分）"
-    )
+    ),
+    current_user: User = Depends(require_admin)
 ):
     """
     同步概念数据（异步任务）
@@ -307,7 +311,10 @@ async def sync_concepts(
 
 
 @router.get("/sync/status/{task_id}")
-async def get_sync_status(task_id: str):
+async def get_sync_status(
+    task_id: str,
+    current_user: User = Depends(require_admin)
+):
     """
     查询概念同步任务状态
 
@@ -356,7 +363,8 @@ async def get_sync_status(task_id: str):
 @router.put("/stock/{stock_code}/concepts")
 async def update_stock_concepts(
     stock_code: str,
-    concept_ids: List[int]
+    concept_ids: List[int],
+    current_user: User = Depends(require_admin)
 ):
     """
     更新股票的概念标签
