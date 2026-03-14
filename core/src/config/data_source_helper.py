@@ -140,6 +140,7 @@ class DataSourceConfigHelper:
                 - "limit_up": 涨停板池数据源
                 - "top_list": 龙虎榜数据源
                 - "premarket": 盘前数据源
+                - "concept": 概念数据源
 
         Returns:
             数据提供者实例
@@ -162,6 +163,8 @@ class DataSourceConfigHelper:
             source = config["top_list_data_source"]
         elif source_type == "premarket":
             source = config["premarket_data_source"]
+        elif source_type == "concept":
+            source = config.get("concept_data_source", config["data_source"])  # 概念数据源，如果未配置则使用主数据源
         else:
             source = config["data_source"]
 
@@ -198,6 +201,12 @@ def get_minute_data_source() -> str:
 def get_realtime_data_source() -> str:
     """获取实时数据源（便捷函数）"""
     return _helper.get_realtime_data_source()
+
+
+def get_concept_data_source() -> str:
+    """获取概念数据源（便捷函数）"""
+    config = _helper.get_data_source_config()
+    return config.get("concept_data_source", config["data_source"])
 
 
 def get_tushare_token() -> str:

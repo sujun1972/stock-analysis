@@ -3,7 +3,7 @@
 负责数据源配置的验证和管理
 
 功能说明：
-1. 支持6种数据源配置：主数据源、分时、实时、涨停板池、龙虎榜、盘前
+1. 支持7种数据源配置：主数据源、分时、实时、涨停板池、龙虎榜、盘前、概念
 2. Token安全管理：返回给前端时自动掩码（如 d038****...****f3ad）
 3. "留空不修改"模式：允许更新配置但不修改Token
 4. 数据源验证：确保所选数据源在支持列表中
@@ -84,6 +84,7 @@ class DataSourceManager:
                 "limit_up_data_source",
                 "top_list_data_source",
                 "premarket_data_source",
+                "concept_data_source",
                 "tushare_token"
             ]
 
@@ -99,6 +100,7 @@ class DataSourceManager:
                 "limit_up_data_source": configs.get("limit_up_data_source") or "tushare",  # 默认tushare（用户有5000积分）
                 "top_list_data_source": configs.get("top_list_data_source") or "tushare",  # 默认tushare
                 "premarket_data_source": configs.get("premarket_data_source") or "akshare",  # 默认akshare（外盘数据）
+                "concept_data_source": configs.get("concept_data_source") or "akshare",  # 默认akshare（免费且数据丰富）
                 "tushare_token": self._mask_token(raw_token) if mask_token else raw_token,
             }
 
@@ -140,6 +142,16 @@ class DataSourceManager:
         """
         config = await self.get_data_source_config()
         return config["realtime_data_source"]
+
+    async def get_concept_data_source(self) -> str:
+        """
+        获取概念数据源
+
+        Returns:
+            数据源名称
+        """
+        config = await self.get_data_source_config()
+        return config["concept_data_source"]
 
     async def get_tushare_token(self) -> str:
         """
@@ -204,18 +216,20 @@ class DataSourceManager:
         limit_up_data_source: Optional[str] = None,
         top_list_data_source: Optional[str] = None,
         premarket_data_source: Optional[str] = None,
+        concept_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
     ) -> Dict:
         """
         更新数据源配置
 
-        支持6种数据源的独立配置：
-        1. 主数据源：日线数据、股票列表、概念板块等
+        支持7种数据源的独立配置：
+        1. 主数据源：日线数据、股票列表等
         2. 分时数据源：分钟级K线数据
         3. 实时数据源：实时行情数据
-        4. 涨停板池数据源：涨停板池数据（新增）
-        5. 龙虎榜数据源：龙虎榜数据（新增）
-        6. 盘前数据源：盘前外盘数据（新增）
+        4. 涨停板池数据源：涨停板池数据
+        5. 龙虎榜数据源：龙虎榜数据
+        6. 盘前数据源：盘前外盘数据
+        7. 概念数据源：概念板块数据
 
         安全特性：
         - Token留空不修改：如果tushare_token为None，则保持原有Token不变
@@ -228,6 +242,7 @@ class DataSourceManager:
             limit_up_data_source: 涨停板池数据源（可选）
             top_list_data_source: 龙虎榜数据源（可选）
             premarket_data_source: 盘前数据源（可选）
+            concept_data_source: 概念数据源（可选）
             tushare_token: Tushare Token（可选，留空不修改原有Token）
 
         Returns:
@@ -260,6 +275,10 @@ class DataSourceManager:
             if premarket_data_source:
                 self.validate_data_source(premarket_data_source)
 
+            # 验证概念数据源
+            if concept_data_source:
+                self.validate_data_source(concept_data_source)
+
             # 验证 Tushare 配置
             await self.validate_tushare_config(data_source, tushare_token)
 
@@ -281,6 +300,9 @@ class DataSourceManager:
             if premarket_data_source:
                 updates["premarket_data_source"] = premarket_data_source
 
+            if concept_data_source:
+                updates["concept_data_source"] = concept_data_source
+
             if tushare_token:
                 updates["tushare_token"] = tushare_token
 
@@ -294,7 +316,8 @@ class DataSourceManager:
                 f"实时={realtime_data_source or '未更改'}, "
                 f"涨停板={limit_up_data_source or '未更改'}, "
                 f"龙虎榜={top_list_data_source or '未更改'}, "
-                f"盘前={premarket_data_source or '未更改'}"
+                f"盘前={premarket_data_source or '未更改'}, "
+                f"概念={concept_data_source or '未更改'}"
             )
 
             return await self.get_data_source_config()

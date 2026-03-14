@@ -448,9 +448,10 @@ class ApiClient {
   }
 
   // 同步概念数据
-  async syncConcepts(source: string = 'ths'): Promise<ApiResponse<any>> {
+  async syncConcepts(source?: string): Promise<ApiResponse<any>> {
+    const params = source ? { source } : {}
     const response = await axiosInstance.post('/api/concepts/sync', null, {
-      params: { source }
+      params
     })
     return response.data
   }
@@ -565,6 +566,7 @@ class ApiClient {
     limit_up_data_source?: string
     top_list_data_source?: string
     premarket_data_source?: string
+    concept_data_source?: string
     tushare_token: string
   }>> {
     const response = await axiosInstance.get('/api/config/source')
@@ -581,6 +583,7 @@ class ApiClient {
     limit_up_data_source?: string
     top_list_data_source?: string
     premarket_data_source?: string
+    concept_data_source?: string
     tushare_token?: string
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/config/source', params)

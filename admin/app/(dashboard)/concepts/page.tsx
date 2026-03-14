@@ -91,12 +91,13 @@ export default function ConceptsPage() {
     setPage(1)
   }
 
-  // 同步概念数据
+  // 同步概念数据（使用系统配置的数据源）
   const handleSync = async () => {
     setLoading(true)
     try {
-      await apiClient.syncConcepts('em')
-      toast.success('概念数据同步任务已提交，正在后台执行')
+      // 不传source参数，让后端使用系统配置的数据源
+      await apiClient.syncConcepts()
+      toast.success('概念数据同步任务已提交，将使用系统配置的数据源')
       setTimeout(() => loadConcepts(), 2000)
     } catch (error: any) {
       toast.error('同步失败: ' + (error.message || '未知错误'))

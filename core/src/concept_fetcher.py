@@ -26,11 +26,13 @@ try:
     from .exceptions import DataProviderError
     from .database.connection_pool_manager import ConnectionPoolManager
     from .config.data_source_helper import create_provider, get_data_source_config
+    from .providers.provider_factory import DataProviderFactory
 except ImportError:
     from src.utils.response import Response
     from src.exceptions import DataProviderError
     from src.database.connection_pool_manager import ConnectionPoolManager
     from src.config.data_source_helper import create_provider, get_data_source_config
+    from src.providers.provider_factory import DataProviderFactory
 
 
 class ConceptFetcher:
@@ -45,14 +47,14 @@ class ConceptFetcher:
         """
         self.pool_manager = pool_manager
 
-        # 从配置获取数据源
+        # 从配置获取数据源（使用独立的概念数据源配置）
         self.config = get_data_source_config()
-        self.data_source = self.config["data_source"]
+        self.data_source = self.config.get("concept_data_source", self.config["data_source"])
 
-        # 创建数据提供者
+        # 创建数据提供者（使用概念数据源类型）
         try:
-            self.provider = create_provider("data")
-            logger.info(f"✓ 概念采集器初始化成功，使用数据源: {self.data_source}")
+            self.provider = create_provider("concept")
+            logger.info(f"✓ 概念采集器初始化成功，使用概念数据源: {self.data_source}")
         except Exception as e:
             logger.warning(f"创建数据提供者失败，将在需要时重试: {e}")
             self.provider = None
@@ -86,6 +88,7 @@ class ConceptFetcher:
                    - None: 使用配置的数据源
                    - 'em': 强制使用AkShare东方财富
                    - 'ths': 强制使用AkShare同花顺（不推荐，成分股API已失效）
+                   - 'tushare': 强制使用Tushare（需5000积分）
 
         Returns:
             Response: 包含操作结果的响应对象
@@ -99,10 +102,15 @@ class ConceptFetcher:
 
             logger.info(f"开始获取概念板块数据（数据源：{actual_source}）...")
 
+            # 初始化 tushare_provider（如果需要）
+            tushare_provider = None
+
             # 1. 根据数据源获取概念列表
             if actual_source == "tushare":
-                # 使用Tushare获取概念列表
-                concept_df = self.provider.api_client.query('concept')
+                # 使用Tushare获取概念列表（动态创建 tushare provider）
+                tushare_token = self.config.get("tushare_token", "")
+                tushare_provider = DataProviderFactory.create_provider('tushare', token=tushare_token)
+                concept_df = tushare_provider.api_client.query('concept')
                 # 字段映射：ts_code -> 代码, name -> 名称
                 concept_df = concept_df.rename(columns={'ts_code': '代码', 'name': '名称'})
                 source_label = 'tushare'
@@ -138,7 +146,7 @@ class ConceptFetcher:
             if source == 'ths':
                 logger.warning("⚠️ 同花顺成分股API不可用，跳过成分股同步")
             elif actual_source == "tushare":
-                # 使用Tushare获取概念成分股
+                # 使用Tushare获取概念成分股（使用之前创建的 tushare_provider）
                 for idx, row in concept_df.iterrows():
                     try:
                         concept_code = row.get('代码') or row.get('code')
@@ -151,7 +159,7 @@ class ConceptFetcher:
                         logger.info(f"正在获取概念 [{concept_name}] 的成分股... ({idx+1}/{len(concept_df)})")
 
                         # 获取概念成分股
-                        stocks_df = self.provider.api_client.query('concept_detail', ts_code=concept_code)
+                        stocks_df = tushare_provider.api_client.query('concept_detail', ts_code=concept_code)
 
                         if stocks_df is not None and not stocks_df.empty:
                             # 字段映射：ts_code -> 代码

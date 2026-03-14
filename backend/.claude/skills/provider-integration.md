@@ -13,9 +13,15 @@ Backend 项目通过 `src.providers` (来自 core 项目) 获取股票数据。C
 
 ```python
 from src.providers import DataProviderFactory
+from src.config.data_source_helper import create_provider, get_data_source_config
 
-# 创建提供者
+# 方式1: 直接创建（手动指定数据源）
 provider = DataProviderFactory.create_provider(source="akshare")
+
+# 方式2: 配置化创建（推荐，使用系统配置）
+provider = create_provider("data")  # 使用主数据源配置
+provider = create_provider("concept")  # 使用概念数据源配置
+provider = create_provider("realtime")  # 使用实时数据源配置
 
 # ❌ 错误：直接使用返回值
 df = provider.get_daily_data(code="000001")  # 返回 Response 对象
@@ -28,6 +34,36 @@ if not response.is_success():
     # 处理错误
     raise ExternalAPIError(response.error_message, error_code=response.error_code)
 df = response.data  # 提取 DataFrame
+```
+
+### 数据源配置系统
+
+系统支持 7 种数据源的独立配置：
+
+1. **主数据源** (`data`) - 日线数据、股票列表
+2. **分时数据源** (`minute`) - 分钟级K线
+3. **实时数据源** (`realtime`) - 实时行情
+4. **涨停板池数据源** (`limit_up`) - 涨停板池数据
+5. **龙虎榜数据源** (`top_list`) - 龙虎榜数据
+6. **盘前数据源** (`premarket`) - 外盘/盘前数据
+7. **概念数据源** (`concept`) - 概念板块数据
+
+**配置方式**:
+- Admin界面: 设置 > 数据源设置 (http://localhost:3002/settings/datasource)
+- 数据库: `system_config` 表
+
+**示例**:
+```python
+from src.config.data_source_helper import create_provider, get_data_source_config
+
+# 获取当前配置
+config = get_data_source_config()
+print(f"主数据源: {config['data_source']}")
+print(f"概念数据源: {config['concept_data_source']}")
+
+# 使用配置创建 Provider（自动读取系统配置）
+provider = create_provider("concept")  # 使用系统配置的概念数据源
+response = provider.get_concept_list()
 ```
 
 ---

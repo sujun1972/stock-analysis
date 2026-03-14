@@ -267,14 +267,20 @@ async def get_stock_concepts(stock_code: str):
 @router.post("/sync")
 async def sync_concepts(
     background_tasks: BackgroundTasks,
-    source: str = Query(default='em', description="数据源：em（东方财富，推荐）或 ths（同花顺，成分股API已失效）")
+    source: Optional[str] = Query(
+        None,
+        description="数据源（可选）：None=使用系统配置，em=东方财富（推荐），ths=同花顺（成分股API已失效），tushare=Tushare Pro（需5000积分）"
+    )
 ):
     """
     同步概念数据（后台任务）
 
     Args:
-        source: 数据源，推荐使用 'em'（东方财富，466个概念，完整成分股）
-               'ths'（同花顺，375个概念，但成分股API已失效）
+        source: 数据源（可选）
+               - None: 使用系统配置的主数据源（推荐）
+               - 'em': 强制使用AkShare东方财富（466个概念，完整成分股，免费）
+               - 'ths': 强制使用AkShare同花顺（375个概念，成分股API已失效）
+               - 'tushare': 强制使用Tushare Pro（需5000积分，数据稳定）
 
     Returns:
         任务提交成功信息
@@ -282,6 +288,7 @@ async def sync_concepts(
     try:
         def sync_task():
             fetcher = ConceptFetcher(pool_manager)
+            # source=None 时，ConceptFetcher 会自动使用配置的数据源
             result = fetcher.fetch_and_save_concepts(source=source)
             if result.is_success():
                 print(f"✅ 概念数据同步完成: {result.message}")
@@ -291,11 +298,13 @@ async def sync_concepts(
         # 添加后台任务
         background_tasks.add_task(sync_task)
 
+        source_display = source or "系统配置的数据源"
+
         return {
             "code": 200,
             "message": "概念数据同步任务已提交，正在后台执行",
             "data": {
-                "source": source,
+                "source": source_display,
                 "status": "processing"
             }
         }
