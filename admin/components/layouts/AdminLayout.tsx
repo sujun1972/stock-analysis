@@ -36,7 +36,8 @@ import {
   Zap,
   Clock,
   ScrollText,
-  Brain
+  Brain,
+  Bell
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -128,6 +129,11 @@ const navItems: NavItem[] = [
         name: '定时任务',
         href: '/settings/scheduler',
         icon: Clock
+      },
+      {
+        name: '通知渠道',
+        href: '/settings/notification-channels',
+        icon: Bell
       }
     ]
   },
@@ -153,9 +159,20 @@ const navItems: NavItem[] = [
     ]
   },
   {
-    name: '性能监控',
-    href: '/monitor',
-    icon: Activity
+    name: '系统监控',
+    icon: Activity,
+    children: [
+      {
+        name: '性能监控',
+        href: '/monitor',
+        icon: Activity
+      },
+      {
+        name: '通知监控',
+        href: '/monitoring/notifications',
+        icon: Bell
+      }
+    ]
   },
 ]
 

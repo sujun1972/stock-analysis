@@ -43,6 +43,12 @@ import type {
   PaginatedSentimentResponse,
   SentimentStatistics,
 } from '@/types/sentiment'
+import type {
+  NotificationChannelConfig,
+  NotificationChannelUpdateRequest,
+  TestChannelRequest,
+  TestChannelResponse,
+} from '@/types/notification-channel'
 import { isTokenExpiringSoon } from './jwt-utils'
 import logger from '@/lib/logger'
 
@@ -1694,6 +1700,59 @@ class ApiClient {
    */
   async deleteAIProvider(provider: string): Promise<ApiResponse<void>> {
     const response = await axiosInstance.delete(`/api/ai-strategy/providers/${provider}`)
+    return response.data
+  }
+
+  // ========== 通知渠道配置 API ==========
+
+  /**
+   * 获取所有通知渠道配置
+   */
+  async getNotificationChannels(): Promise<ApiResponse<NotificationChannelConfig[]>> {
+    const response = await axiosInstance.get('/api/notification-channels')
+    return response.data
+  }
+
+  /**
+   * 获取指定渠道配置
+   */
+  async getNotificationChannel(channelType: string): Promise<ApiResponse<NotificationChannelConfig>> {
+    const response = await axiosInstance.get(`/api/notification-channels/${channelType}`)
+    return response.data
+  }
+
+  /**
+   * 更新通知渠道配置
+   */
+  async updateNotificationChannel(
+    channelType: string,
+    data: NotificationChannelUpdateRequest
+  ): Promise<ApiResponse<NotificationChannelConfig>> {
+    const response = await axiosInstance.put(`/api/notification-channels/${channelType}`, data)
+    return response.data
+  }
+
+  /**
+   * 启用/禁用通知渠道
+   */
+  async toggleNotificationChannel(
+    channelType: string
+  ): Promise<ApiResponse<NotificationChannelConfig>> {
+    const response = await axiosInstance.post(`/api/notification-channels/${channelType}/toggle`)
+    return response.data
+  }
+
+  /**
+   * 测试通知渠道
+   */
+  async testNotificationChannel(
+    channelType: string,
+    testTarget: string
+  ): Promise<ApiResponse<TestChannelResponse>> {
+    const response = await axiosInstance.post(
+      `/api/notification-channels/${channelType}/test`,
+      { test_target: testTarget }
+    )
     return response.data
   }
 }
