@@ -25,7 +25,7 @@ router = APIRouter()
 
 # ==================== 用户通知配置 ====================
 
-@router.get("/settings", response_model=ApiResponse[NotificationSettingsResponse])
+@router.get("/settings")
 def get_notification_settings(
     current_user = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -42,12 +42,12 @@ def get_notification_settings(
         return ApiResponse.success(
             data=settings,
             message="获取成功"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/settings", response_model=ApiResponse[NotificationSettingsResponse])
+@router.put("/settings")
 def update_notification_settings(
     settings_data: NotificationSettingsUpdate,
     current_user = Depends(get_current_active_user),
@@ -65,14 +65,14 @@ def update_notification_settings(
         return ApiResponse.success(
             data=settings,
             message="配置已更新"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== 站内消息 ====================
 
-@router.get("/in-app", response_model=ApiResponse[List[InAppNotificationResponse]])
+@router.get("/in-app")
 def get_in_app_notifications(
     unread_only: bool = Query(False, description="仅未读消息"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -93,12 +93,12 @@ def get_in_app_notifications(
         return ApiResponse.success(
             data=notifications,
             message="获取成功"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/in-app/{notification_id}/read", response_model=ApiResponse)
+@router.post("/in-app/{notification_id}/read")
 def mark_notification_as_read(
     notification_id: int,
     current_user = Depends(get_current_active_user),
@@ -112,12 +112,12 @@ def mark_notification_as_read(
         return ApiResponse.success(
             data=None,
             message="已标记为已读"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/in-app/read-all", response_model=ApiResponse)
+@router.post("/in-app/read-all")
 def mark_all_as_read(
     current_user = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -130,12 +130,12 @@ def mark_all_as_read(
         return ApiResponse.success(
             data={"count": count},
             message=f"已标记 {count} 条消息为已读"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/unread-count", response_model=ApiResponse[UnreadCountResponse])
+@router.get("/unread-count")
 def get_unread_count(
     current_user = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -148,14 +148,14 @@ def get_unread_count(
         return ApiResponse.success(
             data={"unread_count": count},
             message="获取成功"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== 通知发送历史 ====================
 
-@router.get("/logs", response_model=ApiResponse[List[NotificationLogResponse]])
+@router.get("/logs")
 def get_notification_logs(
     limit: int = Query(50, ge=1, le=200, description="每页数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
@@ -170,6 +170,6 @@ def get_notification_logs(
         return ApiResponse.success(
             data=logs,
             message="获取成功"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
