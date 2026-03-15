@@ -20,6 +20,7 @@ from .endpoints import (
     market,
     ml,
     notification_channels,
+    notification_monitoring,  # Phase 3: 通知监控
     notifications,
     premarket,
     profile,
@@ -93,5 +94,6 @@ router.include_router(system_logs.router, tags=["系统日志"])
 # 通知系统路由
 router.include_router(notification_channels.router, prefix="/notification-channels", tags=["通知渠道配置（Admin）"])
 router.include_router(notifications.router, prefix="/notifications", tags=["用户通知"])
+router.include_router(notification_monitoring.router, prefix="/notification-monitoring", tags=["通知系统监控（Admin）"])  # Phase 3
 
 __all__ = ["router"]

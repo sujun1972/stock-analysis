@@ -467,3 +467,89 @@ def cleanup_expired_notifications_task():
     finally:
         if db:
             db.close()
+
+
+# ==================== Phase 3: 监控与告警任务 ====================
+
+@shared_task
+def notification_health_check_task():
+    """
+    通知系统健康检查任务
+
+    定时任务，每小时执行一次
+    检查发送成功率、失败率、积压情况，发现异常自动告警
+    """
+    db = None
+    try:
+        logger.info("开始通知系统健康检查...")
+
+        db = next(get_db())
+        from app.services.notification_alert import NotificationAlert
+
+        alert_service = NotificationAlert(db)
+        result = alert_service.check_and_alert()
+
+        health_status = result.get('health_status', 'unknown')
+        alerts_count = len(result.get('alerts_triggered', []))
+
+        if alerts_count > 0:
+            logger.warning(
+                f"通知系统健康检查发现异常: status={health_status}, "
+                f"alerts={alerts_count}"
+            )
+        else:
+            logger.info(f"通知系统健康检查正常: status={health_status}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"健康检查任务失败: {e}", exc_info=True)
+        return {
+            'health_status': 'critical',
+            'error': str(e),
+            'alerts_triggered': []
+        }
+
+    finally:
+        if db:
+            db.close()
+
+
+@shared_task
+def reset_daily_rate_limits_task():
+    """
+    重置每日频率限制计数器
+
+    定时任务，每天凌晨执行
+    重置所有用户的每日通知计数
+    """
+    db = None
+    try:
+        logger.info("开始重置每日频率限制...")
+
+        db = next(get_db())
+        from sqlalchemy import text
+
+        # 批量重置计数器
+        result = db.execute(
+            text("""
+                UPDATE user_notification_settings
+                SET daily_notification_count = 0,
+                    last_reset_date = CURRENT_DATE
+                WHERE last_reset_date < CURRENT_DATE
+            """)
+        )
+
+        reset_count = result.rowcount
+        db.commit()
+
+        logger.info(f"频率限制重置完成，共重置 {reset_count} 个用户")
+
+    except Exception as e:
+        logger.error(f"重置频率限制失败: {e}", exc_info=True)
+        if db:
+            db.rollback()
+
+    finally:
+        if db:
+            db.close()

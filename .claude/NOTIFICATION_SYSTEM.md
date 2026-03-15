@@ -29,10 +29,29 @@
 - 渠道级别统计
 
 ### 5. Celery 异步任务 (`notification_tasks.py`)
-- `send_email_notification_task` - Email 发送
+- `send_email_notification_task` - Email 发送（支持连接池优化）
 - `send_telegram_notification_task` - Telegram 发送
 - `send_in_app_notification_task` - 站内消息
 - `schedule_report_notification_task` - 批量调度（核心任务）
+- `notification_health_check_task` - 健康检查（每小时，Phase 3）
+- `reset_daily_rate_limits_task` - 重置频率限制（每天凌晨，Phase 3）
+- `cleanup_expired_notifications_task` - 清理过期消息（每天凌晨）
+
+### 6. 监控服务 (`notification_monitor.py`, Phase 3)
+- 发送成功率统计（总体 + 按渠道）
+- 失败记录分析和失败原因统计
+- 渠道性能分析（成功率、平均送达时间、高峰时段）
+- 每日发送趋势分析
+- 实时监控数据
+- 健康检查
+
+### 7. 告警服务 (`notification_alert.py`, Phase 3)
+- 自动健康检查并触发告警
+- 多级告警阈值（成功率、失败率、积压）
+- 渠道异常检测
+- 管理员站内消息自动通知
+- 失败原因分析与优化建议
+- 趋势分析（improving/worsening/stable）
 
 ## 数据模型
 
@@ -181,9 +200,61 @@ INSERT INTO notification_templates (
 
 ## 监控和调试
 
+### Phase 3: 监控面板 (Admin 后台)
+
+访问路径: `/monitoring/notifications`
+
+**功能**:
+- 健康状态概览（系统状态、24h成功率、失败率、待发送）
+- 实时统计卡片（总数、成功率、最近1小时、待发送队列）
+- 发送趋势图表（最近7天趋势）
+- 渠道性能分析（Email/Telegram/站内消息独立卡片）
+- 失败分析（饼图分布 + 详细列表 + 最近失败记录）
+- 自动刷新（每分钟） + 手动刷新按钮
+- 执行健康检查按钮
+
+### 监控 API 端点
+
+**路由前缀**: `/api/notification-monitoring`（仅超级管理员）
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/statistics` | GET | 获取成功率统计 |
+| `/failures` | GET | 获取失败记录列表 |
+| `/failure-reasons` | GET | 获取失败原因汇总 |
+| `/channel-performance` | GET | 获取渠道性能分析 |
+| `/daily-trend` | GET | 获取每日发送趋势 |
+| `/realtime` | GET | 获取实时监控数据 |
+| `/health-check` | GET | 执行健康检查 |
+| `/check-and-alert` | POST | 执行健康检查并触发告警 |
+| `/failure-analysis` | GET | 获取失败分析和优化建议 |
+| `/user-stats/{user_id}` | GET | 获取用户通知统计 |
+
+### 告警阈值
+
+| 指标 | 警告阈值 | 严重阈值 |
+|------|---------|---------|
+| 成功率 | < 90% | < 70% |
+| 失败率 | > 10% | > 20% |
+| 待发送积压 | > 100 条 | > 500 条 |
+| 平均送达时间 | > 300s | - |
+
+### 性能优化 (Phase 3)
+
+**Email 连接池**:
+- 默认池大小: 5 个连接
+- 批量发送性能提升: **50-70%**
+- 使用方式: `EmailSender(config, use_pool=True)`
+
+**建议配置**:
+- 小流量 (< 100 封/小时): 池大小 = 3
+- 中流量 (100-500 封/小时): 池大小 = 5
+- 大流量 (> 500 封/小时): 池大小 = 10
+
 ### 查看 Celery 日志
 ```bash
 docker-compose logs -f celery_worker
+docker-compose logs -f celery_beat
 ```
 
 ### 查看通知日志
@@ -199,4 +270,10 @@ SELECT user_id, notification_date, total_count, hourly_counts
 FROM notification_rate_limits
 WHERE notification_date = CURRENT_DATE
 ORDER BY total_count DESC;
+```
+
+### 手动触发健康检查
+```bash
+curl -X POST http://localhost:8000/api/notification-monitoring/check-and-alert \
+  -H "Authorization: Bearer <admin_token>"
 ```
