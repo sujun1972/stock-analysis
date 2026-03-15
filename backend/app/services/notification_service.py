@@ -463,6 +463,79 @@ class NotificationService:
             NotificationLog.user_id == user_id
         ).order_by(desc(NotificationLog.created_at)).limit(limit).offset(offset).all()
 
+    # ==================== 通知日志管理 (Phase 2) ====================
+
+    def create_notification_log(
+        self,
+        user_id: int,
+        notification_type: str,
+        channel: str,
+        title: str,
+        content: str,
+        content_type: str = 'full',
+        business_date: str = None
+    ) -> int:
+        """
+        创建通知日志记录
+
+        Args:
+            user_id: 用户ID
+            notification_type: 通知类型
+            channel: 渠道
+            title: 标题
+            content: 内容
+            content_type: 内容格式
+            business_date: 关联的交易日
+
+        Returns:
+            日志记录 ID
+        """
+        log = NotificationLog(
+            user_id=user_id,
+            notification_type=notification_type,
+            channel=channel,
+            title=title,
+            content=content,
+            content_type=content_type,
+            business_date=business_date,
+            status='pending'
+        )
+        self.db.add(log)
+        self.db.commit()
+        self.db.refresh(log)
+        return log.id
+
+    def update_notification_log(
+        self,
+        log_id: int,
+        status: str,
+        failed_reason: str = None,
+        retry_count: int = 0
+    ):
+        """
+        更新通知日志状态
+
+        Args:
+            log_id: 日志ID
+            status: 状态 (sent/failed/skipped)
+            failed_reason: 失败原因
+            retry_count: 重试次数
+        """
+        log = self.db.query(NotificationLog).filter(
+            NotificationLog.id == log_id
+        ).first()
+
+        if log:
+            log.status = status
+            if status == 'sent':
+                log.sent_at = datetime.now()
+            if failed_reason:
+                log.failed_reason = failed_reason
+            if retry_count:
+                log.retry_count = retry_count
+
+            self.db.commit()
+
     # ==================== 渠道配置管理 ====================
 
     def get_channel_config(self, channel_type: str) -> Optional[Dict]:

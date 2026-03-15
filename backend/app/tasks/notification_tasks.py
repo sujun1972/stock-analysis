@@ -2,6 +2,7 @@
 Celery 通知任务
 
 异步发送邮件、Telegram 和站内消息
+Phase 2: 集成 Telegram、模板渲染、频率限制
 """
 
 from celery import shared_task
@@ -12,6 +13,9 @@ from datetime import datetime
 from app.core.database import get_db
 from app.services.notification_service import NotificationService
 from app.services.email_sender import EmailSender
+from app.services.telegram_sender import TelegramSender  # Phase 2
+from app.services.template_renderer import TemplateRenderer  # Phase 2
+from app.services.notification_rate_limiter import NotificationRateLimiter  # Phase 2
 
 logger = get_task_logger(__name__)
 
@@ -95,6 +99,85 @@ def send_email_notification_task(
             db.close()
 
 
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def send_telegram_notification_task(
+    self,
+    user_id: int,
+    chat_id: str,
+    message: str,
+    notification_log_id: int,
+    parse_mode: str = 'Markdown'
+):
+    """
+    发送 Telegram 通知（Phase 2）
+
+    Args:
+        user_id: 用户ID
+        chat_id: Telegram Chat ID
+        message: 消息内容
+        notification_log_id: 通知日志ID
+        parse_mode: 解析模式（Markdown/HTML）
+
+    重试策略: 3次，指数退避 (30s, 60s, 120s)
+    """
+    db = None
+    try:
+        logger.info(f"开始发送 Telegram: user_id={user_id}, chat_id={chat_id}")
+
+        # 获取数据库会话
+        db = next(get_db())
+        service = NotificationService(db)
+
+        # 查询 Telegram Bot 配置
+        bot_config = service.get_channel_config('telegram')
+
+        if not bot_config or not bot_config.get('bot_token'):
+            raise ValueError("Telegram Bot 配置不存在或未启用")
+
+        # 发送消息
+        telegram_sender = TelegramSender(bot_config)
+        success = telegram_sender.send(
+            chat_id=chat_id,
+            message=message,
+            parse_mode=parse_mode
+        )
+
+        if success:
+            # 更新日志状态为成功
+            service.update_notification_log(notification_log_id, 'sent')
+            logger.info(f"Telegram 发送成功: log_id={notification_log_id}")
+        else:
+            raise Exception("Telegram 发送失败")
+
+    except Exception as exc:
+        logger.error(f"Telegram 发送失败: {exc}")
+
+        # 更新日志状态为失败
+        if db:
+            try:
+                service = NotificationService(db)
+                service.update_notification_log(
+                    notification_log_id,
+                    'failed',
+                    failed_reason=str(exc),
+                    retry_count=self.request.retries
+                )
+            except Exception as e:
+                logger.error(f"更新日志失败: {e}")
+
+        # 指数退避重试
+        if self.request.retries < self.max_retries:
+            countdown = 30 * (2 ** self.request.retries)
+            logger.warning(f"准备重试 ({self.request.retries + 1}/{self.max_retries})，延迟 {countdown}s")
+            raise self.retry(exc=exc, countdown=countdown)
+        else:
+            logger.error(f"Telegram 最终发送失败: log_id={notification_log_id}")
+
+    finally:
+        if db:
+            db.close()
+
+
 @shared_task
 def send_in_app_notification_task(
     user_id: int,
@@ -156,18 +239,18 @@ def schedule_report_notification_task(
     report_data: Dict[str, Any]
 ):
     """
-    调度报告通知（批量生成发送任务）
+    调度报告通知（批量生成发送任务）- Phase 2 增强版
 
     Args:
         report_type: 报告类型 ('sentiment_report', 'premarket_report', 'backtest_result')
         trade_date: 交易日期
         report_data: 报告原始数据
 
-    流程:
-    1. 查询订阅用户列表
-    2. 为每个用户渲染报告内容
-    3. 创建通知日志
-    4. 异步发送到各渠道队列
+    Phase 2 增强:
+    1. 使用 Jinja2 模板渲染
+    2. 检查频率限制
+    3. 支持 Telegram 发送
+    4. 批量发送优化
     """
     db = None
     try:
@@ -175,6 +258,8 @@ def schedule_report_notification_task(
 
         db = next(get_db())
         service = NotificationService(db)
+        renderer = TemplateRenderer(db)  # Phase 2: 模板渲染器
+        rate_limiter = NotificationRateLimiter(db)  # Phase 2: 频率限制器
 
         # 1. 获取订阅用户列表
         subscribers = service.get_subscribers(report_type)
@@ -184,56 +269,153 @@ def schedule_report_notification_task(
             logger.info(f"无订阅用户，跳过通知调度")
             return
 
+        # 统计数据
+        sent_count = 0
+        skipped_count = 0
+        failed_count = 0
+
         # 2. 为每个用户生成通知
         for user in subscribers:
-            try:
-                # 渲染报告内容
-                rendered = service.render_report(
-                    report_type=report_type,
-                    report_data=report_data,
-                    user_preferences=user
-                )
+            user_id = user['user_id']
 
-                # 创建通知日志
-                log_ids = service.create_notification_logs(
-                    user_id=user['user_id'],
-                    notification_type=report_type,
-                    title=rendered['title'],
-                    content=rendered['content'],
-                    business_date=trade_date,
-                    channels=user['enabled_channels']
-                )
+            try:
+                # Phase 2: 检查频率限制
+                rate_check = rate_limiter.check_rate_limit(user_id)
+                if not rate_check['allowed']:
+                    logger.warning(
+                        f"用户 {user_id} 超过频率限制: {rate_check['reason']}"
+                    )
+                    skipped_count += 1
+                    continue
+
+                # 准备模板上下文
+                context = {
+                    'trade_date': trade_date,
+                    'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    **report_data  # 合并报告数据
+                }
+
+                # 获取用户配置的内容格式
+                content_format = user.get('report_format', 'full')
 
                 # 3. 异步发送到各渠道
-                if 'email' in user['enabled_channels']:
-                    send_email_notification_task.delay(
-                        user_id=user['user_id'],
-                        email_address=user['email_address'],
-                        subject=rendered['title'],
-                        html_content=rendered['email_html'],
-                        notification_log_id=log_ids['email']
-                    )
-                    logger.info(f"已推送邮件任务: user_id={user['user_id']}")
+                enabled_channels = user.get('enabled_channels', [])
 
-                if 'telegram' in user['enabled_channels']:
-                    # TODO: Phase 2 实现 Telegram 发送
-                    logger.warning(f"Telegram 发送功能尚未实现（Phase 2）")
+                # Email 渠道
+                if 'email' in enabled_channels and user.get('email_address'):
+                    try:
+                        # Phase 2: 使用模板渲染
+                        email_render = renderer.render_notification(
+                            notification_type=report_type,
+                            channel='email',
+                            context=context,
+                            content_format=content_format
+                        )
 
-                if 'in_app' in user['enabled_channels']:
-                    send_in_app_notification_task.delay(
-                        user_id=user['user_id'],
-                        title=rendered['title'],
-                        content=rendered['content'],
-                        notification_type=report_type,
-                        business_date=trade_date
-                    )
-                    logger.info(f"已推送站内消息任务: user_id={user['user_id']}")
+                        # 创建日志
+                        log_id = service.create_notification_log(
+                            user_id=user_id,
+                            notification_type=report_type,
+                            channel='email',
+                            title=email_render['subject'],
+                            content=email_render['content'],
+                            content_type=content_format,
+                            business_date=trade_date
+                        )
+
+                        # 异步发送
+                        send_email_notification_task.delay(
+                            user_id=user_id,
+                            email_address=user['email_address'],
+                            subject=email_render['subject'],
+                            html_content=email_render['content'],
+                            notification_log_id=log_id
+                        )
+
+                        # 增加计数器
+                        rate_limiter.increment_counter(user_id, 'email')
+                        logger.info(f"已推送邮件任务: user_id={user_id}")
+
+                    except Exception as e:
+                        logger.error(f"Email 任务创建失败: user_id={user_id}, {e}")
+
+                # Telegram 渠道 (Phase 2)
+                if 'telegram' in enabled_channels and user.get('telegram_chat_id'):
+                    try:
+                        # Phase 2: 使用模板渲染
+                        telegram_render = renderer.render_notification(
+                            notification_type=report_type,
+                            channel='telegram',
+                            context=context,
+                            content_format=content_format
+                        )
+
+                        # 创建日志
+                        log_id = service.create_notification_log(
+                            user_id=user_id,
+                            notification_type=report_type,
+                            channel='telegram',
+                            title=telegram_render['subject'],
+                            content=telegram_render['content'],
+                            content_type=content_format,
+                            business_date=trade_date
+                        )
+
+                        # 异步发送
+                        send_telegram_notification_task.delay(
+                            user_id=user_id,
+                            chat_id=user['telegram_chat_id'],
+                            message=telegram_render['content'],
+                            notification_log_id=log_id,
+                            parse_mode='Markdown'
+                        )
+
+                        # 增加计数器
+                        rate_limiter.increment_counter(user_id, 'telegram')
+                        logger.info(f"已推送 Telegram 任务: user_id={user_id}")
+
+                    except Exception as e:
+                        logger.error(f"Telegram 任务创建失败: user_id={user_id}, {e}")
+
+                # 站内消息渠道
+                if 'in_app' in enabled_channels:
+                    try:
+                        # Phase 2: 使用模板渲染
+                        in_app_render = renderer.render_notification(
+                            notification_type=report_type,
+                            channel='in_app',
+                            context=context,
+                            content_format='summary'  # 站内消息使用摘要版
+                        )
+
+                        # 异步发送
+                        send_in_app_notification_task.delay(
+                            user_id=user_id,
+                            title=in_app_render['subject'],
+                            content=in_app_render['content'],
+                            notification_type=report_type,
+                            business_date=trade_date
+                        )
+
+                        # 增加计数器
+                        rate_limiter.increment_counter(user_id, 'in_app')
+                        logger.info(f"已推送站内消息任务: user_id={user_id}")
+
+                    except Exception as e:
+                        logger.error(f"站内消息任务创建失败: user_id={user_id}, {e}")
+
+                sent_count += 1
 
             except Exception as e:
-                logger.error(f"处理用户 {user['user_id']} 通知失败: {e}", exc_info=True)
+                logger.error(f"处理用户 {user_id} 通知失败: {e}", exc_info=True)
+                failed_count += 1
                 continue
 
-        logger.info(f"{report_type} 通知调度完成，共处理 {len(subscribers)} 个用户")
+        logger.info(
+            f"{report_type} 通知调度完成 - "
+            f"总计: {len(subscribers)}, 成功: {sent_count}, "
+            f"跳过: {skipped_count}, 失败: {failed_count}"
+        )
 
     except Exception as e:
         logger.error(f"调度通知任务失败: {e}", exc_info=True)
