@@ -48,6 +48,7 @@ export default function SettingsPage() {
   const [topListDataSource, setTopListDataSource] = useState<'akshare' | 'tushare'>('tushare')
   const [premarketDataSource, setPremarketDataSource] = useState<'akshare' | 'tushare'>('akshare')
   const [conceptDataSource, setConceptDataSource] = useState<'akshare' | 'tushare'>('akshare')
+  const [sentimentDataSource, setSentimentDataSource] = useState<'akshare' | 'tushare'>('akshare')
   const [tushareToken, setTushareToken] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,6 +79,7 @@ export default function SettingsPage() {
       setTopListDataSource((configData.top_list_data_source || 'tushare') as 'akshare' | 'tushare')
       setPremarketDataSource((configData.premarket_data_source || 'akshare') as 'akshare' | 'tushare')
       setConceptDataSource((configData.concept_data_source || 'akshare') as 'akshare' | 'tushare')
+      setSentimentDataSource((configData.sentiment_data_source || 'akshare') as 'akshare' | 'tushare')
 
       // 安全性：Token从后端返回时已被掩码（如 d038****...****f3ad）
       // 前端始终显示为空，避免暴露真实Token
@@ -102,7 +104,7 @@ export default function SettingsPage() {
       const anyTushare = dataSource === 'tushare' || minuteDataSource === 'tushare' ||
                         realtimeDataSource === 'tushare' || limitUpDataSource === 'tushare' ||
                         topListDataSource === 'tushare' || premarketDataSource === 'tushare' ||
-                        conceptDataSource === 'tushare'
+                        conceptDataSource === 'tushare' || sentimentDataSource === 'tushare'
 
       // 检查是否已有 Token（通过星号判断是否为后端掩码后的 Token）
       const hasExistingToken = configData?.tushare_token && configData.tushare_token.includes('*')
@@ -123,6 +125,7 @@ export default function SettingsPage() {
         top_list_data_source: topListDataSource,
         premarket_data_source: premarketDataSource,
         concept_data_source: conceptDataSource,
+        sentiment_data_source: sentimentDataSource,
         tushare_token: tokenToSave
       })
 
@@ -480,10 +483,41 @@ export default function SettingsPage() {
                 </p>
               </div>
 
+              {/* 市场情绪数据源配置 */}
+              <div className="space-y-2">
+                <Label htmlFor="sentiment-data-source">市场情绪数据源</Label>
+                <Select value={sentimentDataSource} onValueChange={(value) => setSentimentDataSource(value as 'akshare' | 'tushare')}>
+                  <SelectTrigger id="sentiment-data-source">
+                    <SelectValue placeholder="选择市场情绪数据源" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="akshare">
+                      <div className="flex items-center gap-2">
+                        <span>AkShare (东方财富)</span>
+                        <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded">
+                          免费（功能丰富）
+                        </span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="tushare">
+                      <div className="flex items-center gap-2">
+                        <span>Tushare Pro</span>
+                        <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">
+                          推荐（需120积分，更稳定）
+                        </span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  用于市场指数数据（上证、深成、创业板）。AkShare免费但可能有反爬限制；Tushare需120积分，稳定可靠无限制
+                </p>
+              </div>
+
               {/* Tushare Token - 仅在至少一个数据源选择Tushare时显示 */}
               {(dataSource === 'tushare' || minuteDataSource === 'tushare' || realtimeDataSource === 'tushare' ||
                 limitUpDataSource === 'tushare' || topListDataSource === 'tushare' || premarketDataSource === 'tushare' ||
-                conceptDataSource === 'tushare') && (
+                conceptDataSource === 'tushare' || sentimentDataSource === 'tushare') && (
                 <div className="space-y-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="tushare-token">Tushare API Token</Label>

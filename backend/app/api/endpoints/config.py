@@ -26,6 +26,8 @@ class DataSourceConfigRequest(BaseModel):
     limit_up_data_source: Optional[str] = None
     top_list_data_source: Optional[str] = None
     premarket_data_source: Optional[str] = None
+    concept_data_source: Optional[str] = None
+    sentiment_data_source: Optional[str] = None
     tushare_token: Optional[str] = None
 
 
@@ -75,6 +77,8 @@ async def update_data_source_config(
         limit_up_data_source=request.limit_up_data_source,
         top_list_data_source=request.top_list_data_source,
         premarket_data_source=request.premarket_data_source,
+        concept_data_source=request.concept_data_source,
+        sentiment_data_source=request.sentiment_data_source,
         tushare_token=request.tushare_token,
     )
 

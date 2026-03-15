@@ -588,6 +588,7 @@ class ApiClient {
     top_list_data_source?: string
     premarket_data_source?: string
     concept_data_source?: string
+    sentiment_data_source?: string
     tushare_token?: string
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/config/source', params)

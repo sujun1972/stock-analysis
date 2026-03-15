@@ -91,6 +91,7 @@ class DataSourceConfigService:
                 "top_list_data_source",
                 "premarket_data_source",
                 "concept_data_source",
+                "sentiment_data_source",
                 "tushare_token"
             ]
 
@@ -107,6 +108,7 @@ class DataSourceConfigService:
                 "top_list_data_source": configs.get("top_list_data_source") or "tushare",  # 默认tushare
                 "premarket_data_source": configs.get("premarket_data_source") or "akshare",  # 默认akshare（外盘数据）
                 "concept_data_source": configs.get("concept_data_source") or "akshare",  # 默认akshare（免费且数据丰富）
+                "sentiment_data_source": configs.get("sentiment_data_source") or "akshare",  # 默认akshare（免费，推荐切换为tushare避免反爬）
                 "tushare_token": self._mask_token(raw_token) if mask_token else raw_token,
             }
 
@@ -223,12 +225,13 @@ class DataSourceConfigService:
         top_list_data_source: Optional[str] = None,
         premarket_data_source: Optional[str] = None,
         concept_data_source: Optional[str] = None,
+        sentiment_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
     ) -> Dict:
         """
         更新数据源配置
 
-        支持7种数据源的独立配置：
+        支持8种数据源的独立配置：
         1. 主数据源：日线数据、股票列表等
         2. 分时数据源：分钟级K线数据
         3. 实时数据源：实时行情数据
@@ -236,6 +239,7 @@ class DataSourceConfigService:
         5. 龙虎榜数据源：龙虎榜数据
         6. 盘前数据源：盘前外盘数据
         7. 概念数据源：概念板块数据
+        8. 市场情绪数据源：大盘指数数据
 
         安全特性：
         - Token留空不修改：如果tushare_token为None，则保持原有Token不变
@@ -249,6 +253,7 @@ class DataSourceConfigService:
             top_list_data_source: 龙虎榜数据源（可选）
             premarket_data_source: 盘前数据源（可选）
             concept_data_source: 概念数据源（可选）
+            sentiment_data_source: 市场情绪数据源（可选）
             tushare_token: Tushare Token（可选，留空不修改原有Token）
 
         Returns:
@@ -285,6 +290,10 @@ class DataSourceConfigService:
             if concept_data_source:
                 self.validate_data_source(concept_data_source)
 
+            # 验证市场情绪数据源
+            if sentiment_data_source:
+                self.validate_data_source(sentiment_data_source)
+
             # 验证 Tushare 配置
             await self.validate_tushare_config(data_source, tushare_token)
 
@@ -308,6 +317,9 @@ class DataSourceConfigService:
 
             if concept_data_source:
                 updates["concept_data_source"] = concept_data_source
+
+            if sentiment_data_source:
+                updates["sentiment_data_source"] = sentiment_data_source
 
             if tushare_token:
                 updates["tushare_token"] = tushare_token

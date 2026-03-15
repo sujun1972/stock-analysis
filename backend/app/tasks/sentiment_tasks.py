@@ -241,13 +241,59 @@ def manual_sentiment_sync_task(self, date: str = None):
 
             # 判断结果
             if not result.get('is_trading_day'):
-                logger.info(f"[手动同步] {date} 非交易日")
-                return {
-                    "status": "skipped",
-                    "reason": "非交易日",
-                    "date": date,
-                    "is_trading_day": False
-                }
+                logger.info(f"[手动同步] {date} 非交易日，尝试查找最近一个交易日")
+
+                # 查找最近一个交易日
+                from datetime import datetime, timedelta
+                target_date = datetime.strptime(date, '%Y-%m-%d')
+                attempts = 0
+                max_attempts = 10  # 最多向前查找10天
+
+                while attempts < max_attempts:
+                    target_date -= timedelta(days=1)
+                    date_str = target_date.strftime('%Y-%m-%d')
+                    attempts += 1
+
+                    logger.info(f"[手动同步] 尝试同步最近交易日: {date_str} (尝试 {attempts}/{max_attempts})")
+
+                    # 更新进度提示
+                    self.update_state(
+                        state='PROGRESS',
+                        meta={
+                            'message': f'{date} 非交易日，正在同步最近交易日 {date_str}',
+                            'progress': 15,
+                            'current': 0,
+                            'total': 3,
+                            'date': date_str
+                        }
+                    )
+
+                    # 尝试同步该日期
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        result = loop.run_until_complete(
+                            service.sync_daily_sentiment(date=date_str)
+                        )
+                    finally:
+                        loop.close()
+
+                    # 如果是交易日，退出循环
+                    if result.get('is_trading_day'):
+                        logger.success(f"[手动同步] 找到最近交易日: {date_str}")
+                        date = date_str  # 更新为实际同步的日期
+                        break
+                    else:
+                        logger.debug(f"[手动同步] {date_str} 也非交易日，继续查找")
+                else:
+                    # 超过最大尝试次数仍未找到交易日
+                    logger.warning(f"[手动同步] 未能在最近{max_attempts}天内找到交易日")
+                    return {
+                        "status": "skipped",
+                        "reason": f"最近{max_attempts}天内无交易日",
+                        "date": date,
+                        "is_trading_day": False
+                    }
 
             if result.get('success'):
                 logger.success(f"[手动同步] {date} 情绪数据同步成功")

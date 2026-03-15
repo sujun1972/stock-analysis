@@ -15,6 +15,7 @@ export interface DataSourceConfig {
   top_list_data_source?: string;
   premarket_data_source?: string;
   concept_data_source?: string;
+  sentiment_data_source?: string;
   tushare_token: string;
 }
 

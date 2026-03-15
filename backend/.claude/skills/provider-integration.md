@@ -38,7 +38,7 @@ df = response.data  # 提取 DataFrame
 
 ### 数据源配置系统
 
-系统支持 7 种数据源的独立配置：
+系统支持 8 种数据源的独立配置：
 
 1. **主数据源** (`data`) - 日线数据、股票列表
 2. **分时数据源** (`minute`) - 分钟级K线
@@ -47,6 +47,7 @@ df = response.data  # 提取 DataFrame
 5. **龙虎榜数据源** (`top_list`) - 龙虎榜数据
 6. **盘前数据源** (`premarket`) - 外盘/盘前数据
 7. **概念数据源** (`concept`) - 概念板块数据
+8. **市场情绪数据源** (`sentiment`) - 三大指数行情数据
 
 **配置方式**:
 - Admin界面: 设置 > 数据源设置 (http://localhost:3002/settings/datasource)
@@ -85,6 +86,86 @@ Core 的 `Response` 对象包含：
 response.is_success()  # 是否成功
 response.is_warning()  # 是否警告
 response.is_error()    # 是否错误
+```
+
+---
+
+## ⚠️ 数据单位转换注意事项
+
+**重要**: 不同数据源返回的数据字段单位可能不同，需要统一处理！
+
+### Tushare vs AkShare 单位差异
+
+| 字段 | Tushare | AkShare | 数据库存储 | 前端显示 |
+|------|---------|---------|-----------|---------|
+| amount (成交额) | **千元** | **元** | **元** | **亿元** (除以1亿) |
+| volume (成交量) | 手 | 手 | 手 | 手 |
+| price (价格) | 元 | 元 | 元 | 元 |
+
+### 示例：指数数据的单位转换
+
+```python
+# ❌ 错误：直接存储 Tushare 的 amount 字段
+sh_index_amount = float(tushare_data['amount'])  # 单位：千元
+# 数据库存储: 2,400,317,199.30 (千元)
+# 前端显示: 24.00 亿元 ❌ (应该是 24,003.17 亿元)
+
+# ✅ 正确：转换为元后存储
+sh_index_amount = float(tushare_data['amount']) * 1000  # 千元 → 元
+# 数据库存储: 2,400,317,199,300 (元)
+# 前端显示: 24,003.17 亿元 ✅
+
+# ✅ AkShare 无需转换（已是元）
+sh_index_amount = float(akshare_data['amount'])  # 单位：元
+```
+
+### 单位转换规则
+
+1. **Tushare 数据源**:
+   - `amount` 字段：乘以 1000 (千元 → 元)
+   - 示例: `amount * 1000`
+
+2. **AkShare 数据源**:
+   - `amount` 字段：无需转换（已是元）
+   - 示例: `amount`
+
+3. **数据库存储标准**:
+   - 成交额统一存储为 **元**
+   - 前端统一除以 100,000,000 显示为 **亿元**
+
+### 实际案例
+
+参考 [core/src/sentiment/fetcher.py:286-307](../../../core/src/sentiment/fetcher.py#L286-L307) 的实现：
+
+```python
+# Tushare的amount字段单位是千元，需要转换为元（与前端显示逻辑一致）
+market_indices = MarketIndices(
+    trade_date=date_str,
+    # 上证指数
+    sh_index_amount=float(sh_data['amount']) * 1000 if sh_data is not None else 0.0,  # 千元转元
+    # 深成指数
+    sz_index_amount=float(sz_data['amount']) * 1000 if sz_data is not None else 0.0,  # 千元转元
+    # 创业板指数
+    cyb_index_amount=float(cyb_data['amount']) * 1000 if cyb_data is not None else 0.0,  # 千元转元
+)
+```
+
+### 验证数据单位正确性
+
+```python
+# 步骤1: 检查数据源文档确认单位
+# Tushare: https://tushare.pro/document/2?doc_id=95
+#   - amount: 成交额（千元）
+# AkShare: stock_zh_index_daily_em
+#   - amount: 成交额（元）
+
+# 步骤2: 验证实际数值是否合理
+# 上证指数日成交额通常在 1万亿-3万亿 范围
+# 如果显示为 24亿，说明单位有问题（应该是 2.4万亿）
+
+# 步骤3: 检查前端显示逻辑
+# 前端代码: total_amount / 100000000  （除以1亿）
+# 因此数据库必须存储为 "元"
 ```
 
 ---

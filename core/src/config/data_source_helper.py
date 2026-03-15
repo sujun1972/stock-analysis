@@ -64,14 +64,20 @@ class DataSourceConfigHelper:
             # 直接查询配置表
             query = """
                 SELECT config_key, config_value
-                FROM config
-                WHERE config_key IN ('data_source', 'minute_data_source', 'realtime_data_source', 'tushare_token')
+                FROM system_config
+                WHERE config_key IN ('data_source', 'minute_data_source', 'realtime_data_source', 'limit_up_data_source', 'top_list_data_source', 'premarket_data_source', 'concept_data_source', 'sentiment_data_source', 'tushare_token')
             """
 
-            results = db.execute_query(query)
+            # 使用 DatabaseManager 的正确方式：get_connection + cursor
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(query)
+            results = cursor.fetchall()
+            cursor.close()
+            db.release_connection(conn)
 
             # 转换为字典
-            config_dict = {row['config_key']: row['config_value'] for row in results}
+            config_dict = {row[0]: row[1] for row in results}
 
             # 填充默认值
             config = {
@@ -81,6 +87,8 @@ class DataSourceConfigHelper:
                 "limit_up_data_source": config_dict.get("limit_up_data_source") or "tushare",  # 默认tushare（用户有5000积分）
                 "top_list_data_source": config_dict.get("top_list_data_source") or "tushare",  # 默认tushare
                 "premarket_data_source": config_dict.get("premarket_data_source") or "akshare",  # 默认akshare（外盘数据）
+                "concept_data_source": config_dict.get("concept_data_source") or "akshare",  # 默认akshare
+                "sentiment_data_source": config_dict.get("sentiment_data_source") or "akshare",  # 默认akshare
                 "tushare_token": config_dict.get("tushare_token") or "",
             }
 
@@ -100,6 +108,8 @@ class DataSourceConfigHelper:
                 "limit_up_data_source": "tushare",
                 "top_list_data_source": "tushare",
                 "premarket_data_source": "akshare",
+                "concept_data_source": "akshare",
+                "sentiment_data_source": "akshare",
                 "tushare_token": "",
             }
 
@@ -141,6 +151,7 @@ class DataSourceConfigHelper:
                 - "top_list": 龙虎榜数据源
                 - "premarket": 盘前数据源
                 - "concept": 概念数据源
+                - "sentiment": 市场情绪数据源（三大指数）
 
         Returns:
             数据提供者实例
@@ -165,6 +176,8 @@ class DataSourceConfigHelper:
             source = config["premarket_data_source"]
         elif source_type == "concept":
             source = config.get("concept_data_source", config["data_source"])  # 概念数据源，如果未配置则使用主数据源
+        elif source_type == "sentiment":
+            source = config.get("sentiment_data_source", config["data_source"])  # 市场情绪数据源，如果未配置则使用主数据源
         else:
             source = config["data_source"]
 

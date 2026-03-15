@@ -38,12 +38,12 @@ class SentimentDataFetcher:
 
         # 从配置获取数据源
         self.config = get_data_source_config()
-        self.data_source = self.config["data_source"]
+        self.data_source = self.config.get("sentiment_data_source", self.config["data_source"])
 
         # 创建数据提供者
         try:
-            self.provider = create_provider("data")
-            logger.info(f"✓ 情绪数据抓取器初始化成功，使用数据源: {self.data_source}")
+            self.provider = create_provider("sentiment")
+            logger.info(f"✓ 情绪数据抓取器初始化成功，使用市场情绪数据源: {self.data_source}")
         except Exception as e:
             logger.warning(f"创建数据提供者失败，将在需要时重试: {e}")
             self.provider = None
@@ -173,49 +173,117 @@ class SentimentDataFetcher:
             # 使用配置的数据源获取指数数据
             if self.data_source == "akshare":
                 import akshare as ak
-                df = ak.stock_zh_index_spot_em()
 
-                # 查找三大指数
-                sh_data = df[df['代码'] == '000001'].iloc[0] if '000001' in df['代码'].values else None
-                sz_data = df[df['代码'] == '399001'].iloc[0] if '399001' in df['代码'].values else None
-                cyb_data = df[df['代码'] == '399006'].iloc[0] if '399006' in df['代码'].values else None
+                # 使用历史数据接口获取指定日期的指数数据
+                start_date = date_str.replace('-', '')
+                end_date = start_date
+
+                # 获取三大指数的历史数据（使用东财接口）
+                indices_symbols = {
+                    'sh000001': 'sh',   # 上证指数
+                    'sz399001': 'sz',   # 深成指数
+                    'sz399006': 'cyb'   # 创业板指
+                }
+
+                indices_data = {}
+                for symbol, key in indices_symbols.items():
+                    try:
+                        # 使用 stock_zh_index_daily_em 获取指数历史数据
+                        df_temp = ak.stock_zh_index_daily_em(symbol=symbol, start_date=start_date, end_date=end_date)
+                        if not df_temp.empty:
+                            # 获取指定日期的数据（通常是最后一行）
+                            row = df_temp.iloc[-1]
+                            indices_data[key] = row
+                            logger.debug(f"✓ 成功获取 {symbol} 指数数据: 收盘={row['close']:.2f}")
+                        else:
+                            logger.warning(f"⚠ 未获取到 {symbol} 指数在 {date_str} 的数据，可能非交易日")
+                            indices_data[key] = None
+                        time.sleep(0.2)  # 限流，避免被封
+                    except Exception as e:
+                        logger.error(f"✗ 获取 {symbol} 指数数据失败: {e}")
+                        indices_data[key] = None
+
+                sh_data = indices_data.get('sh')
+                sz_data = indices_data.get('sz')
+                cyb_data = indices_data.get('cyb')
+
+                # 计算涨跌幅辅助函数
+                def calc_change_pct(row):
+                    """根据开盘价和收盘价计算涨跌幅"""
+                    if row is not None and 'open' in row and 'close' in row:
+                        open_price = float(row['open'])
+                        close_price = float(row['close'])
+                        if open_price > 0:
+                            return (close_price - open_price) / open_price * 100
+                    return 0.0
+
+                # 计算振幅辅助函数
+                def calc_amplitude(row):
+                    """根据最高、最低、前收计算振幅"""
+                    if row is not None and 'high' in row and 'low' in row and 'open' in row:
+                        high = float(row['high'])
+                        low = float(row['low'])
+                        prev_close = float(row['open'])  # 简化：用开盘价近似前收盘
+                        if prev_close > 0:
+                            return (high - low) / prev_close * 100
+                    return 0.0
 
                 market_indices = MarketIndices(
                     trade_date=date_str,
                     # 上证指数
-                    sh_index_close=float(sh_data['最新价']) if sh_data is not None else 0.0,
-                    sh_index_change=float(sh_data['涨跌幅']) if sh_data is not None else 0.0,
-                    sh_index_amplitude=float(sh_data['振幅']) if sh_data is not None else 0.0,
-                    sh_index_volume=int(sh_data['成交量']) if sh_data is not None else 0,
-                    sh_index_amount=float(sh_data['成交额']) if sh_data is not None else 0.0,
+                    sh_index_close=float(sh_data['close']) if sh_data is not None else 0.0,
+                    sh_index_change=calc_change_pct(sh_data),
+                    sh_index_amplitude=calc_amplitude(sh_data),
+                    sh_index_volume=int(sh_data['volume']) if sh_data is not None else 0,
+                    sh_index_amount=float(sh_data['amount']) if sh_data is not None else 0.0,
                     # 深成指数
-                    sz_index_close=float(sz_data['最新价']) if sz_data is not None else 0.0,
-                    sz_index_change=float(sz_data['涨跌幅']) if sz_data is not None else 0.0,
-                    sz_index_amplitude=float(sz_data['振幅']) if sz_data is not None else 0.0,
-                    sz_index_volume=int(sz_data['成交量']) if sz_data is not None else 0,
-                    sz_index_amount=float(sz_data['成交额']) if sz_data is not None else 0.0,
+                    sz_index_close=float(sz_data['close']) if sz_data is not None else 0.0,
+                    sz_index_change=calc_change_pct(sz_data),
+                    sz_index_amplitude=calc_amplitude(sz_data),
+                    sz_index_volume=int(sz_data['volume']) if sz_data is not None else 0,
+                    sz_index_amount=float(sz_data['amount']) if sz_data is not None else 0.0,
                     # 创业板指数
-                    cyb_index_close=float(cyb_data['最新价']) if cyb_data is not None else 0.0,
-                    cyb_index_change=float(cyb_data['涨跌幅']) if cyb_data is not None else 0.0,
-                    cyb_index_amplitude=float(cyb_data['振幅']) if cyb_data is not None else 0.0,
-                    cyb_index_volume=int(cyb_data['成交量']) if cyb_data is not None else 0,
-                    cyb_index_amount=float(cyb_data['成交额']) if cyb_data is not None else 0.0,
+                    cyb_index_close=float(cyb_data['close']) if cyb_data is not None else 0.0,
+                    cyb_index_change=calc_change_pct(cyb_data),
+                    cyb_index_amplitude=calc_amplitude(cyb_data),
+                    cyb_index_volume=int(cyb_data['volume']) if cyb_data is not None else 0,
+                    cyb_index_amount=float(cyb_data['amount']) if cyb_data is not None else 0.0,
                 )
 
             elif self.data_source == "tushare":
-                # Tushare获取指数行情
-                indices = ['000001.SH', '399001.SZ', '399006.SZ']  # 上证、深成、创业板
-                df = self.provider.api_client.query(
-                    'index_daily',
-                    ts_code=','.join(indices),
-                    trade_date=date_str.replace('-', ''),
-                )
+                # Tushare获取指数行情（需要逐个查询）
+                indices_map = {
+                    '000001.SH': 'sh',   # 上证指数
+                    '399001.SZ': 'sz',   # 深成指数
+                    '399006.SZ': 'cyb'   # 创业板指
+                }
+
+                indices_data = {}
+                for ts_code, key in indices_map.items():
+                    try:
+                        df_temp = self.provider.api_client.query(
+                            'index_daily',
+                            ts_code=ts_code,
+                            start_date=date_str.replace('-', ''),
+                            end_date=date_str.replace('-', ''),
+                        )
+                        if not df_temp.empty:
+                            indices_data[key] = df_temp.iloc[0]
+                            logger.debug(f"✓ 成功获取 {ts_code} 指数数据: 收盘={df_temp.iloc[0]['close']:.2f}")
+                        else:
+                            logger.warning(f"⚠ 未获取到 {ts_code} 指数在 {date_str} 的数据，可能非交易日")
+                            indices_data[key] = None
+                        time.sleep(0.2)  # 限流
+                    except Exception as e:
+                        logger.error(f"✗ 获取 {ts_code} 指数数据失败: {e}")
+                        indices_data[key] = None
 
                 # 解析数据
-                sh_data = df[df['ts_code'] == '000001.SH'].iloc[0] if len(df[df['ts_code'] == '000001.SH']) > 0 else None
-                sz_data = df[df['ts_code'] == '399001.SZ'].iloc[0] if len(df[df['ts_code'] == '399001.SZ']) > 0 else None
-                cyb_data = df[df['ts_code'] == '399006.SZ'].iloc[0] if len(df[df['ts_code'] == '399006.SZ']) > 0 else None
+                sh_data = indices_data.get('sh')
+                sz_data = indices_data.get('sz')
+                cyb_data = indices_data.get('cyb')
 
+                # Tushare的amount字段单位是千元，需要转换为元（与前端显示逻辑一致）
                 market_indices = MarketIndices(
                     trade_date=date_str,
                     # 上证指数
@@ -223,19 +291,19 @@ class SentimentDataFetcher:
                     sh_index_change=float(sh_data['pct_chg']) if sh_data is not None else 0.0,
                     sh_index_amplitude=0.0,  # Tushare没有振幅字段
                     sh_index_volume=int(sh_data['vol']) if sh_data is not None else 0,
-                    sh_index_amount=float(sh_data['amount']) if sh_data is not None else 0.0,
+                    sh_index_amount=float(sh_data['amount']) * 1000 if sh_data is not None else 0.0,  # 千元转元
                     # 深成指数
                     sz_index_close=float(sz_data['close']) if sz_data is not None else 0.0,
                     sz_index_change=float(sz_data['pct_chg']) if sz_data is not None else 0.0,
                     sz_index_amplitude=0.0,
                     sz_index_volume=int(sz_data['vol']) if sz_data is not None else 0,
-                    sz_index_amount=float(sz_data['amount']) if sz_data is not None else 0.0,
+                    sz_index_amount=float(sz_data['amount']) * 1000 if sz_data is not None else 0.0,  # 千元转元
                     # 创业板指数
                     cyb_index_close=float(cyb_data['close']) if cyb_data is not None else 0.0,
                     cyb_index_change=float(cyb_data['pct_chg']) if cyb_data is not None else 0.0,
                     cyb_index_amplitude=0.0,
                     cyb_index_volume=int(cyb_data['vol']) if cyb_data is not None else 0,
-                    cyb_index_amount=float(cyb_data['amount']) if cyb_data is not None else 0.0,
+                    cyb_index_amount=float(cyb_data['amount']) * 1000 if cyb_data is not None else 0.0,  # 千元转元
                 )
             else:
                 raise ValueError(f"不支持的数据源: {self.data_source}")
@@ -248,8 +316,20 @@ class SentimentDataFetcher:
                 market_indices.sh_index_amount + market_indices.sz_index_amount
             )
 
-            logger.success(f"大盘指数数据抓取成功: 上证{market_indices.sh_index_close}, "
-                          f"深成{market_indices.sz_index_close}, 创业板{market_indices.cyb_index_close}")
+            # 数据完整性验证
+            missing_indices = []
+            if market_indices.sh_index_close == 0.0:
+                missing_indices.append("上证指数")
+            if market_indices.sz_index_close == 0.0:
+                missing_indices.append("深成指数")
+            if market_indices.cyb_index_close == 0.0:
+                missing_indices.append("创业板指")
+
+            if missing_indices:
+                logger.warning(f"⚠ 部分指数数据缺失: {', '.join(missing_indices)}，可能非交易日或数据源问题")
+
+            logger.success(f"✓ 大盘指数数据抓取成功: 上证{market_indices.sh_index_close:.2f}, "
+                          f"深成{market_indices.sz_index_close:.2f}, 创业板{market_indices.cyb_index_close:.2f}")
 
             return market_indices
 
@@ -268,6 +348,16 @@ class SentimentDataFetcher:
             是否成功
         """
         try:
+            # 数据验证：至少有一个指数数据不为0
+            if data.sh_index_close == 0.0 and data.sz_index_close == 0.0 and data.cyb_index_close == 0.0:
+                logger.error(f"❌ 数据验证失败: 三大指数收盘价均为0，拒绝保存 (日期: {data.trade_date})")
+                return False
+
+            # 警告：如果深成指数或创业板指为0
+            if data.sz_index_close == 0.0 or data.cyb_index_close == 0.0:
+                logger.warning(f"⚠ 数据不完整警告: 深成指数={data.sz_index_close}, "
+                             f"创业板指={data.cyb_index_close} (日期: {data.trade_date})")
+
             conn = self.pool_manager.get_connection()
             cursor = conn.cursor()
 

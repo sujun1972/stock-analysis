@@ -114,6 +114,7 @@ class ConfigService:
         top_list_data_source: Optional[str] = None,
         premarket_data_source: Optional[str] = None,
         concept_data_source: Optional[str] = None,
+        sentiment_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
     ) -> Dict:
         """
@@ -127,6 +128,7 @@ class ConfigService:
             top_list_data_source: 龙虎榜数据源（可选）
             premarket_data_source: 盘前数据源（可选）
             concept_data_source: 概念数据源（可选）
+            sentiment_data_source: 市场情绪数据源（可选）
             tushare_token: Tushare Token (可选)
 
         Returns:
@@ -140,6 +142,7 @@ class ConfigService:
             top_list_data_source=top_list_data_source,
             premarket_data_source=premarket_data_source,
             concept_data_source=concept_data_source,
+            sentiment_data_source=sentiment_data_source,
             tushare_token=tushare_token,
         )
 
