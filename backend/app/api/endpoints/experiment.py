@@ -87,7 +87,7 @@ async def create_batch(request: BatchCreateRequest, current_user: User = Depends
             tags=request.tags,
         )
 
-        return {"status": "success", "message": "批次创建成功", "data": {"batch_id": batch_id}}
+        return {"success": True, "message": "批次创建成功", "data": {"batch_id": batch_id}}
 
     except Exception as e:
         logger.error(f"创建批次失败: {e}")
@@ -103,7 +103,7 @@ async def get_batch_info(batch_id: int, current_user: User = Depends(get_current
         if not info:
             raise HTTPException(status_code=404, detail="批次不存在")
 
-        return {"status": "success", "data": info}
+        return {"success": True, "data": info}
 
     except HTTPException:
         raise
@@ -133,7 +133,7 @@ async def list_batches(
         total = await asyncio.to_thread(batch_repo.count_batches, status=status)
 
         return {
-            "status": "success",
+            "success": True,
             "data": {
                 "batches": batches,
                 "pagination": {
@@ -158,7 +158,7 @@ async def delete_batch(batch_id: int, current_user: User = Depends(get_current_a
         # 使用 Repository 删除批次
         result = await asyncio.to_thread(batch_repo.delete_batch_cascade, batch_id)
 
-        return {"status": "success", "message": f"批次 {batch_id} 已删除", "data": result}
+        return {"success": True, "message": f"批次 {batch_id} 已删除", "data": result}
 
     except Exception as e:
         logger.error(f"删除批次失败: {e}")
@@ -183,7 +183,7 @@ async def start_batch(
         # 在后台运行批次（不阻塞HTTP响应）
         background_tasks.add_task(experiment_service.run_batch, batch_id, max_workers)
 
-        return {"status": "success", "message": f"批次 {batch_id} 已启动，正在后台运行"}
+        return {"success": True, "message": f"批次 {batch_id} 已启动，正在后台运行"}
 
     except Exception as e:
         logger.error(f"启动批次失败: {e}")
@@ -211,7 +211,7 @@ async def cancel_batch(batch_id: int, current_user: User = Depends(get_current_a
         )
         await asyncio.to_thread(experiment_repo.execute_update, query, (batch_id,))
 
-        return {"status": "success", "message": f"批次 {batch_id} 已取消"}
+        return {"success": True, "message": f"批次 {batch_id} 已取消"}
 
     except Exception as e:
         logger.error(f"取消批次失败: {e}")
@@ -237,7 +237,7 @@ async def list_experiments(
         )
 
         return {
-            "status": "success",
+            "success": True,
             "data": {"batch_id": batch_id, "experiments": experiments, "count": len(experiments)},
         }
 
@@ -272,7 +272,7 @@ async def get_top_models(
         )
 
         return {
-            "status": "success",
+            "success": True,
             "data": {"batch_id": batch_id, "models": models, "count": len(models)},
         }
 
@@ -289,7 +289,7 @@ async def generate_report(batch_id: int, current_user: User = Depends(get_curren
         ranker = ModelRanker()
         report = ranker.generate_report(batch_id)
 
-        return {"status": "success", "data": report}
+        return {"success": True, "data": report}
 
     except Exception as e:
         logger.error(f"生成报告失败: {e}")
@@ -305,7 +305,7 @@ async def get_parameter_importance(batch_id: int, current_user: User = Depends(g
         importance = ranker.analyze_parameter_importance(batch_id)
 
         return {
-            "status": "success",
+            "success": True,
             "data": {"batch_id": batch_id, "parameter_importance": importance},
         }
 
@@ -391,7 +391,7 @@ async def get_templates(current_user: User = Depends(get_current_active_user)):
         },
     }
 
-    return {"status": "success", "data": templates}
+    return {"success": True, "data": templates}
 
 
 @router.get("/{experiment_id}")
@@ -409,7 +409,7 @@ async def get_experiment_detail(experiment_id: int, current_user: User = Depends
         if not experiment:
             raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
 
-        return {"status": "success", "data": experiment}
+        return {"success": True, "data": experiment}
 
     except HTTPException:
         raise
@@ -436,7 +436,7 @@ async def delete_experiment(experiment_id: int, current_user: User = Depends(get
         # 删除实验
         await asyncio.to_thread(experiment_repo.delete_experiment, experiment_id)
 
-        return {"status": "success", "message": f"实验 {experiment_id} 已删除"}
+        return {"success": True, "message": f"实验 {experiment_id} 已删除"}
 
     except HTTPException:
         raise

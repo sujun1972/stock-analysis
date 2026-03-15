@@ -22,7 +22,7 @@ async def list_strategies() -> Dict[str, Any]:
 
     返回:
         {
-            "status": "success",
+            "success": True,
             "data": [
                 {
                     "id": "complex_indicator",
@@ -35,7 +35,7 @@ async def list_strategies() -> Dict[str, Any]:
         }
     """
     strategies = strategy_manager.list_strategies()
-    return {"status": "success", "data": strategies}
+    return {"success": True, "data": strategies}
 
 
 @router.get("/metadata")
@@ -49,7 +49,7 @@ async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[
 
     返回:
         {
-            "status": "success",
+            "success": True,
             "data": {
                 "id": "complex_indicator",
                 "name": "复合指标策略",
@@ -74,7 +74,7 @@ async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[
     """
     try:
         metadata = strategy_manager.get_strategy_metadata(strategy_id)
-        return {"status": "success", "data": metadata}
+        return {"success": True, "data": metadata}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -91,7 +91,7 @@ async def validate_strategy_params(strategy_id: str, params: Dict[str, Any]) -> 
 
     返回:
         {
-            "status": "success",
+            "success": True,
             "data": {
                 "valid": true,
                 "message": "参数验证通过"
@@ -102,9 +102,9 @@ async def validate_strategy_params(strategy_id: str, params: Dict[str, Any]) -> 
         is_valid = strategy_manager.validate_strategy_params(strategy_id, params)
 
         if is_valid:
-            return {"status": "success", "data": {"valid": True, "message": "参数验证通过"}}
+            return {"success": True, "data": {"valid": True, "message": "参数验证通过"}}
         else:
-            return {"status": "error", "data": {"valid": False, "message": "参数验证失败"}}
+            return {"success": False, "data": {"valid": False, "message": "参数验证失败"}}
     except ValueError as e:
         logger.error(f"参数验证失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))

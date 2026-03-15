@@ -159,10 +159,11 @@ export default function StrategiesPage() {
         }
       }>('/api/strategies', { params })
 
-      if (response.data && 'success' in response.data && response.data.success) {
-        setStrategies(response.data.data)
-        setTotalPages(response.data.meta.total_pages)
-        setTotalCount(response.data.meta.total)
+      // apiClient.get 已经返回了 response.data，所以直接使用
+      if (response && 'success' in response && response.success) {
+        setStrategies(response.data)
+        setTotalPages(response.meta.total_pages)
+        setTotalCount(response.meta.total)
       }
     } catch (error) {
       logger.error('获取策略列表失败', error)

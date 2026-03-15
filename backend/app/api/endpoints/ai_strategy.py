@@ -282,13 +282,13 @@ async def delete_provider(provider: str, current_user: User = Depends(require_ad
         provider: 提供商名称
 
     Returns:
-        {"message": "删除成功"}
+        {"success": true, "message": "删除成功"}
     """
     deleted = ai_config_repository.delete(provider)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"未找到AI提供商配置: {provider}")
 
-    return {"message": f"成功删除AI提供商配置: {provider}"}
+    return {"success": True, "message": f"成功删除AI提供商配置: {provider}"}
 
 
 @router.get("/providers/default/info", response_model=AIProviderConfigResponse)
@@ -495,13 +495,15 @@ async def cancel_task(task_id: str, current_user: User = Depends(get_current_act
             task.revoke(terminate=True)
             logger.info(f"AI策略生成任务已取消 [task_id={task_id}]")
             return {
-                "message": "任务已取消",
-                "task_id": task_id
+                "success": True,
+                "data": {"task_id": task_id},
+                "message": "任务已取消"
             }
         else:
             return {
-                "message": f"任务当前状态为 {task.state}，无法取消",
-                "task_id": task_id
+                "success": False,
+                "data": {"task_id": task_id, "state": task.state},
+                "message": f"任务当前状态为 {task.state}，无法取消"
             }
 
     except Exception as e:

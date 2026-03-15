@@ -2344,7 +2344,7 @@ async def cancel_async_backtest(
 
         logger.info(f"[异步回测] 任务已取消: task_id={task_id}")
 
-        return {"message": "任务已取消", "task_id": task_id}
+        return {"success": True, "data": {"task_id": task_id}, "message": "任务已取消"}
 
     except Exception as e:
         logger.error(f"[异步回测] 取消任务失败: task_id={task_id}, error={e}")

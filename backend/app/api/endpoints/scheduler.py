@@ -162,7 +162,7 @@ async def get_scheduled_tasks(
                 }
             )
 
-        return {"code": 200, "message": "success", "data": tasks}
+        return {"success": True, "data": tasks}
     except DatabaseError as e:
         logger.error(f"数据库查询失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -232,7 +232,7 @@ async def get_scheduled_task(
             "updated_at": row[13].strftime("%Y-%m-%d %H:%M:%S") if row[13] else None,
         }
 
-        return {"code": 200, "message": "success", "data": task}
+        return {"success": True, "data": task}
     except HTTPException:
         raise
     except Exception as e:
@@ -311,7 +311,7 @@ async def create_scheduled_task(
         task_id = result[0][0]
         logger.info(f"✓ 创建定时任务: {request.task_name} (ID: {task_id})")
 
-        return {"code": 200, "message": "success", "data": {"id": task_id}}
+        return {"success": True, "data": {"id": task_id}, "message": "创建成功"}
     except HTTPException:
         raise
     except Exception as e:
@@ -379,7 +379,7 @@ async def update_scheduled_task(
 
         logger.info(f"✓ 更新定时任务: {task_id}")
 
-        return {"code": 200, "message": "success", "data": {"id": task_id}}
+        return {"success": True, "data": {"id": task_id}, "message": "更新成功"}
     except HTTPException:
         raise
     except Exception as e:
@@ -411,7 +411,7 @@ async def delete_scheduled_task(
 
         logger.info(f"✓ 删除定时任务: {task_id}")
 
-        return {"code": 200, "message": "success", "data": {"id": task_id}}
+        return {"success": True, "data": {"id": task_id}, "message": "删除成功"}
     except Exception as e:
         logger.error(f"删除定时任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -453,7 +453,7 @@ async def toggle_scheduled_task(
 
         logger.info(f"✓ 切换定时任务状态: {task_id} -> {new_enabled}")
 
-        return {"code": 200, "message": "success", "data": {"enabled": new_enabled}}
+        return {"success": True, "data": {"enabled": new_enabled}, "message": "状态切换成功"}
     except HTTPException:
         raise
     except Exception as e:
@@ -516,7 +516,7 @@ async def get_task_execution_history(
                 }
             )
 
-        return {"code": 200, "message": "success", "data": history}
+        return {"success": True, "data": history}
     except Exception as e:
         logger.error(f"获取任务执行历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -577,7 +577,7 @@ async def get_recent_execution_history(
                 }
             )
 
-        return {"code": 200, "message": "success", "data": history}
+        return {"success": True, "data": history}
     except Exception as e:
         logger.error(f"获取最近执行历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -603,19 +603,18 @@ async def validate_cron(
 
         if not is_valid:
             return {
-                "code": 400,
-                "message": "无效的Cron表达式",
+                "success": False,
                 "data": {
                     "valid": False,
                     "error": "格式应为: 分 时 日 月 周 (例: 0 9 * * 1-5)"
-                }
+                },
+                "message": "无效的Cron表达式"
             }
 
         next_run = calculate_next_run_time(cron_expression)
 
         return {
-            "code": 200,
-            "message": "success",
+            "success": True,
             "data": {
                 "valid": True,
                 "next_run_at": next_run.strftime("%Y-%m-%d %H:%M:%S") if next_run else None,

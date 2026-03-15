@@ -90,7 +90,13 @@ async def list_tasks(
     """
     tasks = ml_service.list_tasks(status=status, limit=limit)
 
-    return {"total": len(tasks), "tasks": [MLTrainingTaskResponse(**t) for t in tasks]}
+    return {
+        "success": True,
+        "data": {
+            "total": len(tasks),
+            "tasks": [MLTrainingTaskResponse(**t) for t in tasks]
+        }
+    }
 
 
 @router.delete("/tasks/{task_id}")
@@ -106,7 +112,7 @@ async def delete_task(task_id: str, current_user: User = Depends(get_current_act
     if not success:
         raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
 
-    return {"message": "删除成功", "task_id": task_id}
+    return {"success": True, "data": {"task_id": task_id}, "message": "删除成功"}
 
 
 @router.get("/tasks/{task_id}/stream")
@@ -440,7 +446,13 @@ async def get_available_features():
         "TREND": {"label": "趋势强度", "params": [20, 60]},
     }
 
-    return {"technical_indicators": technical_indicators, "alpha_factors": alpha_factors}
+    return {
+        "success": True,
+        "data": {
+            "technical_indicators": technical_indicators,
+            "alpha_factors": alpha_factors
+        }
+    }
 
 
 @router.get("/features/snapshot")

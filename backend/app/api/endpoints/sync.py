@@ -69,7 +69,7 @@ async def get_sync_status(
     config_service = ConfigService()
     status = await config_service.get_sync_status()
 
-    return {"code": 200, "message": "success", "data": status}
+    return {"success": True, "data": status}
 
 
 @router.get("/status/{module}")
@@ -97,7 +97,7 @@ async def get_module_sync_status(
     config_service = ConfigService()
     status = await config_service.get_module_sync_status(module)
 
-    return {"code": 200, "message": "success", "data": status}
+    return {"success": True, "data": status}
 
 
 @router.post("/abort")
@@ -116,12 +116,12 @@ async def abort_sync(
     # 检查当前是否有正在运行的同步
     status = await config_service.get_sync_status()
     if status.get("status") != "running":
-        return {"code": 400, "message": "没有正在运行的同步任务", "data": None}
+        return {"success": False, "message": "没有正在运行的同步任务", "data": None}
 
     # 设置中止标志
     await config_service.set_sync_abort_flag(True)
 
-    return {"code": 200, "message": "中止请求已发送，同步将在当前股票完成后停止", "data": None}
+    return {"success": True, "message": "中止请求已发送，同步将在当前股票完成后停止", "data": None}
 
 
 # ==================== Stock List Sync Endpoints ====================
@@ -284,7 +284,7 @@ async def sync_daily_stock(
     service = DailySyncService()
     result = await service.sync_single_stock(code=code, years=years)
 
-    return {"code": 200, "message": "success", "data": result}
+    return {"success": True, "data": result}
 
 
 # ==================== Realtime Sync Endpoints ====================
@@ -312,7 +312,7 @@ async def sync_minute_data(
     service = RealtimeSyncService()
     result = await service.sync_minute_data(code=code, period=request.period, days=request.days)
 
-    return {"code": 200, "message": "success", "data": result}
+    return {"success": True, "data": result}
 
 
 @router.post("/realtime")
@@ -340,9 +340,9 @@ async def sync_realtime_quotes(
 
     # 检查是否为部分成功（超时但有部分数据保存）
     if result.get("partial_success"):
-        return {"code": 206, "message": "partial_success", "data": result}  # 206 Partial Content
+        return {"success": True, "partial": true, "message": "部分成功", "data": result}  # 206 Partial Content
     else:
-        return {"code": 200, "message": "success", "data": result}
+        return {"success": True, "data": result}
 
 
 # ==================== History Endpoint ====================
@@ -368,4 +368,4 @@ async def get_sync_history(
     # TODO: 从 sync_log 表查询历史记录
     history = []
 
-    return {"code": 200, "message": "success", "data": history}
+    return {"success": True, "data": history}
