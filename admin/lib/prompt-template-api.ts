@@ -29,8 +29,10 @@ export const promptTemplateApi = {
     skip?: number
     limit?: number
   }): Promise<PromptTemplateListResponse> => {
-    const response = await apiClient.get('/api/prompt-templates', { params })
-    return response.data
+    const response = await apiClient.get('/api/prompt-templates/', { params })
+    // apiClient.get 返回 ApiResponse<T> 格式: { code, message, data }
+    // 实际的模板列表数据在 response.data 中
+    return response.data as PromptTemplateListResponse
   },
 
   /**
@@ -45,7 +47,7 @@ export const promptTemplateApi = {
    * 创建新模板
    */
   create: async (data: PromptTemplateCreate): Promise<PromptTemplate> => {
-    const response = await apiClient.post('/api/prompt-templates', data)
+    const response = await apiClient.post('/api/prompt-templates/', data)
     return response.data
   },
 
@@ -128,7 +130,7 @@ export const promptTemplateApi = {
    * 获取所有业务类型
    */
   getBusinessTypes: async (): Promise<string[]> => {
-    const response = await apiClient.get('/api/prompt-templates/business-types/all')
+    const response = await apiClient.get('/api/prompt-templates/business-types/all/')
     return response.data
   },
 }

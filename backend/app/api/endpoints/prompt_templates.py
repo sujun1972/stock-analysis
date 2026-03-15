@@ -26,12 +26,13 @@ from app.services.prompt_template_service import get_prompt_template_service
 from app.core.exceptions import DataNotFoundError, ValidationError
 from app.core.dependencies import require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 router = APIRouter()
 service = get_prompt_template_service()
 
 
-@router.get("/", response_model=PromptTemplateListResponse)
+@router.get("/")
 def list_templates(
     business_type: Optional[str] = Query(None, description="业务类型"),
     is_active: Optional[bool] = Query(None, description="是否启用"),
@@ -49,15 +50,18 @@ def list_templates(
             skip=skip,
             limit=limit
         )
-        return PromptTemplateListResponse(
-            total=total,
-            items=[PromptTemplateResponse.from_orm(t) for t in templates]
-        )
+        return ApiResponse.success(
+            data={
+                "total": total,
+                "items": [PromptTemplateResponse.from_orm(t).model_dump() for t in templates]
+            },
+            message="获取提示词模板列表成功"
+        ).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.get("/{template_id}", response_model=PromptTemplateResponse)
+@router.get("/{template_id}")
 def get_template(
     template_id: int,
     db: Session = Depends(get_db),
@@ -66,14 +70,17 @@ def get_template(
     """获取模板详情"""
     try:
         template = service.get_template_by_id(db, template_id)
-        return PromptTemplateResponse.from_orm(template)
+        return ApiResponse.success(
+            data=PromptTemplateResponse.from_orm(template).model_dump(),
+            message="获取模板详情成功"
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.post("/", response_model=PromptTemplateResponse, status_code=201)
+@router.post("/", status_code=201)
 def create_template(
     template_data: PromptTemplateCreate,
     db: Session = Depends(get_db),
@@ -82,14 +89,17 @@ def create_template(
     """创建新模板"""
     try:
         template = service.create_template(db, template_data)
-        return PromptTemplateResponse.from_orm(template)
+        return ApiResponse.created(
+            data=PromptTemplateResponse.from_orm(template).model_dump(),
+            message="创建模板成功"
+        ).to_dict()
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return ApiResponse.bad_request(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.put("/{template_id}", response_model=PromptTemplateResponse)
+@router.put("/{template_id}")
 def update_template(
     template_id: int,
     updates: PromptTemplateUpdate,
@@ -99,16 +109,19 @@ def update_template(
     """更新模板"""
     try:
         template = service.update_template(db, template_id, updates)
-        return PromptTemplateResponse.from_orm(template)
+        return ApiResponse.success(
+            data=PromptTemplateResponse.from_orm(template).model_dump(),
+            message="更新模板成功"
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return ApiResponse.bad_request(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.post("/{template_id}/versions", response_model=PromptTemplateResponse, status_code=201)
+@router.post("/{template_id}/versions", status_code=201)
 def create_version(
     template_id: int,
     version_data: PromptTemplateVersionCreate,
@@ -118,16 +131,19 @@ def create_version(
     """基于现有模板创建新版本"""
     try:
         template = service.create_version(db, template_id, version_data)
-        return PromptTemplateResponse.from_orm(template)
+        return ApiResponse.created(
+            data=PromptTemplateResponse.from_orm(template).model_dump(),
+            message="创建新版本成功"
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return ApiResponse.bad_request(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.post("/{template_id}/activate", response_model=PromptTemplateResponse)
+@router.post("/{template_id}/activate")
 def activate_template(
     template_id: int,
     set_as_default: bool = Query(False, description="是否设为默认模板"),
@@ -137,16 +153,20 @@ def activate_template(
     """激活模板"""
     try:
         template = service.activate_template(db, template_id, set_as_default)
-        return PromptTemplateResponse.from_orm(template)
+        message = "已激活并设为默认模板" if set_as_default else "激活模板成功"
+        return ApiResponse.success(
+            data=PromptTemplateResponse.from_orm(template).model_dump(),
+            message=message
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return ApiResponse.bad_request(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.post("/{template_id}/deactivate", response_model=PromptTemplateResponse)
+@router.post("/{template_id}/deactivate")
 def deactivate_template(
     template_id: int,
     db: Session = Depends(get_db),
@@ -155,16 +175,19 @@ def deactivate_template(
     """停用模板"""
     try:
         template = service.deactivate_template(db, template_id)
-        return PromptTemplateResponse.from_orm(template)
+        return ApiResponse.success(
+            data=PromptTemplateResponse.from_orm(template).model_dump(),
+            message="停用模板成功"
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return ApiResponse.bad_request(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.delete("/{template_id}", status_code=204)
+@router.delete("/{template_id}")
 def delete_template(
     template_id: int,
     db: Session = Depends(get_db),
@@ -173,16 +196,16 @@ def delete_template(
     """删除模板"""
     try:
         service.delete_template(db, template_id)
-        return None
+        return ApiResponse.success(message="删除模板成功").to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return ApiResponse.bad_request(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.post("/{template_id}/preview", response_model=PromptTemplatePreviewResponse)
+@router.post("/{template_id}/preview")
 def preview_template(
     template_id: int,
     preview_request: PromptTemplatePreviewRequest,
@@ -196,14 +219,17 @@ def preview_template(
             template_id,
             preview_request.variables
         )
-        return PromptTemplatePreviewResponse(**result)
+        return ApiResponse.success(
+            data=result,
+            message="预览渲染成功"
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.get("/{template_id}/statistics", response_model=PromptTemplateStatistics)
+@router.get("/{template_id}/statistics")
 def get_template_statistics(
     template_id: int,
     db: Session = Depends(get_db),
@@ -212,14 +238,17 @@ def get_template_statistics(
     """获取模板的性能统计"""
     try:
         stats = service.get_template_statistics(db, template_id)
-        return stats
+        return ApiResponse.success(
+            data=stats,
+            message="获取统计信息成功"
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.get("/{template_id}/history", response_model=list[PromptTemplateHistoryResponse])
+@router.get("/{template_id}/history")
 def get_template_history(
     template_id: int,
     limit: int = Query(50, ge=1, le=200),
@@ -229,16 +258,22 @@ def get_template_history(
     """获取模板的修改历史"""
     try:
         history = service.get_template_history(db, template_id, limit)
-        return [PromptTemplateHistoryResponse.from_orm(h) for h in history]
+        return ApiResponse.success(
+            data=[PromptTemplateHistoryResponse.from_orm(h).model_dump() for h in history],
+            message="获取修改历史成功"
+        ).to_dict()
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return ApiResponse.not_found(message=str(e)).to_dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.error(message=str(e), code=500).to_dict()
 
 
-@router.get("/business-types/all", response_model=list[str])
+@router.get("/business-types/all")
 def get_business_types(
     current_user: User = Depends(require_admin)
 ):
     """获取所有业务类型"""
-    return BusinessTypeEnum.all()
+    return ApiResponse.success(
+        data=BusinessTypeEnum.all(),
+        message="获取业务类型列表成功"
+    ).to_dict()
