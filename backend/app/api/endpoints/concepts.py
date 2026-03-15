@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.core.dependencies import require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 # 添加 core 模块到路径
 core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
@@ -99,17 +100,16 @@ async def get_concepts_list(
                     'updated_at': row[6].isoformat() if row[6] else None
                 })
 
-            return {
-                "code": 200,
-                "message": f"成功获取第 {page} 页，共 {total} 个概念",
-                "data": {
+            return ApiResponse.success(
+                data={
                     "items": concepts,
                     "total": total,
                     "page": page,
                     "page_size": page_size,
                     "total_pages": (total + page_size - 1) // page_size
-                }
-            }
+                },
+                message=f"成功获取第 {page} 页，共 {total} 个概念"
+            ).to_dict()
 
         finally:
             cursor.close()
@@ -157,11 +157,10 @@ async def get_concept_detail(concept_id: int):
                 'updated_at': row[7].isoformat() if row[7] else None
             }
 
-            return {
-                "code": 200,
-                "message": "获取概念详情成功",
-                "data": concept
-            }
+            return ApiResponse.success(
+                data=concept,
+                message="获取概念详情成功"
+            ).to_dict()
 
         finally:
             cursor.close()
@@ -220,14 +219,13 @@ async def get_concept_stocks(
                     'industry': row[3]
                 })
 
-            return {
-                "code": 200,
-                "message": f"获取到 {len(stocks)} 只股票",
-                "data": {
+            return ApiResponse.success(
+                data={
                     "items": stocks,
                     "total": len(stocks)
-                }
-            }
+                },
+                message=f"获取到 {len(stocks)} 只股票"
+            ).to_dict()
 
         finally:
             cursor.close()
@@ -253,11 +251,10 @@ async def get_stock_concepts(stock_code: str):
         result = fetcher.get_stock_concepts(stock_code)
 
         if result.is_success():
-            return {
-                "code": 200,
-                "message": result.message,
-                "data": result.data
-            }
+            return ApiResponse.success(
+                data=result.data,
+                message=result.message
+            ).to_dict()
         else:
             raise HTTPException(status_code=500, detail=result.error)
 
@@ -296,15 +293,14 @@ async def sync_concepts(
 
         source_display = source or "系统配置的概念数据源"
 
-        return {
-            "code": 200,
-            "message": "概念数据同步任务已提交",
-            "data": {
+        return ApiResponse.success(
+            data={
                 "task_id": task.id,
                 "source": source_display,
                 "status": "pending"
-            }
-        }
+            },
+            message="概念数据同步任务已提交"
+        ).to_dict()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"提交同步任务失败: {str(e)}")
@@ -350,11 +346,10 @@ async def get_sync_status(
             response["message"] = "任务失败"
             response["error"] = str(task_result.info)
 
-        return {
-            "code": 200,
-            "message": "查询成功",
-            "data": response
-        }
+        return ApiResponse.success(
+            data=response,
+            message="查询成功"
+        ).to_dict()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询任务状态失败: {str(e)}")
@@ -415,14 +410,13 @@ async def update_stock_concepts(
 
             conn.commit()
 
-            return {
-                "code": 200,
-                "message": f"成功更新股票概念，添加了 {added_count} 个概念",
-                "data": {
+            return ApiResponse.success(
+                data={
                     "stock_code": stock_code,
                     "concepts_count": added_count
-                }
-            }
+                },
+                message=f"成功更新股票概念，添加了 {added_count} 个概念"
+            ).to_dict()
 
         finally:
             cursor.close()

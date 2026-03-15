@@ -23,6 +23,7 @@ from src.database.connection_pool_manager import ConnectionPoolManager
 from app.services.premarket_analysis_service import premarket_analysis_service
 from app.core.dependencies import get_current_user
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 # 创建路由（注意：不要在这里加prefix，在__init__.py中统一添加）
 router = APIRouter(
@@ -72,22 +73,20 @@ async def sync_premarket_data(
         result = fetcher.sync_premarket_data(date)
 
         if result.success:
-            return {
-                "code": 200,
-                "message": "盘前数据同步成功" if result.is_trading_day else f"{date}非交易日，已跳过",
-                "data": {
+            return ApiResponse.success(
+                data={
                     "trade_date": result.trade_date,
                     "is_trading_day": result.is_trading_day,
                     "synced_tables": result.synced_tables,
                     "details": result.details
-                }
-            }
+                },
+                message="盘前数据同步成功" if result.is_trading_day else f"{date}非交易日，已跳过"
+            ).to_dict()
         else:
-            return {
-                "code": 400,
-                "message": result.error or "同步失败",
-                "data": None
-            }
+            return ApiResponse.error(
+                message=result.error or "同步失败",
+                code=400
+            ).to_dict()
 
     except Exception as e:
         logger.error(f"同步盘前数据失败: {str(e)}", exc_info=True)
@@ -133,17 +132,15 @@ async def generate_collision_analysis(
         )
 
         if result.get("success"):
-            return {
-                "code": 200,
-                "message": "碰撞分析生成成功",
-                "data": result
-            }
+            return ApiResponse.success(
+                data=result,
+                message="碰撞分析生成成功"
+            ).to_dict()
         else:
-            return {
-                "code": 400,
-                "message": result.get("error", "生成失败"),
-                "data": None
-            }
+            return ApiResponse.error(
+                message=result.get("error", "生成失败"),
+                code=400
+            ).to_dict()
 
     except Exception as e:
         logger.error(f"生成碰撞分析失败: {str(e)}", exc_info=True)
@@ -172,11 +169,10 @@ async def get_collision_analysis(
         result = premarket_analysis_service.get_collision_analysis(date)
 
         if result:
-            return {
-                "code": 200,
-                "message": "查询成功",
-                "data": result
-            }
+            return ApiResponse.success(
+                data=result,
+                message="查询成功"
+            ).to_dict()
         else:
             raise HTTPException(status_code=404, detail=f"{date} 无碰撞分析数据")
 
@@ -230,10 +226,8 @@ async def get_overnight_data(
         pool_manager.release_connection(conn)
 
         if row:
-            return {
-                "code": 200,
-                "message": "查询成功",
-                "data": {
+            return ApiResponse.success(
+                data={
                     "trade_date": str(row[0]),
                     "a50": {
                         "close": float(row[1]) if row[1] else 0,
@@ -272,8 +266,9 @@ async def get_overnight_data(
                         "change": float(row[18]) if row[18] else 0
                     },
                     "fetch_time": str(row[19]) if row[19] else None
-                }
-            }
+                },
+                message="查询成功"
+            ).to_dict()
         else:
             raise HTTPException(status_code=404, detail=f"{date} 无外盘数据")
 
@@ -342,14 +337,13 @@ async def get_premarket_news(
                 "created_at": str(row[8]) if row[8] else None
             })
 
-        return {
-            "code": 200,
-            "message": "查询成功",
-            "data": {
+        return ApiResponse.success(
+            data={
                 "count": len(news_list),
                 "news": news_list
-            }
-        }
+            },
+            message="查询成功"
+        ).to_dict()
 
     except Exception as e:
         logger.error(f"查询盘前新闻失败: {str(e)}")
@@ -408,11 +402,10 @@ async def get_analysis_history(
                 "created_at": str(row[7]) if row[7] else None
             })
 
-        return {
-            "code": 200,
-            "message": "查询成功",
-            "data": history
-        }
+        return ApiResponse.success(
+            data=history,
+            message="查询成功"
+        ).to_dict()
 
     except Exception as e:
         logger.error(f"查询历史记录失败: {str(e)}")

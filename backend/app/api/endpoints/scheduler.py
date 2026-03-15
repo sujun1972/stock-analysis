@@ -603,25 +603,25 @@ async def validate_cron(
         is_valid = validate_cron_expression(cron_expression)
 
         if not is_valid:
-            return {
-                "success": False,
-                "data": {
+            return ApiResponse.error(
+                data={
                     "valid": False,
                     "error": "格式应为: 分 时 日 月 周 (例: 0 9 * * 1-5)"
                 },
-                "message": "无效的Cron表达式"
-            }
+                message="无效的Cron表达式",
+                code=400
+            ).to_dict()
 
         next_run = calculate_next_run_time(cron_expression)
 
-        return {
-            "success": True,
-            "data": {
+        return ApiResponse.success(
+            data={
                 "valid": True,
                 "next_run_at": next_run.strftime("%Y-%m-%d %H:%M:%S") if next_run else None,
                 "cron_expression": cron_expression
-            }
-        }
+            },
+            message="Cron表达式验证成功"
+        ).to_dict()
     except Exception as e:
         logger.error(f"验证Cron表达式失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

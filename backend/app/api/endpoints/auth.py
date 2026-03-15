@@ -29,11 +29,12 @@ from app.schemas.auth import (
     MessageResponse
 )
 from app.schemas.user import UserResponse
+from app.models.api_response import ApiResponse
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
 
-@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
@@ -79,14 +80,17 @@ async def register(
 
     logger.info(f"[认证] 新用户注册成功 [user_id={new_user.id}, email={new_user.email}, username={new_user.username}]")
 
-    return RegisterResponse(
-        message="注册成功",
-        user_id=new_user.id,
-        email=new_user.email
-    )
+    return ApiResponse.success(
+        data=RegisterResponse(
+            message="注册成功",
+            user_id=new_user.id,
+            email=new_user.email
+        ),
+        message="注册成功"
+    ).to_dict()
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login")
 async def login(
     login_data: LoginRequest,
     request: Request,
@@ -183,23 +187,26 @@ async def login(
     logger.info(f"[认证] 登录成功 [user_id={user.id}, email={user.email}, ip={client_ip}]")
 
     # 返回Token和用户信息
-    return LoginResponse(
-        access_token=tokens["access_token"],
-        refresh_token=tokens["refresh_token"],
-        token_type="bearer",
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user={
-            "id": user.id,
-            "email": user.email,
-            "username": user.username,
-            "role": user.role,
-            "full_name": user.full_name,
-            "avatar_url": user.avatar_url
-        }
-    )
+    return ApiResponse.success(
+        data=LoginResponse(
+            access_token=tokens["access_token"],
+            refresh_token=tokens["refresh_token"],
+            token_type="bearer",
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            user={
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "role": user.role,
+                "full_name": user.full_name,
+                "avatar_url": user.avatar_url
+            }
+        ),
+        message="登录成功"
+    ).to_dict()
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh")
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
     db: Session = Depends(get_db)
@@ -272,15 +279,18 @@ async def refresh_token(
     db.add(new_refresh_token)
     db.commit()
 
-    return TokenResponse(
-        access_token=new_tokens["access_token"],
-        refresh_token=new_tokens["refresh_token"],
-        token_type="bearer",
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    )
+    return ApiResponse.success(
+        data=TokenResponse(
+            access_token=new_tokens["access_token"],
+            refresh_token=new_tokens["refresh_token"],
+            token_type="bearer",
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        ),
+        message="令牌刷新成功"
+    ).to_dict()
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout")
 async def logout(
     refresh_data: RefreshTokenRequest,
     current_user: User = Depends(get_current_active_user),
@@ -303,10 +313,13 @@ async def logout(
         token_obj.revoked_at = datetime.now(timezone.utc)
         db.commit()
 
-    return MessageResponse(message="登出成功")
+    return ApiResponse.success(
+        data=MessageResponse(message="登出成功"),
+        message="登出成功"
+    ).to_dict()
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -315,10 +328,13 @@ async def get_current_user_info(
 
     需要在Header中提供有效的access_token
     """
-    return current_user
+    return ApiResponse.success(
+        data=UserResponse.model_validate(current_user),
+        message="获取用户信息成功"
+    ).to_dict()
 
 
-@router.post("/verify-email/{token}", response_model=MessageResponse)
+@router.post("/verify-email/{token}")
 async def verify_email(token: str, db: Session = Depends(get_db)):
     """
     验证邮箱（预留接口，需要邮件服务支持）
@@ -328,10 +344,13 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     # TODO: 实现邮箱验证逻辑
     # 1. 解析token获取user_id
     # 2. 更新user.is_email_verified = True
-    return MessageResponse(message="邮箱验证功能尚未实现")
+    return ApiResponse.success(
+        data=MessageResponse(message="邮箱验证功能尚未实现"),
+        message="邮箱验证功能尚未实现"
+    ).to_dict()
 
 
-@router.post("/forgot-password", response_model=MessageResponse)
+@router.post("/forgot-password")
 async def forgot_password(email: str, db: Session = Depends(get_db)):
     """
     忘记密码（预留接口，需要邮件服务支持）
@@ -342,10 +361,13 @@ async def forgot_password(email: str, db: Session = Depends(get_db)):
     # 1. 查找用户
     # 2. 生成重置密码token
     # 3. 发送邮件
-    return MessageResponse(message="密码重置功能尚未实现，请联系管理员")
+    return ApiResponse.success(
+        data=MessageResponse(message="密码重置功能尚未实现，请联系管理员"),
+        message="密码重置功能尚未实现，请联系管理员"
+    ).to_dict()
 
 
-@router.post("/reset-password", response_model=MessageResponse)
+@router.post("/reset-password")
 async def reset_password(
     token: str,
     new_password: str,
@@ -360,4 +382,7 @@ async def reset_password(
     # TODO: 实现重置密码逻辑
     # 1. 验证token
     # 2. 更新密码
-    return MessageResponse(message="密码重置功能尚未实现")
+    return ApiResponse.success(
+        data=MessageResponse(message="密码重置功能尚未实现"),
+        message="密码重置功能尚未实现"
+    ).to_dict()

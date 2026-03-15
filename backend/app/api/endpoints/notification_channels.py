@@ -22,7 +22,7 @@ from app.models.api_response import ApiResponse
 router = APIRouter()
 
 
-@router.get("", response_model=ApiResponse[List[NotificationChannelConfigResponse]])
+@router.get("")
 def get_all_notification_channels(
     db: Session = Depends(get_db),
     current_admin = Depends(require_super_admin)
@@ -32,16 +32,15 @@ def get_all_notification_channels(
         service = NotificationChannelService(db)
         channels = service.get_all_channels()
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=channels,
             message="获取成功"
-        )
+        ).to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{channel_type}", response_model=ApiResponse[NotificationChannelConfigResponse])
+@router.get("/{channel_type}")
 def get_notification_channel(
     channel_type: str,
     db: Session = Depends(get_db),
@@ -55,18 +54,17 @@ def get_notification_channel(
         if not channel:
             raise HTTPException(status_code=404, detail="渠道不存在")
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=channel,
             message="获取成功"
-        )
+        ).to_dict()
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{channel_type}", response_model=ApiResponse[NotificationChannelConfigResponse])
+@router.put("/{channel_type}")
 def update_notification_channel(
     channel_type: str,
     data: NotificationChannelConfigUpdate,
@@ -82,18 +80,17 @@ def update_notification_channel(
 
         channel = service.update_channel(channel_type, update_dict)
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=channel,
             message="配置已更新"
-        )
+        ).to_dict()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{channel_type}/toggle", response_model=ApiResponse[NotificationChannelConfigResponse])
+@router.post("/{channel_type}/toggle")
 def toggle_notification_channel(
     channel_type: str,
     db: Session = Depends(get_db),
@@ -106,18 +103,17 @@ def toggle_notification_channel(
 
         status_text = "已启用" if channel.is_enabled else "已禁用"
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=channel,
             message=f"渠道{status_text}"
-        )
+        ).to_dict()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{channel_type}/test", response_model=ApiResponse[TestChannelResponse])
+@router.post("/{channel_type}/test")
 async def test_notification_channel(
     channel_type: str,
     request: TestChannelRequest,
@@ -130,17 +126,16 @@ async def test_notification_channel(
         result = await service.test_channel(channel_type, request.test_target)
 
         if result['success']:
-            return ApiResponse(
-                success=True,
+            return ApiResponse.success(
                 data=result,
                 message="测试成功"
-            )
+            ).to_dict()
         else:
-            return ApiResponse(
-                success=False,
+            return ApiResponse.error(
                 data=result,
-                message=result['message']
-            )
+                message=result['message'],
+                code=400
+            ).to_dict()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

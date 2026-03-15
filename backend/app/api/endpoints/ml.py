@@ -91,13 +91,13 @@ async def list_tasks(
     """
     tasks = ml_service.list_tasks(status=status, limit=limit)
 
-    return {
-        "success": True,
-        "data": {
+    return ApiResponse.success(
+        data={
             "total": len(tasks),
             "tasks": [MLTrainingTaskResponse(**t) for t in tasks]
-        }
-    }
+        },
+        message="获取任务列表成功"
+    ).to_dict()
 
 
 @router.delete("/tasks/{task_id}")
@@ -401,13 +401,16 @@ async def list_models(
             }
             models.append(model_data)
 
-        return {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-            "models": models,
-        }
+        return ApiResponse.success(
+            data={
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "models": models,
+            },
+            message="获取模型列表成功"
+        ).to_dict()
 
     except DatabaseError as e:
         logger.exception(f"数据库查询失败: {e}")
@@ -447,13 +450,13 @@ async def get_available_features():
         "TREND": {"label": "趋势强度", "params": [20, 60]},
     }
 
-    return {
-        "success": True,
-        "data": {
+    return ApiResponse.success(
+        data={
             "technical_indicators": technical_indicators,
             "alpha_factors": alpha_factors
-        }
-    }
+        },
+        message="获取可用特征列表成功"
+    ).to_dict()
 
 
 @router.get("/features/snapshot")
@@ -542,12 +545,15 @@ async def get_feature_snapshot(
         # 特征快照主要用于查看训练数据的原始特征值
 
         # 统一清理所有浮点数值（将 NaN/Inf 转换为 None）
-        return {
-            "date": date_obj.strftime("%Y-%m-%d"),
-            "features": sanitize_float_values(features),
-            "target": sanitize_float_values(target),
-            "prediction": None,  # 预测值需要单独运行预测接口获取
-        }
+        return ApiResponse.success(
+            data={
+                "date": date_obj.strftime("%Y-%m-%d"),
+                "features": sanitize_float_values(features),
+                "target": sanitize_float_values(target),
+                "prediction": None,  # 预测值需要单独运行预测接口获取
+            },
+            message="获取特征快照成功"
+        ).to_dict()
 
     except HTTPException:
         raise

@@ -19,11 +19,12 @@ from app.schemas.user import (
     LoginHistoryResponse
 )
 from app.schemas.auth import MessageResponse
+from app.models.api_response import ApiResponse
 
 router = APIRouter(prefix="/profile", tags=["个人资料"])
 
 
-@router.get("", response_model=UserWithQuota)
+@router.get("")
 async def get_my_profile(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -32,10 +33,13 @@ async def get_my_profile(
 
     返回当前登录用户的完整信息（包含配额）
     """
-    return current_user
+    return ApiResponse.success(
+        data=UserWithQuota.model_validate(current_user),
+        message="获取个人资料成功"
+    ).to_dict()
 
 
-@router.patch("", response_model=UserWithQuota)
+@router.patch("")
 async def update_my_profile(
     profile_data: UserUpdate,
     current_user: User = Depends(get_current_active_user),
@@ -78,10 +82,13 @@ async def update_my_profile(
     db.commit()
     db.refresh(current_user)
 
-    return current_user
+    return ApiResponse.success(
+        data=UserWithQuota.model_validate(current_user),
+        message="个人资料更新成功"
+    ).to_dict()
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post("/change-password")
 async def change_password(
     password_data: PasswordChange,
     current_user: User = Depends(get_current_active_user),
@@ -104,10 +111,13 @@ async def change_password(
     current_user.password_hash = hash_password(password_data.new_password)
     db.commit()
 
-    return MessageResponse(message="密码修改成功")
+    return ApiResponse.success(
+        data=MessageResponse(message="密码修改成功"),
+        message="密码修改成功"
+    ).to_dict()
 
 
-@router.get("/quota", response_model=UserQuotaResponse)
+@router.get("/quota")
 async def get_my_quota(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -129,10 +139,13 @@ async def get_my_quota(
             detail="配额记录不存在"
         )
 
-    return quota
+    return ApiResponse.success(
+        data=UserQuotaResponse.model_validate(quota),
+        message="获取配额成功"
+    ).to_dict()
 
 
-@router.get("/activity", response_model=List[ActivityLogResponse])
+@router.get("/activity")
 async def get_my_activity(
     limit: int = Query(50, ge=1, le=200, description="返回记录数"),
     action_type: str = Query(None, description="操作类型筛选"),
@@ -155,10 +168,13 @@ async def get_my_activity(
     # 查询日志
     logs = query.order_by(UserActivityLog.created_at.desc()).limit(limit).all()
 
-    return logs
+    return ApiResponse.success(
+        data=[ActivityLogResponse.model_validate(log) for log in logs],
+        message="获取操作记录成功"
+    ).to_dict()
 
 
-@router.get("/login-history", response_model=List[LoginHistoryResponse])
+@router.get("/login-history")
 async def get_my_login_history(
     limit: int = Query(20, ge=1, le=100, description="返回记录数"),
     current_user: User = Depends(get_current_active_user),
@@ -176,4 +192,7 @@ async def get_my_login_history(
         LoginHistory.login_at.desc()
     ).limit(limit).all()
 
-    return history
+    return ApiResponse.success(
+        data=[LoginHistoryResponse.model_validate(h) for h in history],
+        message="获取登录历史成功"
+    ).to_dict()

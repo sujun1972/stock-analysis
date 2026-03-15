@@ -144,15 +144,14 @@ async def sync_stock_list(
     # 启动异步任务
     task = sync_stock_list_task.delay()
 
-    return {
-        "code": 200,
-        "message": "股票列表同步任务已启动",
-        "data": {
+    return ApiResponse.success(
+        data={
             "task_id": task.id,
             "task_name": "股票列表同步",
             "display_name": "股票列表同步"
-        }
-    }
+        },
+        message="股票列表同步任务已启动"
+    ).to_dict()
 
 
 @router.post("/new-stocks")
@@ -176,15 +175,14 @@ async def sync_new_stocks(
     # 启动异步任务
     task = sync_new_stocks_task.delay(days=request.days)
 
-    return {
-        "code": 200,
-        "message": "新股列表同步任务已启动",
-        "data": {
+    return ApiResponse.success(
+        data={
             "task_id": task.id,
             "task_name": "新股列表同步",
             "display_name": f"新股列表同步(最近{request.days}天)"
-        }
-    }
+        },
+        message="新股列表同步任务已启动"
+    ).to_dict()
 
 
 @router.post("/delisted-stocks")
@@ -203,15 +201,14 @@ async def sync_delisted_stocks(
     # 启动异步任务
     task = sync_delisted_stocks_task.delay()
 
-    return {
-        "code": 200,
-        "message": "退市股票列表同步任务已启动",
-        "data": {
+    return ApiResponse.success(
+        data={
             "task_id": task.id,
             "task_name": "退市股票同步",
             "display_name": "退市股票列表同步"
-        }
-    }
+        },
+        message="退市股票列表同步任务已启动"
+    ).to_dict()
 
 
 # ==================== Daily Data Sync Endpoints ====================
@@ -254,15 +251,14 @@ async def sync_daily_batch(
         years=request.years
     )
 
-    return {
-        "code": 200,
-        "message": "日线数据批量同步任务已启动",
-        "data": {
+    return ApiResponse.success(
+        data={
             "task_id": task.id,
             "task_name": "日线数据批量同步",
             "display_name": display_name
-        }
-    }
+        },
+        message="日线数据批量同步任务已启动"
+    ).to_dict()
 
 
 @router.post("/daily/{code}")

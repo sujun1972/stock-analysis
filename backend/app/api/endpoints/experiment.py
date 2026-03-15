@@ -133,9 +133,8 @@ async def list_batches(
         # 获取总数
         total = await asyncio.to_thread(batch_repo.count_batches, status=status)
 
-        return {
-            "success": True,
-            "data": {
+        return ApiResponse.success(
+            data={
                 "batches": batches,
                 "pagination": {
                     "page": page,
@@ -144,7 +143,8 @@ async def list_batches(
                     "pages": (total + limit - 1) // limit,
                 },
             },
-        }
+            message="列出批次成功"
+        ).to_dict()
 
     except Exception as e:
         logger.error(f"列出批次失败: {e}")
@@ -237,10 +237,10 @@ async def list_experiments(
             experiment_repo.find_experiments_by_batch, batch_id=batch_id, status=status, limit=limit
         )
 
-        return {
-            "success": True,
-            "data": {"batch_id": batch_id, "experiments": experiments, "count": len(experiments)},
-        }
+        return ApiResponse.success(
+            data={"batch_id": batch_id, "experiments": experiments, "count": len(experiments)},
+            message="列出实验成功"
+        ).to_dict()
 
     except Exception as e:
         logger.error(f"列出实验失败: {e}")
@@ -272,10 +272,10 @@ async def get_top_models(
             top_n=top_n,
         )
 
-        return {
-            "success": True,
-            "data": {"batch_id": batch_id, "models": models, "count": len(models)},
-        }
+        return ApiResponse.success(
+            data={"batch_id": batch_id, "models": models, "count": len(models)},
+            message="获取Top模型成功"
+        ).to_dict()
 
     except Exception as e:
         logger.error(f"获取Top模型失败: {e}")
@@ -305,10 +305,10 @@ async def get_parameter_importance(batch_id: int, current_user: User = Depends(g
         ranker = ModelRanker()
         importance = ranker.analyze_parameter_importance(batch_id)
 
-        return {
-            "success": True,
-            "data": {"batch_id": batch_id, "parameter_importance": importance},
-        }
+        return ApiResponse.success(
+            data={"batch_id": batch_id, "parameter_importance": importance},
+            message="参数重要性分析成功"
+        ).to_dict()
 
     except Exception as e:
         logger.error(f"参数重要性分析失败: {e}")

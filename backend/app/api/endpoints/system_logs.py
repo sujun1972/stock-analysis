@@ -158,12 +158,12 @@ async def get_log_files(
 
         logger.bind(count=len(files_info)).info("查询日志文件列表成功")
 
-        return {
-            "success": True,
-            "data": {
+        return ApiResponse.success(
+            data={
                 "files": [f.model_dump() for f in files_info]
-            }
-        }
+            },
+            message="获取日志文件列表成功"
+        ).to_dict()
     except Exception as e:
         logger.error(f"获取日志文件列表失败: {e}")
         raise HTTPException(
@@ -212,15 +212,15 @@ async def query_system_logs(
                 reverse=True
             )
             if not files:
-                return {
-                    "success": True,
-                    "data": {
+                return ApiResponse.success(
+                    data={
                         "total": 0,
                         "page": page,
                         "page_size": page_size,
                         "logs": []
-                    }
-                }
+                    },
+                    message="未找到日志文件"
+                ).to_dict()
             filename = files[0].name
 
         log_file = log_dir / filename
@@ -267,15 +267,15 @@ async def query_system_logs(
             returned=len(page_logs)
         ).info("查询系统日志成功")
 
-        return {
-            "success": True,
-            "data": {
+        return ApiResponse.success(
+            data={
                 "total": total,
                 "page": page,
                 "page_size": page_size,
                 "logs": [log.model_dump() for log in page_logs]
-            }
-        }
+            },
+            message="查询系统日志成功"
+        ).to_dict()
 
     except HTTPException:
         raise
@@ -312,16 +312,16 @@ async def get_log_statistics(
                 reverse=True
             )
             if not files:
-                return {
-                    "success": True,
-                    "data": {
+                return ApiResponse.success(
+                    data={
                         "total_logs": 0,
                         "by_level": {},
                         "by_module": {},
                         "error_count": 0,
                         "warning_count": 0
-                    }
-                }
+                    },
+                    message="未找到日志文件"
+                ).to_dict()
             filename = files[0].name
 
         log_file = log_dir / filename
@@ -364,16 +364,16 @@ async def get_log_statistics(
 
         logger.bind(total=total_logs).info("生成日志统计信息成功")
 
-        return {
-            "success": True,
-            "data": {
+        return ApiResponse.success(
+            data={
                 "total_logs": total_logs,
                 "by_level": by_level,
                 "by_module": dict(sorted(by_module.items(), key=lambda x: x[1], reverse=True)[:10]),  # Top 10模块
                 "error_count": error_count,
                 "warning_count": warning_count
-            }
-        }
+            },
+            message="生成日志统计信息成功"
+        ).to_dict()
 
     except HTTPException:
         raise
