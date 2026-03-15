@@ -39,8 +39,7 @@ def get_notification_settings(
             # 自动创建默认配置
             settings = service.update_user_settings(current_user.id, {})
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=settings,
             message="获取成功"
         )
@@ -63,8 +62,7 @@ def update_notification_settings(
 
         settings = service.update_user_settings(current_user.id, update_dict)
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=settings,
             message="配置已更新"
         )
@@ -92,8 +90,7 @@ def get_in_app_notifications(
             offset=offset
         )
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=notifications,
             message="获取成功"
         )
@@ -112,8 +109,7 @@ def mark_notification_as_read(
         service = NotificationService(db)
         service.mark_as_read(notification_id, current_user.id)
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=None,
             message="已标记为已读"
         )
@@ -131,8 +127,7 @@ def mark_all_as_read(
         service = NotificationService(db)
         count = service.mark_all_as_read(current_user.id)
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data={"count": count},
             message=f"已标记 {count} 条消息为已读"
         )
@@ -150,8 +145,7 @@ def get_unread_count(
         service = NotificationService(db)
         count = service.get_unread_count(current_user.id)
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data={"unread_count": count},
             message="获取成功"
         )
@@ -173,8 +167,7 @@ def get_notification_logs(
         service = NotificationService(db)
         logs = service.get_notification_logs(current_user.id, limit, offset)
 
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success(
             data=logs,
             message="获取成功"
         )
