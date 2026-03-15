@@ -4,6 +4,11 @@
 
 多渠道文字报告推送系统，支持 Email、Telegram Bot、站内消息三种渠道。
 
+**完整功能包含**:
+- ✅ 后端: 多渠道发送、模板系统、频率限制、监控告警
+- ✅ Admin: 渠道配置、模板管理、监控面板
+- ✅ 用户前端: 通知设置、站内消息中心、未读角标
+
 ## 核心组件
 
 ### 1. 通知服务 (`notification_service.py`)
@@ -52,6 +57,12 @@
 - 管理员站内消息自动通知
 - 失败原因分析与优化建议
 - 趋势分析（improving/worsening/stable）
+
+### 8. 用户前端组件
+- **通知设置页面** (`/settings/notifications`) - 用户配置订阅偏好、渠道管理
+- **通知中心** (`/notifications`) - 查看站内消息、标记已读
+- **未读角标** (`NotificationBadge`) - 实时显示未读数量（30秒轮询）
+- **导航集成** - 桌面端（下拉菜单）+ 移动端（侧边栏）
 
 ## 数据模型
 
@@ -197,6 +208,22 @@ INSERT INTO notification_templates (
     '{"title": "测试", "content": "内容"}'::jsonb
 );
 ```
+
+## 用户前端 API 端点
+
+**路由前缀**: `/api/notifications`（需认证）
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/settings` | GET | 获取用户通知配置 |
+| `/settings` | PUT | 更新用户通知配置 |
+| `/in-app` | GET | 获取站内消息列表 |
+| `/in-app/{id}/read` | POST | 标记消息为已读 |
+| `/in-app/read-all` | POST | 全部标记为已读 |
+| `/unread-count` | GET | 获取未读消息数量 |
+| `/logs` | GET | 获取通知发送历史 |
+
+**重要**: 所有端点必须使用 `ApiResponse.success(...).to_dict()` 返回，确保前端收到 `success` 字段。
 
 ## 监控和调试
 

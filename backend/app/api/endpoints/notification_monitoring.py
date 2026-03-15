@@ -4,13 +4,14 @@
 Phase 3: 提供监控数据查询接口（仅管理员可访问）
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import date, datetime, timedelta
 
 from app.core.database import get_db
 from app.core.dependencies import require_admin
+from app.models.api_response import ApiResponse
 from app.services.notification_monitor import NotificationMonitor
 from app.services.notification_alert import NotificationAlert
 
@@ -44,11 +45,10 @@ def get_notification_statistics(
             channel=channel
         )
 
-        return ApiResponse(
-            success=True,
-            message="获取统计数据成功",
-            data=stats
-        )
+        return ApiResponse.success(
+            data=stats,
+            message="获取统计数据成功"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -84,11 +84,10 @@ def get_notification_failures(
             limit=limit
         )
 
-        return ApiResponse(
-            success=True,
-            message="获取失败记录成功",
-            data=failures
-        )
+        return ApiResponse.success(
+            data=failures,
+            message="获取失败记录成功"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -122,11 +121,10 @@ def get_failure_reasons_summary(
             end_date=end_date
         )
 
-        return ApiResponse(
-            success=True,
-            message="获取失败原因汇总成功",
-            data=summary
-        )
+        return ApiResponse.success(
+            data=summary,
+            message="获取失败原因汇总成功"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -160,11 +158,10 @@ def get_channel_performance(
             end_date=end_date
         )
 
-        return ApiResponse(
-            success=True,
-            message="获取渠道性能分析成功",
-            data=performance
-        )
+        return ApiResponse.success(
+            data=performance,
+            message="获取渠道性能分析成功"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -200,11 +197,10 @@ def get_daily_trend(
             channel=channel
         )
 
-        return ApiResponse(
-            success=True,
-            message="获取每日趋势成功",
-            data=trend
-        )
+        return ApiResponse.success(
+            data=trend,
+            message="获取每日趋势成功"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -227,11 +223,10 @@ def get_realtime_stats(
         monitor = NotificationMonitor(db)
         realtime_data = monitor.get_realtime_stats()
 
-        return ApiResponse(
-            success=True,
-            message="获取实时监控数据成功",
-            data=realtime_data
-        )
+        return ApiResponse.success(
+            data=realtime_data,
+            message="获取实时监控数据成功"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -254,11 +249,10 @@ def health_check(
         monitor = NotificationMonitor(db)
         health_status = monitor.health_check()
 
-        return ApiResponse(
-            success=True,
-            message="健康检查完成",
-            data=health_status
-        )
+        return ApiResponse.success(
+            data=health_status,
+            message="健康检查完成"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -309,11 +303,10 @@ def get_failure_analysis_and_suggestions(
         alert_service = NotificationAlert(db)
         analysis = alert_service.analyze_failures_and_suggest(days=days)
 
-        return ApiResponse(
-            success=True,
-            message="失败分析完成",
-            data=analysis
-        )
+        return ApiResponse.success(
+            data=analysis,
+            message="失败分析完成"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
@@ -341,11 +334,10 @@ def get_user_notification_stats(
             days=days
         )
 
-        return ApiResponse(
-            success=True,
-            message="获取用户通知统计成功",
-            data=stats
-        )
+        return ApiResponse.success(
+            data=stats,
+            message="获取用户通知统计成功"
+        ).to_dict()
 
     except Exception as e:
         return ApiResponse(
