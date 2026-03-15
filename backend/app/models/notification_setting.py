@@ -4,9 +4,7 @@
 
 from sqlalchemy import Column, Integer, String, Boolean, Text, TIMESTAMP, Date, Time, ForeignKey, JSON
 from sqlalchemy.sql import func
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
+from app.models.user import Base  # 使用统一的 Base
 
 
 class UserNotificationSetting(Base):
