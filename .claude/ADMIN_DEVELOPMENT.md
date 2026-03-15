@@ -174,8 +174,12 @@ if (response.code === 200 && response.data) {
   console.log(response.data)  // 完整的类型检查
 }
 
-// ❌ 错误：直接使用 fetch（无认证Token）
+// ❌ 错误：直接使用 fetch（无认证Token，无自动Token刷新）
 const res = await fetch('/api/users/123')
+
+// ❌ 错误：直接使用 axios（无认证Token，无自动Token刷新）
+import axios from 'axios'
+const res = await axios.get('/api/users/123')
 
 // ❌ 错误：使用 as any 绕过类型检查
 const result = response as any
@@ -209,11 +213,42 @@ if (response.code === 200 && response.data) {
 ```
 
 **注意事项**:
-- ⚠️ 禁止使用 `as any` 绕过类型检查
-- ⚠️ 禁止使用原生 `fetch`（会丢失认证Token）
-- ⚠️ 禁止自定义响应类型（必须使用 `types/api.ts`）
-- ✅ 始终通过 `apiClient` 调用 API
-- ✅ 使用类型守卫函数提高类型安全
+- ⚠️ **禁止使用原生 `fetch` 或独立的 `axios` 实例**（会丢失认证Token和自动Token刷新）
+- ⚠️ **禁止使用 `as any` 绕过类型检查**
+- ⚠️ **禁止自定义响应类型**（必须使用 `types/api.ts`）
+- ✅ **始终通过 `apiClient` 调用 API**
+- ✅ **使用类型守卫函数提高类型安全**
+- ✅ **所有自定义 API 模块必须使用 `apiClient`**（参考 `prompt-template-api.ts`）
+
+**正确示例**（自定义API模块）:
+```typescript
+// ✅ 正确：使用 apiClient 的自定义 API 模块
+import { apiClient } from './api-client'
+
+export const myCustomApi = {
+  list: async () => {
+    const response = await apiClient.get('/api/my-resource')
+    return response.data
+  },
+  create: async (data: any) => {
+    const response = await apiClient.post('/api/my-resource', data)
+    return response.data
+  }
+}
+```
+
+```typescript
+// ❌ 错误：直接使用 axios 的自定义 API 模块
+import axios from 'axios'
+
+export const myCustomApi = {
+  list: async () => {
+    // 缺少认证 Token！
+    const response = await axios.get('http://localhost:8000/api/my-resource')
+    return response.data
+  }
+}
+```
 
 ---
 

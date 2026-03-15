@@ -2,7 +2,7 @@
  * 提示词模板管理 API 客户端
  */
 
-import axios from 'axios'
+import { apiClient } from './api-client'
 import type {
   PromptTemplate,
   PromptTemplateCreate,
@@ -15,10 +15,9 @@ import type {
   PromptTemplateListResponse,
 } from '@/types/prompt-template'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
 /**
  * 提示词模板API客户端
+ * 使用 apiClient 确保所有请求都带有认证 token
  */
 export const promptTemplateApi = {
   /**
@@ -30,10 +29,7 @@ export const promptTemplateApi = {
     skip?: number
     limit?: number
   }): Promise<PromptTemplateListResponse> => {
-    const response = await axios.get(`${API_BASE_URL}/api/prompt-templates`, {
-      params,
-      withCredentials: true,
-    })
+    const response = await apiClient.get('/api/prompt-templates', { params })
     return response.data
   },
 
@@ -41,9 +37,7 @@ export const promptTemplateApi = {
    * 获取模板详情
    */
   get: async (id: number): Promise<PromptTemplate> => {
-    const response = await axios.get(`${API_BASE_URL}/api/prompt-templates/${id}`, {
-      withCredentials: true,
-    })
+    const response = await apiClient.get(`/api/prompt-templates/${id}`)
     return response.data
   },
 
@@ -51,9 +45,7 @@ export const promptTemplateApi = {
    * 创建新模板
    */
   create: async (data: PromptTemplateCreate): Promise<PromptTemplate> => {
-    const response = await axios.post(`${API_BASE_URL}/api/prompt-templates`, data, {
-      withCredentials: true,
-    })
+    const response = await apiClient.post('/api/prompt-templates', data)
     return response.data
   },
 
@@ -61,9 +53,7 @@ export const promptTemplateApi = {
    * 更新模板
    */
   update: async (id: number, data: PromptTemplateUpdate): Promise<PromptTemplate> => {
-    const response = await axios.put(`${API_BASE_URL}/api/prompt-templates/${id}`, data, {
-      withCredentials: true,
-    })
+    const response = await apiClient.put(`/api/prompt-templates/${id}`, data)
     return response.data
   },
 
@@ -71,9 +61,7 @@ export const promptTemplateApi = {
    * 删除模板
    */
   delete: async (id: number): Promise<void> => {
-    await axios.delete(`${API_BASE_URL}/api/prompt-templates/${id}`, {
-      withCredentials: true,
-    })
+    await apiClient.delete(`/api/prompt-templates/${id}`)
   },
 
   /**
@@ -83,13 +71,7 @@ export const promptTemplateApi = {
     id: number,
     data: PromptTemplateVersionCreate
   ): Promise<PromptTemplate> => {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/prompt-templates/${id}/versions`,
-      data,
-      {
-        withCredentials: true,
-      }
-    )
+    const response = await apiClient.post(`/api/prompt-templates/${id}/versions`, data)
     return response.data
   },
 
@@ -97,13 +79,10 @@ export const promptTemplateApi = {
    * 激活模板
    */
   activate: async (id: number, setAsDefault: boolean = false): Promise<PromptTemplate> => {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/prompt-templates/${id}/activate`,
+    const response = await apiClient.post(
+      `/api/prompt-templates/${id}/activate`,
       null,
-      {
-        params: { set_as_default: setAsDefault },
-        withCredentials: true,
-      }
+      { params: { set_as_default: setAsDefault } }
     )
     return response.data
   },
@@ -112,13 +91,7 @@ export const promptTemplateApi = {
    * 停用模板
    */
   deactivate: async (id: number): Promise<PromptTemplate> => {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/prompt-templates/${id}/deactivate`,
-      null,
-      {
-        withCredentials: true,
-      }
-    )
+    const response = await apiClient.post(`/api/prompt-templates/${id}/deactivate`)
     return response.data
   },
 
@@ -129,13 +102,7 @@ export const promptTemplateApi = {
     id: number,
     variables: Record<string, any>
   ): Promise<PromptTemplatePreviewResponse> => {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/prompt-templates/${id}/preview`,
-      { variables },
-      {
-        withCredentials: true,
-      }
-    )
+    const response = await apiClient.post(`/api/prompt-templates/${id}/preview`, { variables })
     return response.data
   },
 
@@ -143,12 +110,7 @@ export const promptTemplateApi = {
    * 获取模板的性能统计
    */
   getStatistics: async (id: number): Promise<PromptTemplateStatistics> => {
-    const response = await axios.get(
-      `${API_BASE_URL}/api/prompt-templates/${id}/statistics`,
-      {
-        withCredentials: true,
-      }
-    )
+    const response = await apiClient.get(`/api/prompt-templates/${id}/statistics`)
     return response.data
   },
 
@@ -156,13 +118,9 @@ export const promptTemplateApi = {
    * 获取模板的修改历史
    */
   getHistory: async (id: number, limit: number = 50): Promise<PromptTemplateHistory[]> => {
-    const response = await axios.get(
-      `${API_BASE_URL}/api/prompt-templates/${id}/history`,
-      {
-        params: { limit },
-        withCredentials: true,
-      }
-    )
+    const response = await apiClient.get(`/api/prompt-templates/${id}/history`, {
+      params: { limit }
+    })
     return response.data
   },
 
@@ -170,12 +128,7 @@ export const promptTemplateApi = {
    * 获取所有业务类型
    */
   getBusinessTypes: async (): Promise<string[]> => {
-    const response = await axios.get(
-      `${API_BASE_URL}/api/prompt-templates/business-types/all`,
-      {
-        withCredentials: true,
-      }
-    )
+    const response = await apiClient.get('/api/prompt-templates/business-types/all')
     return response.data
   },
 }

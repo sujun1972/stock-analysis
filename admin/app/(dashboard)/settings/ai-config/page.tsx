@@ -41,6 +41,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
+import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 
 interface AIProvider {
   id: number
@@ -60,8 +62,6 @@ interface AIProvider {
   created_at: string
   updated_at: string
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function AIConfigPage() {
   const { toast } = useToast()
@@ -87,11 +87,10 @@ export default function AIConfigPage() {
 
   const fetchProviders = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai-strategy/providers`)
-      if (!response.ok) throw new Error('获取AI提供商列表失败')
-      const data = await response.json()
-      setProviders(data)
+      const response = await apiClient.getAIProviders()
+      setProviders(response.data || response as any)
     } catch (error) {
+      logger.error('获取AI提供商列表失败', error)
       toast({
         title: '加载失败',
         description: error instanceof Error ? error.message : '未知错误',
@@ -164,16 +163,7 @@ export default function AIConfigPage() {
         updateData.timeout = formData.timeout
         if (formData.description) updateData.description = formData.description
 
-        const response = await fetch(`${API_BASE_URL}/api/ai-strategy/providers/${editingProvider.provider}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData)
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || '更新失败')
-        }
+        await apiClient.updateAIProvider(editingProvider.provider, updateData)
 
         toast({
           title: '更新成功',
@@ -181,16 +171,7 @@ export default function AIConfigPage() {
         })
       } else {
         // 创建
-        const response = await fetch(`${API_BASE_URL}/api/ai-strategy/providers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || '创建失败')
-        }
+        await apiClient.createAIProvider(formData)
 
         toast({
           title: '创建成功',
@@ -200,10 +181,11 @@ export default function AIConfigPage() {
 
       setIsDialogOpen(false)
       fetchProviders()
-    } catch (error) {
+    } catch (error: any) {
+      logger.error('保存AI提供商失败', error)
       toast({
         title: '操作失败',
-        description: error instanceof Error ? error.message : '未知错误',
+        description: error.response?.data?.detail || error.message || '未知错误',
         variant: 'destructive'
       })
     }
@@ -213,11 +195,7 @@ export default function AIConfigPage() {
     if (!confirm(`确定要删除 ${provider} 吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai-strategy/providers/${provider}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) throw new Error('删除失败')
+      await apiClient.deleteAIProvider(provider)
 
       toast({
         title: '删除成功',
@@ -225,10 +203,11 @@ export default function AIConfigPage() {
       })
 
       fetchProviders()
-    } catch (error) {
+    } catch (error: any) {
+      logger.error('删除AI提供商失败', error)
       toast({
         title: '删除失败',
-        description: error instanceof Error ? error.message : '未知错误',
+        description: error.response?.data?.detail || error.message || '未知错误',
         variant: 'destructive'
       })
     }

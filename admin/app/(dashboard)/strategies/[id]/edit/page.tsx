@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 
 // 动态导入 Monaco Editor (客户端组件)
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -62,14 +62,10 @@ export default function EditStrategyPage() {
   useEffect(() => {
     const fetchStrategy = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/strategies/${strategyId}`)
-        if (!response.ok) {
-          throw new Error('获取策略详情失败')
-        }
+        const result = await apiClient.getStrategy(Number(strategyId))
+        const strategy = result.data || result as any
 
-        const result = await response.json()
-        if (result.success) {
-          const strategy = result.data
+        if (strategy && (result.success || strategy.id)) {
           setOriginalStrategy(strategy)
           setFormData({
             display_name: strategy.display_name,
@@ -82,10 +78,11 @@ export default function EditStrategyPage() {
             is_enabled: strategy.is_enabled,
           })
         } else {
-          throw new Error(result.message || '获取策略详情失败')
+          throw new Error((result as any).message || '获取策略详情失败')
         }
       } catch (err: any) {
-        setError(err.message)
+        logger.error('获取策略详情失败', err)
+        setError(err.response?.data?.detail || err.message)
       } finally {
         setLoading(false)
       }
@@ -101,25 +98,15 @@ export default function EditStrategyPage() {
     setError(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/strategies/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code: formData.code,
-          strict_mode: true,
-        }),
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        setValidationResult(result.data)
+      const result = await apiClient.validateStrategy(formData.code)
+      if (result.success || result.data) {
+        setValidationResult(result.data || result)
       } else {
-        setError(result.message || '验证失败')
+        setError((result as any).message || '验证失败')
       }
     } catch (err: any) {
-      setError(err.message)
+      logger.error('验证策略代码失败', err)
+      setError(err.response?.data?.detail || err.message)
     } finally {
       setValidating(false)
     }
@@ -173,23 +160,17 @@ export default function EditStrategyPage() {
         payload.default_params = defaultParams
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/strategies/${strategyId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
+      const result = await apiClient.updateStrategy(Number(strategyId), payload)
 
-      const result = await response.json()
-      if (result.success) {
+      if (result.success || result.data) {
         // 成功跳转到策略详情页
         router.push(`/strategies/${strategyId}`)
       } else {
-        throw new Error(result.message || '更新失败')
+        throw new Error((result as any).message || '更新失败')
       }
     } catch (err: any) {
-      setError(err.message)
+      logger.error('更新策略失败', err)
+      setError(err.response?.data?.detail || err.message)
     } finally {
       setSaving(false)
     }

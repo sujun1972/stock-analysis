@@ -11,8 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 
 // 动态导入 Monaco Editor (客户端组件)
 const Editor = dynamic(() => import('@monaco-editor/react'), {
@@ -70,25 +70,15 @@ export default function NewStrategyPage() {
     setError(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/strategies/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code: formData.code,
-          strict_mode: true,
-        }),
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        setValidationResult(result.data)
+      const result = await apiClient.validateStrategy(formData.code)
+      if (result.success || result.data) {
+        setValidationResult(result.data || result)
       } else {
-        setError(result.message || '验证失败')
+        setError((result as any).message || '验证失败')
       }
     } catch (err: any) {
-      setError(err.message)
+      logger.error('验证策略代码失败', err)
+      setError(err.response?.data?.detail || err.message)
     } finally {
       setValidating(false)
     }
@@ -117,13 +107,13 @@ export default function NewStrategyPage() {
         .map((t) => t.trim())
         .filter((t) => t)
 
-      const payload = {
+      const payload: any = {
         name: formData.name,
         display_name: formData.display_name,
         class_name: formData.class_name,
         code: formData.code,
-        source_type: formData.source_type,
-        strategy_type: formData.strategy_type,
+        source_type: formData.source_type as any,
+        strategy_type: formData.strategy_type as any,
         description: formData.description || undefined,
         category: formData.category || undefined,
         tags: tags.length > 0 ? tags : undefined,
@@ -133,26 +123,21 @@ export default function NewStrategyPage() {
 
       // 如果指定了user_id，添加到payload
       if (formData.user_id) {
-        ;(payload as any).user_id = parseInt(formData.user_id)
+        payload.user_id = parseInt(formData.user_id)
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/strategies`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
+      const result = await apiClient.createStrategy(payload)
 
-      const result = await response.json()
-      if (result.success) {
+      if (result.success || result.data) {
+        const strategyId = result.data?.strategy_id || (result as any).strategy_id
         // 成功跳转到策略详情页
-        router.push(`/strategies/${result.data.strategy_id}`)
+        router.push(`/strategies/${strategyId}`)
       } else {
-        throw new Error(result.message || '创建失败')
+        throw new Error((result as any).message || '创建失败')
       }
     } catch (err: any) {
-      setError(err.message)
+      logger.error('创建策略失败', err)
+      setError(err.response?.data?.detail || err.message)
     } finally {
       setLoading(false)
     }

@@ -164,15 +164,11 @@ export default function SettingsPage() {
       setTestResults(prev => prev.map((t, i) => i === 0 ? { ...t, status: 'running', message: '正在连接...' } : t))
       await new Promise(resolve => setTimeout(resolve, 500))
       try {
-        // 验证配置API可访问性
-        const response = await fetch('http://localhost:8000/api/config/source')
-        if (response.ok) {
-          setTestResults(prev => prev.map((t, i) =>
-            i === 0 ? { ...t, status: 'success', message: '连接成功' } : t
-          ))
-        } else {
-          throw new Error('连接失败')
-        }
+        // 使用 apiClient 验证配置API可访问性
+        await apiClient.getDataSourceConfig()
+        setTestResults(prev => prev.map((t, i) =>
+          i === 0 ? { ...t, status: 'success', message: '连接成功' } : t
+        ))
       } catch (err: any) {
         setTestResults(prev => prev.map((t, i) =>
           i === 0 ? { ...t, status: 'error', message: `连接失败: ${err.message}` } : t

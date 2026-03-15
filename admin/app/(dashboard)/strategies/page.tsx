@@ -57,8 +57,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Check } from 'lucide-react'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
 // 策略类型标签颜色
 const strategyTypeColors = {
   stock_selection: 'bg-blue-100 text-blue-800',
@@ -141,35 +139,34 @@ export default function StrategiesPage() {
   const fetchStrategies = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        page_size: '20',
-      })
-
-      if (searchTerm) params.append('search', searchTerm)
-      if (filterStrategyType) params.append('strategy_type', filterStrategyType)
-      if (filterSourceType) params.append('source_type', filterSourceType)
-      if (filterUserId) params.append('user_id', filterUserId)
-      if (filterPublishStatus) params.append('publish_status', filterPublishStatus)
-
-      const response = await fetch(`${API_BASE_URL}/api/strategies?${params}`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error('获取策略列表失败')
+      const params: any = {
+        page: currentPage,
+        page_size: 20,
       }
 
-      const result = await response.json()
-      if (result.success) {
-        setStrategies(result.data)
-        setTotalPages(result.meta.total_pages)
-        setTotalCount(result.meta.total)
+      if (searchTerm) params.search = searchTerm
+      if (filterStrategyType) params.strategy_type = filterStrategyType
+      if (filterSourceType) params.source_type = filterSourceType
+      if (filterUserId) params.user_id = filterUserId
+      if (filterPublishStatus) params.publish_status = filterPublishStatus
+
+      const response = await apiClient.get<{
+        success: boolean
+        data: Strategy[]
+        meta: {
+          total_pages: number
+          total: number
+        }
+      }>('/api/strategies', { params })
+
+      if (response.data && 'success' in response.data && response.data.success) {
+        setStrategies(response.data.data)
+        setTotalPages(response.data.meta.total_pages)
+        setTotalCount(response.data.meta.total)
       }
     } catch (error) {
       logger.error('获取策略列表失败', error)
+      setError('获取策略列表失败')
     } finally {
       setLoading(false)
     }
@@ -289,19 +286,12 @@ export default function StrategiesPage() {
     if (!confirm('确定要删除这个策略吗？')) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/strategies/${id}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('删除策略失败')
-      }
-
+      await apiClient.deleteStrategy(id)
       // 刷新列表
       fetchStrategies()
-    } catch (error) {
+    } catch (error: any) {
       logger.error('删除策略失败', error)
-      setError('删除失败：' + error)
+      setError('删除失败：' + (error.response?.data?.detail || error.message))
     }
   }
 

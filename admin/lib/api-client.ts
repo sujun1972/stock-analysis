@@ -1559,6 +1559,75 @@ class ApiClient {
     const response = await axiosInstance.post(`/api/admin/strategies/${strategyId}/unpublish`)
     return response.data
   }
+
+  // ========== AI 策略提供商相关API ==========
+
+  /**
+   * 获取 AI 提供商列表
+   */
+  async getAIProviders(): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/ai-strategy/providers')
+    return response.data
+  }
+
+  /**
+   * 获取单个 AI 提供商详情
+   */
+  async getAIProvider(provider: string): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get(`/api/ai-strategy/providers/${provider}`)
+    return response.data
+  }
+
+  /**
+   * 创建 AI 提供商
+   */
+  async createAIProvider(data: {
+    provider: string
+    display_name: string
+    api_key: string
+    api_base_url?: string
+    model_name?: string
+    max_tokens?: number
+    temperature?: number
+    is_active?: boolean
+    is_default?: boolean
+    priority?: number
+    rate_limit?: number
+    timeout?: number
+    description?: string
+  }): Promise<ApiResponse<{ id: number }>> {
+    const response = await axiosInstance.post('/api/ai-strategy/providers', data)
+    return response.data
+  }
+
+  /**
+   * 更新 AI 提供商
+   */
+  async updateAIProvider(provider: string, data: {
+    api_key?: string
+    display_name?: string
+    api_base_url?: string
+    model_name?: string
+    max_tokens?: number
+    temperature?: number
+    is_active?: boolean
+    is_default?: boolean
+    priority?: number
+    rate_limit?: number
+    timeout?: number
+    description?: string
+  }): Promise<ApiResponse<{ id: number }>> {
+    const response = await axiosInstance.put(`/api/ai-strategy/providers/${provider}`, data)
+    return response.data
+  }
+
+  /**
+   * 删除 AI 提供商
+   */
+  async deleteAIProvider(provider: string): Promise<ApiResponse<void>> {
+    const response = await axiosInstance.delete(`/api/ai-strategy/providers/${provider}`)
+    return response.data
+  }
 }
 
 // 导出单例

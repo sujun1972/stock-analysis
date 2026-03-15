@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Edit, AlertCircle, Copy, Check } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { apiClient } from '@/lib/api-client'
+import logger from '@/lib/logger'
 
 // 策略类型显示名称
 const strategyTypeNames = {
@@ -49,19 +49,15 @@ export default function StrategyDetailPage() {
   useEffect(() => {
     const fetchStrategy = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/strategies/${strategyId}`)
-        if (!response.ok) {
-          throw new Error('获取策略详情失败')
-        }
-
-        const result = await response.json()
-        if (result.success) {
-          setStrategy(result.data)
+        const result = await apiClient.getStrategy(Number(strategyId))
+        if (result.success || result.data) {
+          setStrategy(result.data || result as any)
         } else {
-          throw new Error(result.message || '获取策略详情失败')
+          throw new Error((result as any).message || '获取策略详情失败')
         }
       } catch (err: any) {
-        setError(err.message)
+        logger.error('获取策略详情失败', err)
+        setError(err.response?.data?.detail || err.message)
       } finally {
         setLoading(false)
       }
