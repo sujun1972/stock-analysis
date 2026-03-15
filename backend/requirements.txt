@@ -70,3 +70,7 @@ pybreaker>=1.0.0
 
 # 性能测试
 locust>=2.15.0
+
+# 通知系统依赖
+aiosmtplib>=3.0.0  # 异步SMTP客户端
+email-validator>=2.1.0  # 邮箱验证

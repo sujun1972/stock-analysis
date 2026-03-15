@@ -678,6 +678,27 @@ class PremarketAnalysisService:
 
             logger.success(f"{trade_date} 碰撞分析已保存到数据库")
 
+            # 触发通知调度（异步）
+            try:
+                from app.tasks.notification_tasks import schedule_report_notification_task
+
+                schedule_report_notification_task.delay(
+                    report_type='premarket_report',
+                    trade_date=trade_date,
+                    report_data={
+                        'trade_date': trade_date,
+                        'action_command': action_command,
+                        'macro_tone': analysis_result.get('macro_tone', {}),
+                        'holdings_alert': analysis_result.get('holdings_alert', {}),
+                        'plan_adjustment': analysis_result.get('plan_adjustment', {}),
+                        'auction_focus': analysis_result.get('auction_focus', {})
+                    }
+                )
+                logger.info(f"已触发 {trade_date} 盘前报告通知调度")
+            except Exception as notify_error:
+                # 通知失败不影响主流程
+                logger.warning(f"触发通知调度失败（不影响主流程）: {notify_error}")
+
         except Exception as e:
             logger.error(f"保存碰撞分析失败: {e}")
             raise

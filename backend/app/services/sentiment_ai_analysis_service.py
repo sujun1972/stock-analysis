@@ -695,6 +695,27 @@ class SentimentAIAnalysisService:
 
             logger.success(f"{trade_date} AI分析结果已保存到数据库")
 
+            # 触发通知调度（异步）
+            try:
+                from app.tasks.notification_tasks import schedule_report_notification_task
+
+                schedule_report_notification_task.delay(
+                    report_type='sentiment_report',
+                    trade_date=trade_date,
+                    report_data={
+                        'trade_date': trade_date,
+                        'full_report': full_report,
+                        'space_analysis': space_analysis,
+                        'sentiment_analysis': sentiment_analysis,
+                        'capital_flow_analysis': capital_flow_analysis,
+                        'tomorrow_tactics': tomorrow_tactics
+                    }
+                )
+                logger.info(f"已触发 {trade_date} 情绪报告通知调度")
+            except Exception as notify_error:
+                # 通知失败不影响主流程
+                logger.warning(f"触发通知调度失败（不影响主流程）: {notify_error}")
+
         except Exception as e:
             logger.error(f"保存AI分析结果失败: {str(e)}")
             raise

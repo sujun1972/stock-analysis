@@ -19,6 +19,8 @@ from .endpoints import (
     llm_logs,
     market,
     ml,
+    notification_channels,
+    notifications,
     premarket,
     profile,
     prompt_templates,
@@ -87,5 +89,9 @@ router.include_router(prompt_templates.router, prefix="/prompt-templates", tags=
 
 # 系统日志路由
 router.include_router(system_logs.router, tags=["系统日志"])
+
+# 通知系统路由
+router.include_router(notification_channels.router, prefix="/notification-channels", tags=["通知渠道配置（Admin）"])
+router.include_router(notifications.router, prefix="/notifications", tags=["用户通知"])
 
 __all__ = ["router"]

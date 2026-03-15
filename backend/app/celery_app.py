@@ -86,6 +86,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载数据同步任务模块失败: {e}")
 
+try:
+    from app.tasks import notification_tasks
+    logger.info(f"✅ 已加载通知发送任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载通知发送任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 
