@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from app.api.error_handler import handle_api_errors
+from app.models.api_response import ApiResponse
 from app.strategies.strategy_manager import strategy_manager
 
 router = APIRouter()
@@ -16,7 +17,7 @@ router = APIRouter()
 
 @router.get("/list")
 @handle_api_errors
-async def list_strategies() -> Dict[str, Any]:
+async def list_strategies():
     """
     获取所有可用策略列表
 
@@ -35,12 +36,12 @@ async def list_strategies() -> Dict[str, Any]:
         }
     """
     strategies = strategy_manager.list_strategies()
-    return {"success": True, "data": strategies}
+    return ApiResponse.success(data=strategies)
 
 
 @router.get("/metadata")
 @handle_api_errors
-async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[str, Any]:
+async def get_strategy_metadata(strategy_id: str = "complex_indicator"):
     """
     获取策略完整元数据（包含参数定义）
 
@@ -74,14 +75,14 @@ async def get_strategy_metadata(strategy_id: str = "complex_indicator") -> Dict[
     """
     try:
         metadata = strategy_manager.get_strategy_metadata(strategy_id)
-        return {"success": True, "data": metadata}
+        return ApiResponse.success(data=metadata)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/validate")
 @handle_api_errors
-async def validate_strategy_params(strategy_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+async def validate_strategy_params(strategy_id: str, params: Dict[str, Any]):
     """
     验证策略参数
 
@@ -102,9 +103,9 @@ async def validate_strategy_params(strategy_id: str, params: Dict[str, Any]) -> 
         is_valid = strategy_manager.validate_strategy_params(strategy_id, params)
 
         if is_valid:
-            return {"success": True, "data": {"valid": True, "message": "参数验证通过"}}
+            return ApiResponse.success(data={"valid": True, "message": "参数验证通过"})
         else:
-            return {"success": False, "data": {"valid": False, "message": "参数验证失败"}}
+            return ApiResponse.error(message="参数验证失败", code=400, data={"valid": False})
     except ValueError as e:
         logger.error(f"参数验证失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))

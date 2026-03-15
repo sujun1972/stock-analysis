@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 from app.repositories.strategy_repository import StrategyRepository
 from app.repositories.publish_review_repository import PublishReviewRepository
 from app.schemas.strategy import ApproveStrategyRequest, RejectStrategyRequest, PublishReviewResponse
@@ -31,7 +32,7 @@ async def get_pending_review_strategies(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
-) -> Dict[str, Any]:
+):
     """
     获取所有待审核的策略列表
 
@@ -46,11 +47,10 @@ async def get_pending_review_strategies(
         include_code=False
     )
 
-    return {
-        "success": True,
-        "data": result['items'],
+    return ApiResponse.success(data={
+        "items": result['items'],
         "meta": result['meta']
-    }
+    })
 
 
 @router.post(
@@ -63,7 +63,7 @@ async def approve_strategy(
     request: ApproveStrategyRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
-) -> Dict[str, Any]:
+):
     """
     批准策略发布
 
@@ -117,15 +117,14 @@ async def approve_strategy(
         }
     })
 
-    return {
-        "success": True,
-        "message": "策略已批准发布" + ("并启用" if request.auto_enable else ""),
-        "data": {
+    return ApiResponse.success(
+        message="策略已批准发布" + ("并启用" if request.auto_enable else ""),
+        data={
             "strategy_id": strategy_id,
             "publish_status": "approved",
             "is_enabled": request.auto_enable
         }
-    }
+    )
 
 
 @router.post(
@@ -138,7 +137,7 @@ async def reject_strategy(
     request: RejectStrategyRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
-) -> Dict[str, Any]:
+):
     """
     拒绝策略发布
 
@@ -186,15 +185,14 @@ async def reject_strategy(
         'comment': request.reason
     })
 
-    return {
-        "success": True,
-        "message": "策略发布已拒绝",
-        "data": {
+    return ApiResponse.success(
+        message="策略发布已拒绝",
+        data={
             "strategy_id": strategy_id,
             "publish_status": "rejected",
             "reject_reason": request.reason
         }
-    }
+    )
 
 
 @router.get(
@@ -239,7 +237,7 @@ async def unpublish_strategy(
     strategy_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
-) -> Dict[str, Any]:
+):
     """
     取消策略发布（管理员权限）
 
@@ -289,12 +287,11 @@ async def unpublish_strategy(
         'comment': '管理员取消发布'
     })
 
-    return {
-        "success": True,
-        "message": "策略已取消发布",
-        "data": {
+    return ApiResponse.success(
+        message="策略已取消发布",
+        data={
             "strategy_id": strategy_id,
             "publish_status": "draft",
             "is_enabled": False
         }
-    }
+    )

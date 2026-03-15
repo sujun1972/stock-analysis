@@ -69,7 +69,17 @@ export default function PremarketPage() {
   const loadProviders = async () => {
     setIsLoadingProviders(true)
     try {
-      const data = await apiClient.get('/api/ai-strategy/providers')
+      // Backend 使用 ApiResponse 格式，数据在 response.data 中
+      const response = await apiClient.get('/api/ai-strategy/providers') as any
+
+      if (response.code !== 200) {
+        logger.error('Failed to load AI providers', response)
+        toast.error(response.message || "加载AI配置失败")
+        setAiProviders([])
+        return
+      }
+
+      const data = response.data
 
       if (!Array.isArray(data)) {
         logger.error('AI Providers data is not an array', data)

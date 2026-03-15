@@ -15,6 +15,7 @@ from loguru import logger
 from app.api.error_handler import handle_api_errors
 from app.core.dependencies import get_current_active_user
 from app.core.exceptions import DatabaseError, DataNotFoundError
+from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.models.ml_models import (
     MLPredictionRequest,
@@ -112,7 +113,7 @@ async def delete_task(task_id: str, current_user: User = Depends(get_current_act
     if not success:
         raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
 
-    return {"success": True, "data": {"task_id": task_id}, "message": "删除成功"}
+    return ApiResponse.success(data={"task_id": task_id}, message="删除成功")
 
 
 @router.get("/tasks/{task_id}/stream")

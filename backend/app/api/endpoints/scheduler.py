@@ -15,6 +15,7 @@ from app.api.error_handler import handle_api_errors
 from app.core.exceptions import DatabaseError
 from app.core.dependencies import require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 from src.database.db_manager import DatabaseManager
 
 router = APIRouter()
@@ -162,7 +163,7 @@ async def get_scheduled_tasks(
                 }
             )
 
-        return {"success": True, "data": tasks}
+        return ApiResponse.success(data=tasks)
     except DatabaseError as e:
         logger.error(f"数据库查询失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -232,7 +233,7 @@ async def get_scheduled_task(
             "updated_at": row[13].strftime("%Y-%m-%d %H:%M:%S") if row[13] else None,
         }
 
-        return {"success": True, "data": task}
+        return ApiResponse.success(data=task)
     except HTTPException:
         raise
     except Exception as e:
@@ -311,7 +312,7 @@ async def create_scheduled_task(
         task_id = result[0][0]
         logger.info(f"✓ 创建定时任务: {request.task_name} (ID: {task_id})")
 
-        return {"success": True, "data": {"id": task_id}, "message": "创建成功"}
+        return ApiResponse.success(data={"id": task_id}, message="创建成功")
     except HTTPException:
         raise
     except Exception as e:
@@ -379,7 +380,7 @@ async def update_scheduled_task(
 
         logger.info(f"✓ 更新定时任务: {task_id}")
 
-        return {"success": True, "data": {"id": task_id}, "message": "更新成功"}
+        return ApiResponse.success(data={"id": task_id}, message="更新成功")
     except HTTPException:
         raise
     except Exception as e:
@@ -411,7 +412,7 @@ async def delete_scheduled_task(
 
         logger.info(f"✓ 删除定时任务: {task_id}")
 
-        return {"success": True, "data": {"id": task_id}, "message": "删除成功"}
+        return ApiResponse.success(data={"id": task_id}, message="删除成功")
     except Exception as e:
         logger.error(f"删除定时任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -453,7 +454,7 @@ async def toggle_scheduled_task(
 
         logger.info(f"✓ 切换定时任务状态: {task_id} -> {new_enabled}")
 
-        return {"success": True, "data": {"enabled": new_enabled}, "message": "状态切换成功"}
+        return ApiResponse.success(data={"enabled": new_enabled}, message="状态切换成功")
     except HTTPException:
         raise
     except Exception as e:
@@ -516,7 +517,7 @@ async def get_task_execution_history(
                 }
             )
 
-        return {"success": True, "data": history}
+        return ApiResponse.success(data=history)
     except Exception as e:
         logger.error(f"获取任务执行历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -577,7 +578,7 @@ async def get_recent_execution_history(
                 }
             )
 
-        return {"success": True, "data": history}
+        return ApiResponse.success(data=history)
     except Exception as e:
         logger.error(f"获取最近执行历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

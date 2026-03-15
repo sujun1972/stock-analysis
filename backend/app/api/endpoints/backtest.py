@@ -63,7 +63,7 @@ def execute_backtest_core(
     params: Dict[str, Any],
     execution_id: Optional[int] = None,
     progress_callback: Optional[callable] = None
-) -> Dict[str, Any]:
+):
     """
     核心回测执行函数（可被同步和异步调用）
 
@@ -853,7 +853,7 @@ async def run_backtest_main(
     strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数（覆盖默认参数，用于ML模型ID等）"),
     exit_strategy_ids: Optional[List[int]] = Body(None, description="离场策略ID列表（可选，支持多个）"),
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     运行回测
 
@@ -875,7 +875,8 @@ async def run_backtest_main(
 
     Returns:
         {
-            "success": true,
+            "code": 200,
+            "message": "回测完成",
             "data": {
                 "execution_id": 1,
                 "strategy_info": {...},
@@ -994,11 +995,7 @@ async def run_backtest_main(
             logger.warning(f"更新策略统计失败: {e}")
 
         # 5. 返回成功响应
-        return {
-            "success": True,
-            "data": result_data,
-            "message": "回测完成"
-        }
+        return ApiResponse.success(data=result_data, message="回测完成").to_dict()
 
     except HTTPException as he:
         # 更新执行记录状态为失败
@@ -1701,9 +1698,8 @@ async def run_backtest_main(
             except Exception as e:
                 logger.error(f"[回测] 更新执行记录失败: {e}", exc_info=True)
 
-        return {
-            "success": True,
-            "data": {
+        return ApiResponse.success(
+            data={
                 "execution_id": execution_id,
                 "strategy_info": strategy_info,
                 "metrics": metrics,
@@ -1718,8 +1714,8 @@ async def run_backtest_main(
                     "initial_capital": initial_capital,
                 }
             },
-            "message": "回测完成"
-        }
+            message="回测完成"
+        ).to_dict()
 
     except HTTPException as he:
         # 更新执行记录状态为失败
@@ -2162,7 +2158,7 @@ async def start_async_backtest(
     strategy_params: Optional[Dict[str, Any]] = Body(None, description="策略参数"),
     exit_strategy_ids: Optional[List[int]] = Body(None, description="离场策略ID列表（可选，支持多个）"),
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     启动异步回测任务（立即返回）
 
@@ -2177,9 +2173,13 @@ async def start_async_backtest(
 
     Returns:
         {
-            "task_id": "abc-123-def",
-            "execution_id": 456,
-            "status": "pending"
+            "code": 200,
+            "message": "回测任务已提交，请使用 task_id 查询进度",
+            "data": {
+                "task_id": "abc-123-def",
+                "execution_id": 456,
+                "status": "pending"
+            }
         }
     """
     logger.info(f"[异步回测] 启动任务: strategy_id={strategy_id}, stocks={len(stock_pool)}")
@@ -2223,12 +2223,14 @@ async def start_async_backtest(
 
         logger.info(f"[异步回测] 任务已提交: task_id={task.id}, execution_id={execution_id}")
 
-        return {
-            "task_id": task.id,
-            "execution_id": execution_id,
-            "status": "pending",
-            "message": "回测任务已提交，请使用 task_id 查询进度"
-        }
+        return ApiResponse.success(
+            data={
+                "task_id": task.id,
+                "execution_id": execution_id,
+                "status": "pending"
+            },
+            message="回测任务已提交，请使用 task_id 查询进度"
+        ).to_dict()
 
     except Exception as e:
         logger.error(f"[异步回测] 启动失败: {e}", exc_info=True)
@@ -2243,7 +2245,7 @@ async def start_async_backtest(
 async def get_backtest_status(
     task_id: str,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     查询异步回测任务状态
 
@@ -2317,7 +2319,7 @@ async def get_backtest_status(
 async def cancel_async_backtest(
     task_id: str,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     取消正在执行的异步回测任务
 
@@ -2344,7 +2346,7 @@ async def cancel_async_backtest(
 
         logger.info(f"[异步回测] 任务已取消: task_id={task_id}")
 
-        return {"success": True, "data": {"task_id": task_id}, "message": "任务已取消"}
+        return ApiResponse.success(data={"task_id": task_id}, message="任务已取消").to_dict()
 
     except Exception as e:
         logger.error(f"[异步回测] 取消任务失败: task_id={task_id}, error={e}")

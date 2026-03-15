@@ -19,6 +19,7 @@ from app.models.llm_call_log import LLMCallLog
 from app.core.logging_config import get_logger
 from app.core.dependencies import require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 logger = get_logger()
 
@@ -55,18 +56,15 @@ async def get_llm_logs(
 
         logs, total = llm_call_logger.query_logs(db, query_params)
 
-        return {
-            "success": True,
-            "data": {
-                "logs": logs,
-                "pagination": {
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "total_pages": (total + page_size - 1) // page_size
-                }
+        return ApiResponse.success(data={
+            "logs": logs,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size
             }
-        }
+        })
     except Exception as e:
         logger.error(f"查询LLM日志失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -164,48 +162,45 @@ async def get_llm_summary(
             LLMCallLog.created_at >= start_date
         ).group_by(func.date(LLMCallLog.created_at)).order_by(func.date(LLMCallLog.created_at)).all()
 
-        return {
-            "success": True,
-            "data": {
-                "period": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat(),
-                    "days": days
-                },
-                "overview": {
-                    "total_calls": total_result.total_calls or 0,
-                    "success_calls": total_result.success_calls or 0,
-                    "success_rate": round((total_result.success_calls or 0) / max(total_result.total_calls, 1) * 100, 2),
-                    "total_tokens": int(total_result.total_tokens or 0),
-                    "total_cost": float(total_result.total_cost or 0),
-                    "avg_duration_ms": round(float(total_result.avg_duration_ms or 0), 2)
-                },
-                "by_provider": [
-                    {
-                        "provider": item.provider,
-                        "count": item.count,
-                        "cost": float(item.cost or 0)
-                    }
-                    for item in provider_dist
-                ],
-                "by_business_type": [
-                    {
-                        "business_type": item.business_type,
-                        "count": item.count,
-                        "cost": float(item.cost or 0)
-                    }
-                    for item in business_dist
-                ],
-                "daily_trend": [
-                    {
-                        "date": item.date.isoformat(),
-                        "count": item.count,
-                        "cost": float(item.cost or 0)
-                    }
-                    for item in daily_trend
-                ]
-            }
-        }
+        return ApiResponse.success(data={
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "days": days
+            },
+            "overview": {
+                "total_calls": total_result.total_calls or 0,
+                "success_calls": total_result.success_calls or 0,
+                "success_rate": round((total_result.success_calls or 0) / max(total_result.total_calls, 1) * 100, 2),
+                "total_tokens": int(total_result.total_tokens or 0),
+                "total_cost": float(total_result.total_cost or 0),
+                "avg_duration_ms": round(float(total_result.avg_duration_ms or 0), 2)
+            },
+            "by_provider": [
+                {
+                    "provider": item.provider,
+                    "count": item.count,
+                    "cost": float(item.cost or 0)
+                }
+                for item in provider_dist
+            ],
+            "by_business_type": [
+                {
+                    "business_type": item.business_type,
+                    "count": item.count,
+                    "cost": float(item.cost or 0)
+                }
+                for item in business_dist
+            ],
+            "daily_trend": [
+                {
+                    "date": item.date.isoformat(),
+                    "count": item.count,
+                    "cost": float(item.cost or 0)
+                }
+                for item in daily_trend
+            ]
+        })
     except Exception as e:
         logger.error(f"获取概览数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -221,10 +216,7 @@ async def get_recent_logs(
     try:
         logs = db.query(LLMCallLog).order_by(LLMCallLog.created_at.desc()).limit(limit).all()
 
-        return {
-            "success": True,
-            "data": [LLMCallLogResponse.model_validate(log) for log in logs]
-        }
+        return ApiResponse.success(data=[LLMCallLogResponse.model_validate(log) for log in logs])
     except Exception as e:
         logger.error(f"获取最近日志失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -269,22 +261,19 @@ async def get_cost_analysis(
             func.avg(LLMCallLog.cost_estimate).label('avg_cost')
         ).group_by(group_field).all()
 
-        return {
-            "success": True,
-            "data": {
-                "group_by": group_by,
-                "results": [
-                    {
-                        "name": item.group_name,
-                        "total_calls": item.total_calls,
-                        "total_tokens": int(item.total_tokens or 0),
-                        "total_cost": float(item.total_cost or 0),
-                        "avg_cost": float(item.avg_cost or 0)
-                    }
-                    for item in results
-                ]
-            }
-        }
+        return ApiResponse.success(data={
+            "group_by": group_by,
+            "results": [
+                {
+                    "name": item.group_name,
+                    "total_calls": item.total_calls,
+                    "total_tokens": int(item.total_tokens or 0),
+                    "total_cost": float(item.total_cost or 0),
+                    "avg_cost": float(item.avg_cost or 0)
+                }
+                for item in results
+            ]
+        })
     except HTTPException:
         raise
     except Exception as e:

@@ -25,6 +25,7 @@ from app.core.api_versioning import deprecated
 from app.core.dependencies import get_current_user
 from app.core_adapters.dynamic_strategy_adapter import DynamicStrategyAdapter
 from app.models.user import User
+from app.models.api_response import ApiResponse
 from app.repositories.dynamic_strategy_repository import DynamicStrategyRepository
 
 router = APIRouter()
@@ -138,7 +139,7 @@ class ValidateCodeRequest(BaseModel):
 
 @router.get("/statistics", summary="获取动态策略统计信息")
 @handle_api_errors
-async def get_statistics() -> Dict[str, Any]:
+async def get_statistics():
     """
     获取动态策略的统计信息
 
@@ -175,7 +176,7 @@ async def get_statistics() -> Dict[str, Any]:
     reason="使用新的统一策略系统API",
 )
 @handle_api_errors
-async def validate_code(request: ValidateCodeRequest) -> Dict[str, Any]:
+async def validate_code(request: ValidateCodeRequest):
     """
     验证策略代码的安全性和正确性
 
@@ -226,7 +227,7 @@ async def validate_code(request: ValidateCodeRequest) -> Dict[str, Any]:
 async def create_dynamic_strategy(
     data: DynamicStrategyCreate,
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     创建新的动态代码策略
 
@@ -321,7 +322,7 @@ async def list_dynamic_strategies(
     created_by: Optional[str] = Query(None, description="创建者过滤（用户名）"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量")
-) -> Dict[str, Any]:
+):
     """
     获取动态策略列表
 
@@ -374,7 +375,7 @@ async def list_dynamic_strategies(
 
 @router.get("/{strategy_id}", summary="获取动态策略详情")
 @handle_api_errors
-async def get_dynamic_strategy(strategy_id: int) -> Dict[str, Any]:
+async def get_dynamic_strategy(strategy_id: int):
     """
     获取指定动态策略的详细信息
 
@@ -406,7 +407,7 @@ async def get_dynamic_strategy(strategy_id: int) -> Dict[str, Any]:
 
 @router.get("/{strategy_id}/code", summary="获取策略代码")
 @handle_api_errors
-async def get_strategy_code(strategy_id: int) -> Dict[str, Any]:
+async def get_strategy_code(strategy_id: int):
     """
     获取指定策略的代码
 
@@ -445,7 +446,7 @@ async def update_dynamic_strategy(
     strategy_id: int,
     data: DynamicStrategyUpdate,
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     更新指定动态策略
 
@@ -538,7 +539,7 @@ async def update_dynamic_strategy(
 async def delete_dynamic_strategy(
     strategy_id: int,
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     删除指定动态策略
 
@@ -579,10 +580,7 @@ async def delete_dynamic_strategy(
         f"deleted_by={current_user.username} (id={current_user.id})"
     )
 
-    return {
-        "success": True,
-        "message": "动态策略删除成功"
-    }
+    return ApiResponse.success(message="动态策略删除成功")
 
 
 @router.post("/{strategy_id}/test", summary="测试动态策略", status_code=status.HTTP_200_OK)
@@ -590,7 +588,7 @@ async def delete_dynamic_strategy(
 async def test_dynamic_strategy(
     strategy_id: int,
     strict_mode: bool = Query(True, description="严格模式")
-) -> Dict[str, Any]:
+):
     """
     测试动态策略是否能成功创建
 

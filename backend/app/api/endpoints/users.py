@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.security import hash_password
 from app.core.dependencies import require_admin, require_super_admin
 from app.models.user import User, UserQuota, LoginHistory, UserActivityLog
+from app.models.api_response import ApiResponse
 from app.schemas.user import (
     UserCreate,
     UserUpdate,
@@ -34,7 +35,7 @@ async def list_users(
     is_active: Optional[bool] = Query(None, description="是否激活"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
-) -> Dict[str, Any]:
+):
     """
     获取用户列表（分页）
 
@@ -48,7 +49,8 @@ async def list_users(
 
     返回格式:
     {
-        "success": true,
+        "code": 200,
+        "message": "success",
         "data": {
             "total": 100,
             "page": 1,
@@ -125,15 +127,12 @@ async def list_users(
         }
         users_with_quota.append(user_dict)
 
-    return {
-        "success": True,
-        "data": {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "users": users_with_quota
-        }
-    }
+    return ApiResponse.success(data={
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "users": users_with_quota
+    })
 
 
 @router.post("", response_model=UserWithQuota, status_code=status.HTTP_201_CREATED)

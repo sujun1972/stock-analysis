@@ -150,24 +150,15 @@ export default function StrategiesPage() {
       if (filterUserId) params.user_id = filterUserId
       if (filterPublishStatus) params.publish_status = filterPublishStatus
 
-      const response = await apiClient.get<{
-        success: boolean
-        data: Strategy[]
-        meta: {
-          total_pages: number
-          total: number
-        }
-      }>('/api/strategies', { params })
+      const response = await apiClient.get('/api/strategies', { params }) as any
 
-      // apiClient.get 已经返回了 response.data，所以直接使用
-      if (response?.success && response.data) {
-        const responseData = response.data as any
-        if (responseData.data && Array.isArray(responseData.data)) {
-          setStrategies(responseData.data)
-          if (responseData.meta) {
-            setTotalPages(responseData.meta.total_pages)
-            setTotalCount(responseData.meta.total)
-          }
+      // Backend 使用 ApiResponse 格式: { code, message, data: { items, total, page, page_size, total_pages } }
+      if (response?.code === 200 && response.data) {
+        const { items, total, total_pages } = response.data
+        if (items && Array.isArray(items)) {
+          setStrategies(items)
+          setTotalPages(total_pages || 1)
+          setTotalCount(total || 0)
         }
       }
     } catch (error) {
@@ -198,28 +189,14 @@ export default function StrategiesPage() {
         params.append('search', searchQuery)
       }
 
-      const response = await apiClient.get<{
-        success: boolean
-        data: {
-          users: User[]
-          total: number
-          page: number
-          page_size: number
-        }
-      }>(`/api/users?${params}`)
+      const response = await apiClient.get(`/api/users?${params}`) as any
 
-      // 处理两种可能的API响应格式
-      // 格式 1: { success: true, data: { users: [...] } }
-      // 格式 2: { users: [...], total: ..., page: ... }
-      let usersList: User[] = []
-
-      if (response.data && 'success' in response.data && response.data.success && 'data' in response.data) {
-        usersList = response.data.data?.users || []
-      } else if (response.data && 'users' in response.data) {
-        usersList = (response.data as any).users || []
+      // Backend 使用 ApiResponse 格式: { code, message, data: { users, total, page, page_size } }
+      if (response?.code === 200 && response.data?.users) {
+        setUsers(response.data.users)
+      } else {
+        setUsers([])
       }
-
-      setUsers(usersList)
     } catch (error) {
       logger.error('获取用户列表失败', error)
       setError('获取用户列表失败：' + error)

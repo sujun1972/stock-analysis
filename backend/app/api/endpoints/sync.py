@@ -15,6 +15,7 @@ from app.services.realtime_sync_service import RealtimeSyncService
 from app.services.stock_list_sync_service import StockListSyncService
 from app.core.dependencies import require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 router = APIRouter()
 
@@ -69,7 +70,7 @@ async def get_sync_status(
     config_service = ConfigService()
     status = await config_service.get_sync_status()
 
-    return {"success": True, "data": status}
+    return ApiResponse.success(data=status)
 
 
 @router.get("/status/{module}")
@@ -97,7 +98,7 @@ async def get_module_sync_status(
     config_service = ConfigService()
     status = await config_service.get_module_sync_status(module)
 
-    return {"success": True, "data": status}
+    return ApiResponse.success(data=status)
 
 
 @router.post("/abort")
@@ -116,12 +117,12 @@ async def abort_sync(
     # 检查当前是否有正在运行的同步
     status = await config_service.get_sync_status()
     if status.get("status") != "running":
-        return {"success": False, "message": "没有正在运行的同步任务", "data": None}
+        return ApiResponse.error(message="没有正在运行的同步任务", code=400)
 
     # 设置中止标志
     await config_service.set_sync_abort_flag(True)
 
-    return {"success": True, "message": "中止请求已发送，同步将在当前股票完成后停止", "data": None}
+    return ApiResponse.success(message="中止请求已发送，同步将在当前股票完成后停止")
 
 
 # ==================== Stock List Sync Endpoints ====================
@@ -284,7 +285,7 @@ async def sync_daily_stock(
     service = DailySyncService()
     result = await service.sync_single_stock(code=code, years=years)
 
-    return {"success": True, "data": result}
+    return ApiResponse.success(data=result)
 
 
 # ==================== Realtime Sync Endpoints ====================
@@ -312,7 +313,7 @@ async def sync_minute_data(
     service = RealtimeSyncService()
     result = await service.sync_minute_data(code=code, period=request.period, days=request.days)
 
-    return {"success": True, "data": result}
+    return ApiResponse.success(data=result)
 
 
 @router.post("/realtime")
@@ -340,9 +341,9 @@ async def sync_realtime_quotes(
 
     # 检查是否为部分成功（超时但有部分数据保存）
     if result.get("partial_success"):
-        return {"success": True, "partial": true, "message": "部分成功", "data": result}  # 206 Partial Content
+        return ApiResponse.partial_content(data=result, message="部分成功")  # 206 Partial Content
     else:
-        return {"success": True, "data": result}
+        return ApiResponse.success(data=result)
 
 
 # ==================== History Endpoint ====================
@@ -368,4 +369,4 @@ async def get_sync_history(
     # TODO: 从 sync_log 表查询历史记录
     history = []
 
-    return {"success": True, "data": history}
+    return ApiResponse.success(data=history)

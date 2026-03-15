@@ -241,8 +241,17 @@ export default function SentimentAIAnalysisPage() {
   const loadProviders = async () => {
     setIsLoadingProviders(true)
     try {
-      // apiClient.get() 已经返回 response.data，所以这里直接得到的是数据
-      const data = await apiClient.get('/api/ai-strategy/providers')
+      // Backend 使用 ApiResponse 格式，数据在 response.data 中
+      const response = await apiClient.get('/api/ai-strategy/providers') as any
+
+      if (response.code !== 200) {
+        logger.error('Failed to load AI providers', response)
+        toast.error(response.message || "加载AI配置失败")
+        setAiProviders([])
+        return
+      }
+
+      const data = response.data
 
       // 确保是数组
       if (!Array.isArray(data)) {

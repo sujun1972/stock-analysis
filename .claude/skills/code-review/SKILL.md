@@ -100,7 +100,44 @@ grep -r "^from \.\." core/src --include="*.py" | head -10
 - ✅ 正确: `from src.database.db_manager import DatabaseManager` (在 Docker 容器内)
 - ❌ 错误: `from database.db_manager import DatabaseManager`
 
-### 第四步：TypeScript/JavaScript 代码检查
+### 第四步：API 响应格式检查
+
+```bash
+echo "=== API 响应格式规范检查 ==="
+
+# 检查 Backend 是否有直接返回字典的端点（应使用 ApiResponse）
+echo "检查直接返回字典的端点..."
+grep -r 'return {"success":' backend/app/api/endpoints --include="*.py" | head -5 || echo "✅ 未发现直接返回字典"
+
+# 检查是否有 response_model=Dict 的端点（应移除）
+echo "检查冗余的 response_model..."
+grep -r 'response_model=Dict\[' backend/app/api/endpoints --include="*.py" | head -5 || echo "✅ 未发现冗余的 response_model"
+
+# 检查 Frontend 是否有 response.success 检查（应使用 response.code）
+echo "检查 Frontend 响应检查..."
+grep -r 'response\.success' admin/app admin/components admin/lib --include="*.ts" --include="*.tsx" | head -5 || echo "✅ Frontend 响应检查规范"
+
+# 检查是否有不安全的 toFixed 调用
+echo "检查不安全的 toFixed 调用..."
+grep -r '\.toFixed(' admin/app admin/components --include="*.ts" --include="*.tsx" | grep -v 'safeFormatNumber' | head -5 || echo "✅ 未发现不安全的 toFixed"
+```
+
+**API 响应格式规范：**
+
+Backend:
+- ✅ 使用 `ApiResponse.success()` / `ApiResponse.paginated()` / `ApiResponse.error()`
+- ❌ 禁止直接返回 `{"success": True, "data": ...}`
+- ❌ 禁止使用 `response_model=Dict[str, Any]`
+
+Frontend:
+- ✅ 使用 `response.code === 200` 检查成功
+- ❌ 禁止使用 `response.success` 检查
+- ✅ 分页数据从 `response.data.items` 获取
+- ✅ 使用 `safeFormatNumber()` 而非直接 `.toFixed()`
+
+参考文档: `.claude/API_DEVELOPMENT_GUIDE.md`
+
+### 第五步：TypeScript/JavaScript 代码检查
 
 ```bash
 # Admin 前端检查
@@ -135,7 +172,7 @@ grep -r "console\.\(log\|error\|warn\)" app components lib hooks stores --includ
 - 异步函数未处理错误
 - 使用 console.log/error（应使用 logger）
 
-### 第五步：安全漏洞扫描
+### 第六步：安全漏洞扫描
 
 ```bash
 cd /Volumes/MacDriver/stock-analysis
@@ -160,7 +197,7 @@ else
 fi
 ```
 
-### 第六步：SQL 注入风险检查
+### 第七步：SQL 注入风险检查
 
 ```bash
 # 检查是否有字符串拼接的 SQL 查询
@@ -178,7 +215,7 @@ grep -r '"SELECT.*" +' core/src backend/app --include="*.py" | grep -v "# nosec"
 - ✅ 使用 ORM（如 SQLAlchemy）
 - ❌ 避免字符串拼接 SQL
 
-### 第七步：错误处理检查
+### 第八步：错误处理检查
 
 ```bash
 # 检查裸 except 块（应该指定异常类型）

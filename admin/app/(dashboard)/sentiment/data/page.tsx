@@ -24,6 +24,13 @@ export default function SentimentManagementPage() {
 
   const pageSize = 20
 
+  // 安全地格式化数字
+  const safeFormatNumber = (value: any, decimals: number = 2): string => {
+    if (value === null || value === undefined || value === '') return '-'
+    const num = typeof value === 'number' ? value : parseFloat(value)
+    return isNaN(num) ? '-' : num.toFixed(decimals)
+  }
+
   // 获取北京时间
   const getBeijingTime = () => {
     return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
@@ -346,7 +353,9 @@ export default function SentimentManagementPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">
-                {sentiments[0]?.blast_rate ? (sentiments[0].blast_rate * 100).toFixed(1) + '%' : 'N/A'}
+                {sentiments[0]?.blast_rate !== undefined && sentiments[0]?.blast_rate !== null && !isNaN(Number(sentiments[0]?.blast_rate))
+                  ? safeFormatNumber(Number(sentiments[0].blast_rate) * 100, 1) + '%'
+                  : 'N/A'}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {marketStatus.label}市场情绪
@@ -404,39 +413,39 @@ export default function SentimentManagementPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span>{item.sh_index_close?.toFixed(2) || '-'}</span>
-                            {item.sh_index_change !== undefined && (
-                              <Badge variant={item.sh_index_change >= 0 ? 'default' : 'destructive'} className="text-xs">
-                                {item.sh_index_change >= 0 ? '+' : ''}
-                                {item.sh_index_change.toFixed(2)}%
+                            <span>{safeFormatNumber(item.sh_index_close)}</span>
+                            {item.sh_index_change !== undefined && item.sh_index_change !== null && !isNaN(Number(item.sh_index_change)) && (
+                              <Badge variant={Number(item.sh_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+                                {Number(item.sh_index_change) >= 0 ? '+' : ''}
+                                {safeFormatNumber(item.sh_index_change)}%
                               </Badge>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span>{item.sz_index_close?.toFixed(2) || '-'}</span>
-                            {item.sz_index_change !== undefined && (
-                              <Badge variant={item.sz_index_change >= 0 ? 'default' : 'destructive'} className="text-xs">
-                                {item.sz_index_change >= 0 ? '+' : ''}
-                                {item.sz_index_change.toFixed(2)}%
+                            <span>{safeFormatNumber(item.sz_index_close)}</span>
+                            {item.sz_index_change !== undefined && item.sz_index_change !== null && !isNaN(Number(item.sz_index_change)) && (
+                              <Badge variant={Number(item.sz_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+                                {Number(item.sz_index_change) >= 0 ? '+' : ''}
+                                {safeFormatNumber(item.sz_index_change)}%
                               </Badge>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span>{item.cyb_index_close?.toFixed(2) || '-'}</span>
-                            {item.cyb_index_change !== undefined && (
-                              <Badge variant={item.cyb_index_change >= 0 ? 'default' : 'destructive'} className="text-xs">
-                                {item.cyb_index_change >= 0 ? '+' : ''}
-                                {item.cyb_index_change.toFixed(2)}%
+                            <span>{safeFormatNumber(item.cyb_index_close)}</span>
+                            {item.cyb_index_change !== undefined && item.cyb_index_change !== null && !isNaN(Number(item.cyb_index_change)) && (
+                              <Badge variant={Number(item.cyb_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+                                {Number(item.cyb_index_change) >= 0 ? '+' : ''}
+                                {safeFormatNumber(item.cyb_index_change)}%
                               </Badge>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
-                          {item.total_amount ? (item.total_amount / 100000000).toFixed(0) : '-'}
+                          {safeFormatNumber(item.total_amount ? item.total_amount / 100000000 : null, 0)}
                         </TableCell>
                         <TableCell>
                           <Link href={`/sentiment/limit-up?date=${item.trade_date}`}>
@@ -447,9 +456,9 @@ export default function SentimentManagementPage() {
                         </TableCell>
                         <TableCell>
                           <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
-                            {item.blast_rate !== undefined ? (
-                              <Badge variant={item.blast_rate > 0.3 ? 'destructive' : 'secondary'} className="cursor-pointer hover:opacity-80">
-                                {(item.blast_rate * 100).toFixed(1)}%
+                            {item.blast_rate !== undefined && item.blast_rate !== null && !isNaN(Number(item.blast_rate)) ? (
+                              <Badge variant={Number(item.blast_rate) > 0.3 ? 'destructive' : 'secondary'} className="cursor-pointer hover:opacity-80">
+                                {safeFormatNumber(Number(item.blast_rate) * 100, 1)}%
                               </Badge>
                             ) : '-'}
                           </Link>
@@ -480,10 +489,10 @@ export default function SentimentManagementPage() {
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">上证指数</span>
                         <div className="flex items-center gap-2">
-                          <span>{item.sh_index_close?.toFixed(2) || '-'}</span>
-                          {item.sh_index_change !== undefined && (
-                            <Badge variant={item.sh_index_change >= 0 ? 'default' : 'destructive'} className="text-xs">
-                              {item.sh_index_change >= 0 ? '+' : ''}{item.sh_index_change.toFixed(2)}%
+                          <span>{safeFormatNumber(item.sh_index_close)}</span>
+                          {item.sh_index_change !== undefined && item.sh_index_change !== null && !isNaN(Number(item.sh_index_change)) && (
+                            <Badge variant={Number(item.sh_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+                              {Number(item.sh_index_change) >= 0 ? '+' : ''}{safeFormatNumber(item.sh_index_change)}%
                             </Badge>
                           )}
                         </div>
@@ -497,9 +506,9 @@ export default function SentimentManagementPage() {
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">炸板率</span>
                         <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
-                          {item.blast_rate !== undefined ? (
-                            <Badge variant={item.blast_rate > 0.3 ? 'destructive' : 'secondary'}>
-                              {(item.blast_rate * 100).toFixed(1)}%
+                          {item.blast_rate !== undefined && item.blast_rate !== null && !isNaN(Number(item.blast_rate)) ? (
+                            <Badge variant={Number(item.blast_rate) > 0.3 ? 'destructive' : 'secondary'}>
+                              {safeFormatNumber(Number(item.blast_rate) * 100, 1)}%
                             </Badge>
                           ) : '-'}
                         </Link>

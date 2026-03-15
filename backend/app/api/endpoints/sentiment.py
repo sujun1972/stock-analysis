@@ -14,6 +14,7 @@ from app.services.sentiment_service import MarketSentimentService
 from app.core.exceptions import DatabaseError, ExternalAPIError
 from app.core.dependencies import get_current_active_user, require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 
 router = APIRouter()
@@ -39,11 +40,7 @@ async def get_daily_sentiment(
 
         report = await sentiment_service.get_sentiment_report(date)
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": report
-        }
+        return ApiResponse.success(data=report)
 
     except DatabaseError as e:
         logger.error(f"查询每日情绪数据失败: {e}")
@@ -72,11 +69,7 @@ async def get_sentiment_list(
             end_date=end_date
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": result
-        }
+        return ApiResponse.success(data=result)
 
     except DatabaseError as e:
         logger.error(f"查询情绪列表失败: {e}")
@@ -102,17 +95,9 @@ async def get_limit_up_pool(
         data = await sentiment_service.get_limit_up_detail(date)
 
         if not data:
-            return {
-                "code": 404,
-                "message": f"{date}没有涨停板数据",
-                "data": None
-            }
+            return ApiResponse.error(message=f"{date}没有涨停板数据", code=404)
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": data
-        }
+        return ApiResponse.success(data=data)
 
     except DatabaseError as e:
         logger.error(f"查询涨停板池失败: {e}")
@@ -137,14 +122,10 @@ async def get_limit_up_trend(
 
         stats = await sentiment_service.get_sentiment_statistics(start_date, end_date)
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "trend": stats.get("trend", []),
-                "summary": stats.get("limit_up_stats", {})
-            }
-        }
+        return ApiResponse.success(data={
+            "trend": stats.get("trend", []),
+            "summary": stats.get("limit_up_stats", {})
+        })
 
     except DatabaseError as e:
         logger.error(f"查询涨停板趋势失败: {e}")
@@ -176,11 +157,7 @@ async def get_dragon_tiger_list(
             limit=limit
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": result
-        }
+        return ApiResponse.success(data=result)
 
     except DatabaseError as e:
         logger.error(f"查询龙虎榜失败: {e}")
@@ -213,11 +190,7 @@ async def get_stock_dragon_tiger_history(
             limit=days  # 查询所有记录
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": result.get("items", [])
-        }
+        return ApiResponse.success(data=result.get("items", []))
 
     except DatabaseError as e:
         logger.error(f"查询个股龙虎榜历史失败: {e}")
@@ -252,11 +225,7 @@ async def get_trading_calendar(
             month=month
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": calendar
-        }
+        return ApiResponse.success(data=calendar)
 
     except DatabaseError as e:
         logger.error(f"查询交易日历失败: {e}")
@@ -280,14 +249,13 @@ async def sync_trading_calendar(
     try:
         total_count = await sentiment_service.sync_trading_calendar_batch(years)
 
-        return {
-            "code": 200,
-            "message": f"交易日历同步成功，共{total_count}条记录",
-            "data": {
+        return ApiResponse.success(
+            message=f"交易日历同步成功，共{total_count}条记录",
+            data={
                 "years": years,
                 "total_count": total_count
             }
-        }
+        )
 
     except ExternalAPIError as e:
         logger.error(f"同步交易日历失败: {e}")
@@ -368,11 +336,7 @@ async def get_sync_task_status(
             response_data["message"] = f"未知状态: {state}"
             response_data["progress"] = 0
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": response_data
-        }
+        return ApiResponse.success(data=response_data)
 
     except Exception as e:
         logger.error(f"查询任务状态失败: {e}")
@@ -409,15 +373,15 @@ async def sync_sentiment_data(
 
             if is_locked:
                 logger.warning(f"⚠️  {date} 数据同步任务已在执行中，拒绝重复提交")
-                return {
-                    "code": 409,  # Conflict
-                    "message": "数据同步任务正在执行中",
-                    "data": {
+                return ApiResponse.error(
+                    message="数据同步任务正在执行中",
+                    code=409,
+                    data={
                         "date": date,
                         "status": "locked",
                         "reason": "已有同步任务正在进行，请等待其完成后再试"
                     }
-                }
+                )
 
         # 提交到 Celery 异步执行
         task = manual_sentiment_sync_task.apply_async(
@@ -425,15 +389,14 @@ async def sync_sentiment_data(
             task_id=f"manual_sentiment_sync_{date}"  # 使用固定ID，便于查询
         )
 
-        return {
-            "code": 200,
-            "message": "同步任务已提交",
-            "data": {
+        return ApiResponse.success(
+            message="同步任务已提交",
+            data={
                 "task_id": task.id,
                 "date": date,
                 "status": "pending"
             }
-        }
+        )
 
     except Exception as e:
         logger.error(f"提交同步任务失败: {e}")
@@ -467,19 +430,11 @@ async def sync_sentiment_batch(
             datetime.strptime(start_date, '%Y-%m-%d')
             datetime.strptime(end_date, '%Y-%m-%d')
         except ValueError:
-            return {
-                "code": 400,
-                "message": "日期格式错误，请使用 YYYY-MM-DD 格式",
-                "data": None
-            }
+            return ApiResponse.error(message="日期格式错误，请使用 YYYY-MM-DD 格式", code=400)
 
         # 验证日期范围
         if start_date > end_date:
-            return {
-                "code": 400,
-                "message": "起始日期不能晚于结束日期",
-                "data": None
-            }
+            return ApiResponse.error(message="起始日期不能晚于结束日期", code=400)
 
         # 生成唯一任务ID
         task_id = f"batch_sentiment_sync_{start_date}_{end_date}_{uuid.uuid4().hex[:8]}"
@@ -490,17 +445,16 @@ async def sync_sentiment_batch(
             task_id=task_id
         )
 
-        return {
-            "code": 200,
-            "message": "批量同步任务已提交",
-            "data": {
+        return ApiResponse.success(
+            message="批量同步任务已提交",
+            data={
                 "task_id": task.id,
                 "start_date": start_date,
                 "end_date": end_date,
                 "status": "pending",
                 "display_name": f"情绪数据批量同步 ({start_date} ~ {end_date})"
             }
-        }
+        )
 
     except Exception as e:
         logger.error(f"提交批量同步任务失败: {e}")
@@ -537,11 +491,7 @@ async def get_sentiment_statistics(
             end_date=end_date
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": stats
-        }
+        return ApiResponse.success(data=stats)
 
     except DatabaseError as e:
         logger.error(f"统计分析失败: {e}")
@@ -573,24 +523,23 @@ async def sentiment_health_check():
         cursor.close()
         sentiment_service._pool_manager.release_connection(conn)
 
-        return {
-            "code": 200,
-            "message": "healthy",
-            "data": {
+        return ApiResponse.success(
+            message="healthy",
+            data={
                 "latest_date": latest_date.strftime('%Y-%m-%d') if latest_date else None,
                 "database_connected": True
             }
-        }
+        )
 
     except Exception as e:
-        return {
-            "code": 500,
-            "message": "unhealthy",
-            "data": {
+        return ApiResponse.error(
+            message="unhealthy",
+            code=500,
+            data={
                 "error": str(e),
                 "database_connected": False
             }
-        }
+        )
 
 
 # ========== 情绪周期相关（新增）==========
@@ -621,17 +570,9 @@ async def get_current_cycle(
         cycle = cycle_service.get_cycle_stage()
 
         if 'error' in cycle:
-            return {
-                "code": 404,
-                "message": cycle['error'],
-                "data": None
-            }
+            return ApiResponse.error(message=cycle['error'], code=404)
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": cycle
-        }
+        return ApiResponse.success(data=cycle)
 
     except Exception as e:
         logger.error(f"获取当前情绪周期失败: {e}")
@@ -655,11 +596,7 @@ async def get_cycle_trend(
     try:
         trend = cycle_service.get_cycle_trend(days=days)
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": trend
-        }
+        return ApiResponse.success(data=trend)
 
     except Exception as e:
         logger.error(f"获取情绪周期趋势失败: {e}")
@@ -688,11 +625,7 @@ async def get_institution_top_stocks(
             limit=limit
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": ranking
-        }
+        return ApiResponse.success(data=ranking)
 
     except Exception as e:
         logger.error(f"获取机构排行失败: {e}")
@@ -726,11 +659,7 @@ async def get_top_tier_limit_up_stocks(
             limit=limit
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": ranking
-        }
+        return ApiResponse.success(data=ranking)
 
     except Exception as e:
         logger.error(f"获取游资打板排行失败: {e}")
@@ -757,11 +686,7 @@ async def get_hot_money_activity_ranking(
             limit=limit
         )
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": ranking
-        }
+        return ApiResponse.success(data=ranking)
 
     except Exception as e:
         logger.error(f"获取游资活跃度排行失败: {e}")
@@ -814,11 +739,7 @@ async def calculate_cycle(
         if original_date != date:
             message = f"{original_date} 非交易日，已计算最近交易日 {date} 的数据"
 
-        return {
-            "code": 200,
-            "message": message,
-            "data": cycle
-        }
+        return ApiResponse.success(message=message, data=cycle)
 
     except Exception as e:
         logger.error(f"计算情绪周期失败: {e}")
@@ -850,17 +771,9 @@ async def get_ai_analysis(
 
         if not result:
             # 无数据时返回统一的404响应格式，避免前端显示不必要的错误提示
-            return {
-                "code": 404,
-                "message": f"{date} 暂无AI分析数据",
-                "data": None
-            }
+            return ApiResponse.error(message=f"{date} 暂无AI分析数据", code=404)
 
-        return {
-            "code": 200,
-            "message": "获取成功",
-            "data": result
-        }
+        return ApiResponse.success(message="获取成功", data=result)
 
     except Exception as e:
         logger.error(f"获取AI分析失败: {e}")
@@ -900,15 +813,15 @@ async def generate_ai_analysis(
         # PENDING 是默认状态，不代表任务存在，只检查真正运行中的状态
         if existing_task.state in ['STARTED', 'PROGRESS', 'RETRY']:
             logger.warning(f"AI分析任务已在执行中: {task_id}, 状态: {existing_task.state}")
-            return {
-                "code": 409,
-                "message": "AI分析任务正在执行中，请稍候",
-                "data": {
+            return ApiResponse.error(
+                message="AI分析任务正在执行中，请稍候",
+                code=409,
+                data={
                     "task_id": task_id,
                     "date": date,
                     "status": "running"
                 }
-            }
+            )
 
         # 如果任务已完成或失败，先撤销旧任务结果，避免ID冲突
         if existing_task.state in ['SUCCESS', 'FAILURE']:
@@ -923,16 +836,15 @@ async def generate_ai_analysis(
 
         logger.info(f"AI分析任务已提交: {task_id}")
 
-        return {
-            "code": 200,
-            "message": "AI分析任务已提交，正在后台生成",
-            "data": {
+        return ApiResponse.success(
+            message="AI分析任务已提交，正在后台生成",
+            data={
                 "task_id": task.id,
                 "date": date,
                 "provider": provider,
                 "status": "pending"
             }
-        }
+        )
 
     except Exception as e:
         logger.error(f"提交AI分析任务失败: {e}")
@@ -1004,14 +916,10 @@ async def get_active_tasks(
 
         logger.info(f"获取到 {len(active_tasks)} 个活动任务")
 
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "total": len(active_tasks),
-                "tasks": active_tasks
-            }
-        }
+        return ApiResponse.success(data={
+            "total": len(active_tasks),
+            "tasks": active_tasks
+        })
 
     except Exception as e:
         logger.error(f"获取活动任务失败: {e}")

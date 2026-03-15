@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from app.api.error_handler import handle_api_errors
 from app.core.dependencies import get_current_active_user
 from app.models.user import User
+from app.models.api_response import ApiResponse
 from app.repositories.batch_repository import BatchRepository
 from app.repositories.experiment_repository import ExperimentRepository
 from app.services.experiment_service import ExperimentService
@@ -87,7 +88,7 @@ async def create_batch(request: BatchCreateRequest, current_user: User = Depends
             tags=request.tags,
         )
 
-        return {"success": True, "message": "批次创建成功", "data": {"batch_id": batch_id}}
+        return ApiResponse.success(message="批次创建成功", data={"batch_id": batch_id})
 
     except Exception as e:
         logger.error(f"创建批次失败: {e}")
@@ -103,7 +104,7 @@ async def get_batch_info(batch_id: int, current_user: User = Depends(get_current
         if not info:
             raise HTTPException(status_code=404, detail="批次不存在")
 
-        return {"success": True, "data": info}
+        return ApiResponse.success(data=info)
 
     except HTTPException:
         raise
@@ -158,7 +159,7 @@ async def delete_batch(batch_id: int, current_user: User = Depends(get_current_a
         # 使用 Repository 删除批次
         result = await asyncio.to_thread(batch_repo.delete_batch_cascade, batch_id)
 
-        return {"success": True, "message": f"批次 {batch_id} 已删除", "data": result}
+        return ApiResponse.success(message=f"批次 {batch_id} 已删除", data=result)
 
     except Exception as e:
         logger.error(f"删除批次失败: {e}")
@@ -183,7 +184,7 @@ async def start_batch(
         # 在后台运行批次（不阻塞HTTP响应）
         background_tasks.add_task(experiment_service.run_batch, batch_id, max_workers)
 
-        return {"success": True, "message": f"批次 {batch_id} 已启动，正在后台运行"}
+        return ApiResponse.success(message=f"批次 {batch_id} 已启动，正在后台运行")
 
     except Exception as e:
         logger.error(f"启动批次失败: {e}")
@@ -211,7 +212,7 @@ async def cancel_batch(batch_id: int, current_user: User = Depends(get_current_a
         )
         await asyncio.to_thread(experiment_repo.execute_update, query, (batch_id,))
 
-        return {"success": True, "message": f"批次 {batch_id} 已取消"}
+        return ApiResponse.success(message=f"批次 {batch_id} 已取消")
 
     except Exception as e:
         logger.error(f"取消批次失败: {e}")
@@ -289,7 +290,7 @@ async def generate_report(batch_id: int, current_user: User = Depends(get_curren
         ranker = ModelRanker()
         report = ranker.generate_report(batch_id)
 
-        return {"success": True, "data": report}
+        return ApiResponse.success(data=report)
 
     except Exception as e:
         logger.error(f"生成报告失败: {e}")
@@ -391,7 +392,7 @@ async def get_templates(current_user: User = Depends(get_current_active_user)):
         },
     }
 
-    return {"success": True, "data": templates}
+    return ApiResponse.success(data=templates)
 
 
 @router.get("/{experiment_id}")
@@ -409,7 +410,7 @@ async def get_experiment_detail(experiment_id: int, current_user: User = Depends
         if not experiment:
             raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
 
-        return {"success": True, "data": experiment}
+        return ApiResponse.success(data=experiment)
 
     except HTTPException:
         raise
@@ -436,7 +437,7 @@ async def delete_experiment(experiment_id: int, current_user: User = Depends(get
         # 删除实验
         await asyncio.to_thread(experiment_repo.delete_experiment, experiment_id)
 
-        return {"success": True, "message": f"实验 {experiment_id} 已删除"}
+        return ApiResponse.success(message=f"实验 {experiment_id} 已删除")
 
     except HTTPException:
         raise

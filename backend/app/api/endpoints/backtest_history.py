@@ -11,6 +11,7 @@ from loguru import logger
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 router = APIRouter(tags=["回测历史"])
 
@@ -23,7 +24,7 @@ async def get_user_backtest_history(
     strategy_id: Optional[int] = Query(None, description="策略ID筛选"),
     db = Depends(get_db),
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     获取当前用户的回测历史记录
 
@@ -155,7 +156,7 @@ async def get_backtest_detail(
     execution_id: int,
     db = Depends(get_db),
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     获取回测详情（包含完整的result数据）
 
@@ -252,7 +253,7 @@ async def delete_backtest_record(
     execution_id: int,
     db = Depends(get_db),
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     删除回测记录
 
@@ -289,10 +290,7 @@ async def delete_backtest_record(
         db.execute(delete_query, {"execution_id": execution_id})
         db.commit()
 
-        return {
-            "success": True,
-            "message": "回测记录已删除"
-        }
+        return ApiResponse.success(message="回测记录已删除")
 
     except HTTPException:
         raise

@@ -10,6 +10,7 @@ from celery.result import AsyncResult
 from app.api.error_handler import handle_api_errors
 from app.core.dependencies import get_current_active_user, require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 from app.schemas.ai_config import (
     AIProviderConfigCreate,
     AIProviderConfigUpdate,
@@ -108,14 +109,14 @@ async def generate_strategy(
 
 # ============ AI配置管理端点 (Admin) ============
 
-@router.get("/providers", response_model=List[AIProviderConfigResponse])
+@router.get("/providers")
 @handle_api_errors
 async def list_providers(current_user: User = Depends(require_admin)):
     """
     获取所有AI提供商配置列表
 
     Returns:
-        List[AIProviderConfigResponse]: AI提供商配置列表（API密钥已脱敏）
+        ApiResponse: AI提供商配置列表（API密钥已脱敏）
     """
     configs = ai_config_repository.get_all()
 
@@ -140,12 +141,15 @@ async def list_providers(current_user: User = Depends(require_admin)):
             "created_at": config.created_at,
             "updated_at": config.updated_at,
         }
-        response_configs.append(AIProviderConfigResponse(**config_dict))
+        response_configs.append(config_dict)
 
-    return response_configs
+    return ApiResponse.success(
+        data=response_configs,
+        message=f"成功获取 {len(response_configs)} 个AI提供商配置"
+    )
 
 
-@router.get("/providers/{provider}", response_model=AIProviderConfigResponse)
+@router.get("/providers/{provider}")
 @handle_api_errors
 async def get_provider(provider: str, current_user: User = Depends(require_admin)):
     """
@@ -155,7 +159,7 @@ async def get_provider(provider: str, current_user: User = Depends(require_admin
         provider: 提供商名称
 
     Returns:
-        AIProviderConfigResponse: AI提供商配置（API密钥已脱敏）
+        ApiResponse: AI提供商配置（API密钥已脱敏）
     """
     config = ai_config_repository.get_by_provider(provider)
     if not config:
@@ -179,10 +183,13 @@ async def get_provider(provider: str, current_user: User = Depends(require_admin
         "created_at": config.created_at,
         "updated_at": config.updated_at,
     }
-    return AIProviderConfigResponse(**config_dict)
+    return ApiResponse.success(
+        data=config_dict,
+        message=f"成功获取AI提供商配置: {provider}"
+    )
 
 
-@router.post("/providers", response_model=AIProviderConfigResponse, status_code=201)
+@router.post("/providers", status_code=201)
 @handle_api_errors
 async def create_provider(
     config: AIProviderConfigCreate,
@@ -195,7 +202,7 @@ async def create_provider(
         config: AI提供商配置
 
     Returns:
-        AIProviderConfigResponse: 创建的配置
+        ApiResponse: 创建的配置
     """
     # 检查是否已存在
     existing = ai_config_repository.get_by_provider(config.provider)
@@ -225,10 +232,13 @@ async def create_provider(
         "created_at": created_config.created_at,
         "updated_at": created_config.updated_at,
     }
-    return AIProviderConfigResponse(**response_dict)
+    return ApiResponse.success(
+        data=response_dict,
+        message=f"成功创建AI提供商配置: {config.provider}"
+    )
 
 
-@router.put("/providers/{provider}", response_model=AIProviderConfigResponse)
+@router.put("/providers/{provider}")
 @handle_api_errors
 async def update_provider(
     provider: str,
@@ -243,7 +253,7 @@ async def update_provider(
         config: 更新的配置
 
     Returns:
-        AIProviderConfigResponse: 更新后的配置
+        ApiResponse: 更新后的配置
     """
     config_dict = config.model_dump(exclude_unset=True)
     updated_config = ai_config_repository.update(provider, config_dict)
@@ -269,7 +279,10 @@ async def update_provider(
         "created_at": updated_config.created_at,
         "updated_at": updated_config.updated_at,
     }
-    return AIProviderConfigResponse(**response_dict)
+    return ApiResponse.success(
+        data=response_dict,
+        message=f"成功更新AI提供商配置: {provider}"
+    )
 
 
 @router.delete("/providers/{provider}")
@@ -288,17 +301,17 @@ async def delete_provider(provider: str, current_user: User = Depends(require_ad
     if not deleted:
         raise HTTPException(status_code=404, detail=f"未找到AI提供商配置: {provider}")
 
-    return {"success": True, "message": f"成功删除AI提供商配置: {provider}"}
+    return ApiResponse.success(message=f"成功删除AI提供商配置: {provider}")
 
 
-@router.get("/providers/default/info", response_model=AIProviderConfigResponse)
+@router.get("/providers/default/info")
 @handle_api_errors
 async def get_default_provider_info(current_user: User = Depends(require_admin)):
     """
     获取默认AI提供商配置
 
     Returns:
-        AIProviderConfigResponse: 默认AI提供商配置
+        ApiResponse: 默认AI提供商配置
     """
     config = ai_config_repository.get_default()
     if not config:
@@ -322,7 +335,10 @@ async def get_default_provider_info(current_user: User = Depends(require_admin))
         "created_at": config.created_at,
         "updated_at": config.updated_at,
     }
-    return AIProviderConfigResponse(**config_dict)
+    return ApiResponse.success(
+        data=config_dict,
+        message="成功获取默认AI提供商配置"
+    )
 
 
 # ============ 异步AI策略生成端点 ============
@@ -405,12 +421,14 @@ async def async_generate_strategy(
             f"provider={provider_config_obj.provider}"
         )
 
-        return {
-            "task_id": task.id,
-            "status": "pending",
-            "message": f"AI策略生成任务已提交，使用提供商: {provider_config_obj.provider}",
-            "provider_used": provider_config_obj.provider
-        }
+        return ApiResponse.success(
+            data={
+                "task_id": task.id,
+                "status": "pending",
+                "provider_used": provider_config_obj.provider
+            },
+            message=f"AI策略生成任务已提交，使用提供商: {provider_config_obj.provider}"
+        )
 
     except HTTPException:
         raise
@@ -437,39 +455,40 @@ async def get_task_status(task_id: str, current_user: User = Depends(get_current
     try:
         task = AsyncResult(task_id, app=celery_app)
 
-        response = {
+        data = {
             "task_id": task_id,
             "status": task.state
         }
+        message = ""
 
         if task.state == 'PENDING':
-            response["message"] = "任务排队中，等待AI服务..."
+            message = "任务排队中，等待AI服务..."
 
         elif task.state == 'PROGRESS':
             # 返回进度信息（只返回状态文字，不返回具体进度百分比）
             info = task.info or {}
-            response["message"] = info.get('status', 'AI策略生成进行中...')
+            message = info.get('status', 'AI策略生成进行中...')
 
         elif task.state == 'SUCCESS':
             # 返回完整结果
             result = task.result
-            response["strategy_code"] = result.get('strategy_code')
-            response["strategy_metadata"] = result.get('strategy_metadata')
-            response["tokens_used"] = result.get('tokens_used')
-            response["generation_time"] = result.get('generation_time')
-            response["provider_used"] = result.get('provider_used')
-            response["message"] = "策略生成成功"
+            data["strategy_code"] = result.get('strategy_code')
+            data["strategy_metadata"] = result.get('strategy_metadata')
+            data["tokens_used"] = result.get('tokens_used')
+            data["generation_time"] = result.get('generation_time')
+            data["provider_used"] = result.get('provider_used')
+            message = "策略生成成功"
 
         elif task.state == 'FAILURE':
             # 返回错误信息
             error = str(task.info) if task.info else "未知错误"
-            response["error"] = error
-            response["message"] = f"策略生成失败: {error}"
+            data["error"] = error
+            message = f"策略生成失败: {error}"
 
         else:
-            response["message"] = f"未知状态: {task.state}"
+            message = f"未知状态: {task.state}"
 
-        return response
+        return ApiResponse.success(data=data, message=message)
 
     except Exception as e:
         logger.error(f"查询任务状态失败 [task_id={task_id}]: {str(e)}")
@@ -494,17 +513,13 @@ async def cancel_task(task_id: str, current_user: User = Depends(get_current_act
         if task.state in ['PENDING', 'PROGRESS']:
             task.revoke(terminate=True)
             logger.info(f"AI策略生成任务已取消 [task_id={task_id}]")
-            return {
-                "success": True,
-                "data": {"task_id": task_id},
-                "message": "任务已取消"
-            }
+            return ApiResponse.success(data={"task_id": task_id}, message="任务已取消")
         else:
-            return {
-                "success": False,
-                "data": {"task_id": task_id, "state": task.state},
-                "message": f"任务当前状态为 {task.state}，无法取消"
-            }
+            return ApiResponse.error(
+                message=f"任务当前状态为 {task.state}，无法取消",
+                code=400,
+                data={"task_id": task_id, "state": task.state}
+            )
 
     except Exception as e:
         logger.error(f"取消任务失败 [task_id={task_id}]: {str(e)}")

@@ -25,6 +25,7 @@ from loguru import logger
 
 from app.api.error_handler import handle_api_errors
 from app.core.dependencies import get_current_user, get_current_active_user
+from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.repositories.strategy_repository import StrategyRepository
 from app.schemas.strategy import (
@@ -50,9 +51,9 @@ router = APIRouter()
 # ==================== API 端点 ====================
 
 
-@router.get("/statistics", summary="获取策略统计信息", response_model=Dict[str, Any])
+@router.get("/statistics", summary="获取策略统计信息")
 @handle_api_errors
-async def get_statistics() -> Dict[str, Any]:
+async def get_statistics():
     """
     获取策略的统计信息
 
@@ -75,7 +76,7 @@ async def get_statistics() -> Dict[str, Any]:
 
     logger.info(f"获取策略统计: total={statistics['total_count']}")
 
-    return {"success": True, "data": statistics}
+    return ApiResponse.success(data=statistics, message="获取策略统计成功")
 
 
 @router.post("/validate", summary="验证策略代码", status_code=status.HTTP_200_OK)
@@ -83,7 +84,7 @@ async def get_statistics() -> Dict[str, Any]:
 async def validate_code(
     request: ValidateCodeRequest,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     验证策略代码的安全性和正确性
 
@@ -128,7 +129,7 @@ async def validate_code(
             f"risk_level={validation_result['risk_level']}"
         )
 
-        return {"success": True, "data": validation_result}
+        return ApiResponse.success(data=validation_result, message="代码验证完成")
 
     except Exception as e:
         logger.error(f"代码验证失败: {str(e)}", exc_info=True)
@@ -143,7 +144,7 @@ async def validate_code(
 async def create_strategy(
     data: StrategyCreate,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     创建新策略
 
@@ -221,14 +222,13 @@ async def create_strategy(
         f"validation={validation_data['status']}"
     )
 
-    return {
-        "success": True,
-        "data": {"strategy_id": strategy_id, "validation": validation_data},
-        "message": "策略创建成功",
-    }
+    return ApiResponse.created(
+        data={"strategy_id": strategy_id, "validation": validation_data},
+        message="策略创建成功"
+    )
 
 
-@router.get("", summary="获取策略列表", response_model=Dict[str, Any])
+@router.get("", summary="获取策略列表")
 @handle_api_errors
 async def list_strategies(
     user_id: Optional[int] = Query(None, description="用户ID过滤（管理员可查看所有用户）"),
@@ -241,7 +241,7 @@ async def list_strategies(
     search: Optional[str] = Query(None, description="搜索关键词（名称、描述）"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-) -> Dict[str, Any]:
+):
     """
     获取策略列表
 
@@ -294,12 +294,18 @@ async def list_strategies(
         f"total={result['meta']['total']}"
     )
 
-    return {"success": True, "data": result["items"], "meta": result["meta"]}
+    return ApiResponse.paginated(
+        items=result["items"],
+        total=result["meta"]["total"],
+        page=result["meta"]["page"],
+        page_size=result["meta"]["page_size"],
+        message=f"成功获取第 {page} 页，共 {result['meta']['total']} 个策略"
+    )
 
 
-@router.get("/{strategy_id}", summary="获取策略详情", response_model=Dict[str, Any])
+@router.get("/{strategy_id}", summary="获取策略详情")
 @handle_api_errors
-async def get_strategy(strategy_id: int) -> Dict[str, Any]:
+async def get_strategy(strategy_id: int):
     """
     获取指定策略的详细信息（包含完整代码）
 
@@ -333,7 +339,7 @@ async def get_strategy(strategy_id: int) -> Dict[str, Any]:
 
     logger.info(f"获取策略详情: strategy_id={strategy_id}, name={strategy['name']}")
 
-    return {"success": True, "data": strategy}
+    return ApiResponse.success(data=strategy, message="获取策略详情成功")
 
 
 @router.put("/{strategy_id}", summary="更新策略")
@@ -342,7 +348,7 @@ async def update_strategy(
     strategy_id: int,
     data: StrategyUpdate,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     更新指定策略
 
@@ -438,12 +444,11 @@ async def update_strategy(
 
     logger.success(f"更新策略成功: strategy_id={strategy_id}")
 
-    response = {"success": True, "message": "策略更新成功"}
-
+    response_data = {}
     if validation_data:
-        response["validation"] = validation_data
+        response_data["validation"] = validation_data
 
-    return response
+    return ApiResponse.success(data=response_data, message="策略更新成功")
 
 
 @router.delete("/{strategy_id}", summary="删除策略")
@@ -451,7 +456,7 @@ async def update_strategy(
 async def delete_strategy(
     strategy_id: int,
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     删除指定策略
 
@@ -502,12 +507,12 @@ async def delete_strategy(
         f"deleted_by={current_user.username} (id={current_user.id})"
     )
 
-    return {"success": True, "message": "策略删除成功"}
+    return ApiResponse.success(message="策略删除成功")
 
 
 @router.get("/{strategy_id}/code", summary="获取策略代码")
 @handle_api_errors
-async def get_strategy_code(strategy_id: int) -> Dict[str, Any]:
+async def get_strategy_code(strategy_id: int):
     """
     获取指定策略的代码
 
@@ -549,7 +554,7 @@ async def get_strategy_code(strategy_id: int) -> Dict[str, Any]:
 
     logger.info(f"获取策略代码: strategy_id={strategy_id}")
 
-    return {"success": True, "data": code_info}
+    return ApiResponse.success(data=code_info, message="获取策略代码成功")
 
 
 @router.post("/{strategy_id}/test", summary="测试策略", status_code=status.HTTP_200_OK)
@@ -558,7 +563,7 @@ async def test_strategy(
     strategy_id: int,
     strict_mode: bool = Query(True, description="严格模式"),
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     测试策略是否能成功创建
 
@@ -595,15 +600,15 @@ async def test_strategy(
         validation_result = sanitizer.sanitize(strategy["code"], strict_mode=strict_mode)
 
         if not validation_result.get("safe"):
-            return {
-                "success": False,
-                "data": {
+            return ApiResponse.error(
+                message="策略测试失败：代码安全验证未通过",
+                code=400,
+                data={
                     "test_passed": False,
                     "error": "代码验证失败",
                     "errors": validation_result.get("errors", []),
-                    "message": "策略测试失败：代码安全验证未通过",
-                },
-            }
+                }
+            )
 
         # 3. 尝试动态加载（这里可以扩展为真正的策略实例化）
         # TODO: 实现动态加载策略实例
@@ -613,26 +618,25 @@ async def test_strategy(
 
         logger.success(f"策略测试通过: strategy_id={strategy_id}")
 
-        return {
-            "success": True,
-            "data": {
+        return ApiResponse.success(
+            data={
                 "test_passed": True,
                 "strategy_name": strategy["name"],
                 "strategy_class": strategy["class_name"],
                 "validation_status": strategy["validation_status"],
-                "message": "策略测试通过，代码可以正常执行",
             },
-        }
+            message="策略测试通过，代码可以正常执行"
+        )
 
     except Exception as e:
         logger.error(f"策略测试失败: strategy_id={strategy_id}, " f"error={str(e)}")
 
-        return {
-            "success": False,
-            "data": {
+        return ApiResponse.error(
+            message="策略测试失败",
+            code=500,
+            data={
                 "test_passed": False,
                 "error": str(e),
                 "error_type": e.__class__.__name__,
-                "message": "策略测试失败",
-            },
-        }
+            }
+        )

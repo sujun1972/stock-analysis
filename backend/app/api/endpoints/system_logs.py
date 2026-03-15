@@ -32,6 +32,7 @@ from app.schemas.system_logs import (
 )
 from app.core.dependencies import require_admin
 from app.models.user import User
+from app.models.api_response import ApiResponse
 
 router = APIRouter(prefix="/system-logs", tags=["System Logs"])
 

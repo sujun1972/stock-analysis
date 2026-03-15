@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
+from app.models.api_response import ApiResponse
 from app.repositories.strategy_repository import StrategyRepository
 from app.repositories.publish_review_repository import PublishReviewRepository
 
@@ -29,7 +30,7 @@ async def request_publish_strategy(
     strategy_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     用户申请发布策略
 
@@ -90,14 +91,13 @@ async def request_publish_strategy(
         'comment': '用户申请发布'
     })
 
-    return {
-        "success": True,
-        "message": "发布申请已提交，请等待管理员审核",
-        "data": {
+    return ApiResponse.success(
+        message="发布申请已提交，请等待管理员审核",
+        data={
             "strategy_id": strategy_id,
             "publish_status": "pending_review"
         }
-    }
+    )
 
 
 @router.post(
@@ -109,7 +109,7 @@ async def withdraw_publish_request(
     strategy_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     用户撤回发布申请
 
@@ -162,14 +162,13 @@ async def withdraw_publish_request(
         'comment': '用户撤回发布申请'
     })
 
-    return {
-        "success": True,
-        "message": "已撤回发布申请",
-        "data": {
+    return ApiResponse.success(
+        message="已撤回发布申请",
+        data={
             "strategy_id": strategy_id,
             "publish_status": "draft"
         }
-    }
+    )
 
 
 @router.get(
@@ -183,7 +182,7 @@ async def get_my_strategies(
     page_size: int = 20,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
+):
     """
     获取当前用户创建的所有策略
 
@@ -200,8 +199,7 @@ async def get_my_strategies(
         include_code=False  # 列表不包含完整代码
     )
 
-    return {
-        "success": True,
-        "data": result['items'],
+    return ApiResponse.success(data={
+        "items": result['items'],
         "meta": result['meta']
-    }
+    })

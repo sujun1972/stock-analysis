@@ -24,6 +24,7 @@ from app.core.api_versioning import deprecated
 from app.core.dependencies import get_current_active_user
 from app.core_adapters.config_strategy_adapter import ConfigStrategyAdapter
 from app.models.user import User
+from app.models.api_response import ApiResponse
 from app.repositories.strategy_config_repository import StrategyConfigRepository
 
 router = APIRouter()
@@ -137,7 +138,7 @@ class ValidateConfigRequest(BaseModel):
     reason="使用新的统一策略系统API",
 )
 @handle_api_errors
-async def get_strategy_types() -> Dict[str, Any]:
+async def get_strategy_types():
     """
     获取可用的预定义策略类型
 
@@ -178,7 +179,7 @@ async def get_strategy_types() -> Dict[str, Any]:
     reason="使用新的统一策略系统API",
 )
 @handle_api_errors
-async def validate_config(request: ValidateConfigRequest) -> Dict[str, Any]:
+async def validate_config(request: ValidateConfigRequest):
     """
     验证策略配置参数
 
@@ -225,7 +226,7 @@ async def validate_config(request: ValidateConfigRequest) -> Dict[str, Any]:
 async def create_config(
     data: StrategyConfigCreate,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     创建新的策略配置
 
@@ -276,11 +277,7 @@ async def create_config(
         f"type={data.strategy_type}, name={data.name}"
     )
 
-    return {
-        "success": True,
-        "data": {"config_id": config_id},
-        "message": "策略配置创建成功"
-    }
+    return ApiResponse.success(data={"config_id": config_id}, message="策略配置创建成功")
 
 
 @router.get("", summary="获取配置列表")
@@ -292,7 +289,7 @@ async def list_configs(
     category: Optional[str] = Query(None, description="分类过滤"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量")
-) -> Dict[str, Any]:
+):
     """
     获取策略配置列表
 
@@ -341,7 +338,7 @@ async def list_configs(
 
 @router.get("/{config_id}", summary="获取配置详情")
 @handle_api_errors
-async def get_config(config_id: int) -> Dict[str, Any]:
+async def get_config(config_id: int):
     """
     获取指定配置的详细信息
 
@@ -382,7 +379,7 @@ async def update_config(
     config_id: int,
     data: StrategyConfigUpdate,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     更新指定配置
 
@@ -436,10 +433,7 @@ async def update_config(
 
     logger.success(f"更新配置成功: config_id={config_id}")
 
-    return {
-        "success": True,
-        "message": "配置更新成功"
-    }
+    return ApiResponse.success(message="配置更新成功")
 
 
 @router.delete("/{config_id}", summary="删除配置")
@@ -447,7 +441,7 @@ async def update_config(
 async def delete_config(
     config_id: int,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     删除指定配置
 
@@ -476,10 +470,7 @@ async def delete_config(
 
     logger.warning(f"删除配置: config_id={config_id}")
 
-    return {
-        "success": True,
-        "message": "配置删除成功"
-    }
+    return ApiResponse.success(message="配置删除成功")
 
 
 @router.post("/{config_id}/test", summary="测试配置", status_code=status.HTTP_200_OK)
@@ -487,7 +478,7 @@ async def delete_config(
 async def test_config(
     config_id: int,
     current_user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+):
     """
     测试配置是否能成功创建策略
 
