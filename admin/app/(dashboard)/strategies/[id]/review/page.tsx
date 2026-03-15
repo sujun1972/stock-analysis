@@ -48,13 +48,15 @@ export default function StrategyReviewPage() {
     setLoading(true)
     setError(null)
     try {
-      const response = await apiClient.getStrategy(strategyId)
-      if (response.success && response.data) {
+      const response = await apiClient.getStrategy(strategyId) as any
+      if (response?.code === 200 && response.data) {
         setStrategy(response.data)
+      } else {
+        setError(response?.message || '加载失败')
       }
     } catch (error: any) {
       logger.error('获取策略详情失败', error)
-      setError(error.response?.data?.detail || '加载失败')
+      setError(error.response?.data?.message || '加载失败')
     } finally {
       setLoading(false)
     }

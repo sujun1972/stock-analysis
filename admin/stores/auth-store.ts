@@ -88,7 +88,7 @@ export const useAuthStore = create<AuthStore>()(
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
         try {
-          // 注意：/api/auth/login 直接返回数据，不包裹在 ApiResponse 中
+          // /api/auth/login 现在返回标准 ApiResponse 格式
           const response = await apiClient.post<{
             access_token: string;
             refresh_token: string;
@@ -96,10 +96,15 @@ export const useAuthStore = create<AuthStore>()(
           }>('/api/auth/login', {
             email,
             password,
-          });
+          }) as any;
 
-          // 认证端点直接返回数据对象（不在 response.data 中）
-          const { access_token, refresh_token, user } = response as any;
+          // 检查响应状态码
+          if (response?.code !== 200) {
+            throw new Error(response?.message || '登录失败');
+          }
+
+          // 从 response.data 中获取数据
+          const { access_token, refresh_token, user } = response.data;
 
           set({
             user,
@@ -183,16 +188,21 @@ export const useAuthStore = create<AuthStore>()(
         }
 
         try {
-          // 注意：/api/auth/refresh 直接返回数据，不包裹在 ApiResponse 中
+          // /api/auth/refresh 现在返回标准 ApiResponse 格式
           const response = await apiClient.post<{
             access_token: string;
             refresh_token: string;
           }>('/api/auth/refresh', {
             refresh_token: refreshToken,
-          });
+          }) as any;
 
-          // 认证端点直接返回数据对象（不在 response.data 中）
-          const { access_token, refresh_token: new_refresh_token } = response as any;
+          // 检查响应状态码
+          if (response?.code !== 200) {
+            throw new Error(response?.message || 'Token刷新失败');
+          }
+
+          // 从 response.data 中获取数据
+          const { access_token, refresh_token: new_refresh_token } = response.data;
 
           set({
             accessToken: access_token,

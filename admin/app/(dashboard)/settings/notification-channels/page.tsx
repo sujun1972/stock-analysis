@@ -25,15 +25,21 @@ export default function NotificationChannelsPage() {
   const loadChannels = async () => {
     setIsLoading(true)
     try {
-      const response = await apiClient.getNotificationChannels()
-      if (response.success && response.data) {
+      const response = await apiClient.getNotificationChannels() as any
+      if (response?.code === 200 && response.data) {
         setChannels(response.data)
+      } else {
+        toast({
+          title: '加载失败',
+          description: response?.message || '无法加载通知渠道配置',
+          variant: 'destructive',
+        })
       }
     } catch (error: any) {
       console.error('加载渠道配置失败:', error)
       toast({
         title: '加载失败',
-        description: error.response?.data?.detail || '无法加载通知渠道配置',
+        description: error.response?.data?.message || '无法加载通知渠道配置',
         variant: 'destructive',
       })
     } finally {
@@ -50,8 +56,8 @@ export default function NotificationChannelsPage() {
   const handleToggleChannel = async (channelType: string) => {
     setTogglingChannel(channelType)
     try {
-      const response = await apiClient.toggleNotificationChannel(channelType)
-      if (response.success && response.data) {
+      const response = await apiClient.toggleNotificationChannel(channelType) as any
+      if (response?.code === 200 && response.data) {
         setChannels(prev =>
           prev.map(ch => (ch.channel_type === channelType ? response.data! : ch))
         )
@@ -59,12 +65,18 @@ export default function NotificationChannelsPage() {
           title: '更新成功',
           description: `${response.data.channel_name} 已${response.data.is_enabled ? '启用' : '禁用'}`,
         })
+      } else {
+        toast({
+          title: '操作失败',
+          description: response?.message || '无法切换渠道状态',
+          variant: 'destructive',
+        })
       }
     } catch (error: any) {
       console.error('切换渠道状态失败:', error)
       toast({
         title: '操作失败',
-        description: error.response?.data?.detail || '无法切换渠道状态',
+        description: error.response?.data?.message || '无法切换渠道状态',
         variant: 'destructive',
       })
     } finally {
@@ -82,8 +94,8 @@ export default function NotificationChannelsPage() {
       const response = await apiClient.updateNotificationChannel(channelType, {
         config,
         description,
-      })
-      if (response.success && response.data) {
+      }) as any
+      if (response?.code === 200 && response.data) {
         setChannels(prev =>
           prev.map(ch => (ch.channel_type === channelType ? response.data! : ch))
         )
@@ -91,12 +103,14 @@ export default function NotificationChannelsPage() {
           title: '保存成功',
           description: `${response.data.channel_name} 配置已更新`,
         })
+      } else {
+        throw new Error(response?.message || '保存失败')
       }
     } catch (error: any) {
       console.error('保存渠道配置失败:', error)
       toast({
         title: '保存失败',
-        description: error.response?.data?.detail || '无法保存渠道配置',
+        description: error.response?.data?.message || error.message || '无法保存渠道配置',
         variant: 'destructive',
       })
       throw error

@@ -26,18 +26,20 @@ export default function PendingReviewStrategiesPage() {
       const response = await apiClient.getPendingReviewStrategies({
         page: currentPage,
         page_size: 20,
-      })
+      }) as any
 
-      if (response.success && response.data) {
+      if (response?.code === 200 && response.data) {
         setStrategies(response.data)
         if (response.meta) {
           setTotalPages(response.meta.total_pages || 1)
           setTotalCount(response.meta.total || 0)
         }
+      } else {
+        setError(response?.message || '加载失败，请稍后重试')
       }
     } catch (error: any) {
       logger.error('获取待审核策略列表失败', error)
-      setError(error.response?.data?.detail || '加载失败，请稍后重试')
+      setError(error.response?.data?.message || '加载失败，请稍后重试')
     } finally {
       setLoading(false)
     }

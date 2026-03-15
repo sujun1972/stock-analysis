@@ -97,23 +97,25 @@ export default function SystemLogsPage() {
         search: searchTerm || undefined,
         page,
         page_size: pageSize
-      })
+      }) as any
 
-      if (logsResponse.success && logsResponse.data) {
+      if (logsResponse?.code === 200 && logsResponse.data) {
         setLogs(logsResponse.data.logs)
         setTotal(logsResponse.data.total)
+      } else {
+        setError(logsResponse?.message || '加载日志失败')
       }
 
       // 获取统计信息
       const statsResponse = await apiClient.getSystemLogStatistics({
         log_type: logType
-      })
+      }) as any
 
-      if (statsResponse.success && statsResponse.data) {
+      if (statsResponse?.code === 200 && statsResponse.data) {
         setStatistics(statsResponse.data)
       }
     } catch (err: any) {
-      setError(err.message || '加载日志失败')
+      setError(err.response?.data?.message || err.message || '加载日志失败')
       console.error('Failed to load system logs:', err)
     } finally {
       setIsLoading(false)
