@@ -120,16 +120,12 @@ export interface BacktestResult {
   }>
 }
 
-// API响应类型
-export interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  message?: string
-  error?: string
-}
+// 注意: ApiResponse 和 PaginatedResponse 类型已移至 types/api.ts
+// 请从 '@/types' 导入使用
 
-// 分页响应类型（匹配后端 v2.0 格式）
-export interface PaginatedResponse<T> {
+// 保留旧的 PaginatedResponse 用于向后兼容（将被移除）
+/** @deprecated 使用 PaginatedData<T> 代替 */
+export interface LegacyPaginatedResponse<T> {
   items: T[]           // 数据列表
   total: number        // 总记录数
   page: number         // 当前页码

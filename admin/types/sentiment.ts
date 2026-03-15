@@ -181,14 +181,8 @@ export interface SentimentStatistics {
   }[]
 }
 
-// API响应
-export interface ApiResponse<T = any> {
-  code: number
-  message: string
-  data?: T
-}
-
 // ==================== 情绪周期类型（新增）====================
+// 注意: ApiResponse 类型已移至 types/api.ts，请从 '@/types' 导入
 
 // 情绪周期数据
 export interface SentimentCycle {

@@ -126,12 +126,7 @@ export interface AnalysisHistory {
 }
 
 // ========== API响应类型 ==========
-
-export interface ApiResponse<T> {
-  code: number
-  message: string
-  data: T | null
-}
+// 注意: ApiResponse 类型已移至 types/api.ts，请从 '@/types' 导入
 
 export interface SyncResult {
   trade_date: string

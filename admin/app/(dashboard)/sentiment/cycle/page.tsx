@@ -7,14 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, Users, Building2, AlertCircle } from 'lucide-react'
 import logger from '@/lib/logger'
+import { apiClient } from '@/lib/api-client'
 import type {
   SentimentCycle,
   InstitutionTopStock,
   HotMoneyLimitUpStock,
   HotMoneySeat
 } from '@/types/sentiment'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function SentimentCyclePage() {
   const [loading, setLoading] = useState(false)
@@ -29,12 +28,11 @@ export default function SentimentCyclePage() {
   // 获取当前情绪周期
   const fetchCurrentCycle = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/sentiment/cycle/current`)
-      const data = await res.json()
-      if (data.code === 200 && data.data) {
-        setCurrentCycle(data.data)
+      const response = await apiClient.get<SentimentCycle>('/api/sentiment/cycle/current')
+      if (response.code === 200 && response.data) {
+        setCurrentCycle(response.data)
         setError(null)
-      } else if (data.code === 404) {
+      } else if (response.code === 404) {
         setError('暂无情绪周期数据，请先采集数据并计算')
       }
     } catch (error) {
@@ -46,10 +44,9 @@ export default function SentimentCyclePage() {
   // 获取机构排行
   const fetchInstitutionTop = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/sentiment/hot-money/institution-top?limit=3`)
-      const data = await res.json()
-      if (data.code === 200) {
-        setInstitutionTop(data.data || [])
+      const response = await apiClient.get<InstitutionTopStock[]>('/api/sentiment/hot-money/institution-top?limit=3')
+      if (response.code === 200) {
+        setInstitutionTop(response.data || [])
       }
     } catch (error) {
       logger.error('获取机构排行失败', error)
@@ -59,10 +56,9 @@ export default function SentimentCyclePage() {
   // 获取游资打板排行
   const fetchHotMoneyTop = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/sentiment/hot-money/top-tier-limit-up?limit=10`)
-      const data = await res.json()
-      if (data.code === 200) {
-        setHotMoneyTop(data.data || [])
+      const response = await apiClient.get<HotMoneyLimitUpStock[]>('/api/sentiment/hot-money/top-tier-limit-up?limit=10')
+      if (response.code === 200) {
+        setHotMoneyTop(response.data || [])
       }
     } catch (error) {
       logger.error('获取游资打板排行失败', error)
@@ -72,10 +68,9 @@ export default function SentimentCyclePage() {
   // 获取游资活跃度排行
   const fetchHotMoneyRanking = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/sentiment/hot-money/activity-ranking?days=30&limit=20`)
-      const data = await res.json()
-      if (data.code === 200) {
-        setHotMoneyRanking(data.data || [])
+      const response = await apiClient.get<HotMoneySeat[]>('/api/sentiment/hot-money/activity-ranking?days=30&limit=20')
+      if (response.code === 200) {
+        setHotMoneyRanking(response.data || [])
       }
     } catch (error) {
       logger.error('获取游资活跃度排行失败', error)
@@ -89,16 +84,13 @@ export default function SentimentCyclePage() {
     setInfoMessage(null)
     try {
       const today = new Date().toISOString().split('T')[0]
-      const res = await fetch(`${API_BASE}/api/sentiment/cycle/calculate?date=${today}`, {
-        method: 'POST'
-      })
-      const data = await res.json()
+      const response = await apiClient.post(`/api/sentiment/cycle/calculate?date=${today}`)
 
-      if (data.code === 200) {
+      if (response.code === 200) {
         // 显示成功消息（如果日期被自动调整，会包含说明）
-        if (data.message && data.message !== '计算成功') {
+        if (response.message && response.message !== '计算成功') {
           // 使用信息提示显示调整信息
-          setInfoMessage(data.message)
+          setInfoMessage(response.message)
           setTimeout(() => setInfoMessage(null), 6000)
         } else {
           setInfoMessage('计算成功')
@@ -107,7 +99,7 @@ export default function SentimentCyclePage() {
         // 计算成功后刷新数据
         await refreshAll()
       } else {
-        setError(data.message || '计算失败')
+        setError(response.message || '计算失败')
       }
     } catch (error) {
       logger.error('计算情绪周期失败', error)

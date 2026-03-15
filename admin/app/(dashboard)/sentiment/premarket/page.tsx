@@ -29,12 +29,12 @@ import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
 import logger from "@/lib/logger"
+import type { ApiResponse } from "@/types"
 import type {
   OvernightData,
   CollisionAnalysis,
   PremarketNews,
   AnalysisHistory,
-  ApiResponse,
   SyncResult,
   NewsListResponse
 } from "@/types/premarket"

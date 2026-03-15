@@ -5,8 +5,6 @@ import type {
   FeatureData,
   Prediction,
   BacktestResult,
-  ApiResponse,
-  PaginatedResponse,
   MinuteData,
   Concept,
   // V2.0 统一策略类型
@@ -32,6 +30,11 @@ import type {
   DynamicStrategyTestResponse,
   DynamicStrategyStatistics,
 } from '@/types'
+import type {
+  ApiResponse,
+  PaginatedResponse,
+  PaginatedData,
+} from '@/types/api'
 import type {
   MarketSentiment,
   LimitUpPool,
@@ -387,9 +390,9 @@ class ApiClient {
     concepts?: string
     sort_by?: string
     sort_order?: string
-  }): Promise<PaginatedResponse<StockInfo>> {
+  }): Promise<PaginatedData<StockInfo>> {
     const response = await axiosInstance.get('/api/stocks/list', { params })
-    const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
+    const result = response.data as ApiResponse<PaginatedData<StockInfo>>
     // 返回嵌套在 data 字段中的分页数据
     return result.data || { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }
   }
@@ -400,7 +403,7 @@ class ApiClient {
     const response = await axiosInstance.get(`/api/stocks/list`, {
       params: { search: code, limit: 1 }
     })
-    const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
+    const result = response.data as ApiResponse<PaginatedData<StockInfo>>
     if (result.data?.items && result.data.items.length > 0) {
       return result.data.items[0]
     }

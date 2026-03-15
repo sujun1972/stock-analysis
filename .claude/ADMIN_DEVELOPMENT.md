@@ -144,6 +144,79 @@ logger.clearUser()
 
 ---
 
+### 4. 统一 API 响应类型
+
+**位置**: [admin/types/api.ts](../admin/types/api.ts)
+
+**重要**: 所有 API 调用必须使用统一的 `ApiResponse<T>` 类型
+
+**标准响应格式**:
+```typescript
+interface ApiResponse<T> {
+  code: number              // HTTP状态码 (200, 400, 500等)
+  message: string           // 响应消息
+  data?: T                  // 响应数据（泛型）
+  success?: boolean         // 成功标识（后端自动计算）
+  timestamp?: string        // 时间戳
+  request_id?: string       // 请求追踪ID
+  api_version?: string      // API版本
+}
+```
+
+**使用方法**:
+```typescript
+import { apiClient } from '@/lib/api-client'
+import type { ApiResponse } from '@/types'
+
+// ✅ 正确：使用 apiClient + 统一类型
+const response = await apiClient.get<User>('/api/users/123')
+if (response.code === 200 && response.data) {
+  console.log(response.data)  // 完整的类型检查
+}
+
+// ❌ 错误：直接使用 fetch（无认证Token）
+const res = await fetch('/api/users/123')
+
+// ❌ 错误：使用 as any 绕过类型检查
+const result = response as any
+```
+
+**类型守卫函数**:
+```typescript
+import { isSuccessResponse, isErrorResponse } from '@/types'
+
+const response = await apiClient.get<User>('/api/users/123')
+
+if (isSuccessResponse(response)) {
+  // TypeScript 自动推断 response.data 存在
+  console.log(response.data.username)
+}
+
+if (isErrorResponse(response)) {
+  // 处理错误
+  console.error(response.message)
+}
+```
+
+**分页响应**:
+```typescript
+import type { PaginatedResponse } from '@/types'
+
+const response = await apiClient.get<PaginatedResponse<User>>('/api/users')
+if (response.code === 200 && response.data) {
+  const { items, total, page, page_size } = response.data
+}
+```
+
+**注意事项**:
+- ⚠️ 禁止使用 `as any` 绕过类型检查
+- ⚠️ 禁止使用原生 `fetch`（会丢失认证Token）
+- ⚠️ 禁止自定义响应类型（必须使用 `types/api.ts`）
+- ✅ 始终通过 `apiClient` 调用 API
+- ✅ 使用类型守卫函数提高类型安全
+
+---
+
 ## 🛠️ 常用命令
 
 ### 开发命令
