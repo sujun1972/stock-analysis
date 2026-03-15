@@ -13,8 +13,22 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const apiDomain = apiUrl.replace(/^https?:\/\//, '').split('/')[0]
+
   return (
     <html lang="zh-CN">
+      <head>
+        {/* DNS 预解析 - 提前解析 API 域名 */}
+        <link rel="dns-prefetch" href={`//${apiDomain}`} />
+
+        {/* 预连接 - 建立早期连接到 API 服务器 */}
+        <link rel="preconnect" href={apiUrl} />
+        <link rel="preconnect" href={apiUrl} crossOrigin="anonymous" />
+
+        {/* 预加载关键字体（如果有） */}
+        {/* <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossOrigin="anonymous" /> */}
+      </head>
       <body className="antialiased">
         <ErrorBoundary>
           {children}

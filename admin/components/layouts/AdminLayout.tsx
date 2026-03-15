@@ -19,7 +19,7 @@
 
 import { ReactNode, useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Settings,
   Database,
@@ -178,6 +178,7 @@ const navItems: NavItem[] = [
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { isCollapsed, setCollapsed } = useSidebarStore()
 
   /**
@@ -202,6 +203,30 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   const [openMenus, setOpenMenus] = useState<string[]>(() => getInitialOpenMenus())
+
+  /**
+   * 预加载关键页面
+   * 在组件挂载后预加载用户最常访问的页面，提升导航体验
+   */
+  useEffect(() => {
+    // 预加载关键页面（最常访问的页面）
+    const criticalPages = [
+      '/strategies',
+      '/stocks',
+      '/sentiment/data',
+      '/sync',
+      '/users',
+    ]
+
+    // 延迟预加载，避免影响当前页面加载
+    const timer = setTimeout(() => {
+      criticalPages.forEach(page => {
+        router.prefetch(page)
+      })
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [router])
 
   /**
    * 监听路径变化，自动展开/收起对应的菜单

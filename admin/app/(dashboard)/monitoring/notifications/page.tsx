@@ -25,23 +25,21 @@ import {
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
+// 动态导入 Recharts 图表库（仅客户端加载，减少初始包大小）
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
-  LineChart,
   Line,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Legend,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts'
+} from '@/components/charts/LazyCharts'
 
 interface HealthStatus {
   status: 'healthy' | 'warning' | 'critical'
