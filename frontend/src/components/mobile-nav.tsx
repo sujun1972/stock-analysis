@@ -3,8 +3,9 @@
 import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Menu, User, LogOut, Crown } from "lucide-react"
+import { Menu, User, LogOut, Crown, Bell, Settings } from "lucide-react"
 import { useAuthStore, getRoleDisplayName } from "@/stores/auth-store"
+import { NotificationBadge } from "@/components/notifications/NotificationBadge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -126,6 +127,23 @@ export function MobileNav() {
           <>
             <Separator className="my-4" />
             <div className="flex flex-col gap-2">
+              <Button
+                variant="ghost"
+                className="w-full justify-start relative"
+                onClick={() => { setOpen(false); router.push('/notifications') }}
+              >
+                <Bell className="mr-2 h-4 w-4" />
+                通知中心
+                <NotificationBadge className="ml-2" enablePolling={true} />
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => { setOpen(false); router.push('/settings/notifications') }}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                通知设置
+              </Button>
               <Button
                 variant="ghost"
                 className="w-full justify-start"

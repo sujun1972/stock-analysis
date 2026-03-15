@@ -1280,6 +1280,73 @@ class ApiClient {
     const response = await axiosInstance.delete(`/api/ai-strategy/cancel/${taskId}`)
     return response.data
   }
+
+  // ========== 用户通知相关API ==========
+
+  /**
+   * 获取用户通知配置
+   */
+  async getNotificationSettings(): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/notifications/settings')
+    return response.data
+  }
+
+  /**
+   * 更新用户通知配置
+   */
+  async updateNotificationSettings(
+    settings: Record<string, any>
+  ): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.put('/api/notifications/settings', settings)
+    return response.data
+  }
+
+  /**
+   * 获取站内消息列表
+   */
+  async getInAppNotifications(params?: {
+    unread_only?: boolean
+    limit?: number
+    offset?: number
+  }): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/notifications/in-app', { params })
+    return response.data
+  }
+
+  /**
+   * 标记消息为已读
+   */
+  async markNotificationAsRead(id: number): Promise<ApiResponse<void>> {
+    const response = await axiosInstance.post(`/api/notifications/in-app/${id}/read`)
+    return response.data
+  }
+
+  /**
+   * 全部标记为已读
+   */
+  async markAllNotificationsAsRead(): Promise<ApiResponse<{ count: number }>> {
+    const response = await axiosInstance.post('/api/notifications/in-app/read-all')
+    return response.data
+  }
+
+  /**
+   * 获取未读消息数量
+   */
+  async getUnreadCount(): Promise<ApiResponse<{ unread_count: number }>> {
+    const response = await axiosInstance.get('/api/notifications/unread-count')
+    return response.data
+  }
+
+  /**
+   * 获取通知发送历史
+   */
+  async getNotificationLogs(params?: {
+    limit?: number
+    offset?: number
+  }): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/notifications/logs', { params })
+    return response.data
+  }
 }
 
 // 导出单例

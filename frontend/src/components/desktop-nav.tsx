@@ -13,8 +13,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, LogOut, Settings, Crown } from "lucide-react"
+import { User, LogOut, Settings, Crown, Bell } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { NotificationBadge } from "@/components/notifications/NotificationBadge"
+import { useState } from "react"
 
 /**
  * 桌面端导航菜单组件
@@ -24,6 +26,7 @@ export function DesktopNav() {
   const pathname = usePathname()
   const router = useRouter()
   const { isAuthenticated, user, logout } = useAuthStore()
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const menuItems = [
     { href: "/", label: "首页" },
@@ -79,6 +82,41 @@ export function DesktopNav() {
 
           {/* 用户状态区域 */}
           <div className="flex items-center gap-3">
+            {isAuthenticated && user ? (
+              <>
+                {/* 通知中心 */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="relative">
+                      <Bell className="h-5 w-5" />
+                      <NotificationBadge
+                        className="absolute -top-1 -right-1"
+                        enablePolling={true}
+                      />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-96 max-h-[500px] overflow-y-auto">
+                    <DropdownMenuLabel>通知中心</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <div className="p-2">
+                      <div className="text-sm text-muted-foreground mb-2">
+                        最近通知将在这里显示
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push('/notifications')}>
+                      查看全部通知
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push('/settings/notifications')}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      通知设置
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* 用户菜单 */}
+              </>
+            ) : null}
             {isAuthenticated && user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
