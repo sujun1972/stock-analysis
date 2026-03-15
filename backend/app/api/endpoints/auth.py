@@ -76,6 +76,8 @@ async def register(
     db.commit()
     db.refresh(new_user)
 
+    logger.info(f"[认证] 新用户注册成功 [user_id={new_user.id}, email={new_user.email}, username={new_user.username}]")
+
     return RegisterResponse(
         message="注册成功",
         user_id=new_user.id,
@@ -116,6 +118,7 @@ async def login(
     # 验证用户存在
     if not user:
         record_login(False, "用户不存在")
+        logger.warning(f"[认证] 登录失败-用户不存在 [email={login_data.email}, ip={client_ip}]")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="邮箱或密码错误"
@@ -124,6 +127,18 @@ async def login(
     # 验证密码
     if not verify_password(login_data.password, user.password_hash):
         record_login(False, "密码错误")
+        logger.warning(f"[认证] 登录失败-密码错误 [email={login_data.email}, ip={client_ip}]")
+
+        # 检查是否存在暴力破解（获取最近5分钟的失败次数）
+        recent_failures = db.query(LoginHistory).filter(
+            LoginHistory.ip_address == client_ip,
+            LoginHistory.login_successful == False,
+            LoginHistory.login_at >= datetime.now(timezone.utc) - timedelta(minutes=5)
+        ).count()
+
+        if recent_failures >= 5:
+            logger.critical(f"[安全警报] 可能的暴力破解尝试 [email={login_data.email}, ip={client_ip}, 失败次数={recent_failures}]")
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="邮箱或密码错误"
@@ -132,6 +147,7 @@ async def login(
     # 检查用户是否被禁用
     if not user.is_active:
         record_login(False, "账户已被禁用")
+        logger.warning(f"[认证] 登录失败-账户被禁用 [email={login_data.email}, user_id={user.id}, ip={client_ip}]")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用，请联系管理员"
@@ -162,6 +178,8 @@ async def login(
     record_login(True)
 
     db.commit()
+
+    logger.info(f"[认证] 登录成功 [user_id={user.id}, email={user.email}, ip={client_ip}]")
 
     # 返回Token和用户信息
     return LoginResponse(
@@ -195,6 +213,7 @@ async def refresh_token(
     # 验证refresh_token
     payload = verify_token(refresh_data.refresh_token, token_type="refresh")
     if payload is None:
+        logger.warning(f"[认证] refresh_token验证失败-无效令牌")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的刷新令牌"

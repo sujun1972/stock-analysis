@@ -1370,6 +1370,73 @@ class ApiClient {
     return response.data
   }
 
+  /**
+   * 获取系统日志文件列表
+   */
+  async getSystemLogFiles(log_type?: string): Promise<ApiResponse<{
+    files: Array<{
+      filename: string
+      type: string
+      date: string
+      size: number
+      size_human: string
+      path: string
+    }>
+  }>> {
+    const response = await axiosInstance.get('/api/system-logs/files', {
+      params: { log_type }
+    })
+    return response.data
+  }
+
+  /**
+   * 查询系统日志内容
+   */
+  async querySystemLogs(params?: {
+    log_type?: 'app' | 'errors' | 'performance'
+    log_date?: string
+    level?: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL'
+    module?: string
+    search?: string
+    page?: number
+    page_size?: number
+  }): Promise<ApiResponse<{
+    total: number
+    page: number
+    page_size: number
+    logs: Array<{
+      text: string
+      timestamp: string
+      level: string
+      module?: string
+      function?: string
+      line?: number
+      message: string
+      file_path?: string
+      extra?: any
+    }>
+  }>> {
+    const response = await axiosInstance.get('/api/system-logs/query', { params })
+    return response.data
+  }
+
+  /**
+   * 获取系统日志统计信息
+   */
+  async getSystemLogStatistics(params?: {
+    log_type?: 'app' | 'errors' | 'performance'
+    log_date?: string
+  }): Promise<ApiResponse<{
+    total_logs: number
+    by_level: Record<string, number>
+    by_module: Record<string, number>
+    error_count: number
+    warning_count: number
+  }>> {
+    const response = await axiosInstance.get('/api/system-logs/statistics', { params })
+    return response.data
+  }
+
   // ========== 市场情绪相关API ==========
 
   /**

@@ -30,6 +30,7 @@ from .endpoints import (
     strategy_configs,
     strategy_publish,
     sync,
+    system_logs,
     users,
 )
 
@@ -83,5 +84,8 @@ router.include_router(llm_logs.router, tags=["LLM调用日志"])
 
 # 提示词模板管理路由
 router.include_router(prompt_templates.router, prefix="/prompt-templates", tags=["提示词模板管理"])
+
+# 系统日志路由
+router.include_router(system_logs.router, tags=["系统日志"])
 
 __all__ = ["router"]

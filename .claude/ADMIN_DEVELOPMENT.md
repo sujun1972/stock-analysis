@@ -59,7 +59,63 @@ npm run dev
 
 ## 🔧 重构后的新功能
 
-### 1. 统一日志系统
+### 1. 系统日志查看功能（NEW）
+
+**页面位置**: [admin/app/(dashboard)/logs/system/page.tsx](../admin/app/(dashboard)/logs/system/page.tsx)
+**访问地址**: http://localhost:3002/logs/system
+
+**功能特性**:
+- ✅ 查看 backend/logs 目录下的JSON格式日志文件
+- ✅ 支持3种日志类型切换：
+  - **应用日志** (app_*.json) - 所有级别的日志
+  - **错误日志** (errors_*.json) - WARNING及以上级别
+  - **性能日志** (performance_*.json) - 性能相关日志
+- ✅ 多维度过滤：
+  - 按日志级别：DEBUG/INFO/WARNING/ERROR/CRITICAL
+  - 按模块名称：api、core、services等
+  - 关键词搜索：在消息中搜索
+- ✅ 实时统计：总日志数、错误数、警告数
+- ✅ 分页浏览：防止大文件加载OOM
+- ✅ 响应式设计：桌面表格视图、移动卡片视图
+
+**API端点**:
+- `GET /api/system-logs/files` - 获取日志文件列表
+- `GET /api/system-logs/query` - 查询日志内容（支持过滤、分页）
+- `GET /api/system-logs/statistics` - 获取统计信息
+
+**使用场景**:
+```typescript
+// 前端自动调用（无需手动编码）
+// 1. 查看最新的应用日志
+// 2. 筛选ERROR级别的错误
+// 3. 搜索特定模块的日志
+// 4. 分析系统运行状况
+```
+
+**日志格式**:
+```json
+{
+  "text": "2026-03-15 10:46:05 | INFO | app.main:startup_event:62 - 🚀 Stock Analysis Backend 启动中...",
+  "record": {
+    "timestamp": 1770622801.332469,
+    "level": "INFO",
+    "module": "main",
+    "function": "startup_event",
+    "line": 62,
+    "message": "🚀 Stock Analysis Backend 启动中...",
+    "file_path": "/app/app/main.py"
+  }
+}
+```
+
+**注意事项**:
+- ⚠️ 仅管理员可访问
+- ⚠️ 日志文件按日期自动轮转、压缩
+- ⚠️ 应用日志保留30天，性能日志保留7天
+
+---
+
+### 2. 统一日志系统
 
 **位置**: [admin/lib/logger.ts](../admin/lib/logger.ts)
 
@@ -99,7 +155,7 @@ logger.clearUser()
 
 ---
 
-### 2. Sentry 错误监控
+### 3. Sentry 错误监控
 
 **配置文件**:
 - [admin/sentry.client.config.ts](../admin/sentry.client.config.ts) - 客户端
@@ -129,7 +185,7 @@ logger.clearUser()
 
 ---
 
-### 3. 全局 Error Boundary
+### 4. 全局 Error Boundary
 
 **位置**: [admin/components/ErrorBoundary.tsx](../admin/components/ErrorBoundary.tsx)
 
@@ -144,7 +200,7 @@ logger.clearUser()
 
 ---
 
-### 4. 统一 API 响应类型
+### 5. 统一 API 响应类型
 
 **位置**: [admin/types/api.ts](../admin/types/api.ts)
 
@@ -545,27 +601,39 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 ## 🔄 最近重构内容
 
-**日期**: 2026-03-14
+**日期**: 2026-03-15
 
 ### 完成的改进
 
-1. ✅ **移除构建错误忽略**
+1. ✅ **系统日志查看功能** (2026-03-15)
+   - 创建系统日志API端点 (backend)
+   - 实现日志文件读取和查询
+   - 添加前端日志查看页面
+   - 支持多维度过滤和统计
+
+2. ✅ **认证安全增强** (2026-03-15)
+   - 添加登录失败日志记录
+   - 实现暴力破解检测（5分钟5次失败）
+   - 添加用户注册成功日志
+   - 增强Token验证日志
+
+3. ✅ **移除构建错误忽略** (2026-03-14)
    - 启用严格的 TypeScript 和 ESLint 检查
    - 修复 20+ 类型错误
    - 修复 12 个 ESLint 错误
    - 修复 26 个 React Hooks 警告
 
-2. ✅ **添加全局 Error Boundary**
+4. ✅ **添加全局 Error Boundary**
    - 优雅的错误UI
    - 自动错误上报
    - 错误恢复机制
 
-3. ✅ **统一日志管理系统**
+5. ✅ **统一日志管理系统**
    - 创建 logger.ts
    - 替换所有 console 调用（28个文件）
    - 集成 Sentry
 
-4. ✅ **引入 Sentry 监控**
+6. ✅ **引入 Sentry 监控**
    - 错误追踪
    - 性能监控
    - Session Replay
@@ -600,5 +668,5 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 ---
 
-**最后更新**: 2026-03-14
+**最后更新**: 2026-03-15
 **维护者**: Stock Analysis Team
