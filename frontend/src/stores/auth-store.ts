@@ -80,9 +80,15 @@ export const useAuthStore = create<AuthStore>()(
           const response = await apiClient.post<any>('/api/auth/login', {
             email,
             password,
-          });
+          }) as any;
 
-          const { access_token, refresh_token, user } = response;
+          // 检查响应状态码
+          if (response?.code !== 200) {
+            throw new Error(response?.message || '登录失败');
+          }
+
+          // 从 response.data 中获取数据
+          const { access_token, refresh_token, user } = response.data;
 
           set({
             user,
@@ -175,9 +181,15 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await apiClient.post('/api/auth/refresh', {
             refresh_token: refreshToken,
-          });
+          }) as any;
 
-          const { access_token, refresh_token: new_refresh_token } = response;
+          // 检查响应状态码
+          if (response?.code !== 200) {
+            throw new Error(response?.message || 'Token刷新失败');
+          }
+
+          // 从 response.data 中获取数据
+          const { access_token, refresh_token: new_refresh_token } = response.data;
 
           set({
             accessToken: access_token,
@@ -200,18 +212,23 @@ export const useAuthStore = create<AuthStore>()(
       updateProfile: async (data: Partial<User>) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await apiClient.patch<User>('/api/profile', data);
+          const response = await apiClient.patch<User>('/api/profile', data) as any;
+
+          // 检查响应状态码
+          if (response?.code !== 200) {
+            throw new Error(response?.message || '更新失败');
+          }
 
           set({
-            user: response,
+            user: response.data,
             isLoading: false,
             error: null,
           });
 
           // 更新localStorage
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
+          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response.data));
         } catch (error: any) {
-          const errorMessage = error.response?.data?.detail || '更新失败';
+          const errorMessage = error.response?.data?.message || error.message || '更新失败';
           set({
             isLoading: false,
             error: errorMessage,
@@ -245,15 +262,20 @@ export const useAuthStore = create<AuthStore>()(
 
         // 验证Token是否有效
         try {
-          const response = await apiClient.get<User>('/api/auth/me');
+          const response = await apiClient.get<User>('/api/auth/me') as any;
+
+          // 检查响应状态码
+          if (response?.code !== 200) {
+            throw new Error(response?.message || '获取用户信息失败');
+          }
 
           set({
-            user: response,
+            user: response.data,
             isAuthenticated: true,
           });
 
           // 更新localStorage中的用户信息
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
+          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response.data));
         } catch (error) {
           // Token无效，尝试刷新
           try {

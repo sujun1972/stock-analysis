@@ -37,8 +37,10 @@ function ProfileContent() {
   const loadQuota = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.getQuota()
-      setQuota(response.data)
+      const response = await apiClient.getQuota() as any
+      if (response?.code === 200 && response.data) {
+        setQuota(response.data)
+      }
     } catch (error) {
       console.error('Failed to load quota:', error)
     } finally {

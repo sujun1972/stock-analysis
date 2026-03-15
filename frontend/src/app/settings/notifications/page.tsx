@@ -32,9 +32,15 @@ export default function NotificationSettingsPage() {
   const loadSettings = async () => {
     setIsLoading(true)
     try {
-      const response = await apiClient.getNotificationSettings()
-      if (response.success && response.data) {
+      const response = await apiClient.getNotificationSettings() as any
+      if (response?.code === 200 && response.data) {
         setSettings(response.data)
+      } else {
+        toast({
+          title: '加载失败',
+          description: response?.message || '无法加载通知设置',
+          variant: 'destructive',
+        })
       }
     } catch (error: any) {
       console.error('Failed to load notification settings:', error)
@@ -89,14 +95,20 @@ export default function NotificationSettingsPage() {
 
     setIsSaving(true)
     try {
-      const response = await apiClient.updateNotificationSettings(settings)
-      if (response.success) {
+      const response = await apiClient.updateNotificationSettings(settings) as any
+      if (response?.code === 200) {
         toast({
           title: '保存成功',
-          description: '通知设置已更新',
+          description: response?.message || '通知设置已更新',
         })
         // 重新加载以获取服务器最新数据
         await loadSettings()
+      } else {
+        toast({
+          title: '保存失败',
+          description: response?.message || '无法保存通知设置',
+          variant: 'destructive',
+        })
       }
     } catch (error: any) {
       console.error('Failed to save settings:', error)
