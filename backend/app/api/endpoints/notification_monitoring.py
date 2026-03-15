@@ -10,21 +10,20 @@ from typing import Optional
 from datetime import date, datetime, timedelta
 
 from app.core.database import get_db
-from app.core.auth import get_current_super_admin
+from app.core.dependencies import require_admin
 from app.services.notification_monitor import NotificationMonitor
 from app.services.notification_alert import NotificationAlert
-from app.schemas.response import ApiResponse
 
 router = APIRouter()
 
 
-@router.get("/statistics", response_model=ApiResponse)
+@router.get("/statistics")
 def get_notification_statistics(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     channel: Optional[str] = Query(None, description="渠道类型 (email/telegram/in_app)"),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取通知发送成功率统计
@@ -58,13 +57,13 @@ def get_notification_statistics(
         )
 
 
-@router.get("/failures", response_model=ApiResponse)
+@router.get("/failures")
 def get_notification_failures(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     limit: int = Query(50, ge=1, le=200, description="返回记录数"),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取通知发送失败记录
@@ -98,12 +97,12 @@ def get_notification_failures(
         )
 
 
-@router.get("/failure-reasons", response_model=ApiResponse)
+@router.get("/failure-reasons")
 def get_failure_reasons_summary(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取失败原因统计汇总
@@ -136,12 +135,12 @@ def get_failure_reasons_summary(
         )
 
 
-@router.get("/channel-performance", response_model=ApiResponse)
+@router.get("/channel-performance")
 def get_channel_performance(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取各渠道性能分析
@@ -174,13 +173,13 @@ def get_channel_performance(
         )
 
 
-@router.get("/daily-trend", response_model=ApiResponse)
+@router.get("/daily-trend")
 def get_daily_trend(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     channel: Optional[str] = Query(None, description="渠道类型 (email/telegram/in_app)"),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取每日发送趋势
@@ -214,10 +213,10 @@ def get_daily_trend(
         )
 
 
-@router.get("/realtime", response_model=ApiResponse)
+@router.get("/realtime")
 def get_realtime_stats(
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取实时监控数据
@@ -241,10 +240,10 @@ def get_realtime_stats(
         )
 
 
-@router.get("/health-check", response_model=ApiResponse)
+@router.get("/health-check")
 def health_check(
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     通知系统健康检查
@@ -268,10 +267,10 @@ def health_check(
         )
 
 
-@router.post("/check-and-alert", response_model=ApiResponse)
+@router.post("/check-and-alert")
 def check_and_alert(
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     执行健康检查并触发告警
@@ -295,11 +294,11 @@ def check_and_alert(
         )
 
 
-@router.get("/failure-analysis", response_model=ApiResponse)
+@router.get("/failure-analysis")
 def get_failure_analysis_and_suggestions(
     days: int = Query(7, ge=1, le=90, description="分析天数"),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取失败分析和优化建议
@@ -323,12 +322,12 @@ def get_failure_analysis_and_suggestions(
         )
 
 
-@router.get("/user-stats/{user_id}", response_model=ApiResponse)
+@router.get("/user-stats/{user_id}")
 def get_user_notification_stats(
     user_id: int,
     days: int = Query(30, ge=1, le=90, description="统计天数"),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_super_admin)
+    current_admin = Depends(require_admin)
 ):
     """
     获取指定用户的通知统计
