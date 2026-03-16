@@ -4,7 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Callable, Any
 from datetime import datetime, date
 import pandas as pd
 from src.utils.response import Response
@@ -222,13 +222,15 @@ class BaseDataProvider(ABC):
     @abstractmethod
     def get_realtime_quotes(
         self,
-        codes: Optional[List[str]] = None
+        codes: Optional[List[str]] = None,
+        save_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Response:
         """
         获取实时行情数据
 
         Args:
             codes: 股票代码列表 (None 表示获取全部)
+            save_callback: 保存回调函数，用于增量保存每条行情数据 (可选)
 
         Returns:
             Response: 响应对象

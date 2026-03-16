@@ -182,8 +182,13 @@ class TushareAPIClient:
 
     @property
     def realtime_quotes(self):
-        """实时行情接口"""
-        return self.pro.realtime_quotes
+        """
+        实时行情接口
+
+        注意：Tushare Pro 中实际接口名为 realtime_quote（单数形式）
+        此接口需要较高积分权限，建议使用 daily 接口替代
+        """
+        return self.pro.realtime_quote
 
     @property
     def new_share(self):

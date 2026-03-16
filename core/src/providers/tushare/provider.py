@@ -4,7 +4,7 @@ Tushare 数据提供者主类
 整合 API 客户端和数据转换器，实现 BaseDataProvider 接口
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime, timedelta
 import time
 import pandas as pd
@@ -634,65 +634,140 @@ class TushareProvider(BaseDataProvider):
 
     def get_realtime_quotes(
         self,
-        codes: Optional[List[str]] = None
+        codes: Optional[List[str]] = None,
+        save_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Response:
         """
-        获取实时行情数据
+        获取最新行情数据
 
-        注意: Tushare 实时行情需要 5000 积分
+        实现策略：
+        1. 主要使用 daily 接口获取最近交易日数据
+        2. 可选：对少量股票使用分钟数据获取盘中价格（需高级权限）
+
+        注意事项：
+        - 交易日15:00后可获取当天收盘数据
+        - 非交易时段获取的是最近交易日数据
+        - stk_mins 接口限制严格（2次/天），谨慎使用
 
         Args:
             codes: 股票代码列表 (None 表示获取全部)
+            save_callback: 增量保存回调函数
 
         Returns:
-            Response: 响应对象
-                - data: pd.DataFrame 标准化的实时行情数据
-                - metadata: 元数据(n_stocks)
+            Response: 包含行情数据的响应对象
         """
         try:
             start_time = time.time()
-            logger.info("正在获取实时行情...")
+
+            # 由于stk_mins接口限制严格（每天2次），默认使用daily接口
+            # 如需使用分钟数据，可单独调用 get_minute_data 方法
+            use_minute_data = False  # 可通过环境变量或配置控制
+
+            if use_minute_data and codes and len(codes) <= 5:  # 严格限制使用场景
+                logger.info("正在获取最新行情（使用分钟数据）...")
+                minute_df = self._get_quotes_from_minute_data(codes)
+                if minute_df is not None and not minute_df.empty:
+                    # 如果提供了保存回调，逐条调用
+                    if save_callback:
+                        for _, row in minute_df.iterrows():
+                            quote_dict = row.to_dict()
+                            try:
+                                save_callback(quote_dict)
+                            except Exception as e:
+                                logger.warning(f"保存回调失败 {quote_dict.get('code', 'Unknown')}: {e}")
+
+                    elapsed = time.time() - start_time
+                    logger.info(f"成功获取 {len(minute_df)} 只股票的最新行情（来自分钟数据）")
+                    return Response.success(
+                        data=minute_df,
+                        message=f"成功获取 {len(minute_df)} 只股票的最新行情",
+                        n_stocks=len(minute_df),
+                        provider=self.provider_name,
+                        elapsed_time=f"{elapsed:.2f}s"
+                    )
+
+            # 使用daily接口（主要方案）
+            logger.info("正在获取最新行情（使用daily接口）...")
 
             # 如果指定了代码列表，转换格式
             ts_codes = None
             if codes:
                 ts_codes = ','.join([self.converter.to_ts_code(code) for code in codes])
 
-            # 获取实时行情（需要高积分）
+            # 使用 daily 接口获取最新数据
+            # 指定今天日期，如果今天不是交易日会返回空，所以用日期范围
+            from datetime import datetime, timedelta
+            today = datetime.now().strftime('%Y%m%d')
+            # 获取最近7天的数据，然后取最新的
+            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y%m%d')
+
             df = self.api_client.execute(
-                self.api_client.realtime_quotes,
-                ts_code=ts_codes
+                self.api_client.daily,
+                ts_code=ts_codes,
+                start_date=start_date,
+                end_date=today
             )
+
+            # 如果有数据，只保留每个股票的最新记录
+            if df is not None and not df.empty:
+                # 按股票代码和日期排序，保留每个股票最新的一条
+                df = df.sort_values(['ts_code', 'trade_date'], ascending=[True, False])
+                df = df.groupby('ts_code').first().reset_index()
 
             if df is None or df.empty:
                 return Response.error(
-                    error="获取实时行情失败，返回数据为空",
+                    error="获取最新行情失败，返回数据为空",
                     error_code="TUSHARE_EMPTY_DATA",
                     provider=self.provider_name
                 )
 
-            # 转换为标准格式
-            df = self.converter.convert_realtime_quotes(df)
+            # 保存ts_code用于后续转换
+            ts_code_series = df['ts_code'].copy() if 'ts_code' in df.columns else None
+
+            # 转换为标准格式（复用daily数据转换）
+            df = self.converter.convert_daily_data(df)
+
+            # 转换股票代码格式（ts_code -> code）- 在convert_daily_data之后
+            if ts_code_series is not None:
+                df['code'] = ts_code_series.apply(self.converter.from_ts_code)
+
+            # 添加 latest_price 字段（使用收盘价作为最新价）
+            df['latest_price'] = df['close']
+            df['trade_time'] = pd.to_datetime(df['trade_date'])
+
+            # 添加name字段（daily接口不返回股票名称，暂时置空）
+            if 'name' not in df.columns:
+                df['name'] = ''
+
+            # 如果提供了保存回调，逐条调用
+            if save_callback:
+                for _, row in df.iterrows():
+                    quote_dict = row.to_dict()
+                    try:
+                        save_callback(quote_dict)
+                    except Exception as e:
+                        logger.warning(f"保存回调失败 {quote_dict.get('code', 'Unknown')}: {e}")
+
             elapsed = time.time() - start_time
 
-            logger.info(f"成功获取 {len(df)} 只股票的实时行情")
+            logger.info(f"成功获取 {len(df)} 只股票的最新行情（来自daily接口）")
             return Response.success(
                 data=df,
-                message=f"成功获取 {len(df)} 只股票的实时行情",
+                message=f"成功获取 {len(df)} 只股票的最新行情",
                 n_stocks=len(df),
                 provider=self.provider_name,
                 elapsed_time=f"{elapsed:.2f}s"
             )
 
         except TusharePermissionError as e:
-            logger.error(f"获取实时行情失败: {e}")
+            logger.error(f"获取最新行情失败: {e}")
             return Response.error(
                 error=str(e),
                 error_code="TUSHARE_PERMISSION_ERROR",
                 provider=self.provider_name
             )
         except TushareRateLimitError as e:
-            logger.error(f"获取实时行情失败: {e}")
+            logger.error(f"获取最新行情失败: {e}")
             return Response.error(
                 error=str(e),
                 error_code="TUSHARE_RATE_LIMIT_ERROR",
@@ -700,19 +775,91 @@ class TushareProvider(BaseDataProvider):
                 retry_after=e.retry_after
             )
         except TushareDataError as e:
-            logger.error(f"获取实时行情失败: {e}")
+            logger.error(f"获取最新行情失败: {e}")
             return Response.error(
                 error=str(e),
                 error_code="TUSHARE_DATA_ERROR",
                 provider=self.provider_name
             )
         except Exception as e:
-            logger.error(f"获取实时行情失败: {e}")
+            logger.error(f"获取最新行情失败: {e}")
             return Response.error(
-                error=f"获取实时行情失败: {str(e)}",
+                error=f"获取最新行情失败: {str(e)}",
                 error_code="TUSHARE_UNEXPECTED_ERROR",
                 provider=self.provider_name
             )
+
+    def _get_quotes_from_minute_data(self, codes: List[str]) -> Optional[pd.DataFrame]:
+        """
+        从分钟数据获取最新行情（内部方法）
+
+        Args:
+            codes: 股票代码列表
+
+        Returns:
+            pd.DataFrame: 包含最新行情的DataFrame，失败返回None
+        """
+        try:
+            from datetime import datetime, timedelta
+
+            # 准备时间参数（获取最近1小时的数据）
+            now = datetime.now()
+            end_time = now.strftime('%Y-%m-%d %H:%M:%S')
+            start_time_str = (now - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+
+            all_data = []
+
+            # 逐个股票获取分钟数据
+            for code in codes:
+                ts_code = self.converter.to_ts_code(code)
+
+                try:
+                    # 获取分钟数据
+                    df_min = self.api_client.execute(
+                        self.api_client.stk_mins,
+                        ts_code=ts_code,
+                        freq='1min',
+                        start_date=start_time_str,
+                        end_date=end_time
+                    )
+
+                    if df_min is not None and not df_min.empty:
+                        # 取最新的一条记录
+                        latest = df_min.iloc[-1]
+
+                        # 构建实时行情数据
+                        quote_data = {
+                            'code': code,
+                            'name': '',  # 分钟数据不含股票名称
+                            'latest_price': float(latest['close']),
+                            'open': float(latest['open']),
+                            'high': float(latest['high']),
+                            'low': float(latest['low']),
+                            'close': float(latest['close']),
+                            'trade_time': pd.to_datetime(latest['trade_time']),
+                            'trade_date': pd.to_datetime(latest['trade_time']).date(),
+                            'volume': float(latest.get('vol', 0)) * 100,  # 手转股
+                            'amount': float(latest.get('amount', 0)) * 1000,  # 千元转元
+                            'pct_change': 0,  # 分钟数据无涨跌幅
+                            'change_amount': 0,
+                            'amplitude': 0
+                        }
+
+                        all_data.append(quote_data)
+                    else:
+                        logger.info(f"{code}: 无分钟数据")
+
+                except Exception as e:
+                    logger.warning(f"获取 {code} 分钟数据失败: {e}")
+                    continue
+
+            if all_data:
+                return pd.DataFrame(all_data)
+            return None
+
+        except Exception as e:
+            logger.warning(f"获取分钟数据失败: {e}")
+            return None
 
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"

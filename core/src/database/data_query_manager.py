@@ -150,14 +150,35 @@ class DataQueryManager:
         try:
             conn = self.pool_manager.get_connection()
 
-            query = "SELECT * FROM stock_info WHERE status = %s"
+            # LEFT JOIN stock_realtime 表以获取最新价格数据
+            # 使用别名避免列名冲突（如volume同时存在于两个表）
+            query = """
+                SELECT
+                    si.*,
+                    sr.latest_price,
+                    sr.open as realtime_open,
+                    sr.high as realtime_high,
+                    sr.low as realtime_low,
+                    sr.pre_close,
+                    sr.pct_change,
+                    sr.change_amount,
+                    sr.volume as realtime_volume,
+                    sr.amount as realtime_amount,
+                    sr.amplitude,
+                    sr.turnover,
+                    sr.trade_time,
+                    sr.updated_at as price_updated_at
+                FROM stock_info si
+                LEFT JOIN stock_realtime sr ON si.code = sr.code
+                WHERE si.status = %s
+            """
             params = [status]
 
             if market:
-                query += " AND market = %s"
+                query += " AND si.market = %s"
                 params.append(market)
 
-            query += " ORDER BY code"
+            query += " ORDER BY si.code"
 
             df = pd.read_sql_query(query, conn, params=params)
             logger.info(f"✓ 获取股票列表: {len(df)} 只股票")
