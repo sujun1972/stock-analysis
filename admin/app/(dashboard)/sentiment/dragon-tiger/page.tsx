@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { DatePicker } from '@/components/ui/date-picker'
-import { ArrowLeft, Activity, Building2, TrendingUp, TrendingDown } from 'lucide-react'
+import { Activity, Building2, TrendingUp, TrendingDown } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
-import Link from 'next/link'
 import logger from '@/lib/logger'
 import { format } from '@/lib/date-utils'
 
@@ -101,15 +100,7 @@ export default function DragonTigerListPage() {
   const totalPages = Math.ceil(total / pageSize)
 
   return (
-    <div className="space-y-6 p-6">
-      {/* 返回按钮 */}
-      <Link href="/sentiment/data">
-        <Button variant="ghost" size="sm">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          返回情绪总览
-        </Button>
-      </Link>
-
+    <div className="space-y-6">
       {/* 标题栏 */}
       <div className="flex justify-between items-center">
         <div>

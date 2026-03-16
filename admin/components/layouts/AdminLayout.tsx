@@ -37,7 +37,8 @@ import {
   Clock,
   ScrollText,
   Brain,
-  Bell
+  Bell,
+  Flame
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -88,6 +89,11 @@ const navItems: NavItem[] = [
         name: '情绪数据',
         href: '/sentiment/data',
         icon: Activity
+      },
+      {
+        name: '龙虎榜',
+        href: '/sentiment/dragon-tiger',
+        icon: Flame
       },
       {
         name: '情绪周期',
