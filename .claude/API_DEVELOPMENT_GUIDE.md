@@ -25,85 +25,114 @@ return result  # 直接返回 Pydantic 模型
 
 ### ApiResponse 方法
 
-**重要：所有 ApiResponse 方法必须调用 `.to_dict()` 转换为字典后返回**
+**重要：直接返回 ApiResponse 对象，FastAPI 会自动序列化**
 
 #### 1. 成功响应 (200)
 
 ```python
-return ApiResponse.success(
-    data={"key": "value"},
-    message="操作成功"
-).to_dict()
+@router.get("/items", response_model=ApiResponse)
+async def get_items():
+    return ApiResponse.success(
+        data={"key": "value"},
+        message="操作成功"
+    )
 ```
 
 #### 2. 创建成功 (201)
 
 ```python
-return ApiResponse.created(
-    data={"id": new_id},
-    message="资源创建成功"
-).to_dict()
+@router.post("/items", response_model=ApiResponse)
+async def create_item():
+    return ApiResponse.created(
+        data={"id": new_id},
+        message="资源创建成功"
+    )
 ```
 
 #### 3. 分页响应 (200)
 
 ```python
-return ApiResponse.paginated(
-    items=items_list,
-    total=total_count,
-    page=current_page,
-    page_size=page_size,
-    message=f"成功获取第 {current_page} 页，共 {total_count} 条记录"
-).to_dict()
+@router.get("/items", response_model=ApiResponse)
+async def get_items():
+    return ApiResponse.success(
+        data={
+            "items": items_list,
+            "pagination": {
+                "total": total_count,
+                "page": current_page,
+                "page_size": page_size,
+                "total_pages": (total_count + page_size - 1) // page_size
+            }
+        }
+    )
 ```
 
 #### 4. 错误响应 (400/404/500等)
 
 ```python
+# 注意：错误响应通常通过 HTTPException 抛出，不直接返回
+raise HTTPException(status_code=400, detail="错误描述")
+
+# 或者在异常处理器中使用 ApiResponse
 return ApiResponse.error(
     message="错误描述",
     code=400,
     data={"details": "..."}  # 可选
-).to_dict()
+)
 ```
 
 #### 5. 部分成功 (206)
 
 ```python
-return ApiResponse.partial_content(
-    data={"processed": 80, "failed": 20},
-    message="部分数据处理成功"
-).to_dict()
+@router.post("/batch", response_model=ApiResponse)
+async def batch_process():
+    return ApiResponse.partial_content(
+        data={"processed": 80, "failed": 20},
+        message="部分数据处理成功"
+    )
 ```
 
 ### 端点装饰器规范
 
-**移除冗余的类型注解**，让 FastAPI 自动处理序列化：
+**必须使用 `response_model=ApiResponse`**，让 FastAPI 正确序列化响应：
 
 ```python
-# ❌ 错误 - 会导致验证错误
-@router.get("/items", response_model=List[Item])
-async def get_items() -> Dict[str, Any]:
-    return ApiResponse.success(data=items).to_dict()
+# ❌ 错误 - 会导致 Pydantic 验证错误
+@router.get("/items", response_model=dict)
+async def get_items():
+    return ApiResponse.success(data=items)
 
-# ✅ 正确 - 让 FastAPI 自动序列化，记得调用 .to_dict()
+# ❌ 错误 - 缺少 response_model
 @router.get("/items")
 async def get_items():
     return ApiResponse.success(data=items).to_dict()
+
+# ✅ 正确 - 使用 response_model=ApiResponse
+@router.get("/items", response_model=ApiResponse)
+async def get_items():
+    return ApiResponse.success(data=items)
 ```
 
 **常见错误：**
 
 ```python
-# ❌ 错误 - 忘记调用 .to_dict()
-return ApiResponse.success(data=items)
+# ❌ 错误 - response_model=dict 无法序列化 ApiResponse 对象
+@router.get("/items", response_model=dict)
 
 # ❌ 错误 - 使用错误的导入路径
 from app.utils.response import ApiResponse  # 不存在
 
-# ✅ 正确 - 使用正确的导入和方法
+# ❌ 错误 - 返回字典而不是 ApiResponse 对象
+@router.get("/items", response_model=ApiResponse)
+async def get_items():
+    return {"code": 200, "data": items}
+
+# ✅ 正确 - 完整示例
 from app.models.api_response import ApiResponse
-return ApiResponse.success(data=items).to_dict()
+
+@router.get("/items", response_model=ApiResponse)
+async def get_items():
+    return ApiResponse.success(data=items)
 ```
 
 ---
@@ -241,12 +270,12 @@ const formatted = safeFormatNumber(value, 2)
 ### Backend 新端点
 
 - [ ] 使用正确的导入：`from app.models.api_response import ApiResponse`
-- [ ] 使用 `ApiResponse` 包装所有响应
-- [ ] **必须调用 `.to_dict()` 方法转换为字典**
-- [ ] 移除 `response_model=Dict[str, Any]` 等类型注解
-- [ ] 移除 `-> Dict[str, Any]` 返回类型注解
-- [ ] 使用合适的 ApiResponse 方法（success/paginated/error等）
+- [ ] **装饰器必须使用 `response_model=ApiResponse`**
+- [ ] **直接返回 ApiResponse 对象，不要调用 `.to_dict()`**
+- [ ] 不要使用 `response_model=dict` 或 `response_model=Dict[str, Any]`
+- [ ] 使用合适的 ApiResponse 方法（success/error等）
 - [ ] 添加有意义的 message
+- [ ] 对于分页响应，将 items 和 pagination 放在 data 字段中
 
 ### Frontend 新页面
 
@@ -258,9 +287,11 @@ const formatted = safeFormatNumber(value, 2)
 
 ### 代码审查要点
 
-- [ ] 所有 ApiResponse 调用都有 `.to_dict()`
+- [ ] 所有端点装饰器使用 `response_model=ApiResponse`
+- [ ] 直接返回 ApiResponse 对象（不调用 `.to_dict()`）
 - [ ] 使用正确的导入路径 `app.models.api_response`
-- [ ] 无直接返回字典或模型
+- [ ] 无 `response_model=dict` 配置
+- [ ] 无直接返回字典
 - [ ] 无 `response.success` 检查（前端）
 - [ ] 无双重嵌套 `data.data` 访问（前端）
 - [ ] 无不安全的 `.toFixed()` 调用（前端）
@@ -299,4 +330,27 @@ const formatted = safeFormatNumber(value, 2)
 
 ---
 
-**最后更新**: 2026-03-15 (添加迁移完成状态)
+## 修复记录
+
+### 2026-03-16: 修复 response_model 配置错误
+
+**问题**：
+- `llm_logs.py` 和 `system_logs.py` 中使用 `response_model=dict`
+- 导致 FastAPI 尝试将 `ApiResponse` 对象验证为 dict 时抛出 500 错误
+- 错误信息: `Input should be a valid dictionary`
+
+**修复**：
+- 将所有 `response_model=dict` 改为 `response_model=ApiResponse`
+- 受影响文件：
+  - `backend/app/api/endpoints/llm_logs.py` (1 个端点)
+  - `backend/app/api/endpoints/system_logs.py` (3 个端点)
+
+**重要提醒**：
+- ✅ **正确**: `@router.get("/list", response_model=ApiResponse)`
+- ❌ **错误**: `@router.get("/list", response_model=dict)`
+- 直接返回 `ApiResponse` 对象，FastAPI 会自动序列化
+- 不需要调用 `.to_dict()`
+
+---
+
+**最后更新**: 2026-03-16 (修复 response_model 配置错误)

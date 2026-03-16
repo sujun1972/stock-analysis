@@ -109,7 +109,7 @@ def parse_log_record(line: str) -> Optional[SystemLogRecord]:
         return None
 
 
-@router.get("/files", response_model=dict, summary="获取日志文件列表")
+@router.get("/files", response_model=ApiResponse, summary="获取日志文件列表")
 async def get_log_files(
     log_type: Optional[LogType] = Query(None, description="日志类型过滤"),
     current_user: User = Depends(require_admin)
@@ -172,7 +172,7 @@ async def get_log_files(
         )
 
 
-@router.get("/query", response_model=dict, summary="查询系统日志")
+@router.get("/query", response_model=ApiResponse, summary="查询系统日志")
 async def query_system_logs(
     log_type: LogType = Query(LogType.APP, description="日志类型"),
     log_date: Optional[date] = Query(None, description="日志日期 (格式: YYYY-MM-DD)"),
@@ -287,7 +287,7 @@ async def query_system_logs(
         )
 
 
-@router.get("/statistics", response_model=dict, summary="获取日志统计信息")
+@router.get("/statistics", response_model=ApiResponse, summary="获取日志统计信息")
 async def get_log_statistics(
     log_type: LogType = Query(LogType.APP, description="日志类型"),
     log_date: Optional[date] = Query(None, description="日志日期"),

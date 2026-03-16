@@ -26,7 +26,7 @@ logger = get_logger()
 router = APIRouter(prefix="/llm-logs", tags=["LLM Logs"])
 
 
-@router.get("/list", response_model=dict, summary="查询LLM调用日志列表")
+@router.get("/list", response_model=ApiResponse, summary="查询LLM调用日志列表")
 async def get_llm_logs(
     business_type: Optional[BusinessType] = Query(None, description="业务类型"),
     provider: Optional[str] = Query(None, description="AI提供商"),
