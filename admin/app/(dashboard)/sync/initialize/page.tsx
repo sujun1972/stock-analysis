@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -300,14 +301,10 @@ export default function InitializePage() {
   return (
         <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          数据初始化
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          系统首次使用时的必要步骤，请按顺序完成以下初始化操作
-        </p>
-      </div>
+      <PageHeader
+        title="数据初始化"
+        description="系统首次使用时的必要步骤，请按顺序完成以下初始化操作"
+      />
 
       {/* 使用建议 */}
       <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">

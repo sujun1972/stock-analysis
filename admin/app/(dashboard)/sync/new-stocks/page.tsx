@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import logger from '@/lib/logger'
 
 interface ModuleSyncStatus {
@@ -139,14 +140,10 @@ export default function NewStocksSyncPage() {
   return (
         <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-          新股列表同步
-        </h1>
-        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-2">
-          获取最近上市的新股信息，支持增量更新。建议每日同步以保持数据最新。
-        </p>
-      </div>
+      <PageHeader
+        title="新股列表同步"
+        description="获取最近上市的新股信息，支持增量更新。建议每日同步以保持数据最新。"
+      />
 
       {/* 错误提示 */}
       {error && (

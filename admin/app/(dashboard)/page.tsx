@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import {
@@ -56,14 +57,10 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          管理控制台
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          股票分析系统管理后台 - 系统监控与管理
-        </p>
-      </div>
+      <PageHeader
+        title="管理控制台"
+        description="股票分析系统管理后台 - 系统监控与管理"
+      />
 
         {/* 统计卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

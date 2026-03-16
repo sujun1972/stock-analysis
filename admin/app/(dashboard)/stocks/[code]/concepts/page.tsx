@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Save, RefreshCw } from 'lucide-react'
+import { Save, RefreshCw } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import type { Concept, StockInfo } from '@/types/stock'
@@ -91,38 +92,30 @@ export default function StockConceptsPage() {
   return (
         <div className="space-y-6">
           {/* 页面标题和导航 */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" onClick={() => router.back()}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">
-                  {stockInfo?.name || code} - 概念标签分配
-                </h1>
-                <p className="text-muted-foreground mt-2">
-                  为股票分配概念标签，帮助分类和筛选
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={handleReset}
-                disabled={!hasChanges() || saving}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                重置
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={!hasChanges() || saving}
-              >
-                <Save className={`mr-2 h-4 w-4 ${saving ? 'animate-spin' : ''}`} />
-                保存更改
-              </Button>
-            </div>
-          </div>
+          <PageHeader
+            title={`${stockInfo?.name || code} - 概念标签分配`}
+            description="为股票分配概念标签，帮助分类和筛选"
+            showBack
+            actions={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleReset}
+                  disabled={!hasChanges() || saving}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  重置
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={!hasChanges() || saving}
+                >
+                  <Save className={`mr-2 h-4 w-4 ${saving ? 'animate-spin' : ''}`} />
+                  保存更改
+                </Button>
+              </>
+            }
+          />
 
           {loading ? (
             <Card>

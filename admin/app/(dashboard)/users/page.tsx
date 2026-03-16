@@ -21,6 +21,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, type Column } from '@/components/common/DataTable'
 import {
   Select,
@@ -499,20 +500,20 @@ export default function UsersPage() {
 
   return (
     <>
+      <PageHeader
+        title="用户管理"
+        description={`管理系统用户和权限 (${total} 个用户)`}
+        actions={
+          <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:w-auto">
+            <Plus className="mr-2 h-4 w-4" />
+            创建用户
+          </Button>
+        }
+      />
+
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle className="text-2xl">用户管理</CardTitle>
-              <CardDescription>
-                管理系统用户和权限 ({total} 个用户)
-              </CardDescription>
-            </div>
-            <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:w-auto">
-              <Plus className="mr-2 h-4 w-4" />
-              创建用户
-            </Button>
-          </div>
+          <CardTitle>用户列表</CardTitle>
         </CardHeader>
 
         <CardContent>

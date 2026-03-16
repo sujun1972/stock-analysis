@@ -27,6 +27,7 @@ import type { StockInfo } from '@/types/stock'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, type Column } from '@/components/common/DataTable'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
@@ -413,14 +414,10 @@ export default function StocksManagementPage() {
   return (
     <div className="space-y-6">
       {/* 页头 */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">股票管理</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-2">
-            查看和管理所有股票数据，包括基本信息和实时行情
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="股票管理"
+        description="查看和管理所有股票数据，包括基本信息和实时行情"
+      />
 
       {/* 筛选和操作区 */}
       <Card>

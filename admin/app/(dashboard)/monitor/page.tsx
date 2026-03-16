@@ -22,6 +22,7 @@ import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -178,63 +179,59 @@ export default function MonitorPage() {
   return (
         <div className="space-y-6">
           {/* 页面标题 */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                系统监控
-              </h1>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1 sm:mt-2">
-                实时查看系统健康状态和性能指标
-              </p>
-            </div>
-            {/* 桌面端按钮组 */}
-            <div className="hidden lg:flex gap-2">
-              <Button
-                variant="outline"
-                onClick={openPrometheus}
-                size="sm"
-              >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Prometheus
-              </Button>
-              <Button
-                variant="default"
-                onClick={openGrafana}
-                size="sm"
-              >
-                <LineChart className="h-4 w-4 mr-2" />
-                Grafana
-              </Button>
-              <Button
-                variant={autoRefresh ? "default" : "outline"}
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                size="sm"
-              >
-                <Activity className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-pulse' : ''}`} />
-                {autoRefresh ? '自动' : '手动'}
-              </Button>
-              <Button onClick={loadMonitorData} disabled={isLoading} size="sm">
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                刷新
-              </Button>
-            </div>
-            {/* 移动端简化按钮组 */}
-            <div className="flex lg:hidden gap-2">
-              <Button
-                variant={autoRefresh ? "default" : "outline"}
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                size="sm"
-                className="flex-1"
-              >
-                <Activity className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-pulse' : ''}`} />
-                {autoRefresh ? '自动' : '手动'}
-              </Button>
-              <Button onClick={loadMonitorData} disabled={isLoading} size="sm" className="flex-1">
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                刷新
-              </Button>
-            </div>
-          </div>
+          <PageHeader
+            title="系统监控"
+            description="实时查看系统健康状态和性能指标"
+            actions={
+              <>
+                <div className="hidden lg:flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={openPrometheus}
+                    size="sm"
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Prometheus
+                  </Button>
+                  <Button
+                    variant="default"
+                    onClick={openGrafana}
+                    size="sm"
+                  >
+                    <LineChart className="h-4 w-4 mr-2" />
+                    Grafana
+                  </Button>
+                  <Button
+                    variant={autoRefresh ? "default" : "outline"}
+                    onClick={() => setAutoRefresh(!autoRefresh)}
+                    size="sm"
+                  >
+                    <Activity className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-pulse' : ''}`} />
+                    {autoRefresh ? '自动' : '手动'}
+                  </Button>
+                  <Button onClick={loadMonitorData} disabled={isLoading} size="sm">
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    刷新
+                  </Button>
+                </div>
+                <div className="flex lg:hidden gap-2">
+                  <Button
+                    variant={autoRefresh ? "default" : "outline"}
+                    onClick={() => setAutoRefresh(!autoRefresh)}
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <Activity className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-pulse' : ''}`} />
+                    {autoRefresh ? '自动' : '手动'}
+                  </Button>
+                  <Button onClick={loadMonitorData} disabled={isLoading} size="sm" className="flex-1">
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    刷新
+                  </Button>
+                </div>
+              </>
+            }
+          />
 
           {/* 最后更新时间 */}
           {lastUpdate && (

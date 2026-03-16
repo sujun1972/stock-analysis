@@ -18,6 +18,7 @@ import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -181,29 +182,12 @@ export default function StrategyReviewPage() {
   return (
     <div className="p-6">
       {/* 页面头部 */}
-      <div className="mb-6">
-        <button
-          onClick={() => router.back()}
-          className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          返回
-        </button>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">
-                {strategy.display_name}
-              </h1>
-              <PublishStatusBadge status={strategy.publish_status as any} />
-            </div>
-            <p className="mt-1 text-sm text-gray-600">
-              策略ID: #{strategy.id} | {strategy.name}
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={strategy.display_name}
+        description={`策略ID: #${strategy.id} | ${strategy.name}`}
+        showBack
+        prefix={<PublishStatusBadge status={strategy.publish_status as any} />}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 左侧：策略详情 */}

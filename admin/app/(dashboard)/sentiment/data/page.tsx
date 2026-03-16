@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, type Column } from '@/components/common/DataTable'
 import { Badge } from '@/components/ui/badge'
@@ -380,18 +381,20 @@ export default function SentimentManagementPage() {
   return (
     <div className="space-y-6 p-6">
       {/* 标题栏 */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">市场情绪管理</h1>
-          <p className="text-muted-foreground mt-1">
+      <PageHeader
+        title="市场情绪管理"
+        description={
+          <>
             管理每日 <span className="font-medium text-foreground">17:30</span> (北京时间 UTC+8，本地时间 <span className="font-medium text-foreground">{getLocalTimeFromBeijing()}</span>) 采集的市场情绪指标数据
-          </p>
-        </div>
-        <Button onClick={handleSync} disabled={syncing}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? '同步中...' : '手动同步'}
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={handleSync} disabled={syncing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? '同步中...' : '手动同步'}
+          </Button>
+        }
+      />
 
       {/* 市场状态提示条 */}
       {marketStatus && !marketStatus.shouldHideStats && (

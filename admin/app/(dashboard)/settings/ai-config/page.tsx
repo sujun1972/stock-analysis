@@ -20,6 +20,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Check, X, Key, Sparkles, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -256,16 +257,16 @@ export default function AIConfigPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">AI配置管理</h1>
-          <p className="text-sm sm:text-base text-gray-500 mt-1">管理AI策略生成的提供商配置</p>
-        </div>
-        <Button onClick={handleCreate} className="gap-2 w-full sm:w-auto">
-          <Plus className="w-4 h-4" />
-          添加AI提供商
-        </Button>
-      </div>
+      <PageHeader
+        title="AI配置管理"
+        description="管理AI策略生成的提供商配置"
+        actions={
+          <Button onClick={handleCreate} className="gap-2 w-full sm:w-auto">
+            <Plus className="w-4 h-4" />
+            添加AI提供商
+          </Button>
+        }
+      />
 
       <div className="grid gap-4">
         {providers.map((provider) => (

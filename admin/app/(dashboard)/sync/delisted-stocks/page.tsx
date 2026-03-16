@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import logger from '@/lib/logger'
 
 interface ModuleSyncStatus {
@@ -138,14 +139,10 @@ export default function DelistedStocksSyncPage() {
   return (
         <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          退市列表同步
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          获取已退市股票信息，更新股票状态和退市日期。建议每周同步以保持数据准确。
-        </p>
-      </div>
+      <PageHeader
+        title="退市列表同步"
+        description="获取已退市股票信息，更新股票状态和退市日期。建议每周同步以保持数据准确。"
+      />
 
       {/* 错误提示 */}
       {error && (

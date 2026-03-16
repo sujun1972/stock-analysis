@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 
 interface ScheduledTask {
@@ -318,14 +319,10 @@ export default function SchedulerSettingsPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          定时任务配置
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          配置自动化数据同步任务，支持 Cron 表达式定时执行
-        </p>
-      </div>
+      <PageHeader
+        title="定时任务配置"
+        description="配置自动化数据同步任务，支持 Cron 表达式定时执行"
+      />
 
       {/* 动态配置说明 */}
       <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-5">

@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { PageHeader } from '@/components/common/PageHeader'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 
@@ -146,10 +147,10 @@ export default function NewStrategyPage() {
   return (
     <div className="p-4 sm:p-6">
       {/* 页面头部 */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">创建新策略</h1>
-        <p className="mt-1 text-sm text-gray-600">填写策略信息并验证代码</p>
-      </div>
+      <PageHeader
+        title="创建新策略"
+        description="填写策略信息并验证代码"
+      />
 
       {/* 错误提示 */}
       {error && (

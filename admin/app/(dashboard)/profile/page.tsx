@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -87,14 +88,10 @@ export default function ProfilePage() {
   return (
         <div className="space-y-6 max-w-4xl">
           {/* 页面标题 */}
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              个人资料
-            </h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-2">
-              管理您的个人信息和账户设置
-            </p>
-          </div>
+          <PageHeader
+            title="个人资料"
+            description="管理您的个人信息和账户设置"
+          />
 
           {/* 用户基本信息卡片 */}
           <Card>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -153,26 +154,26 @@ export default function SentimentCyclePage() {
   return (
     <div className="space-y-6">
       {/* 标题栏 */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">市场情绪周期分析</h1>
-          <p className="text-muted-foreground mt-1">实时监测市场情绪变化，洞察资金动向</p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={calculateCycle}
-            disabled={calculating}
-            variant="outline"
-          >
-            <Activity className={`mr-2 h-4 w-4 ${calculating ? 'animate-spin' : ''}`} />
-            {calculating ? '计算中...' : '计算周期'}
-          </Button>
-          <Button onClick={refreshAll} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            刷新数据
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="市场情绪周期分析"
+        description="实时监测市场情绪变化，洞察资金动向"
+        actions={
+          <>
+            <Button
+              onClick={calculateCycle}
+              disabled={calculating}
+              variant="outline"
+            >
+              <Activity className={`mr-2 h-4 w-4 ${calculating ? 'animate-spin' : ''}`} />
+              {calculating ? '计算中...' : '计算周期'}
+            </Button>
+            <Button onClick={refreshAll} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              刷新数据
+            </Button>
+          </>
+        }
+      />
 
       {/* 信息提示 */}
       {infoMessage && (

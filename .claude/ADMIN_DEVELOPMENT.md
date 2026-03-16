@@ -539,6 +539,41 @@ npm run build
 - ✅ `logger.*` - 统一日志系统
 - ✅ `useCallback` - 正确的依赖管理
 - ✅ 类型安全的API调用
+- ✅ `PageHeader` - 统一的页面头部组件
+
+### 通用组件使用
+
+#### PageHeader 组件
+**位置**: `admin/components/common/PageHeader.tsx`
+
+**功能**: 为所有页面提供统一的头部布局
+
+**使用示例**:
+```tsx
+import { PageHeader } from '@/components/common/PageHeader'
+
+// 基本用法
+<PageHeader
+  title="页面标题"
+  description="页面描述"
+/>
+
+// 带操作按钮
+<PageHeader
+  title="策略管理"
+  description="管理交易策略"
+  actions={
+    <Button>创建策略</Button>
+  }
+/>
+
+// 带返回按钮
+<PageHeader
+  title="编辑策略"
+  description="修改策略配置"
+  showBack
+/>
+```
 
 ---
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -102,14 +103,10 @@ export default function DragonTigerListPage() {
   return (
     <div className="space-y-6">
       {/* 标题栏 */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">龙虎榜</h1>
-          <p className="text-muted-foreground mt-1">
-            主力资金动向、机构席位明细
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        title="龙虎榜"
+        description="主力资金动向、机构席位明细"
+        actions={
           <DatePicker
             date={selectedDate}
             onDateChange={(date) => {
@@ -121,8 +118,8 @@ export default function DragonTigerListPage() {
             placeholder="选择日期"
             className="w-[240px]"
           />
-        </div>
-      </div>
+        }
+      />
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

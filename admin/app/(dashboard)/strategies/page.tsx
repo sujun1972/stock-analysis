@@ -17,13 +17,13 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Filter, Edit, Trash2, Code, AlertCircle, Users, ClipboardList, Ban, MoreVertical, Info, Check } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, AlertCircle, Users, ClipboardList, Ban, MoreVertical, Info, Check } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import { DataTable, type Column } from '@/components/common/DataTable'
+import { PageHeader } from '@/components/common/PageHeader'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
-import { StrategyTableRow } from '@/components/strategies/StrategyTableRow'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -353,7 +353,7 @@ export default function StrategiesPage() {
     {
       key: 'publish',
       header: '发布状态',
-      accessor: (strategy) => <PublishStatusBadge status={strategy.publish_status} />,
+      accessor: (strategy) => <PublishStatusBadge status={strategy.publish_status || 'draft'} />,
     },
     {
       key: 'enabled',
@@ -439,7 +439,7 @@ export default function StrategiesPage() {
         <Badge className={sourceTypeColors[strategy.source_type as keyof typeof sourceTypeColors] || 'bg-gray-100 text-gray-800'}>
           {sourceTypeNames[strategy.source_type as keyof typeof sourceTypeNames] || strategy.source_type}
         </Badge>
-        <PublishStatusBadge status={strategy.publish_status} />
+        <PublishStatusBadge status={strategy.publish_status || 'draft'} />
       </div>
 
       {/* 验证和风险信息 */}
@@ -526,16 +526,16 @@ export default function StrategiesPage() {
   return (
     <div className="container mx-auto p-4 space-y-6">
       {/* 页面标题 */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">策略管理</h1>
-          <p className="text-muted-foreground">管理和监控所有交易策略</p>
-        </div>
-        <Button onClick={() => router.push('/strategies/create')}>
-          <Plus className="mr-2 h-4 w-4" />
-          创建策略
-        </Button>
-      </div>
+      <PageHeader
+        title="策略管理"
+        description="管理和监控所有交易策略"
+        actions={
+          <Button onClick={() => router.push('/strategies/create')}>
+            <Plus className="mr-2 h-4 w-4" />
+            创建策略
+          </Button>
+        }
+      />
 
       {/* 筛选器 */}
       <Card>
@@ -771,7 +771,7 @@ export default function StrategiesPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">发布状态</Label>
-                    <PublishStatusBadge status={selectedStrategy.publish_status} />
+                    <PublishStatusBadge status={selectedStrategy.publish_status || 'draft'} />
                   </div>
                   <div>
                     <Label className="text-muted-foreground">启用状态</Label>

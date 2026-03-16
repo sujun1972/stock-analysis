@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -264,14 +265,10 @@ export default function PremarketPage() {
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">盘前预期管理系统</h1>
-          <p className="text-muted-foreground mt-1">
-            每日早8:00自动执行：隔夜外盘数据 + 盘前新闻 + AI碰撞分析 = 早盘竞价行动指令
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="盘前预期管理系统"
+        description="每日早8:00自动执行：隔夜外盘数据 + 盘前新闻 + AI碰撞分析 = 早盘竞价行动指令"
+      />
 
       {/* 控制面板 */}
       <Card>

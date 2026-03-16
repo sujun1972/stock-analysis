@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/common/PageHeader'
 
 export default function PendingReviewStrategiesPage() {
   const router = useRouter()
@@ -71,12 +72,10 @@ export default function PendingReviewStrategiesPage() {
       {/* 页面头部 */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">待审核策略</h1>
-            <p className="mt-1 text-sm text-gray-600">
-              查看所有等待审核的策略发布申请
-            </p>
-          </div>
+          <PageHeader
+        title="待审核策略"
+        description="查看所有等待审核的策略发布申请"
+      />
         </div>
       </div>
 

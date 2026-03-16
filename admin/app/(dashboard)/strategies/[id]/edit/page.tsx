@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
+import { PageHeader } from '@/components/common/PageHeader'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 
@@ -200,10 +201,10 @@ export default function EditStrategyPage() {
   return (
     <div className="p-4 sm:p-6">
       {/* 页面头部 */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">编辑策略</h1>
-        <p className="mt-1 text-sm text-gray-600">{originalStrategy?.name}</p>
-      </div>
+      <PageHeader
+        title="编辑策略"
+        description="{originalStrategy?.name}"
+      />
 
       {/* 系统策略提示 */}
       {originalStrategy?.source_type === 'builtin' && (

@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api-client'
 import { useConfigStore } from '@/stores/config-store'
 import logger from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -223,14 +224,10 @@ export default function SettingsPage() {
   return (
         <div className="space-y-6">
         {/* 页面标题 */}
-        <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          数据源设置
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          配置股票数据源（AkShare / Tushare）
-        </p>
-      </div>
+        <PageHeader
+          title="数据源设置"
+          description="配置股票数据源（AkShare / Tushare）"
+        />
 
       {/* 成功消息 */}
       {successMessage && (

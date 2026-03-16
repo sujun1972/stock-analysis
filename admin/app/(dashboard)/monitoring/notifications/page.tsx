@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -168,30 +169,28 @@ export default function NotificationMonitoringPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">通知系统监控</h1>
-          <p className="text-muted-foreground mt-1">
-            实时监控通知发送状态、成功率和性能指标
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={loadData}
-            disabled={loading}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            刷新
-          </Button>
-          <Button
-            onClick={triggerHealthCheck}
-          >
-            <Activity className="mr-2 h-4 w-4" />
-            执行健康检查
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="通知系统监控"
+        description="实时监控通知发送状态、成功率和性能指标"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={loadData}
+              disabled={loading}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              刷新
+            </Button>
+            <Button
+              onClick={triggerHealthCheck}
+            >
+              <Activity className="mr-2 h-4 w-4" />
+              执行健康检查
+            </Button>
+          </>
+        }
+      />
 
       {/* 健康状态概览 */}
       {healthStatus && (

@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import { useConfigStore } from '@/stores/config-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 
 interface SyncStatus {
   status: string
@@ -92,14 +93,10 @@ export default function RealtimeSyncPage() {
   return (
         <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          实时行情同步
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          获取最新的实时行情快照，包括当前价格、涨跌幅、成交量等关键指标
-        </p>
-      </div>
+      <PageHeader
+        title="实时行情同步"
+        description="获取最新的实时行情快照，包括当前价格、涨跌幅、成交量等关键指标"
+      />
 
       {/* 错误提示 */}
       {error && (

@@ -19,6 +19,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, type Column } from '@/components/common/DataTable'
 import {
   Dialog,
@@ -338,34 +339,32 @@ export default function ConceptsPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题和操作栏 */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">概念标签管理</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">
-            管理股票概念标签，包括创建、编辑、删除和同步
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleSync}
-            variant="outline"
-            disabled={hasSyncingTask}
-            className="flex-1 sm:flex-none"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${hasSyncingTask ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">
-              {hasSyncingTask ? '同步中...' : '同步概念数据'}
-            </span>
-            <span className="sm:hidden">
-              {hasSyncingTask ? '同步中' : '同步'}
-            </span>
-          </Button>
-          <Button onClick={() => setIsCreateDialogOpen(true)} className="flex-1 sm:flex-none">
-            <Plus className="mr-2 h-4 w-4" />
-            创建概念
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="概念标签管理"
+        description="管理股票概念标签，包括创建、编辑、删除和同步"
+        actions={
+          <>
+            <Button
+              onClick={handleSync}
+              variant="outline"
+              disabled={hasSyncingTask}
+              className="flex-1 sm:flex-none"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${hasSyncingTask ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">
+                {hasSyncingTask ? '同步中...' : '同步概念数据'}
+              </span>
+              <span className="sm:hidden">
+                {hasSyncingTask ? '同步中' : '同步'}
+              </span>
+            </Button>
+            <Button onClick={() => setIsCreateDialogOpen(true)} className="flex-1 sm:flex-none">
+              <Plus className="mr-2 h-4 w-4" />
+              创建概念
+            </Button>
+          </>
+        }
+      />
 
       {/* 搜索和筛选 */}
       <Card>

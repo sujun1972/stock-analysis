@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, type Column } from '@/components/common/DataTable'
 import {
   Select,
@@ -249,16 +250,16 @@ export default function LLMCallLogsPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">LLM调用日志</h1>
-          <p className="text-gray-500 mt-1">查看和管理所有AI模型调用记录</p>
-        </div>
-        <Button onClick={() => refetch()} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          刷新
-        </Button>
-      </div>
+      <PageHeader
+        title="LLM调用日志"
+        description="查看和管理所有AI模型调用记录"
+        actions={
+          <Button onClick={() => refetch()} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            刷新
+          </Button>
+        }
+      />
 
       {/* 概览卡片 */}
       {summary && (

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -194,14 +195,10 @@ export default function LimitUpPoolPage() {
   return (
     <div className="space-y-6">
       {/* 标题栏 */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">涨停板池</h1>
-          <p className="text-muted-foreground mt-1">
-            涨停板、炸板率、连板天梯数据
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        title="涨停板池"
+        description="涨停板、炸板率、连板天梯数据"
+        actions={
           <DatePicker
             date={selectedDate}
             onDateChange={(date) => {
@@ -212,8 +209,8 @@ export default function LimitUpPoolPage() {
             placeholder="选择日期"
             className="w-[240px]"
           />
-        </div>
-      </div>
+        }
+      />
 
       {loading ? (
         <div className="text-center py-12">

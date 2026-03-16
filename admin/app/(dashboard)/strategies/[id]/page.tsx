@@ -1,5 +1,7 @@
 'use client'
 
+import { PageHeader } from '@/components/common/PageHeader'
+
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Edit, AlertCircle, Copy, Check } from 'lucide-react'
@@ -91,12 +93,10 @@ export default function StrategyDetailPage() {
     <div className="p-4 sm:p-6">
       {/* 页面头部 */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {strategy.display_name}
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">{strategy.name}</p>
-        </div>
+        <PageHeader
+        title="{strategy.display_name}"
+        description="{strategy.name}"
+      />
         {strategy.source_type !== 'builtin' && (
           <button
             onClick={() => router.push(`/strategies/${strategyId}/edit`)}

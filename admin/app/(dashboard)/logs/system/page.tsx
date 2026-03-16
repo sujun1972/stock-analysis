@@ -15,6 +15,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -229,20 +230,16 @@ export default function SystemLogsPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-            系统日志
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1 sm:mt-2">
-            查看和分析应用程序运行日志
-          </p>
-        </div>
-        <Button onClick={loadLogs} disabled={isLoading} className="w-full sm:w-auto">
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          刷新
-        </Button>
-      </div>
+      <PageHeader
+        title="系统日志"
+        description="查看和分析应用程序运行日志"
+        actions={
+          <Button onClick={loadLogs} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            刷新
+          </Button>
+        }
+      />
 
       {/* 统计卡片 */}
       {statistics && (

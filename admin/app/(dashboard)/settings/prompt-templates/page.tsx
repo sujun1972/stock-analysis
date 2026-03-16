@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -128,18 +129,16 @@ export default function PromptTemplatesPage() {
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">提示词模板管理</h1>
-          <p className="text-muted-foreground mt-2">
-            管理所有LLM调用的提示词模板，支持版本控制和性能统计
-          </p>
-        </div>
-        <Button onClick={() => router.push('/settings/prompt-templates/new')}>
-          <Plus className="h-4 w-4 mr-2" />
-          创建模板
-        </Button>
-      </div>
+      <PageHeader
+        title="提示词模板管理"
+        description="管理所有LLM调用的提示词模板，支持版本控制和性能统计"
+        actions={
+          <Button onClick={() => router.push('/settings/prompt-templates/new')}>
+            <Plus className="h-4 w-4 mr-2" />
+            创建模板
+          </Button>
+        }
+      />
 
       {/* 筛选器 */}
       <Card>

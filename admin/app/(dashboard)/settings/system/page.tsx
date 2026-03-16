@@ -17,6 +17,7 @@ import { useSystemConfig } from '@/contexts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useSystemSettings, useUpdateSystemSettings } from '@/hooks/queries/use-system'
@@ -89,15 +90,11 @@ export default function SystemSettingsPage() {
   return (
     <div className="space-y-6">
       {/* 页头 */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Settings className="h-8 w-8" />
-          系统配置
-        </h1>
-        <p className="text-sm sm:text-base text-muted-foreground mt-2">
-          管理系统级别的全局配置
-        </p>
-      </div>
+      <PageHeader
+        title="系统配置"
+        description="管理系统级别的全局配置"
+        prefix={<Settings className="h-8 w-8" />}
+      />
 
       {/* 股票分析URL设置 */}
       <Card>

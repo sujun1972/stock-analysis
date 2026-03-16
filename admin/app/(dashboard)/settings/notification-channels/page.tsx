@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
@@ -195,10 +196,10 @@ export default function NotificationChannelsPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">通知渠道配置</h1>
-          <p className="text-muted-foreground mt-2">管理系统通知渠道的配置参数</p>
-        </div>
+        <PageHeader
+          title="通知渠道配置"
+          description="管理系统通知渠道的配置参数"
+        />
         <div className="grid gap-6 md:grid-cols-2">
           {[1, 2].map(i => (
             <Card key={i}>
@@ -218,12 +219,10 @@ export default function NotificationChannelsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">通知渠道配置</h1>
-        <p className="text-muted-foreground mt-2">
-          管理系统通知渠道的配置参数，包括 Email 和 Telegram Bot
-        </p>
-      </div>
+      <PageHeader
+        title="通知渠道配置"
+        description="管理系统通知渠道的配置参数，包括 Email 和 Telegram Bot"
+      />
 
       <div className="grid gap-6 md:grid-cols-2">
         {channels.map(channel => (
