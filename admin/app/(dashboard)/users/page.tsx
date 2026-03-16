@@ -9,26 +9,19 @@
  * - 查看用户详细信息（配额使用情况、登录统计等）
  *
  * 响应式设计：
- * - 桌面端（≥768px）：表格视图，操作下拉菜单
- * - 移动端（<768px）：卡片视图，图标操作按钮
- * - 对话框：支持小屏幕滚动，自适应布局
+ * - 使用 DataTable 组件自动处理桌面/移动端切换
+ * - 桌面端（≥768px）：表格视图
+ * - 移动端（<768px）：卡片视图
  *
  * 优化：使用 React Query 管理数据状态
  */
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/common/DataTable'
 import {
   Select,
   SelectContent,
@@ -252,7 +245,7 @@ export default function UsersPage() {
 
     // 构建更新数据（只发送变更的字段）
     const updateData: UpdateUserDto = {
-      role: formData.role as 'admin' | 'user',
+      role: formData.role,
     }
 
     if (formData.email && formData.email !== selectedUser.email) {
@@ -293,12 +286,12 @@ export default function UsersPage() {
   }
 
   // 切换用户状态
-  const handleToggleStatus = (user: User) => {
+  const handleToggleStatus = useCallback((user: User) => {
     toggleStatusMutation.mutate({
       id: user.id,
       is_active: !user.is_active
     })
-  }
+  }, [toggleStatusMutation])
 
   /**
    * 渲染角色徽章
@@ -331,6 +324,174 @@ export default function UsersPage() {
     return new Date(dateString).toLocaleString('zh-CN')
   }
 
+  // 定义表格列
+  const columns: Column<User>[] = useMemo(() => [
+    {
+      key: 'id',
+      header: 'ID',
+      cellClassName: 'font-mono text-sm',
+      width: 80,
+    },
+    {
+      key: 'username',
+      header: '用户名',
+      accessor: (user) => (
+        <div className="font-medium">{user.username}</div>
+      ),
+    },
+    {
+      key: 'email',
+      header: '邮箱',
+      cellClassName: 'text-sm',
+    },
+    {
+      key: 'role',
+      header: '角色',
+      accessor: (user) => getRoleBadge(user.role),
+    },
+    {
+      key: 'is_active',
+      header: '状态',
+      accessor: (user) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleToggleStatus(user)
+          }}
+          disabled={toggleStatusMutation.isPending}
+        >
+          {user.is_active ? (
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              活跃
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
+              禁用
+            </Badge>
+          )}
+        </Button>
+      ),
+    },
+    {
+      key: 'is_email_verified',
+      header: '邮箱验证',
+      accessor: (user) => (
+        user.is_email_verified ? (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+            已验证
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+            未验证
+          </Badge>
+        )
+      ),
+      hideOnMobile: true,
+    },
+  ], [toggleStatusMutation.isPending, handleToggleStatus])
+
+  // 移动端卡片渲染
+  const mobileCard = useCallback((user: User) => (
+    <div className="border rounded-lg p-4 bg-white space-y-3">
+      {/* 顶部：用户名和操作按钮 */}
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-base truncate">{user.username}</div>
+        </div>
+        <div className="flex gap-1 ml-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => openEditDialog(user)}
+            className="h-8 w-8 shrink-0"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => openDeleteDialog(user)}
+            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* 邮箱 */}
+      <div className="text-sm text-gray-600 break-all">{user.email}</div>
+
+      {/* 徽章：角色、状态、邮箱验证 */}
+      <div className="flex flex-wrap gap-2">
+        {getRoleBadge(user.role)}
+        {user.is_active ? (
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            活跃
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
+            禁用
+          </Badge>
+        )}
+        {user.is_email_verified ? (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+            已验证
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+            未验证
+          </Badge>
+        )}
+      </div>
+
+      {/* 配额信息 */}
+      {user.quota && (
+        <div className="text-sm space-y-1 bg-gray-50 rounded p-2">
+          <div className="font-medium text-gray-700">配额使用情况</div>
+          <div className="text-xs text-gray-600">
+            配额: {user.quota.backtest_quota_used}/{user.quota.backtest_quota_total}
+          </div>
+        </div>
+      )}
+
+      {/* 底部信息：ID、创建时间 */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pt-2 border-t">
+        <div>ID: <span className="font-mono">{user.id}</span></div>
+        <div className="w-full sm:w-auto">创建于: {formatDate(user.created_at)}</div>
+      </div>
+    </div>
+  ), [])
+
+  // 操作列渲染
+  const actions = useCallback((user: User) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => openDetailDialog(user)}>
+          <Info className="mr-2 h-4 w-4" />
+          详情
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openEditDialog(user)}>
+          <Pencil className="mr-2 h-4 w-4" />
+          编辑
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => openDeleteDialog(user)}
+          className="text-red-600 focus:text-red-600"
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          删除
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ), [])
+
   // 处理错误
   if (error) {
     toast.error('加载用户列表失败: ' + error.message)
@@ -338,604 +499,460 @@ export default function UsersPage() {
 
   return (
     <>
-        <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <CardTitle className="text-2xl">用户管理</CardTitle>
-                  <CardDescription>
-                    管理系统用户和权限 ({total} 个用户)
-                  </CardDescription>
-                </div>
-                <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:w-auto">
-                  <Plus className="mr-2 h-4 w-4" />
-                  创建用户
-                </Button>
-              </div>
-            </CardHeader>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="text-2xl">用户管理</CardTitle>
+              <CardDescription>
+                管理系统用户和权限 ({total} 个用户)
+              </CardDescription>
+            </div>
+            <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              创建用户
+            </Button>
+          </div>
+        </CardHeader>
 
-            <CardContent>
-              {/* 搜索和筛选 */}
-              <div className="flex flex-col sm:flex-row gap-3 mb-6">
-                <div className="flex-1 flex gap-2">
-                  <Input
-                    placeholder="搜索用户名或邮箱..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  />
-                  <Button onClick={handleSearch} variant="secondary" size="icon" className="shrink-0">
-                    <Search className="h-4 w-4" />
-                  </Button>
-                </div>
+        <CardContent>
+          {/* 搜索和筛选 */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <div className="flex-1 flex gap-2">
+              <Input
+                placeholder="搜索用户名或邮箱..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              <Button onClick={handleSearch} variant="secondary" size="icon" className="shrink-0">
+                <Search className="h-4 w-4" />
+              </Button>
+            </div>
 
-                <div className="flex gap-2">
-                  <Select value={roleFilter} onValueChange={setRoleFilter}>
-                    <SelectTrigger className="w-full sm:w-40">
-                      <SelectValue placeholder="角色筛选" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部角色</SelectItem>
-                      <SelectItem value="admin">管理员</SelectItem>
-                      <SelectItem value="user">普通用户</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <div className="flex gap-2">
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="角色筛选" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部角色</SelectItem>
+                  <SelectItem value="admin">管理员</SelectItem>
+                  <SelectItem value="user">普通用户</SelectItem>
+                </SelectContent>
+              </Select>
 
-                  <Button
-                    onClick={() => refetch()}
-                    variant="outline"
-                    size="icon"
-                    className="shrink-0"
-                    disabled={isLoading}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                  </Button>
-                </div>
-              </div>
+              <Button
+                onClick={() => refetch()}
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                disabled={isLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </div>
 
-              {/* 用户列表 - 桌面端表格 / 移动端卡片 */}
-              {isLoading ? (
-                <div className="text-center py-12 text-gray-500">
-                  <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
-                  加载中...
-                </div>
-              ) : users.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  暂无用户数据
-                </div>
-              ) : (
-                <>
-                  {/* 桌面端表格视图 - 隐藏在小屏幕 */}
-                  <div className="hidden md:block border rounded-lg">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID</TableHead>
-                          <TableHead>用户名</TableHead>
-                          <TableHead>邮箱</TableHead>
-                          <TableHead>角色</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>邮箱验证</TableHead>
-                          <TableHead>操作</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {users.map((user) => (
-                          <TableRow key={user.id}>
-                            <TableCell className="font-mono text-sm">{user.id}</TableCell>
-                            <TableCell>
-                              <div className="font-medium">{user.username}</div>
-                            </TableCell>
-                            <TableCell className="text-sm">{user.email}</TableCell>
-                            <TableCell>{getRoleBadge(user.role)}</TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleToggleStatus(user)}
-                                disabled={toggleStatusMutation.isPending}
-                              >
-                                {user.is_active ? (
-                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                    活跃
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-                                    禁用
-                                  </Badge>
-                                )}
-                              </Button>
-                            </TableCell>
-                            <TableCell>
-                              {user.is_email_verified ? (
-                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                  已验证
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                                  未验证
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => openDetailDialog(user)}>
-                                    <Info className="mr-2 h-4 w-4" />
-                                    详情
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => openEditDialog(user)}>
-                                    <Pencil className="mr-2 h-4 w-4" />
-                                    编辑
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => openDeleteDialog(user)}
-                                    className="text-red-600 focus:text-red-600"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    删除
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+          {/* 用户列表 - 使用 DataTable 组件 */}
+          <DataTable
+            data={users}
+            columns={columns}
+            loading={isLoading}
+            emptyMessage="暂无用户数据"
+            loadingMessage="加载中..."
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: setPage,
+            }}
+            actions={actions}
+            mobileCard={mobileCard}
+            rowKey={(user) => user.id}
+          />
+        </CardContent>
+      </Card>
+
+      {/* 创建用户对话框 */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>创建新用户</DialogTitle>
+            <DialogDescription>
+              填写用户的基本信息。密码需要至少8位，包含大小写字母和数字。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4 px-2 overflow-y-auto flex-1">
+            <div className="space-y-2">
+              <Label htmlFor="create-email">
+                邮箱 <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="create-email"
+                type="email"
+                placeholder="user@example.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-username">
+                用户名 <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="create-username"
+                placeholder="输入用户名"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-password">
+                密码 <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="create-password"
+                type="password"
+                placeholder="至少8位，含大小写字母和数字"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-role">角色</Label>
+              <Select
+                value={formData.role}
+                onValueChange={(value: any) => setFormData({ ...formData, role: value })}
+              >
+                <SelectTrigger id="create-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">管理员</SelectItem>
+                  <SelectItem value="user">普通用户</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCreateDialogOpen(false)
+                resetForm()
+              }}
+              disabled={createUserMutation.isPending}
+              className="flex-1"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={createUserMutation.isPending}
+              className="flex-1"
+            >
+              {createUserMutation.isPending ? '创建中...' : '创建'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑用户对话框 */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>编辑用户</DialogTitle>
+            <DialogDescription>
+              修改用户信息。用户名不可修改。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4 px-2 overflow-y-auto flex-1">
+            <div className="space-y-2">
+              <Label htmlFor="edit-username">用户名</Label>
+              <Input
+                id="edit-username"
+                value={formData.username}
+                disabled
+                className="bg-gray-50"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">邮箱</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                placeholder="user@example.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">新密码（留空表示不修改）</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                placeholder="至少8位，含大小写字母和数字"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-role">角色</Label>
+              <Select
+                value={formData.role}
+                onValueChange={(value: any) => setFormData({ ...formData, role: value })}
+              >
+                <SelectTrigger id="edit-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">管理员</SelectItem>
+                  <SelectItem value="user">普通用户</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditDialogOpen(false)
+                setSelectedUser(null)
+                resetForm()
+              }}
+              disabled={updateUserMutation.isPending}
+              className="flex-1"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleEdit}
+              disabled={updateUserMutation.isPending}
+              className="flex-1"
+            >
+              {updateUserMutation.isPending ? '保存中...' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除用户确认对话框 */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认删除用户？</DialogTitle>
+            <DialogDescription className="space-y-2">
+              <span className="block">
+                您即将删除用户 <span className="font-semibold">{selectedUser?.username}</span>
+              </span>
+              <span className="block text-sm break-all">({selectedUser?.email})</span>
+              <span className="block text-red-600 font-medium mt-2">
+                此操作无法撤销，请谨慎操作。
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false)
+                setSelectedUser(null)
+              }}
+              disabled={deleteUserMutation.isPending}
+              className="w-full sm:w-auto"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleDelete}
+              disabled={deleteUserMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 w-full sm:w-auto"
+            >
+              {deleteUserMutation.isPending ? '删除中...' : '确认删除'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 用户详情对话框 */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>用户详情</DialogTitle>
+            <DialogDescription>
+              查看用户的完整信息
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-6 py-4 overflow-y-auto flex-1">
+              {/* 基本信息 */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">基本信息</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-gray-500">用户ID</Label>
+                    <div className="mt-1 font-mono text-sm">{selectedUser.id}</div>
                   </div>
-
-                  {/* 移动端卡片视图 - 仅在小屏幕显示 */}
-                  <div className="md:hidden space-y-4">
-                    {users.map((user) => (
-                      <div key={user.id} className="border rounded-lg p-4 bg-white space-y-3">
-                        {/* 顶部：用户名和操作按钮 */}
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-base truncate">{user.username}</div>
-                          </div>
-                          <div className="flex gap-1 ml-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openEditDialog(user)}
-                              className="h-8 w-8 shrink-0"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openDeleteDialog(user)}
-                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* 邮箱 */}
-                        <div className="text-sm text-gray-600 break-all">{user.email}</div>
-
-                        {/* 徽章：角色、状态、邮箱验证 */}
-                        <div className="flex flex-wrap gap-2">
-                          {getRoleBadge(user.role)}
-                          {user.is_active ? (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                              活跃
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-                              禁用
-                            </Badge>
-                          )}
-                          {user.is_email_verified ? (
-                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                              已验证
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                              未验证
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* 配额信息 */}
-                        {user.quota && (
-                          <div className="text-sm space-y-1 bg-gray-50 rounded p-2">
-                            <div className="font-medium text-gray-700">配额使用情况</div>
-                            <div className="text-xs text-gray-600">
-                              日请求: {user.quota.used_requests_today}/{user.quota.max_requests_per_day}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* 底部信息：ID、创建时间 */}
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pt-2 border-t">
-                          <div>ID: <span className="font-mono">{user.id}</span></div>
-                          <div className="w-full sm:w-auto">创建于: {formatDate(user.created_at)}</div>
-                        </div>
-                      </div>
-                    ))}
+                  <div>
+                    <Label className="text-xs text-gray-500">用户名</Label>
+                    <div className="mt-1 font-medium text-sm">{selectedUser.username}</div>
                   </div>
-                </>
-              )}
-
-              {/* 分页 */}
-              {total > pageSize && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-gray-600">
-                    显示 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} / {total}
+                  <div>
+                    <Label className="text-xs text-gray-500">邮箱</Label>
+                    <div className="mt-1 text-sm break-all">{selectedUser.email}</div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1 || isLoading}
-                    >
-                      上一页
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => p + 1)}
-                      disabled={page * pageSize >= total || isLoading}
-                    >
-                      下一页
-                    </Button>
+                  <div>
+                    <Label className="text-xs text-gray-500">角色</Label>
+                    <div className="mt-1">{getRoleBadge(selectedUser.role)}</div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* 创建用户对话框 */}
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>创建新用户</DialogTitle>
-                <DialogDescription>
-                  填写用户的基本信息。密码需要至少8位，包含大小写字母和数字。
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4 px-2 overflow-y-auto flex-1">
-                <div className="space-y-2">
-                  <Label htmlFor="create-email">
-                    邮箱 <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="create-email"
-                    type="email"
-                    placeholder="user@example.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-username">
-                    用户名 <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="create-username"
-                    placeholder="输入用户名"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-password">
-                    密码 <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="create-password"
-                    type="password"
-                    placeholder="至少8位，含大小写字母和数字"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-role">角色</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value: any) => setFormData({ ...formData, role: value })}
-                  >
-                    <SelectTrigger id="create-role">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">管理员</SelectItem>
-                      <SelectItem value="user">普通用户</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter className="flex-row gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsCreateDialogOpen(false)
-                    resetForm()
-                  }}
-                  disabled={createUserMutation.isPending}
-                  className="flex-1"
-                >
-                  取消
-                </Button>
-                <Button
-                  onClick={handleCreate}
-                  disabled={createUserMutation.isPending}
-                  className="flex-1"
-                >
-                  {createUserMutation.isPending ? '创建中...' : '创建'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* 编辑用户对话框 */}
-          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>编辑用户</DialogTitle>
-                <DialogDescription>
-                  修改用户信息。用户名不可修改。
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4 px-2 overflow-y-auto flex-1">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-username">用户名</Label>
-                  <Input
-                    id="edit-username"
-                    value={formData.username}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-email">邮箱</Label>
-                  <Input
-                    id="edit-email"
-                    type="email"
-                    placeholder="user@example.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-password">新密码（留空表示不修改）</Label>
-                  <Input
-                    id="edit-password"
-                    type="password"
-                    placeholder="至少8位，含大小写字母和数字"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-role">角色</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value: any) => setFormData({ ...formData, role: value })}
-                  >
-                    <SelectTrigger id="edit-role">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">管理员</SelectItem>
-                      <SelectItem value="user">普通用户</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter className="flex-row gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsEditDialogOpen(false)
-                    setSelectedUser(null)
-                    resetForm()
-                  }}
-                  disabled={updateUserMutation.isPending}
-                  className="flex-1"
-                >
-                  取消
-                </Button>
-                <Button
-                  onClick={handleEdit}
-                  disabled={updateUserMutation.isPending}
-                  className="flex-1"
-                >
-                  {updateUserMutation.isPending ? '保存中...' : '保存'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* 删除用户确认对话框 */}
-          <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>确认删除用户？</DialogTitle>
-                <DialogDescription className="space-y-2">
-                  <span className="block">
-                    您即将删除用户 <span className="font-semibold">{selectedUser?.username}</span>
-                  </span>
-                  <span className="block text-sm break-all">({selectedUser?.email})</span>
-                  <span className="block text-red-600 font-medium mt-2">
-                    此操作无法撤销，请谨慎操作。
-                  </span>
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsDeleteDialogOpen(false)
-                    setSelectedUser(null)
-                  }}
-                  disabled={deleteUserMutation.isPending}
-                  className="w-full sm:w-auto"
-                >
-                  取消
-                </Button>
-                <Button
-                  onClick={handleDelete}
-                  disabled={deleteUserMutation.isPending}
-                  className="bg-red-600 hover:bg-red-700 w-full sm:w-auto"
-                >
-                  {deleteUserMutation.isPending ? '删除中...' : '确认删除'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* 用户详情对话框 */}
-          <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-            <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>用户详情</DialogTitle>
-                <DialogDescription>
-                  查看用户的完整信息
-                </DialogDescription>
-              </DialogHeader>
-              {selectedUser && (
-                <div className="space-y-6 py-4 overflow-y-auto flex-1">
-                  {/* 基本信息 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">基本信息</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-xs text-gray-500">用户ID</Label>
-                        <div className="mt-1 font-mono text-sm">{selectedUser.id}</div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">用户名</Label>
-                        <div className="mt-1 font-medium text-sm">{selectedUser.username}</div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">邮箱</Label>
-                        <div className="mt-1 text-sm break-all">{selectedUser.email}</div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">角色</Label>
-                        <div className="mt-1">{getRoleBadge(selectedUser.role)}</div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">账号状态</Label>
-                        <div className="mt-1">
-                          {selectedUser.is_active ? (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                              活跃
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-                              禁用
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">邮箱验证</Label>
-                        <div className="mt-1">
-                          {selectedUser.is_email_verified ? (
-                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                              已验证
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                              未验证
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">账号状态</Label>
+                    <div className="mt-1">
+                      {selectedUser.is_active ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          活跃
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
+                          禁用
+                        </Badge>
+                      )}
                     </div>
                   </div>
-
-                  {/* 配额信息 */}
-                  {selectedUser.quota && (
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">配额使用情况</h3>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <Label className="text-xs text-gray-500">日请求限额</Label>
-                        <div className="mt-2 space-y-1">
-                          <div className="flex justify-between items-baseline">
-                            <span className="text-sm text-gray-600">已使用</span>
-                            <span className="text-lg font-semibold">{selectedUser.quota.used_requests_today}</span>
-                          </div>
-                          <div className="flex justify-between items-baseline">
-                            <span className="text-sm text-gray-600">总额度</span>
-                            <span className="text-lg font-semibold">{selectedUser.quota.max_requests_per_day}</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                            <div
-                              className="bg-blue-500 h-2 rounded-full"
-                              style={{
-                                width: `${Math.min((selectedUser.quota.used_requests_today / selectedUser.quota.max_requests_per_day) * 100, 100)}%`
-                              }}
-                            ></div>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-2">
-                            重置时间: {new Date(selectedUser.quota.reset_time).toLocaleString('zh-CN')}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 时间信息 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">时间信息</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-xs text-gray-500">创建时间</Label>
-                        <div className="mt-1 text-sm">{formatDate(selectedUser.created_at)}</div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">更新时间</Label>
-                        <div className="mt-1 text-sm">{formatDate(selectedUser.updated_at)}</div>
-                      </div>
-                      {selectedUser.last_login && (
-                        <div>
-                          <Label className="text-xs text-gray-500">最后登录</Label>
-                          <div className="mt-1 text-sm">{formatDate(selectedUser.last_login)}</div>
-                        </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">邮箱验证</Label>
+                    <div className="mt-1">
+                      {selectedUser.is_email_verified ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          已验证
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                          未验证
+                        </Badge>
                       )}
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* 配额信息 */}
+              {selectedUser.quota && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">配额使用情况</h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <Label className="text-xs text-gray-500">配额使用情况</Label>
+                    <div className="mt-2 space-y-3">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-sm text-gray-600">回测配额</span>
+                          <span className="text-sm font-semibold">
+                            {selectedUser.quota.backtest_quota_used || 0}/{selectedUser.quota.backtest_quota_total || 0}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-500 h-2 rounded-full"
+                            style={{
+                              width: `${Math.min(((selectedUser.quota.backtest_quota_used || 0) / (selectedUser.quota.backtest_quota_total || 1)) * 100, 100)}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-sm text-gray-600">预测配额</span>
+                          <span className="text-sm font-semibold">
+                            {selectedUser.quota.ml_prediction_quota_used || 0}/{selectedUser.quota.ml_prediction_quota_total || 0}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-green-500 h-2 rounded-full"
+                            style={{
+                              width: `${Math.min(((selectedUser.quota.ml_prediction_quota_used || 0) / (selectedUser.quota.ml_prediction_quota_total || 1)) * 100, 100)}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-sm text-gray-600">策略数量</span>
+                          <span className="text-sm font-semibold">
+                            {selectedUser.quota.current_strategies || 0}/{selectedUser.quota.max_strategies || 0}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-purple-500 h-2 rounded-full"
+                            style={{
+                              width: `${Math.min(((selectedUser.quota.current_strategies || 0) / (selectedUser.quota.max_strategies || 1)) * 100, 100)}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        {selectedUser.quota.backtest_quota_reset_at && (
+                          <div>回测配额重置: {new Date(selectedUser.quota.backtest_quota_reset_at).toLocaleString('zh-CN')}</div>
+                        )}
+                        {selectedUser.quota.ml_prediction_quota_reset_at && (
+                          <div>预测配额重置: {new Date(selectedUser.quota.ml_prediction_quota_reset_at).toLocaleString('zh-CN')}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
-              <DialogFooter className="gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsDetailDialogOpen(false)
-                    setSelectedUser(null)
-                  }}
-                  className="w-full sm:w-auto"
-                >
-                  关闭
-                </Button>
-                <Button
-                  onClick={() => {
-                    setIsDetailDialogOpen(false)
-                    if (selectedUser) {
-                      openEditDialog(selectedUser)
-                    }
-                  }}
-                  className="w-full sm:w-auto"
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  编辑用户
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+
+              {/* 时间信息 */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">时间信息</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-gray-500">创建时间</Label>
+                    <div className="mt-1 text-sm">{formatDate(selectedUser.created_at)}</div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">更新时间</Label>
+                    <div className="mt-1 text-sm">{formatDate(selectedUser.updated_at)}</div>
+                  </div>
+                  {selectedUser.last_login_at && (
+                    <div>
+                      <Label className="text-xs text-gray-500">最后登录</Label>
+                      <div className="mt-1 text-sm">{formatDate(selectedUser.last_login_at)}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDetailDialogOpen(false)
+                setSelectedUser(null)
+              }}
+              className="w-full sm:w-auto"
+            >
+              关闭
+            </Button>
+            <Button
+              onClick={() => {
+                setIsDetailDialogOpen(false)
+                if (selectedUser) {
+                  openEditDialog(selectedUser)
+                }
+              }}
+              className="w-full sm:w-auto"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              编辑用户
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

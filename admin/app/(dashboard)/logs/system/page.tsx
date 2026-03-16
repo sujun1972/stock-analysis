@@ -12,7 +12,7 @@
  */
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -27,14 +27,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
   FileText,
   Activity,
   AlertCircle,
@@ -45,6 +37,7 @@ import {
   Zap,
   TrendingUp
 } from 'lucide-react'
+import { DataTable, Column } from '@/components/common/DataTable'
 
 interface SystemLogRecord {
   text: string
@@ -162,6 +155,76 @@ export default function SystemLogsPage() {
   }
 
   const totalPages = Math.ceil(total / pageSize)
+
+  // 定义表格列配置
+  const columns: Column<SystemLogRecord>[] = useMemo(() => [
+    {
+      key: 'timestamp',
+      header: '时间',
+      render: (value: string) => (
+        <span className="text-sm font-mono">
+          {formatTimestamp(value)}
+        </span>
+      ),
+      width: 180
+    },
+    {
+      key: 'level',
+      header: '级别',
+      render: (value: string) => getLevelBadge(value),
+      width: 80
+    },
+    {
+      key: 'module',
+      header: '模块',
+      render: (value?: string) => (
+        <span className="text-sm">{value || '-'}</span>
+      ),
+      width: 120
+    },
+    {
+      key: 'function',
+      header: '函数',
+      render: (value?: string, item: SystemLogRecord) => (
+        <span className="text-sm">
+          {value && item.line ? `${value}:${item.line}` : '-'}
+        </span>
+      ),
+      width: 120
+    },
+    {
+      key: 'message',
+      header: '消息',
+      cellClassName: 'text-sm'
+    }
+  ], [])
+
+  // 移动端卡片渲染
+  const mobileCard = useCallback((log: SystemLogRecord) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="text-xs text-gray-500 font-mono">
+            {formatTimestamp(log.timestamp)}
+          </div>
+          <div className="text-sm mt-1">
+            <span className="text-gray-500">模块: </span>
+            {log.module || '-'} / {log.function || '-'}
+          </div>
+        </div>
+        {getLevelBadge(log.level)}
+      </div>
+
+      <div className="text-sm text-gray-700 dark:text-gray-300">
+        {log.message}
+      </div>
+    </div>
+  ), [])
+
+  // 处理分页变化
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+  }
 
   return (
     <div className="space-y-6">
@@ -337,104 +400,21 @@ export default function SystemLogsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-blue-600"></div>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">加载中...</p>
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="text-center py-8 text-red-600">{error}</div>
-          ) : logs.length === 0 ? (
-            <div className="text-center py-8 text-gray-600 dark:text-gray-400">
-              暂无日志记录
-            </div>
           ) : (
-            <>
-              {/* 桌面端表格视图 */}
-              <div className="hidden md:block overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[180px]">时间</TableHead>
-                      <TableHead className="w-[80px]">级别</TableHead>
-                      <TableHead className="w-[120px]">模块</TableHead>
-                      <TableHead className="w-[120px]">函数</TableHead>
-                      <TableHead>消息</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {logs.map((log, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="text-sm font-mono">
-                          {formatTimestamp(log.timestamp)}
-                        </TableCell>
-                        <TableCell>
-                          {getLevelBadge(log.level)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {log.module || '-'}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {log.function ? `${log.function}:${log.line}` : '-'}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {log.message}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* 移动端卡片视图 */}
-              <div className="md:hidden space-y-3">
-                {logs.map((log, index) => (
-                  <div key={index} className="border rounded-lg p-4 bg-white dark:bg-gray-800 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs text-gray-500 font-mono">
-                          {formatTimestamp(log.timestamp)}
-                        </div>
-                        <div className="text-sm mt-1">
-                          <span className="text-gray-500">模块: </span>
-                          {log.module || '-'} / {log.function || '-'}
-                        </div>
-                      </div>
-                      {getLevelBadge(log.level)}
-                    </div>
-
-                    <div className="text-sm text-gray-700 dark:text-gray-300">
-                      {log.message}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* 分页控件 */}
-              <div className="mt-4 flex items-center justify-between">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  显示 {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} / {total} 条
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
-                    上一页
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </div>
-            </>
+            <DataTable
+              data={logs}
+              columns={columns}
+              loading={isLoading}
+              mobileCard={mobileCard}
+              pageSize={pageSize}
+              currentPage={page}
+              totalItems={total}
+              onPageChange={handlePageChange}
+              showPagination={true}
+              emptyMessage="暂无日志记录"
+            />
           )}
         </CardContent>
       </Card>

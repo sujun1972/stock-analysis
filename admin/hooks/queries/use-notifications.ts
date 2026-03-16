@@ -236,7 +236,7 @@ export function useScheduledTasks(params?: {
   return useQuery({
     queryKey: queryKeys.notifications.scheduledTasks(),
     queryFn: async () => {
-      const response = await apiClient.getScheduledTasks(params);
+      const response = await apiClient.getScheduledTasks();
       if (response.code !== 200) {
         throw new Error(response.message || '获取定时任务失败');
       }

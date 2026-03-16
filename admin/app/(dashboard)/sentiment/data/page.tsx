@@ -1,11 +1,22 @@
+/**
+ * 市场情绪数据管理页面
+ *
+ * 功能：
+ * - 显示每日市场情绪指标数据
+ * - 支持手动同步数据
+ * - 展示市场状态和统计信息
+ * - 提供快捷入口到其他分析页面
+ *
+ * 使用 DataTable 组件自动处理表格展示和响应式布局
+ */
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/common/DataTable'
 import { Badge } from '@/components/ui/badge'
 import { RefreshCw, TrendingUp, Activity, AlertCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
@@ -78,7 +89,6 @@ export default function SentimentManagementPage() {
     }
 
     // 工作日：收盘后 (15:00 之后)
-    // 收盘后统一判断：如果有今日数据显示，没有则隐藏
     if (timeInMinutes >= 15 * 60) {
       const hasToday = latestDataDate === today
 
@@ -91,11 +101,11 @@ export default function SentimentManagementPage() {
             ? '今日数据（已采集）'
             : `等待 17:30 自动采集数据，或点击"手动同步"立即获取`,
           showDate: !hasToday,
-          shouldHideStats: !hasToday // 收盘后没有今日数据就隐藏
+          shouldHideStats: !hasToday
         }
       }
 
-      // 17:30 之后（应该已经采集完成）
+      // 17:30 之后
       return {
         status: 'after_market',
         label: hasToday ? '今日' : '数据未就绪',
@@ -117,7 +127,7 @@ export default function SentimentManagementPage() {
     }
   }, [sentiments, getTodayDate])
 
-  // 计算北京时间 17:30 对应的本地时间（用于页面提示）
+  // 计算北京时间 17:30 对应的本地时间
   const getLocalTimeFromBeijing = () => {
     const today = new Date()
     const beijingTime = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
@@ -146,7 +156,7 @@ export default function SentimentManagementPage() {
     }, 60000) // 60秒
 
     return () => clearInterval(timer)
-  }, [sentiments, getMarketStatus]) // 当 sentiments 变化时重新计算
+  }, [sentiments, getMarketStatus])
 
   // 当数据加载完成后，更新市场状态
   useEffect(() => {
@@ -178,38 +188,32 @@ export default function SentimentManagementPage() {
     }
   }, [page])
 
-  // 手动同步（异步任务）
+  // 手动同步
   const handleSync = async () => {
     setSyncing(true)
     try {
       const res = await apiClient.syncSentimentData() as any
 
-      // 成功提交任务
       if (res.code === 200 && res.data) {
         const { task_id, date } = res.data
 
-        // 显示任务提交成功的提示
         toast.info('同步任务已提交', {
           description: `正在同步 ${date} 的数据，请稍候...`,
           duration: 3000,
         })
 
-        // 添加任务到全局轮询队列
         addTaskToQueue(task_id, '市场情绪数据同步')
 
-        // 延迟刷新列表（给任务一些执行时间）
         setTimeout(() => {
           loadSentiments()
         }, 2000)
       }
-      // 任务正在执行中（锁冲突）
       else if (res.code === 409) {
         toast.warning('同步任务正在执行中', {
           description: res.data?.reason || '已有同步任务正在进行，请等待其完成后再试',
           duration: 5000,
         })
       }
-      // 其他错误
       else {
         toast.error(res.message || '提交同步任务失败')
       }
@@ -225,7 +229,153 @@ export default function SentimentManagementPage() {
     loadSentiments()
   }, [loadSentiments])
 
-  const totalPages = Math.ceil(total / pageSize)
+  // 定义表格列
+  const columns: Column<MarketSentiment>[] = useMemo(() => [
+    {
+      key: 'trade_date',
+      header: '日期',
+      cellClassName: 'font-medium',
+    },
+    {
+      key: 'sh_index',
+      header: '上证指数',
+      accessor: (item) => (
+        <div className="flex items-center gap-2">
+          <span>{safeFormatNumber(item.sh_index_close)}</span>
+          {item.sh_index_change !== undefined && item.sh_index_change !== null && !isNaN(Number(item.sh_index_change)) && (
+            <Badge variant={Number(item.sh_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+              {Number(item.sh_index_change) >= 0 ? '+' : ''}
+              {safeFormatNumber(item.sh_index_change)}%
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'sz_index',
+      header: '深成指数',
+      accessor: (item) => (
+        <div className="flex items-center gap-2">
+          <span>{safeFormatNumber(item.sz_index_close)}</span>
+          {item.sz_index_change !== undefined && item.sz_index_change !== null && !isNaN(Number(item.sz_index_change)) && (
+            <Badge variant={Number(item.sz_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+              {Number(item.sz_index_change) >= 0 ? '+' : ''}
+              {safeFormatNumber(item.sz_index_change)}%
+            </Badge>
+          )}
+        </div>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'cyb_index',
+      header: '创业板指',
+      accessor: (item) => (
+        <div className="flex items-center gap-2">
+          <span>{safeFormatNumber(item.cyb_index_close)}</span>
+          {item.cyb_index_change !== undefined && item.cyb_index_change !== null && !isNaN(Number(item.cyb_index_change)) && (
+            <Badge variant={Number(item.cyb_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+              {Number(item.cyb_index_change) >= 0 ? '+' : ''}
+              {safeFormatNumber(item.cyb_index_change)}%
+            </Badge>
+          )}
+        </div>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'total_amount',
+      header: '成交额(亿)',
+      accessor: (item) => safeFormatNumber(item.total_amount ? item.total_amount / 100000000 : null, 0),
+      align: 'right',
+    },
+    {
+      key: 'limit_up_count',
+      header: '涨停',
+      accessor: (item) => (
+        <Link href={`/sentiment/limit-up?date=${item.trade_date}`}>
+          <span className="text-green-600 font-medium cursor-pointer hover:underline">
+            {item.limit_up_count || 0}
+          </span>
+        </Link>
+      ),
+      align: 'center',
+    },
+    {
+      key: 'blast_rate',
+      header: '炸板率',
+      accessor: (item) => (
+        <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
+          {item.blast_rate !== undefined && item.blast_rate !== null && !isNaN(Number(item.blast_rate)) ? (
+            <Badge variant={Number(item.blast_rate) > 0.3 ? 'destructive' : 'secondary'} className="cursor-pointer hover:opacity-80">
+              {safeFormatNumber(Number(item.blast_rate) * 100, 1)}%
+            </Badge>
+          ) : '-'}
+        </Link>
+      ),
+      align: 'center',
+    },
+  ], [])
+
+  // 移动端卡片渲染
+  const mobileCard = useCallback((item: MarketSentiment) => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">
+          {item.trade_date}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">上证指数</span>
+          <div className="flex items-center gap-2">
+            <span>{safeFormatNumber(item.sh_index_close)}</span>
+            {item.sh_index_change !== undefined && item.sh_index_change !== null && !isNaN(Number(item.sh_index_change)) && (
+              <Badge variant={Number(item.sh_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
+                {Number(item.sh_index_change) >= 0 ? '+' : ''}{safeFormatNumber(item.sh_index_change)}%
+              </Badge>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">成交额</span>
+          <span>{safeFormatNumber(item.total_amount ? item.total_amount / 100000000 : null, 0)}亿</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">涨停家数</span>
+          <Link href={`/sentiment/limit-up?date=${item.trade_date}`}>
+            <span className="text-green-600 font-medium">{item.limit_up_count || 0}</span>
+          </Link>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">炸板率</span>
+          <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
+            {item.blast_rate !== undefined && item.blast_rate !== null && !isNaN(Number(item.blast_rate)) ? (
+              <Badge variant={Number(item.blast_rate) > 0.3 ? 'destructive' : 'secondary'}>
+                {safeFormatNumber(Number(item.blast_rate) * 100, 1)}%
+              </Badge>
+            ) : '-'}
+          </Link>
+        </div>
+        <div className="flex gap-2 pt-2">
+          <Link href={`/sentiment/dragon-tiger?date=${item.trade_date}`} className="w-full">
+            <Button variant="outline" size="sm" className="w-full">
+              查看龙虎榜
+            </Button>
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  ), [])
+
+  // 操作列
+  const actions = useCallback((item: MarketSentiment) => (
+    <Link href={`/sentiment/dragon-tiger?date=${item.trade_date}`}>
+      <Button variant="outline" size="sm">
+        龙虎榜
+      </Button>
+    </Link>
+  ), [])
 
   return (
     <div className="space-y-6 p-6">
@@ -243,7 +393,7 @@ export default function SentimentManagementPage() {
         </Button>
       </div>
 
-      {/* 市场状态提示条 - 只在显示统计卡片时展示 */}
+      {/* 市场状态提示条 */}
       {marketStatus && !marketStatus.shouldHideStats && (
         <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${
           marketStatus.status === 'trading' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
@@ -258,7 +408,6 @@ export default function SentimentManagementPage() {
 
       {/* 快捷入口卡片 */}
       {marketStatus.shouldHideStats ? (
-        /* 收盘后无数据时显示等待提示卡片 */
         <Card className={`${
           marketStatus.status === 'waiting_collection'
             ? 'border-orange-200 bg-orange-50/50'
@@ -300,7 +449,6 @@ export default function SentimentManagementPage() {
           </CardContent>
         </Card>
       ) : (
-        /* 正常显示统计卡片 */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="cursor-pointer hover:shadow-md transition-shadow border-purple-200"
                 onClick={() => router.push('/sentiment/cycle')}>
@@ -375,182 +523,30 @@ export default function SentimentManagementPage() {
           <CardDescription>共 {total} 条记录</CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
-              <p>加载中...</p>
-            </div>
-          ) : sentiments.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <AlertCircle className="h-6 w-6 mx-auto mb-2" />
-              <p>暂无数据</p>
-              <Button onClick={handleSync} className="mt-4" variant="outline">
-                立即同步数据
-              </Button>
-            </div>
-          ) : (
-            <>
-              {/* 桌面端表格 */}
-              <div className="hidden md:block overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>日期</TableHead>
-                      <TableHead>上证指数</TableHead>
-                      <TableHead>深成指数</TableHead>
-                      <TableHead>创业板指</TableHead>
-                      <TableHead>成交额(亿)</TableHead>
-                      <TableHead>涨停</TableHead>
-                      <TableHead>炸板率</TableHead>
-                      <TableHead>操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sentiments.map((item) => (
-                      <TableRow key={item.id} className="hover:bg-muted/50">
-                        <TableCell className="font-medium">
-                          {item.trade_date}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span>{safeFormatNumber(item.sh_index_close)}</span>
-                            {item.sh_index_change !== undefined && item.sh_index_change !== null && !isNaN(Number(item.sh_index_change)) && (
-                              <Badge variant={Number(item.sh_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
-                                {Number(item.sh_index_change) >= 0 ? '+' : ''}
-                                {safeFormatNumber(item.sh_index_change)}%
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span>{safeFormatNumber(item.sz_index_close)}</span>
-                            {item.sz_index_change !== undefined && item.sz_index_change !== null && !isNaN(Number(item.sz_index_change)) && (
-                              <Badge variant={Number(item.sz_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
-                                {Number(item.sz_index_change) >= 0 ? '+' : ''}
-                                {safeFormatNumber(item.sz_index_change)}%
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span>{safeFormatNumber(item.cyb_index_close)}</span>
-                            {item.cyb_index_change !== undefined && item.cyb_index_change !== null && !isNaN(Number(item.cyb_index_change)) && (
-                              <Badge variant={Number(item.cyb_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
-                                {Number(item.cyb_index_change) >= 0 ? '+' : ''}
-                                {safeFormatNumber(item.cyb_index_change)}%
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {safeFormatNumber(item.total_amount ? item.total_amount / 100000000 : null, 0)}
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/sentiment/limit-up?date=${item.trade_date}`}>
-                            <span className="text-green-600 font-medium cursor-pointer hover:underline">
-                              {item.limit_up_count || 0}
-                            </span>
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
-                            {item.blast_rate !== undefined && item.blast_rate !== null && !isNaN(Number(item.blast_rate)) ? (
-                              <Badge variant={Number(item.blast_rate) > 0.3 ? 'destructive' : 'secondary'} className="cursor-pointer hover:opacity-80">
-                                {safeFormatNumber(Number(item.blast_rate) * 100, 1)}%
-                              </Badge>
-                            ) : '-'}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/sentiment/dragon-tiger?date=${item.trade_date}`}>
-                            <Button variant="outline" size="sm">
-                              龙虎榜
-                            </Button>
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          <DataTable
+            data={sentiments}
+            columns={columns}
+            loading={loading}
+            emptyMessage={
+              <div className="text-center py-12 text-muted-foreground">
+                <AlertCircle className="h-6 w-6 mx-auto mb-2" />
+                <p>暂无数据</p>
+                <Button onClick={handleSync} className="mt-4" variant="outline">
+                  立即同步数据
+                </Button>
               </div>
-
-              {/* 移动端卡片 */}
-              <div className="md:hidden space-y-4">
-                {sentiments.map((item) => (
-                  <Card key={item.id}>
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        {item.trade_date}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">上证指数</span>
-                        <div className="flex items-center gap-2">
-                          <span>{safeFormatNumber(item.sh_index_close)}</span>
-                          {item.sh_index_change !== undefined && item.sh_index_change !== null && !isNaN(Number(item.sh_index_change)) && (
-                            <Badge variant={Number(item.sh_index_change) >= 0 ? 'default' : 'destructive'} className="text-xs">
-                              {Number(item.sh_index_change) >= 0 ? '+' : ''}{safeFormatNumber(item.sh_index_change)}%
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">涨停家数</span>
-                        <Link href={`/sentiment/limit-up?date=${item.trade_date}`}>
-                          <span className="text-green-600 font-medium">{item.limit_up_count || 0}</span>
-                        </Link>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">炸板率</span>
-                        <Link href={`/sentiment/limit-up?date=${item.trade_date}#blast-stocks`}>
-                          {item.blast_rate !== undefined && item.blast_rate !== null && !isNaN(Number(item.blast_rate)) ? (
-                            <Badge variant={Number(item.blast_rate) > 0.3 ? 'destructive' : 'secondary'}>
-                              {safeFormatNumber(Number(item.blast_rate) * 100, 1)}%
-                            </Badge>
-                          ) : '-'}
-                        </Link>
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        <Link href={`/sentiment/dragon-tiger?date=${item.trade_date}`} className="w-full">
-                          <Button variant="outline" size="sm" className="w-full">
-                            龙虎榜
-                          </Button>
-                        </Link>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-
-              {/* 分页 */}
-              {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-6">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page === 1}
-                    onClick={() => setPage(page - 1)}
-                  >
-                    上一页
-                  </Button>
-                  <span className="px-4 py-2 text-sm">
-                    {page} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    下一页
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
+            }
+            loadingMessage="加载中..."
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: setPage,
+            }}
+            actions={actions}
+            mobileCard={mobileCard}
+            rowKey={(item) => item.id}
+          />
         </CardContent>
       </Card>
     </div>

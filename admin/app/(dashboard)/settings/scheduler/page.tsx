@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/lib/api-client'
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { DataTable, Column } from '@/components/common/DataTable'
 
 interface ScheduledTask {
   id: number
@@ -120,12 +121,206 @@ export default function SchedulerSettingsPage() {
     }
   }
 
+  // 定义表格列配置
+  const columns: Column<ScheduledTask>[] = useMemo(() => [
+    {
+      key: 'task_name',
+      header: '任务名称',
+      render: (value: string, item: ScheduledTask) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={item.description || value}>
+            {item.description || value}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 truncate" title={value}>
+            {value}
+          </div>
+        </div>
+      ),
+      width: 200
+    },
+    {
+      key: 'module',
+      header: '模块',
+      render: (value: string) => (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
+          {getModuleLabel(value)}
+        </span>
+      )
+    },
+    {
+      key: 'cron_expression',
+      header: 'Cron 表达式',
+      render: (value: string) => (
+        <code className="text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
+          {value}
+        </code>
+      )
+    },
+    {
+      key: 'next_run_at',
+      header: '执行时间',
+      render: (value: string | null, item: ScheduledTask) => (
+        <div className="text-xs space-y-1">
+          {item.last_run_at && (
+            <div className="text-gray-700 dark:text-gray-300 truncate" title={`上次: ${item.last_run_at}`}>
+              <span className="text-gray-500 dark:text-gray-400">上次: </span>
+              {item.last_run_at}
+            </div>
+          )}
+          {value && (
+            <div className="text-blue-700 dark:text-blue-300 truncate" title={`下次: ${value}`}>
+              <span className="text-gray-500 dark:text-gray-400">下次: </span>
+              {value}
+            </div>
+          )}
+          <div className="text-gray-500 dark:text-gray-400">
+            已运行 {item.run_count} 次
+          </div>
+        </div>
+      ),
+      width: 250
+    },
+    {
+      key: 'last_status',
+      header: '运行状态',
+      render: (value: string | null) => value ? (
+        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(value)}`}>
+          {value}
+        </span>
+      ) : null
+    },
+    {
+      key: 'enabled',
+      header: '启用',
+      render: (value: boolean, item: ScheduledTask) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleToggle(item.id)
+          }}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            value
+              ? 'bg-blue-600'
+              : 'bg-gray-200 dark:bg-gray-700'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              value ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      )
+    },
+    {
+      key: 'id',
+      header: '操作',
+      render: (_value: number, item: ScheduledTask) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleEdit(item)
+          }}
+          className="text-sm text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+        >
+          编辑
+        </button>
+      )
+    }
+  ], [])
+
+  // 移动端卡片渲染
+  const mobileCard = useCallback((task: ScheduledTask) => (
+    <div className="space-y-3">
+      {/* 任务名称和开关 */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-gray-900 dark:text-white">
+            {task.description || task.task_name}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {task.task_name}
+          </div>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleToggle(task.id)
+          }}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+            task.enabled
+              ? 'bg-blue-600'
+              : 'bg-gray-200 dark:bg-gray-700'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              task.enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* 模块和状态 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+          {getModuleLabel(task.module)}
+        </span>
+        {task.last_status && (
+          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.last_status)}`}>
+            {task.last_status}
+          </span>
+        )}
+      </div>
+
+      {/* Cron表达式 */}
+      <div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Cron 表达式</div>
+        <code className="text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+          {task.cron_expression}
+        </code>
+      </div>
+
+      {/* 执行时间 */}
+      <div className="text-xs space-y-1">
+        {task.last_run_at && (
+          <div className="text-gray-700 dark:text-gray-300">
+            <span className="text-gray-500 dark:text-gray-400">上次: </span>
+            {task.last_run_at}
+          </div>
+        )}
+        {task.next_run_at && (
+          <div className="text-blue-700 dark:text-blue-300">
+            <span className="text-gray-500 dark:text-gray-400">下次: </span>
+            {task.next_run_at}
+          </div>
+        )}
+        <div className="text-gray-500 dark:text-gray-400">
+          已运行 {task.run_count} 次
+        </div>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleEdit(task)
+          }}
+          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          编辑任务
+        </button>
+      </div>
+    </div>
+  ), [])
+
   return (
-      <div className="space-y-6">
+    <div className="space-y-6">
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          ⏰ 定时任务配置
+          定时任务配置
         </h1>
         <p className="text-gray-600 dark:text-gray-300 mt-2">
           配置自动化数据同步任务，支持 Cron 表达式定时执行
@@ -162,209 +357,13 @@ export default function SchedulerSettingsPage() {
           定时任务列表
         </h2>
 
-{loading ? (
-          <div className="text-center py-8 text-gray-600 dark:text-gray-400">
-            加载中...
-          </div>
-        ) : (
-          <>
-            {/* 桌面端表格视图 */}
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-[15%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[23%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[10%]" />
-                </colgroup>
-                <thead className="bg-gray-50 dark:bg-gray-800">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      任务名称
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      模块
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Cron 表达式
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      执行时间
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      运行状态
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      启用
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      操作
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {tasks.map((task) => (
-                    <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                      <td className="px-3 py-3">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={task.description || task.task_name}>
-                          {task.description || task.task_name}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 truncate" title={task.task_name}>
-                          {task.task_name}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
-                          {getModuleLabel(task.module)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <code className="text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
-                          {task.cron_expression}
-                        </code>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="text-xs space-y-1">
-                          {task.last_run_at && (
-                            <div className="text-gray-700 dark:text-gray-300 truncate" title={`上次: ${task.last_run_at}`}>
-                              <span className="text-gray-500 dark:text-gray-400">上次: </span>
-                              {task.last_run_at}
-                            </div>
-                          )}
-                          {task.next_run_at && (
-                            <div className="text-blue-700 dark:text-blue-300 truncate" title={`下次: ${task.next_run_at}`}>
-                              <span className="text-gray-500 dark:text-gray-400">下次: </span>
-                              {task.next_run_at}
-                            </div>
-                          )}
-                          <div className="text-gray-500 dark:text-gray-400">
-                            已运行 {task.run_count} 次
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        {task.last_status && (
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(task.last_status)}`}>
-                            {task.last_status}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <button
-                          onClick={() => handleToggle(task.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            task.enabled
-                              ? 'bg-blue-600'
-                              : 'bg-gray-200 dark:bg-gray-700'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              task.enabled ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </td>
-                      <td className="px-3 py-3">
-                        <button
-                          onClick={() => handleEdit(task)}
-                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
-                        >
-                          编辑
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* 移动端卡片视图 */}
-            <div className="lg:hidden space-y-4">
-              {tasks.map((task) => (
-                <div key={task.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
-                  {/* 任务名称和开关 */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {task.description || task.task_name}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {task.task_name}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleToggle(task.id)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
-                        task.enabled
-                          ? 'bg-blue-600'
-                          : 'bg-gray-200 dark:bg-gray-700'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          task.enabled ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* 模块和状态 */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                      {getModuleLabel(task.module)}
-                    </span>
-                    {task.last_status && (
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.last_status)}`}>
-                        {task.last_status}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Cron表达式 */}
-                  <div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Cron 表达式</div>
-                    <code className="text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                      {task.cron_expression}
-                    </code>
-                  </div>
-
-                  {/* 执行时间 */}
-                  <div className="text-xs space-y-1">
-                    {task.last_run_at && (
-                      <div className="text-gray-700 dark:text-gray-300">
-                        <span className="text-gray-500 dark:text-gray-400">上次: </span>
-                        {task.last_run_at}
-                      </div>
-                    )}
-                    {task.next_run_at && (
-                      <div className="text-blue-700 dark:text-blue-300">
-                        <span className="text-gray-500 dark:text-gray-400">下次: </span>
-                        {task.next_run_at}
-                      </div>
-                    )}
-                    <div className="text-gray-500 dark:text-gray-400">
-                      已运行 {task.run_count} 次
-                    </div>
-                  </div>
-
-                  {/* 操作按钮 */}
-                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <button
-                      onClick={() => handleEdit(task)}
-                      className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      编辑任务
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+        <DataTable
+          data={tasks}
+          columns={columns}
+          loading={loading}
+          mobileCard={mobileCard}
+          showPagination={false}
+        />
       </div>
 
       {/* Cron 表达式说明 */}
@@ -477,6 +476,6 @@ export default function SchedulerSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
+    </div>
   )
 }

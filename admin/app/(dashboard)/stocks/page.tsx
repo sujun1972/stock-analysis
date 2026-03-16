@@ -8,9 +8,9 @@
  * - 多维度筛选（市场、行业、概念、状态）
  *
  * 响应式设计：
- * - 桌面端（≥768px）：表格视图，完整分页
- * - 移动端（<768px）：卡片视图，简化分页
- * - 按钮、筛选器、搜索框全面响应式适配
+ * - 使用 DataTable 组件自动处理桌面/移动端切换
+ * - 桌面端（≥768px）：表格视图
+ * - 移动端（<768px）：卡片视图
  *
  * 视觉优化：
  * - 市场标签差异化配色（上海主板/深圳主板/创业板/科创板）
@@ -19,15 +19,15 @@
  */
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
-import { Search, RefreshCw, Database, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Info } from 'lucide-react'
+import { Search, RefreshCw, Database, TrendingUp, TrendingDown, Info } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import type { StockInfo } from '@/types/stock'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/common/DataTable'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { StockDetailDialog } from '@/components/stocks/StockDetailDialog'
@@ -62,9 +62,6 @@ export default function StocksManagementPage() {
   // 排序
   const [sortBy, setSortBy] = useState<string>('pct_change')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-
-  // 计算总页数
-  const totalPages = Math.ceil(totalStocks / pageSize)
 
   // 获取股票分析URL（支持URL模板）
   const getStockAnalysisUrl = (code: string) => {
@@ -152,8 +149,13 @@ export default function StocksManagementPage() {
   }
 
   // 切换排序
-  const handleToggleSort = () => {
-    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+  const handleSort = (key: string) => {
+    if (key === sortBy) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(key)
+      setSortOrder('desc')
+    }
   }
 
   // 获取价格颜色（A股规则：红涨绿跌）
@@ -200,74 +202,213 @@ export default function StocksManagementPage() {
     return marketStyles[market] || 'bg-gray-100 text-gray-800 border-gray-200'
   }
 
-  // 渲染分页按钮
-  const renderPaginationButtons = () => {
-    const buttons: JSX.Element[] = []
-    const maxButtons = 7
-
-    if (totalPages <= maxButtons) {
-      for (let i = 1; i <= totalPages; i++) {
-        buttons.push(
-          <Button
-            key={i}
-            variant={currentPage === i ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentPage(i)}
+  // 定义表格列
+  const columns: Column<StockInfo>[] = useMemo(() => [
+    {
+      key: 'name',
+      header: '股票名称',
+      accessor: (stock) => (
+        <div className="flex items-center gap-2">
+          <a
+            href={getStockAnalysisUrl(stock.code)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
           >
-            {i}
-          </Button>
-        )
-      }
-    } else {
-      buttons.push(
-        <Button
-          key={1}
-          variant={currentPage === 1 ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setCurrentPage(1)}
-        >
-          1
-        </Button>
-      )
-
-      if (currentPage > 3) {
-        buttons.push(<span key="ellipsis1" className="px-2">...</span>)
-      }
-
-      const start = Math.max(2, currentPage - 1)
-      const end = Math.min(totalPages - 1, currentPage + 1)
-
-      for (let i = start; i <= end; i++) {
-        buttons.push(
-          <Button
-            key={i}
-            variant={currentPage === i ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentPage(i)}
+            {stock.name}[{stock.code}]
+          </a>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setSelectedStock(stock)
+              setDetailDialogOpen(true)
+            }}
+            className="text-gray-400 hover:text-blue-600 transition-colors"
+            title="查看详情"
           >
-            {i}
-          </Button>
-        )
-      }
+            <Info className="h-4 w-4" />
+          </button>
+        </div>
+      ),
+      width: 200,
+    },
+    {
+      key: 'market',
+      header: '市场',
+      accessor: (stock) => (
+        <Badge variant="outline" className={getMarketBadgeClass(stock.market)}>
+          {stock.market}
+        </Badge>
+      ),
+      width: 100,
+    },
+    {
+      key: 'latest_price',
+      header: '最新价',
+      accessor: (stock) => (
+        <span className={`font-medium ${getPriceColor(stock.pct_change)}`}>
+          {formatPrice(stock.latest_price)}
+        </span>
+      ),
+      align: 'right',
+      width: 100,
+    },
+    {
+      key: 'pct_change',
+      header: (
+        <div className="flex items-center justify-end gap-1">
+          涨跌幅
+          {sortOrder === 'desc' ? (
+            <TrendingDown className="h-4 w-4" />
+          ) : (
+            <TrendingUp className="h-4 w-4" />
+          )}
+        </div>
+      ),
+      accessor: (stock) => (
+        <span className={`font-medium ${getPriceColor(stock.pct_change)}`}>
+          {formatPctChange(stock.pct_change)}
+        </span>
+      ),
+      align: 'right',
+      sortable: true,
+      width: 100,
+    },
+    {
+      key: 'volume',
+      header: '成交量',
+      accessor: (stock) => (
+        <span className="text-sm text-muted-foreground">{formatVolume(stock.volume)}</span>
+      ),
+      align: 'right',
+      width: 120,
+      hideOnMobile: true,
+    },
+    {
+      key: 'amount',
+      header: '成交额',
+      accessor: (stock) => (
+        <span className="text-sm text-muted-foreground">{formatAmount(stock.amount)}</span>
+      ),
+      align: 'right',
+      width: 120,
+      hideOnMobile: true,
+    },
+    {
+      key: 'concepts',
+      header: '所属概念',
+      accessor: (stock) => (
+        <div className="flex flex-wrap gap-1">
+          {stock.concepts?.slice(0, 3).map((concept) => (
+            <Badge key={concept.code} variant="secondary" className="text-xs">
+              {concept.name}
+            </Badge>
+          ))}
+          {stock.concepts && stock.concepts.length > 3 && (
+            <Badge variant="secondary" className="text-xs">
+              +{stock.concepts.length - 3}
+            </Badge>
+          )}
+        </div>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'status',
+      header: '状态',
+      accessor: (stock) => (
+        <>
+          {stock.status === 'L' && <Badge variant="default">正常</Badge>}
+          {stock.status === 'D' && <Badge variant="destructive">退市</Badge>}
+          {stock.status === 'P' && <Badge variant="secondary">暂停</Badge>}
+          {!stock.status && <Badge variant="outline">未知</Badge>}
+        </>
+      ),
+      width: 80,
+    },
+  ], [sortOrder, config])
 
-      if (currentPage < totalPages - 2) {
-        buttons.push(<span key="ellipsis2" className="px-2">...</span>)
-      }
+  // 移动端卡片渲染
+  const mobileCard = useCallback((stock: StockInfo) => (
+    <div className="border rounded-lg p-4 bg-white space-y-3">
+      {/* 顶部：股票代码和名称 */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <a
+              href={getStockAnalysisUrl(stock.code)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-base text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              {stock.name}[{stock.code}]
+            </a>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedStock(stock)
+                setDetailDialogOpen(true)
+              }}
+              className="text-gray-400 hover:text-blue-600 transition-colors shrink-0"
+              title="查看详情"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className={`text-lg font-bold ${getPriceColor(stock.pct_change)}`}>
+            {formatPrice(stock.latest_price)}
+          </div>
+          <div className={`text-sm font-medium ${getPriceColor(stock.pct_change)}`}>
+            {formatPctChange(stock.pct_change)}
+          </div>
+        </div>
+      </div>
 
-      buttons.push(
-        <Button
-          key={totalPages}
-          variant={currentPage === totalPages ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setCurrentPage(totalPages)}
-        >
-          {totalPages}
-        </Button>
-      )
-    }
+      {/* 市场和状态标签 */}
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="outline" className={getMarketBadgeClass(stock.market)}>
+          {stock.market}
+        </Badge>
+        {stock.status === 'L' && <Badge variant="default">正常</Badge>}
+        {stock.status === 'D' && <Badge variant="destructive">退市</Badge>}
+        {stock.status === 'P' && <Badge variant="secondary">暂停</Badge>}
+        {!stock.status && <Badge variant="outline">未知</Badge>}
+      </div>
 
-    return buttons
-  }
+      {/* 成交信息 */}
+      <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 rounded p-2">
+        <div>
+          <span className="text-gray-500">成交量: </span>
+          <span className="font-medium">{formatVolume(stock.volume)}</span>
+        </div>
+        <div>
+          <span className="text-gray-500">成交额: </span>
+          <span className="font-medium">{formatAmount(stock.amount)}</span>
+        </div>
+      </div>
+
+      {/* 概念标签 */}
+      {stock.concepts && stock.concepts.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-xs text-gray-500">所属概念</div>
+          <div className="flex flex-wrap gap-1">
+            {stock.concepts.slice(0, 4).map((concept) => (
+              <Badge key={concept.code} variant="secondary" className="text-xs">
+                {concept.name}
+              </Badge>
+            ))}
+            {stock.concepts.length > 4 && (
+              <Badge variant="secondary" className="text-xs">
+                +{stock.concepts.length - 4}
+              </Badge>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  ), [config])
 
   return (
     <div className="space-y-6">
@@ -406,7 +547,7 @@ export default function StocksManagementPage() {
             <div>
               <CardTitle>股票列表</CardTitle>
               <CardDescription>
-                共 {totalStocks.toLocaleString()} 只股票，当前第 {currentPage}/{totalPages} 页
+                共 {totalStocks.toLocaleString()} 只股票
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -432,236 +573,35 @@ export default function StocksManagementPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-muted-foreground">加载中...</span>
-            </div>
-          ) : stocks.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              没有找到符合条件的股票
-            </div>
-          ) : (
-            <>
-              {/* 桌面端表格视图 - 隐藏在小屏幕 */}
-              <div className="hidden md:block rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[200px]">股票名称</TableHead>
-                      <TableHead className="w-[100px]">市场</TableHead>
-                      <TableHead className="w-[100px] text-right">最新价</TableHead>
-                      <TableHead
-                        className="w-[100px] text-right cursor-pointer hover:bg-muted/50"
-                        onClick={handleToggleSort}
-                      >
-                        <div className="flex items-center justify-end gap-1">
-                          涨跌幅
-                          {sortOrder === 'desc' ? (
-                            <TrendingDown className="h-4 w-4" />
-                          ) : (
-                            <TrendingUp className="h-4 w-4" />
-                          )}
-                        </div>
-                      </TableHead>
-                      <TableHead className="w-[120px] text-right">成交量</TableHead>
-                      <TableHead className="w-[120px] text-right">成交额</TableHead>
-                      <TableHead>所属概念</TableHead>
-                      <TableHead className="w-[80px]">状态</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stocks.map((stock) => (
-                      <TableRow key={stock.code}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={getStockAnalysisUrl(stock.code)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                            >
-                              {stock.name}[{stock.code}]
-                            </a>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedStock(stock)
-                                setDetailDialogOpen(true)
-                              }}
-                              className="text-gray-400 hover:text-blue-600 transition-colors"
-                              title="查看详情"
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={getMarketBadgeClass(stock.market)}>
-                            {stock.market}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className={`text-right font-medium ${getPriceColor(stock.pct_change)}`}>
-                          {formatPrice(stock.latest_price)}
-                        </TableCell>
-                        <TableCell className={`text-right font-medium ${getPriceColor(stock.pct_change)}`}>
-                          {formatPctChange(stock.pct_change)}
-                        </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">
-                          {formatVolume(stock.volume)}
-                        </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">
-                          {formatAmount(stock.amount)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {stock.concepts?.slice(0, 3).map((concept) => (
-                              <Badge key={concept.code} variant="secondary" className="text-xs">
-                                {concept.name}
-                              </Badge>
-                            ))}
-                            {stock.concepts && stock.concepts.length > 3 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{stock.concepts.length - 3}
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {stock.status === 'L' && <Badge variant="default">正常</Badge>}
-                          {stock.status === 'D' && <Badge variant="destructive">退市</Badge>}
-                          {stock.status === 'P' && <Badge variant="secondary">暂停</Badge>}
-                          {!stock.status && <Badge variant="outline">未知</Badge>}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* 移动端卡片视图 - 仅在小屏幕显示 */}
-              <div className="md:hidden space-y-4">
-                {stocks.map((stock) => (
-                  <div
-                    key={stock.code}
-                    className="border rounded-lg p-4 bg-white space-y-3"
-                  >
-                    {/* 顶部：股票代码和名称 */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={getStockAnalysisUrl(stock.code)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-semibold text-base text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            {stock.name}[{stock.code}]
-                          </a>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSelectedStock(stock)
-                              setDetailDialogOpen(true)
-                            }}
-                            className="text-gray-400 hover:text-blue-600 transition-colors shrink-0"
-                            title="查看详情"
-                          >
-                            <Info className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className={`text-lg font-bold ${getPriceColor(stock.pct_change)}`}>
-                          {formatPrice(stock.latest_price)}
-                        </div>
-                        <div className={`text-sm font-medium ${getPriceColor(stock.pct_change)}`}>
-                          {formatPctChange(stock.pct_change)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 市场和状态标签 */}
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className={getMarketBadgeClass(stock.market)}>
-                        {stock.market}
-                      </Badge>
-                      {stock.status === 'L' && <Badge variant="default">正常</Badge>}
-                      {stock.status === 'D' && <Badge variant="destructive">退市</Badge>}
-                      {stock.status === 'P' && <Badge variant="secondary">暂停</Badge>}
-                      {!stock.status && <Badge variant="outline">未知</Badge>}
-                    </div>
-
-                    {/* 成交信息 */}
-                    <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 rounded p-2">
-                      <div>
-                        <span className="text-gray-500">成交量: </span>
-                        <span className="font-medium">{formatVolume(stock.volume)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">成交额: </span>
-                        <span className="font-medium">{formatAmount(stock.amount)}</span>
-                      </div>
-                    </div>
-
-                    {/* 概念标签 */}
-                    {stock.concepts && stock.concepts.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-xs text-gray-500">所属概念</div>
-                        <div className="flex flex-wrap gap-1">
-                          {stock.concepts.slice(0, 4).map((concept) => (
-                            <Badge key={concept.code} variant="secondary" className="text-xs">
-                              {concept.name}
-                            </Badge>
-                          ))}
-                          {stock.concepts.length > 4 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{stock.concepts.length - 4}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* 分页 */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
-                <div className="text-xs sm:text-sm text-muted-foreground">
-                  显示第 {(currentPage - 1) * pageSize + 1} 到 {Math.min(currentPage * pageSize, totalStocks)} 条，共 {totalStocks} 条
-                </div>
-                <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="h-8"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    <span className="hidden sm:inline ml-1">上一页</span>
-                  </Button>
-                  <div className="hidden sm:flex items-center gap-1">
-                    {renderPaginationButtons()}
-                  </div>
-                  <div className="sm:hidden text-sm font-medium px-2">
-                    {currentPage} / {totalPages}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="h-8"
-                  >
-                    <span className="hidden sm:inline mr-1">下一页</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
+          <DataTable
+            data={stocks}
+            columns={columns}
+            loading={loading}
+            emptyMessage="没有找到符合条件的股票"
+            loadingMessage="加载中..."
+            pagination={{
+              page: currentPage,
+              pageSize,
+              total: totalStocks,
+              onPageChange: setCurrentPage,
+              onPageSizeChange: (size) => {
+                setPageSize(size)
+                setCurrentPage(1)
+              },
+              pageSizeOptions: [10, 20, 30, 50],
+            }}
+            sort={{
+              key: sortBy,
+              direction: sortOrder,
+              onSort: (key, direction) => {
+                if (key === 'pct_change') {
+                  handleSort(key)
+                }
+              },
+            }}
+            mobileCard={mobileCard}
+            rowKey={(stock) => stock.code}
+          />
         </CardContent>
       </Card>
 

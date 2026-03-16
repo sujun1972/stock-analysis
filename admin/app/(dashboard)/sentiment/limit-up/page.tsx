@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { DatePicker } from '@/components/ui/date-picker'
 import { TrendingUp, AlertCircle, Zap } from 'lucide-react'
@@ -11,6 +10,22 @@ import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import logger from '@/lib/logger'
 import { format } from '@/lib/date-utils'
+import { DataTable, Column } from '@/components/common/DataTable'
+
+interface LimitUpStock {
+  code: string
+  name: string
+  days: number
+  reason?: string
+  first_limit_time?: string
+}
+
+interface BlastStock {
+  code: string
+  name: string
+  blast_times: number
+  final_change?: number
+}
 
 export default function LimitUpPoolPage() {
   const searchParams = useSearchParams()
@@ -20,6 +35,119 @@ export default function LimitUpPoolPage() {
     const dateParam = searchParams.get('date')
     return dateParam ? new Date(dateParam) : new Date()
   })
+
+  // 涨停股票表格列配置
+  const limitUpColumns: Column<LimitUpStock>[] = useMemo(() => [
+    {
+      key: 'code',
+      header: '股票代码',
+      cellClassName: 'font-mono'
+    },
+    {
+      key: 'name',
+      header: '股票名称',
+      cellClassName: 'font-medium'
+    },
+    {
+      key: 'days',
+      header: '连板天数',
+      render: (value: number) => (
+        <Badge variant={value >= 3 ? 'destructive' : 'default'}>
+          {value}连板
+        </Badge>
+      )
+    },
+    {
+      key: 'reason',
+      header: '涨停原因',
+      cellClassName: 'text-sm text-muted-foreground max-w-xs truncate',
+      render: (value: string | undefined) => value || '-'
+    },
+    {
+      key: 'first_limit_time',
+      header: '首次封板时间',
+      cellClassName: 'text-sm',
+      render: (value: string | undefined) => value || '-'
+    }
+  ], [])
+
+  // 炸板股票表格列配置
+  const blastColumns: Column<BlastStock>[] = useMemo(() => [
+    {
+      key: 'code',
+      header: '股票代码',
+      cellClassName: 'font-mono'
+    },
+    {
+      key: 'name',
+      header: '股票名称',
+      cellClassName: 'font-medium'
+    },
+    {
+      key: 'blast_times',
+      header: '炸板次数',
+      render: (value: number) => (
+        <Badge variant="destructive">{value}次</Badge>
+      )
+    },
+    {
+      key: 'final_change',
+      header: '最终涨跌幅',
+      render: (value: number | undefined) => {
+        const changeValue = value ?? 0
+        return (
+          <Badge variant={changeValue >= 0 ? 'default' : 'destructive'}>
+            {changeValue >= 0 ? '+' : ''}
+            {changeValue.toFixed(2)}%
+          </Badge>
+        )
+      }
+    }
+  ], [])
+
+  // 涨停股票移动端卡片渲染
+  const limitUpMobileCard = useCallback((item: LimitUpStock) => (
+    <div className="space-y-2">
+      <div className="flex justify-between items-start">
+        <div>
+          <span className="font-mono text-sm">{item.code}</span>
+          <p className="font-medium">{item.name}</p>
+        </div>
+        <Badge variant={item.days >= 3 ? 'destructive' : 'default'}>
+          {item.days}连板
+        </Badge>
+      </div>
+      {item.reason && (
+        <p className="text-sm text-muted-foreground truncate">
+          原因: {item.reason}
+        </p>
+      )}
+      {item.first_limit_time && (
+        <p className="text-xs text-muted-foreground">
+          封板: {item.first_limit_time}
+        </p>
+      )}
+    </div>
+  ), [])
+
+  // 炸板股票移动端卡片渲染
+  const blastMobileCard = useCallback((item: BlastStock) => (
+    <div className="space-y-2">
+      <div className="flex justify-between items-start">
+        <div>
+          <span className="font-mono text-sm">{item.code}</span>
+          <p className="font-medium">{item.name}</p>
+        </div>
+        <div className="flex flex-col gap-1 items-end">
+          <Badge variant="destructive">{item.blast_times}次</Badge>
+          <Badge variant={(item.final_change ?? 0) >= 0 ? 'default' : 'destructive'}>
+            {(item.final_change ?? 0) >= 0 ? '+' : ''}
+            {(item.final_change ?? 0).toFixed(2)}%
+          </Badge>
+        </div>
+      </div>
+    </div>
+  ), [])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -204,36 +332,13 @@ export default function LimitUpPoolPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>股票代码</TableHead>
-                      <TableHead>股票名称</TableHead>
-                      <TableHead>连板天数</TableHead>
-                      <TableHead>涨停原因</TableHead>
-                      <TableHead>首次封板时间</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.limit_up_stocks.slice(0, 50).map((stock: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-mono">{stock.code}</TableCell>
-                        <TableCell className="font-medium">{stock.name}</TableCell>
-                        <TableCell>
-                          <Badge variant={stock.days >= 3 ? 'destructive' : 'default'}>
-                            {stock.days}连板
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
-                          {stock.reason || '-'}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {stock.first_limit_time || '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <DataTable
+                  data={data.limit_up_stocks.slice(0, 50)}
+                  columns={limitUpColumns}
+                  mobileCard={limitUpMobileCard}
+                  pageSize={20}
+                  showPagination={data.limit_up_stocks.length > 20}
+                />
                 {data.limit_up_stocks.length > 50 && (
                   <p className="text-sm text-muted-foreground text-center mt-4">
                     仅显示前50只，共{data.limit_up_stocks.length}只
@@ -256,33 +361,13 @@ export default function LimitUpPoolPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>股票代码</TableHead>
-                      <TableHead>股票名称</TableHead>
-                      <TableHead>炸板次数</TableHead>
-                      <TableHead>最终涨跌幅</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.blast_stocks.slice(0, 30).map((stock: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-mono">{stock.code}</TableCell>
-                        <TableCell className="font-medium">{stock.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="destructive">{stock.blast_times}次</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={stock.final_change >= 0 ? 'default' : 'destructive'}>
-                            {stock.final_change >= 0 ? '+' : ''}
-                            {stock.final_change?.toFixed(2) || 0}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <DataTable
+                  data={data.blast_stocks.slice(0, 30)}
+                  columns={blastColumns}
+                  mobileCard={blastMobileCard}
+                  pageSize={15}
+                  showPagination={data.blast_stocks.length > 15}
+                />
                 {data.blast_stocks.length > 30 && (
                   <p className="text-sm text-muted-foreground text-center mt-4">
                     仅显示前30只，共{data.blast_stocks.length}只

@@ -1,11 +1,13 @@
 /**
  * LLM调用日志页面
  * 展示所有AI模型调用的详细记录，支持筛选、分页和详情查看
+ *
+ * 使用 DataTable 组件自动处理表格展示和响应式布局
  */
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Card,
@@ -14,14 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/common/DataTable'
 import {
   Select,
   SelectContent,
@@ -41,11 +36,7 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
-  ChevronLeft,
-  ChevronRight,
   Eye,
-  Search,
-  Download,
   RefreshCw,
   TrendingUp,
   TrendingDown,
@@ -117,6 +108,143 @@ export default function LLMCallLogsPage() {
     if (!cost) return '-'
     return `$${cost.toFixed(4)}`
   }
+
+  // 定义表格列
+  const columns: Column<LLMCallLog>[] = useMemo(() => [
+    {
+      key: 'created_at',
+      header: '调用时间',
+      accessor: (log) => (
+        <span className="text-sm">{formatDateTime(log.created_at)}</span>
+      ),
+    },
+    {
+      key: 'business_type',
+      header: '业务类型',
+      accessor: (log) => (
+        <span className="text-sm">
+          {businessTypeMap[log.business_type] || log.business_type}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'provider',
+      header: '提供商',
+      accessor: (log) => (
+        <Badge variant="outline">
+          {providerMap[log.provider] || log.provider}
+        </Badge>
+      ),
+    },
+    {
+      key: 'model_name',
+      header: '模型',
+      cellClassName: 'text-sm font-mono',
+      hideOnMobile: true,
+    },
+    {
+      key: 'status',
+      header: '状态',
+      accessor: (log) => (
+        <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
+          {statusMap[log.status]?.text || log.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'tokens_total',
+      header: 'Tokens',
+      accessor: (log) => (
+        <span className="text-sm">{log.tokens_total?.toLocaleString() || '-'}</span>
+      ),
+      align: 'right',
+      hideOnMobile: true,
+    },
+    {
+      key: 'cost_estimate',
+      header: '成本',
+      accessor: (log) => (
+        <span className="text-sm">{formatCost(log.cost_estimate)}</span>
+      ),
+      align: 'right',
+    },
+    {
+      key: 'duration_ms',
+      header: '耗时',
+      accessor: (log) => (
+        <span className="text-sm">{formatDuration(log.duration_ms)}</span>
+      ),
+      align: 'right',
+      hideOnMobile: true,
+    },
+  ], [])
+
+  // 移动端卡片渲染
+  const mobileCard = useCallback((log: LLMCallLog) => (
+    <div className="border rounded-lg p-4 bg-white space-y-3">
+      {/* 顶部：时间和状态 */}
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-gray-600">{formatDateTime(log.created_at)}</div>
+          <div className="font-medium mt-1">
+            {businessTypeMap[log.business_type] || log.business_type}
+          </div>
+        </div>
+        <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
+          {statusMap[log.status]?.text || log.status}
+        </Badge>
+      </div>
+
+      {/* 提供商和模型 */}
+      <div className="flex items-center gap-2">
+        <Badge variant="outline">
+          {providerMap[log.provider] || log.provider}
+        </Badge>
+        <span className="text-sm font-mono text-gray-600">{log.model_name}</span>
+      </div>
+
+      {/* 性能指标 */}
+      <div className="grid grid-cols-3 gap-2 text-sm">
+        <div>
+          <div className="text-gray-500">Tokens</div>
+          <div className="font-medium">{log.tokens_total?.toLocaleString() || '-'}</div>
+        </div>
+        <div>
+          <div className="text-gray-500">成本</div>
+          <div className="font-medium">{formatCost(log.cost_estimate)}</div>
+        </div>
+        <div>
+          <div className="text-gray-500">耗时</div>
+          <div className="font-medium">{formatDuration(log.duration_ms)}</div>
+        </div>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="pt-2 border-t">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleViewDetail(log)}
+          className="w-full"
+        >
+          <Eye className="w-4 h-4 mr-2" />
+          查看详情
+        </Button>
+      </div>
+    </div>
+  ), [])
+
+  // 操作列渲染
+  const actions = useCallback((log: LLMCallLog) => (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => handleViewDetail(log)}
+    >
+      <Eye className="w-4 h-4" />
+    </Button>
+  ), [])
 
   return (
     <div className="space-y-6">
@@ -243,7 +371,7 @@ export default function LLMCallLogsPage() {
         </CardContent>
       </Card>
 
-      {/* 日志列表 */}
+      {/* 日志列表 - 使用 DataTable 组件 */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">调用记录</CardTitle>
@@ -252,113 +380,24 @@ export default function LLMCallLogsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>调用时间</TableHead>
-                  <TableHead>业务类型</TableHead>
-                  <TableHead>提供商</TableHead>
-                  <TableHead>模型</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead className="text-right">Tokens</TableHead>
-                  <TableHead className="text-right">成本</TableHead>
-                  <TableHead className="text-right">耗时</TableHead>
-                  <TableHead className="text-center">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                      加载中...
-                    </TableCell>
-                  </TableRow>
-                ) : logs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                      暂无数据
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  logs.map((log) => (
-                    <TableRow key={log.call_id}>
-                      <TableCell className="text-sm">
-                        {formatDateTime(log.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {businessTypeMap[log.business_type] || log.business_type}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {providerMap[log.provider] || log.provider}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm font-mono">
-                        {log.model_name}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={log.status === 'success' ? 'default' : 'destructive'}
-                        >
-                          {statusMap[log.status]?.text || log.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {log.tokens_total?.toLocaleString() || '-'}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {formatCost(log.cost_estimate)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {formatDuration(log.duration_ms)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewDetail(log)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* 分页 */}
-          {pagination && pagination.total_pages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <div className="text-sm text-gray-500">
-                第 {pagination.page} / {pagination.total_pages} 页
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setQueryParams({ ...queryParams, page: (queryParams.page || 1) - 1 })}
-                  disabled={!pagination || pagination.page <= 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  上一页
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setQueryParams({ ...queryParams, page: (queryParams.page || 1) + 1 })}
-                  disabled={!pagination || pagination.page >= pagination.total_pages}
-                >
-                  下一页
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+          <DataTable
+            data={logs}
+            columns={columns}
+            loading={isLoading}
+            emptyMessage="暂无数据"
+            loadingMessage="加载中..."
+            pagination={
+              pagination ? {
+                page: queryParams.page || 1,
+                pageSize: queryParams.page_size || 20,
+                total: pagination.total,
+                onPageChange: (page) => setQueryParams({ ...queryParams, page }),
+              } : undefined
+            }
+            actions={actions}
+            mobileCard={mobileCard}
+            rowKey={(log) => log.call_id}
+          />
         </CardContent>
       </Card>
 

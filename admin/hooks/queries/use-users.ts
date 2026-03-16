@@ -11,19 +11,32 @@ import { useUserQueryHelper } from '@/hooks/use-query-client';
 
 // 类型定义
 export interface User {
-  id: string;
+  id: number | string;  // 支持后端返回的数字或字符串
   username: string;
   email: string;
-  role: 'admin' | 'user';
+  role: string;  // 后端返回的角色类型更多样化
   is_active: boolean;
   is_email_verified: boolean;
   created_at: string;
   updated_at: string;
-  last_login?: string;
+  last_login_at?: string;
+  login_count?: number;
+  full_name?: string;
+  avatar_url?: string | null;
+  phone?: string | null;
   quota?: {
-    max_requests_per_day: number;
-    used_requests_today: number;
-    reset_time: string;
+    id?: number;
+    user_id?: number;
+    backtest_quota_total?: number;
+    backtest_quota_used?: number;
+    ml_prediction_quota_total?: number;
+    ml_prediction_quota_used?: number;
+    max_strategies?: number;
+    current_strategies?: number;
+    backtest_quota_reset_at?: string;
+    ml_prediction_quota_reset_at?: string;
+    created_at?: string;
+    updated_at?: string;
   };
 }
 
@@ -49,16 +62,20 @@ export interface CreateUserDto {
   username: string;
   email: string;
   password: string;
-  role: 'admin' | 'user';
+  role: string;  // 支持更多角色类型
   is_active?: boolean;
+  full_name?: string;
+  phone?: string;
 }
 
 export interface UpdateUserDto {
   username?: string;
   email?: string;
-  role?: 'admin' | 'user';
+  role?: string;  // 支持更多角色类型
   is_active?: boolean;
   password?: string;
+  full_name?: string;
+  phone?: string;
 }
 
 /**
@@ -72,7 +89,16 @@ export function useUserList(params?: UserListParams) {
       if (response.code !== 200) {
         throw new Error(response.message || '获取用户列表失败');
       }
-      return response.data as UserListResponse;
+      // 处理后端返回的数据结构不一致问题
+      // 后端返回 {users: [], total: ...} 而不是 {items: [], total: ...}
+      const data = response.data as any;
+      return {
+        items: data.users || data.items || [],
+        total: data.total || 0,
+        page: data.page || 1,
+        page_size: data.page_size || 20,
+        total_pages: data.total_pages || Math.ceil((data.total || 0) / (data.page_size || 20))
+      } as UserListResponse;
     },
     ...getQueryConfig('LIST'),
   });
@@ -81,11 +107,11 @@ export function useUserList(params?: UserListParams) {
 /**
  * 获取单个用户详情
  */
-export function useUser(id: string, enabled = true) {
+export function useUser(id: number | string, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.users.detail(id),
+    queryKey: queryKeys.users.detail(String(id)),
     queryFn: async () => {
-      const response = await apiClient.getUser(id);
+      const response = await apiClient.getUser(String(id));
       if (response.code !== 200) {
         throw new Error(response.message || '获取用户详情失败');
       }
@@ -131,8 +157,8 @@ export function useUpdateUser() {
   const { invalidateUserList, invalidateUser } = useUserQueryHelper();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: UpdateUserDto }) => {
-      const response = await apiClient.updateUser(id, data);
+    mutationFn: async ({ id, data }: { id: number | string; data: UpdateUserDto }) => {
+      const response = await apiClient.updateUser(String(id), data);
       if (response.code !== 200) {
         throw new Error(response.message || '更新用户失败');
       }
@@ -141,7 +167,7 @@ export function useUpdateUser() {
     onSuccess: (data, variables) => {
       // 使用户列表和详情缓存失效
       invalidateUserList();
-      invalidateUser(variables.id);
+      invalidateUser(String(variables.id));
       toast.success('用户信息更新成功');
     },
     onError: (error: Error) => {
@@ -159,8 +185,8 @@ export function useDeleteUser() {
   const { invalidateUserList } = useUserQueryHelper();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiClient.deleteUser(id);
+    mutationFn: async (id: number | string) => {
+      const response = await apiClient.deleteUser(String(id));
       if (response.code !== 200) {
         throw new Error(response.message || '删除用户失败');
       }
@@ -170,7 +196,7 @@ export function useDeleteUser() {
       // 使用户列表缓存失效
       invalidateUserList();
       // 移除用户详情缓存
-      queryClient.removeQueries({ queryKey: queryKeys.users.detail(id) });
+      queryClient.removeQueries({ queryKey: queryKeys.users.detail(String(id)) });
       toast.success('用户删除成功');
     },
     onError: (error: Error) => {
@@ -187,9 +213,9 @@ export function useBatchDeleteUsers() {
   const { invalidateUserList } = useUserQueryHelper();
 
   return useMutation({
-    mutationFn: async (ids: string[]) => {
+    mutationFn: async (ids: (number | string)[]) => {
       const results = await Promise.all(
-        ids.map((id) => apiClient.deleteUser(id))
+        ids.map((id) => apiClient.deleteUser(String(id)))
       );
       const failed = results.filter((r) => r.code !== 200);
       if (failed.length > 0) {
@@ -215,15 +241,15 @@ export function useResetUserPassword() {
   const { invalidateUser } = useUserQueryHelper();
 
   return useMutation({
-    mutationFn: async ({ id, password }: { id: string; password: string }) => {
-      const response = await apiClient.updateUser(id, { password });
+    mutationFn: async ({ id, password }: { id: number | string; password: string }) => {
+      const response = await apiClient.updateUser(String(id), { password });
       if (response.code !== 200) {
         throw new Error(response.message || '重置密码失败');
       }
       return response.data;
     },
     onSuccess: (_, variables) => {
-      invalidateUser(variables.id);
+      invalidateUser(String(variables.id));
       toast.success('密码重置成功');
     },
     onError: (error: Error) => {
@@ -240,7 +266,7 @@ export function useResetUserQuota() {
   const { invalidateUser } = useUserQueryHelper();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (id: number | string) => {
       const response = await apiClient.post(`/api/users/${id}/reset-quota`);
       if (response.code !== 200) {
         throw new Error(response.message || '重置配额失败');
@@ -248,7 +274,7 @@ export function useResetUserQuota() {
       return response.data;
     },
     onSuccess: (_, id) => {
-      invalidateUser(id);
+      invalidateUser(String(id));
       toast.success('配额重置成功');
     },
     onError: (error: Error) => {
@@ -265,8 +291,8 @@ export function useToggleUserStatus() {
   const { invalidateUserList, invalidateUser } = useUserQueryHelper();
 
   return useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const response = await apiClient.updateUser(id, { is_active });
+    mutationFn: async ({ id, is_active }: { id: number | string; is_active: boolean }) => {
+      const response = await apiClient.updateUser(String(id), { is_active });
       if (response.code !== 200) {
         throw new Error(response.message || '切换用户状态失败');
       }
@@ -274,7 +300,7 @@ export function useToggleUserStatus() {
     },
     onSuccess: (data, variables) => {
       invalidateUserList();
-      invalidateUser(variables.id);
+      invalidateUser(String(variables.id));
       toast.success(
         data.is_active ? '用户已启用' : '用户已禁用'
       );
@@ -291,7 +317,7 @@ export function useToggleUserStatus() {
  */
 export function useSendVerificationEmail() {
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (id: number | string) => {
       const response = await apiClient.post(`/api/users/${id}/send-verification`);
       if (response.code !== 200) {
         throw new Error(response.message || '发送验证邮件失败');
@@ -327,7 +353,15 @@ export function useSearchUsers(keyword: string, enabled = true) {
       if (response.code !== 200) {
         throw new Error(response.message || '搜索用户失败');
       }
-      return response.data as UserListResponse;
+      // 处理后端返回的数据结构不一致问题
+      const data = response.data as any;
+      return {
+        items: data.users || data.items || [],
+        total: data.total || 0,
+        page: data.page || 1,
+        page_size: data.page_size || 20,
+        total_pages: data.total_pages || Math.ceil((data.total || 0) / (data.page_size || 20))
+      } as UserListResponse;
     },
     enabled: enabled && keyword.length >= 2,
     ...getQueryConfig('SEARCH'),
