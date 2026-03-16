@@ -38,9 +38,6 @@ export function StockDetailDialog({
   // 股票的概念列表
   const [stockConcepts, setStockConcepts] = useState<Concept[]>([])
 
-  // 所有可用的概念列表
-  const [allConcepts, setAllConcepts] = useState<Concept[]>([])
-
   // 选中要添加的概念
   const [selectedConceptId, setSelectedConceptId] = useState<string>('')
 
@@ -60,29 +57,51 @@ export function StockDetailDialog({
     }
   }, [stock?.code])
 
-  // 加载所有概念
-  const loadAllConcepts = async () => {
+  // 远程搜索概念（支持后端分页和搜索）
+  const handleSearchConcepts = async (query: string): Promise<Concept[]> => {
     try {
-      const response = await apiClient.getConceptsList({ page_size: 500 })
-      setAllConcepts(response.items || [])
+      const response = await apiClient.getConceptsList({
+        search: query,
+        page: 1,
+        page_size: 50, // 每次最多加载50条
+      })
+      return response.items || []
     } catch (error: any) {
-      logger.error('加载概念列表失败', error)
+      logger.error('搜索概念失败', error)
+      return []
+    }
+  }
+
+  // 获取选中概念的详情（用于显示已选中的概念）
+  const handleFetchSelectedConcept = async (conceptId: string): Promise<Concept | null> => {
+    try {
+      const id = Number(conceptId)
+      const concept = await apiClient.getConcept(id)
+      return concept
+    } catch (error: any) {
+      logger.error('获取概念详情失败', error)
+      return null
     }
   }
 
   // 添加概念
-  const handleAddConcept = () => {
+  const handleAddConcept = async () => {
     if (!selectedConceptId) {
       toast.warning('请选择要添加的概念')
       return
     }
 
-    const concept = allConcepts.find(c => c.id === Number(selectedConceptId))
-    if (!concept) return
-
     // 检查是否已存在
-    if (stockConcepts.some(c => c.id === concept.id)) {
+    const conceptId = Number(selectedConceptId)
+    if (stockConcepts.some(c => c.id === conceptId)) {
       toast.warning('该概念已存在')
+      return
+    }
+
+    // 从后端获取概念详情
+    const concept = await handleFetchSelectedConcept(selectedConceptId)
+    if (!concept) {
+      toast.error('获取概念详情失败')
       return
     }
 
@@ -121,21 +140,53 @@ export function StockDetailDialog({
   useEffect(() => {
     if (open && stock) {
       loadStockConcepts()
-      loadAllConcepts()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, stock, loadStockConcepts])
 
-  // 过滤出未添加的概念
-  const availableConcepts = allConcepts.filter(
-    c => !stockConcepts.some(sc => sc.id === c.id)
-  )
-
   if (!stock) return null
 
+  // 处理 Dialog 关闭，防止点击下拉框时关闭
+  const handleOpenChange = (newOpen: boolean) => {
+    // 如果要关闭 Dialog，检查是否是因为点击了概念选择下拉框
+    if (!newOpen) {
+      const dropdown = document.querySelector('[data-concept-select-dropdown]')
+      if (dropdown) {
+        // 下拉框打开时，不关闭 Dialog
+        return
+      }
+    }
+    onOpenChange(newOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className="max-w-2xl max-h-[80vh] overflow-y-auto"
+        onEscapeKeyDown={(e) => {
+          // 如果下拉框打开，按ESC只关闭下拉框，不关闭Dialog
+          const dropdown = document.querySelector('[data-concept-select-dropdown]')
+          if (dropdown) {
+            e.preventDefault()
+          }
+        }}
+        onInteractOutside={(e) => {
+          // 如果点击的是概念选择下拉框，不关闭 Dialog
+          const target = e.target as HTMLElement
+          const dropdown = target.closest('[data-concept-select-dropdown]')
+          if (dropdown) {
+            e.preventDefault()
+          }
+        }}
+        onFocusOutside={(e) => {
+          // 如果焦点移到概念选择下拉框，允许焦点离开 Dialog
+          const target = e.target as HTMLElement
+          const dropdown = target.closest('[data-concept-select-dropdown]')
+          if (dropdown) {
+            e.preventDefault()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-2xl">股票详情</DialogTitle>
           <DialogDescription>
@@ -143,7 +194,7 @@ export function StockDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-6 overflow-visible">
           {/* 基本信息 */}
           <div>
             <h3 className="text-lg font-semibold mb-3">基本信息</h3>
@@ -158,18 +209,18 @@ export function StockDetailDialog({
               </div>
               <div>
                 <Label className="text-muted-foreground">市场</Label>
-                <p>
+                <div>
                   <Badge variant="outline">{stock.market}</Badge>
-                </p>
+                </div>
               </div>
               <div>
                 <Label className="text-muted-foreground">状态</Label>
-                <p>
+                <div>
                   {stock.status === 'L' && <Badge variant="default">正常上市</Badge>}
                   {stock.status === 'D' && <Badge variant="destructive">退市</Badge>}
                   {stock.status === 'P' && <Badge variant="secondary">暂停上市</Badge>}
                   {!stock.status && <Badge variant="outline">未知</Badge>}
-                </p>
+                </div>
               </div>
               {stock.industry && (
                 <div>
@@ -256,7 +307,7 @@ export function StockDetailDialog({
           <Separator />
 
           {/* 概念标签编辑 */}
-          <div>
+          <div className="overflow-visible">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold flex items-center gap-2">
                 <Tag className="h-5 w-5" />
@@ -282,31 +333,28 @@ export function StockDetailDialog({
             </div>
 
             {/* 添加概念 */}
-            <div className="flex gap-2 mb-4">
-              <div className="flex-1">
+            <div className="flex gap-2 mb-4 overflow-visible">
+              <div className="flex-1 overflow-visible">
                 <SimpleConceptSelect
-                  concepts={availableConcepts}
                   value={selectedConceptId}
                   onSelect={setSelectedConceptId}
                   placeholder="搜索并选择概念..."
-                  disabled={availableConcepts.length === 0}
+                  disabled={false}
                   valueType="id"
+                  remoteSearch={true}
+                  onSearch={handleSearchConcepts}
+                  onFetchSelected={handleFetchSelectedConcept}
                 />
               </div>
               <Button
                 onClick={handleAddConcept}
-                disabled={!selectedConceptId || availableConcepts.length === 0}
+                disabled={!selectedConceptId}
                 variant="outline"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 添加
               </Button>
             </div>
-            {availableConcepts.length === 0 && (
-              <p className="text-sm text-muted-foreground mb-4">
-                所有概念都已添加
-              </p>
-            )}
 
             {/* 当前概念列表 */}
             {loading ? (
