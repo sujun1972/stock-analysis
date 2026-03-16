@@ -2,33 +2,36 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { ArrowLeft, TrendingUp, AlertCircle, Zap } from 'lucide-react'
+import { DatePicker } from '@/components/ui/date-picker'
+import { TrendingUp, AlertCircle, Zap } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
-import Link from 'next/link'
 import logger from '@/lib/logger'
+import { format } from '@/lib/date-utils'
 
 export default function LimitUpPoolPage() {
   const searchParams = useSearchParams()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const dateParam = searchParams.get('date')
+    return dateParam ? new Date(dateParam) : new Date()
+  })
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await apiClient.getLimitUpPool(date) as any
+      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      const res = await apiClient.getLimitUpPool(dateStr) as any
 
       if (res.code === 200 && res.data) {
         setData(res.data)
       } else if (res.code === 404) {
         setData(null)
-        toast.info(`${date} 没有涨停板数据`)
+        toast.info(`${dateStr} 没有涨停板数据`)
       } else {
         toast.error(res.message || '加载失败')
       }
@@ -38,7 +41,7 @@ export default function LimitUpPoolPage() {
     } finally {
       setLoading(false)
     }
-  }, [date])
+  }, [selectedDate])
 
   useEffect(() => {
     loadData()
@@ -61,15 +64,7 @@ export default function LimitUpPoolPage() {
   }, [loading, data])
 
   return (
-    <div className="space-y-6 p-6">
-      {/* 返回按钮 */}
-      <Link href="/sentiment/data">
-        <Button variant="ghost" size="sm">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          返回情绪总览
-        </Button>
-      </Link>
-
+    <div className="space-y-6">
       {/* 标题栏 */}
       <div className="flex justify-between items-center">
         <div>
@@ -79,11 +74,15 @@ export default function LimitUpPoolPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-40"
+          <DatePicker
+            date={selectedDate}
+            onDateChange={(date) => {
+              if (date) {
+                setSelectedDate(date)
+              }
+            }}
+            placeholder="选择日期"
+            className="w-[240px]"
           />
         </div>
       </div>
@@ -99,7 +98,7 @@ export default function LimitUpPoolPage() {
               <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground">暂无数据</p>
               <p className="text-sm text-muted-foreground mt-2">
-                {date} 可能不是交易日或数据尚未采集
+                {format(selectedDate, 'yyyy-MM-dd')} 可能不是交易日或数据尚未采集
               </p>
             </div>
           </CardContent>

@@ -38,7 +38,8 @@ import {
   ScrollText,
   Brain,
   Bell,
-  Flame
+  Flame,
+  ArrowUpCircle
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -94,6 +95,11 @@ const navItems: NavItem[] = [
         name: '龙虎榜',
         href: '/sentiment/dragon-tiger',
         icon: Flame
+      },
+      {
+        name: '涨停板池',
+        href: '/sentiment/limit-up',
+        icon: ArrowUpCircle
       },
       {
         name: '情绪周期',
