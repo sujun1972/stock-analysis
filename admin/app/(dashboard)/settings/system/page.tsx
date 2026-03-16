@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Settings, Save, RotateCcw, ExternalLink, Info } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import { useSystemConfig } from '@/contexts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export default function SystemSettingsPage() {
+  const { refreshConfig } = useSystemConfig()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [stockAnalysisUrl, setStockAnalysisUrl] = useState('')
@@ -56,7 +58,9 @@ export default function SystemSettingsPage() {
       await apiClient.updateSystemSettings({
         stock_analysis_url: stockAnalysisUrl,
       })
-      toast.success('系统设置已保存')
+      // 刷新全局配置，使其他页面立即生效
+      await refreshConfig()
+      toast.success('系统设置已保存并生效')
       setOriginalUrl(stockAnalysisUrl)
     } catch (error: any) {
       toast.error('保存系统设置失败: ' + (error.message || '未知错误'))

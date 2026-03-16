@@ -57,24 +57,28 @@ class ConfigRepository(BaseRepository):
 
         return configs
 
-    def set_config_value(self, key: str, value: str) -> int:
+    def set_config_value(self, key: str, value: str, description: str = "") -> int:
         """
-        设置单个配置值
+        设置单个配置值（使用 UPSERT，如果不存在则插入，存在则更新）
 
         Args:
             key: 配置键名
             value: 配置值
+            description: 配置描述（仅在插入时使用）
 
         Returns:
             受影响的行数
         """
         query = """
-            UPDATE system_config
-            SET config_value = %s, updated_at = CURRENT_TIMESTAMP
-            WHERE config_key = %s
+            INSERT INTO system_config (config_key, config_value, description, updated_at)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (config_key)
+            DO UPDATE SET
+                config_value = EXCLUDED.config_value,
+                updated_at = CURRENT_TIMESTAMP
         """
 
-        rows = self.execute_update(query, (value, key))
+        rows = self.execute_update(query, (key, value, description))
 
         if rows > 0:
             logger.info(f"✓ 更新配置: {key} = {value}")

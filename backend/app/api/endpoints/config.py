@@ -151,7 +151,11 @@ async def update_system_settings(
 
     # 更新股票分析URL
     if request.stock_analysis_url is not None:
-        await config_service.set_config("stock_analysis_url", request.stock_analysis_url)
+        await config_service.set_config(
+            "stock_analysis_url",
+            request.stock_analysis_url,
+            "股票分析页面URL模板（使用 {code} 作为占位符）"
+        )
 
     # 返回更新后的配置
     stock_analysis_url = await config_service.get_config("stock_analysis_url")

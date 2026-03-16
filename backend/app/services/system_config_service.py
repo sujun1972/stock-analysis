@@ -74,22 +74,23 @@ class SystemConfigService:
                 reason=str(e)
             )
 
-    async def set_config(self, key: str, value: str) -> bool:
+    async def set_config(self, key: str, value: str, description: str = "") -> bool:
         """
         设置单个配置值
 
         Args:
             key: 配置键
             value: 配置值
+            description: 配置描述（可选，仅在新建时使用）
 
         Returns:
             是否成功
 
         Examples:
-            >>> await service.set_config('app_name', 'Stock Analysis')
+            >>> await service.set_config('app_name', 'Stock Analysis', 'Application name')
         """
         try:
-            await asyncio.to_thread(self.config_repo.set_config_value, key, value)
+            await asyncio.to_thread(self.config_repo.set_config_value, key, value, description)
             logger.info(f"✓ 配置已更新: {key}")
             return True
         except DatabaseError:

@@ -78,18 +78,19 @@ class ConfigService:
         """
         return await self.system_config.get_all_configs()
 
-    async def set_config(self, key: str, value: str) -> bool:
+    async def set_config(self, key: str, value: str, description: str = "") -> bool:
         """
         设置单个配置值
 
         Args:
             key: 配置键名
             value: 配置值
+            description: 配置描述（可选）
 
         Returns:
             bool: 是否成功
         """
-        return await self.system_config.set_config(key, value)
+        return await self.system_config.set_config(key, value, description)
 
     # ==================== 数据源配置接口（委托给 DataSourceConfigService）====================
 
