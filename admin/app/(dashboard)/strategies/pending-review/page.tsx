@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, User, Calendar, AlertCircle, Eye, CheckCircle, XCircle } from 'lucide-react'
+import { Clock, User, Calendar, AlertCircle, Eye, CheckCircle } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
@@ -29,10 +29,10 @@ export default function PendingReviewStrategiesPage() {
       }) as any
 
       if (response?.code === 200 && response.data) {
-        setStrategies(response.data)
-        if (response.meta) {
-          setTotalPages(response.meta.total_pages || 1)
-          setTotalCount(response.meta.total || 0)
+        setStrategies(response.data.items || [])
+        if (response.data.meta) {
+          setTotalPages(response.data.meta.total_pages || 1)
+          setTotalCount(response.data.meta.total || 0)
         }
       } else {
         setError(response?.message || '加载失败，请稍后重试')

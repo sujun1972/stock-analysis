@@ -243,14 +243,32 @@ const items = response.data.items  // 分页响应
 const data = response.data         // 普通响应
 ```
 
-### 错误 3: 期望 meta 字段
+### 错误 3: 期望 meta 字段在顶层
 
 ```typescript
-// ❌ 错误
+// ❌ 错误 - meta 不在顶层
 const total = response.meta.total
 
-// ✅ 正确
-const total = response.data.total
+// ✅ 正确 - meta 在 data 下
+const total = response.data.meta.total
+```
+
+**常见场景**：分页数据结构
+```typescript
+// 后端返回
+return ApiResponse.success(data={
+    "items": result['items'],
+    "meta": result['meta']
+})
+
+// 前端正确解析
+if (response?.code === 200 && response.data) {
+  setStrategies(response.data.items || [])
+  if (response.data.meta) {
+    setTotalPages(response.data.meta.total_pages || 1)
+    setTotalCount(response.data.meta.total || 0)
+  }
+}
 ```
 
 ### 错误 4: 直接使用 toFixed
@@ -332,7 +350,7 @@ const formatted = safeFormatNumber(value, 2)
 
 ## 修复记录
 
-### 2026-03-16: 修复 response_model 配置错误
+### 2026-03-16 (1): 修复 response_model 配置错误
 
 **问题**：
 - `llm_logs.py` 和 `system_logs.py` 中使用 `response_model=dict`
@@ -353,4 +371,40 @@ const formatted = safeFormatNumber(value, 2)
 
 ---
 
-**最后更新**: 2026-03-16 (修复 response_model 配置错误)
+### 2026-03-16 (2): 修复 Admin 分页数据解析错误
+
+**问题**：
+- `/strategies/pending-review` 页面报错: `strategies.map is not a function`
+- 前端错误地将 `response.data` (对象) 当作数组使用
+- 后端返回格式: `{code: 200, data: {items: [...], meta: {...}}}`
+
+**根本原因**：
+- 前端期望 `response.data` 是数组，但实际是包含 `items` 和 `meta` 的对象
+- 分页信息位置错误：使用 `response.meta` 而非 `response.data.meta`
+
+**修复**：
+```typescript
+// ❌ 错误
+setStrategies(response.data)
+if (response.meta) {
+  setTotalPages(response.meta.total_pages || 1)
+}
+
+// ✅ 正确
+setStrategies(response.data.items || [])
+if (response.data.meta) {
+  setTotalPages(response.data.meta.total_pages || 1)
+}
+```
+
+**受影响文件**：
+- `admin/app/(dashboard)/strategies/pending-review/page.tsx`
+
+**关键点**：
+- 分页数据中，数组在 `response.data.items`
+- 分页信息在 `response.data.meta`，不在顶层 `response.meta`
+- 始终添加 `|| []` 作为默认值，防止 undefined
+
+---
+
+**最后更新**: 2026-03-16 (修复 Admin 分页数据解析错误)
