@@ -319,7 +319,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* 导航菜单 */}
         <nav className={cn(
-          "flex-1 p-4 space-y-1 overflow-y-auto",
+          "flex-1 p-4 space-y-1 overflow-y-auto scrollbar-hide",
           isCollapsed && "md:p-2 md:overflow-visible"
         )}>
           {navItems.map((item) => {
