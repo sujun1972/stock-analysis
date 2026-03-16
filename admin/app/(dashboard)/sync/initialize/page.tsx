@@ -299,13 +299,6 @@ export default function InitializePage() {
 
   return (
         <div className="space-y-6">
-        {/* 返回按钮 */}
-        <div>
-        <Button variant="ghost" onClick={() => router.back()}>
-          ← 返回数据同步管理
-        </Button>
-      </div>
-
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -458,11 +451,11 @@ export default function InitializePage() {
               <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 查看数据说明
               </summary>
-              <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="mt-3 space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
-                    <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-1">
+                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">数据内容：</strong>
+                    <ul className="list-disc list-inside space-y-1.5">
                       <li>股票代码、名称</li>
                       <li>市场类型</li>
                       <li>所属行业、地区</li>
@@ -470,8 +463,8 @@ export default function InitializePage() {
                     </ul>
                   </div>
                   <div>
-                    <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-1">
+                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">注意事项：</strong>
+                    <ul className="list-disc list-inside space-y-1.5">
                       <li>建议每月更新一次</li>
                       <li>同步会覆盖更新现有数据</li>
                       <li>通常需要几秒到几分钟</li>
@@ -651,11 +644,11 @@ export default function InitializePage() {
               <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 查看数据说明
               </summary>
-              <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="mt-3 space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
-                    <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-1">
+                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">数据内容：</strong>
+                    <ul className="list-disc list-inside space-y-1.5">
                       <li>开盘价、收盘价</li>
                       <li>最高价、最低价</li>
                       <li>成交量、成交额</li>
@@ -663,8 +656,8 @@ export default function InitializePage() {
                     </ul>
                   </div>
                   <div>
-                    <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-1">
+                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">注意事项：</strong>
+                    <ul className="list-disc list-inside space-y-1.5">
                       <li>同步过程中不要关闭浏览器</li>
                       <li>同步会覆盖更新现有数据</li>
                       <li>注意API限流问题</li>
@@ -764,11 +757,11 @@ export default function InitializePage() {
               <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 查看数据说明
               </summary>
-              <div className="mt-3 space-y-2 text-gray-600 dark:text-gray-400">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="mt-3 space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
-                    <strong className="text-gray-700 dark:text-gray-300">数据内容：</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-1">
+                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">数据内容：</strong>
+                    <ul className="list-disc list-inside space-y-1.5">
                       <li>大盘指数（上证、深成、创业板）</li>
                       <li>涨停板池（涨停、炸板、连板）</li>
                       <li>龙虎榜（机构、游资席位）</li>
@@ -776,8 +769,8 @@ export default function InitializePage() {
                     </ul>
                   </div>
                   <div>
-                    <strong className="text-gray-700 dark:text-gray-300">注意事项：</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-1">
+                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">注意事项：</strong>
+                    <ul className="list-disc list-inside space-y-1.5">
                       <li>仅同步交易日数据</li>
                       <li>建议按需同步近期数据</li>
                       <li>同步完成后可在&ldquo;情绪数据&rdquo;页面查看</li>

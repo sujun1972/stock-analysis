@@ -137,14 +137,6 @@ export default function DelistedStocksSyncPage() {
 
   return (
         <div className="space-y-6">
-        {/* 返回按钮 */}
-        <button
-        onClick={() => router.back()}
-        className="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
-      >
-        ← 返回同步管理
-      </button>
-
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -258,13 +250,13 @@ export default function DelistedStocksSyncPage() {
                 </code>
               </div>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 启用自动同步：系统将按照 Cron 表达式自动执行同步任务
               </div>
               <button
                 onClick={handleToggleTask}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                className={`relative inline-flex h-6 w-11 min-w-[2.75rem] items-center rounded-full transition-colors flex-shrink-0 ${
                   scheduledTask.enabled
                     ? 'bg-purple-600'
                     : 'bg-gray-200 dark:bg-gray-700'
@@ -314,11 +306,11 @@ export default function DelistedStocksSyncPage() {
           <CardTitle className="text-lg">数据说明</CardTitle>
         </CardHeader>
         <CardContent>
-        <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <strong>数据内容：</strong>
-              <ul className="list-disc list-inside mt-1 space-y-1">
+              <strong className="block mb-2 text-base">数据内容：</strong>
+              <ul className="list-disc list-inside space-y-1.5">
                 <li>退市股票代码和名称</li>
                 <li>上市日期</li>
                 <li>退市日期（暂停上市日期）</li>
@@ -327,8 +319,8 @@ export default function DelistedStocksSyncPage() {
               </ul>
             </div>
             <div>
-              <strong>数据用途：</strong>
-              <ul className="list-disc list-inside mt-1 space-y-1">
+              <strong className="block mb-2 text-base">数据用途：</strong>
+              <ul className="list-disc list-inside space-y-1.5">
                 <li>自动更新股票状态</li>
                 <li>风险预警和防范</li>
                 <li>历史数据归档</li>

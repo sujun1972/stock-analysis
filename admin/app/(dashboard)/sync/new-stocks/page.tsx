@@ -138,84 +138,76 @@ export default function NewStocksSyncPage() {
 
   return (
         <div className="space-y-6">
-        {/* 返回按钮 */}
-        <button
-        onClick={() => router.back()}
-        className="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
-      >
-        ← 返回同步管理
-      </button>
-
       {/* 页面标题 */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
           新股列表同步
         </h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
+        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-2">
           获取最近上市的新股信息，支持增量更新。建议每日同步以保持数据最新。
         </p>
       </div>
 
       {/* 错误提示 */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="text-red-800 dark:text-red-200">{error}</p>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 sm:p-4">
+          <p className="text-sm sm:text-base text-red-800 dark:text-red-200 break-words">{error}</p>
         </div>
       )}
 
       {/* 成功提示 */}
       {successMessage && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-          <p className="text-green-800 dark:text-green-200">{successMessage}</p>
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 sm:p-4">
+          <p className="text-sm sm:text-base text-green-800 dark:text-green-200 break-words">{successMessage}</p>
         </div>
       )}
 
       {/* 当前状态 */}
       <Card>
         <CardHeader>
-          <CardTitle>上次同步信息</CardTitle>
+          <CardTitle className="text-base sm:text-lg">上次同步信息</CardTitle>
         </CardHeader>
         <CardContent>
         {syncStatus ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(syncStatus.status)}`}>
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
+                <span className={`inline-block px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(syncStatus.status)}`}>
                   {getStatusText(syncStatus.status)}
                 </span>
               </div>
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">开始时间</div>
-                <div className="font-medium text-gray-900 dark:text-white">
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">开始时间</div>
+                <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white break-all">
                   {syncStatus.started_at || '未同步'}
                 </div>
               </div>
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">完成时间</div>
-                <div className="font-medium text-gray-900 dark:text-white">
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">完成时间</div>
+                <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white break-all">
                   {syncStatus.completed_at || '-'}
                 </div>
               </div>
             </div>
 
             {syncStatus.status === 'completed' && syncStatus.success > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">同步总数</div>
-                  <div className="font-medium text-gray-900 dark:text-white">
+                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">同步总数</div>
+                  <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
                     {syncStatus.total || 0} 只
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">成功</div>
-                  <div className="font-medium text-green-600 dark:text-green-400">
+                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">成功</div>
+                  <div className="text-sm sm:text-base font-medium text-green-600 dark:text-green-400">
                     {syncStatus.success || 0} 只
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">失败</div>
-                  <div className="font-medium text-red-600 dark:text-red-400">
+                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">失败</div>
+                  <div className="text-sm sm:text-base font-medium text-red-600 dark:text-red-400">
                     {syncStatus.failed || 0} 只
                   </div>
                 </div>
@@ -240,32 +232,32 @@ export default function NewStocksSyncPage() {
       {/* 定时任务配置 */}
       <Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
         <CardHeader>
-          <CardTitle>定时任务配置</CardTitle>
+          <CardTitle className="text-base sm:text-lg">定时任务配置</CardTitle>
         </CardHeader>
         <CardContent>
         {scheduledTask ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">任务描述</div>
-                <div className="font-medium text-gray-900 dark:text-white">
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">任务描述</div>
+                <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
                   {scheduledTask.description}
                 </div>
               </div>
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">执行计划</div>
-                <code className="text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 px-2 py-1 rounded">
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">执行计划</div>
+                <code className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 px-2 py-1 rounded break-all">
                   {scheduledTask.cron_expression}
                 </code>
               </div>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 启用自动同步：系统将按照 Cron 表达式自动执行同步任务
               </div>
               <button
                 onClick={handleToggleTask}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
                   scheduledTask.enabled
                     ? 'bg-purple-600'
                     : 'bg-gray-200 dark:bg-gray-700'
@@ -291,7 +283,7 @@ export default function NewStocksSyncPage() {
       {/* 同步操作 */}
       <Card>
         <CardHeader>
-          <CardTitle>开始同步</CardTitle>
+          <CardTitle className="text-base sm:text-lg">开始同步</CardTitle>
         </CardHeader>
         <CardContent>
         <div className="space-y-4">
@@ -329,11 +321,11 @@ export default function NewStocksSyncPage() {
           <CardTitle className="text-lg">数据说明</CardTitle>
         </CardHeader>
         <CardContent>
-        <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <strong>数据内容：</strong>
-              <ul className="list-disc list-inside mt-1 space-y-1">
+              <strong className="block mb-2 text-base">数据内容：</strong>
+              <ul className="list-disc list-inside space-y-1.5">
                 <li>新股代码和名称</li>
                 <li>上市日期</li>
                 <li>发行价格</li>
@@ -342,8 +334,8 @@ export default function NewStocksSyncPage() {
               </ul>
             </div>
             <div>
-              <strong>数据用途：</strong>
-              <ul className="list-disc list-inside mt-1 space-y-1">
+              <strong className="block mb-2 text-base">数据用途：</strong>
+              <ul className="list-disc list-inside space-y-1.5">
                 <li>及时发现新上市股票</li>
                 <li>新股表现跟踪分析</li>
                 <li>自动更新股票池</li>

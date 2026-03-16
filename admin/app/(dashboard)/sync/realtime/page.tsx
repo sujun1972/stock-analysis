@@ -91,14 +91,6 @@ export default function RealtimeSyncPage() {
 
   return (
         <div className="space-y-6">
-        {/* 返回按钮 */}
-        <button
-        onClick={() => router.back()}
-        className="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
-      >
-        ← 返回同步管理
-      </button>
-
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -284,11 +276,11 @@ export default function RealtimeSyncPage() {
           <CardTitle className="text-lg">数据说明</CardTitle>
         </CardHeader>
         <CardContent>
-        <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <strong>数据内容：</strong>
-              <ul className="list-disc list-inside mt-1 space-y-1">
+              <strong className="block mb-2 text-base">数据内容：</strong>
+              <ul className="list-disc list-inside space-y-1.5">
                 <li>股票代码、名称</li>
                 <li>最新价格</li>
                 <li>涨跌额、涨跌幅</li>
@@ -301,8 +293,8 @@ export default function RealtimeSyncPage() {
               </ul>
             </div>
             <div>
-              <strong>数据用途：</strong>
-              <ul className="list-disc list-inside mt-1 space-y-1">
+              <strong className="block mb-2 text-base">数据用途：</strong>
+              <ul className="list-disc list-inside space-y-1.5">
                 <li>市场整体监控</li>
                 <li>热门股票筛选</li>
                 <li>涨跌幅排行</li>

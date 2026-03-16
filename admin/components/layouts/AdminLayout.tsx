@@ -39,7 +39,11 @@ import {
   Brain,
   Bell,
   Flame,
-  ArrowUpCircle
+  ArrowUpCircle,
+  RefreshCw,
+  PackagePlus,
+  PackageMinus,
+  TrendingUp as TrendingUpIcon
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -151,8 +155,29 @@ const navItems: NavItem[] = [
   },
   {
     name: '数据同步',
-    href: '/sync',
-    icon: Database
+    icon: Database,
+    children: [
+      {
+        name: '数据初始化',
+        href: '/sync/initialize',
+        icon: RefreshCw
+      },
+      {
+        name: '新股列表同步',
+        href: '/sync/new-stocks',
+        icon: PackagePlus
+      },
+      {
+        name: '退市列表同步',
+        href: '/sync/delisted-stocks',
+        icon: PackageMinus
+      },
+      {
+        name: '实时行情同步',
+        href: '/sync/realtime',
+        icon: TrendingUpIcon
+      }
+    ]
   },
   {
     name: '日志管理',
