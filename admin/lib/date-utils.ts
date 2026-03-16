@@ -13,6 +13,9 @@
  */
 
 // 按需导入核心函数，支持 tree-shaking
+import { format as dateFnsFormat } from 'date-fns/format'
+import { zhCN as zhCNLocale } from 'date-fns/locale/zh-CN'
+
 export { format } from 'date-fns/format'
 export { subDays } from 'date-fns/subDays'
 export { subMonths } from 'date-fns/subMonths'
@@ -32,7 +35,7 @@ export { zhCN } from 'date-fns/locale/zh-CN'
  */
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return format(d, 'yyyy-MM-dd')
+  return dateFnsFormat(d, 'yyyy-MM-dd')
 }
 
 /**
@@ -40,7 +43,7 @@ export function formatDate(date: Date | string): string {
  */
 export function formatDateTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return format(d, 'yyyy-MM-dd HH:mm:ss')
+  return dateFnsFormat(d, 'yyyy-MM-dd HH:mm:ss')
 }
 
 /**
@@ -48,5 +51,5 @@ export function formatDateTime(date: Date | string): string {
  */
 export function formatDateCN(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return format(d, 'yyyy年MM月dd日', { locale: zhCN })
+  return dateFnsFormat(d, 'yyyy年MM月dd日', { locale: zhCNLocale })
 }

@@ -105,6 +105,63 @@ async def get_all_configs(
     return ApiResponse.success(data=configs)
 
 
+class SystemSettingsRequest(BaseModel):
+    """系统设置请求"""
+    stock_analysis_url: Optional[str] = None
+
+
+@router.get("/system")
+@handle_api_errors
+async def get_system_settings():
+    """
+    获取系统设置（公开接口，无需认证）
+
+    Returns:
+        系统设置信息
+    """
+    config_service = ConfigService()
+
+    # 获取股票分析页面URL配置
+    stock_analysis_url = await config_service.get_config("stock_analysis_url")
+    if not stock_analysis_url:
+        stock_analysis_url = "http://localhost:3000/analysis?code={code}"
+
+    return ApiResponse.success(data={
+        "stock_analysis_url": stock_analysis_url
+    })
+
+
+@router.post("/system")
+@handle_api_errors
+async def update_system_settings(
+    request: SystemSettingsRequest,
+    current_user: User = Depends(require_admin)
+):
+    """
+    更新系统设置（需要管理员权限）
+
+    Args:
+        request: 系统设置请求
+            - stock_analysis_url: 股票分析页面URL
+
+    Returns:
+        更新后的设置信息
+    """
+    config_service = ConfigService()
+
+    # 更新股票分析URL
+    if request.stock_analysis_url is not None:
+        await config_service.set_config("stock_analysis_url", request.stock_analysis_url)
+
+    # 返回更新后的配置
+    stock_analysis_url = await config_service.get_config("stock_analysis_url")
+
+    return ApiResponse.success(
+        data={"stock_analysis_url": stock_analysis_url},
+        message="系统设置已更新"
+    )
+
+
 @router.get("/sync-status")
 @handle_api_errors
 async def get_sync_status(

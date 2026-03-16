@@ -65,6 +65,7 @@ services:
       # 挂载源代码，实现热重载
       - ./admin/app:/app/app
       - ./admin/components:/app/components
+      - ./admin/contexts:/app/contexts
       - ./admin/lib:/app/lib
       - ./admin/stores:/app/stores
       - ./admin/types:/app/types

@@ -21,7 +21,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
-import { Search, RefreshCw, Database, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, RefreshCw, Database, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Info } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import type { StockInfo } from '@/types/stock'
 import { Button } from '@/components/ui/button'
@@ -32,8 +32,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { StockDetailDialog } from '@/components/stocks/StockDetailDialog'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
+import { useSystemConfig } from '@/contexts'
 
 export default function StocksManagementPage() {
+  // 获取系统配置
+  const { config } = useSystemConfig()
+
   // 数据状态
   const [stocks, setStocks] = useState<StockInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,6 +65,12 @@ export default function StocksManagementPage() {
 
   // 计算总页数
   const totalPages = Math.ceil(totalStocks / pageSize)
+
+  // 获取股票分析URL（支持URL模板）
+  const getStockAnalysisUrl = (code: string) => {
+    const template = config?.stock_analysis_url || 'http://localhost:3000/analysis?code={code}'
+    return template.replace('{code}', code)
+  }
 
   // 加载股票列表
   const loadStocks = useCallback(async () => {
@@ -438,8 +448,7 @@ export default function StocksManagementPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[120px]">股票代码</TableHead>
-                      <TableHead className="w-[150px]">股票名称</TableHead>
+                      <TableHead className="w-[200px]">股票名称</TableHead>
                       <TableHead className="w-[100px]">市场</TableHead>
                       <TableHead className="w-[100px] text-right">最新价</TableHead>
                       <TableHead
@@ -464,27 +473,28 @@ export default function StocksManagementPage() {
                   <TableBody>
                     {stocks.map((stock) => (
                       <TableRow key={stock.code}>
-                        <TableCell className="font-mono">
-                          <button
-                            onClick={() => {
-                              setSelectedStock(stock)
-                              setDetailDialogOpen(true)
-                            }}
-                            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                          >
-                            {stock.code}
-                          </button>
-                        </TableCell>
                         <TableCell className="font-medium">
-                          <button
-                            onClick={() => {
-                              setSelectedStock(stock)
-                              setDetailDialogOpen(true)
-                            }}
-                            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                          >
-                            {stock.name}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={getStockAnalysisUrl(stock.code)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                            >
+                              {stock.name}[{stock.code}]
+                            </a>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedStock(stock)
+                                setDetailDialogOpen(true)
+                              }}
+                              className="text-gray-400 hover:text-blue-600 transition-colors"
+                              title="查看详情"
+                            >
+                              <Info className="h-4 w-4" />
+                            </button>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getMarketBadgeClass(stock.market)}>
@@ -534,17 +544,32 @@ export default function StocksManagementPage() {
                 {stocks.map((stock) => (
                   <div
                     key={stock.code}
-                    className="border rounded-lg p-4 bg-white space-y-3 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => {
-                      setSelectedStock(stock)
-                      setDetailDialogOpen(true)
-                    }}
+                    className="border rounded-lg p-4 bg-white space-y-3"
                   >
                     {/* 顶部：股票代码和名称 */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-base truncate">{stock.name}</div>
-                        <div className="text-sm text-gray-500 font-mono">{stock.code}</div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={getStockAnalysisUrl(stock.code)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-base text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {stock.name}[{stock.code}]
+                          </a>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedStock(stock)
+                              setDetailDialogOpen(true)
+                            }}
+                            className="text-gray-400 hover:text-blue-600 transition-colors shrink-0"
+                            title="查看详情"
+                          >
+                            <Info className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                       <div className="text-right shrink-0">
                         <div className={`text-lg font-bold ${getPriceColor(stock.pct_change)}`}>

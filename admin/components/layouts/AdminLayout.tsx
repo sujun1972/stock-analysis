@@ -43,7 +43,8 @@ import {
   RefreshCw,
   PackagePlus,
   PackageMinus,
-  TrendingUp as TrendingUpIcon
+  TrendingUp as TrendingUpIcon,
+  Wrench
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -126,6 +127,11 @@ const navItems: NavItem[] = [
     name: '系统设置',
     icon: Settings,
     children: [
+      {
+        name: '系统配置',
+        href: '/settings/system',
+        icon: Wrench
+      },
       {
         name: '数据源设置',
         href: '/settings/datasource',

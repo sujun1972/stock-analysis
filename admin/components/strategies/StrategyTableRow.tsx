@@ -113,10 +113,10 @@ export const StrategyTableRow = React.memo<StrategyTableRowProps>(
         <td className="px-6 py-4 whitespace-nowrap">
           <span
             className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-              strategyTypeColors[strategy.type as keyof typeof strategyTypeColors]
+              strategyTypeColors[strategy.strategy_type as keyof typeof strategyTypeColors]
             }`}
           >
-            {strategyTypeNames[strategy.type as keyof typeof strategyTypeNames]}
+            {strategyTypeNames[strategy.strategy_type as keyof typeof strategyTypeNames]}
           </span>
         </td>
         <td className="px-6 py-4 whitespace-nowrap">
@@ -153,7 +153,7 @@ export const StrategyTableRow = React.memo<StrategyTableRowProps>(
           </span>
         </td>
         <td className="px-6 py-4 whitespace-nowrap">
-          <PublishStatusBadge status={strategy.publish_status} />
+          <PublishStatusBadge status={strategy.publish_status || 'draft'} />
         </td>
         <td className="px-6 py-4 whitespace-nowrap">
           <Switch

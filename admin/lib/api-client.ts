@@ -1753,6 +1753,30 @@ class ApiClient {
     )
     return response.data
   }
+
+  // ========== 系统设置 API ==========
+
+  /**
+   * 获取系统设置
+   */
+  async getSystemSettings(): Promise<ApiResponse<{
+    stock_analysis_url: string
+  }>> {
+    const response = await axiosInstance.get('/api/config/system')
+    return response.data
+  }
+
+  /**
+   * 更新系统设置
+   */
+  async updateSystemSettings(data: {
+    stock_analysis_url?: string
+  }): Promise<ApiResponse<{
+    stock_analysis_url: string
+  }>> {
+    const response = await axiosInstance.post('/api/config/system', data)
+    return response.data
+  }
 }
 
 // 导出单例
