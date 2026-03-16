@@ -12,10 +12,12 @@
  * - 桌面端（≥768px）：表格视图，操作下拉菜单
  * - 移动端（<768px）：卡片视图，图标操作按钮
  * - 对话框：支持小屏幕滚动，自适应布局
+ *
+ * 优化：使用 React Query 管理数据状态
  */
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -50,31 +52,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Plus, Search, RefreshCw, User, ShieldCheck, Crown, Pencil, Trash2, MoreVertical, Info } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { Plus, Search, RefreshCw, User as UserIcon, ShieldCheck, Crown, Pencil, Trash2, MoreVertical, Info } from 'lucide-react'
 import { toast } from 'sonner'
-
-/**
- * 用户数据接口
- */
-interface User {
-  id: number
-  email: string
-  username: string
-  role: string
-  is_active: boolean
-  is_email_verified: boolean
-  created_at: string
-  full_name: string | null
-  login_count: number
-  quota?: {
-    backtest_quota_total: number
-    backtest_quota_used: number
-    ml_prediction_quota_total: number
-    ml_prediction_quota_used: number
-  }
-}
+import { useDebounce } from '@/hooks/use-debounce'
+import {
+  useUserList,
+  useCreateUser,
+  useUpdateUser,
+  useDeleteUser,
+  useToggleUserStatus,
+  type User,
+  type CreateUserDto,
+  type UpdateUserDto,
+} from '@/hooks/queries/use-users'
 
 /**
  * 表单数据接口
@@ -85,19 +75,38 @@ interface UserFormData {
   password: string
   full_name: string
   phone: string
-  role: string
+  role: 'super_admin' | 'admin' | 'vip_user' | 'normal_user' | 'trial_user'
   is_email_verified: boolean
 }
 
 export default function UsersPage() {
-  // 列表状态
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  // 筛选和分页状态
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
   const pageSize = 20
+
+  // 使用防抖的搜索词
+  const debouncedSearch = useDebounce(search, 500)
+
+  // 构建查询参数
+  const queryParams = useMemo(() => ({
+    page,
+    page_size: pageSize,
+    search: debouncedSearch || undefined,
+    role: roleFilter !== 'all' ? roleFilter as any : undefined,
+  }), [page, debouncedSearch, roleFilter])
+
+  // 使用 React Query Hooks
+  const { data, isLoading, error, refetch } = useUserList(queryParams)
+  const createUserMutation = useCreateUser()
+  const updateUserMutation = useUpdateUser()
+  const deleteUserMutation = useDeleteUser()
+  const toggleStatusMutation = useToggleUserStatus()
+
+  // 从 data 中提取用户列表和总数
+  const users = data?.items || []
+  const total = data?.total || 0
 
   // 对话框状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -105,7 +114,6 @@ export default function UsersPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const [submitting, setSubmitting] = useState(false)
 
   // 表单数据
   const [formData, setFormData] = useState<UserFormData>({
@@ -118,36 +126,9 @@ export default function UsersPage() {
     is_email_verified: false,
   })
 
-  // 加载用户列表
-  const loadUsers = useCallback(async () => {
-    setLoading(true)
-    try {
-      const params: any = {
-        page,
-        page_size: pageSize,
-      }
-
-      if (search) params.search = search
-      if (roleFilter !== 'all') params.role = roleFilter
-
-      const response = await apiClient.getUsers(params)
-      setUsers(response.data?.users || [])
-      setTotal(response.data?.total || 0)
-    } catch (error: any) {
-      toast.error('加载用户列表失败: ' + (error.message || '未知错误'))
-    } finally {
-      setLoading(false)
-    }
-  }, [page, search, roleFilter])
-
-  useEffect(() => {
-    loadUsers()
-  }, [loadUsers])
-
   // 搜索
   const handleSearch = () => {
     setPage(1)
-    loadUsers()
   }
 
   // 重置表单
@@ -210,26 +191,20 @@ export default function UsersPage() {
       return
     }
 
-    setSubmitting(true)
-    try {
-      await apiClient.createUser({
-        email: formData.email,
-        username: formData.username,
-        password: formData.password,
-        role: formData.role,
-        full_name: formData.full_name || undefined,
-        phone: formData.phone || undefined,
-        is_email_verified: formData.is_email_verified,
-      })
-      toast.success('用户创建成功')
-      setIsCreateDialogOpen(false)
-      resetForm()
-      loadUsers()
-    } catch (error: any) {
-      toast.error('创建用户失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
-    } finally {
-      setSubmitting(false)
+    const createData: CreateUserDto = {
+      email: formData.email,
+      username: formData.username,
+      password: formData.password,
+      role: formData.role as 'admin' | 'user',
+      is_active: true,
     }
+
+    createUserMutation.mutate(createData, {
+      onSuccess: () => {
+        setIsCreateDialogOpen(false)
+        resetForm()
+      }
+    })
   }
 
   // 打开详情对话框
@@ -245,9 +220,9 @@ export default function UsersPage() {
       email: user.email,
       username: user.username,
       password: '', // 密码保持为空，只在需要修改时填写
-      full_name: user.full_name || '',
+      full_name: '',
       phone: '',
-      role: user.role,
+      role: user.role as any,
       is_email_verified: user.is_email_verified,
     })
     setIsEditDialogOpen(true)
@@ -266,7 +241,7 @@ export default function UsersPage() {
       return
     }
 
-    // 如果修改了密码，验证密码强度（注意：当前版本不支持修改密码）
+    // 如果修改了密码，验证密码强度
     if (formData.password) {
       const passwordValidation = validatePassword(formData.password)
       if (!passwordValidation.valid) {
@@ -275,34 +250,28 @@ export default function UsersPage() {
       }
     }
 
-    setSubmitting(true)
-    try {
-      // 构建更新数据（只发送变更的字段）
-      const updateData: Record<string, any> = {
-        role: formData.role,
-      }
-
-      if (formData.email && formData.email !== selectedUser.email) {
-        updateData.email = formData.email
-      }
-      if (formData.full_name !== selectedUser.full_name) {
-        updateData.full_name = formData.full_name || null
-      }
-      if (formData.is_email_verified !== selectedUser.is_email_verified) {
-        updateData.is_email_verified = formData.is_email_verified
-      }
-
-      await apiClient.updateUser(selectedUser.id, updateData)
-      toast.success('用户更新成功')
-      setIsEditDialogOpen(false)
-      setSelectedUser(null)
-      resetForm()
-      loadUsers()
-    } catch (error: any) {
-      toast.error('更新用户失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
-    } finally {
-      setSubmitting(false)
+    // 构建更新数据（只发送变更的字段）
+    const updateData: UpdateUserDto = {
+      role: formData.role as 'admin' | 'user',
     }
+
+    if (formData.email && formData.email !== selectedUser.email) {
+      updateData.email = formData.email
+    }
+    if (formData.password) {
+      updateData.password = formData.password
+    }
+
+    updateUserMutation.mutate(
+      { id: selectedUser.id, data: updateData },
+      {
+        onSuccess: () => {
+          setIsEditDialogOpen(false)
+          setSelectedUser(null)
+          resetForm()
+        }
+      }
+    )
   }
 
   // 打开删除对话框
@@ -315,18 +284,20 @@ export default function UsersPage() {
   const handleDelete = async () => {
     if (!selectedUser) return
 
-    setSubmitting(true)
-    try {
-      await apiClient.deleteUser(selectedUser.id)
-      toast.success('用户删除成功')
-      setIsDeleteDialogOpen(false)
-      setSelectedUser(null)
-      loadUsers()
-    } catch (error: any) {
-      toast.error('删除用户失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
-    } finally {
-      setSubmitting(false)
-    }
+    deleteUserMutation.mutate(selectedUser.id, {
+      onSuccess: () => {
+        setIsDeleteDialogOpen(false)
+        setSelectedUser(null)
+      }
+    })
+  }
+
+  // 切换用户状态
+  const handleToggleStatus = (user: User) => {
+    toggleStatusMutation.mutate({
+      id: user.id,
+      is_active: !user.is_active
+    })
   }
 
   /**
@@ -337,12 +308,13 @@ export default function UsersPage() {
     const config: Record<string, { label: string; variant: any; icon: any }> = {
       super_admin: { label: '超级管理员', variant: 'destructive', icon: Crown },
       admin: { label: '管理员', variant: 'default', icon: ShieldCheck },
-      vip_user: { label: 'VIP用户', variant: 'secondary', icon: User },
-      normal_user: { label: '普通用户', variant: 'outline', icon: User },
-      trial_user: { label: '试用用户', variant: 'outline', icon: User },
+      vip_user: { label: 'VIP用户', variant: 'secondary', icon: UserIcon },
+      user: { label: '普通用户', variant: 'outline', icon: UserIcon },
+      normal_user: { label: '普通用户', variant: 'outline', icon: UserIcon },
+      trial_user: { label: '试用用户', variant: 'outline', icon: UserIcon },
     }
 
-    const { label, variant, icon: Icon } = config[role] || config.normal_user
+    const { label, variant, icon: Icon } = config[role] || config.user
 
     return (
       <Badge variant={variant} className="gap-1">
@@ -357,6 +329,11 @@ export default function UsersPage() {
    */
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('zh-CN')
+  }
+
+  // 处理错误
+  if (error) {
+    toast.error('加载用户列表失败: ' + error.message)
   }
 
   return (
@@ -399,22 +376,25 @@ export default function UsersPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">全部角色</SelectItem>
-                      <SelectItem value="super_admin">超级管理员</SelectItem>
                       <SelectItem value="admin">管理员</SelectItem>
-                      <SelectItem value="vip_user">VIP用户</SelectItem>
-                      <SelectItem value="normal_user">普通用户</SelectItem>
-                      <SelectItem value="trial_user">试用用户</SelectItem>
+                      <SelectItem value="user">普通用户</SelectItem>
                     </SelectContent>
                   </Select>
 
-                  <Button onClick={loadUsers} variant="outline" size="icon" className="shrink-0">
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  <Button
+                    onClick={() => refetch()}
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    disabled={isLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
               </div>
 
               {/* 用户列表 - 桌面端表格 / 移动端卡片 */}
-              {loading ? (
+              {isLoading ? (
                 <div className="text-center py-12 text-gray-500">
                   <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
                   加载中...
@@ -445,22 +425,26 @@ export default function UsersPage() {
                             <TableCell className="font-mono text-sm">{user.id}</TableCell>
                             <TableCell>
                               <div className="font-medium">{user.username}</div>
-                              {user.full_name && (
-                                <div className="text-xs text-gray-500">{user.full_name}</div>
-                              )}
                             </TableCell>
                             <TableCell className="text-sm">{user.email}</TableCell>
                             <TableCell>{getRoleBadge(user.role)}</TableCell>
                             <TableCell>
-                              {user.is_active ? (
-                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                  活跃
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-                                  禁用
-                                </Badge>
-                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleStatus(user)}
+                                disabled={toggleStatusMutation.isPending}
+                              >
+                                {user.is_active ? (
+                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                    活跃
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
+                                    禁用
+                                  </Badge>
+                                )}
+                              </Button>
                             </TableCell>
                             <TableCell>
                               {user.is_email_verified ? (
@@ -513,9 +497,6 @@ export default function UsersPage() {
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="font-semibold text-base truncate">{user.username}</div>
-                            {user.full_name && (
-                              <div className="text-sm text-gray-500 truncate">{user.full_name}</div>
-                            )}
                           </div>
                           <div className="flex gap-1 ml-2">
                             <Button
@@ -568,18 +549,14 @@ export default function UsersPage() {
                           <div className="text-sm space-y-1 bg-gray-50 rounded p-2">
                             <div className="font-medium text-gray-700">配额使用情况</div>
                             <div className="text-xs text-gray-600">
-                              回测: {user.quota.backtest_quota_used}/{user.quota.backtest_quota_total}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              ML预测: {user.quota.ml_prediction_quota_used}/{user.quota.ml_prediction_quota_total}
+                              日请求: {user.quota.used_requests_today}/{user.quota.max_requests_per_day}
                             </div>
                           </div>
                         )}
 
-                        {/* 底部信息：ID、登录次数、创建时间 */}
+                        {/* 底部信息：ID、创建时间 */}
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pt-2 border-t">
                           <div>ID: <span className="font-mono">{user.id}</span></div>
-                          <div>登录: {user.login_count}次</div>
                           <div className="w-full sm:w-auto">创建于: {formatDate(user.created_at)}</div>
                         </div>
                       </div>
@@ -599,7 +576,7 @@ export default function UsersPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
+                      disabled={page === 1 || isLoading}
                     >
                       上一页
                     </Button>
@@ -607,7 +584,7 @@ export default function UsersPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setPage(p => p + 1)}
-                      disabled={page * pageSize >= total}
+                      disabled={page * pageSize >= total || isLoading}
                     >
                       下一页
                     </Button>
@@ -663,56 +640,19 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="create-full-name">全名</Label>
-                  <Input
-                    id="create-full-name"
-                    placeholder="输入用户全名"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-phone">手机号</Label>
-                  <Input
-                    id="create-phone"
-                    placeholder="输入手机号"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="create-role">角色</Label>
                   <Select
                     value={formData.role}
-                    onValueChange={(value) => setFormData({ ...formData, role: value })}
+                    onValueChange={(value: any) => setFormData({ ...formData, role: value })}
                   >
                     <SelectTrigger id="create-role">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="super_admin">超级管理员</SelectItem>
                       <SelectItem value="admin">管理员</SelectItem>
-                      <SelectItem value="vip_user">VIP用户</SelectItem>
-                      <SelectItem value="normal_user">普通用户</SelectItem>
-                      <SelectItem value="trial_user">试用用户</SelectItem>
+                      <SelectItem value="user">普通用户</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-t">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="create-email-verified">邮箱验证状态</Label>
-                    <p className="text-xs sm:text-sm text-gray-500">
-                      是否已验证该用户的邮箱地址
-                    </p>
-                  </div>
-                  <Switch
-                    id="create-email-verified"
-                    checked={formData.is_email_verified}
-                    onCheckedChange={(checked) =>
-                      setFormData({ ...formData, is_email_verified: checked })
-                    }
-                    className="self-start sm:self-auto"
-                  />
                 </div>
               </div>
               <DialogFooter className="flex-row gap-2">
@@ -722,13 +662,17 @@ export default function UsersPage() {
                     setIsCreateDialogOpen(false)
                     resetForm()
                   }}
-                  disabled={submitting}
+                  disabled={createUserMutation.isPending}
                   className="flex-1"
                 >
                   取消
                 </Button>
-                <Button onClick={handleCreate} disabled={submitting} className="flex-1">
-                  {submitting ? '创建中...' : '创建'}
+                <Button
+                  onClick={handleCreate}
+                  disabled={createUserMutation.isPending}
+                  className="flex-1"
+                >
+                  {createUserMutation.isPending ? '创建中...' : '创建'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -764,47 +708,29 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-full-name">全名</Label>
+                  <Label htmlFor="edit-password">新密码（留空表示不修改）</Label>
                   <Input
-                    id="edit-full-name"
-                    placeholder="输入用户全名"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                    id="edit-password"
+                    type="password"
+                    placeholder="至少8位，含大小写字母和数字"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-role">角色</Label>
                   <Select
                     value={formData.role}
-                    onValueChange={(value) => setFormData({ ...formData, role: value })}
+                    onValueChange={(value: any) => setFormData({ ...formData, role: value })}
                   >
                     <SelectTrigger id="edit-role">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="super_admin">超级管理员</SelectItem>
                       <SelectItem value="admin">管理员</SelectItem>
-                      <SelectItem value="vip_user">VIP用户</SelectItem>
-                      <SelectItem value="normal_user">普通用户</SelectItem>
-                      <SelectItem value="trial_user">试用用户</SelectItem>
+                      <SelectItem value="user">普通用户</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-t">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="edit-email-verified">邮箱验证状态</Label>
-                    <p className="text-xs sm:text-sm text-gray-500">
-                      是否已验证该用户的邮箱地址
-                    </p>
-                  </div>
-                  <Switch
-                    id="edit-email-verified"
-                    checked={formData.is_email_verified}
-                    onCheckedChange={(checked) =>
-                      setFormData({ ...formData, is_email_verified: checked })
-                    }
-                    className="self-start sm:self-auto"
-                  />
                 </div>
               </div>
               <DialogFooter className="flex-row gap-2">
@@ -815,13 +741,17 @@ export default function UsersPage() {
                     setSelectedUser(null)
                     resetForm()
                   }}
-                  disabled={submitting}
+                  disabled={updateUserMutation.isPending}
                   className="flex-1"
                 >
                   取消
                 </Button>
-                <Button onClick={handleEdit} disabled={submitting} className="flex-1">
-                  {submitting ? '保存中...' : '保存'}
+                <Button
+                  onClick={handleEdit}
+                  disabled={updateUserMutation.isPending}
+                  className="flex-1"
+                >
+                  {updateUserMutation.isPending ? '保存中...' : '保存'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -849,17 +779,17 @@ export default function UsersPage() {
                     setIsDeleteDialogOpen(false)
                     setSelectedUser(null)
                   }}
-                  disabled={submitting}
+                  disabled={deleteUserMutation.isPending}
                   className="w-full sm:w-auto"
                 >
                   取消
                 </Button>
                 <Button
                   onClick={handleDelete}
-                  disabled={submitting}
+                  disabled={deleteUserMutation.isPending}
                   className="bg-red-600 hover:bg-red-700 w-full sm:w-auto"
                 >
-                  {submitting ? '删除中...' : '确认删除'}
+                  {deleteUserMutation.isPending ? '删除中...' : '确认删除'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -893,10 +823,6 @@ export default function UsersPage() {
                         <div className="mt-1 text-sm break-all">{selectedUser.email}</div>
                       </div>
                       <div>
-                        <Label className="text-xs text-gray-500">全名</Label>
-                        <div className="mt-1 text-sm">{selectedUser.full_name || '-'}</div>
-                      </div>
-                      <div>
                         <Label className="text-xs text-gray-500">角色</Label>
                         <div className="mt-1">{getRoleBadge(selectedUser.role)}</div>
                       </div>
@@ -928,10 +854,6 @@ export default function UsersPage() {
                           )}
                         </div>
                       </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">登录次数</Label>
-                        <div className="mt-1 text-sm">{selectedUser.login_count} 次</div>
-                      </div>
                     </div>
                   </div>
 
@@ -939,47 +861,27 @@ export default function UsersPage() {
                   {selectedUser.quota && (
                     <div className="space-y-4">
                       <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">配额使用情况</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <Label className="text-xs text-gray-500">回测配额</Label>
-                          <div className="mt-2 space-y-1">
-                            <div className="flex justify-between items-baseline">
-                              <span className="text-sm text-gray-600">已使用</span>
-                              <span className="text-lg font-semibold">{selectedUser.quota.backtest_quota_used}</span>
-                            </div>
-                            <div className="flex justify-between items-baseline">
-                              <span className="text-sm text-gray-600">总额度</span>
-                              <span className="text-lg font-semibold">{selectedUser.quota.backtest_quota_total}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                              <div
-                                className="bg-blue-500 h-2 rounded-full"
-                                style={{
-                                  width: `${Math.min((selectedUser.quota.backtest_quota_used / selectedUser.quota.backtest_quota_total) * 100, 100)}%`
-                                }}
-                              ></div>
-                            </div>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <Label className="text-xs text-gray-500">日请求限额</Label>
+                        <div className="mt-2 space-y-1">
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-sm text-gray-600">已使用</span>
+                            <span className="text-lg font-semibold">{selectedUser.quota.used_requests_today}</span>
                           </div>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <Label className="text-xs text-gray-500">ML预测配额</Label>
-                          <div className="mt-2 space-y-1">
-                            <div className="flex justify-between items-baseline">
-                              <span className="text-sm text-gray-600">已使用</span>
-                              <span className="text-lg font-semibold">{selectedUser.quota.ml_prediction_quota_used}</span>
-                            </div>
-                            <div className="flex justify-between items-baseline">
-                              <span className="text-sm text-gray-600">总额度</span>
-                              <span className="text-lg font-semibold">{selectedUser.quota.ml_prediction_quota_total}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                              <div
-                                className="bg-green-500 h-2 rounded-full"
-                                style={{
-                                  width: `${Math.min((selectedUser.quota.ml_prediction_quota_used / selectedUser.quota.ml_prediction_quota_total) * 100, 100)}%`
-                                }}
-                              ></div>
-                            </div>
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-sm text-gray-600">总额度</span>
+                            <span className="text-lg font-semibold">{selectedUser.quota.max_requests_per_day}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                            <div
+                              className="bg-blue-500 h-2 rounded-full"
+                              style={{
+                                width: `${Math.min((selectedUser.quota.used_requests_today / selectedUser.quota.max_requests_per_day) * 100, 100)}%`
+                              }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-2">
+                            重置时间: {new Date(selectedUser.quota.reset_time).toLocaleString('zh-CN')}
                           </div>
                         </div>
                       </div>
@@ -994,6 +896,16 @@ export default function UsersPage() {
                         <Label className="text-xs text-gray-500">创建时间</Label>
                         <div className="mt-1 text-sm">{formatDate(selectedUser.created_at)}</div>
                       </div>
+                      <div>
+                        <Label className="text-xs text-gray-500">更新时间</Label>
+                        <div className="mt-1 text-sm">{formatDate(selectedUser.updated_at)}</div>
+                      </div>
+                      {selectedUser.last_login && (
+                        <div>
+                          <Label className="text-xs text-gray-500">最后登录</Label>
+                          <div className="mt-1 text-sm">{formatDate(selectedUser.last_login)}</div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

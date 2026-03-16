@@ -5,41 +5,39 @@
  * - 管理系统级别的配置
  * - 股票分析页面跳转URL配置（支持灵活的URL模板）
  * - 支持query参数和path参数两种方式
+ *
+ * 优化：使用 React Query 管理数据状态
  */
 'use client'
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Settings, Save, RotateCcw, ExternalLink, Info } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
 import { useSystemConfig } from '@/contexts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useSystemSettings, useUpdateSystemSettings } from '@/hooks/queries/use-system'
 
 export default function SystemSettingsPage() {
   const { refreshConfig } = useSystemConfig()
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [stockAnalysisUrl, setStockAnalysisUrl] = useState('')
   const [originalUrl, setOriginalUrl] = useState('')
 
-  // 加载系统设置
-  const loadSettings = async () => {
-    setLoading(true)
-    try {
-      const response = await apiClient.getSystemSettings()
-      const url = response.data?.stock_analysis_url || 'http://localhost:3000/analysis?code={code}'
+  // 使用 React Query hooks
+  const { data: settings, isLoading } = useSystemSettings()
+  const updateSettingsMutation = useUpdateSystemSettings()
+
+  // 初始化设置值
+  useEffect(() => {
+    if (settings) {
+      const url = settings.stock_analysis_url || 'http://localhost:3000/analysis?code={code}'
       setStockAnalysisUrl(url)
       setOriginalUrl(url)
-    } catch (error: any) {
-      toast.error('加载系统设置失败: ' + (error.message || '未知错误'))
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [settings])
 
   // 保存系统设置
   const handleSave = async () => {
@@ -53,20 +51,16 @@ export default function SystemSettingsPage() {
       return
     }
 
-    setSaving(true)
-    try {
-      await apiClient.updateSystemSettings({
-        stock_analysis_url: stockAnalysisUrl,
-      })
-      // 刷新全局配置，使其他页面立即生效
-      await refreshConfig()
-      toast.success('系统设置已保存并生效')
-      setOriginalUrl(stockAnalysisUrl)
-    } catch (error: any) {
-      toast.error('保存系统设置失败: ' + (error.message || '未知错误'))
-    } finally {
-      setSaving(false)
-    }
+    updateSettingsMutation.mutate(
+      { stock_analysis_url: stockAnalysisUrl },
+      {
+        onSuccess: async () => {
+          // 刷新全局配置，使其他页面立即生效
+          await refreshConfig()
+          setOriginalUrl(stockAnalysisUrl)
+        }
+      }
+    )
   }
 
   // 重置为原始值
@@ -88,10 +82,6 @@ export default function SystemSettingsPage() {
     if (!stockAnalysisUrl) return ''
     return stockAnalysisUrl.replace('{code}', '000001')
   }
-
-  useEffect(() => {
-    loadSettings()
-  }, [])
 
   const hasChanges = stockAnalysisUrl !== originalUrl
   const isValidTemplate = stockAnalysisUrl.includes('{code}')
@@ -118,7 +108,7 @@ export default function SystemSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {loading ? (
+          {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               <span className="ml-3 text-muted-foreground">加载中...</span>
@@ -179,11 +169,11 @@ export default function SystemSettingsPage() {
               <div className="flex gap-2 pt-4 border-t">
                 <Button
                   onClick={handleSave}
-                  disabled={saving || !hasChanges || !isValidTemplate}
+                  disabled={updateSettingsMutation.isPending || !hasChanges || !isValidTemplate}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  {saving ? '保存中...' : '保存设置'}
+                  {updateSettingsMutation.isPending ? '保存中...' : '保存设置'}
                 </Button>
                 <Button
                   onClick={handleReset}
