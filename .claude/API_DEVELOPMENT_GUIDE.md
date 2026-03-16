@@ -276,4 +276,27 @@ const formatted = safeFormatNumber(value, 2)
 
 ---
 
-**最后更新**: 2026-03-15 (完善 .to_dict() 和导入路径说明)
+## 已完成的迁移工作
+
+### Backend (已完成)
+- ✅ 统一 48 个 API 端点使用 ApiResponse 格式
+- ✅ 涉及 10 个文件: auth.py, profile.py, premarket.py, concepts.py, sync.py, system_logs.py, experiment.py, ml.py, scheduler.py, notification_channels.py
+- ✅ 提交: `4109660` - refactor(api): 统一所有API端点使用ApiResponse标准格式
+
+### Admin 项目 (已完成)
+- ✅ 修复 5 个核心文件的 API 响应解析
+- ✅ 文件: auth-store.ts, notification-channels/page.tsx, logs/system/page.tsx, strategies/pending-review/page.tsx, strategies/[id]/review/page.tsx
+- ✅ 提交: `ffbf5ed` - fix(admin): 适配后端 API 响应格式标准化 (ApiResponse)
+
+### Frontend 项目 (已完成)
+- ✅ 修复 3 个核心文件的 API 响应解析
+- ✅ 文件: auth-store.ts, settings/notifications/page.tsx, profile/page.tsx
+- ✅ 提交: `fcc16cf` - fix(frontend): 适配后端 API 响应格式标准化 (ApiResponse)
+
+### 遗留工作
+- ⚠️ 其他页面可能仍需适配（非核心功能页面）
+- 📝 建议在发现问题时逐步修复
+
+---
+
+**最后更新**: 2026-03-15 (添加迁移完成状态)

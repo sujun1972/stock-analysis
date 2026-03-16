@@ -621,8 +621,7 @@ class ApiClient {
     total: number
     completed: number
   }>> {
-    const response = await axiosInstance.get('/api/sync/status')
-    return response.data
+    return this.get('/api/sync/status')
   }
 
   /**
@@ -1099,8 +1098,7 @@ class ApiClient {
     started_at: string
     completed_at: string
   }>> {
-    const response = await axiosInstance.get(`/api/sync/status/${module}`)
-    return response.data
+    return this.get(`/api/sync/status/${module}`)
   }
 
   // ========== Scheduler API ==========
