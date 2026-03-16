@@ -320,7 +320,7 @@ export default function SentimentAIAnalysisPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       {/* 页面标题 */}
       <PageHeader
         title="市场情绪AI分析"

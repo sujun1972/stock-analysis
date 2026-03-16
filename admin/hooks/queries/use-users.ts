@@ -111,7 +111,7 @@ export function useUser(id: number | string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.users.detail(String(id)),
     queryFn: async () => {
-      const response = await apiClient.getUser(String(id));
+      const response = await apiClient.getUser(typeof id === 'number' ? id : parseInt(id));
       if (response.code !== 200) {
         throw new Error(response.message || '获取用户详情失败');
       }
@@ -158,7 +158,7 @@ export function useUpdateUser() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: number | string; data: UpdateUserDto }) => {
-      const response = await apiClient.updateUser(String(id), data);
+      const response = await apiClient.updateUser(typeof id === 'number' ? id : parseInt(id), data);
       if (response.code !== 200) {
         throw new Error(response.message || '更新用户失败');
       }
@@ -186,7 +186,7 @@ export function useDeleteUser() {
 
   return useMutation({
     mutationFn: async (id: number | string) => {
-      const response = await apiClient.deleteUser(String(id));
+      const response = await apiClient.deleteUser(typeof id === 'number' ? id : parseInt(id));
       if (response.code !== 200) {
         throw new Error(response.message || '删除用户失败');
       }
@@ -215,7 +215,7 @@ export function useBatchDeleteUsers() {
   return useMutation({
     mutationFn: async (ids: (number | string)[]) => {
       const results = await Promise.all(
-        ids.map((id) => apiClient.deleteUser(String(id)))
+        ids.map((id) => apiClient.deleteUser(typeof id === 'number' ? id : parseInt(id)))
       );
       const failed = results.filter((r) => r.code !== 200);
       if (failed.length > 0) {
@@ -242,11 +242,9 @@ export function useResetUserPassword() {
 
   return useMutation({
     mutationFn: async ({ id, password }: { id: number | string; password: string }) => {
-      const response = await apiClient.updateUser(String(id), { password });
-      if (response.code !== 200) {
-        throw new Error(response.message || '重置密码失败');
-      }
-      return response.data;
+      // TODO: 需要后端提供重置密码的专门接口
+      // 当前 updateUser API 不支持密码字段，需要单独的端点
+      throw new Error('重置密码功能暂不可用，请联系后端添加密码重置接口');
     },
     onSuccess: (_, variables) => {
       invalidateUser(String(variables.id));
@@ -292,7 +290,7 @@ export function useToggleUserStatus() {
 
   return useMutation({
     mutationFn: async ({ id, is_active }: { id: number | string; is_active: boolean }) => {
-      const response = await apiClient.updateUser(String(id), { is_active });
+      const response = await apiClient.updateUser(typeof id === 'number' ? id : parseInt(id), { is_active });
       if (response.code !== 200) {
         throw new Error(response.message || '切换用户状态失败');
       }
@@ -342,7 +340,13 @@ export function useSearchUsers(keyword: string, enabled = true) {
     queryKey: queryKeys.users.list({ search: keyword, page_size: 20 }),
     queryFn: async () => {
       if (!keyword || keyword.length < 2) {
-        return { items: [], total: 0 } as UserListResponse;
+        return {
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+          total_pages: 0
+        } as UserListResponse;
       }
 
       const response = await apiClient.getUsers({

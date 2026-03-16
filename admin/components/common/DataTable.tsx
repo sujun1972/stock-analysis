@@ -67,9 +67,9 @@ export interface DataTableProps<T> {
   columns: Column<T>[]
   loading?: boolean
   error?: string | null
-  emptyMessage?: string
-  loadingMessage?: string
-  errorMessage?: string
+  emptyMessage?: string | ReactNode
+  loadingMessage?: string | ReactNode
+  errorMessage?: string | ReactNode
   pagination?: PaginationConfig
   sort?: SortConfig
   className?: string

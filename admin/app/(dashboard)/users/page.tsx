@@ -499,7 +499,7 @@ export default function UsersPage() {
   }
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="用户管理"
         description={`管理系统用户和权限 (${total} 个用户)`}
@@ -954,6 +954,6 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   )
 }

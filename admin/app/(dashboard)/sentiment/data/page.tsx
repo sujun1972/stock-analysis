@@ -379,7 +379,7 @@ export default function SentimentManagementPage() {
   ), [])
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {/* 标题栏 */}
       <PageHeader
         title="市场情绪管理"

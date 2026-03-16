@@ -162,9 +162,9 @@ export default function SystemLogsPage() {
     {
       key: 'timestamp',
       header: '时间',
-      render: (value: string) => (
+      accessor: (item: SystemLogRecord) => (
         <span className="text-sm font-mono">
-          {formatTimestamp(value)}
+          {formatTimestamp(item.timestamp)}
         </span>
       ),
       width: 180
@@ -172,23 +172,23 @@ export default function SystemLogsPage() {
     {
       key: 'level',
       header: '级别',
-      render: (value: string) => getLevelBadge(value),
+      accessor: (item: SystemLogRecord) => getLevelBadge(item.level),
       width: 80
     },
     {
       key: 'module',
       header: '模块',
-      render: (value?: string) => (
-        <span className="text-sm">{value || '-'}</span>
+      accessor: (item: SystemLogRecord) => (
+        <span className="text-sm">{item.module || '-'}</span>
       ),
       width: 120
     },
     {
       key: 'function',
       header: '函数',
-      render: (value?: string, item: SystemLogRecord) => (
+      accessor: (item: SystemLogRecord) => (
         <span className="text-sm">
-          {value && item.line ? `${value}:${item.line}` : '-'}
+          {item.function && item.line ? `${item.function}:${item.line}` : '-'}
         </span>
       ),
       width: 120
@@ -405,11 +405,12 @@ export default function SystemLogsPage() {
               columns={columns}
               loading={isLoading}
               mobileCard={mobileCard}
-              pageSize={pageSize}
-              currentPage={page}
-              totalItems={total}
-              onPageChange={handlePageChange}
-              showPagination={true}
+              pagination={{
+                page,
+                pageSize,
+                total,
+                onPageChange: handlePageChange
+              }}
               emptyMessage="暂无日志记录"
             />
           )}

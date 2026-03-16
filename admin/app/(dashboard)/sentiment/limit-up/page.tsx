@@ -333,8 +333,6 @@ export default function LimitUpPoolPage() {
                   data={data.limit_up_stocks.slice(0, 50)}
                   columns={limitUpColumns}
                   mobileCard={limitUpMobileCard}
-                  pageSize={20}
-                  showPagination={data.limit_up_stocks.length > 20}
                 />
                 {data.limit_up_stocks.length > 50 && (
                   <p className="text-sm text-muted-foreground text-center mt-4">
@@ -362,8 +360,6 @@ export default function LimitUpPoolPage() {
                   data={data.blast_stocks.slice(0, 30)}
                   columns={blastColumns}
                   mobileCard={blastMobileCard}
-                  pageSize={15}
-                  showPagination={data.blast_stocks.length > 15}
                 />
                 {data.blast_stocks.length > 30 && (
                   <p className="text-sm text-muted-foreground text-center mt-4">

@@ -575,6 +575,49 @@ import { PageHeader } from '@/components/common/PageHeader'
 />
 ```
 
+#### DataTable 组件
+**位置**: `admin/components/common/DataTable.tsx`
+
+**功能**: 通用数据表格组件，支持响应式布局、分页、排序
+
+**特性**:
+- 桌面端显示表格视图
+- 移动端自动切换为卡片视图
+- 内置分页控件
+- 支持自定义列配置
+- 支持空状态和加载状态
+
+**使用示例**:
+```tsx
+import { DataTable, type Column } from '@/components/common/DataTable'
+
+const columns: Column<DataType>[] = [
+  {
+    key: 'name',
+    header: '名称',
+    accessor: (item) => item.name
+  },
+  {
+    key: 'status',
+    header: '状态',
+    accessor: (item) => <Badge>{item.status}</Badge>
+  }
+]
+
+<DataTable
+  data={items}
+  columns={columns}
+  loading={isLoading}
+  pagination={{
+    page: currentPage,
+    pageSize: 20,
+    total: totalCount,
+    onPageChange: setCurrentPage
+  }}
+  mobileCard={(item) => <CustomCard item={item} />}
+/>
+```
+
 ---
 
 ## 📊 性能监控

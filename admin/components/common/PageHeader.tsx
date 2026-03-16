@@ -33,9 +33,9 @@ interface PageHeaderProps {
   title: string
 
   /**
-   * 页面副标题/描述
+   * 页面副标题/描述 - 支持字符串或 React 节点
    */
-  description?: string
+  description?: string | ReactNode
 
   /**
    * 右侧操作按钮区域

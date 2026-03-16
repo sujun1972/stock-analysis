@@ -127,7 +127,7 @@ export default function PromptTemplatesPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       {/* 页面标题 */}
       <PageHeader
         title="提示词模板管理"

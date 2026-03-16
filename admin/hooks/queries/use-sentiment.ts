@@ -234,7 +234,7 @@ export function useLimitUpPool(date: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.sentiment.limitUp(date),
     queryFn: async () => {
-      const response = await apiClient.getLimitUpPool({ date });
+      const response = await apiClient.getLimitUpPool(date);
       if (response.code !== 200) {
         throw new Error(response.message || '获取涨停池失败');
       }

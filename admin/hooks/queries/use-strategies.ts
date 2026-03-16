@@ -231,15 +231,15 @@ export function useExportStrategy() {
   return useMutation({
     mutationFn: ({ id, format }: { id: number; format: 'json' | 'python' }) =>
       strategyApi.exportStrategy(id, format),
-    onSuccess: (response) => {
+    onSuccess: (response, variables) => {
       // 创建下载链接
       const blob = new Blob([response.data?.content || ''], {
-        type: format === 'json' ? 'application/json' : 'text/plain'
+        type: variables.format === 'json' ? 'application/json' : 'text/plain'
       })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = response.data?.filename || `strategy.${format}`
+      a.download = response.data?.filename || `strategy.${variables.format}`
       a.click()
       URL.revokeObjectURL(url)
 

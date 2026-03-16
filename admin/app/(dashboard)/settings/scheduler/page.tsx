@@ -359,7 +359,6 @@ export default function SchedulerSettingsPage() {
           columns={columns}
           loading={loading}
           mobileCard={mobileCard}
-          showPagination={false}
         />
       </div>
 
