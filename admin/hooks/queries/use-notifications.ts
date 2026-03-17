@@ -240,10 +240,9 @@ export function useScheduledTasks(params?: {
       if (response.code !== 200) {
         throw new Error(response.message || '获取定时任务失败');
       }
-      return response.data as {
-        items: ScheduledTask[];
-        total: number;
-      };
+      return response.data && typeof response.data === 'object' && !Array.isArray(response.data)
+        ? response.data as { items: ScheduledTask[]; total: number; }
+        : { items: [], total: 0 };
     },
     ...getQueryConfig('LIST'),
   });
@@ -274,12 +273,20 @@ export function useCreateScheduledTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (task: Omit<ScheduledTask, 'id' | 'created_at' | 'updated_at'>) => {
+    mutationFn: async (task: {
+      task_name: string;
+      module: string;
+      description?: string;
+      cron_expression: string;
+      enabled?: boolean;
+      params?: any;
+    }) => {
       const response = await apiClient.createScheduledTask(task);
       if (response.code !== 200) {
         throw new Error(response.message || '创建定时任务失败');
       }
-      return response.data as ScheduledTask;
+      // API 返回的数据格式与前端 ScheduledTask 接口不完全匹配，需要类型转换
+      return response.data as unknown as ScheduledTask;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -306,13 +313,18 @@ export function useUpdateScheduledTask() {
       updates,
     }: {
       taskId: string;
-      updates: Partial<ScheduledTask>;
+      updates: {
+        description?: string;
+        cron_expression?: string;
+        enabled?: boolean;
+        params?: any;
+      };
     }) => {
-      const response = await apiClient.updateScheduledTask(taskId, updates);
+      const response = await apiClient.updateScheduledTask(Number(taskId), updates);
       if (response.code !== 200) {
         throw new Error(response.message || '更新定时任务失败');
       }
-      return response.data as ScheduledTask;
+      return response.data as unknown as ScheduledTask;
     },
     onSuccess: (data, variables) => {
       queryClient.setQueryData(
@@ -339,7 +351,7 @@ export function useDeleteScheduledTask() {
 
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiClient.deleteScheduledTask(taskId);
+      const response = await apiClient.deleteScheduledTask(Number(taskId));
       if (response.code !== 200) {
         throw new Error(response.message || '删除定时任务失败');
       }

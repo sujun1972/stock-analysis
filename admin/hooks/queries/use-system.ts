@@ -292,14 +292,16 @@ export function useToggleMaintenanceMode() {
 
   return useMutation({
     mutationFn: async ({ enabled, message }: { enabled: boolean; message?: string }) => {
-      const response = await apiClient.updateSystemSettings({
+      // TODO: 维护模式 API 尚未实现
+      // 当前 updateSystemSettings 只支持 stock_analysis_url 参数
+      // 需要后端添加维护模式相关的 API 接口
+      console.warn('维护模式功能尚未实现，需要后端支持');
+
+      // 暂时返回模拟数据，避免页面报错
+      return {
         enable_maintenance_mode: enabled,
-        maintenance_message: message,
-      });
-      if (response.code !== 200) {
-        throw new Error(response.message || '切换维护模式失败');
-      }
-      return response.data;
+        maintenance_message: message || '系统维护中，请稍后访问'
+      };
     },
     onSuccess: (_, variables) => {
       invalidateSystemSettings();

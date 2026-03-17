@@ -7,7 +7,7 @@
  */
 
 import { BaseApiClient } from './base'
-import { ApiResponse, PaginatedResponse } from '@/types/api'
+import { ApiResponse, PaginatedResponse, PaginatedData } from '@/types/api'
 import { StockInfo, StockDaily, MinuteData, Concept } from '@/types'
 
 export interface StockListParams {
@@ -44,15 +44,15 @@ export class StockApiClient extends BaseApiClient {
    * 获取股票列表
    */
   async getStockList(params?: StockListParams): Promise<PaginatedResponse<StockInfo>> {
-    const response = await this.get<ApiResponse<PaginatedResponse<StockInfo>>>('/api/stocks', { params })
-    return response.data || { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }
+    const response = await this.get<ApiResponse<PaginatedData<StockInfo>>>('/api/stocks', { params })
+    return response || { code: 200, message: 'OK', data: { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 } }
   }
 
   /**
    * 获取单个股票信息
    */
   async getStock(code: string): Promise<StockInfo> {
-    const response = await this.get<ApiResponse<PaginatedResponse<StockInfo>>>('/api/stocks', {
+    const response = await this.get<ApiResponse<PaginatedData<StockInfo>>>('/api/stocks', {
       params: { search: code, limit: 1 }
     })
 

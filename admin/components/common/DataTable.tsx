@@ -96,14 +96,14 @@ function TableLoading({
   message = TABLE_CONFIG.DEFAULT_LOADING_MESSAGE
 }: {
   columns: number
-  message?: string
+  message?: string | ReactNode
 }) {
   return (
     <TableRow>
       <TableCell colSpan={columns} className="h-24 text-center">
         <div className="flex flex-col items-center justify-center gap-2">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-          <span className="text-sm text-muted-foreground">{message}</span>
+          <div className="text-sm text-muted-foreground">{message}</div>
         </div>
       </TableCell>
     </TableRow>
@@ -118,12 +118,12 @@ function TableEmpty({
   message = TABLE_CONFIG.DEFAULT_EMPTY_MESSAGE
 }: {
   columns: number
-  message?: string
+  message?: string | ReactNode
 }) {
   return (
     <TableRow>
       <TableCell colSpan={columns} className="h-24 text-center">
-        <span className="text-sm text-muted-foreground">{message}</span>
+        <div className="text-sm text-muted-foreground">{message}</div>
       </TableCell>
     </TableRow>
   )
@@ -138,14 +138,14 @@ function TableError({
   onRetry
 }: {
   columns: number
-  message?: string
+  message?: string | ReactNode
   onRetry?: () => void
 }) {
   return (
     <TableRow>
       <TableCell colSpan={columns} className="h-24 text-center">
         <div className="flex flex-col items-center justify-center gap-2">
-          <span className="text-sm text-destructive">{message}</span>
+          <div className="text-sm text-destructive">{message}</div>
           {onRetry && (
             <Button size="sm" variant="outline" onClick={onRetry}>
               重试
@@ -432,7 +432,7 @@ export function DataTable<T>({
           <TableBody>
             {loading && <TableLoading columns={columnCount} message={loadingMessage} />}
 
-            {error && <TableError columns={columnCount} message={errorMessage || error} />}
+            {error && <TableError columns={columnCount} message={errorMessage || String(error)} />}
 
             {!loading && !error && data.length === 0 && (
               <TableEmpty columns={columnCount} message={emptyMessage} />
