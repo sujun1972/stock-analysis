@@ -5,7 +5,6 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import AdminLayout from '@/components/layouts/AdminLayout'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { TaskPollingProvider } from '@/components/TaskPollingProvider'
-import { ActiveTasksPanel } from '@/components/ActiveTasksPanel'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { SystemConfigProvider } from '@/contexts'
 import { queryClient } from '@/lib/react-query-config'
@@ -26,8 +25,6 @@ export default function DashboardLayout({
                 {children}
               </Suspense>
             </AdminLayout>
-            {/* 全局活动任务面板 - 浮动在右下角 */}
-            <ActiveTasksPanel />
           </TaskPollingProvider>
         </SystemConfigProvider>
       </ProtectedRoute>

@@ -71,6 +71,23 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 这些页面以卡片形式展示子功能入口，解决了中间层级页面点击的问题。
 
+### 任务管理面板
+
+Admin项目采用统一的任务管理面板，位于Header右侧：
+
+#### 特点
+- **统一入口**：通过Header右侧的任务图标访问
+- **自动刷新**：打开面板时每5秒自动刷新任务状态
+- **任务分组**：按任务类型（数据同步、AI分析、策略回测等）分组显示
+- **进度显示**：支持显示任务进度条
+- **状态管理**：使用Zustand store统一管理任务状态
+- **错误提示**：显示失败任务的错误信息
+
+#### 相关文件
+- `/admin/components/TaskPanel.tsx` - 任务面板组件
+- `/admin/components/TaskStatusIcon.tsx` - Header中的任务图标
+- `/admin/stores/task-store.ts` - 任务状态管理
+
 ## 常用命令
 
 ### 查看容器状态

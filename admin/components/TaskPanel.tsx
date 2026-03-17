@@ -1,11 +1,15 @@
 /**
- * 任务面板组件（重构版）
+ * 任务面板组件
  *
- * 功能：
+ * 统一的异步任务管理面板，集成了以下功能：
  * 1. 显示所有活动任务和已完成任务
  * 2. 支持任务分组（按类型）
- * 3. 显示任务进度
- * 4. 清除已完成任务
+ * 3. 实时显示任务进度
+ * 4. 自动刷新任务状态（5秒间隔）
+ * 5. 手动刷新和清除已完成任务
+ * 6. 显示任务错误信息
+ *
+ * @since 2026-03-17 合并了原有的两个任务面板，统一管理
  */
 
 'use client'
@@ -59,7 +63,14 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
               displayName: task.display_name || task.task_name,
               taskType: task.task_type || 'other',
               status: task.status === 'running' ? 'running' : 'pending',
-              startTime: Date.now()
+              startTime: Date.now(),
+              worker: task.worker
+            })
+          } else {
+            // 更新已存在的任务状态
+            taskStore.updateTask(task.task_id, {
+              status: task.status === 'running' ? 'running' : 'pending',
+              worker: task.worker
             })
           }
         })
@@ -68,6 +79,17 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
       logger.error('刷新任务列表失败', error)
     }
   }
+
+  // 打开面板时自动刷新，并设置定时刷新
+  useEffect(() => {
+    if (open) {
+      handleRefresh()
+
+      // 每5秒自动刷新
+      const interval = setInterval(handleRefresh, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [open])
 
   const getStatusColor = (status: string) => {
     switch (status) {
