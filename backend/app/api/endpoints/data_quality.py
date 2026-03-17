@@ -2,21 +2,21 @@
 from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.core.database import get_db
 from app.services.data_quality_service import DataQualityService
-from app.core.security import require_auth
+from app.core.dependencies import get_current_user
 
 router = APIRouter()
 
 
 @router.get("/daily-report")
-async def get_daily_quality_report(
+def get_daily_quality_report(
     trade_date: Optional[date] = Query(None, description="交易日期，默认最新交易日"),
     format: str = Query("json", description="输出格式: json或html"),
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> Any:
     """
     获取每日数据质量报告
@@ -25,20 +25,20 @@ async def get_daily_quality_report(
         包含各数据源质量状况的详细报告
     """
     service = DataQualityService(db)
-    report = await service.generate_daily_quality_report(trade_date)
+    report = service.generate_daily_quality_report(trade_date)
 
     if format == "html":
-        return await service.export_report_html(report)
+        return service.export_report_html(report)
     return report
 
 
 @router.get("/weekly-report")
-async def get_weekly_quality_report(
+def get_weekly_quality_report(
     start_date: Optional[date] = Query(None, description="开始日期，默认本周一"),
     end_date: Optional[date] = Query(None, description="结束日期，默认今天"),
     format: str = Query("json", description="输出格式: json或html"),
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> Any:
     """
     获取周度数据质量报告
@@ -47,18 +47,18 @@ async def get_weekly_quality_report(
         包含一周内数据质量趋势的详细报告
     """
     service = DataQualityService(db)
-    report = await service.generate_weekly_quality_report(start_date, end_date)
+    report = service.generate_weekly_quality_report(start_date, end_date)
 
     if format == "html":
-        return await service.export_report_html(report)
+        return service.export_report_html(report)
     return report
 
 
 @router.get("/real-time-metrics")
-async def get_real_time_metrics(
+def get_real_time_metrics(
     data_source: Optional[str] = Query(None, description="数据源名称"),
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     获取实时数据质量指标
@@ -72,7 +72,7 @@ async def get_real_time_metrics(
     service = DataQualityService(db)
 
     if data_source:
-        metrics = await service.get_data_source_metrics(data_source)
+        metrics = service.get_data_source_metrics(data_source)
         if not metrics:
             raise HTTPException(status_code=404, detail=f"数据源 {data_source} 不存在")
         return {data_source: metrics}
@@ -86,7 +86,7 @@ async def get_real_time_metrics(
     ]
 
     for source in sources:
-        metrics = await service.get_data_source_metrics(source)
+        metrics = service.get_data_source_metrics(source)
         if metrics:
             all_metrics[source] = metrics
 
@@ -94,9 +94,9 @@ async def get_real_time_metrics(
 
 
 @router.get("/health-summary")
-async def get_health_summary(
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+def get_health_summary(
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     获取数据质量健康状态摘要
@@ -105,15 +105,15 @@ async def get_health_summary(
         系统整体健康状态和关键指标
     """
     service = DataQualityService(db)
-    return await service.get_health_summary()
+    return service.get_health_summary()
 
 
 @router.get("/validation-history")
-async def get_validation_history(
+def get_validation_history(
     data_source: str = Query(..., description="数据源名称"),
     days: int = Query(7, description="历史天数"),
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> List[Dict[str, Any]]:
     """
     获取数据验证历史记录
@@ -130,7 +130,7 @@ async def get_validation_history(
     end_date = datetime.now().date()
     start_date = end_date - timedelta(days=days)
 
-    history = await service.get_validation_history(
+    history = service.get_validation_history(
         data_source, start_date, end_date
     )
 
@@ -144,10 +144,10 @@ async def get_validation_history(
 
 
 @router.get("/quality-trends")
-async def get_quality_trends(
+def get_quality_trends(
     days: int = Query(30, description="趋势天数"),
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     获取数据质量趋势分析
@@ -167,7 +167,7 @@ async def get_quality_trends(
     ]
 
     for source in sources:
-        trend = await service.get_quality_trend(source, days)
+        trend = service.get_quality_trend(source, days)
         if trend:
             trends[source] = trend
 
@@ -179,11 +179,11 @@ async def get_quality_trends(
 
 
 @router.post("/trigger-validation")
-async def trigger_validation(
+def trigger_validation(
     data_source: str,
     trade_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     手动触发数据验证
@@ -198,7 +198,7 @@ async def trigger_validation(
     service = DataQualityService(db)
 
     try:
-        result = await service.validate_data_source(data_source, trade_date)
+        result = service.validate_data_source(data_source, trade_date)
         return {
             "status": "success",
             "data_source": data_source,
@@ -210,9 +210,9 @@ async def trigger_validation(
 
 
 @router.get("/alerts/active")
-async def get_active_alerts(
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+def get_active_alerts(
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> List[Dict[str, Any]]:
     """
     获取当前活跃的质量告警
@@ -221,16 +221,16 @@ async def get_active_alerts(
         活跃告警列表
     """
     service = DataQualityService(db)
-    alerts = await service.get_active_alerts()
+    alerts = service.get_active_alerts()
 
     return alerts
 
 
 @router.post("/alerts/acknowledge/{alert_id}")
-async def acknowledge_alert(
+def acknowledge_alert(
     alert_id: int,
-    db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_auth)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     确认质量告警
@@ -244,7 +244,7 @@ async def acknowledge_alert(
     service = DataQualityService(db)
 
     try:
-        await service.acknowledge_alert(alert_id)
+        service.acknowledge_alert(alert_id)
         return {
             "status": "success",
             "alert_id": alert_id,

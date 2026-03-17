@@ -8,21 +8,20 @@ from datetime import datetime, timedelta
 import asyncio
 import pandas as pd
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.core.database import get_async_db
+from app.core.database import get_db
 from app.core.config import settings
-from app.utils.logger import logger
-from app.services.base_service import BaseService
+from loguru import logger
+# from app.services.base_service import BaseService
 from core.src.providers import DataProviderFactory
 from core.src.data.validators.extended_validator import ExtendedDataValidator
 
 
-class ExtendedDataSyncService(BaseService):
+class ExtendedDataSyncService:
     """扩展数据同步服务"""
 
     def __init__(self):
-        super().__init__()
         self.provider_factory = DataProviderFactory()
         self.validator = ExtendedDataValidator()
 

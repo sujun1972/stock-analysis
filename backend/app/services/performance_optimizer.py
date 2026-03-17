@@ -15,12 +15,12 @@ import json
 import hashlib
 from contextlib import asynccontextmanager
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy import text
+from sqlalchemy.orm import Session
+from sqlalchemy import text, create_engine
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import get_settings
-from app.core.database import get_async_db
+# from app.core.database import get_db  # Not needed for mock service
 
 logger = logging.getLogger(__name__)
 

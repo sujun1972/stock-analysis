@@ -9,7 +9,7 @@ import asyncio
 from typing import Optional
 
 from app.services.extended_sync_service import ExtendedDataSyncService
-from app.utils.logger import logger
+from loguru import logger
 
 
 @shared_task(name="extended.sync_daily_basic",
