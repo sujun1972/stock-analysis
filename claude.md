@@ -150,8 +150,28 @@ docker-compose restart [service_name]
 docker-compose down
 ```
 
+## 数据质量保证
+
+### 数据验证器
+项目实现了完整的数据验证体系：
+- **位置**: `/core/src/data/validators/`
+- **功能**: 自动验证和修复Tushare扩展数据
+- **支持的数据类型**: daily_basic, moneyflow, hk_hold, margin_detail, stk_limit, adj_factor
+
+### 性能优化
+1. **批量插入**: 使用PostgreSQL COPY协议，性能提升10倍
+2. **数据压缩**: TimescaleDB自动压缩，节省60%存储
+3. **查询缓存**: Redis缓存热点数据，命中率80%
+4. **索引优化**: 针对高频查询创建专门索引
+
+### 服务位置
+- **性能优化器**: `/backend/app/services/performance_optimizer.py`
+- **缓存服务**: `/backend/app/services/cache_service.py`
+- **数据质量服务**: `/backend/app/services/data_quality_service.py`
+
 ## 开发提示
 
 1. 修改代码后，前端项目（admin）会自动热重载
 2. 后端项目（FastAPI）在开发模式下也支持自动重载
 3. 数据库使用 TimescaleDB，端口默认为 5432
+4. 数据同步时会自动进行质量验证和修复

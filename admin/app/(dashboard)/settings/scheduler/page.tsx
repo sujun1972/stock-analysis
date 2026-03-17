@@ -108,9 +108,32 @@ export default function SchedulerSettingsPage() {
       'delisted_stocks': '退市列表',
       'daily': '日线数据',
       'minute': '分时数据',
-      'realtime': '实时行情'
+      'realtime': '实时行情',
+      // 新增扩展数据任务
+      'extended.sync_daily_basic': '每日指标',
+      'extended.sync_moneyflow': '资金流向',
+      'extended.sync_hk_hold': '北向资金',
+      'extended.sync_margin': '融资融券',
+      'extended.sync_stk_limit': '涨跌停价格',
+      'extended.sync_block_trade': '大宗交易',
+      'extended.sync_adj_factor': '复权因子',
+      'extended.sync_suspend': '停复牌信息'
     }
     return labels[module] || module
+  }
+
+  const getPointsConsumption = (module: string) => {
+    const points: Record<string, number> = {
+      'extended.sync_daily_basic': 120,
+      'extended.sync_moneyflow': 2000,  // 高消耗
+      'extended.sync_hk_hold': 300,
+      'extended.sync_margin': 300,
+      'extended.sync_stk_limit': 120,
+      'extended.sync_block_trade': 300,
+      'extended.sync_adj_factor': 120,
+      'extended.sync_suspend': 120
+    }
+    return points[module] || 0
   }
 
   const getStatusColor = (status: string | null) => {
@@ -143,9 +166,23 @@ export default function SchedulerSettingsPage() {
       key: 'module',
       header: '模块',
       render: (value: string) => (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
-          {getModuleLabel(value)}
-        </span>
+        <div className="space-y-1">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
+            {getModuleLabel(value)}
+          </span>
+          {getPointsConsumption(value) > 0 && (
+            <div>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
+                getPointsConsumption(value) >= 1000
+                  ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+              }`}>
+                {getPointsConsumption(value) >= 1000 ? '⚠️ ' : ''}
+                {getPointsConsumption(value)} 积分
+              </span>
+            </div>
+          )}
+        </div>
       )
     },
     {

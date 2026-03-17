@@ -861,6 +861,243 @@ class TushareProvider(BaseDataProvider):
             logger.warning(f"获取分钟数据失败: {e}")
             return None
 
+    # ========== 扩展数据获取方法 ==========
+
+    def get_daily_basic(self, ts_code: Optional[str] = None,
+                       trade_date: Optional[str] = None,
+                       start_date: Optional[str] = None,
+                       end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取每日指标数据
+        积分消耗：120分
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 每日指标数据
+        """
+        try:
+            logger.info(f"获取每日指标数据: ts_code={ts_code}, trade_date={trade_date}")
+            df = self.api_client.query('daily_basic',
+                                     ts_code=ts_code,
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取每日指标数据失败: {e}")
+            raise TushareDataError(f"获取每日指标数据失败: {str(e)}")
+
+    def get_moneyflow(self, ts_code: Optional[str] = None,
+                     trade_date: Optional[str] = None,
+                     start_date: Optional[str] = None,
+                     end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取个股资金流向
+        积分消耗：2000分
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 资金流向数据
+        """
+        try:
+            logger.info(f"获取资金流向数据: ts_code={ts_code}, trade_date={trade_date}")
+            df = self.api_client.query('moneyflow',
+                                     ts_code=ts_code,
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取资金流向数据失败: {e}")
+            raise TushareDataError(f"获取资金流向数据失败: {str(e)}")
+
+    def get_adj_factor(self, ts_code: Optional[str] = None,
+                      trade_date: Optional[str] = None,
+                      start_date: Optional[str] = None,
+                      end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取复权因子
+        积分消耗：120分
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 复权因子数据
+        """
+        try:
+            logger.info(f"获取复权因子数据: ts_code={ts_code}")
+            df = self.api_client.query('adj_factor',
+                                     ts_code=ts_code,
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取复权因子数据失败: {e}")
+            raise TushareDataError(f"获取复权因子数据失败: {str(e)}")
+
+    def get_hk_hold(self, code: Optional[str] = None,
+                   ts_code: Optional[str] = None,
+                   trade_date: Optional[str] = None,
+                   start_date: Optional[str] = None,
+                   end_date: Optional[str] = None,
+                   exchange: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取沪深港通持股数据
+        积分消耗：300分
+
+        Args:
+            code: 股票代码
+            ts_code: TS代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            exchange: 交易所代码（SH/SZ）
+
+        Returns:
+            pd.DataFrame: 北向资金持股数据
+        """
+        try:
+            logger.info(f"获取北向资金数据: exchange={exchange}, trade_date={trade_date}")
+            df = self.api_client.query('hk_hold',
+                                     code=code,
+                                     ts_code=ts_code,
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date,
+                                     exchange=exchange)
+            return df
+        except Exception as e:
+            logger.error(f"获取北向资金数据失败: {e}")
+            raise TushareDataError(f"获取北向资金数据失败: {str(e)}")
+
+    def get_margin_detail(self, ts_code: Optional[str] = None,
+                         trade_date: Optional[str] = None,
+                         start_date: Optional[str] = None,
+                         end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取融资融券详细数据
+        积分消耗：300分
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 融资融券数据
+        """
+        try:
+            logger.info(f"获取融资融券数据: ts_code={ts_code}, trade_date={trade_date}")
+            df = self.api_client.query('margin_detail',
+                                     ts_code=ts_code,
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取融资融券数据失败: {e}")
+            raise TushareDataError(f"获取融资融券数据失败: {str(e)}")
+
+    def get_block_trade(self, ts_code: Optional[str] = None,
+                       trade_date: Optional[str] = None,
+                       start_date: Optional[str] = None,
+                       end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取大宗交易数据
+        积分消耗：300分
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 大宗交易数据
+        """
+        try:
+            logger.info(f"获取大宗交易数据: ts_code={ts_code}, trade_date={trade_date}")
+            df = self.api_client.query('block_trade',
+                                     ts_code=ts_code,
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取大宗交易数据失败: {e}")
+            raise TushareDataError(f"获取大宗交易数据失败: {str(e)}")
+
+    def get_stk_limit(self, ts_code: Optional[str] = None,
+                     trade_date: Optional[str] = None,
+                     start_date: Optional[str] = None,
+                     end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取每日涨跌停价格
+        积分消耗：120分
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 涨跌停价格数据
+        """
+        try:
+            logger.info(f"获取涨跌停价格数据: ts_code={ts_code}, trade_date={trade_date}")
+            df = self.api_client.query('stk_limit',
+                                     ts_code=ts_code,
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取涨跌停价格数据失败: {e}")
+            raise TushareDataError(f"获取涨跌停价格数据失败: {str(e)}")
+
+    def get_suspend(self, ts_code: Optional[str] = None,
+                   suspend_date: Optional[str] = None,
+                   resume_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取停复牌信息
+        积分消耗：120分
+
+        Args:
+            ts_code: 股票代码
+            suspend_date: 停牌日期 YYYYMMDD
+            resume_date: 复牌日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 停复牌信息数据
+        """
+        try:
+            logger.info(f"获取停复牌信息: ts_code={ts_code}")
+            df = self.api_client.query('suspend',
+                                     ts_code=ts_code,
+                                     suspend_date=suspend_date,
+                                     resume_date=resume_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取停复牌信息失败: {e}")
+            raise TushareDataError(f"获取停复牌信息失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

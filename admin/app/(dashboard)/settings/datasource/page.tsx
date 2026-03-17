@@ -37,7 +37,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { CheckCircle2, XCircle, Loader2, PlayCircle } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, PlayCircle, AlertTriangle, Info } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 export default function SettingsPage() {
   const { dataSource: configData, isLoading, error: configError, fetchDataSourceConfig } = useConfigStore()
@@ -54,6 +57,11 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  // 扩展数据配置相关状态
+  const [extendedDataEnabled, setExtendedDataEnabled] = useState(false)
+  const [moneyflowStrategy, setMoneyflowStrategy] = useState<'top100' | 'active' | 'all'>('top100')
+  const [backfillDays, setBackfillDays] = useState<'0' | '7' | '30' | '90'>('0')
 
   // 测试相关状态
   const [isTestDialogOpen, setIsTestDialogOpen] = useState(false)
@@ -575,6 +583,157 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* 扩展数据配置卡片 */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>扩展数据配置（短线交易专用）</CardTitle>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            配置短线交易所需的高级数据源，这些数据仅支持 Tushare Pro
+          </p>
+        </CardHeader>
+        <CardContent>
+          {/* 总开关 */}
+          <div className="flex items-center justify-between mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div>
+              <Label>启用扩展数据同步</Label>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                开启后将同步资金流向、每日指标等高级数据
+              </p>
+            </div>
+            <Switch
+              checked={extendedDataEnabled}
+              onCheckedChange={setExtendedDataEnabled}
+            />
+          </div>
+
+          {extendedDataEnabled && (
+            <div className="space-y-4">
+              {/* 每日指标数据源 */}
+              <div className="space-y-2">
+                <Label>每日指标（换手率、PE等）</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">Tushare Pro</Badge>
+                  <span className="text-xs text-yellow-600">消耗 120 积分/次</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  包含换手率、市盈率、市净率等关键指标
+                </p>
+              </div>
+
+              {/* 资金流向数据源 */}
+              <div className="space-y-2">
+                <Label>资金流向</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">Tushare Pro</Badge>
+                  <span className="text-xs text-red-600 font-semibold">
+                    ⚠️ 高消耗：2000 积分/次
+                  </span>
+                </div>
+                <Alert className="mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    资金流向数据积分消耗高，建议仅同步活跃股票
+                  </AlertDescription>
+                </Alert>
+              </div>
+
+              {/* 北向资金数据源 */}
+              <div className="space-y-2">
+                <Label>北向资金（沪深港通）</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">Tushare Pro</Badge>
+                  <span className="text-xs text-yellow-600">消耗 300 积分/次</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  追踪外资动向，重要参考指标
+                </p>
+              </div>
+
+              {/* 融资融券数据源 */}
+              <div className="space-y-2">
+                <Label>融资融券</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">Tushare Pro</Badge>
+                  <span className="text-xs text-yellow-600">消耗 300 积分/次</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  两融余额变化，市场情绪指标
+                </p>
+              </div>
+
+              {/* 积分消耗预估 */}
+              <Alert className="mt-6">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="space-y-1">
+                    <p className="font-semibold">积分消耗预估</p>
+                    <p className="text-xs">日消耗：约 1,240 积分（不含资金流向）</p>
+                    <p className="text-xs">月消耗：约 37,200 积分</p>
+                    <p className="text-xs text-blue-600">
+                      建议申请 5万积分/月 的配额
+                    </p>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 同步策略配置 */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>同步策略配置</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* 资金流向同步策略 */}
+            <div>
+              <Label>资金流向同步策略</Label>
+              <RadioGroup value={moneyflowStrategy} onValueChange={(value) => setMoneyflowStrategy(value as 'top100' | 'active' | 'all')}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="top100" id="top100" />
+                  <Label htmlFor="top100" className="text-sm">
+                    仅同步成交额前100（推荐）
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="active" id="active" />
+                  <Label htmlFor="active" className="text-sm">
+                    同步涨跌幅前200
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="all" id="all" />
+                  <Label htmlFor="all" className="text-sm">
+                    同步全部（消耗大量积分）
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {/* 历史数据回补 */}
+            <div>
+              <Label>历史数据回补</Label>
+              <Select value={backfillDays} onValueChange={setBackfillDays}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">不回补</SelectItem>
+                  <SelectItem value="7">最近7天</SelectItem>
+                  <SelectItem value="30">最近30天</SelectItem>
+                  <SelectItem value="90">最近90天</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-600 mt-1">
+                首次启用时是否同步历史数据
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

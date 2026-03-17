@@ -13,8 +13,10 @@ from .endpoints import (
     concepts,
     config,
     data,
+    data_quality,  # 数据质量监控
     dynamic_strategies,
     experiment,
+    extended_data,  # 扩展数据接口
     features,
     llm_logs,
     market,
@@ -67,6 +69,8 @@ router.include_router(ml.router, prefix="/ml", tags=["机器学习"])
 # 数据引擎路由
 router.include_router(config.router, prefix="/config", tags=["配置管理"])
 router.include_router(sync.router, prefix="/sync", tags=["数据同步"])
+router.include_router(extended_data.router, prefix="/extended-data", tags=["扩展数据"])
+router.include_router(data_quality.router, prefix="/data-quality", tags=["数据质量"])
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(market.router, prefix="/market", tags=["市场状态"])
 
