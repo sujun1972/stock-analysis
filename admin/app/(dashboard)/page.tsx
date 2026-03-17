@@ -185,7 +185,7 @@ export default function AdminDashboard() {
               </Link>
 
               <Link
-                href="/monitor"
+                href="/monitoring/performance"
                 className="flex items-center gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">

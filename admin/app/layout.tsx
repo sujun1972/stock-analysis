@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { ProgressBar } from "@/components/ProgressBar";
 import "./globals.css";
+import "@/styles/nprogress.css";
 
 export const metadata: Metadata = {
   title: "管理后台 - Stock Analysis Admin",
@@ -30,6 +32,7 @@ export default function RootLayout({
         {/* <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossOrigin="anonymous" /> */}
       </head>
       <body className="antialiased">
+        <ProgressBar />
         <ErrorBoundary>
           {children}
         </ErrorBoundary>

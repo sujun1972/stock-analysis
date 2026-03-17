@@ -207,7 +207,7 @@ const navItems: NavItem[] = [
     children: [
       {
         name: '性能监控',
-        href: '/monitor',
+        href: '/monitoring/performance',
         icon: Activity
       },
       {

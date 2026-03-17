@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import NProgress from 'nprogress'
 import type {
   StockInfo,
   StockDaily,
@@ -79,6 +80,15 @@ axiosInstance.interceptors.request.use(
     // 只在浏览器环境中访问localStorage
     if (typeof window === 'undefined') {
       return config
+    }
+
+    // 为 API 请求显示进度条
+    // 排除认证相关的请求，避免频繁的进度条闪烁
+    const skipProgressUrls = ['/api/auth/refresh', '/api/auth/login']
+    const shouldShowProgress = !skipProgressUrls.some(url => config.url?.includes(url))
+
+    if (shouldShowProgress) {
+      NProgress.start()
     }
 
     // 从localStorage获取Token（由auth-store管理）
@@ -190,9 +200,13 @@ const processQueue = (error: any = null, token: string | null = null) => {
  */
 axiosInstance.interceptors.response.use(
   (response) => {
+    // 请求成功，完成进度条
+    NProgress.done()
     return response
   },
   async (error) => {
+    // 请求失败也要完成进度条
+    NProgress.done()
     const originalRequest = error.config
 
     // Token过期，尝试刷新
