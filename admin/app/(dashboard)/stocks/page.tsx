@@ -21,7 +21,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
-import { Search, RefreshCw, Database, TrendingUp, TrendingDown, Info } from 'lucide-react'
+import { Search, RefreshCw, Database, Info } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import type { StockInfo } from '@/types/stock'
 import { Button } from '@/components/ui/button'
@@ -74,9 +74,10 @@ export default function StocksManagementPage() {
   const loadStocks = useCallback(async () => {
     setLoading(true)
     try {
+      // 构建分页参数（使用 page/page_size 而非 skip/limit，与后端 API 保持一致）
       const params: any = {
-        skip: (currentPage - 1) * pageSize,
-        limit: pageSize,
+        page: currentPage,
+        page_size: pageSize,
         sort_by: sortBy,
         sort_order: sortOrder,
       }
@@ -256,16 +257,7 @@ export default function StocksManagementPage() {
     },
     {
       key: 'pct_change',
-      header: (
-        <div className="flex items-center justify-end gap-1">
-          涨跌幅
-          {sortOrder === 'desc' ? (
-            <TrendingDown className="h-4 w-4" />
-          ) : (
-            <TrendingUp className="h-4 w-4" />
-          )}
-        </div>
-      ),
+      header: '涨跌幅',
       accessor: (stock) => (
         <span className={`font-medium ${getPriceColor(stock.pct_change)}`}>
           {formatPctChange(stock.pct_change)}

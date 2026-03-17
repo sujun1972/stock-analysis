@@ -385,13 +385,19 @@ class ApiClient {
 
   // ========== 股票相关API ==========
 
-  // 获取股票列表
+  /**
+   * 获取股票列表
+   * @param params 查询参数
+   * @param params.page 页码（从1开始）
+   * @param params.page_size 每页记录数
+   * @returns 分页的股票数据
+   */
   async getStockList(params?: {
     market?: string
     industry?: string
     status?: string
-    skip?: number
-    limit?: number
+    page?: number        // 页码方式分页（而非 skip/limit 偏移量方式）
+    page_size?: number   // 每页大小
     search?: string
     concepts?: string
     sort_by?: string
