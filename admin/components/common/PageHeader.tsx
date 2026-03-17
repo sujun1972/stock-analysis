@@ -52,13 +52,6 @@ interface PageHeaderProps {
    */
   onBack?: () => void
 
-  /**
-   * 面包屑导航
-   */
-  breadcrumbs?: Array<{
-    label: string
-    href?: string
-  }>
 
   /**
    * 额外的 CSS 类名
@@ -87,7 +80,6 @@ export function PageHeader({
   actions,
   showBack = false,
   onBack,
-  breadcrumbs,
   className,
   compact = false,
   prefix,
@@ -105,26 +97,6 @@ export function PageHeader({
 
   return (
     <div className={cn('space-y-4', className)}>
-      {/* 面包屑导航 */}
-      {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="flex items-center space-x-2 text-sm text-muted-foreground">
-          {breadcrumbs.map((item, index) => (
-            <React.Fragment key={index}>
-              {index > 0 && <span>/</span>}
-              {item.href ? (
-                <a
-                  href={item.href}
-                  className="hover:text-foreground transition-colors"
-                >
-                  {item.label}
-                </a>
-              ) : (
-                <span className="text-foreground font-medium">{item.label}</span>
-              )}
-            </React.Fragment>
-          ))}
-        </nav>
-      )}
 
       {/* 主要头部区域 */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

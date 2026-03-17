@@ -49,6 +49,8 @@ import {
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
 import { cn } from '@/lib/utils'
+import { Breadcrumb } from '@/components/ui/breadcrumb'
+import { useBreadcrumbs } from '@/hooks/useBreadcrumbs'
 
 interface AdminLayoutProps {
   children: ReactNode
@@ -223,6 +225,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { isCollapsed, setCollapsed } = useSidebarStore()
+  const breadcrumbs = useBreadcrumbs()
 
   /**
    * 根据当前路径自动计算应该展开的菜单
@@ -554,6 +557,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* 顶部 Header */}
         <Header />
+
+        {/* 面包屑导航 - 在Header下方，内容区上方 */}
+        {breadcrumbs.length > 0 && (
+          <div className="px-8 py-3 border-b bg-white dark:bg-gray-900">
+            <Breadcrumb items={breadcrumbs} />
+          </div>
+        )}
 
         {/* 页面内容 */}
         <div className="flex-1 overflow-auto p-8">
