@@ -26,8 +26,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Dialog,
   DialogContent,
@@ -41,8 +42,10 @@ import {
   RefreshCw,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  CalendarIcon
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   getLLMCallLogs,
   getLLMSummary,
@@ -53,7 +56,8 @@ import {
   providerMap
 } from '@/lib/llm-logs-api'
 import { format } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { zhCN as dateZhCN } from 'date-fns/locale'
+import { zhCN } from '@/lib/date-utils'
 
 export default function LLMCallLogsPage() {
   // 查询参数
@@ -61,6 +65,9 @@ export default function LLMCallLogsPage() {
     page: 1,
     page_size: 20
   })
+
+  // 日期选择状态
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
 
   // 详情弹窗
   const [detailLog, setDetailLog] = useState<LLMCallLog | null>(null)
@@ -91,7 +98,7 @@ export default function LLMCallLogsPage() {
   // 格式化时间
   const formatDateTime = (dateStr: string) => {
     try {
-      return format(new Date(dateStr), 'yyyy-MM-dd HH:mm:ss', { locale: zhCN })
+      return format(new Date(dateStr), 'yyyy-MM-dd HH:mm:ss', { locale: dateZhCN })
     } catch {
       return dateStr
     }
@@ -306,10 +313,10 @@ export default function LLMCallLogsPage() {
       {/* 筛选器 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">筛选条件</CardTitle>
+          <CardTitle className="text-base sm:text-lg">筛选条件</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Select
               value={queryParams.business_type || 'all'}
               onValueChange={(value) =>
@@ -362,12 +369,43 @@ export default function LLMCallLogsPage() {
               </SelectContent>
             </Select>
 
-            <Input
-              type="date"
-              value={queryParams.start_date || ''}
-              onChange={(e) => setQueryParams({ ...queryParams, start_date: e.target.value || undefined, page: 1 })}
-              placeholder="开始日期"
-            />
+            <div className="w-full">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !selectedDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                    {selectedDate ? (
+                      <span className="truncate">
+                        {format(selectedDate, "yyyy-MM-dd", { locale: zhCN })}
+                      </span>
+                    ) : (
+                      <span className="truncate">选择开始日期</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => {
+                      setSelectedDate(date)
+                      setQueryParams({
+                        ...queryParams,
+                        start_date: date ? format(date, "yyyy-MM-dd") : undefined,
+                        page: 1
+                      })
+                    }}
+                    locale={zhCN}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -22,11 +22,18 @@ import {
   Power,
   PowerOff,
   TrendingUp,
-  Copy,
   Trash2,
   Clock,
   CheckCircle2,
+  MoreVertical,
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export default function PromptTemplatesPage() {
   const router = useRouter()
@@ -143,14 +150,14 @@ export default function PromptTemplatesPage() {
       {/* 筛选器 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">筛选条件</CardTitle>
+          <CardTitle className="text-base sm:text-lg">筛选条件</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="w-full">
               <label className="text-sm font-medium mb-2 block">业务类型</label>
               <Select value={businessTypeFilter} onValueChange={setBusinessTypeFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -162,10 +169,10 @@ export default function PromptTemplatesPage() {
               </Select>
             </div>
 
-            <div className="flex-1">
+            <div className="w-full">
               <label className="text-sm font-medium mb-2 block">状态</label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -198,34 +205,37 @@ export default function PromptTemplatesPage() {
         <div className="grid gap-4">
           {templates.map((template) => (
             <Card key={template.id} className={template.is_default ? 'border-primary' : ''}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <CardTitle className="text-lg">{template.template_name}</CardTitle>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <CardTitle className="text-base sm:text-lg break-all">{template.template_name}</CardTitle>
                       {template.is_default && (
-                        <Badge variant="default">默认</Badge>
+                        <Badge variant="default" className="text-xs">默认</Badge>
                       )}
                       {template.is_active ? (
-                        <Badge variant="outline" className="text-green-600">
+                        <Badge variant="outline" className="text-green-600 text-xs">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           已启用
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-gray-500">
+                        <Badge variant="outline" className="text-gray-500 text-xs">
                           已停用
                         </Badge>
                       )}
-                      <Badge variant="secondary">
+                      <Badge variant="secondary" className="text-xs">
                         {BUSINESS_TYPE_LABELS[template.business_type]}
                       </Badge>
                     </div>
-                    <CardDescription>
-                      Key: {template.template_key} | 版本: {template.version}
+                    <CardDescription className="text-xs sm:text-sm">
+                      <span className="block sm:inline">Key: {template.template_key}</span>
+                      <span className="hidden sm:inline"> | </span>
+                      <span className="block sm:inline">版本: {template.version}</span>
                     </CardDescription>
                   </div>
 
-                  <div className="flex gap-2">
+                  {/* 桌面端按钮组 */}
+                  <div className="hidden sm:flex gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -286,28 +296,87 @@ export default function PromptTemplatesPage() {
                       </Button>
                     )}
                   </div>
+
+                  {/* 移动端下拉菜单 */}
+                  <div className="sm:hidden">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreVertical className="h-4 w-4" />
+                          <span className="sr-only">操作菜单</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/settings/prompt-templates/${template.id}`)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          编辑模板
+                        </DropdownMenuItem>
+
+                        {template.is_active ? (
+                          <DropdownMenuItem onClick={() => handleDeactivate(template.id)}>
+                            <PowerOff className="mr-2 h-4 w-4" />
+                            停用模板
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => handleActivate(template.id)}>
+                            <Power className="mr-2 h-4 w-4" />
+                            启用模板
+                          </DropdownMenuItem>
+                        )}
+
+                        {!template.is_default && (
+                          <DropdownMenuItem onClick={() => handleActivate(template.id, true)}>
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            设为默认
+                          </DropdownMenuItem>
+                        )}
+
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/settings/prompt-templates/${template.id}/statistics`)}
+                        >
+                          <TrendingUp className="mr-2 h-4 w-4" />
+                          查看统计
+                        </DropdownMenuItem>
+
+                        {!template.is_default && !template.is_active && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(template.id)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              删除模板
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </CardHeader>
 
-              <CardContent>
-                <div className="grid grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">使用次数</p>
-                    <p className="font-semibold text-lg">{template.usage_count || 0}</p>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm">
+                  <div className="bg-muted/30 rounded-lg p-2 sm:p-3">
+                    <p className="text-muted-foreground text-xs">使用次数</p>
+                    <p className="font-semibold text-base sm:text-lg mt-1">{template.usage_count || 0}</p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">成功率</p>
-                    <p className="font-semibold text-lg">
+                  <div className="bg-muted/30 rounded-lg p-2 sm:p-3">
+                    <p className="text-muted-foreground text-xs">成功率</p>
+                    <p className="font-semibold text-base sm:text-lg mt-1">
                       {template.success_rate ? `${template.success_rate.toFixed(1)}%` : '-'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">平均Token</p>
-                    <p className="font-semibold text-lg">{template.avg_tokens_used || '-'}</p>
+                  <div className="bg-muted/30 rounded-lg p-2 sm:p-3">
+                    <p className="text-muted-foreground text-xs">平均Token</p>
+                    <p className="font-semibold text-base sm:text-lg mt-1">{template.avg_tokens_used || '-'}</p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">平均耗时</p>
-                    <p className="font-semibold text-lg">
+                  <div className="bg-muted/30 rounded-lg p-2 sm:p-3">
+                    <p className="text-muted-foreground text-xs">平均耗时</p>
+                    <p className="font-semibold text-base sm:text-lg mt-1">
                       {template.avg_generation_time
                         ? `${template.avg_generation_time.toFixed(2)}s`
                         : '-'}
@@ -316,17 +385,27 @@ export default function PromptTemplatesPage() {
                 </div>
 
                 {template.description && (
-                  <div className="mt-4 p-3 bg-muted/50 rounded-md">
-                    <p className="text-sm text-muted-foreground">{template.description}</p>
+                  <div className="mt-3 sm:mt-4 p-2 sm:p-3 bg-muted/50 rounded-md">
+                    <p className="text-xs sm:text-sm text-muted-foreground">{template.description}</p>
                   </div>
                 )}
 
-                <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    创建于 {new Date(template.created_at).toLocaleString('zh-CN')}
+                    <Clock className="h-3 w-3 flex-shrink-0" />
+                    <span>创建于 {new Date(template.created_at).toLocaleString('zh-CN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}</span>
                   </div>
-                  {template.created_by && <div>创建人: {template.created_by}</div>}
+                  {template.created_by && (
+                    <div className="flex items-center gap-1">
+                      <span>创建人: {template.created_by}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

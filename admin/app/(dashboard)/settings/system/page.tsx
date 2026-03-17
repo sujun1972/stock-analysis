@@ -205,25 +205,25 @@ export default function SystemSettingsPage() {
             <div className="space-y-2">
               <div className="bg-muted p-3 rounded-md">
                 <p className="font-medium mb-1">1. Query 参数方式（推荐）</p>
-                <code className="text-xs block mb-1">http://localhost:3000/analysis?code={'{code}'}</code>
+                <code className="text-xs block mb-1 break-all">http://localhost:3000/analysis?code={'{code}'}</code>
                 <p className="text-xs text-muted-foreground">适用于大多数Web应用</p>
               </div>
 
               <div className="bg-muted p-3 rounded-md">
                 <p className="font-medium mb-1">2. Path 参数方式</p>
-                <code className="text-xs block mb-1">http://localhost:3000/stocks/{'{code}'}/analysis</code>
+                <code className="text-xs block mb-1 break-all">http://localhost:3000/stocks/{'{code}'}/analysis</code>
                 <p className="text-xs text-muted-foreground">RESTful风格的URL</p>
               </div>
 
               <div className="bg-muted p-3 rounded-md">
                 <p className="font-medium mb-1">3. 混合方式</p>
-                <code className="text-xs block mb-1">http://localhost:3000/stock/{'{code}'}?tab=analysis</code>
+                <code className="text-xs block mb-1 break-all">http://localhost:3000/stock/{'{code}'}?tab=analysis</code>
                 <p className="text-xs text-muted-foreground">同时使用path和query参数</p>
               </div>
 
               <div className="bg-muted p-3 rounded-md">
                 <p className="font-medium mb-1">4. 自定义参数名</p>
-                <code className="text-xs block mb-1">https://example.com/detail?symbol={'{code}'}&amp;market=cn</code>
+                <code className="text-xs block mb-1 break-all">https://example.com/detail?symbol={'{code}'}&amp;market=cn</code>
                 <p className="text-xs text-muted-foreground">支持自定义参数名称</p>
               </div>
             </div>

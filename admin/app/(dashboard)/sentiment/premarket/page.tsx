@@ -14,15 +14,14 @@ import {
   CalendarIcon,
   PlayIcon,
   RefreshCwIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
   AlertTriangleIcon,
-  CheckCircle2Icon,
   Clock,
   Database,
   BrainCircuit,
-  NewspaperIcon,
-  BarChart3Icon
+  TrendingUp,
+  Globe,
+  Newspaper,
+  History
 } from "lucide-react"
 import { format, zhCN } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
@@ -35,8 +34,7 @@ import type {
   CollisionAnalysis,
   PremarketNews,
   AnalysisHistory,
-  SyncResult,
-  NewsListResponse
+  SyncResult
 } from "@/types/premarket"
 
 interface AIProvider {
@@ -52,6 +50,7 @@ export default function PremarketPage() {
   const [date, setDate] = useState<Date>(new Date())
   const [aiProvider, setAiProvider] = useState<string>("")
   const [aiProviders, setAiProviders] = useState<AIProvider[]>([])
+  const [activeTab, setActiveTab] = useState<string>("analysis")
 
   const [overnightData, setOvernightData] = useState<OvernightData | null>(null)
   const [collisionAnalysis, setCollisionAnalysis] = useState<CollisionAnalysis | null>(null)
@@ -277,78 +276,84 @@ export default function PremarketPage() {
           <CardDescription>选择日期，同步数据或生成AI碰撞分析</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-4">
-            {/* 日期选择 */}
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium mb-2 block">分析日期</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !date && "text-muted-foreground"
+          <div className="flex flex-col space-y-4">
+            {/* 第一行：日期和AI提供商选择 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* 日期选择 */}
+              <div className="w-full">
+                <label className="text-sm font-medium mb-2 block">分析日期</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">
+                        {date ? format(date, "PPP", { locale: zhCN }) : "选择日期"}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={date}
+                      onSelect={handleDateChange}
+                      locale={zhCN}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* AI提供商选择 */}
+              <div className="w-full">
+                <label className="text-sm font-medium mb-2 block">AI提供商</label>
+                <Select value={aiProvider} onValueChange={setAiProvider} disabled={isLoadingProviders}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={isLoadingProviders ? "加载中..." : "选择AI提供商"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {aiProviders.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        暂无可用配置
+                      </div>
+                    ) : (
+                      aiProviders.map((provider) => (
+                        <SelectItem key={provider.id} value={provider.provider}>
+                          <div className="flex flex-col">
+                            <span>{provider.display_name} {provider.is_default && "(默认)"}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {provider.model_name}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
                     )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP", { locale: zhCN }) : "选择日期"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={handleDateChange}
-                    initialFocus
-                    locale={zhCN}
-                  />
-                </PopoverContent>
-              </Popover>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* AI提供商选择 */}
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium mb-2 block">AI提供商</label>
-              <Select value={aiProvider} onValueChange={setAiProvider} disabled={isLoadingProviders}>
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingProviders ? "加载中..." : "选择AI提供商"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {aiProviders.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground text-center">
-                      暂无可用配置
-                    </div>
-                  ) : (
-                    aiProviders.map((provider) => (
-                      <SelectItem key={provider.id} value={provider.provider}>
-                        {provider.display_name} {provider.is_default && "(默认)"}
-                        <span className="text-xs text-muted-foreground ml-2">
-                          {provider.model_name}
-                        </span>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 操作按钮 */}
-            <div className="flex gap-2 items-end">
+            {/* 第二行：操作按钮 */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <Button
                 onClick={handleSync}
                 disabled={isSyncing}
                 variant="outline"
-                className="min-w-[140px]"
+                className="w-full"
               >
                 {isSyncing ? (
                   <>
-                    <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin" />
-                    同步中...
+                    <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin flex-shrink-0" />
+                    <span className="truncate">同步中...</span>
                   </>
                 ) : (
                   <>
-                    <Database className="mr-2 h-4 w-4" />
-                    同步盘前数据
+                    <Database className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">同步盘前数据</span>
                   </>
                 )}
               </Button>
@@ -356,17 +361,17 @@ export default function PremarketPage() {
               <Button
                 onClick={handleGenerate}
                 disabled={isGenerating || aiProviders.length === 0}
-                className="min-w-[140px]"
+                className="w-full"
               >
                 {isGenerating ? (
                   <>
-                    <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin" />
-                    生成中...
+                    <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin flex-shrink-0" />
+                    <span className="truncate">生成中...</span>
                   </>
                 ) : (
                   <>
-                    <BrainCircuit className="mr-2 h-4 w-4" />
-                    生成碰撞分析
+                    <BrainCircuit className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">生成碰撞分析</span>
                   </>
                 )}
               </Button>
@@ -375,9 +380,10 @@ export default function PremarketPage() {
                 variant="outline"
                 onClick={() => loadAllData()}
                 disabled={isLoading}
+                className="w-full"
               >
-                <RefreshCwIcon className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
-                刷新
+                <RefreshCwIcon className={cn("mr-2 h-4 w-4 flex-shrink-0", isLoading && "animate-spin")} />
+                <span className="truncate">刷新</span>
               </Button>
             </div>
           </div>
@@ -385,13 +391,123 @@ export default function PremarketPage() {
       </Card>
 
       {/* 主要内容区域 */}
-      <Tabs defaultValue="analysis" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="analysis">📊 碰撞分析</TabsTrigger>
-          <TabsTrigger value="overnight">🌏 外盘数据</TabsTrigger>
-          <TabsTrigger value="news">📰 盘前新闻</TabsTrigger>
-          <TabsTrigger value="history">📜 历史记录</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="analysis" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        {/* 移动端卡片式导航 (小于640px显示) */}
+        <div className="grid grid-cols-2 gap-3 sm:hidden">
+          <button
+            onClick={() => setActiveTab("analysis")}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+              activeTab === "analysis"
+                ? "border-primary bg-primary/5 text-primary shadow-sm"
+                : "border-border bg-muted/30 hover:bg-muted/50"
+            )}
+          >
+            <TrendingUp className="h-5 w-5" />
+            <span className="text-xs font-medium">碰撞分析</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("overnight")}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+              activeTab === "overnight"
+                ? "border-primary bg-primary/5 text-primary shadow-sm"
+                : "border-border bg-muted/30 hover:bg-muted/50"
+            )}
+          >
+            <Globe className="h-5 w-5" />
+            <span className="text-xs font-medium">外盘数据</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("news")}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all relative",
+              activeTab === "news"
+                ? "border-primary bg-primary/5 text-primary shadow-sm"
+                : "border-border bg-muted/30 hover:bg-muted/50"
+            )}
+          >
+            <Newspaper className="h-5 w-5" />
+            <span className="text-xs font-medium">盘前新闻</span>
+            {newsList.length > 0 && (
+              <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 px-1.5 text-xs">
+                {newsList.length}
+              </Badge>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("history")}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all relative",
+              activeTab === "history"
+                ? "border-primary bg-primary/5 text-primary shadow-sm"
+                : "border-border bg-muted/30 hover:bg-muted/50"
+            )}
+          >
+            <History className="h-5 w-5" />
+            <span className="text-xs font-medium">历史记录</span>
+            {history.length > 0 && (
+              <Badge variant="outline" className="absolute -top-1 -right-1 h-5 px-1.5 text-xs">
+                {history.length}
+              </Badge>
+            )}
+          </button>
+        </div>
+
+        {/* 桌面端标签式导航 (640px及以上显示) */}
+        <div className="relative hidden sm:block">
+          {/* 渐变遮罩效果 */}
+          <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 md:hidden" />
+          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 md:hidden" />
+
+          {/* 可滚动的 Tabs 容器 */}
+          <div className="w-full overflow-x-auto scrollbar-hide">
+            <TabsList className="inline-flex h-12 items-center justify-start rounded-xl bg-muted/40 backdrop-blur-sm p-1.5 text-muted-foreground w-full md:w-auto min-w-max border border-border/50">
+              <TabsTrigger
+                value="analysis"
+                className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap rounded-lg transition-all duration-200 hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/50"
+              >
+                <TrendingUp className="h-4 w-4 transition-colors" />
+                <span>碰撞分析</span>
+                <span className="absolute -top-1 -right-1 flex h-2 w-2 data-[state=active]:opacity-100 opacity-0 transition-opacity">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="overnight"
+                className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap rounded-lg transition-all duration-200 hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/50"
+              >
+                <Globe className="h-4 w-4 transition-colors" />
+                <span>外盘数据</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="news"
+                className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap rounded-lg transition-all duration-200 hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/50"
+              >
+                <Newspaper className="h-4 w-4 transition-colors" />
+                <span>盘前新闻</span>
+                {newsList.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                    {newsList.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="history"
+                className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap rounded-lg transition-all duration-200 hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/50"
+              >
+                <History className="h-4 w-4 transition-colors" />
+                <span>历史记录</span>
+                {history.length > 0 && (
+                  <Badge variant="outline" className="ml-1 h-5 px-1.5 text-xs">
+                    {history.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
         {/* 碰撞分析标签页 */}
         <TabsContent value="analysis" className="space-y-4">
@@ -426,10 +542,10 @@ export default function PremarketPage() {
                       {collisionAnalysis.action_command}
                     </pre>
                   </div>
-                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mt-4 pt-4 border-t">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-muted-foreground mt-4 pt-4 border-t">
                     <div className="flex items-center gap-1">
                       <span className="font-medium">AI模型:</span>
-                      <Badge variant="outline">{collisionAnalysis.ai_provider} / {collisionAnalysis.ai_model}</Badge>
+                      <Badge variant="outline" className="text-xs">{collisionAnalysis.ai_provider} / {collisionAnalysis.ai_model}</Badge>
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="font-medium">Token消耗:</span>
@@ -445,7 +561,7 @@ export default function PremarketPage() {
               </Card>
 
               {/* 四维度分析 */}
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* 宏观定调 */}
                 <Card>
                   <CardHeader>
@@ -644,7 +760,7 @@ export default function PremarketPage() {
           ) : (
             <>
               {/* A50和中概股 */}
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">富时A50期指</CardTitle>
@@ -682,30 +798,30 @@ export default function PremarketPage() {
                   <CardTitle className="text-base">大宗商品</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                       <div className="text-sm text-muted-foreground mb-1">WTI原油</div>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold">{overnightData.wti_crude.close.toFixed(2)}</span>
-                        <span className={cn("font-semibold", getChangeColor(overnightData.wti_crude.change))}>
+                        <span className="text-xl sm:text-2xl font-bold">{overnightData.wti_crude.close.toFixed(2)}</span>
+                        <span className={cn("text-sm sm:text-base font-semibold", getChangeColor(overnightData.wti_crude.change))}>
                           {getChangePrefix(overnightData.wti_crude.change)}{overnightData.wti_crude.change.toFixed(2)}%
                         </span>
                       </div>
                     </div>
-                    <div>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                       <div className="text-sm text-muted-foreground mb-1">COMEX黄金</div>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold">{overnightData.comex_gold.close.toFixed(2)}</span>
-                        <span className={cn("font-semibold", getChangeColor(overnightData.comex_gold.change))}>
+                        <span className="text-xl sm:text-2xl font-bold">{overnightData.comex_gold.close.toFixed(2)}</span>
+                        <span className={cn("text-sm sm:text-base font-semibold", getChangeColor(overnightData.comex_gold.change))}>
                           {getChangePrefix(overnightData.comex_gold.change)}{overnightData.comex_gold.change.toFixed(2)}%
                         </span>
                       </div>
                     </div>
-                    <div>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                       <div className="text-sm text-muted-foreground mb-1">伦敦铜</div>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold">{overnightData.lme_copper.close.toFixed(2)}</span>
-                        <span className={cn("font-semibold", getChangeColor(overnightData.lme_copper.change))}>
+                        <span className="text-xl sm:text-2xl font-bold">{overnightData.lme_copper.close.toFixed(2)}</span>
+                        <span className={cn("text-sm sm:text-base font-semibold", getChangeColor(overnightData.lme_copper.change))}>
                           {getChangePrefix(overnightData.lme_copper.change)}{overnightData.lme_copper.change.toFixed(2)}%
                         </span>
                       </div>
@@ -715,7 +831,7 @@ export default function PremarketPage() {
               </Card>
 
               {/* 外汇和美股 */}
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">美元兑离岸人民币</CardTitle>
@@ -793,28 +909,38 @@ export default function PremarketPage() {
                   {newsList.map((news) => (
                     <div
                       key={news.id}
-                      className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                      className="border rounded-lg p-3 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Badge className={getImportanceColor(news.importance_level)}>
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge className={cn(getImportanceColor(news.importance_level), "text-xs")}>
                             {news.importance_level === 'critical' ? '核弹级' :
                              news.importance_level === 'high' ? '高' : '中'}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(news.news_time).toLocaleString('zh-CN')}
+                            {new Date(news.news_time).toLocaleString('zh-CN', {
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
                           </span>
-                          <Badge variant="outline">{news.source}</Badge>
+                          <Badge variant="outline" className="text-xs">{news.source}</Badge>
                         </div>
                       </div>
-                      <div className="font-medium mb-2">{news.title}</div>
-                      <div className="text-sm text-muted-foreground mb-2">{news.content}</div>
+                      <div className="font-medium text-sm sm:text-base mb-2 line-clamp-2">{news.title}</div>
+                      <div className="text-xs sm:text-sm text-muted-foreground mb-2 line-clamp-3">{news.content}</div>
                       <div className="flex flex-wrap gap-1">
-                        {news.keywords.map((keyword, idx) => (
-                          <Badge key={idx} variant="secondary" className="text-xs">
+                        {news.keywords.slice(0, 5).map((keyword, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs py-0 px-1">
                             {keyword}
                           </Badge>
                         ))}
+                        {news.keywords.length > 5 && (
+                          <Badge variant="secondary" className="text-xs py-0 px-1">
+                            +{news.keywords.length - 5}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -845,25 +971,29 @@ export default function PremarketPage() {
                   {history.map((record) => (
                     <div
                       key={record.trade_date}
-                      className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer"
+                      className="border rounded-lg p-3 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer"
                       onClick={() => {
                         const selectedDate = new Date(record.trade_date)
                         setDate(selectedDate)
                         loadAllData(selectedDate)
                       }}
                     >
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold">{record.trade_date}</span>
-                          <Badge variant={record.status === 'success' ? 'default' : 'destructive'}>
+                          <span className="font-bold text-sm sm:text-base">{record.trade_date}</span>
+                          <Badge variant={record.status === 'success' ? 'default' : 'destructive'} className="text-xs">
                             {record.status === 'success' ? '成功' : '失败'}
                           </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {record.ai_provider} | {record.tokens_used} tokens | {record.generation_time}s
+                          <span className="block sm:inline">{record.ai_provider}</span>
+                          <span className="hidden sm:inline"> | </span>
+                          <span className="block sm:inline">{record.tokens_used} tokens</span>
+                          <span className="hidden sm:inline"> | </span>
+                          <span className="block sm:inline">{record.generation_time}s</span>
                         </div>
                       </div>
-                      <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded text-sm">
+                      <div className="bg-gray-50 dark:bg-gray-900 p-2 sm:p-3 rounded text-xs sm:text-sm line-clamp-3">
                         {record.action_command}
                       </div>
                     </div>

@@ -313,7 +313,7 @@ export default function AIConfigPage() {
                     </Button>
                   </div>
                   {/* 移动端图标按钮 */}
-                  <div className="flex sm:hidden items-center gap-1">
+                  <div className="flex items-center gap-1 sm:hidden">
                     <Button
                       variant="ghost"
                       size="icon"
