@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import NProgress from 'nprogress'
 
 /**
@@ -21,21 +21,21 @@ NProgress.configure({
  * 全局页面加载进度条组件
  *
  * 功能特性:
- * 1. 自动检测路由变化并显示进度条
+ * 1. 自动检测页面路由变化并显示进度条
  * 2. 拦截所有内部链接点击事件
  * 3. 监听浏览器前进/后退
- * 4. 自动拦截 API 请求（/api/ 路径）
+ *
+ * 注意：仅在页面跳转时显示，不包括 API 请求和查询参数变化
  *
  * @returns null - 不渲染任何可见元素
  */
 export function ProgressBar() {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
 
-  // 监听路由变化，完成进度条
+  // 监听路由变化，完成进度条（仅路径变化，不包括查询参数）
   useEffect(() => {
     NProgress.done()
-  }, [pathname, searchParams])
+  }, [pathname])
 
   // 设置全局事件监听器
   useEffect(() => {
@@ -86,39 +86,11 @@ export function ProgressBar() {
     document.addEventListener('submit', handleFormSubmit, true)
     window.addEventListener('popstate', handlePopState)
 
-    /**
-     * 拦截 fetch 请求
-     * 为 API 调用显示进度条
-     * 注意：这里的拦截是补充 api-client.ts 中的拦截器
-     * 主要用于未经过 axios 的直接 fetch 调用
-     */
-    const originalFetch = window.fetch
-    window.fetch = function(...args) {
-      const [resource] = args
-
-      // 只对 API 请求显示进度条
-      if (typeof resource === 'string' && resource.includes('/api/')) {
-        NProgress.start()
-
-        return originalFetch.apply(this, args as Parameters<typeof fetch>)
-          .then(response => {
-            NProgress.done()
-            return response
-          })
-          .catch(error => {
-            NProgress.done()
-            throw error
-          })
-      }
-
-      return originalFetch.apply(this, args as Parameters<typeof fetch>)
-    }
-
+    // 清理函数
     return () => {
       document.removeEventListener('click', handleLinkClick, true)
       document.removeEventListener('submit', handleFormSubmit, true)
       window.removeEventListener('popstate', handlePopState)
-      window.fetch = originalFetch
     }
   }, [])
 
