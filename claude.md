@@ -77,7 +77,8 @@ Admin项目采用统一的任务管理面板，位于Header右侧：
 
 #### 特点
 - **统一入口**：通过Header右侧的任务图标访问
-- **自动刷新**：打开面板时每5秒自动刷新任务状态
+- **全局轮询**：Header组件统一处理轮询（每5秒更新状态，每30秒同步历史）
+- **即时更新**：打开面板或执行任务后立即触发轮询，无需等待定时周期
 - **任务分组**：按任务类型（数据同步、AI分析、策略回测等）分组显示
 - **进度显示**：支持显示任务进度条
 - **状态管理**：使用Zustand store统一管理任务状态
@@ -107,11 +108,37 @@ Admin项目采用统一的任务管理面板，位于Header右侧：
 - 每个信号处理器创建独立的数据库连接（避免 fork pool worker 共享连接）
 - Celery 5.x 中从 `sender.request.id` 获取 task_id
 
+#### 轮询机制
+
+**全局轮询架构**：
+- Header 组件启用两个全局 Hook：
+  - `useTaskPolling(true, 5000)` - 每5秒轮询活动任务状态
+  - `useTaskSync(true, 30000)` - 每30秒同步后端任务历史
+- TaskPanel 和其他组件不做重复轮询，避免多余的 API 调用
+
+**手动触发机制**：
+- `useTaskPolling` 将轮询函数注册到 `task-store`
+- 其他组件可通过 `triggerPoll()` 手动触发一次轮询
+- 应用场景：
+  - 打开任务面板时立即获取最新状态
+  - 执行任务后立即更新 Header 图标
+
+**示例代码**：
+```typescript
+const { triggerPoll } = useTaskStore()
+
+// 执行任务后立即触发轮询
+await apiClient.executeTask(taskId)
+triggerPoll()  // Header 图标即时更新
+```
+
 #### 相关文件
 - `/admin/components/TaskPanel.tsx` - 任务面板组件
 - `/admin/components/TaskStatusIcon.tsx` - Header中的任务图标
-- `/admin/stores/task-store.ts` - 任务状态管理
+- `/admin/components/layout/Header.tsx` - 全局轮询入口
+- `/admin/stores/task-store.ts` - 任务状态管理（包含轮询触发器）
 - `/admin/hooks/useTaskPolling.ts` - 任务状态轮询Hook
+- `/admin/hooks/useTaskSync.ts` - 任务历史同步Hook
 - `/backend/app/celery_signals.py` - Celery信号处理器（自动更新任务历史）
 - `/backend/app/api/endpoints/celery_tasks.py` - 任务历史API
 - `/backend/app/models/celery_task_history.py` - 任务历史模型

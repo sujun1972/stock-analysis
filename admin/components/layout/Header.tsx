@@ -29,12 +29,20 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogOut, User, Menu, KeyRound } from 'lucide-react'
 import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
 import { TaskStatusIcon } from '@/components/TaskStatusIcon'
+import { useTaskPolling } from '@/hooks/useTaskPolling'
+import { useTaskSync } from '@/hooks/useTaskSync'
 
 export function Header() {
   const router = useRouter()
   const { user, logout } = useAuthStore()
   const { toggleSidebar } = useSidebarStore()
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+
+  // 启用全局任务轮询（每5秒检查一次已有任务的状态）
+  useTaskPolling(true, 5000)
+
+  // 启用任务同步（每30秒从后端同步正在运行的任务）
+  useTaskSync(true, 30000)
 
   const handleLogout = async () => {
     await logout()

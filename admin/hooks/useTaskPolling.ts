@@ -14,8 +14,8 @@ import logger from '@/lib/logger'
  * @param interval 轮询间隔（毫秒），默认3秒
  */
 export function useTaskPolling(enabled: boolean = true, interval: number = 3000) {
-  const getTasks = useTaskStore((state) => () => Array.from(state.tasks.values()))
   const updateTask = useTaskStore((state) => state.updateTask)
+  const setPollTrigger = useTaskStore((state) => state.setPollTrigger)
   const pollingRef = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
@@ -23,12 +23,14 @@ export function useTaskPolling(enabled: boolean = true, interval: number = 3000)
       if (pollingRef.current) {
         clearInterval(pollingRef.current)
       }
+      // 清除触发器
+      setPollTrigger(null)
       return
     }
 
     const pollTaskStatus = async () => {
-      // 获取最新的任务列表（避免闭包问题）
-      const tasks = getTasks()
+      // 直接从 store 获取最新的任务列表（避免闭包问题）
+      const tasks = Array.from(useTaskStore.getState().tasks.values())
 
       // 只轮询活动任务
       const activeTasks = tasks.filter(
@@ -39,13 +41,10 @@ export function useTaskPolling(enabled: boolean = true, interval: number = 3000)
         return
       }
 
-      logger.info(`轮询 ${activeTasks.length} 个活动任务的状态...`)
-
       // 并发查询所有活动任务的状态
       await Promise.allSettled(
         activeTasks.map(async (task) => {
           try {
-            // 尝试从后端获取任务状态
             const response = await fetchTaskStatus(task.taskId, task.taskName)
 
             if (response) {
@@ -56,7 +55,7 @@ export function useTaskPolling(enabled: boolean = true, interval: number = 3000)
               // 添加完成时间
               if (response.status === 'success' || response.status === 'failure') {
                 updates.endTime = Date.now()
-                logger.info(`任务 ${task.taskId.substring(0, 8)}... 已${response.status === 'success' ? '成功' : '失败'}`)
+                logger.info(`[TaskPolling] 任务完成: ${task.displayName} - ${response.status === 'success' ? '成功' : '失败'}`)
               }
 
               // 添加进度
@@ -75,11 +74,14 @@ export function useTaskPolling(enabled: boolean = true, interval: number = 3000)
               updateTask(task.taskId, updates)
             }
           } catch (error) {
-            logger.error(`轮询任务 ${task.taskId} 状态失败:`, error)
+            logger.error(`[TaskPolling] 轮询任务失败: ${task.displayName}`, error)
           }
         })
       )
     }
+
+    // 将轮询函数注册到 store，供外部手动触发
+    setPollTrigger(pollTaskStatus)
 
     // 立即执行一次
     pollTaskStatus()
@@ -91,8 +93,10 @@ export function useTaskPolling(enabled: boolean = true, interval: number = 3000)
       if (pollingRef.current) {
         clearInterval(pollingRef.current)
       }
+      // 清除触发器
+      setPollTrigger(null)
     }
-  }, [enabled, interval])
+  }, [enabled, interval, setPollTrigger])
 }
 
 /**
@@ -106,7 +110,7 @@ async function fetchTaskStatus(taskId: string, taskName: string) {
     if (celeryResponse.data) {
       return mapCeleryStatus(celeryResponse.data)
     }
-  } catch (error) {
+  } catch (error: any) {
     // Celery API 不存在或失败，继续尝试其他API
   }
 

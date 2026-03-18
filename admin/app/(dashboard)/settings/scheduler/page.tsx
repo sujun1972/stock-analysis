@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { useTaskStore } from '@/stores/task-store'
-import { toast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import { Play, Loader2 } from 'lucide-react'
 
 interface ScheduledTask {
@@ -305,7 +305,6 @@ const getTaskInfo = (taskName: string, backendDescription?: string) => {
 export default function SchedulerSettingsPage() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
 
@@ -321,7 +320,9 @@ export default function SchedulerSettingsPage() {
         setTasks(response.data)
       }
     } catch (err: any) {
-      setError(err.message || '加载定时任务失败')
+      toast.error('加载失败', {
+        description: err.message || '加载定时任务失败'
+      })
     } finally {
       setLoading(false)
     }
@@ -347,9 +348,11 @@ export default function SchedulerSettingsPage() {
         setTasks(response.data)
       }
     } catch (err: any) {
-      // 如果失败，回滚状态
+      // 如果失败，回滚状态并显示错误
       await loadTasks()
-      setError(err.message || '切换任务状态失败')
+      toast.error('操作失败', {
+        description: err.message || '切换任务状态失败'
+      })
     }
   }
 
@@ -359,23 +362,27 @@ export default function SchedulerSettingsPage() {
   }
 
   const [executingTasks, setExecutingTasks] = useState<Set<number>>(new Set())
-  const { addTask } = useTaskStore()
+  const { addTask, triggerPoll } = useTaskStore()
 
   const handleExecute = async (task: ScheduledTask) => {
     const taskInfo = getTaskInfo(task.task_name, task.description)
 
     try {
-      // 添加到执行中列表
+      // 添加到执行中列表（按钮变为 disabled 状态）
       setExecutingTasks(prev => new Set(prev).add(task.id))
 
       // 调用执行API
       const response = await apiClient.executeScheduledTask(task.id)
 
-      if (response.success) {
+      // 检查响应是否成功（兼容两种响应格式）
+      const isSuccess = response.success || response.code === 200
+      const responseData = response.data
+
+      if (isSuccess && responseData) {
         // 添加到任务存储
         addTask({
-          taskId: response.data.celery_task_id,
-          taskName: response.data.task_name,
+          taskId: responseData.celery_task_id,
+          taskName: responseData.task_name,
           displayName: taskInfo.name,
           taskType: 'scheduler',
           status: 'running',
@@ -383,28 +390,36 @@ export default function SchedulerSettingsPage() {
           startTime: Date.now()
         })
 
-        // 显示成功通知
-        toast({
-          title: "任务已提交",
-          description: `"${taskInfo.name}" 已开始执行，可在任务面板查看进度`,
-          variant: "default"
+        // 立即触发一次轮询，让 Header 图标即时更新
+        triggerPoll()
+
+        // 显示 toast 通知
+        toast.success('任务已提交', {
+          description: `"${taskInfo.name}" 已开始执行，可在任务面板查看进度`
         })
 
-        // 延迟刷新任务列表
-        setTimeout(() => loadTasks(), 1000)
+        // 静默刷新任务列表（不触发 loading 状态，避免页面跳动）
+        setTimeout(async () => {
+          try {
+            const response = await apiClient.getScheduledTasks()
+            if (response.data) {
+              setTasks(response.data)
+            }
+          } catch (err) {
+            // 静默失败，不打断用户
+            console.error('静默刷新任务列表失败:', err)
+          }
+        }, 1000)
       } else {
         throw new Error(response.message || '执行失败')
       }
     } catch (err: any) {
-      // 显示错误通知
-      toast({
-        title: "执行失败",
-        description: err.message || '未知错误',
-        variant: "destructive"
+      // 显示错误 toast
+      toast.error('执行失败', {
+        description: err.message || '未知错误'
       })
-      setError(err.message || '执行任务失败')
     } finally {
-      // 从执行中列表移除
+      // 从执行中列表移除（按钮恢复正常状态）
       setExecutingTasks(prev => {
         const next = new Set(prev)
         next.delete(task.id)
@@ -424,9 +439,16 @@ export default function SchedulerSettingsPage() {
       })
       setShowEditModal(false)
       setEditingTask(null)
+
+      toast.success('更新成功', {
+        description: '定时任务配置已更新'
+      })
+
       await loadTasks()
     } catch (err: any) {
-      setError(err.message || '更新任务失败')
+      toast.error('更新失败', {
+        description: err.message || '更新任务失败'
+      })
     }
   }
 
@@ -641,17 +663,14 @@ export default function SchedulerSettingsPage() {
             className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 hover:underline whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
             title="立即执行该任务"
           >
-            {executingTasks.has(item.id) ? (
-              <>
-                <Loader2 className="h-3 w-3 animate-spin" />
-                执行中
-              </>
-            ) : (
-              <>
-                <Play className="h-3 w-3" />
-                执行
-              </>
-            )}
+            <span className="inline-flex w-3 h-3 items-center justify-center">
+              {executingTasks.has(item.id) ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+            </span>
+            执行
           </button>
           <span className="text-gray-400">|</span>
           <button
@@ -754,17 +773,14 @@ export default function SchedulerSettingsPage() {
             disabled={executingTasks.has(task.id)}
             className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {executingTasks.has(task.id) ? (
-              <>
-                <Loader2 className="h-3 w-3 animate-spin" />
-                执行中
-              </>
-            ) : (
-              <>
-                <Play className="h-3 w-3" />
-                立即执行
-              </>
-            )}
+            <span className="inline-flex w-3 h-3 items-center justify-center">
+              {executingTasks.has(task.id) ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+            </span>
+            立即执行
           </button>
           <span className="text-gray-400">|</span>
           <button
@@ -805,13 +821,6 @@ export default function SchedulerSettingsPage() {
           </div>
         </div>
       </div>
-
-      {/* 错误提示 */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="text-red-800 dark:text-red-200">{error}</p>
-        </div>
-      )}
 
       {/* 任务列表 */}
       <div className="card">

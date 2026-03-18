@@ -5,11 +5,16 @@
  * 1. 显示所有活动任务和已完成任务
  * 2. 支持任务分组（按类型）
  * 3. 实时显示任务进度
- * 4. 自动刷新任务状态（5秒间隔）
- * 5. 手动刷新和清除已完成任务
- * 6. 显示任务错误信息
+ * 4. 手动刷新和清除已完成任务
+ * 5. 显示任务错误信息
+ *
+ * 注意：
+ * - 任务状态轮询由 Header 组件全局处理（每5秒）
+ * - 任务历史同步由 Header 组件全局处理（每30秒）
+ * - 本组件仅提供展示和手动刷新功能，不做自动轮询
  *
  * @since 2026-03-17 合并了原有的两个任务面板，统一管理
+ * @since 2026-03-18 移除重复轮询，改为依赖全局轮询
  */
 
 'use client'
@@ -38,7 +43,6 @@ import {
 } from 'lucide-react'
 import { useTaskStore, TaskType } from '@/stores/task-store'
 import { apiClient } from '@/lib/api-client'
-import { useTaskPolling } from '@/hooks/useTaskPolling'
 
 interface TaskPanelProps {
   open: boolean
@@ -50,18 +54,25 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
   const setTasks = useTaskStore((state) => state.setTasks)
   const removeTask = useTaskStore((state) => state.removeTask)
   const clearCompletedTasks = useTaskStore((state) => state.clearCompletedTasks)
+  const triggerPoll = useTaskStore((state) => state.triggerPoll)
 
-  // 启用任务状态轮询（仅当面板打开时）
-  useTaskPolling(open, 3000)
+  // 任务状态轮询由 Header 组件全局处理，这里不再重复轮询
+  // 但在面板打开时，立即触发一次轮询以获取最新状态
+  useEffect(() => {
+    if (open) {
+      logger.info('[TaskPanel] 面板打开，立即触发一次轮询')
+      triggerPoll()
+    }
+  }, [open, triggerPoll])
 
   const activeTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'running' || t.status === 'progress')
   const completedTasks = tasks.filter((t) => t.status === 'success' || t.status === 'failure')
     .sort((a, b) => (b.endTime || b.startTime) - (a.endTime || a.startTime)) // 按完成时间倒序排列
 
-  // 从API加载历史任务
-  const loadTaskHistory = async () => {
+  // 手动刷新任务列表（从API重新加载）
+  const handleRefresh = async () => {
     try {
-      const response = await apiClient.get('/api/celery/task-history?limit=50') as any
+      const response = await apiClient.get('/api/celery/task-history?limit=100') as any
       if (response.code === 200 && response.data?.tasks) {
         const historyTasks = response.data.tasks.map((t: any) => ({
           taskId: t.celery_task_id,
@@ -87,23 +98,11 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
         })
 
         setTasks(Array.from(mergedTasks.values()))
-        logger.info(`加载了 ${historyTasks.length} 条任务历史记录`)
+        logger.info(`[TaskPanel] 手动刷新了 ${historyTasks.length} 条任务历史记录`)
       }
     } catch (error) {
-      logger.error('加载任务历史失败', error)
+      logger.error('[TaskPanel] 手动刷新任务失败', error)
     }
-  }
-
-  // 面板打开时加载历史
-  useEffect(() => {
-    if (open) {
-      loadTaskHistory()
-    }
-  }, [open])
-
-  // 手动刷新任务列表（从API重新加载）
-  const handleRefresh = async () => {
-    await loadTaskHistory()
   }
 
   // 清理僵尸任务（运行中但超过1小时未完成的任务）
@@ -111,12 +110,12 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
     try {
       const response = await apiClient.post('/api/celery/task-history/cleanup-stale') as any
       if (response.code === 200) {
-        logger.info(`清理了 ${response.data.deleted_count} 个僵尸任务`)
+        logger.info(`[TaskPanel] 清理了 ${response.data.deleted_count} 个僵尸任务`)
         // 重新加载任务列表
-        await loadTaskHistory()
+        await handleRefresh()
       }
     } catch (error) {
-      logger.error('清理僵尸任务失败', error)
+      logger.error('[TaskPanel] 清理僵尸任务失败', error)
     }
   }
 
@@ -125,25 +124,14 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
     try {
       const response = await apiClient.delete(`/api/celery/task-history/${taskId}`) as any
       if (response.code === 200) {
-        logger.info(`删除任务 ${taskId.substring(0, 8)}... 成功`)
+        logger.info(`[TaskPanel] 删除任务 ${taskId.substring(0, 8)}... 成功`)
         // 从本地store移除
         removeTask(taskId)
       }
     } catch (error) {
-      logger.error('删除任务失败', error)
+      logger.error('[TaskPanel] 删除任务失败', error)
     }
   }
-
-  // 打开面板时自动刷新，并设置定时刷新
-  useEffect(() => {
-    if (open) {
-      handleRefresh()
-
-      // 每5秒自动刷新
-      const interval = setInterval(handleRefresh, 5000)
-      return () => clearInterval(interval)
-    }
-  }, [open])
 
   const getStatusColor = (status: string) => {
     switch (status) {

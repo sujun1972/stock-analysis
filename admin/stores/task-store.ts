@@ -6,7 +6,7 @@
  * 2. 提供添加、更新、删除任务的方法
  * 3. 支持任务分组和过滤
  * 4. 从后端API加载和同步任务历史
- * 5. 自动轮询更新活动任务状态
+ * 5. 提供手动触发轮询的机制（用于即时更新）
  */
 
 import { create } from 'zustand'
@@ -31,6 +31,11 @@ export interface Task {
 interface TaskStore {
   // 任务列表（使用 Map 提高查找效率）
   tasks: Map<string, Task>
+
+  // 轮询触发器（用于手动触发轮询）
+  pollTrigger: (() => Promise<void>) | null
+  setPollTrigger: (trigger: (() => Promise<void>) | null) => void
+  triggerPoll: () => Promise<void>
 
   // 添加任务
   addTask: (task: Task) => void
@@ -68,6 +73,16 @@ interface TaskStore {
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: new Map(),
+
+  // 轮询触发器
+  pollTrigger: null,
+  setPollTrigger: (trigger) => set({ pollTrigger: trigger }),
+  triggerPoll: async () => {
+    const { pollTrigger } = get()
+    if (pollTrigger) {
+      await pollTrigger()
+    }
+  },
 
   addTask: (task) =>
     set((state) => {
