@@ -628,7 +628,7 @@ async def execute_scheduled_task(
             params=params or {}
         )
 
-        # 记录执行历史
+        # 记录执行历史到 task_execution_history 表（用于定时任务管理）
         import json
         history_query = """
             INSERT INTO task_execution_history (
@@ -647,6 +647,35 @@ async def execute_scheduled_task(
             db._execute_update,
             history_query,
             (task_id_db, task_name, module, json.dumps(result_summary))
+        )
+
+        # 同时记录到 celery_task_history 表（用于任务面板）
+        # 获取任务友好名称
+        from app.scheduler.task_executor import TaskExecutor
+        task_config = TaskExecutor.TASK_MAPPING.get(module, {})
+        display_name = task_config.get('name', task_name)
+
+        # 使用raw SQL插入celery任务历史
+        celery_history_query = """
+            INSERT INTO celery_task_history
+            (celery_task_id, task_name, display_name, task_type, user_id, status, params, metadata, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+
+        task_metadata = json.dumps({
+            "trigger": "manual",
+            "scheduled_task_id": task_id_db,
+            "module": module
+        })
+
+        params_json = json.dumps(params or {})
+        now = datetime.now()
+
+        await asyncio.to_thread(
+            db._execute_update,
+            celery_history_query,
+            (celery_task_id, task_name, display_name, 'scheduler', current_user.id,
+             'pending', params_json, task_metadata, now)
         )
 
         logger.info(f"✓ 手动执行定时任务: {task_name} (ID: {task_id_db}, Celery ID: {celery_task_id})")

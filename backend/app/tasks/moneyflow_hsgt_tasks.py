@@ -1,5 +1,10 @@
 """
 沪深港通资金流向同步任务
+
+注意事项:
+- 任务在 Celery fork pool worker 中执行
+- 必须为每个任务创建独立的 asyncio 事件循环
+- 执行完成后需要关闭事件循环释放资源
 """
 
 from typing import Optional
@@ -32,10 +37,17 @@ def sync_moneyflow_hsgt_task(
     try:
         logger.info(f"开始执行沪深港通资金流向同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
-        # 创建服务实例
         service = ExtendedDataSyncService()
 
-        # 执行同步（使用asyncio运行异步方法）
+        # 在 Celery fork pool worker 中创建独立的事件循环
+        # 避免复用可能已关闭的事件循环，防止 "Event loop is closed" 错误
+        try:
+            old_loop = asyncio.get_event_loop()
+            if not old_loop.is_closed():
+                old_loop.close()
+        except RuntimeError:
+            pass
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -48,46 +60,25 @@ def sync_moneyflow_hsgt_task(
                 )
             )
 
-            # 更新任务状态
             if result["status"] == "success":
                 logger.info(f"沪深港通资金流向同步成功: {result['records']} 条")
-                current_task.update_state(
-                    state='SUCCESS',
-                    meta={
-                        'current': 100,
-                        'total': 100,
-                        'status': '同步完成',
-                        'records': result['records']
-                    }
-                )
+                return result
             else:
                 logger.warning(f"沪深港通资金流向同步失败: {result}")
-                current_task.update_state(
-                    state='FAILURE',
-                    meta={
-                        'current': 0,
-                        'total': 100,
-                        'status': '同步失败',
-                        'error': result.get('error', '未知错误')
-                    }
-                )
-
-            return result
+                error_msg = result.get('error', '未知错误')
+                raise Exception(f"同步失败: {error_msg}")
 
         finally:
-            loop.close()
+            # 关闭事件循环释放资源
+            try:
+                loop.close()
+            except Exception as e:
+                logger.warning(f"关闭事件循环时出错: {e}")
 
     except Exception as e:
         logger.error(f"执行沪深港通资金流向同步任务失败: {str(e)}")
-        current_task.update_state(
-            state='FAILURE',
-            meta={
-                'current': 0,
-                'total': 100,
-                'status': '任务失败',
-                'error': str(e)
-            }
-        )
+        import traceback
+        logger.error(traceback.format_exc())
         raise
 
 

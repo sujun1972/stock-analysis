@@ -10,6 +10,7 @@ from .endpoints import (
     auth,
     backtest,
     backtest_history,
+    celery_tasks,  # Celery 任务状态查询
     concepts,
     config,
     data,
@@ -74,6 +75,7 @@ router.include_router(extended_data.router, prefix="/extended-data", tags=["扩�
 router.include_router(data_quality.router, prefix="/data-quality", tags=["数据质量"])
 router.include_router(moneyflow_hsgt.router, prefix="/moneyflow-hsgt", tags=["沪深港通资金流向"])  # 沪深港通资金流向API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
+router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])
 
 # 自动化实验路由

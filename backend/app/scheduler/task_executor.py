@@ -49,9 +49,9 @@ class TaskExecutor:
             'task': 'extended.sync_moneyflow',
             'name': '资金流向同步'
         },
-        'extended.sync_hk_hold': {
-            'task': 'extended.sync_hk_hold',
-            'name': '北向资金同步'
+        'tasks.sync_moneyflow_hsgt': {
+            'task': 'tasks.sync_moneyflow_hsgt',
+            'name': '沪深港通资金流向同步'
         },
         'extended.sync_margin': {
             'task': 'extended.sync_margin',

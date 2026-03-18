@@ -107,6 +107,13 @@ except Exception as e:
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 
+# 注册Celery信号处理器（自动更新任务历史）
+try:
+    import app.celery_signals
+    logger.info(f"✅ 已注册Celery信号处理器")
+except Exception as e:
+    logger.error(f"❌ 注册Celery信号处理器失败: {e}")
+
 # ==========================================
 # Celery Beat 定时任务调度配置
 # ==========================================

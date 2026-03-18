@@ -82,11 +82,40 @@ Admin项目采用统一的任务管理面板，位于Header右侧：
 - **进度显示**：支持显示任务进度条
 - **状态管理**：使用Zustand store统一管理任务状态
 - **错误提示**：显示失败任务的错误信息
+- **数据持久化**：任务历史记录存储在数据库中，支持历史查询和统计
+
+#### 任务历史持久化架构
+
+**数据库表结构** (`celery_task_history`):
+- 记录所有 Celery 任务的执行历史
+- 包含任务状态、开始时间、完成时间、耗时、结果、错误信息等
+- 支持任务分组、用户关联、进度跟踪
+
+**自动更新机制** (Celery 信号):
+- `task_prerun`: 任务开始时记录 `started_at`，状态改为 `running`
+- `task_success`: 任务成功时记录 `completed_at`、`duration_ms`、`result`
+- `task_failure`: 任务失败时记录 `error`、`duration_ms`
+- `task_revoked`: 任务被撤销时标记为失败
+
+**时间处理**:
+- 数据库存储本地时间 (`datetime.now()`)
+- API 返回 UTC 格式 (ISO 8601 + Z 后缀，如 `2026-03-18T16:52:54Z`)
+- 前端浏览器自动转换为本地时间显示
+
+**注意事项**:
+- 使用 `started_at` 而非 `created_at` 计算任务耗时
+- 每个信号处理器创建独立的数据库连接（避免 fork pool worker 共享连接）
+- Celery 5.x 中从 `sender.request.id` 获取 task_id
 
 #### 相关文件
 - `/admin/components/TaskPanel.tsx` - 任务面板组件
 - `/admin/components/TaskStatusIcon.tsx` - Header中的任务图标
 - `/admin/stores/task-store.ts` - 任务状态管理
+- `/admin/hooks/useTaskPolling.ts` - 任务状态轮询Hook
+- `/backend/app/celery_signals.py` - Celery信号处理器（自动更新任务历史）
+- `/backend/app/api/endpoints/celery_tasks.py` - 任务历史API
+- `/backend/app/models/celery_task_history.py` - 任务历史模型
+- `/db_init/migrations/007_create_celery_task_history.sql` - 数据库迁移
 
 ### 响应式设计规范
 
@@ -215,3 +244,81 @@ docker-compose down
 2. 后端项目（FastAPI）在开发模式下也支持自动重载
 3. 数据库使用 TimescaleDB，端口默认为 5432
 4. 数据同步时会自动进行质量验证和修复
+
+## Celery 异步任务开发指南
+
+### 创建新的 Celery 任务
+
+1. **任务定义**（位于 `/backend/app/tasks/`）:
+```python
+from app.celery_app import celery_app
+from loguru import logger
+import asyncio
+
+@celery_app.task(bind=True, name="tasks.your_task_name")
+def your_task(self, param1: str, param2: int):
+    """任务描述"""
+    try:
+        logger.info(f"开始执行任务: param1={param1}, param2={param2}")
+
+        # 如果需要调用异步方法，使用独立的事件循环
+        # 避免在 fork pool worker 中复用已关闭的事件循环
+        try:
+            old_loop = asyncio.get_event_loop()
+            if not old_loop.is_closed():
+                old_loop.close()
+        except RuntimeError:
+            pass
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            # 调用异步方法
+            result = loop.run_until_complete(your_async_method())
+            return result
+        finally:
+            loop.close()
+
+    except Exception as e:
+        logger.error(f"任务执行失败: {e}")
+        raise
+```
+
+2. **注册任务**（在 `/backend/app/celery_app.py`）:
+```python
+try:
+    from app.tasks import your_tasks
+    logger.info(f"✅ 已加载您的任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载任务模块失败: {e}")
+```
+
+3. **添加到任务映射**（在 `/backend/app/scheduler/task_executor.py`）:
+```python
+TASK_MAPPING = {
+    'your_module.your_task': {
+        'task': 'tasks.your_task_name',
+        'name': '任务显示名称',
+        'default_params': {'param1': 'default_value'}
+    }
+}
+```
+
+### 常见问题和解决方案
+
+**问题1: "Event loop is closed" 错误**
+- 原因: Celery fork pool worker 中复用了已关闭的事件循环
+- 解决: 每个任务创建独立的事件循环（参考上面代码示例）
+
+**问题2: 任务状态未更新到数据库**
+- 原因: Celery 信号未正确触发或数据库连接共享
+- 解决: 检查 `/backend/app/celery_signals.py` 是否正确导入
+
+**问题3: 任务耗时计算不准确**
+- 原因: 使用 `created_at` 而非 `started_at` 计算耗时
+- 解决: 确保使用 `started_at` 作为计算起点
+
+**问题4: 前端显示时间不正确**
+- 原因: 时区处理问题
+- 解决: API 返回时添加 'Z' 后缀标记 UTC 时间，前端自动转换

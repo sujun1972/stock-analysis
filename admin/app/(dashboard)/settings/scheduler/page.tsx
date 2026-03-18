@@ -87,9 +87,9 @@ const TASK_NAME_MAP: Record<string, { name: string; description: string; categor
     description: '同步个股资金流向数据（高积分消耗）',
     category: '扩展数据'
   },
-  'sync_hk_hold': {
-    name: '北向资金同步',
-    description: '同步港股通持股数据',
+  'sync_moneyflow_hsgt': {
+    name: '沪深港通资金流向',
+    description: '同步沪深港通资金流向数据（北向+南向）',
     category: '扩展数据'
   },
   'sync_margin': {
@@ -375,12 +375,12 @@ export default function SchedulerSettingsPage() {
         // 添加到任务存储
         addTask({
           taskId: response.data.celery_task_id,
-          name: taskInfo.name,
-          type: 'scheduler',
+          taskName: response.data.task_name,
+          displayName: taskInfo.name,
+          taskType: 'scheduler',
           status: 'running',
           progress: 0,
-          startTime: new Date().toISOString(),
-          description: `手动执行: ${taskInfo.description}`
+          startTime: Date.now()
         })
 
         // 显示成功通知
@@ -441,7 +441,7 @@ export default function SchedulerSettingsPage() {
       // 新增扩展数据任务
       'extended.sync_daily_basic': '每日指标',
       'extended.sync_moneyflow': '资金流向',
-      'extended.sync_hk_hold': '北向资金',
+      'tasks.sync_moneyflow_hsgt': '沪深港通资金',
       'extended.sync_margin': '融资融券',
       'extended.sync_stk_limit': '涨跌停价格',
       'extended.sync_block_trade': '大宗交易',
@@ -455,7 +455,7 @@ export default function SchedulerSettingsPage() {
     const points: Record<string, number> = {
       'extended.sync_daily_basic': 120,
       'extended.sync_moneyflow': 2000,  // 高消耗
-      'extended.sync_hk_hold': 300,
+      'tasks.sync_moneyflow_hsgt': 2000,  // 高消耗
       'extended.sync_margin': 300,
       'extended.sync_stk_limit': 120,
       'extended.sync_block_trade': 300,

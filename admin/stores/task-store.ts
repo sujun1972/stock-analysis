@@ -5,12 +5,13 @@
  * 1. 管理所有异步任务的状态（同步、AI分析、回测等）
  * 2. 提供添加、更新、删除任务的方法
  * 3. 支持任务分组和过滤
- * 4. 持久化到 localStorage（可选）
+ * 4. 从后端API加载和同步任务历史
+ * 5. 自动轮询更新活动任务状态
  */
 
 import { create } from 'zustand'
 
-export type TaskType = 'sync' | 'sentiment' | 'ai_analysis' | 'backtest' | 'premarket' | 'other'
+export type TaskType = 'sync' | 'sentiment' | 'ai_analysis' | 'backtest' | 'premarket' | 'scheduler' | 'other'
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failure' | 'progress'
 
 export interface Task {
@@ -21,6 +22,7 @@ export interface Task {
   status: TaskStatus
   progress?: number // 0-100
   startTime: number
+  endTime?: number // 完成时间
   result?: any
   error?: string
   worker?: string
@@ -32,6 +34,9 @@ interface TaskStore {
 
   // 添加任务
   addTask: (task: Task) => void
+
+  // 批量添加任务
+  setTasks: (tasks: Task[]) => void
 
   // 更新任务
   updateTask: (taskId: string, updates: Partial<Task>) => void
@@ -68,6 +73,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     set((state) => {
       const newTasks = new Map(state.tasks)
       newTasks.set(task.taskId, task)
+      return { tasks: newTasks }
+    }),
+
+  setTasks: (tasks) =>
+    set(() => {
+      const newTasks = new Map()
+      tasks.forEach(task => newTasks.set(task.taskId, task))
       return { tasks: newTasks }
     }),
 
