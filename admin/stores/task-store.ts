@@ -28,9 +28,17 @@ export interface Task {
   worker?: string
 }
 
+// 任务完成回调函数类型
+export type TaskCompletionCallback = (task: Task) => void
+
 interface TaskStore {
   // 任务列表（使用 Map 提高查找效率）
   tasks: Map<string, Task>
+
+  // 任务完成回调（用于页面监听任务完成事件）
+  completionCallbacks: Map<string, TaskCompletionCallback[]>
+  registerCompletionCallback: (taskId: string, callback: TaskCompletionCallback) => void
+  unregisterCompletionCallback: (taskId: string, callback: TaskCompletionCallback) => void
 
   // 轮询触发器（用于手动触发轮询）
   pollTrigger: (() => Promise<void>) | null
@@ -73,6 +81,30 @@ interface TaskStore {
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: new Map(),
+  completionCallbacks: new Map(),
+
+  // 任务完成回调管理
+  registerCompletionCallback: (taskId, callback) =>
+    set((state) => {
+      const newCallbacks = new Map(state.completionCallbacks)
+      const callbacks = newCallbacks.get(taskId) || []
+      callbacks.push(callback)
+      newCallbacks.set(taskId, callbacks)
+      return { completionCallbacks: newCallbacks }
+    }),
+
+  unregisterCompletionCallback: (taskId, callback) =>
+    set((state) => {
+      const newCallbacks = new Map(state.completionCallbacks)
+      const callbacks = newCallbacks.get(taskId) || []
+      const filtered = callbacks.filter(cb => cb !== callback)
+      if (filtered.length > 0) {
+        newCallbacks.set(taskId, filtered)
+      } else {
+        newCallbacks.delete(taskId)
+      }
+      return { completionCallbacks: newCallbacks }
+    }),
 
   // 轮询触发器
   pollTrigger: null,
@@ -103,7 +135,29 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const newTasks = new Map(state.tasks)
       const task = newTasks.get(taskId)
       if (task) {
-        newTasks.set(taskId, { ...task, ...updates })
+        const oldStatus = task.status
+        const updatedTask = { ...task, ...updates }
+        newTasks.set(taskId, updatedTask)
+
+        // 如果任务从运行中变为完成状态，触发回调
+        const isCompleted = (oldStatus === 'pending' || oldStatus === 'running' || oldStatus === 'progress') &&
+                           (updates.status === 'success' || updates.status === 'failure')
+
+        if (isCompleted) {
+          // 异步执行回调，避免阻塞状态更新
+          setTimeout(() => {
+            const callbacks = state.completionCallbacks.get(taskId)
+            if (callbacks && callbacks.length > 0) {
+              callbacks.forEach(callback => {
+                try {
+                  callback(updatedTask)
+                } catch (error) {
+                  console.error('任务完成回调执行失败:', error)
+                }
+              })
+            }
+          }, 0)
+        }
       }
       return { tasks: newTasks }
     }),

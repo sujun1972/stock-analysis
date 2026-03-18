@@ -12,7 +12,7 @@
 
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -97,6 +97,9 @@ export default function MoneyflowHsgtPage() {
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
+  // 存储活跃的任务回调（用于组件卸载时清理）
+  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
   // 加载数据
   const loadData = useCallback(async () => {
     try {
@@ -141,7 +144,7 @@ export default function MoneyflowHsgtPage() {
   }, [startDate, endDate, page, pageSize])
 
   // 任务存储Hook（用于任务面板显示和Header图标更新）
-  const { addTask, triggerPoll } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
 
   /**
    * 异步同步数据
@@ -169,9 +172,11 @@ export default function MoneyflowHsgtPage() {
       const response = await apiClient.syncMoneyflowHsgtAsync(params)
 
       if (response.code === 200 && response.data) {
+        const taskId = response.data.celery_task_id
+
         // 添加到任务存储（用于任务面板显示）
         addTask({
-          taskId: response.data.celery_task_id,
+          taskId,
           taskName: response.data.task_name,
           displayName: response.data.display_name,
           taskType: 'data_sync',
@@ -180,19 +185,37 @@ export default function MoneyflowHsgtPage() {
           startTime: Date.now()
         })
 
+        // 注册任务完成回调：自动刷新数据
+        const completionCallback = (task: any) => {
+          if (task.status === 'success') {
+            // 任务成功完成，刷新数据
+            loadData().catch(() => {
+              // 静默失败
+            })
+            toast.success('数据同步完成', {
+              description: '沪深港通资金流向数据已更新'
+            })
+          } else if (task.status === 'failure') {
+            // 任务失败
+            toast.error('数据同步失败', {
+              description: task.error || '同步过程中发生错误'
+            })
+          }
+          // 清理回调
+          unregisterCompletionCallback(taskId, completionCallback)
+          activeCallbacksRef.current.delete(taskId)
+        }
+
+        // 存储回调引用
+        activeCallbacksRef.current.set(taskId, completionCallback)
+        registerCompletionCallback(taskId, completionCallback)
+
         // 立即触发轮询，更新Header任务图标状态
         triggerPoll()
 
         toast.success('任务已提交', {
           description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
         })
-
-        // 延迟3秒后刷新数据（给任务执行预留时间）
-        setTimeout(() => {
-          loadData().catch(() => {
-            // 静默失败，避免打断用户操作
-          })
-        }, 3000)
       } else {
         throw new Error(response.message || '同步失败')
       }
@@ -238,9 +261,23 @@ export default function MoneyflowHsgtPage() {
     })
   }
 
+  // 初始加载数据
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  // 组件卸载时清理所有活跃的任务回调
+  useEffect(() => {
+    return () => {
+      // 复制引用以避免React Hook警告
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((callback, taskId) => {
+        unregisterCompletionCallback(taskId, callback)
+      })
+      callbacks.clear()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 定义表格列
   const columns: Column<MoneyflowData>[] = useMemo(() => [
