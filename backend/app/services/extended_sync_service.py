@@ -10,12 +10,14 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.core.config import settings
 from loguru import logger
 # from app.services.base_service import BaseService
 from core.src.providers import DataProviderFactory
 from core.src.data.validators.extended_validator import ExtendedDataValidator
+from app.services.trading_calendar_service import trading_calendar_service
+from app.services.data_availability_config import DataAvailabilityConfig
 
 
 class ExtendedDataSyncService:
@@ -28,7 +30,7 @@ class ExtendedDataSyncService:
     def _get_provider(self):
         """获取Tushare数据提供者"""
         return self.provider_factory.create_provider(
-            provider_type='tushare',
+            source='tushare',
             token=settings.TUSHARE_TOKEN
         )
 
@@ -52,7 +54,13 @@ class ExtendedDataSyncService:
 
             # 如果没有指定日期，默认同步最近交易日
             if not trade_date and not start_date:
-                trade_date = datetime.now().strftime("%Y%m%d")
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # 根据数据类型判断是否应该使用日期
+                trade_date = DataAvailabilityConfig.should_use_date("daily_basic", calculated_date)
+                logger.info(DataAvailabilityConfig.get_description("daily_basic", calculated_date))
 
             df = provider.get_daily_basic(
                 trade_date=trade_date,
@@ -127,7 +135,13 @@ class ExtendedDataSyncService:
 
             # 如果没有指定日期，默认同步最近交易日
             if not trade_date and not start_date:
-                trade_date = datetime.now().strftime("%Y%m%d")
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # 根据数据类型判断是否应该使用日期
+                trade_date = DataAvailabilityConfig.should_use_date("moneyflow", calculated_date)
+                logger.info(DataAvailabilityConfig.get_description("moneyflow", calculated_date))
 
             # 如果没有指定股票列表，获取活跃股票
             if not stock_list:
@@ -195,76 +209,6 @@ class ExtendedDataSyncService:
                 "error": str(e)
             }
 
-    async def sync_hk_hold(self,
-                           trade_date: Optional[str] = None,
-                           start_date: Optional[str] = None,
-                           end_date: Optional[str] = None) -> Dict[str, Any]:
-        """
-        同步北向资金持股数据
-        优先级：P1
-        调用频率：每日18:00
-        积分消耗：300
-        """
-        task_id = self._generate_task_id("hk_hold")
-
-        try:
-            logger.info(f"开始同步北向资金数据: trade_date={trade_date}")
-
-            provider = self._get_provider()
-
-            if not trade_date and not start_date:
-                trade_date = datetime.now().strftime("%Y%m%d")
-
-            total_records = 0
-
-            # 分别获取沪股通和深股通数据
-            for exchange in ['SH', 'SZ']:
-                try:
-                    df = provider.get_hk_hold(
-                        trade_date=trade_date,
-                        start_date=start_date,
-                        end_date=end_date,
-                        exchange=exchange
-                    )
-
-                    if df is not None and len(df) > 0:
-                        # 验证数据质量
-                        is_valid, errors, warnings = self.validator.validate_hk_hold(df)
-
-                        if errors:
-                            logger.warning(f"北向资金数据验证发现错误 [{exchange}]: {errors}")
-                            # 尝试修复数据
-                            df = self.validator.fix_data(df, 'hk_hold')
-                            # 重新验证
-                            is_valid, errors, warnings = self.validator.validate_hk_hold(df)
-
-                        if warnings:
-                            logger.debug(f"北向资金数据验证警告 [{exchange}]: {warnings}")
-
-                        await self._insert_hk_hold(df)
-                        total_records += len(df)
-                        logger.info(f"{exchange} 北向资金同步 {len(df)} 条")
-
-                except Exception as e:
-                    logger.warning(f"获取 {exchange} 北向资金失败: {e}")
-                    continue
-
-            logger.info(f"成功同步北向资金数据 {total_records} 条")
-            return {
-                "task_id": task_id,
-                "status": "success",
-                "records": total_records,
-                "message": f"成功同步 {total_records} 条北向资金数据"
-            }
-
-        except Exception as e:
-            logger.error(f"同步北向资金失败: {str(e)}")
-            return {
-                "task_id": task_id,
-                "status": "error",
-                "records": 0,
-                "error": str(e)
-            }
 
     async def sync_margin_detail(self,
                                  trade_date: Optional[str] = None,
@@ -284,7 +228,13 @@ class ExtendedDataSyncService:
             provider = self._get_provider()
 
             if not trade_date and not start_date:
-                trade_date = datetime.now().strftime("%Y%m%d")
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # 根据数据类型判断是否应该使用日期
+                trade_date = DataAvailabilityConfig.should_use_date("margin_detail", calculated_date)
+                logger.info(DataAvailabilityConfig.get_description("margin_detail", calculated_date))
 
             df = provider.get_margin_detail(
                 trade_date=trade_date,
@@ -350,7 +300,13 @@ class ExtendedDataSyncService:
             provider = self._get_provider()
 
             if not trade_date and not start_date:
-                trade_date = datetime.now().strftime("%Y%m%d")
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # 根据数据类型判断是否应该使用日期
+                trade_date = DataAvailabilityConfig.should_use_date("stk_limit", calculated_date)
+                logger.info(DataAvailabilityConfig.get_description("stk_limit", calculated_date))
 
             df = provider.get_stk_limit(
                 trade_date=trade_date,
@@ -466,7 +422,13 @@ class ExtendedDataSyncService:
             provider = self._get_provider()
 
             if not trade_date and not start_date:
-                trade_date = datetime.now().strftime("%Y%m%d")
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # 根据数据类型判断是否应该使用日期
+                trade_date = DataAvailabilityConfig.should_use_date("block_trade", calculated_date)
+                logger.info(DataAvailabilityConfig.get_description("block_trade", calculated_date))
 
             df = provider.get_block_trade(
                 trade_date=trade_date,
@@ -551,6 +513,80 @@ class ExtendedDataSyncService:
                 "error": str(e)
             }
 
+    async def sync_moneyflow_hsgt(self,
+                                   trade_date: Optional[str] = None,
+                                   start_date: Optional[str] = None,
+                                   end_date: Optional[str] = None) -> Dict[str, Any]:
+        """
+        同步沪深港通资金流向数据
+
+        包含北向资金（沪股通+深股通）和南向资金（港股通上海+港股通深圳）的每日资金流向。
+        数据从Tushare获取，支持2026年及以后的最新数据。
+
+        Args:
+            trade_date: 单个交易日期 (YYYYMMDD格式)
+            start_date: 开始日期 (YYYYMMDD格式)
+            end_date: 结束日期 (YYYYMMDD格式)
+
+        Returns:
+            同步结果，包含成功/失败状态和记录数
+
+        Note:
+            - 优先级：P0
+            - 调用频率：每日收盘后
+            - 积分消耗：2000
+        """
+        task_id = self._generate_task_id("moneyflow_hsgt")
+
+        try:
+            logger.info(f"开始同步沪深港通资金流向: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            provider = self._get_provider()
+
+            # 如果没有指定日期，默认同步最近交易日
+            if not trade_date and not start_date:
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # moneyflow_hsgt支持当前日期
+                trade_date = calculated_date
+                logger.info(f"沪深港通资金流向: 使用日期 {trade_date}")
+
+            # 获取数据
+            df = provider.get_moneyflow_hsgt(
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+            if df is not None and len(df) > 0:
+                await self._insert_moneyflow_hsgt(df)
+
+                logger.info(f"成功同步沪深港通资金流向数据 {len(df)} 条")
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": len(df),
+                    "message": f"成功同步 {len(df)} 条资金流向数据"
+                }
+            else:
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": 0,
+                    "message": "无数据需要同步"
+                }
+
+        except Exception as e:
+            logger.error(f"同步沪深港通资金流向失败: {str(e)}")
+            return {
+                "task_id": task_id,
+                "status": "error",
+                "records": 0,
+                "error": str(e)
+            }
+
     # ========== 辅助方法 ==========
 
     async def _get_active_stocks(self, trade_date: str) -> List[str]:
@@ -578,6 +614,11 @@ class ExtendedDataSyncService:
             records = df.to_dict('records')
 
             for record in records:
+                # 转换日期字符串为日期对象
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    from datetime import datetime
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
                 # 使用UPSERT避免重复数据
                 query = text("""
                     INSERT INTO daily_basic (
@@ -619,6 +660,11 @@ class ExtendedDataSyncService:
             records = df.to_dict('records')
 
             for record in records:
+                # 转换日期字符串为日期对象
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    from datetime import datetime
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
                 query = text("""
                     INSERT INTO moneyflow (
                         ts_code, trade_date, buy_sm_vol, buy_sm_amount,
@@ -659,23 +705,35 @@ class ExtendedDataSyncService:
 
             await db.commit()
 
-    async def _insert_hk_hold(self, df: pd.DataFrame):
-        """插入北向资金数据"""
+
+    async def _insert_moneyflow_hsgt(self, df: pd.DataFrame):
+        """
+        插入沪深港通资金流向数据到数据库
+
+        使用UPSERT策略，如果数据已存在则更新，避免重复数据。
+
+        Args:
+            df: 包含资金流向数据的DataFrame
+        """
         async with get_async_db() as db:
             records = df.to_dict('records')
 
             for record in records:
+                # trade_date在这个接口中已经是字符串格式(YYYYMMDD)，直接使用
                 query = text("""
-                    INSERT INTO hk_hold (
-                        code, trade_date, ts_code, name, vol, ratio, exchange
+                    INSERT INTO moneyflow_hsgt (
+                        trade_date, ggt_ss, ggt_sz, hgt, sgt, north_money, south_money
                     ) VALUES (
-                        :code, :trade_date, :ts_code, :name, :vol, :ratio, :exchange
+                        :trade_date, :ggt_ss, :ggt_sz, :hgt, :sgt, :north_money, :south_money
                     )
-                    ON CONFLICT (code, trade_date, exchange) DO UPDATE SET
-                        ts_code = EXCLUDED.ts_code,
-                        name = EXCLUDED.name,
-                        vol = EXCLUDED.vol,
-                        ratio = EXCLUDED.ratio
+                    ON CONFLICT (trade_date) DO UPDATE SET
+                        ggt_ss = EXCLUDED.ggt_ss,
+                        ggt_sz = EXCLUDED.ggt_sz,
+                        hgt = EXCLUDED.hgt,
+                        sgt = EXCLUDED.sgt,
+                        north_money = EXCLUDED.north_money,
+                        south_money = EXCLUDED.south_money,
+                        updated_at = CURRENT_TIMESTAMP
                 """)
 
                 await db.execute(query, record)
@@ -688,6 +746,11 @@ class ExtendedDataSyncService:
             records = df.to_dict('records')
 
             for record in records:
+                # 转换日期字符串为日期对象
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    from datetime import datetime
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
                 query = text("""
                     INSERT INTO margin_detail (
                         ts_code, trade_date, rzye, rqye, rzmre, rqyl, rzche, rqchl, rqmcl, rzrqye
@@ -715,6 +778,11 @@ class ExtendedDataSyncService:
             records = df.to_dict('records')
 
             for record in records:
+                # 转换日期字符串为日期对象
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    from datetime import datetime
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
                 query = text("""
                     INSERT INTO stk_limit (
                         ts_code, trade_date, pre_close, up_limit, down_limit
@@ -737,6 +805,11 @@ class ExtendedDataSyncService:
             records = df.to_dict('records')
 
             for record in records:
+                # 转换日期字符串为日期对象
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    from datetime import datetime
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
                 query = text("""
                     INSERT INTO adj_factor (
                         ts_code, trade_date, adj_factor
@@ -757,6 +830,11 @@ class ExtendedDataSyncService:
             records = df.to_dict('records')
 
             for record in records:
+                # 转换日期字符串为日期对象
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    from datetime import datetime
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
                 query = text("""
                     INSERT INTO block_trade (
                         ts_code, trade_date, price, vol, amount, buyer, seller
@@ -775,6 +853,13 @@ class ExtendedDataSyncService:
             records = df.to_dict('records')
 
             for record in records:
+                # 转换所有日期字符串为日期对象
+                from datetime import datetime
+                date_fields = ['suspend_date', 'resume_date', 'ann_date']
+                for field in date_fields:
+                    if field in record and isinstance(record[field], str) and record[field]:
+                        record[field] = datetime.strptime(record[field], '%Y%m%d').date()
+
                 query = text("""
                     INSERT INTO suspend_info (
                         ts_code, suspend_date, resume_date, ann_date, suspend_reason, reason_type

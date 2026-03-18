@@ -164,7 +164,13 @@ docker-compose down
 项目实现了完整的数据验证体系：
 - **位置**: `/core/src/data/validators/`
 - **功能**: 自动验证和修复Tushare扩展数据
-- **支持的数据类型**: daily_basic, moneyflow, hk_hold, margin_detail, stk_limit, adj_factor
+- **支持的数据类型**: daily_basic, moneyflow, moneyflow_hsgt, margin_detail, stk_limit, adj_factor
+
+### 沪深港通资金流向
+- **API端点**: `/api/moneyflow-hsgt`
+- **数据内容**: 沪股通、深股通、港股通(上海)、港股通(深圳)的每日资金流向
+- **特点**: 支持2026年及以后的最新数据，替代了仅支持到2025年的北向资金持股明细(hk_hold)
+- **积分消耗**: 2000积分/次（Tushare Pro接口）
 
 ### 性能优化
 1. **批量插入**: 使用PostgreSQL COPY协议，性能提升10倍

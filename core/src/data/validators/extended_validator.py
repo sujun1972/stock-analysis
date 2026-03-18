@@ -30,6 +30,29 @@ class ExtendedDataValidator(BaseDataValidator):
         self.validation_errors = []
         self.validation_warnings = []
 
+    def validate(self, df: pd.DataFrame) -> Tuple[bool, List[str]]:
+        """
+        实现基类的抽象方法 - 通用验证入口
+
+        Args:
+            df: 待验证的数据框
+
+        Returns:
+            (是否通过验证, 错误列表)
+        """
+        # 简单的验证实现：检查数据框是否为空
+        errors = []
+        if df is None or df.empty:
+            errors.append("数据框为空")
+            return False, errors
+
+        # 检查是否有数据
+        if len(df) == 0:
+            errors.append("数据框没有记录")
+            return False, errors
+
+        return True, errors
+
     def validate_daily_basic(self, df: pd.DataFrame) -> Tuple[bool, List[str], List[str]]:
         """
         验证每日指标数据

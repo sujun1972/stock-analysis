@@ -1170,6 +1170,34 @@ class ApiClient {
   }
 
   /**
+   * 立即执行定时任务
+   */
+  async executeScheduledTask(taskId: number): Promise<ApiResponse<{
+    task_id: number
+    task_name: string
+    celery_task_id: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post(`/api/scheduler/tasks/${taskId}/execute`)
+    return response.data
+  }
+
+  /**
+   * 获取任务执行状态
+   */
+  async getTaskExecutionStatus(taskId: number, celeryTaskId?: string): Promise<ApiResponse<{
+    status: string
+    celery_task_id?: string
+    result?: any
+    error?: string
+    progress?: number
+  }>> {
+    const params = celeryTaskId ? { celery_task_id: celeryTaskId } : {}
+    const response = await axiosInstance.get(`/api/scheduler/tasks/${taskId}/status`, { params })
+    return response.data
+  }
+
+  /**
    * 获取任务执行历史
    */
   async getTaskExecutionHistory(taskId: number, limit: number = 20): Promise<ApiResponse<any[]>> {

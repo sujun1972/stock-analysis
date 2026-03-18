@@ -12,6 +12,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
+import { useTaskStore } from '@/stores/task-store'
+import { toast } from '@/hooks/use-toast'
+import { Play, Loader2 } from 'lucide-react'
 
 interface ScheduledTask {
   id: number
@@ -355,6 +358,61 @@ export default function SchedulerSettingsPage() {
     setShowEditModal(true)
   }
 
+  const [executingTasks, setExecutingTasks] = useState<Set<number>>(new Set())
+  const { addTask } = useTaskStore()
+
+  const handleExecute = async (task: ScheduledTask) => {
+    const taskInfo = getTaskInfo(task.task_name, task.description)
+
+    try {
+      // 添加到执行中列表
+      setExecutingTasks(prev => new Set(prev).add(task.id))
+
+      // 调用执行API
+      const response = await apiClient.executeScheduledTask(task.id)
+
+      if (response.success) {
+        // 添加到任务存储
+        addTask({
+          taskId: response.data.celery_task_id,
+          name: taskInfo.name,
+          type: 'scheduler',
+          status: 'running',
+          progress: 0,
+          startTime: new Date().toISOString(),
+          description: `手动执行: ${taskInfo.description}`
+        })
+
+        // 显示成功通知
+        toast({
+          title: "任务已提交",
+          description: `"${taskInfo.name}" 已开始执行，可在任务面板查看进度`,
+          variant: "default"
+        })
+
+        // 延迟刷新任务列表
+        setTimeout(() => loadTasks(), 1000)
+      } else {
+        throw new Error(response.message || '执行失败')
+      }
+    } catch (err: any) {
+      // 显示错误通知
+      toast({
+        title: "执行失败",
+        description: err.message || '未知错误',
+        variant: "destructive"
+      })
+      setError(err.message || '执行任务失败')
+    } finally {
+      // 从执行中列表移除
+      setExecutingTasks(prev => {
+        const next = new Set(prev)
+        next.delete(task.id)
+        return next
+      })
+    }
+  }
+
   const handleSaveEdit = async () => {
     if (!editingTask) return
 
@@ -573,18 +631,42 @@ export default function SchedulerSettingsPage() {
       key: 'id',
       header: '操作',
       accessor: (item: ScheduledTask) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            handleEdit(item)
-          }}
-          className="text-sm text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
-        >
-          编辑
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleExecute(item)
+            }}
+            disabled={executingTasks.has(item.id)}
+            className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 hover:underline whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            title="立即执行该任务"
+          >
+            {executingTasks.has(item.id) ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                执行中
+              </>
+            ) : (
+              <>
+                <Play className="h-3 w-3" />
+                执行
+              </>
+            )}
+          </button>
+          <span className="text-gray-400">|</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleEdit(item)
+            }}
+            className="text-sm text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+          >
+            编辑
+          </button>
+        </div>
       )
     }
-  ], [])
+  ], [executingTasks, handleExecute, handleToggle])
 
   // 移动端卡片渲染
   const mobileCard = useCallback((task: ScheduledTask) => {
@@ -663,7 +745,28 @@ export default function SchedulerSettingsPage() {
         </div>
 
         {/* 操作按钮 */}
-        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex items-center gap-3">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleExecute(task)
+            }}
+            disabled={executingTasks.has(task.id)}
+            className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {executingTasks.has(task.id) ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                执行中
+              </>
+            ) : (
+              <>
+                <Play className="h-3 w-3" />
+                立即执行
+              </>
+            )}
+          </button>
+          <span className="text-gray-400">|</span>
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -676,7 +779,7 @@ export default function SchedulerSettingsPage() {
         </div>
       </div>
     )
-  }, [])
+  }, [executingTasks, handleExecute, handleToggle])
 
   return (
     <div className="space-y-6">

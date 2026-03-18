@@ -584,6 +584,167 @@ async def get_recent_execution_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/tasks/{task_id}/execute")
+@handle_api_errors
+async def execute_scheduled_task(
+    task_id: int,
+    current_user: User = Depends(require_admin)
+):
+    """
+    立即执行定时任务
+
+    Args:
+        task_id: 任务ID
+
+    Returns:
+        执行结果，包含Celery任务ID
+    """
+    try:
+        db = DatabaseManager()
+
+        # 获取任务信息
+        query = """
+            SELECT
+                id, task_name, module, params, enabled
+            FROM scheduled_tasks
+            WHERE id = %s
+        """
+        result = await asyncio.to_thread(db._execute_query, query, (task_id,))
+
+        if not result:
+            raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
+        task_id_db, task_name, module, params, enabled = result[0]
+
+        # 导入必要的任务执行服务
+        from app.scheduler.task_executor import TaskExecutor
+
+        executor = TaskExecutor()
+
+        # 执行任务
+        celery_task_id = await executor.execute_task(
+            task_name=task_name,
+            module=module,
+            params=params or {}
+        )
+
+        # 记录执行历史
+        import json
+        history_query = """
+            INSERT INTO task_execution_history (
+                task_id, task_name, module, status, started_at, result_summary
+            ) VALUES (%s, %s, %s, 'running', NOW(), %s::jsonb)
+            RETURNING id
+        """
+
+        result_summary = {
+            "trigger": "manual",
+            "celery_task_id": celery_task_id,
+            "triggered_by": "admin"
+        }
+
+        await asyncio.to_thread(
+            db._execute_update,
+            history_query,
+            (task_id_db, task_name, module, json.dumps(result_summary))
+        )
+
+        logger.info(f"✓ 手动执行定时任务: {task_name} (ID: {task_id_db}, Celery ID: {celery_task_id})")
+
+        return ApiResponse.success(
+            data={
+                "task_id": task_id_db,
+                "task_name": task_name,
+                "celery_task_id": celery_task_id,
+                "status": "submitted"
+            },
+            message="任务已提交执行"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"执行定时任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tasks/{task_id}/status")
+@handle_api_errors
+async def get_task_execution_status(
+    task_id: int,
+    celery_task_id: Optional[str] = None,
+    current_user: User = Depends(require_admin)
+):
+    """
+    获取任务执行状态
+
+    Args:
+        task_id: 数据库任务ID
+        celery_task_id: Celery任务ID
+
+    Returns:
+        任务执行状态
+    """
+    try:
+        if celery_task_id:
+            # 从Celery获取任务状态
+            from app.celery_app import celery_app
+            from celery.result import AsyncResult
+
+            result = AsyncResult(celery_task_id, app=celery_app)
+
+            status_map = {
+                'PENDING': 'pending',
+                'STARTED': 'running',
+                'SUCCESS': 'success',
+                'FAILURE': 'failed',
+                'RETRY': 'retrying',
+                'REVOKED': 'cancelled'
+            }
+
+            return ApiResponse.success(
+                data={
+                    "celery_task_id": celery_task_id,
+                    "status": status_map.get(result.state, result.state.lower()),
+                    "result": result.result if result.state == 'SUCCESS' else None,
+                    "error": str(result.info) if result.state == 'FAILURE' else None,
+                    "progress": result.info.get('progress', 0) if hasattr(result.info, 'get') else 0
+                }
+            )
+
+        # 从数据库获取最近的执行状态
+        db = DatabaseManager()
+        query = """
+            SELECT
+                id, status, started_at, completed_at, result_summary, error_message
+            FROM task_execution_history
+            WHERE task_id = %s
+            ORDER BY started_at DESC
+            LIMIT 1
+        """
+
+        result = await asyncio.to_thread(db._execute_query, query, (task_id,))
+
+        if not result:
+            return ApiResponse.success(
+                data={"status": "no_history", "message": "暂无执行历史"}
+            )
+
+        row = result[0]
+        return ApiResponse.success(
+            data={
+                "history_id": row[0],
+                "status": row[1],
+                "started_at": row[2].strftime("%Y-%m-%d %H:%M:%S") if row[2] else None,
+                "completed_at": row[3].strftime("%Y-%m-%d %H:%M:%S") if row[3] else None,
+                "result": row[4],
+                "error": row[5]
+            }
+        )
+    except Exception as e:
+        logger.error(f"获取任务执行状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/validate-cron")
 @handle_api_errors
 async def validate_cron(

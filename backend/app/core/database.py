@@ -4,7 +4,9 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from typing import Generator
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from typing import Generator, AsyncGenerator
+from contextlib import asynccontextmanager
 
 from app.core.config import settings
 
@@ -33,3 +35,41 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+# 创建异步数据库引擎
+async_engine = create_async_engine(
+    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
+    echo=settings.is_development,
+)
+
+# 创建异步会话工厂
+AsyncSessionLocal = async_sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=async_engine,
+    class_=AsyncSession
+)
+
+
+@asynccontextmanager
+async def get_async_db():
+    """
+    获取异步数据库会话（上下文管理器）
+
+    Usage:
+        async with get_async_db() as db:
+            result = await db.execute(query)
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()

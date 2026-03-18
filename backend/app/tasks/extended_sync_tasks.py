@@ -3,16 +3,16 @@ Celery异步任务 - 扩展数据同步
 用于定时同步Tushare扩展数据（资金流向、每日指标、北向资金等）
 """
 
-from celery import shared_task
 from datetime import datetime
 import asyncio
 from typing import Optional
 
+from app.celery_app import celery_app
 from app.services.extended_sync_service import ExtendedDataSyncService
 from loguru import logger
 
 
-@shared_task(name="extended.sync_daily_basic",
+@celery_app.task(name="extended.sync_daily_basic",
              bind=True,
              max_retries=3,
              soft_time_limit=600,
@@ -49,7 +49,7 @@ def sync_daily_basic_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@shared_task(name="extended.sync_moneyflow",
+@celery_app.task(name="extended.sync_moneyflow",
              bind=True,
              max_retries=2,
              soft_time_limit=1200,
@@ -89,7 +89,7 @@ def sync_moneyflow_task(self,
         self.retry(countdown=300, exc=e)
 
 
-@shared_task(name="extended.sync_hk_hold",
+@celery_app.task(name="extended.sync_hk_hold",
              bind=True,
              max_retries=3,
              soft_time_limit=600,
@@ -125,7 +125,7 @@ def sync_hk_hold_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@shared_task(name="extended.sync_margin",
+@celery_app.task(name="extended.sync_margin",
              bind=True,
              max_retries=3,
              soft_time_limit=600,
@@ -161,7 +161,7 @@ def sync_margin_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@shared_task(name="extended.sync_stk_limit",
+@celery_app.task(name="extended.sync_stk_limit",
              bind=True,
              max_retries=3,
              soft_time_limit=300,
@@ -197,7 +197,7 @@ def sync_stk_limit_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@shared_task(name="extended.sync_adj_factor",
+@celery_app.task(name="extended.sync_adj_factor",
              bind=True,
              max_retries=3,
              soft_time_limit=600,
@@ -233,7 +233,7 @@ def sync_adj_factor_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@shared_task(name="extended.sync_block_trade",
+@celery_app.task(name="extended.sync_block_trade",
              bind=True,
              max_retries=3,
              soft_time_limit=600,
@@ -269,7 +269,7 @@ def sync_block_trade_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@shared_task(name="extended.sync_suspend",
+@celery_app.task(name="extended.sync_suspend",
              bind=True,
              max_retries=3,
              soft_time_limit=300,
@@ -305,7 +305,7 @@ def sync_suspend_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@shared_task(name="extended.sync_all",
+@celery_app.task(name="extended.sync_all",
              bind=True,
              max_retries=1,
              soft_time_limit=3600,

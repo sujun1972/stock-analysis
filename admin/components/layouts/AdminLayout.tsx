@@ -162,9 +162,14 @@ const navItems: NavItem[] = [
     ]
   },
   {
-    name: '数据同步',
+    name: '数据中心',
     icon: Database,
     children: [
+      {
+        name: '沪深港通资金流向',
+        href: '/data/moneyflow-hsgt',
+        icon: TrendingUp
+      },
       {
         name: '数据初始化',
         href: '/sync/initialize',

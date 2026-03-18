@@ -950,41 +950,6 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取复权因子数据失败: {e}")
             raise TushareDataError(f"获取复权因子数据失败: {str(e)}")
 
-    def get_hk_hold(self, code: Optional[str] = None,
-                   ts_code: Optional[str] = None,
-                   trade_date: Optional[str] = None,
-                   start_date: Optional[str] = None,
-                   end_date: Optional[str] = None,
-                   exchange: Optional[str] = None) -> pd.DataFrame:
-        """
-        获取沪深港通持股数据
-        积分消耗：300分
-
-        Args:
-            code: 股票代码
-            ts_code: TS代码
-            trade_date: 交易日期 YYYYMMDD
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
-            exchange: 交易所代码（SH/SZ）
-
-        Returns:
-            pd.DataFrame: 北向资金持股数据
-        """
-        try:
-            logger.info(f"获取北向资金数据: exchange={exchange}, trade_date={trade_date}")
-            df = self.api_client.query('hk_hold',
-                                     code=code,
-                                     ts_code=ts_code,
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date,
-                                     exchange=exchange)
-            return df
-        except Exception as e:
-            logger.error(f"获取北向资金数据失败: {e}")
-            raise TushareDataError(f"获取北向资金数据失败: {str(e)}")
-
     def get_margin_detail(self, ts_code: Optional[str] = None,
                          trade_date: Optional[str] = None,
                          start_date: Optional[str] = None,
@@ -1042,6 +1007,53 @@ class TushareProvider(BaseDataProvider):
         except Exception as e:
             logger.error(f"获取大宗交易数据失败: {e}")
             raise TushareDataError(f"获取大宗交易数据失败: {str(e)}")
+
+    def get_moneyflow_hsgt(self, trade_date: Optional[str] = None,
+                          start_date: Optional[str] = None,
+                          end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取沪深港通资金流向数据
+        积分消耗：2000分
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 资金流向数据，包含以下字段：
+                - trade_date: 交易日期
+                - ggt_ss: 港股通（上海）百万元
+                - ggt_sz: 港股通（深圳）百万元
+                - hgt: 沪股通（百万元）
+                - sgt: 深股通（百万元）
+                - north_money: 北向资金（百万元）
+                - south_money: 南向资金（百万元）
+        """
+        try:
+            logger.info(f"获取沪深港通资金流向: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            # 注意：moneyflow_hsgt接口必须指定日期参数
+            if trade_date:
+                df = self.api_client.query('moneyflow_hsgt', trade_date=trade_date)
+            elif start_date and end_date:
+                df = self.api_client.query('moneyflow_hsgt', start_date=start_date, end_date=end_date)
+            elif start_date:
+                # 只有开始日期，默认到今天
+                from datetime import datetime
+                end_date = datetime.now().strftime('%Y%m%d')
+                df = self.api_client.query('moneyflow_hsgt', start_date=start_date, end_date=end_date)
+            else:
+                # 获取最近30天的数据
+                from datetime import datetime, timedelta
+                end_date = datetime.now().strftime('%Y%m%d')
+                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
+                df = self.api_client.query('moneyflow_hsgt', start_date=start_date, end_date=end_date)
+
+            return df
+        except Exception as e:
+            logger.error(f"获取沪深港通资金流向失败: {e}")
+            raise TushareDataError(f"获取沪深港通资金流向失败: {str(e)}")
 
     def get_stk_limit(self, ts_code: Optional[str] = None,
                      trade_date: Optional[str] = None,
