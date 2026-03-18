@@ -5,11 +5,55 @@ Celery异步任务 - 扩展数据同步
 
 from datetime import datetime
 import asyncio
-from typing import Optional
+from typing import Optional, Callable, Any
 
 from app.celery_app import celery_app
 from app.services.extended_sync_service import ExtendedDataSyncService
+from app.core.database import reset_async_engine
 from loguru import logger
+
+
+def run_async_in_celery(async_func: Callable, *args, **kwargs) -> Any:
+    """
+    在 Celery fork pool worker 中安全地运行异步函数
+
+    解决 "attached to a different loop" 错误：
+    当 Celery 使用 fork pool 时，全局的 async_engine 会绑定到父进程的事件循环。
+    子进程必须创建新的事件循环并重新初始化数据库引擎。
+
+    Args:
+        async_func: 要运行的异步函数
+        *args: 位置参数
+        **kwargs: 关键字参数
+
+    Returns:
+        异步函数的返回值
+
+    Raises:
+        传递异步函数抛出的所有异常
+    """
+    # 关闭继承的旧事件循环
+    try:
+        old_loop = asyncio.get_event_loop()
+        if old_loop and not old_loop.is_closed():
+            old_loop.close()
+    except RuntimeError:
+        # 如果没有运行中的循环，忽略错误
+        pass
+
+    # 创建新的事件循环并设置为当前循环
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        # 重新初始化数据库引擎（绑定到新循环）
+        reset_async_engine()
+
+        # 运行异步函数
+        return loop.run_until_complete(async_func(*args, **kwargs))
+    finally:
+        # 清理资源
+        loop.close()
 
 
 @celery_app.task(name="extended.sync_daily_basic",
@@ -30,14 +74,11 @@ def sync_daily_basic_task(self,
         logger.info(f"[Celery] 开始执行每日指标同步任务: trade_date={trade_date}")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_daily_basic(
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+        result = run_async_in_celery(
+            service.sync_daily_basic,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date
         )
 
         logger.info(f"[Celery] 每日指标同步任务完成: {result}")
@@ -69,15 +110,12 @@ def sync_moneyflow_task(self,
         logger.info(f"[Celery] 开始执行资金流向同步任务: trade_date={trade_date}")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_moneyflow(
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date,
-                stock_list=stock_list
-            )
+        result = run_async_in_celery(
+            service.sync_moneyflow,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+            stock_list=stock_list
         )
 
         logger.info(f"[Celery] 资金流向同步任务完成: {result}")
@@ -107,14 +145,11 @@ def sync_hk_hold_task(self,
         logger.info(f"[Celery] 开始执行北向资金同步任务: trade_date={trade_date}")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_hk_hold(
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+        result = run_async_in_celery(
+            service.sync_hk_hold,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date
         )
 
         logger.info(f"[Celery] 北向资金同步任务完成: {result}")
@@ -143,14 +178,11 @@ def sync_margin_task(self,
         logger.info(f"[Celery] 开始执行融资融券同步任务: trade_date={trade_date}")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_margin_detail(
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+        result = run_async_in_celery(
+            service.sync_margin_detail,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date
         )
 
         logger.info(f"[Celery] 融资融券同步任务完成: {result}")
@@ -179,14 +211,11 @@ def sync_stk_limit_task(self,
         logger.info(f"[Celery] 开始执行涨跌停价格同步任务: trade_date={trade_date}")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_stk_limit(
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+        result = run_async_in_celery(
+            service.sync_stk_limit,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date
         )
 
         logger.info(f"[Celery] 涨跌停价格同步任务完成: {result}")
@@ -215,14 +244,11 @@ def sync_adj_factor_task(self,
         logger.info(f"[Celery] 开始执行复权因子同步任务: ts_code={ts_code}")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_adj_factor(
-                ts_code=ts_code,
-                start_date=start_date,
-                end_date=end_date
-            )
+        result = run_async_in_celery(
+            service.sync_adj_factor,
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date
         )
 
         logger.info(f"[Celery] 复权因子同步任务完成: {result}")
@@ -251,14 +277,11 @@ def sync_block_trade_task(self,
         logger.info(f"[Celery] 开始执行大宗交易同步任务: trade_date={trade_date}")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_block_trade(
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+        result = run_async_in_celery(
+            service.sync_block_trade,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date
         )
 
         logger.info(f"[Celery] 大宗交易同步任务完成: {result}")
@@ -287,14 +310,11 @@ def sync_suspend_task(self,
         logger.info(f"[Celery] 开始执行停复牌信息同步任务")
 
         service = ExtendedDataSyncService()
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(
-            service.sync_suspend(
-                ts_code=ts_code,
-                suspend_date=suspend_date,
-                resume_date=resume_date
-            )
+        result = run_async_in_celery(
+            service.sync_suspend,
+            ts_code=ts_code,
+            suspend_date=suspend_date,
+            resume_date=resume_date
         )
 
         logger.info(f"[Celery] 停复牌信息同步任务完成: {result}")

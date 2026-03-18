@@ -247,13 +247,32 @@ docker-compose down
 
 ## Celery 异步任务开发指南
 
+### 事件循环冲突问题
+
+在 Celery fork pool worker 中运行异步代码时，可能会遇到 **"attached to a different loop"** 错误。
+
+**根本原因**：
+1. 全局的 `async_engine` 和 `AsyncSessionLocal` 在主进程中创建，绑定到主进程的事件循环
+2. Celery fork pool worker 继承了这些对象，但事件循环已经不是当前循环
+3. 即使创建新的事件循环，旧的数据库引擎仍然绑定到旧循环
+
+**解决方案**：
+使用 `run_async_in_celery` 辅助函数（位于 `/backend/app/tasks/extended_sync_tasks.py`）
+
+**run_async_in_celery 的工作原理**：
+1. 关闭继承自父进程的旧事件循环
+2. 创建新的事件循环
+3. 调用 `reset_async_engine()` 重新初始化数据库引擎（绑定到新循环）
+4. 运行异步函数
+5. 清理资源
+
 ### 创建新的 Celery 任务
 
 1. **任务定义**（位于 `/backend/app/tasks/`）:
 ```python
 from app.celery_app import celery_app
+from app.tasks.extended_sync_tasks import run_async_in_celery
 from loguru import logger
-import asyncio
 
 @celery_app.task(bind=True, name="tasks.your_task_name")
 def your_task(self, param1: str, param2: int):
@@ -261,24 +280,15 @@ def your_task(self, param1: str, param2: int):
     try:
         logger.info(f"开始执行任务: param1={param1}, param2={param2}")
 
-        # 如果需要调用异步方法，使用独立的事件循环
-        # 避免在 fork pool worker 中复用已关闭的事件循环
-        try:
-            old_loop = asyncio.get_event_loop()
-            if not old_loop.is_closed():
-                old_loop.close()
-        except RuntimeError:
-            pass
+        # 使用辅助函数运行异步代码
+        service = YourService()
+        result = run_async_in_celery(
+            service.your_async_method,
+            param1=param1,
+            param2=param2
+        )
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        try:
-            # 调用异步方法
-            result = loop.run_until_complete(your_async_method())
-            return result
-        finally:
-            loop.close()
+        return result
 
     except Exception as e:
         logger.error(f"任务执行失败: {e}")
@@ -307,18 +317,18 @@ TASK_MAPPING = {
 
 ### 常见问题和解决方案
 
-**问题1: "Event loop is closed" 错误**
-- 原因: Celery fork pool worker 中复用了已关闭的事件循环
-- 解决: 每个任务创建独立的事件循环（参考上面代码示例）
+**问题1: "attached to a different loop" 或 "Event loop is closed" 错误**
+- **原因**: Celery fork pool worker 中复用了绑定到父进程的事件循环
+- **解决**: 使用 `run_async_in_celery` 辅助函数（已自动处理）
 
 **问题2: 任务状态未更新到数据库**
-- 原因: Celery 信号未正确触发或数据库连接共享
-- 解决: 检查 `/backend/app/celery_signals.py` 是否正确导入
+- **原因**: Celery 信号未正确触发或数据库连接共享
+- **解决**: 检查 `/backend/app/celery_signals.py` 是否正确导入
 
 **问题3: 任务耗时计算不准确**
-- 原因: 使用 `created_at` 而非 `started_at` 计算耗时
-- 解决: 确保使用 `started_at` 作为计算起点
+- **原因**: 使用 `created_at` 而非 `started_at` 计算耗时
+- **解决**: 确保使用 `started_at` 作为计算起点
 
 **问题4: 前端显示时间不正确**
-- 原因: 时区处理问题
-- 解决: API 返回时添加 'Z' 后缀标记 UTC 时间，前端自动转换
+- **原因**: 时区处理问题
+- **解决**: API 返回时添加 'Z' 后缀标记 UTC 时间，前端自动转换

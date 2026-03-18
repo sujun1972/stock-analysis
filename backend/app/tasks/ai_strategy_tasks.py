@@ -9,7 +9,7 @@ AI策略生成异步任务
 
 设计说明：
 - 参考回测系统的异步架构
-- 使用asyncio运行异步AI服务
+- 使用 run_async_in_celery 运行异步AI服务
 - 避免阻塞前端，提升用户体验
 """
 from typing import Dict, Any
@@ -19,6 +19,7 @@ from loguru import logger
 from app.celery_app import celery_app
 from app.services.ai_service import ai_strategy_service
 from app.core.exceptions import AIServiceError
+from app.tasks.extended_sync_tasks import run_async_in_celery
 
 
 class AIStrategyCallbackTask(Task):
@@ -94,26 +95,11 @@ def generate_strategy_async(
         )
 
         # 调用AI服务生成策略（这是耗时的操作，通常10-60秒）
-        # 注意：ai_strategy_service.generate_strategy 是 async 函数
-        # 在Celery worker（同步环境）中需要使用 asyncio.run_until_complete 运行
-        import asyncio
-
-        # 获取或创建事件循环
-        # 某些环境下可能没有事件循环，需要创建新的
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            # 如果当前线程没有事件循环，创建一个新的
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        # 运行异步函数并等待结果
-        result = loop.run_until_complete(
-            ai_strategy_service.generate_strategy(
-                strategy_requirement=strategy_requirement,
-                provider_config=provider_config,
-                custom_prompt_template=custom_prompt_template
-            )
+        result = run_async_in_celery(
+            ai_strategy_service.generate_strategy,
+            strategy_requirement=strategy_requirement,
+            provider_config=provider_config,
+            custom_prompt_template=custom_prompt_template
         )
 
         logger.info(

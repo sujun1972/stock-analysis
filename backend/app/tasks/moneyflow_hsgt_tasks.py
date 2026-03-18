@@ -1,19 +1,15 @@
 """
 沪深港通资金流向同步任务
 
-注意事项:
-- 任务在 Celery fork pool worker 中执行
-- 必须为每个任务创建独立的 asyncio 事件循环
-- 执行完成后需要关闭事件循环释放资源
+使用 run_async_in_celery 处理 Celery fork pool 中的事件循环冲突问题
 """
 
 from typing import Optional
-from celery import current_task
 from loguru import logger
-import asyncio
 
 from app.celery_app import celery_app
 from app.services.extended_sync_service import ExtendedDataSyncService
+from app.tasks.extended_sync_tasks import run_async_in_celery
 
 
 @celery_app.task(bind=True, name="tasks.sync_moneyflow_hsgt")
@@ -38,42 +34,20 @@ def sync_moneyflow_hsgt_task(
         logger.info(f"开始执行沪深港通资金流向同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
         service = ExtendedDataSyncService()
+        result = run_async_in_celery(
+            service.sync_moneyflow_hsgt,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date
+        )
 
-        # 在 Celery fork pool worker 中创建独立的事件循环
-        # 避免复用可能已关闭的事件循环，防止 "Event loop is closed" 错误
-        try:
-            old_loop = asyncio.get_event_loop()
-            if not old_loop.is_closed():
-                old_loop.close()
-        except RuntimeError:
-            pass
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        try:
-            result = loop.run_until_complete(
-                service.sync_moneyflow_hsgt(
-                    trade_date=trade_date,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-            )
-
-            if result["status"] == "success":
-                logger.info(f"沪深港通资金流向同步成功: {result['records']} 条")
-                return result
-            else:
-                logger.warning(f"沪深港通资金流向同步失败: {result}")
-                error_msg = result.get('error', '未知错误')
-                raise Exception(f"同步失败: {error_msg}")
-
-        finally:
-            # 关闭事件循环释放资源
-            try:
-                loop.close()
-            except Exception as e:
-                logger.warning(f"关闭事件循环时出错: {e}")
+        if result["status"] == "success":
+            logger.info(f"沪深港通资金流向同步成功: {result['records']} 条")
+            return result
+        else:
+            logger.warning(f"沪深港通资金流向同步失败: {result}")
+            error_msg = result.get('error', '未知错误')
+            raise Exception(f"同步失败: {error_msg}")
 
     except Exception as e:
         logger.error(f"执行沪深港通资金流向同步任务失败: {str(e)}")

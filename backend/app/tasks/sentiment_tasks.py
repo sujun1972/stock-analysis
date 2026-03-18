@@ -4,7 +4,6 @@
 定时任务：每日17:30（北京时间）采集市场情绪数据
 """
 
-import asyncio
 import pytz
 from datetime import datetime
 from celery import Task
@@ -14,6 +13,7 @@ from loguru import logger
 from app.celery_app import celery_app
 from app.services.sentiment_service import MarketSentimentService
 from app.core.redis_lock import redis_lock
+from app.tasks.extended_sync_tasks import run_async_in_celery
 
 
 class SentimentSyncTask(Task):
@@ -63,13 +63,11 @@ def daily_sentiment_sync_task(self):
                     "date": date_str
                 }
 
-            # 创建服务实例
+            # 创建服务实例并运行异步任务
             service = MarketSentimentService()
-
-            # 运行异步任务
-            loop = asyncio.get_event_loop()
-            result = loop.run_until_complete(
-                service.sync_daily_sentiment(date=date_str)
+            result = run_async_in_celery(
+                service.sync_daily_sentiment,
+                date=date_str
             )
 
         # 判断结果
@@ -469,10 +467,9 @@ def sync_trading_calendar_task(years: list):
         logger.info(f"[Celery] 开始同步交易日历: {years}")
 
         service = MarketSentimentService()
-
-        loop = asyncio.get_event_loop()
-        count = loop.run_until_complete(
-            service.sync_trading_calendar_batch(years)
+        count = run_async_in_celery(
+            service.sync_trading_calendar_batch,
+            years
         )
 
         logger.success(f"[Celery] 交易日历同步完成，共{count}条记录")
