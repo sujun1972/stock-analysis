@@ -19,7 +19,8 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { apiClient } from '@/lib/api-client'
-import { toast } from '@/hooks/use-toast'
+import { useTaskStore } from '@/stores/task-store'
+import { toast } from 'sonner'
 import {
   TrendingUp,
   TrendingDown,
@@ -131,50 +132,73 @@ export default function MoneyflowHsgtPage() {
       }
     } catch (err: any) {
       setError(err.message || '加载数据失败')
-      toast({
-        title: "加载失败",
-        description: err.message || '无法加载资金流向数据',
-        variant: "destructive"
+      toast.error('加载失败', {
+        description: err.message || '无法加载资金流向数据'
       })
     } finally {
       setLoading(false)
     }
   }, [startDate, endDate, page, pageSize])
 
-  // 同步数据
+  // 任务存储Hook（用于任务面板显示和Header图标更新）
+  const { addTask, triggerPoll } = useTaskStore()
+
+  /**
+   * 异步同步数据
+   * 通过Celery任务异步执行，不阻塞前端
+   * 任务状态会在任务面板实时显示
+   */
   const handleSync = async () => {
     try {
       setSyncing(true)
 
-      const params = new URLSearchParams()
+      // 构建日期范围参数（YYYY-MM-DD格式）
+      const params: {
+        start_date?: string
+        end_date?: string
+      } = {}
+
       if (startDate) {
-        const startStr = startDate.toISOString().split('T')[0].replace(/-/g, '')
-        params.append('start_date', startStr)
+        params.start_date = startDate.toISOString().split('T')[0]
       }
       if (endDate) {
-        const endStr = endDate.toISOString().split('T')[0].replace(/-/g, '')
-        params.append('end_date', endStr)
+        params.end_date = endDate.toISOString().split('T')[0]
       }
 
-      const response = await apiClient.post(`/api/moneyflow-hsgt/sync?${params.toString()}`)
+      // 调用异步同步API
+      const response = await apiClient.syncMoneyflowHsgtAsync(params)
 
-      if (response.code === 200) {
-        toast({
-          title: "同步成功",
-          description: response.message || "资金流向数据同步成功",
-          variant: "default"
+      if (response.code === 200 && response.data) {
+        // 添加到任务存储（用于任务面板显示）
+        addTask({
+          taskId: response.data.celery_task_id,
+          taskName: response.data.task_name,
+          displayName: response.data.display_name,
+          taskType: 'data_sync',
+          status: 'running',
+          progress: 0,
+          startTime: Date.now()
         })
 
-        // 刷新数据
-        await loadData()
+        // 立即触发轮询，更新Header任务图标状态
+        triggerPoll()
+
+        toast.success('任务已提交', {
+          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
+        })
+
+        // 延迟3秒后刷新数据（给任务执行预留时间）
+        setTimeout(() => {
+          loadData().catch(() => {
+            // 静默失败，避免打断用户操作
+          })
+        }, 3000)
       } else {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
-      toast({
-        title: "同步失败",
-        description: err.message || '无法同步数据',
-        variant: "destructive"
+      toast.error('同步失败', {
+        description: err.message || '无法同步数据'
       })
     } finally {
       setSyncing(false)
@@ -209,10 +233,8 @@ export default function MoneyflowHsgtPage() {
     a.click()
     window.URL.revokeObjectURL(url)
 
-    toast({
-      title: "导出成功",
-      description: `已导出 ${data.length} 条数据`,
-      variant: "default"
+    toast.success('导出成功', {
+      description: `已导出 ${data.length} 条数据`
     })
   }
 

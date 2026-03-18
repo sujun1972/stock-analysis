@@ -1217,6 +1217,26 @@ class ApiClient {
     return response.data
   }
 
+  // ========== 沪深港通资金流向API ==========
+
+  /**
+   * 异步同步沪深港通资金流向数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncMoneyflowHsgtAsync(params?: {
+    trade_date?: string  // YYYY-MM-DD
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/moneyflow-hsgt/sync-async', null, { params })
+    return response.data
+  }
+
   // ========== 市场状态相关API ==========
 
   /**

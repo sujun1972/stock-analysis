@@ -144,6 +144,81 @@ triggerPoll()  // Header 图标即时更新
 - `/backend/app/models/celery_task_history.py` - 任务历史模型
 - `/db_init/migrations/007_create_celery_task_history.sql` - 数据库迁移
 
+#### 数据同步页面异步任务集成模式
+
+为了提供一致的用户体验，**所有数据同步页面应该使用异步任务模式**，而不是同步阻塞模式。
+
+**实现步骤**：
+
+1. **后端API**：创建异步执行端点（如 `/sync-async`）
+   ```python
+   @router.post("/sync-async")
+   async def sync_data_async(...):
+       # 提交Celery任务
+       celery_task = your_task.apply_async(kwargs={...})
+
+       # 记录到celery_task_history表
+       await asyncio.to_thread(db_manager._execute_update, ...)
+
+       return ApiResponse.success(data={
+           "celery_task_id": celery_task.id,
+           "task_name": "tasks.your_task",
+           "display_name": "任务显示名称",
+           "status": "pending"
+       })
+   ```
+
+2. **前端API客户端**：添加异步执行方法
+   ```typescript
+   async syncDataAsync(params?: any): Promise<ApiResponse<{
+     celery_task_id: string
+     task_name: string
+     display_name: string
+     status: string
+   }>>
+   ```
+
+3. **前端页面**：使用任务存储和轮询机制
+   ```typescript
+   const { addTask, triggerPoll } = useTaskStore()
+
+   const handleSync = async () => {
+     const response = await apiClient.syncDataAsync(params)
+
+     if (response.code === 200 && response.data) {
+       // 添加到任务存储
+       addTask({
+         taskId: response.data.celery_task_id,
+         taskName: response.data.task_name,
+         displayName: response.data.display_name,
+         taskType: 'data_sync',
+         status: 'running',
+         progress: 0,
+         startTime: Date.now()
+       })
+
+       // 立即触发轮询
+       triggerPoll()
+
+       // 延迟刷新数据
+       setTimeout(() => loadData().catch(() => {}), 3000)
+     }
+   }
+   ```
+
+**优势**：
+- ✅ 异步执行，不阻塞前端
+- ✅ 任务在任务面板实时显示
+- ✅ Header图标即时更新
+- ✅ 任务历史持久化到数据库
+- ✅ 统一的用户体验
+
+**已实现的页面**：
+- 定时任务配置页面（`/settings/scheduler`）
+- 沪深港通资金流向页面（`/data/moneyflow-hsgt`）
+
+**注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
+
 ### 响应式设计规范
 
 Admin项目全面支持移动端访问，采用移动优先的响应式设计：
