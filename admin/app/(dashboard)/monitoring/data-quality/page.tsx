@@ -284,18 +284,34 @@ export default function DataQualityPage() {
         title="数据质量监控"
         description="实时监控数据质量指标，确保数据准确性和完整性"
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => exportReport("json")}>
-              <Download className="h-4 w-4 mr-1" />
-              导出JSON
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => exportReport("html")}>
-              <Download className="h-4 w-4 mr-1" />
-              导出HTML
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* 移动端：使用下拉菜单整合导出选项 */}
+            <div className="sm:hidden">
+              <Select onValueChange={(value) => exportReport(value as "json" | "html")}>
+                <SelectTrigger className="w-[100px]">
+                  <Download className="h-4 w-4 mr-1" />
+                  <SelectValue placeholder="导出" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="json">JSON格式</SelectItem>
+                  <SelectItem value="html">HTML格式</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* 桌面端：显示完整按钮 */}
+            <div className="hidden sm:flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => exportReport("json")}>
+                <Download className="h-4 w-4 mr-1" />
+                导出JSON
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => exportReport("html")}>
+                <Download className="h-4 w-4 mr-1" />
+                导出HTML
+              </Button>
+            </div>
             <Button size="sm" onClick={fetchMetrics} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
-              刷新
+              <span className="hidden sm:inline">刷新</span>
             </Button>
           </div>
         }
@@ -311,23 +327,23 @@ export default function DataQualityPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-2">
               <div>
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-500">
+                    <div className="text-xl sm:text-2xl font-bold text-green-500">
                       {healthSummary.healthy_sources}
                     </div>
                     <div className="text-xs text-muted-foreground">健康</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-yellow-500">
+                    <div className="text-xl sm:text-2xl font-bold text-yellow-500">
                       {healthSummary.warning_sources}
                     </div>
                     <div className="text-xs text-muted-foreground">警告</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-red-500">
+                    <div className="text-xl sm:text-2xl font-bold text-red-500">
                       {healthSummary.critical_sources}
                     </div>
                     <div className="text-xs text-muted-foreground">严重</div>
@@ -349,7 +365,8 @@ export default function DataQualityPage() {
                 )}
               </div>
 
-              <div className="h-64">
+              {/* 饼图在小屏幕上隐藏，或者移到下方 */}
+              <div className="h-48 sm:h-64 mt-4 lg:mt-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -358,7 +375,7 @@ export default function DataQualityPage() {
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      outerRadius={80}
+                      outerRadius={60}
                       label
                     >
                       {getPieData().map((entry, index) => (
@@ -378,52 +395,56 @@ export default function DataQualityPage() {
       {/* 质量趋势 */}
       <Card>
         <CardHeader>
-          <CardTitle>质量趋势</CardTitle>
-          <div className="flex gap-4 mt-4">
-            <Select value={selectedDataSource} onValueChange={setSelectedDataSource}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="选择数据源" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">所有数据源</SelectItem>
-                {Object.keys(metrics).map(source => (
-                  <SelectItem key={source} value={source}>
-                    {source}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardTitle>质量趋势</CardTitle>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+              <Select value={selectedDataSource} onValueChange={setSelectedDataSource}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="选择数据源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">所有数据源</SelectItem>
+                  {Object.keys(metrics).map(source => (
+                    <SelectItem key={source} value={source}>
+                      {source}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">7天</SelectItem>
-                <SelectItem value="14">14天</SelectItem>
-                <SelectItem value="30">30天</SelectItem>
-              </SelectContent>
-            </Select>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-full sm:w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">7天</SelectItem>
+                  <SelectItem value="14">14天</SelectItem>
+                  <SelectItem value="30">30天</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-80">
+        <CardContent className="px-2 sm:px-6">
+          <div className="h-64 sm:h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={getTrendData()}>
+              <LineChart data={getTrendData()} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="date"
                   tickFormatter={(value) => format(new Date(value), "MM-dd")}
+                  tick={{ fontSize: 12 }}
                 />
-                <YAxis domain={[0, 100]} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
                 <Line
                   type="monotone"
                   dataKey="completeness"
                   stroke={COLORS.healthy}
                   name="完整性"
                   strokeWidth={2}
+                  dot={false}
                 />
                 <Line
                   type="monotone"
@@ -431,6 +452,7 @@ export default function DataQualityPage() {
                   stroke={COLORS.primary}
                   name="准确性"
                   strokeWidth={2}
+                  dot={false}
                 />
                 <Line
                   type="monotone"
@@ -438,6 +460,7 @@ export default function DataQualityPage() {
                   stroke={COLORS.warning}
                   name="及时性"
                   strokeWidth={2}
+                  dot={false}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -451,39 +474,39 @@ export default function DataQualityPage() {
           <CardTitle>数据源质量指标</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* 移动端使用单列布局，平板使用2列，桌面使用3列 */}
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
             {Object.entries(metrics).map(([source, metric]) => (
-              <Card key={source}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">
+              <Card key={source} className="overflow-hidden">
+                <CardHeader className="pb-3 px-4 sm:px-6">
+                  <CardTitle className="text-sm font-medium break-all">
                     {source}
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    更新时间: {format(new Date(metric.last_updated), "MM-dd HH:mm")}
+                    更新: {format(new Date(metric.last_updated), "MM-dd HH:mm")}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">记录总数</span>
-                    <span className="font-medium">{metric.total_records.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">有效记录</span>
-                    <span className="font-medium text-green-600">
-                      {metric.valid_records.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">错误数</span>
-                    <span className="font-medium text-red-600">
-                      {metric.error_count}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">警告数</span>
-                    <span className="font-medium text-yellow-600">
-                      {metric.warning_count}
-                    </span>
+                <CardContent className="space-y-2 px-4 sm:px-6">
+                  {/* 移动端使用更紧凑的布局 */}
+                  <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">总记录</div>
+                      <div className="font-medium">{metric.total_records.toLocaleString()}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">有效</div>
+                      <div className="font-medium text-green-600">
+                        {metric.valid_records.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">错误</div>
+                      <div className="font-medium text-red-600">{metric.error_count}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">警告</div>
+                      <div className="font-medium text-yellow-600">{metric.warning_count}</div>
+                    </div>
                   </div>
 
                   <div className="space-y-2 pt-2 border-t">
@@ -525,18 +548,18 @@ export default function DataQualityPage() {
           <CardContent>
             <div className="space-y-2">
               {alerts.map(alert => (
-                <Alert key={alert.id}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <Alert key={alert.id} className="p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-start sm:items-center gap-2">
                       {getAlertIcon(alert.severity)}
-                      <div>
-                        <AlertTitle className="text-sm">
+                      <div className="flex-1 min-w-0">
+                        <AlertTitle className="text-sm break-all">
                           {alert.data_source}
                         </AlertTitle>
-                        <AlertDescription className="text-xs">
-                          {alert.message}
+                        <AlertDescription className="text-xs mt-1">
+                          <div className="break-all">{alert.message}</div>
                           <div className="text-xs text-muted-foreground mt-1">
-                            {format(new Date(alert.created_at), "yyyy-MM-dd HH:mm")}
+                            {format(new Date(alert.created_at), "MM-dd HH:mm")}
                           </div>
                         </AlertDescription>
                       </div>
@@ -546,6 +569,7 @@ export default function DataQualityPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => acknowledgeAlert(alert.id)}
+                        className="self-end sm:self-auto"
                       >
                         确认
                       </Button>

@@ -53,6 +53,7 @@ loguru>=0.7.0
 
 # 任务调度
 apscheduler>=3.10.0
+croniter>=2.0.0
 
 # Redis (用于缓存)
 redis[hiredis]>=5.0.0

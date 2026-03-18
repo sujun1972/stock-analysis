@@ -476,25 +476,65 @@ export default function SchedulerSettingsPage() {
     {
       key: 'next_run_at',
       header: '执行时间',
-      accessor: (item: ScheduledTask) => (
-        <div className="text-xs space-y-1">
-          {item.last_run_at && (
-            <div className="text-gray-700 dark:text-gray-300 truncate" title={`上次: ${item.last_run_at}`}>
-              <span className="text-gray-500 dark:text-gray-400">上次: </span>
-              {item.last_run_at}
-            </div>
-          )}
-          {item.next_run_at && (
-            <div className="text-blue-700 dark:text-blue-300 truncate" title={`下次: ${item.next_run_at}`}>
-              <span className="text-gray-500 dark:text-gray-400">下次: </span>
-              {item.next_run_at}
-            </div>
-          )}
-          <div className="text-gray-500 dark:text-gray-400">
-            已运行 {item.run_count} 次
+      accessor: (item: ScheduledTask) => {
+        // 获取本地时区
+        const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const isBeijingTime = localTimeZone === 'Asia/Shanghai' || localTimeZone === 'Asia/Beijing'
+
+        // 格式化时间为北京时间
+        const formatBeijingTime = (dateStr: string) => {
+          if (!dateStr) return null
+          try {
+            const date = new Date(dateStr)
+            return date.toLocaleString('zh-CN', {
+              timeZone: 'Asia/Shanghai',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false
+            })
+          } catch {
+            return dateStr
+          }
+        }
+
+        return (
+          <div className="text-xs space-y-1">
+            {item.next_run_at ? (
+              <>
+                <div className="text-blue-700 dark:text-blue-300 truncate" title={`下次执行: ${item.next_run_at}`}>
+                  <span className="text-gray-500 dark:text-gray-400">下次: </span>
+                  {item.next_run_at}
+                </div>
+                {!isBeijingTime && (
+                  <div className="text-orange-600 dark:text-orange-400 truncate" title="北京时间">
+                    <span className="text-gray-500 dark:text-gray-400">北京: </span>
+                    {formatBeijingTime(item.next_run_at)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-gray-500 dark:text-gray-400">
+                待计算下次执行时间
+              </div>
+            )}
+            {item.last_run_at && (
+              <div className="text-gray-600 dark:text-gray-400 truncate" title={`上次执行: ${item.last_run_at}`}>
+                <span className="text-gray-500 dark:text-gray-500">上次: </span>
+                {item.last_run_at}
+              </div>
+            )}
+            {item.run_count > 0 && (
+              <div className="text-gray-500 dark:text-gray-500 text-xs">
+                已执行 {item.run_count} 次
+              </div>
+            )}
           </div>
-        </div>
-      ),
+        )
+      },
       width: 250
     },
     {
