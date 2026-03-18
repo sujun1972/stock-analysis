@@ -57,12 +57,13 @@ const routeLabelMap: Record<string, string> = {
   'profile': '个人中心',
 
   // 市场情绪子路由
-  'data': '情绪数据',
+  'data': '数据管理',
   'dragon-tiger': '龙虎榜',
   'limit-up': '涨停板池',
   'cycle': '情绪周期',
   'ai-analysis': 'AI分析',
   'premarket': '盘前预期',
+  'moneyflow-hsgt': '沪深港通资金流向',
 
   // 系统设置子路由
   'system': '系统配置',
@@ -92,7 +93,7 @@ const routeLabelMap: Record<string, string> = {
   'pending-review': '待审核策略',
 
   // 股票管理子路由
-  'concepts': '关联概念',
+  'stock-concepts': '关联概念',
 }
 
 // 路由图标映射

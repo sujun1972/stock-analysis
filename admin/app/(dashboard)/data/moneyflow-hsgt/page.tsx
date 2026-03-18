@@ -1,9 +1,21 @@
+/**
+ * @file 沪深港通资金流向页面
+ * @description 展示沪深港通每日资金流向数据，包括北向资金（沪股通+深股通）和南向资金（港股通）
+ * @features
+ * - 统计卡片展示：北向资金均值、累计净流入、最大流入、南向最大流出
+ * - 趋势图表：展示北向和南向资金流向趋势
+ * - 数据筛选：支持按日期范围筛选
+ * - 数据同步：支持手动同步最新数据
+ * - 数据导出：导出CSV格式数据（单位：亿元）
+ * - 响应式设计：桌面端表格视图，移动端卡片视图
+ */
+
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
-import { DateRangePicker } from '@/components/common/DatePicker'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { apiClient } from '@/lib/api-client'
@@ -59,13 +71,23 @@ interface Statistics {
   count: number
 }
 
+/**
+ * 格式化金额为亿元
+ * @param value 百万元为单位的金额
+ * @param decimals 保留小数位数，默认2位
+ * @returns 格式化后的字符串（亿元）
+ */
+const formatToYi = (value: number, decimals: number = 2): string => {
+  return formatNumber(value / 100, decimals)
+}
+
 export default function MoneyflowHsgtPage() {
   const [data, setData] = useState<MoneyflowData[]>([])
   const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [startDate, setStartDate] = useState<string>('')
-  const [endDate, setEndDate] = useState<string>('')
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [refreshing, setRefreshing] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
@@ -82,15 +104,19 @@ export default function MoneyflowHsgtPage() {
 
       // 构建查询参数
       const params = new URLSearchParams()
-      if (startDate) params.append('start_date', startDate)
-      if (endDate) params.append('end_date', endDate)
+      if (startDate) {
+        const startStr = startDate.toISOString().split('T')[0].replace(/-/g, '')
+        params.append('start_date', startStr)
+      }
+      if (endDate) {
+        const endStr = endDate.toISOString().split('T')[0].replace(/-/g, '')
+        params.append('end_date', endStr)
+      }
       params.append('limit', pageSize.toString())
       params.append('offset', ((page - 1) * pageSize).toString())
 
       // 获取资金流向数据
       const response = await apiClient.get(`/api/moneyflow-hsgt?${params.toString()}`)
-
-      console.log('Moneyflow API Response:', response)
 
       if (response.code === 200) {
         const items = response.data?.items || []
@@ -121,8 +147,14 @@ export default function MoneyflowHsgtPage() {
       setSyncing(true)
 
       const params = new URLSearchParams()
-      if (startDate) params.append('start_date', startDate)
-      if (endDate) params.append('end_date', endDate)
+      if (startDate) {
+        const startStr = startDate.toISOString().split('T')[0].replace(/-/g, '')
+        params.append('start_date', startStr)
+      }
+      if (endDate) {
+        const endStr = endDate.toISOString().split('T')[0].replace(/-/g, '')
+        params.append('end_date', endStr)
+      }
 
       const response = await apiClient.post(`/api/moneyflow-hsgt/sync?${params.toString()}`)
 
@@ -152,17 +184,17 @@ export default function MoneyflowHsgtPage() {
   // 导出数据
   const handleExport = () => {
     // 将数据转换为CSV格式
-    const headers = ['交易日期', '沪股通(百万)', '深股通(百万)', '北向资金(百万)', '港股通沪(百万)', '港股通深(百万)', '南向资金(百万)']
+    const headers = ['交易日期', '沪股通(亿元)', '深股通(亿元)', '北向资金(亿元)', '港股通沪(亿元)', '港股通深(亿元)', '南向资金(亿元)']
     const csvContent = [
       headers.join(','),
       ...data.map(item => [
         item.trade_date,
-        item.hgt,
-        item.sgt,
-        item.north_money,
-        item.ggt_ss,
-        item.ggt_sz,
-        item.south_money
+        formatToYi(item.hgt),
+        formatToYi(item.sgt),
+        formatToYi(item.north_money),
+        formatToYi(item.ggt_ss),
+        formatToYi(item.ggt_sz),
+        formatToYi(item.south_money)
       ].join(','))
     ].join('\n')
 
@@ -171,7 +203,9 @@ export default function MoneyflowHsgtPage() {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `moneyflow_hsgt_${startDate || 'all'}_${endDate || 'latest'}.csv`
+    const startStr = startDate ? startDate.toISOString().split('T')[0] : 'all'
+    const endStr = endDate ? endDate.toISOString().split('T')[0] : 'latest'
+    a.download = `moneyflow_hsgt_${startStr}_${endStr}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
 
@@ -190,7 +224,7 @@ export default function MoneyflowHsgtPage() {
   const columns: Column<MoneyflowData>[] = useMemo(() => [
     {
       key: 'trade_date',
-      header: '交易日期',
+      header: '日期',
       accessor: (item) => {
         const dateStr = item.trade_date
         if (dateStr && dateStr.length === 8 && !dateStr.includes('-')) {
@@ -203,55 +237,77 @@ export default function MoneyflowHsgtPage() {
     },
     {
       key: 'hgt',
-      header: '沪股通',
+      header: (
+        <>
+          <span className="sm:hidden">沪</span>
+          <span className="hidden sm:inline">沪股通(亿)</span>
+        </>
+      ),
       accessor: (item) => (
         <span className={`font-medium ${item.hgt >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-          {item.hgt >= 0 ? '+' : ''}{formatNumber(item.hgt, 2)}
+          {item.hgt >= 0 ? '+' : ''}{formatToYi(item.hgt)}
         </span>
       )
     },
     {
       key: 'sgt',
-      header: '深股通',
+      header: (
+        <>
+          <span className="sm:hidden">深</span>
+          <span className="hidden sm:inline">深股通(亿)</span>
+        </>
+      ),
       accessor: (item) => (
         <span className={`font-medium ${item.sgt >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-          {item.sgt >= 0 ? '+' : ''}{formatNumber(item.sgt, 2)}
+          {item.sgt >= 0 ? '+' : ''}{formatToYi(item.sgt)}
         </span>
       )
     },
     {
       key: 'north_money',
-      header: '北向资金合计',
+      header: (
+        <>
+          <span className="sm:hidden">北向</span>
+          <span className="hidden sm:inline">北向合计(亿)</span>
+        </>
+      ),
       accessor: (item) => (
-        <span className={`font-semibold text-lg ${item.north_money >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-          {item.north_money >= 0 ? '+' : ''}{formatNumber(item.north_money, 2)}
+        <span className={`font-semibold sm:text-lg ${item.north_money >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+          {item.north_money >= 0 ? '+' : ''}{formatToYi(item.north_money)}
         </span>
       )
     },
     {
       key: 'ggt_ss',
-      header: '港股通（沪）',
+      header: '港沪(亿)',
+      className: 'hidden md:table-cell',
       accessor: (item) => (
         <span className="text-gray-600 dark:text-gray-400">
-          {formatNumber(item.ggt_ss, 2)}
+          {formatToYi(item.ggt_ss)}
         </span>
       )
     },
     {
       key: 'ggt_sz',
-      header: '港股通（深）',
+      header: '港深(亿)',
+      className: 'hidden md:table-cell',
       accessor: (item) => (
         <span className="text-gray-600 dark:text-gray-400">
-          {formatNumber(item.ggt_sz, 2)}
+          {formatToYi(item.ggt_sz)}
         </span>
       )
     },
     {
       key: 'south_money',
-      header: '南向资金合计',
+      header: (
+        <>
+          <span className="sm:hidden">南向</span>
+          <span className="hidden sm:inline">南向合计(亿)</span>
+        </>
+      ),
       accessor: (item) => (
         <span className="text-gray-600 dark:text-gray-400">
-          {formatNumber(item.south_money, 2)}
+          {formatToYi(item.south_money)}
         </span>
       )
     }
@@ -259,9 +315,11 @@ export default function MoneyflowHsgtPage() {
 
   // 移动端卡片渲染
   const mobileCard = useCallback((item: MoneyflowData) => (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="font-medium text-lg">
+    <div className="space-y-2">
+      {/* 日期 */}
+      <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">交易日期</span>
+        <span className="font-medium">
           {(() => {
             const dateStr = item.trade_date
             if (dateStr && dateStr.length === 8 && !dateStr.includes('-')) {
@@ -270,30 +328,58 @@ export default function MoneyflowHsgtPage() {
             }
             return formatDate(dateStr)
           })()}
-        </div>
-        <div className={`font-bold text-xl ${item.north_money >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-          {item.north_money >= 0 ? '+' : ''}{formatNumber(item.north_money, 2)}
-        </div>
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <span className="text-gray-500 dark:text-gray-400">沪股通：</span>
-          <span className={`font-medium ml-1 ${item.hgt >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-            {item.hgt >= 0 ? '+' : ''}{formatNumber(item.hgt, 2)}
-          </span>
-        </div>
-        <div>
-          <span className="text-gray-500 dark:text-gray-400">深股通：</span>
-          <span className={`font-medium ml-1 ${item.sgt >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-            {item.sgt >= 0 ? '+' : ''}{formatNumber(item.sgt, 2)}
-          </span>
-        </div>
+      {/* 北向合计 */}
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-600 dark:text-gray-400">北向合计</span>
+        <span className={`font-bold text-lg ${item.north_money >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+          {item.north_money >= 0 ? '+' : ''}{formatToYi(item.north_money)}亿
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-xs text-gray-500 dark:text-gray-400">
-        <div>港股通（沪）：{formatNumber(item.ggt_ss, 2)}</div>
-        <div>港股通（深）：{formatNumber(item.ggt_sz, 2)}</div>
+      {/* 沪股通 */}
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-600 dark:text-gray-400">沪股通</span>
+        <span className={`font-medium ${item.hgt >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+          {item.hgt >= 0 ? '+' : ''}{formatToYi(item.hgt)}亿
+        </span>
+      </div>
+
+      {/* 深股通 */}
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-600 dark:text-gray-400">深股通</span>
+        <span className={`font-medium ${item.sgt >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+          {item.sgt >= 0 ? '+' : ''}{formatToYi(item.sgt)}亿
+        </span>
+      </div>
+
+      {/* 分隔线 */}
+      <div className="border-t border-gray-100 dark:border-gray-800"></div>
+
+      {/* 南向合计 */}
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-600 dark:text-gray-400">南向合计</span>
+        <span className="font-medium text-gray-700 dark:text-gray-300">
+          {formatToYi(item.south_money)}亿
+        </span>
+      </div>
+
+      {/* 港股通(沪) */}
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-500 dark:text-gray-500">港股通(沪)</span>
+        <span className="text-sm text-gray-600 dark:text-gray-400">
+          {formatToYi(item.ggt_ss)}亿
+        </span>
+      </div>
+
+      {/* 港股通(深) */}
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-500 dark:text-gray-500">港股通(深)</span>
+        <span className="text-sm text-gray-600 dark:text-gray-400">
+          {formatToYi(item.ggt_sz)}亿
+        </span>
       </div>
     </div>
   ), [])
@@ -302,13 +388,18 @@ export default function MoneyflowHsgtPage() {
   const chartData = useMemo(() => {
     return [...data].reverse().map(item => ({
       date: item.trade_date.slice(4), // 只显示MMDD
-      north: item.north_money,
-      south: item.south_money,
-      hgt: item.hgt,
-      sgt: item.sgt,
-      net: item.north_money - item.south_money
+      north: item.north_money / 100, // 转换为亿元
+      south: item.south_money / 100,
+      hgt: item.hgt / 100,
+      sgt: item.sgt / 100,
+      net: (item.north_money - item.south_money) / 100
     }))
   }, [data])
+
+  // 图表 Tooltip 格式化
+  const chartTooltipFormatter = (value: any) => {
+    return `${value.toFixed(2)} 亿元`
+  }
 
   return (
     <div className="space-y-6">
@@ -356,9 +447,9 @@ export default function MoneyflowHsgtPage() {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">北向资金均值</p>
                 <p className={`text-2xl font-semibold mt-1 ${statistics.avg_north >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                  {formatNumber(statistics.avg_north, 2)}
+                  {formatToYi(statistics.avg_north)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">百万元</p>
+                <p className="text-xs text-gray-500 mt-1">亿元</p>
               </div>
               <TrendingUp className="h-8 w-8 text-blue-500" />
             </div>
@@ -369,9 +460,9 @@ export default function MoneyflowHsgtPage() {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">累计净流入</p>
                 <p className={`text-2xl font-semibold mt-1 ${statistics.total_north >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                  {formatNumber(statistics.total_north / 1000, 2)}
+                  {formatToYi(statistics.total_north)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">十亿元</p>
+                <p className="text-xs text-gray-500 mt-1">亿元</p>
               </div>
               <Activity className="h-8 w-8 text-green-500" />
             </div>
@@ -380,11 +471,11 @@ export default function MoneyflowHsgtPage() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">最大流入</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">北向最大流入</p>
                 <p className="text-2xl font-semibold mt-1 text-red-600 dark:text-red-400">
-                  {formatNumber(statistics.max_north, 2)}
+                  {formatToYi(statistics.max_north)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">百万元</p>
+                <p className="text-xs text-gray-500 mt-1">亿元</p>
               </div>
               <ArrowUpRight className="h-8 w-8 text-red-500" />
             </div>
@@ -393,11 +484,11 @@ export default function MoneyflowHsgtPage() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">最大流出</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">南向最大流出</p>
                 <p className="text-2xl font-semibold mt-1 text-green-600 dark:text-green-400">
-                  {formatNumber(statistics.min_north, 2)}
+                  {formatToYi(statistics.max_south)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">百万元</p>
+                <p className="text-xs text-gray-500 mt-1">亿元</p>
               </div>
               <ArrowDownRight className="h-8 w-8 text-green-500" />
             </div>
@@ -407,54 +498,74 @@ export default function MoneyflowHsgtPage() {
 
       {/* 图表 */}
       {chartData.length > 0 && (
-        <Card className="p-4">
+        <Card className="p-4 overflow-hidden">
           <h3 className="text-lg font-semibold mb-4">资金流向趋势</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip formatter={(value: any) => formatNumber(value, 2)} />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="north"
-                name="北向资金"
-                stroke="#ef4444"
-                fill="#ef4444"
-                fillOpacity={0.3}
-              />
-              <Area
-                type="monotone"
-                dataKey="south"
-                name="南向资金"
-                stroke="#10b981"
-                fill="#10b981"
-                fillOpacity={0.3}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div className="w-full overflow-x-auto pb-4">
+            <ResponsiveContainer width="100%" height={300} minWidth={300}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                  interval="preserveStartEnd"
+                />
+                <YAxis />
+                <Tooltip formatter={chartTooltipFormatter} />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Area
+                  type="monotone"
+                  dataKey="north"
+                  name="北向(亿)"
+                  stroke="#ef4444"
+                  fill="#ef4444"
+                  fillOpacity={0.3}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="south"
+                  name="南向(亿)"
+                  stroke="#10b981"
+                  fill="#10b981"
+                  fillOpacity={0.3}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </Card>
       )}
 
-      {/* 筛选器 */}
+      {/* 筛选器 - 优化布局对齐 */}
       <Card className="p-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartChange={setStartDate}
-            onEndChange={setEndDate}
-            className="w-full sm:w-auto"
-          />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-1">
+            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">开始日期</span>
+            <DatePicker
+              date={startDate}
+              onDateChange={setStartDate}
+              placeholder="选择开始日期"
+              className="w-full sm:w-[200px]"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-1">
+            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">结束日期</span>
+            <DatePicker
+              date={endDate}
+              onDateChange={setEndDate}
+              placeholder="选择结束日期"
+              className="w-full sm:w-[200px]"
+            />
+          </div>
 
           <Button
             variant="outline"
-            size="sm"
             onClick={() => {
               setPage(1) // 重置到第一页
               loadData()
             }}
+            className="w-full sm:w-auto"
           >
             查询
           </Button>
@@ -462,28 +573,96 @@ export default function MoneyflowHsgtPage() {
       </Card>
 
       {/* 数据表格 */}
-      <Card>
-        <DataTable
-          columns={columns}
-          data={data}
-          loading={loading}
-          error={error}
-          emptyMessage="暂无资金流向数据"
-          mobileCard={mobileCard}
-          pagination={{
-            page,
-            pageSize,
-            total,
-            onPageChange: (newPage) => {
-              setPage(newPage)
-            },
-            onPageSizeChange: (newPageSize) => {
-              setPageSize(newPageSize)
-              setPage(1) // 重置到第一页
-            },
-            pageSizeOptions: [10, 20, 30, 50, 100]
-          }}
-        />
+      <Card className="p-0 sm:p-0 overflow-hidden">
+        <div className="sm:hidden">
+          {/* 移动端视图 - 卡片列表 */}
+          <div className="px-4 py-3 border-b bg-muted/50">
+            <h3 className="text-sm font-medium">资金流向数据</h3>
+          </div>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {!loading && !error && data.map((item, index) => (
+              <div
+                key={index}
+                className={`p-4 transition-colors ${
+                  index % 2 === 0
+                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
+                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
+                }`}
+              >
+                {mobileCard(item)}
+              </div>
+            ))}
+          </div>
+          {loading && (
+            <div className="p-8 text-center">
+              <div className="flex flex-col items-center justify-center gap-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                <span className="text-sm text-muted-foreground">加载中...</span>
+              </div>
+            </div>
+          )}
+          {error && (
+            <div className="p-8 text-center">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+          {!loading && !error && data.length === 0 && (
+            <div className="p-8 text-center">
+              <p className="text-sm text-muted-foreground">暂无资金流向数据</p>
+            </div>
+          )}
+
+          {/* 移动端分页 */}
+          {!loading && !error && data.length > 0 && (
+            <div className="p-4 border-t bg-muted/30">
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                >
+                  上一页
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  第 {page} / {Math.ceil(total / pageSize)} 页
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
+                  disabled={page >= Math.ceil(total / pageSize)}
+                >
+                  下一页
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 桌面端表格视图 */}
+        <div className="hidden sm:block">
+          <DataTable
+            columns={columns}
+            data={data}
+            loading={loading}
+            error={error}
+            emptyMessage="暂无资金流向数据"
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: (newPage) => {
+                setPage(newPage)
+              },
+              onPageSizeChange: (newPageSize) => {
+                setPageSize(newPageSize)
+                setPage(1) // 重置到第一页
+              },
+              pageSizeOptions: [10, 20, 30, 50, 100]
+            }}
+          />
+        </div>
       </Card>
     </div>
   )
