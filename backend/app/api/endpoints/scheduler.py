@@ -731,9 +731,9 @@ async def execute_scheduled_task(
 
         # 同时记录到 celery_task_history 表（用于任务面板）
         # 获取任务友好名称
-        from app.scheduler.task_executor import TaskExecutor
-        task_config = TaskExecutor.TASK_MAPPING.get(module, {})
-        display_name = task_config.get('name', task_name)
+        from app.scheduler import TaskMetadataService
+        metadata_service = TaskMetadataService()
+        display_name = metadata_service.get_friendly_name(module, task_name)
 
         # 使用raw SQL插入celery任务历史
         celery_history_query = """

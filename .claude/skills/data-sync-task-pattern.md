@@ -228,17 +228,22 @@ async def sync_{resource}_async(
 
 ---
 
-### 2.3 注册任务到调度器 (`/backend/app/scheduler/task_executor.py`)
+### 2.3 注册任务到调度器 (`/backend/app/scheduler/task_metadata.py`)
 
 在 `TASK_MAPPING` 字典中添加任务映射：
 
 ```python
-TASK_MAPPING = {
+# backend/app/scheduler/task_metadata.py
+
+TASK_MAPPING: Dict[str, Dict[str, Any]] = {
     # ... 其他任务
 
     'tasks.sync_{resource}': {
         'task': 'tasks.sync_{resource}',
-        'name': '{资源中文名称}'
+        'name': '{资源中文名称}',
+        'description': '{资源详细描述}',
+        'category': '扩展数据',  # 或其他分类
+        'display_order': 310     # 显示排序号
     },
 
     # ... 其他任务
@@ -246,9 +251,14 @@ TASK_MAPPING = {
 ```
 
 **关键点**：
-- ✅ 键名 = 任务名称（`tasks.sync_{resource}`）
+- ✅ 键名 = 模块名（`tasks.sync_{resource}`）
 - ✅ `task` 字段 = Celery 任务名称
 - ✅ `name` 字段 = 前端显示的中文名称
+- ✅ `description` 字段 = 任务详细描述
+- ✅ `category` 字段 = 任务分类（基础数据、扩展数据、市场情绪等）
+- ✅ `display_order` 字段 = 显示排序号（数字越小越靠前）
+
+**注意**：Scheduler 模块已重构，任务元数据统一在 `task_metadata.py` 中管理
 
 ---
 

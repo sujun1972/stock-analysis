@@ -11,36 +11,25 @@
 """
 
 from celery.beat import Scheduler, ScheduleEntry
-from celery.schedules import crontab
 from datetime import datetime
 from loguru import logger
 import json
 from typing import Dict, Any
 
+from .task_metadata_service import TaskMetadataService
+from .cron_parser import CronParser
+
 
 class DatabaseScheduler(Scheduler):
     """从数据库读取定时任务配置的调度器"""
-
-    # Celery任务名称映射表
-    # 将数据库中的module字段映射到实际的Celery任务名称
-    TASK_MAPPING = {
-        'sentiment': 'sentiment.daily_sync_17_30',
-        'sentiment_ai': 'sentiment.ai_analysis_18_00',
-        'premarket': 'premarket.full_workflow_8_00',
-        'stock_list': 'sync.stock_list',
-        'new_stocks': 'sync.new_stocks',
-        'delisted_stocks': 'sync.delisted_stocks',
-        'daily': 'sync.daily_batch',
-        'concept': 'sync.concept',
-        'moneyflow_hsgt': 'tasks.sync_moneyflow_hsgt_daily',
-        'moneyflow_mkt_dc': 'tasks.sync_moneyflow_mkt_dc_daily',
-    }
 
     def __init__(self, *args, **kwargs):
         """初始化调度器"""
         self.last_sync = None
         self.sync_interval = 30  # 每30秒从数据库同步一次
         self._db_schedule = {}  # 数据库中的定时任务
+        self.metadata_service = TaskMetadataService()
+        self.cron_parser = CronParser()
         super().__init__(*args, **kwargs)
         logger.info("🔧 DatabaseScheduler 已初始化")
 
@@ -89,25 +78,20 @@ class DatabaseScheduler(Scheduler):
                 task_name, module, cron_expr, params = row
 
                 try:
-                    # 解析Cron表达式 (格式: "分 时 日 月 周")
-                    schedule_entry = self._parse_cron_expression(cron_expr)
+                    # 解析Cron表达式
+                    schedule_entry = self.cron_parser.parse(cron_expr)
                     if not schedule_entry:
                         logger.warning(f"⚠️  跳过任务 {task_name}: Cron表达式解析失败")
                         continue
 
-                    # 从映射表获取Celery任务名称
-                    celery_task = self.TASK_MAPPING.get(module)
+                    # 从元数据服务获取Celery任务名称
+                    celery_task = self.metadata_service.get_celery_task_name(module)
                     if not celery_task:
                         logger.warning(f"⚠️  跳过任务 {task_name}: 模块 '{module}' 没有对应的Celery任务")
                         continue
 
                     # 解析任务参数
-                    task_params = {}
-                    if params:
-                        try:
-                            task_params = json.loads(params) if isinstance(params, str) else params
-                        except json.JSONDecodeError:
-                            logger.warning(f"⚠️  任务 {task_name}: 参数解析失败，使用空参数")
+                    task_params = self._parse_task_params(params, task_name)
 
                     # 构建任务配置
                     schedule[f'db-{task_name}'] = {
@@ -131,34 +115,27 @@ class DatabaseScheduler(Scheduler):
             logger.error(f"❌ 从数据库加载定时任务失败: {e}")
             return {}
 
-    def _parse_cron_expression(self, cron_expr: str):
+    def _parse_task_params(self, params: Any, task_name: str) -> Dict[str, Any]:
         """
-        解析Cron表达式为Celery crontab对象
+        解析任务参数
 
         Args:
-            cron_expr: Cron表达式，格式: "分 时 日 月 周"
+            params: 数据库中的参数（可能是JSON字符串或字典）
+            task_name: 任务名称（用于日志）
 
         Returns:
-            celery.schedules.crontab对象，解析失败返回None
+            解析后的参数字典
         """
+        if not params:
+            return {}
+
         try:
-            parts = cron_expr.strip().split()
-            if len(parts) != 5:
-                logger.warning(f"⚠️  Cron表达式格式错误: {cron_expr} (需要5个字段)")
-                return None
-
-            minute, hour, day_of_month, month_of_year, day_of_week = parts
-
-            return crontab(
-                minute=minute,
-                hour=hour,
-                day_of_month=day_of_month,
-                month_of_year=month_of_year,
-                day_of_week=day_of_week
-            )
-        except Exception as e:
-            logger.error(f"❌ 解析Cron表达式失败 '{cron_expr}': {e}")
-            return None
+            if isinstance(params, str):
+                return json.loads(params)
+            return params
+        except json.JSONDecodeError:
+            logger.warning(f"⚠️  任务 {task_name}: 参数解析失败，使用空参数")
+            return {}
 
     def tick(self, **kwargs):
         """
@@ -177,39 +154,46 @@ class DatabaseScheduler(Scheduler):
 
             # 检测配置是否有变化
             if new_schedule != self._db_schedule:
-                logger.info("🔄 检测到定时任务配置变更，正在更新...")
-
-                # 找出新增、删除、修改的任务
-                old_keys = set(self._db_schedule.keys())
-                new_keys = set(new_schedule.keys())
-
-                added = new_keys - old_keys
-                removed = old_keys - new_keys
-                modified = {
-                    k for k in old_keys & new_keys
-                    if self._db_schedule[k] != new_schedule[k]
-                }
-
-                if added:
-                    logger.info(f"  ➕ 新增任务: {', '.join(added)}")
-                if removed:
-                    logger.info(f"  ➖ 删除任务: {', '.join(removed)}")
-                if modified:
-                    logger.info(f"  🔧 修改任务: {', '.join(modified)}")
-
-                # 更新内部缓存
-                self._db_schedule = new_schedule
-
-                # 合并到调度器
-                self.merge_inplace(new_schedule)
-
-                logger.info(f"✅ 定时任务配置已更新，当前活跃任务: {len(new_schedule)} 个")
-            else:
-                logger.debug(f"  ℹ️  配置无变化，当前活跃任务: {len(new_schedule)} 个")
+                self._handle_schedule_change(new_schedule)
 
             self.last_sync = now
 
         return super().tick(**kwargs)
+
+    def _handle_schedule_change(self, new_schedule: Dict[str, Dict[str, Any]]):
+        """
+        处理调度配置变更
+
+        Args:
+            new_schedule: 新的调度配置
+        """
+        logger.info("🔄 检测到定时任务配置变更，正在更新...")
+
+        # 找出新增、删除、修改的任务
+        old_keys = set(self._db_schedule.keys())
+        new_keys = set(new_schedule.keys())
+
+        added = new_keys - old_keys
+        removed = old_keys - new_keys
+        modified = {
+            k for k in old_keys & new_keys
+            if self._db_schedule[k] != new_schedule[k]
+        }
+
+        if added:
+            logger.info(f"  ➕ 新增任务: {', '.join(added)}")
+        if removed:
+            logger.info(f"  ➖ 删除任务: {', '.join(removed)}")
+        if modified:
+            logger.info(f"  🔧 修改任务: {', '.join(modified)}")
+
+        # 更新内部缓存
+        self._db_schedule = new_schedule
+
+        # 合并到调度器
+        self.merge_inplace(new_schedule)
+
+        logger.info(f"✅ 定时任务配置已更新，当前活跃任务: {len(new_schedule)} 个")
 
     def merge_inplace(self, schedule):
         """

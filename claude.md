@@ -612,6 +612,84 @@ router.include_router(ai_analysis.router, prefix="/ai-analysis", tags=["sentimen
 - 便于并行开发和代码审查
 - 符合单一职责原则
 
+### Scheduler 模块架构
+
+定时任务调度模块采用模块化架构，提供数据库驱动的动态任务调度：
+
+**模块结构**：
+```
+backend/app/scheduler/
+├── __init__.py                # 统一导出
+├── database_scheduler.py      # 数据库驱动的 Celery Beat 调度器
+├── task_executor.py           # 任务执行器（手动触发）
+├── task_metadata.py           # 任务元数据配置（集中管理）
+├── task_metadata_service.py   # 元数据管理服务
+└── cron_parser.py             # Cron 表达式解析器
+```
+
+**核心组件**：
+
+1. **task_metadata.py** - 任务元数据配置
+   - 存储所有任务的完整元数据（37个任务）
+   - 包含任务名称、描述、分类、显示顺序、积分消耗等
+   - 作为单一数据源，便于维护和扩展
+
+2. **task_metadata_service.py** - 元数据管理服务
+   - 封装任务元数据访问逻辑
+   - 提供查询、过滤、合并参数等12个方法
+   - 隐藏实现细节，便于单元测试
+
+3. **cron_parser.py** - Cron 解析器
+   - 独立的 Cron 表达式解析模块
+   - 可复用、可独立测试
+   - 支持表达式验证和错误处理
+
+4. **database_scheduler.py** - 数据库调度器
+   - 从数据库动态加载任务配置
+   - 每30秒自动同步配置变更
+   - 支持启用/禁用任务、修改 Cron 表达式
+
+5. **task_executor.py** - 任务执行器
+   - 手动触发任务执行
+   - 查询任务状态
+   - 取消任务
+
+**使用示例**：
+
+```python
+# 导入服务
+from app.scheduler import TaskMetadataService
+
+# 获取任务友好名称
+service = TaskMetadataService()
+display_name = service.get_friendly_name('sentiment', 'default_name')
+
+# 合并任务参数（自动过滤元数据字段）
+params = service.merge_task_params('sentiment', {'custom': 'value', 'priority': 1})
+# 结果: {'custom': 'value'}  # priority 被过滤
+```
+
+**新增任务流程**：
+
+1. 在 `task_metadata.py` 中添加任务配置：
+```python
+TASK_MAPPING = {
+    'your_module.your_task': {
+        'task': 'tasks.your_celery_task_name',
+        'name': '任务显示名称',
+        'description': '任务描述',
+        'category': '任务分类',
+        'display_order': 100
+    }
+}
+```
+
+2. 其他模块自动识别新任务，无需修改其他代码
+
+**向后兼容性**：
+- TaskExecutor 保留 `TASK_MAPPING` 属性访问（通过 `@property`）
+- 现有代码无需修改即可使用
+
 ## 开发提示
 
 1. 修改代码后，前端项目（admin）会自动热重载
