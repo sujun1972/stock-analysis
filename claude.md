@@ -551,12 +551,88 @@ async def run_backtest(params: BacktestExecutionParams):
     return ApiResponse.success(data=result)
 ```
 
+### Repository 层架构
+
+Repository 层负责所有数据库访问操作，为 Service 层提供简洁的数据访问接口。
+
+**已实现的 Repository**：
+
+1. **资金流向 - Tushare标准**
+   - `MoneyflowRepository` - 个股资金流向（小单/中单/大单/特大单）
+
+2. **资金流向 - 沪深港通**
+   - `MoneyflowHsgtRepository` - 沪股通/深股通/港股通/北向南向资金
+
+3. **资金流向 - 东方财富DC**
+   - `MoneyflowMktDcRepository` - 大盘资金流向（上证/深证指数）
+   - `MoneyflowIndDcRepository` - 板块资金流向（行业/概念/地域）
+   - `MoneyflowStockDcRepository` - 个股资金流向（主力资金净流入）
+
+4. **融资融券**
+   - `MarginRepository` - 融资融券交易汇总（按交易所统计）
+   - `MarginDetailRepository` - 融资融券交易明细（个股级别）
+
+**Repository 标准方法**：
+
+每个 Repository 都实现以下核心方法：
+
+```python
+class XxxRepository(BaseRepository):
+    # 查询操作
+    def get_by_date_range(start_date, end_date, **filters) -> List[Dict]
+    def get_statistics(start_date, end_date) -> Dict
+    def get_latest_trade_date() -> Optional[str]
+    def get_by_trade_date(trade_date) -> List[Dict]
+
+    # 写入操作
+    def bulk_upsert(df: pd.DataFrame) -> int
+    def delete_by_date_range(start_date, end_date) -> int
+
+    # 数据验证
+    def exists_by_date(trade_date) -> bool
+    def get_record_count(start_date, end_date) -> int
+```
+
+**使用示例**：
+
+```python
+from app.repositories import MoneyflowRepository
+
+# 初始化
+repo = MoneyflowRepository()
+
+# 查询数据
+data = repo.get_by_date_range('20240101', '20240131', ts_code='000001.SZ')
+
+# 获取统计
+stats = repo.get_statistics('20240101', '20240131')
+print(f"平均净流入: {stats['avg_net_amount']}")
+
+# 获取排名
+top20 = repo.get_top_by_net_amount('20240115', limit=20)
+
+# 批量插入（UPSERT）
+import pandas as pd
+df = pd.DataFrame({...})
+count = repo.bulk_upsert(df)
+```
+
+**设计原则**：
+
+- ✅ Repository 只负责数据访问，不包含业务逻辑
+- ✅ 使用 `ON CONFLICT DO UPDATE` 实现 UPSERT 语义
+- ✅ 返回类型化的字典，便于 Service 层使用
+- ✅ 支持可选参数，提供灵活的查询能力
+- ✅ 完整的异常处理（`QueryError`, `DatabaseError`）
+- ✅ 继承 `BaseRepository`，复用 SQL 注入防护
+
 ### 新增功能开发流程
 
 1. **定义 Schema**：在 `schemas/` 中定义请求/响应模型
-2. **实现 Service**：在 `services/` 中实现业务逻辑
-3. **添加 API**：在 `api/endpoints/` 中定义路由
-4. **编写测试**：在 `tests/` 中添加单元测试
+2. **创建 Repository**（如需要）：在 `repositories/` 中实现数据访问层
+3. **实现 Service**：在 `services/` 中实现业务逻辑
+4. **添加 API**：在 `api/endpoints/` 中定义路由
+5. **编写测试**：在 `tests/` 中添加单元测试
 
 ### 注意事项
 
