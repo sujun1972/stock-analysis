@@ -44,7 +44,8 @@ import {
   PackagePlus,
   PackageMinus,
   TrendingUp as TrendingUpIcon,
-  Wrench
+  Wrench,
+  DollarSign
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -162,14 +163,25 @@ const navItems: NavItem[] = [
     ]
   },
   {
-    name: '数据中心',
-    icon: Database,
+    name: '资金流向数据',
+    icon: DollarSign,
     children: [
       {
         name: '沪深港通资金流向',
         href: '/data/moneyflow-hsgt',
         icon: TrendingUp
       },
+      {
+        name: '大盘资金流向（DC）',
+        href: '/data/moneyflow-mkt-dc',
+        icon: LineChart
+      }
+    ]
+  },
+  {
+    name: '数据中心',
+    icon: Database,
+    children: [
       {
         name: '数据初始化',
         href: '/sync/initialize',

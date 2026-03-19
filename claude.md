@@ -216,6 +216,7 @@ triggerPoll()  // Header 图标即时更新
 **已实现的页面**：
 - 定时任务配置页面（`/settings/scheduler`）
 - 沪深港通资金流向页面（`/data/moneyflow-hsgt`）
+- 大盘资金流向页面（`/data/moneyflow-mkt-dc`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -314,7 +315,9 @@ docker-compose down
 - **功能**: 自动验证和修复Tushare扩展数据
 - **支持的数据类型**: daily_basic, moneyflow, moneyflow_hsgt, margin_detail, stk_limit, adj_factor
 
-### 沪深港通资金流向
+### 资金流向数据
+
+#### 沪深港通资金流向
 - **API端点**: `/api/moneyflow-hsgt`
 - **前端页面**: `/admin/app/(dashboard)/data/moneyflow-hsgt/page.tsx`
 - **数据内容**: 沪股通、深股通、港股通(上海)、港股通(深圳)的每日资金流向
@@ -328,6 +331,21 @@ docker-compose down
   - 响应式布局：
     - 桌面端：表格视图，简化列头
     - 移动端：卡片视图，垂直堆叠展示，斑马纹背景，淡蓝色交互反馈
+
+#### 大盘资金流向（DC）
+- **API端点**: `/api/moneyflow-mkt-dc`
+- **前端页面**: `/admin/app/(dashboard)/data/moneyflow-mkt-dc/page.tsx`
+- **数据内容**: 东方财富大盘资金流向，包含上证/深证指数及主力资金（超大单、大单、中单、小单）流入流出情况
+- **积分消耗**: 120积分/次（试用），6000积分/次（正式）
+- **页面功能**:
+  - 统计卡片：主力资金均值、累计净流入、最大净流入、超大单均值
+  - 趋势图表：主力资金净流入可视化
+  - 日期筛选：支持自定义日期范围查询
+  - 数据单位：统一使用亿元（原始数据为元）
+  - 异步同步：支持后台任务执行，实时显示进度
+  - 响应式布局：
+    - 桌面端：完整表格视图，显示所有资金流向指标
+    - 移动端：卡片视图，垂直堆叠展示核心指标
 
 ### 性能优化
 1. **批量插入**: 使用PostgreSQL COPY协议，性能提升10倍

@@ -1237,6 +1237,39 @@ class ApiClient {
     return response.data
   }
 
+  // ========== 大盘资金流向API ==========
+
+  /**
+   * 获取大盘资金流向数据
+   */
+  async getMoneyflowMktDc(params: {
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+    limit?: number
+    offset?: number
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/moneyflow-mkt-dc', { params })
+    return response.data
+  }
+
+  /**
+   * 异步同步大盘资金流向数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncMoneyflowMktDcAsync(params?: {
+    trade_date?: string  // YYYY-MM-DD
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/moneyflow-mkt-dc/sync-async', null, { params })
+    return response.data
+  }
+
   // ========== 市场状态相关API ==========
 
   /**

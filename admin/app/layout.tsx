@@ -3,7 +3,7 @@ import { Toaster } from "sonner";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ProgressBar } from "@/components/ProgressBar";
 import "./globals.css";
-import "@/styles/nprogress.css";
+import "nprogress/nprogress.css";
 
 export const metadata: Metadata = {
   title: "管理后台 - Stock Analysis Admin",

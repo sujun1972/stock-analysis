@@ -32,6 +32,8 @@ class DatabaseScheduler(Scheduler):
         'delisted_stocks': 'sync.delisted_stocks',
         'daily': 'sync.daily_batch',
         'concept': 'sync.concept',
+        'moneyflow_hsgt': 'tasks.sync_moneyflow_hsgt_daily',
+        'moneyflow_mkt_dc': 'tasks.sync_moneyflow_mkt_dc_daily',
     }
 
     def __init__(self, *args, **kwargs):

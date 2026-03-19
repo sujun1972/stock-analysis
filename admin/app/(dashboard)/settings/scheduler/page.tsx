@@ -92,6 +92,11 @@ const TASK_NAME_MAP: Record<string, { name: string; description: string; categor
     description: '同步沪深港通资金流向数据（北向+南向）',
     category: '扩展数据'
   },
+  'sync_moneyflow_mkt_dc': {
+    name: '大盘资金流向',
+    description: '同步大盘资金流向数据（东方财富DC）',
+    category: '扩展数据'
+  },
   'sync_margin': {
     name: '融资融券同步',
     description: '同步两融余额和明细数据',
@@ -464,6 +469,9 @@ export default function SchedulerSettingsPage() {
       'extended.sync_daily_basic': '每日指标',
       'extended.sync_moneyflow': '资金流向',
       'tasks.sync_moneyflow_hsgt': '沪深港通资金',
+      'moneyflow_hsgt': '沪深港通资金',
+      'tasks.sync_moneyflow_mkt_dc': '大盘资金流向',
+      'moneyflow_mkt_dc': '大盘资金流向',
       'extended.sync_margin': '融资融券',
       'extended.sync_stk_limit': '涨跌停价格',
       'extended.sync_block_trade': '大宗交易',
@@ -478,6 +486,9 @@ export default function SchedulerSettingsPage() {
       'extended.sync_daily_basic': 120,
       'extended.sync_moneyflow': 2000,  // 高消耗
       'tasks.sync_moneyflow_hsgt': 2000,  // 高消耗
+      'moneyflow_hsgt': 2000,  // 高消耗
+      'tasks.sync_moneyflow_mkt_dc': 120,
+      'moneyflow_mkt_dc': 120,
       'extended.sync_margin': 300,
       'extended.sync_stk_limit': 120,
       'extended.sync_block_trade': 300,

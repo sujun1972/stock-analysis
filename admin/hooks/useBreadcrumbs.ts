@@ -64,6 +64,7 @@ const routeLabelMap: Record<string, string> = {
   'ai-analysis': 'AI分析',
   'premarket': '盘前预期',
   'moneyflow-hsgt': '沪深港通资金流向',
+  'moneyflow-mkt-dc': '大盘资金流向（DC）',
 
   // 系统设置子路由
   'system': '系统配置',
@@ -116,6 +117,8 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   'cycle': TrendingUp,
   'ai-analysis': Sparkles,
   'premarket': Clock,
+  'moneyflow-hsgt': TrendingUp,
+  'moneyflow-mkt-dc': LineChart,
   'system': Wrench,
   'datasource': Database,
   'ai-config': Sparkles,

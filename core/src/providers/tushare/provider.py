@@ -1055,6 +1055,60 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取沪深港通资金流向失败: {e}")
             raise TushareDataError(f"获取沪深港通资金流向失败: {str(e)}")
 
+    def get_moneyflow_mkt_dc(self, trade_date: Optional[str] = None,
+                             start_date: Optional[str] = None,
+                             end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取大盘资金流向数据（东方财富DC）
+        积分消耗：120分（试用），6000分（正式）
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 大盘资金流向数据，包含以下字段：
+                - trade_date: 交易日期
+                - close_sh: 上证收盘价（点）
+                - pct_change_sh: 上证涨跌幅(%)
+                - close_sz: 深证收盘价（点）
+                - pct_change_sz: 深证涨跌幅(%)
+                - net_amount: 今日主力净流入净额（元）
+                - net_amount_rate: 今日主力净流入净占比(%)
+                - buy_elg_amount: 今日超大单净流入净额（元）
+                - buy_elg_amount_rate: 今日超大单净流入净占比(%)
+                - buy_lg_amount: 今日大单净流入净额（元）
+                - buy_lg_amount_rate: 今日大单净流入净占比(%)
+                - buy_md_amount: 今日中单净流入净额（元）
+                - buy_md_amount_rate: 今日中单净流入净占比(%)
+                - buy_sm_amount: 今日小单净流入净额（元）
+                - buy_sm_amount_rate: 今日小单净流入净占比(%)
+        """
+        try:
+            logger.info(f"获取大盘资金流向: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            if trade_date:
+                df = self.api_client.query('moneyflow_mkt_dc', trade_date=trade_date)
+            elif start_date and end_date:
+                df = self.api_client.query('moneyflow_mkt_dc', start_date=start_date, end_date=end_date)
+            elif start_date:
+                # 只有开始日期，默认到今天
+                from datetime import datetime
+                end_date = datetime.now().strftime('%Y%m%d')
+                df = self.api_client.query('moneyflow_mkt_dc', start_date=start_date, end_date=end_date)
+            else:
+                # 获取最近30天的数据
+                from datetime import datetime, timedelta
+                end_date = datetime.now().strftime('%Y%m%d')
+                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
+                df = self.api_client.query('moneyflow_mkt_dc', start_date=start_date, end_date=end_date)
+
+            return df
+        except Exception as e:
+            logger.error(f"获取大盘资金流向失败: {e}")
+            raise TushareDataError(f"获取大盘资金流向失败: {str(e)}")
+
     def get_stk_limit(self, ts_code: Optional[str] = None,
                      trade_date: Optional[str] = None,
                      start_date: Optional[str] = None,

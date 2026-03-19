@@ -212,11 +212,63 @@ INSERT INTO scheduled_tasks (
     params = EXCLUDED.params,
     updated_at = CURRENT_TIMESTAMP;
 
+-- 沪深港通资金流向同步（每日17:30）
+INSERT INTO scheduled_tasks (
+    task_name,
+    module,
+    description,
+    cron_expression,
+    enabled,
+    params,
+    created_at,
+    updated_at
+) VALUES (
+    'sync_moneyflow_hsgt',
+    'moneyflow_hsgt',
+    '同步沪深港通资金流向数据（北向+南向资金）',
+    '30 17 * * *',
+    true,
+    '{"points_consumption": 2000, "priority": "P0"}',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+) ON CONFLICT (task_name) DO UPDATE SET
+    module = EXCLUDED.module,
+    description = EXCLUDED.description,
+    cron_expression = EXCLUDED.cron_expression,
+    params = EXCLUDED.params,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- 大盘资金流向同步（每日17:45）
+INSERT INTO scheduled_tasks (
+    task_name,
+    module,
+    description,
+    cron_expression,
+    enabled,
+    params,
+    created_at,
+    updated_at
+) VALUES (
+    'sync_moneyflow_mkt_dc',
+    'moneyflow_mkt_dc',
+    '同步大盘资金流向数据（东方财富DC）',
+    '45 17 * * *',
+    true,
+    '{"points_consumption": 120, "priority": "P1"}',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+) ON CONFLICT (task_name) DO UPDATE SET
+    module = EXCLUDED.module,
+    description = EXCLUDED.description,
+    cron_expression = EXCLUDED.cron_expression,
+    params = EXCLUDED.params,
+    updated_at = CURRENT_TIMESTAMP;
+
 -- 输出插入完成信息
 DO $$
 BEGIN
     RAISE NOTICE '扩展数据同步任务配置已插入';
-    RAISE NOTICE '已配置8个定时任务：';
+    RAISE NOTICE '已配置10个定时任务：';
     RAISE NOTICE '  - 每日指标（已启用，120积分）';
     RAISE NOTICE '  - 资金流向（已禁用，2000积分）';
     RAISE NOTICE '  - 北向资金（已启用，300积分）';
@@ -225,4 +277,6 @@ BEGIN
     RAISE NOTICE '  - 复权因子（已启用，120积分）';
     RAISE NOTICE '  - 大宗交易（已禁用，300积分）';
     RAISE NOTICE '  - 停复牌信息（已禁用，120积分）';
+    RAISE NOTICE '  - 沪深港通资金流向（已启用，2000积分）';
+    RAISE NOTICE '  - 大盘资金流向（已启用，120积分）';
 END $$;
