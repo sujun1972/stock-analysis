@@ -1168,6 +1168,59 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取板块资金流向失败: {e}")
             raise TushareDataError(f"获取板块资金流向失败: {str(e)}")
 
+    def get_moneyflow_stock_dc(self,
+                               ts_code: Optional[str] = None,
+                               trade_date: Optional[str] = None,
+                               start_date: Optional[str] = None,
+                               end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取个股资金流向数据（东方财富DC）
+        积分消耗：5000分，单次最大6000条
+        数据开始时间：20230911
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 个股资金流向数据，包含以下字段：
+                - trade_date: 交易日期
+                - ts_code: 股票代码
+                - name: 股票名称
+                - pct_change: 涨跌幅(%)
+                - close: 最新价（元）
+                - net_amount: 今日主力净流入额（万元）
+                - net_amount_rate: 今日主力净流入净占比(%)
+                - buy_elg_amount: 今日超大单净流入额（万元）
+                - buy_elg_amount_rate: 今日超大单净流入占比(%)
+                - buy_lg_amount: 今日大单净流入额（万元）
+                - buy_lg_amount_rate: 今日大单净流入占比(%)
+                - buy_md_amount: 今日中单净流入额（万元）
+                - buy_md_amount_rate: 今日中单净流入占比(%)
+                - buy_sm_amount: 今日小单净流入额（万元）
+                - buy_sm_amount_rate: 今日小单净流入占比(%)
+        """
+        try:
+            logger.info(f"获取个股资金流向: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('moneyflow_dc', **params)
+            return df
+        except Exception as e:
+            logger.error(f"获取个股资金流向失败: {e}")
+            raise TushareDataError(f"获取个股资金流向失败: {str(e)}")
+
     def get_stk_limit(self, ts_code: Optional[str] = None,
                      trade_date: Optional[str] = None,
                      start_date: Optional[str] = None,

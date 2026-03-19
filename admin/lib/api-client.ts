@@ -1270,6 +1270,52 @@ class ApiClient {
     return response.data
   }
 
+  // ========== 个股资金流向API (DC) ==========
+
+  /**
+   * 获取个股资金流向数据
+   */
+  async getMoneyflowStockDc(params: {
+    ts_code?: string     // 股票代码
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+    limit?: number
+    offset?: number
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/moneyflow-stock-dc', { params })
+    return response.data
+  }
+
+  /**
+   * 异步同步个股资金流向数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncMoneyflowStockDcAsync(params?: {
+    ts_code?: string     // 股票代码
+    trade_date?: string  // YYYY-MM-DD
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/moneyflow-stock-dc/sync-async', null, { params })
+    return response.data
+  }
+
+  /**
+   * 获取主力资金流入排名前N的股票
+   */
+  async getTopMoneyflowStocks(params?: {
+    limit?: number        // 返回记录数
+    trade_date?: string   // YYYY-MM-DD
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/moneyflow-stock-dc/top', { params })
+    return response.data
+  }
+
   // ========== 板块资金流向API ==========
 
   /**

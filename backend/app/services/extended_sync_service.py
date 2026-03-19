@@ -741,6 +741,84 @@ class ExtendedDataSyncService:
                 "error": str(e)
             }
 
+    async def sync_moneyflow_stock_dc(self,
+                                      ts_code: Optional[str] = None,
+                                      trade_date: Optional[str] = None,
+                                      start_date: Optional[str] = None,
+                                      end_date: Optional[str] = None) -> Dict[str, Any]:
+        """
+        同步个股资金流向数据（东方财富DC）
+
+        包含个股主力资金、超大单、大单、中单、小单的流入流出情况。
+        数据从Tushare获取，每日盘后更新。数据开始于20230911。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 单个交易日期 (YYYYMMDD格式)
+            start_date: 开始日期 (YYYYMMDD格式)
+            end_date: 结束日期 (YYYYMMDD格式)
+
+        Returns:
+            同步结果，包含成功/失败状态和记录数
+
+        Note:
+            - 优先级：P2
+            - 调用频率：每日盘后
+            - 积分消耗：5000
+            - 单次最大可调取6000条数据
+        """
+        task_id = self._generate_task_id("moneyflow_stock_dc")
+
+        try:
+            logger.info(f"开始同步个股资金流向: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            provider = self._get_provider()
+
+            # 如果没有指定日期，默认同步最近交易日
+            if not trade_date and not start_date:
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # 个股资金流向支持当前日期
+                trade_date = calculated_date
+                logger.info(f"个股资金流向: 使用日期 {trade_date}")
+
+            # 获取数据
+            df = provider.get_moneyflow_stock_dc(
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+            if df is not None and len(df) > 0:
+                await self._insert_moneyflow_stock_dc(df)
+
+                logger.info(f"成功同步个股资金流向数据 {len(df)} 条")
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": len(df),
+                    "message": f"成功同步 {len(df)} 条个股资金流向数据"
+                }
+            else:
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": 0,
+                    "message": "无数据需要同步"
+                }
+
+        except Exception as e:
+            logger.error(f"同步个股资金流向失败: {str(e)}")
+            return {
+                "task_id": task_id,
+                "status": "error",
+                "records": 0,
+                "error": str(e)
+            }
+
     # ========== 辅助方法 ==========
 
     async def _get_active_stocks(self, trade_date: str) -> List[str]:
@@ -995,6 +1073,57 @@ class ExtendedDataSyncService:
                         buy_sm_amount_rate = EXCLUDED.buy_sm_amount_rate,
                         buy_sm_amount_stock = EXCLUDED.buy_sm_amount_stock,
                         rank = EXCLUDED.rank,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+
+                await db.execute(query, record)
+
+            await db.commit()
+
+    async def _insert_moneyflow_stock_dc(self, df: pd.DataFrame):
+        """
+        插入个股资金流向数据到数据库
+
+        使用UPSERT策略，如果数据已存在则更新，避免重复数据。
+
+        Args:
+            df: 包含个股资金流向数据的DataFrame
+        """
+        async with get_async_db() as db:
+            records = df.to_dict('records')
+
+            for record in records:
+                # trade_date在这个接口中已经是字符串格式(YYYYMMDD)，直接使用
+                query = text("""
+                    INSERT INTO moneyflow_stock_dc (
+                        trade_date, ts_code, name, pct_change, close,
+                        net_amount, net_amount_rate,
+                        buy_elg_amount, buy_elg_amount_rate,
+                        buy_lg_amount, buy_lg_amount_rate,
+                        buy_md_amount, buy_md_amount_rate,
+                        buy_sm_amount, buy_sm_amount_rate
+                    ) VALUES (
+                        :trade_date, :ts_code, :name, :pct_change, :close,
+                        :net_amount, :net_amount_rate,
+                        :buy_elg_amount, :buy_elg_amount_rate,
+                        :buy_lg_amount, :buy_lg_amount_rate,
+                        :buy_md_amount, :buy_md_amount_rate,
+                        :buy_sm_amount, :buy_sm_amount_rate
+                    )
+                    ON CONFLICT (trade_date, ts_code) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        pct_change = EXCLUDED.pct_change,
+                        close = EXCLUDED.close,
+                        net_amount = EXCLUDED.net_amount,
+                        net_amount_rate = EXCLUDED.net_amount_rate,
+                        buy_elg_amount = EXCLUDED.buy_elg_amount,
+                        buy_elg_amount_rate = EXCLUDED.buy_elg_amount_rate,
+                        buy_lg_amount = EXCLUDED.buy_lg_amount,
+                        buy_lg_amount_rate = EXCLUDED.buy_lg_amount_rate,
+                        buy_md_amount = EXCLUDED.buy_md_amount,
+                        buy_md_amount_rate = EXCLUDED.buy_md_amount_rate,
+                        buy_sm_amount = EXCLUDED.buy_sm_amount,
+                        buy_sm_amount_rate = EXCLUDED.buy_sm_amount_rate,
                         updated_at = CURRENT_TIMESTAMP
                 """)
 

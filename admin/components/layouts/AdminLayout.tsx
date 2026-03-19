@@ -164,7 +164,7 @@ const navItems: NavItem[] = [
     ]
   },
   {
-    name: '资金流向数据',
+    name: '资金流向',
     icon: DollarSign,
     children: [
       {
@@ -181,6 +181,11 @@ const navItems: NavItem[] = [
         name: '板块资金流向（DC）',
         href: '/data/moneyflow-ind-dc',
         icon: BarChart3
+      },
+      {
+        name: '个股资金流向（DC）',
+        href: '/data/moneyflow-stock-dc',
+        icon: TrendingUpIcon
       }
     ]
   },

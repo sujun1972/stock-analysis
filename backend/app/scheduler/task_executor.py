@@ -61,6 +61,10 @@ class TaskExecutor:
             'task': 'tasks.sync_moneyflow_ind_dc',
             'name': '板块资金流向同步'
         },
+        'tasks.sync_moneyflow_stock_dc': {
+            'task': 'tasks.sync_moneyflow_stock_dc',
+            'name': '个股资金流向同步'
+        },
         'extended.sync_margin': {
             'task': 'extended.sync_margin',
             'name': '融资融券同步'
