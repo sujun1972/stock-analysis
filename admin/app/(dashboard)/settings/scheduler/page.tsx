@@ -29,281 +29,22 @@ interface ScheduledTask {
   last_status: string | null
   last_error: string | null
   run_count: number
+  display_name?: string
+  category?: string
+  display_order?: number
+  points_consumption?: number
 }
 
 /**
- * 任务名称映射表
- * 将后端的技术性任务名称映射为用户友好的中文名称
- * 包含任务名称、描述和分类信息
+ * 获取任务的显示信息
+ * 优先使用后端返回的元数据（display_name, description, category）
+ * 如果后端没有提供，则使用默认值
  */
-const TASK_NAME_MAP: Record<string, { name: string; description: string; category: string }> = {
-  // 股票数据同步任务
-  'daily_stock_list_sync': {
-    name: '每日股票列表',
-    description: '每日同步A股所有股票的基础信息',
-    category: '基础数据'
-  },
-  'daily_new_stocks_sync': {
-    name: '每日新股同步',
-    description: '同步最近上市的新股信息',
-    category: '基础数据'
-  },
-  'weekly_delisted_stocks_sync': {
-    name: '每周退市同步',
-    description: '同步退市股票列表',
-    category: '基础数据'
-  },
-  'daily_data_sync': {
-    name: '每日行情同步',
-    description: '同步股票日K线数据',
-    category: '行情数据'
-  },
-
-  // 行情数据同步
-  'sync_daily_batch': {
-    name: '日线数据批量同步',
-    description: '批量同步股票的日K线数据',
-    category: '行情数据'
-  },
-  'sync_minute_data': {
-    name: '分钟数据同步',
-    description: '同步股票的分钟级K线数据',
-    category: '行情数据'
-  },
-  'sync_realtime_quotes': {
-    name: '实时行情同步',
-    description: '同步股票的实时报价数据',
-    category: '行情数据'
-  },
-
-  // 扩展数据同步
-  'sync_daily_basic': {
-    name: '每日指标同步',
-    description: '同步市盈率、市净率等每日指标数据',
-    category: '扩展数据'
-  },
-  'sync_moneyflow': {
-    name: '资金流向同步',
-    description: '同步个股资金流向数据（高积分消耗）',
-    category: '扩展数据'
-  },
-  'sync_moneyflow_hsgt': {
-    name: '沪深港通资金流向',
-    description: '同步沪深港通资金流向数据（北向+南向）',
-    category: '扩展数据'
-  },
-  'sync_moneyflow_mkt_dc': {
-    name: '大盘资金流向',
-    description: '同步大盘资金流向数据（东方财富DC）',
-    category: '扩展数据'
-  },
-  'sync_margin': {
-    name: '融资融券同步',
-    description: '同步两融余额和明细数据',
-    category: '扩展数据'
-  },
-  'sync_stk_limit': {
-    name: '涨跌停价格同步',
-    description: '同步股票涨跌停价格信息',
-    category: '扩展数据'
-  },
-  'sync_block_trade': {
-    name: '大宗交易同步',
-    description: '同步大宗交易明细数据',
-    category: '扩展数据'
-  },
-  'sync_adj_factor': {
-    name: '复权因子同步',
-    description: '同步股票复权因子数据',
-    category: '扩展数据'
-  },
-  'sync_suspend': {
-    name: '停复牌信息同步',
-    description: '同步股票停复牌公告',
-    category: '扩展数据'
-  },
-
-  // 市场情绪相关
-  'daily_sentiment_sync': {
-    name: '市场情绪抓取',
-    description: '市场情绪数据抓取（17:30）- 包含交易日历、涨停板池、龙虎榜',
-    category: '市场情绪'
-  },
-  'sentiment.ai_analysis_18_00': {
-    name: '情绪AI分析',
-    description: '市场情绪AI分析（18:00）- 基于17:30数据生成盘后分析报告',
-    category: '市场情绪'
-  },
-  'manual_sentiment_sync': {
-    name: '手动情绪同步',
-    description: '手动触发情绪数据同步',
-    category: '市场情绪'
-  },
-  'batch_sentiment_sync': {
-    name: '批量情绪同步',
-    description: '批量同步历史情绪数据',
-    category: '市场情绪'
-  },
-  'sync_trading_calendar': {
-    name: '交易日历同步',
-    description: '同步股市交易日历',
-    category: '市场情绪'
-  },
-  'daily_sentiment_ai_analysis': {
-    name: 'AI情绪分析',
-    description: '使用AI分析市场情绪和热点板块',
-    category: '市场情绪'
-  },
-
-  // 盘前分析
-  'premarket_expectation_8_00': {
-    name: '盘前预期分析',
-    description: '盘前预期管理系统(8:00) - 抓取外盘数据+过滤新闻+AI分析',
-    category: '盘前分析'
-  },
-  'premarket_full_workflow': {
-    name: '盘前完整分析',
-    description: '执行完整的盘前数据同步和AI分析流程',
-    category: '盘前分析'
-  },
-  'sync_premarket_data': {
-    name: '盘前数据同步',
-    description: '同步盘前所需的各项数据',
-    category: '盘前分析'
-  },
-  'generate_analysis': {
-    name: '生成AI分析',
-    description: '生成盘前AI分析报告',
-    category: '盘前分析'
-  },
-
-  // 数据质量监控
-  'generate_daily_quality_report': {
-    name: '每日质量报告',
-    description: '生成每日数据质量报告',
-    category: '质量监控'
-  },
-  'generate_weekly_quality_report': {
-    name: '周度质量报告',
-    description: '生成周度数据质量趋势报告',
-    category: '质量监控'
-  },
-  'real_time_quality_check': {
-    name: '实时质量检查',
-    description: '实时数据质量检查，发现异常立即告警',
-    category: '质量监控'
-  },
-  'data_integrity_check': {
-    name: '数据完整性检查',
-    description: '检查数据完整性，修复缺失数据',
-    category: '质量监控'
-  },
-  'quality_trend_analysis': {
-    name: '质量趋势分析',
-    description: '分析数据质量趋势，预测潜在问题',
-    category: '质量监控'
-  },
-  'cleanup_old_alerts': {
-    name: '清理过期告警',
-    description: '清理过期的质量告警记录',
-    category: '质量监控'
-  },
-
-  // 报告和通知
-  'generate_daily_report': {
-    name: '每日市场报告',
-    description: '生成每日市场分析报告',
-    category: '报告通知'
-  },
-  'send_email_notification': {
-    name: '邮件通知',
-    description: '发送邮件通知',
-    category: '报告通知'
-  },
-  'send_telegram_notification': {
-    name: 'Telegram通知',
-    description: '发送Telegram消息通知',
-    category: '报告通知'
-  },
-  'schedule_report_notification': {
-    name: '定时报告通知',
-    description: '定时发送报告通知',
-    category: '报告通知'
-  },
-
-  // 系统维护
-  'cleanup_expired_notifications': {
-    name: '清理过期通知',
-    description: '清理过期的通知记录',
-    category: '系统维护'
-  },
-  'notification_health_check': {
-    name: '通知系统健康检查',
-    description: '检查通知系统运行状态',
-    category: '系统维护'
-  },
-  'reset_daily_rate_limits': {
-    name: '重置速率限制',
-    description: '重置每日API调用速率限制',
-    category: '系统维护'
-  },
-  'database_cleanup': {
-    name: '数据库清理',
-    description: '清理过期数据和优化表',
-    category: '系统维护'
-  },
-  'backup_database': {
-    name: '数据库备份',
-    description: '执行数据库备份任务',
-    category: '系统维护'
-  }
-}
-
-/**
- * 获取任务的友好名称和描述
- * @param taskName - 原始任务名称
- * @param backendDescription - 后端返回的描述信息
- * @returns 包含友好名称、描述和分类的对象
- */
-const getTaskInfo = (taskName: string, backendDescription?: string) => {
-  // 优先使用映射表中的信息
-  const mappedInfo = TASK_NAME_MAP[taskName]
-
-  if (mappedInfo) {
-    return mappedInfo
-  }
-
-  // 如果映射表中没有，使用后端提供的描述
-  if (backendDescription) {
-    // 尝试从后端描述中提取更友好的名称（截取括号或破折号前的内容）
-    const name = backendDescription.split('（')[0].split('-')[0].trim() || taskName
-
-    // 根据任务名称关键词推断分类
-    let category = '其他'
-    if (taskName.includes('sync') || taskName.includes('data')) {
-      category = '数据同步'
-    } else if (taskName.includes('quality') || taskName.includes('check')) {
-      category = '质量监控'
-    } else if (taskName.includes('report')) {
-      category = '报告通知'
-    } else if (taskName.includes('sentiment')) {
-      category = '市场情绪'
-    } else if (taskName.includes('premarket')) {
-      category = '盘前分析'
-    }
-
-    return {
-      name,
-      description: backendDescription,
-      category
-    }
-  }
-
-  // 默认返回原始任务名称
+const getTaskInfo = (task: ScheduledTask) => {
   return {
-    name: taskName,
-    description: '',
-    category: '其他'
+    name: task.display_name || task.task_name,
+    description: task.description || '',
+    category: task.category || '其他'
   }
 }
 
@@ -370,7 +111,7 @@ export default function SchedulerSettingsPage() {
   const { addTask, triggerPoll } = useTaskStore()
 
   const handleExecute = async (task: ScheduledTask) => {
-    const taskInfo = getTaskInfo(task.task_name, task.description)
+    const taskInfo = getTaskInfo(task)
 
     try {
       // 添加到执行中列表（按钮变为 disabled 状态）
@@ -438,7 +179,11 @@ export default function SchedulerSettingsPage() {
 
     try {
       await apiClient.updateScheduledTask(editingTask.id, {
+        display_name: editingTask.display_name,
         description: editingTask.description,
+        category: editingTask.category,
+        display_order: editingTask.display_order,
+        points_consumption: editingTask.points_consumption,
         cron_expression: editingTask.cron_expression,
         params: editingTask.params
       })
@@ -484,26 +229,6 @@ export default function SchedulerSettingsPage() {
     return labels[module] || module
   }
 
-  const getPointsConsumption = (module: string) => {
-    const points: Record<string, number> = {
-      'extended.sync_daily_basic': 120,
-      'extended.sync_moneyflow': 2000,  // 高消耗
-      'tasks.sync_moneyflow': 2000,  // 个股资金流向（Tushare）高消耗
-      'tasks.sync_moneyflow_hsgt': 2000,  // 沪深港通高消耗
-      'moneyflow_hsgt': 2000,  // 高消耗
-      'tasks.sync_moneyflow_mkt_dc': 120,
-      'moneyflow_mkt_dc': 120,
-      'tasks.sync_moneyflow_ind_dc': 6000,  // 板块资金流向（DC）高消耗
-      'tasks.sync_moneyflow_stock_dc': 5000,  // 个股资金流向（DC）高消耗
-      'extended.sync_margin': 300,
-      'extended.sync_stk_limit': 120,
-      'extended.sync_block_trade': 300,
-      'extended.sync_adj_factor': 120,
-      'extended.sync_suspend': 120
-    }
-    return points[module] || 0
-  }
-
   const getStatusColor = (status: string | null) => {
     if (!status) return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
     switch (status) {
@@ -519,7 +244,7 @@ export default function SchedulerSettingsPage() {
       key: 'task_name',
       header: '任务名称',
       accessor: (item: ScheduledTask) => {
-        const taskInfo = getTaskInfo(item.task_name, item.description)
+        const taskInfo = getTaskInfo(item)
         return (
           <div>
             <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={taskInfo.description}>
@@ -546,15 +271,14 @@ export default function SchedulerSettingsPage() {
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
             {getModuleLabel(item.module)}
           </span>
-          {getPointsConsumption(item.module) > 0 && (
+          {item.points_consumption !== null && item.points_consumption !== undefined && item.points_consumption > 0 && (
             <div>
               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                getPointsConsumption(item.module) >= 1000
-                  ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                item.points_consumption >= 1000
+                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
               }`}>
-                {getPointsConsumption(item.module) >= 1000 ? '⚠️ ' : ''}
-                {getPointsConsumption(item.module)} 积分
+                {item.points_consumption} 积分
               </span>
             </div>
           )}
@@ -706,7 +430,7 @@ export default function SchedulerSettingsPage() {
 
   // 移动端卡片渲染
   const mobileCard = useCallback((task: ScheduledTask) => {
-    const taskInfo = getTaskInfo(task.task_name, task.description)
+    const taskInfo = getTaskInfo(task)
     return (
       <div className="space-y-3">
         {/* 任务名称和开关 */}
@@ -746,6 +470,15 @@ export default function SchedulerSettingsPage() {
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
             {getModuleLabel(task.module)}
           </span>
+          {task.points_consumption !== null && task.points_consumption !== undefined && task.points_consumption > 0 && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+              task.points_consumption >= 1000
+                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+            }`}>
+              {task.points_consumption} 积分
+            </span>
+          )}
           {task.last_status && (
             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.last_status)}`}>
               {task.last_status}
@@ -891,25 +624,110 @@ export default function SchedulerSettingsPage() {
         setShowEditModal(open)
         if (!open) setEditingTask(null)
       }}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>编辑定时任务</DialogTitle>
           </DialogHeader>
 
           {editingTask && (
             <div className="space-y-4 py-4">
+              {/* 任务显示名称 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                  任务显示名称
+                </label>
+                <input
+                  type="text"
+                  value={editingTask.display_name || ''}
+                  onChange={(e) => setEditingTask({ ...editingTask, display_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例：每日股票列表"
+                />
+              </div>
+
+              {/* 任务描述 */}
               <div>
                 <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                   任务描述
                 </label>
-                <input
-                  type="text"
+                <textarea
                   value={editingTask.description}
                   onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
+                  rows={2}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="任务的详细描述"
                 />
               </div>
 
+              {/* 分类、排序和积分 - 使用网格布局 */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 任务分类 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                    任务分类
+                  </label>
+                  <select
+                    value={editingTask.category || '其他'}
+                    onChange={(e) => setEditingTask({ ...editingTask, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="基础数据">基础数据</option>
+                    <option value="行情数据">行情数据</option>
+                    <option value="扩展数据">扩展数据</option>
+                    <option value="资金流向">资金流向</option>
+                    <option value="两融及转融通">两融及转融通</option>
+                    <option value="市场情绪">市场情绪</option>
+                    <option value="盘前分析">盘前分析</option>
+                    <option value="质量监控">质量监控</option>
+                    <option value="报告通知">报告通知</option>
+                    <option value="系统维护">系统维护</option>
+                    <option value="其他">其他</option>
+                  </select>
+                </div>
+
+                {/* 显示顺序 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                    显示顺序
+                  </label>
+                  <input
+                    type="number"
+                    value={editingTask.display_order || 9999}
+                    onChange={(e) => setEditingTask({ ...editingTask, display_order: parseInt(e.target.value) || 9999 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="100"
+                    min="0"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    数字越小越靠前
+                  </p>
+                </div>
+
+                {/* 积分消耗 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                    积分消耗
+                  </label>
+                  <input
+                    type="number"
+                    // 处理 null/undefined 的显示：空字符串表示未设置
+                    value={editingTask.points_consumption !== null && editingTask.points_consumption !== undefined ? editingTask.points_consumption : ''}
+                    onChange={(e) => setEditingTask({
+                      ...editingTask,
+                      // 空字符串转为 undefined，允许清空积分值
+                      points_consumption: e.target.value === '' ? undefined : parseInt(e.target.value)
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="留空表示不消耗"
+                    min="0"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Tushare 接口调用消耗的积分数（可为空）
+                  </p>
+                </div>
+              </div>
+
+              {/* Cron表达式 */}
               <div>
                 <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                   Cron 表达式
@@ -923,6 +741,7 @@ export default function SchedulerSettingsPage() {
                 />
               </div>
 
+              {/* 任务参数 */}
               <div>
                 <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                   任务参数 (JSON)

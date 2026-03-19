@@ -96,6 +96,10 @@ class ScheduledTaskUpdate(BaseModel):
     cron_expression: Optional[str] = None
     enabled: Optional[bool] = None
     params: Optional[Dict[str, Any]] = None
+    display_name: Optional[str] = None
+    category: Optional[str] = None
+    display_order: Optional[int] = None
+    points_consumption: Optional[int] = None
 
     @field_validator('cron_expression')
     @classmethod
@@ -103,6 +107,33 @@ class ScheduledTaskUpdate(BaseModel):
         """验证Cron表达式格式"""
         if v is not None and not validate_cron_expression(v):
             raise ValueError('无效的Cron表达式，格式应为: "分 时 日 月 周"')
+        return v
+
+    @field_validator('display_order')
+    @classmethod
+    def validate_display_order(cls, v: Optional[int]) -> Optional[int]:
+        """验证显示顺序"""
+        if v is not None and v < 0:
+            raise ValueError('显示顺序必须大于等于0')
+        return v
+
+    @field_validator('points_consumption')
+    @classmethod
+    def validate_points(cls, v: Optional[int]) -> Optional[int]:
+        """
+        验证积分消耗字段
+
+        Args:
+            v: 积分消耗值，可为 None（表示不消耗或未知）
+
+        Returns:
+            验证后的积分值
+
+        Raises:
+            ValueError: 如果积分值为负数
+        """
+        if v is not None and v < 0:
+            raise ValueError('积分消耗必须大于等于0')
         return v
 
 
@@ -135,9 +166,28 @@ async def get_scheduled_tasks(
                 last_error,
                 run_count,
                 created_at,
-                updated_at
+                updated_at,
+                display_name,
+                category,
+                display_order,
+                points_consumption
             FROM scheduled_tasks
-            ORDER BY id
+            ORDER BY
+                CASE
+                    WHEN category = '基础数据' THEN 1
+                    WHEN category = '行情数据' THEN 2
+                    WHEN category = '扩展数据' THEN 3
+                    WHEN category = '资金流向' THEN 4
+                    WHEN category = '两融及转融通' THEN 5
+                    WHEN category = '市场情绪' THEN 6
+                    WHEN category = '盘前分析' THEN 7
+                    WHEN category = '质量监控' THEN 8
+                    WHEN category = '报告通知' THEN 9
+                    WHEN category = '系统维护' THEN 10
+                    ELSE 99
+                END,
+                display_order ASC,
+                id ASC
         """
 
         result = await asyncio.to_thread(db._execute_query, query)
@@ -160,6 +210,10 @@ async def get_scheduled_tasks(
                     "run_count": row[11],
                     "created_at": row[12].strftime("%Y-%m-%d %H:%M:%S") if row[12] else None,
                     "updated_at": row[13].strftime("%Y-%m-%d %H:%M:%S") if row[13] else None,
+                    "display_name": row[14],
+                    "category": row[15],
+                    "display_order": row[16],
+                    "points_consumption": row[17],
                 }
             )
 
@@ -205,7 +259,11 @@ async def get_scheduled_task(
                 last_error,
                 run_count,
                 created_at,
-                updated_at
+                updated_at,
+                display_name,
+                category,
+                display_order,
+                points_consumption
             FROM scheduled_tasks
             WHERE id = %s
         """
@@ -231,6 +289,10 @@ async def get_scheduled_task(
             "run_count": row[11],
             "created_at": row[12].strftime("%Y-%m-%d %H:%M:%S") if row[12] else None,
             "updated_at": row[13].strftime("%Y-%m-%d %H:%M:%S") if row[13] else None,
+            "display_name": row[14],
+            "category": row[15],
+            "display_order": row[16],
+            "points_consumption": row[17],
         }
 
         return ApiResponse.success(data=task)
@@ -365,6 +427,24 @@ async def update_scheduled_task(
 
             updates.append("params = %s::jsonb")
             params.append(json.dumps(request.params))
+
+        if request.display_name is not None:
+            updates.append("display_name = %s")
+            params.append(request.display_name)
+
+        if request.category is not None:
+            updates.append("category = %s")
+            params.append(request.category)
+
+        if request.display_order is not None:
+            updates.append("display_order = %s")
+            params.append(request.display_order)
+
+        # 积分消耗字段：记录 Tushare API 调用消耗的积分数
+        # None 表示不消耗积分或未知，数值表示每次执行的积分成本
+        if request.points_consumption is not None:
+            updates.append("points_consumption = %s")
+            params.append(request.points_consumption)
 
         if not updates:
             raise HTTPException(status_code=400, detail="没有需要更新的字段")
