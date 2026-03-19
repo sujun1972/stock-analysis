@@ -45,66 +45,33 @@ def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_codes_str: s
     Returns:
         筛选后的股票列表
     """
-    from src.database.connection_pool_manager import ConnectionPoolManager
-    from src.config.settings import get_settings
+    from app.repositories import ConceptRepository
 
-    settings = get_settings()
-    db_settings = settings.database
+    # 解析概念列表（支持多个概念，逗号分隔）
+    concept_codes = [c.strip() for c in concept_codes_str.split(',') if c.strip()]
 
-    # 创建连接池（注意：这里应该使用全局连接池，但为了快速实现先这样）
-    pool_manager = ConnectionPoolManager(
-        config={
-            'host': db_settings.host,
-            'port': db_settings.port,
-            'database': db_settings.database,
-            'user': db_settings.user,
-            'password': db_settings.password
-        },
-        min_conn=1,
-        max_conn=5
-    )
+    if not concept_codes:
+        return stocks
 
-    try:
-        conn = pool_manager.get_connection()
-        cursor = conn.cursor()
+    # 使用 Repository 层查询
+    repo = ConceptRepository()
+    stock_codes_with_suffix = repo.get_stocks_by_concept_codes(concept_codes)
 
-        # 解析概念列表（支持多个概念，逗号分隔）
-        concept_codes = [c.strip() for c in concept_codes_str.split(',') if c.strip()]
+    # stock_concept中的code格式: 000001.SZ
+    # stock_info中的code格式: 000001
+    # 需要提取前缀进行匹配
+    concept_stock_codes = set()
+    for stock_code_with_suffix in stock_codes_with_suffix:
+        stock_code = stock_code_with_suffix.split('.')[0]  # 提取: 000001
+        concept_stock_codes.add(stock_code)
 
-        if not concept_codes:
-            return stocks
+    # 过滤股票列表
+    filtered_stocks = [
+        stock for stock in stocks
+        if stock.get("code") in concept_stock_codes
+    ]
 
-        # 获取属于这些概念的股票代码（按概念code查询）
-        placeholders = ','.join(['%s'] * len(concept_codes))
-        cursor.execute(f"""
-            SELECT DISTINCT sc.stock_code
-            FROM stock_concept sc
-            INNER JOIN concept c ON sc.concept_id = c.id
-            WHERE c.code IN ({placeholders})
-        """, concept_codes)
-
-        # stock_concept中的code格式: 000001.SZ
-        # stock_info中的code格式: 000001
-        # 需要提取前缀进行匹配
-        concept_stock_codes = set()
-        for row in cursor.fetchall():
-            stock_code_with_suffix = row[0]  # 如: 000001.SZ
-            stock_code = stock_code_with_suffix.split('.')[0]  # 提取: 000001
-            concept_stock_codes.add(stock_code)
-
-        # 过滤股票列表
-        filtered_stocks = [
-            stock for stock in stocks
-            if stock.get("code") in concept_stock_codes
-        ]
-
-        cursor.close()
-        pool_manager.release_connection(conn)
-
-        return filtered_stocks
-
-    finally:
-        pool_manager.close_all_connections()
+    return filtered_stocks
 
 
 @router.get(

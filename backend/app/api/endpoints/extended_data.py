@@ -11,6 +11,15 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.models.api_response import ApiResponse
+from app.repositories import (
+    DailyBasicRepository,
+    HkHoldRepository,
+    StkLimitRepository,
+    BlockTradeRepository,
+    MoneyflowRepository,
+    MarginDetailRepository
+)
 from loguru import logger
 from app.tasks.extended_sync_tasks import (
     sync_daily_basic_task,
@@ -29,8 +38,7 @@ def get_daily_basic(
     ts_code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
-    limit: int = Query(100, le=1000, description="返回记录数"),
-    db: Session = Depends(get_db)
+    limit: int = Query(100, le=1000, description="返回记录数")
 ):
     """
     获取股票每日指标
@@ -38,63 +46,22 @@ def get_daily_basic(
     - 用于短线选股和风险评估
     """
     try:
-        # 构建查询
-        query_str = """
-            SELECT
-                ts_code, trade_date, close, turnover_rate, turnover_rate_f,
-                volume_ratio, pe, pe_ttm, pb, ps, ps_ttm, dv_ratio, dv_ttm,
-                total_share, float_share, free_share, total_mv, circ_mv,
-                created_at
-            FROM daily_basic
-            WHERE ts_code = :ts_code
-        """
+        # 使用 Repository 层
+        repo = DailyBasicRepository()
 
-        params = {"ts_code": ts_code}
+        # 转换日期格式 (date -> YYYYMMDD)
+        start_date_str = start_date.strftime("%Y%m%d") if start_date else None
+        end_date_str = end_date.strftime("%Y%m%d") if end_date else None
 
-        if start_date:
-            query_str += " AND trade_date >= :start_date"
-            params["start_date"] = start_date
+        # 调用 Repository 查询
+        items = repo.get_by_code_and_date_range(
+            ts_code=ts_code,
+            start_date=start_date_str,
+            end_date=end_date_str,
+            limit=limit
+        )
 
-        if end_date:
-            query_str += " AND trade_date <= :end_date"
-            params["end_date"] = end_date
-
-        query_str += " ORDER BY trade_date DESC LIMIT :limit"
-        params["limit"] = limit
-
-        result = db.execute(text(query_str), params)
-        rows = result.fetchall()
-
-        # 转换为字典列表
-        data = []
-        for row in rows:
-            data.append({
-                "ts_code": row.ts_code,
-                "trade_date": row.trade_date.strftime("%Y-%m-%d") if row.trade_date else None,
-                "close": float(row.close) if row.close else None,
-                "turnover_rate": float(row.turnover_rate) if row.turnover_rate else None,
-                "turnover_rate_f": float(row.turnover_rate_f) if row.turnover_rate_f else None,
-                "volume_ratio": float(row.volume_ratio) if row.volume_ratio else None,
-                "pe": float(row.pe) if row.pe else None,
-                "pe_ttm": float(row.pe_ttm) if row.pe_ttm else None,
-                "pb": float(row.pb) if row.pb else None,
-                "ps": float(row.ps) if row.ps else None,
-                "ps_ttm": float(row.ps_ttm) if row.ps_ttm else None,
-                "dv_ratio": float(row.dv_ratio) if row.dv_ratio else None,
-                "dv_ttm": float(row.dv_ttm) if row.dv_ttm else None,
-                "total_share": float(row.total_share) if row.total_share else None,
-                "float_share": float(row.float_share) if row.float_share else None,
-                "free_share": float(row.free_share) if row.free_share else None,
-                "total_mv": float(row.total_mv) if row.total_mv else None,
-                "circ_mv": float(row.circ_mv) if row.circ_mv else None
-            })
-
-        return {
-            "code": 0,
-            "data": data,
-            "count": len(data),
-            "msg": "success"
-        }
+        return ApiResponse.success(data={"items": items, "count": len(items)})
 
     except Exception as e:
         logger.error(f"获取每日指标失败: {str(e)}")
@@ -185,8 +152,7 @@ def get_moneyflow(
 def get_hk_hold(
     trade_date: Optional[date] = Query(None, description="交易日期"),
     exchange: Optional[str] = Query(None, description="交易所：SH/SZ"),
-    top: int = Query(50, le=200, description="返回前N条"),
-    db: Session = Depends(get_db)
+    top: int = Query(50, le=200, description="返回前N条")
 ):
     """
     获取北向资金持股数据
@@ -194,47 +160,20 @@ def get_hk_hold(
     - 外资动向重要参考
     """
     try:
-        query_str = """
-            SELECT
-                code, trade_date, ts_code, name, vol, ratio, exchange
-            FROM hk_hold
-            WHERE 1=1
-        """
+        # 使用 Repository 层
+        repo = HkHoldRepository()
 
-        params = {}
+        # 转换日期格式 (date -> YYYYMMDD)
+        trade_date_str = trade_date.strftime("%Y%m%d") if trade_date else None
 
-        if trade_date:
-            query_str += " AND trade_date = :trade_date"
-            params["trade_date"] = trade_date
+        # 调用 Repository 查询
+        items = repo.get_by_date(
+            trade_date=trade_date_str,
+            exchange=exchange,
+            limit=top
+        )
 
-        if exchange:
-            query_str += " AND exchange = :exchange"
-            params["exchange"] = exchange
-
-        query_str += " ORDER BY ratio DESC LIMIT :limit"
-        params["limit"] = top
-
-        result = db.execute(text(query_str), params)
-        rows = result.fetchall()
-
-        data = []
-        for row in rows:
-            data.append({
-                "code": row.code,
-                "trade_date": row.trade_date.strftime("%Y-%m-%d") if row.trade_date else None,
-                "ts_code": row.ts_code,
-                "name": row.name,
-                "vol": int(row.vol) if row.vol else None,
-                "ratio": float(row.ratio) if row.ratio else None,
-                "exchange": row.exchange
-            })
-
-        return {
-            "code": 0,
-            "data": data,
-            "count": len(data),
-            "msg": "success"
-        }
+        return ApiResponse.success(data={"items": items, "count": len(items)})
 
     except Exception as e:
         logger.error(f"获取北向资金失败: {str(e)}")
@@ -310,8 +249,7 @@ def get_margin_detail(
 def get_limit_prices(
     trade_date: date = Query(..., description="交易日期"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
-    limit: int = Query(100, le=5000, description="返回记录数"),
-    db: Session = Depends(get_db)
+    limit: int = Query(100, le=5000, description="返回记录数")
 ):
     """
     获取涨跌停价格
@@ -319,41 +257,20 @@ def get_limit_prices(
     - 用于交易参考
     """
     try:
-        query_str = """
-            SELECT
-                ts_code, trade_date, pre_close, up_limit, down_limit
-            FROM stk_limit
-            WHERE trade_date = :trade_date
-        """
+        # 使用 Repository 层
+        repo = StkLimitRepository()
 
-        params = {"trade_date": trade_date}
+        # 转换日期格式 (date -> YYYYMMDD)
+        trade_date_str = trade_date.strftime("%Y%m%d")
 
-        if ts_code:
-            query_str += " AND ts_code = :ts_code"
-            params["ts_code"] = ts_code
+        # 调用 Repository 查询
+        items = repo.get_by_date(
+            trade_date=trade_date_str,
+            ts_code=ts_code,
+            limit=limit
+        )
 
-        query_str += " ORDER BY ts_code LIMIT :limit"
-        params["limit"] = limit
-
-        result = db.execute(text(query_str), params)
-        rows = result.fetchall()
-
-        data = []
-        for row in rows:
-            data.append({
-                "ts_code": row.ts_code,
-                "trade_date": row.trade_date.strftime("%Y-%m-%d") if row.trade_date else None,
-                "pre_close": float(row.pre_close) if row.pre_close else None,
-                "up_limit": float(row.up_limit) if row.up_limit else None,
-                "down_limit": float(row.down_limit) if row.down_limit else None
-            })
-
-        return {
-            "code": 0,
-            "data": data,
-            "count": len(data),
-            "msg": "success"
-        }
+        return ApiResponse.success(data={"items": items, "count": len(items)})
 
     except Exception as e:
         logger.error(f"获取涨跌停价格失败: {str(e)}")
@@ -364,8 +281,7 @@ def get_limit_prices(
 def get_block_trade(
     trade_date: Optional[date] = Query(None, description="交易日期"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
-    limit: int = Query(100, le=500, description="返回记录数"),
-    db: Session = Depends(get_db)
+    limit: int = Query(100, le=500, description="返回记录数")
 ):
     """
     获取大宗交易数据
@@ -373,48 +289,20 @@ def get_block_trade(
     - 判断机构动向
     """
     try:
-        query_str = """
-            SELECT
-                id, ts_code, trade_date, price, vol, amount, buyer, seller
-            FROM block_trade
-            WHERE 1=1
-        """
+        # 使用 Repository 层
+        repo = BlockTradeRepository()
 
-        params = {}
+        # 转换日期格式 (date -> YYYYMMDD)
+        trade_date_str = trade_date.strftime("%Y%m%d") if trade_date else None
 
-        if trade_date:
-            query_str += " AND trade_date = :trade_date"
-            params["trade_date"] = trade_date
+        # 调用 Repository 查询
+        items = repo.get_by_date(
+            trade_date=trade_date_str,
+            ts_code=ts_code,
+            limit=limit
+        )
 
-        if ts_code:
-            query_str += " AND ts_code = :ts_code"
-            params["ts_code"] = ts_code
-
-        query_str += " ORDER BY amount DESC LIMIT :limit"
-        params["limit"] = limit
-
-        result = db.execute(text(query_str), params)
-        rows = result.fetchall()
-
-        data = []
-        for row in rows:
-            data.append({
-                "id": row.id,
-                "ts_code": row.ts_code,
-                "trade_date": row.trade_date.strftime("%Y-%m-%d") if row.trade_date else None,
-                "price": float(row.price) if row.price else None,
-                "vol": float(row.vol) if row.vol else None,
-                "amount": float(row.amount) if row.amount else None,
-                "buyer": row.buyer,
-                "seller": row.seller
-            })
-
-        return {
-            "code": 0,
-            "data": data,
-            "count": len(data),
-            "msg": "success"
-        }
+        return ApiResponse.success(data={"items": items, "count": len(items)})
 
     except Exception as e:
         logger.error(f"获取大宗交易数据失败: {str(e)}")
@@ -480,76 +368,25 @@ def get_sync_status(task_id: str):
 
 
 @router.get("/stats/summary")
-def get_data_summary(
-    db: Session = Depends(get_db)
-):
+def get_data_summary():
     """
     获取扩展数据统计摘要
     """
     try:
-        stats = {}
+        # 使用 Repository 层获取统计信息
+        daily_basic_repo = DailyBasicRepository()
+        moneyflow_repo = MoneyflowRepository()
+        hk_hold_repo = HkHoldRepository()
+        margin_detail_repo = MarginDetailRepository()
 
-        # 每日指标统计
-        result = db.execute(text("""
-            SELECT COUNT(DISTINCT ts_code) as stock_count,
-                   MAX(trade_date) as latest_date,
-                   COUNT(*) as total_records
-            FROM daily_basic
-        """))
-        row = result.fetchone()
-        stats['daily_basic'] = {
-            "stock_count": row.stock_count,
-            "latest_date": row.latest_date.strftime("%Y-%m-%d") if row.latest_date else None,
-            "total_records": row.total_records
+        stats = {
+            'daily_basic': daily_basic_repo.get_statistics(),
+            'moneyflow': moneyflow_repo.get_statistics(),
+            'hk_hold': hk_hold_repo.get_statistics(),
+            'margin_detail': margin_detail_repo.get_statistics()
         }
 
-        # 资金流向统计
-        result = db.execute(text("""
-            SELECT COUNT(DISTINCT ts_code) as stock_count,
-                   MAX(trade_date) as latest_date,
-                   COUNT(*) as total_records
-            FROM moneyflow
-        """))
-        row = result.fetchone()
-        stats['moneyflow'] = {
-            "stock_count": row.stock_count,
-            "latest_date": row.latest_date.strftime("%Y-%m-%d") if row.latest_date else None,
-            "total_records": row.total_records
-        }
-
-        # 北向资金统计
-        result = db.execute(text("""
-            SELECT COUNT(DISTINCT code) as stock_count,
-                   MAX(trade_date) as latest_date,
-                   COUNT(*) as total_records
-            FROM hk_hold
-        """))
-        row = result.fetchone()
-        stats['hk_hold'] = {
-            "stock_count": row.stock_count,
-            "latest_date": row.latest_date.strftime("%Y-%m-%d") if row.latest_date else None,
-            "total_records": row.total_records
-        }
-
-        # 融资融券统计
-        result = db.execute(text("""
-            SELECT COUNT(DISTINCT ts_code) as stock_count,
-                   MAX(trade_date) as latest_date,
-                   COUNT(*) as total_records
-            FROM margin_detail
-        """))
-        row = result.fetchone()
-        stats['margin_detail'] = {
-            "stock_count": row.stock_count,
-            "latest_date": row.latest_date.strftime("%Y-%m-%d") if row.latest_date else None,
-            "total_records": row.total_records
-        }
-
-        return {
-            "code": 0,
-            "data": stats,
-            "msg": "success"
-        }
+        return ApiResponse.success(data=stats)
 
     except Exception as e:
         logger.error(f"获取数据统计失败: {str(e)}")

@@ -12,6 +12,7 @@ from pathlib import Path
 from app.core.dependencies import require_admin
 from app.models.user import User
 from app.models.api_response import ApiResponse
+from app.repositories import ConceptRepository
 
 # 添加 core 模块到路径
 core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
@@ -24,7 +25,7 @@ from src.config.settings import get_settings
 
 router = APIRouter()
 
-# 初始化数据库连接池
+# 初始化数据库连接池（仍用于 ConceptFetcher）
 settings = get_settings()
 db_settings = settings.database
 
@@ -59,61 +60,20 @@ async def get_concepts_list(
         概念列表及分页信息
     """
     try:
-        conn = pool_manager.get_connection()
-        try:
-            cursor = conn.cursor()
+        # 使用 Repository 层
+        repo = ConceptRepository()
+        concepts, total = repo.list_concepts(page=page, page_size=page_size, search=search)
 
-            # 计算偏移量
-            offset = (page - 1) * page_size
-
-            # 构建查询条件
-            where_clause = ""
-            params = []
-            if search:
-                where_clause = "WHERE name ILIKE %s"
-                params.append(f'%{search}%')
-
-            # 查询总数
-            count_query = f"SELECT COUNT(*) FROM concept {where_clause}"
-            cursor.execute(count_query, params)
-            total = cursor.fetchone()[0]
-
-            # 查询数据
-            data_query = f"""
-                SELECT id, code, name, source, stock_count, created_at, updated_at
-                FROM concept
-                {where_clause}
-                ORDER BY stock_count DESC, name
-                LIMIT %s OFFSET %s
-            """
-            cursor.execute(data_query, params + [page_size, offset])
-
-            concepts = []
-            for row in cursor.fetchall():
-                concepts.append({
-                    'id': row[0],
-                    'code': row[1],
-                    'name': row[2],
-                    'source': row[3],
-                    'stock_count': row[4],
-                    'created_at': row[5].isoformat() if row[5] else None,
-                    'updated_at': row[6].isoformat() if row[6] else None
-                })
-
-            return ApiResponse.success(
-                data={
-                    "items": concepts,
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "total_pages": (total + page_size - 1) // page_size
-                },
-                message=f"成功获取第 {page} 页，共 {total} 个概念"
-            ).to_dict()
-
-        finally:
-            cursor.close()
-            pool_manager.release_connection(conn)
+        return ApiResponse.success(
+            data={
+                "items": concepts,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size
+            },
+            message=f"成功获取第 {page} 页，共 {total} 个概念"
+        ).to_dict()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取概念列表失败: {str(e)}")
@@ -131,40 +91,17 @@ async def get_concept_detail(concept_id: int):
         概念详细信息
     """
     try:
-        conn = pool_manager.get_connection()
-        try:
-            cursor = conn.cursor()
+        # 使用 Repository 层
+        repo = ConceptRepository()
+        concept = repo.get_by_id(concept_id)
 
-            # 获取概念基本信息
-            cursor.execute("""
-                SELECT id, code, name, source, description, stock_count, created_at, updated_at
-                FROM concept
-                WHERE id = %s
-            """, (concept_id,))
+        if not concept:
+            raise HTTPException(status_code=404, detail=f"概念 {concept_id} 不存在")
 
-            row = cursor.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail=f"概念 {concept_id} 不存在")
-
-            concept = {
-                'id': row[0],
-                'code': row[1],
-                'name': row[2],
-                'source': row[3],
-                'description': row[4],
-                'stock_count': row[5],
-                'created_at': row[6].isoformat() if row[6] else None,
-                'updated_at': row[7].isoformat() if row[7] else None
-            }
-
-            return ApiResponse.success(
-                data=concept,
-                message="获取概念详情成功"
-            ).to_dict()
-
-        finally:
-            cursor.close()
-            pool_manager.release_connection(conn)
+        return ApiResponse.success(
+            data=concept,
+            message="获取概念详情成功"
+        ).to_dict()
 
     except HTTPException:
         raise
@@ -188,48 +125,17 @@ async def get_concept_stocks(
         股票列表
     """
     try:
-        conn = pool_manager.get_connection()
-        try:
-            cursor = conn.cursor()
+        # 使用 Repository 层
+        repo = ConceptRepository()
+        stocks = repo.get_concept_stocks(concept_id, limit=limit)
 
-            # 获取概念的股票列表
-            query = """
-                SELECT
-                    sc.stock_code,
-                    si.name,
-                    si.market,
-                    si.industry
-                FROM stock_concept sc
-                LEFT JOIN stock_info si ON sc.stock_code = si.code
-                WHERE sc.concept_id = %s
-                ORDER BY sc.stock_code
-            """
-
-            if limit:
-                query += f" LIMIT {limit}"
-
-            cursor.execute(query, (concept_id,))
-
-            stocks = []
-            for row in cursor.fetchall():
-                stocks.append({
-                    'code': row[0],
-                    'name': row[1],
-                    'market': row[2],
-                    'industry': row[3]
-                })
-
-            return ApiResponse.success(
-                data={
-                    "items": stocks,
-                    "total": len(stocks)
-                },
-                message=f"获取到 {len(stocks)} 只股票"
-            ).to_dict()
-
-        finally:
-            cursor.close()
-            pool_manager.release_connection(conn)
+        return ApiResponse.success(
+            data={
+                "items": stocks,
+                "total": len(stocks)
+            },
+            message=f"获取到 {len(stocks)} 只股票"
+        ).to_dict()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取概念股票列表失败: {str(e)}")
@@ -247,19 +153,18 @@ async def get_stock_concepts(stock_code: str):
         概念列表
     """
     try:
-        fetcher = ConceptFetcher(pool_manager)
-        result = fetcher.get_stock_concepts(stock_code)
+        # 使用 Repository 层
+        repo = ConceptRepository()
+        concepts = repo.get_stock_concepts(stock_code)
 
-        if result.is_success():
-            return ApiResponse.success(
-                data=result.data,
-                message=result.message
-            ).to_dict()
-        else:
-            raise HTTPException(status_code=500, detail=result.error)
+        return ApiResponse.success(
+            data={
+                "items": concepts,
+                "total": len(concepts)
+            },
+            message=f"获取到 {len(concepts)} 个概念"
+        ).to_dict()
 
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取股票概念失败: {str(e)}")
 
@@ -372,57 +277,17 @@ async def update_stock_concepts(
         更新结果
     """
     try:
-        conn = pool_manager.get_connection()
-        try:
-            cursor = conn.cursor()
+        # 使用 Repository 层（包含事务处理）
+        repo = ConceptRepository()
+        added_count = repo.update_stock_concepts(stock_code, concept_ids)
 
-            # 先删除该股票的所有概念关系
-            cursor.execute("DELETE FROM stock_concept WHERE stock_code = %s", (stock_code,))
-
-            # 添加新的概念关系
-            added_count = 0
-            for concept_id in concept_ids:
-                # 获取概念信息
-                cursor.execute(
-                    "SELECT code, name FROM concept WHERE id = %s",
-                    (concept_id,)
-                )
-                concept_row = cursor.fetchone()
-
-                if concept_row:
-                    concept_code, concept_name = concept_row
-                    cursor.execute("""
-                        INSERT INTO stock_concept
-                            (stock_code, concept_id, concept_code, concept_name)
-                        VALUES (%s, %s, %s, %s)
-                    """, (stock_code, concept_id, concept_code, concept_name))
-                    added_count += 1
-
-            # 更新概念的股票数量
-            for concept_id in concept_ids:
-                cursor.execute("""
-                    UPDATE concept
-                    SET stock_count = (
-                        SELECT COUNT(*) FROM stock_concept WHERE concept_id = %s
-                    )
-                    WHERE id = %s
-                """, (concept_id, concept_id))
-
-            conn.commit()
-
-            return ApiResponse.success(
-                data={
-                    "stock_code": stock_code,
-                    "concepts_count": added_count
-                },
-                message=f"成功更新股票概念，添加了 {added_count} 个概念"
-            ).to_dict()
-
-        finally:
-            cursor.close()
-            pool_manager.release_connection(conn)
+        return ApiResponse.success(
+            data={
+                "stock_code": stock_code,
+                "concepts_count": added_count
+            },
+            message=f"成功更新股票概念，添加了 {added_count} 个概念"
+        ).to_dict()
 
     except Exception as e:
-        if conn:
-            conn.rollback()
         raise HTTPException(status_code=500, detail=f"更新股票概念失败: {str(e)}")
