@@ -7,6 +7,13 @@ from .strategy_config_repository import StrategyConfigRepository
 from .dynamic_strategy_repository import DynamicStrategyRepository
 from .strategy_execution_repository import StrategyExecutionRepository
 from .strategy_repository import StrategyRepository  # Phase 2: 统一策略
+from .moneyflow_repository import MoneyflowRepository
+from .moneyflow_hsgt_repository import MoneyflowHsgtRepository
+from .moneyflow_mkt_dc_repository import MoneyflowMktDcRepository
+from .moneyflow_ind_dc_repository import MoneyflowIndDcRepository
+from .moneyflow_stock_dc_repository import MoneyflowStockDcRepository
+from .margin_repository import MarginRepository
+from .margin_detail_repository import MarginDetailRepository
 
 __all__ = [
     "BaseRepository",
@@ -18,4 +25,15 @@ __all__ = [
     "StrategyConfigRepository",
     "DynamicStrategyRepository",
     "StrategyExecutionRepository",
+    # 资金流向 - Tushare标准
+    "MoneyflowRepository",
+    # 资金流向 - 沪深港通
+    "MoneyflowHsgtRepository",
+    # 资金流向 - 东方财富DC
+    "MoneyflowMktDcRepository",
+    "MoneyflowIndDcRepository",
+    "MoneyflowStockDcRepository",
+    # 融资融券
+    "MarginRepository",
+    "MarginDetailRepository",
 ]
