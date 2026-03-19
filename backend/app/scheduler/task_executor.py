@@ -63,7 +63,11 @@ class TaskExecutor:
         },
         'tasks.sync_moneyflow_stock_dc': {
             'task': 'tasks.sync_moneyflow_stock_dc',
-            'name': '个股资金流向同步'
+            'name': '个股资金流向同步（DC）'
+        },
+        'tasks.sync_moneyflow': {
+            'task': 'tasks.sync_moneyflow',
+            'name': '个股资金流向同步（Tushare）'
         },
         'extended.sync_margin': {
             'task': 'extended.sync_margin',

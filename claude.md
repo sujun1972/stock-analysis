@@ -218,6 +218,8 @@ triggerPoll()  // Header 图标即时更新
 - 沪深港通资金流向页面（`/data/moneyflow-hsgt`）
 - 大盘资金流向页面（`/data/moneyflow-mkt-dc`）
 - 板块资金流向页面（`/data/moneyflow-ind-dc`）
+- 个股资金流向页面（Tushare）（`/data/moneyflow`）
+- 个股资金流向页面（DC）（`/data/moneyflow-stock-dc`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -368,6 +370,27 @@ docker-compose down
   - 响应式布局：
     - 桌面端：完整表格视图，显示所有资金流向指标和排名
     - 移动端：卡片视图，垂直堆叠展示核心指标
+
+#### 个股资金流向（Tushare）
+- **API端点**: `/api/moneyflow`
+- **前端页面**: `/admin/app/(dashboard)/data/moneyflow/page.tsx`
+- **数据内容**: Tushare标准个股资金流向，基于主动买卖单统计，包含小单/中单/大单/特大单的买卖量和买卖额
+- **数据源**: Tushare `pro.moneyflow()` 接口
+- **积分消耗**: 2000积分/次（高消耗）
+- **单次限制**: 最大6000行
+- **数据起始**: 2010年
+- **页面功能**:
+  - 统计卡片：净流入均值、累计净流入、最大净流入、统计股票数
+  - 趋势图表：TOP 20个股资金流向可视化（净流入、特大单、大单）
+  - 筛选器：支持股票代码和日期范围筛选
+  - 数据单位：万元
+  - 异步同步：支持后台任务执行，实时显示进度
+  - 响应式布局：桌面端表格视图，移动端卡片视图
+- **数据库表**: `moneyflow` (trade_date 使用 VARCHAR(8) 存储 YYYYMMDD 格式)
+- **同步特点**: 不依赖 stock_daily 表，直接通过日期参数获取所有股票数据
+- **与 DC 版本区别**:
+  - Tushare 标准版：买卖量/额分别记录，数据更详细
+  - DC 版本：净流入为核心指标，数据来源东方财富
 
 #### 个股资金流向（DC）
 - **API端点**: `/api/moneyflow-stock-dc`

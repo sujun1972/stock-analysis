@@ -22,10 +22,11 @@ from .endpoints import (
     llm_logs,
     market,
     ml,
+    moneyflow,  # 个股资金流向（Tushare标准）
     moneyflow_hsgt,  # 沪深港通资金流向
     moneyflow_mkt_dc,  # 大盘资金流向
     moneyflow_ind_dc,  # 板块资金流向
-    moneyflow_stock_dc,  # 个股资金流向
+    moneyflow_stock_dc,  # 个股资金流向（东方财富DC）
     notification_channels,
     notification_monitoring,  # Phase 3: 通知监控
     notifications,
@@ -76,10 +77,11 @@ router.include_router(config.router, prefix="/config", tags=["配置管理"])
 router.include_router(sync.router, prefix="/sync", tags=["数据同步"])
 router.include_router(extended_data.router, prefix="/extended-data", tags=["扩展数据"])
 router.include_router(data_quality.router, prefix="/data-quality", tags=["数据质量"])
+router.include_router(moneyflow.router, prefix="/moneyflow", tags=["个股资金流向（Tushare）"])  # 个股资金流向API（Tushare标准）
 router.include_router(moneyflow_hsgt.router, prefix="/moneyflow-hsgt", tags=["沪深港通资金流向"])  # 沪深港通资金流向API
 router.include_router(moneyflow_mkt_dc.router, prefix="/moneyflow-mkt-dc", tags=["大盘资金流向"])  # 大盘资金流向API
 router.include_router(moneyflow_ind_dc.router, prefix="/moneyflow-ind-dc", tags=["板块资金流向"])  # 板块资金流向API
-router.include_router(moneyflow_stock_dc.router, prefix="/moneyflow-stock-dc", tags=["个股资金流向"])  # 个股资金流向API
+router.include_router(moneyflow_stock_dc.router, prefix="/moneyflow-stock-dc", tags=["个股资金流向（DC）"])  # 个股资金流向API（东方财富DC）
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

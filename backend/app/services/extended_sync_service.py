@@ -115,20 +115,35 @@ class ExtendedDataSyncService:
             }
 
     async def sync_moneyflow(self,
+                             ts_code: Optional[str] = None,
                              trade_date: Optional[str] = None,
                              start_date: Optional[str] = None,
                              end_date: Optional[str] = None,
                              stock_list: Optional[List[str]] = None) -> Dict[str, Any]:
         """
-        同步资金流向数据
+        同步资金流向数据（Tushare标准接口）
+
+        数据源：pro.moneyflow() - 基于主动买卖单统计的资金流向
         优先级：P0
         调用频率：每日17:30
         积分消耗：2000（高消耗，需要控制调用频率）
+
+        Args:
+            ts_code: 股票代码（单个）
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            stock_list: 股票代码列表（批量，保留用于未来扩展）
+
+        Note:
+            - 不指定股票代码时，直接使用日期参数查询，Tushare会返回该日期所有有数据的股票
+            - 单次最大提取6000行记录
+            - 股票和时间参数至少输入一个
         """
         task_id = self._generate_task_id("moneyflow")
 
         try:
-            logger.info(f"开始同步资金流向数据: trade_date={trade_date}")
+            logger.info(f"开始同步资金流向数据: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
             provider = self._get_provider()
 
@@ -138,66 +153,48 @@ class ExtendedDataSyncService:
                 calculated_date = trading_calendar_service.get_latest_data_date_sync()
                 logger.info(f"计算的最近交易日期: {calculated_date}")
 
-                # 根据数据类型判断是否应该使用日期
-                trade_date = DataAvailabilityConfig.should_use_date("moneyflow", calculated_date)
-                logger.info(DataAvailabilityConfig.get_description("moneyflow", calculated_date))
+                # 资金流向支持当前日期
+                trade_date = calculated_date
+                logger.info(f"资金流向: 使用日期 {trade_date}")
 
-            # 如果没有指定股票列表，获取活跃股票
-            if not stock_list:
-                stock_list = await self._get_active_stocks(trade_date)
-                logger.info(f"获取到 {len(stock_list)} 只活跃股票")
+            # 直接调用 Tushare API（不指定 ts_code 时会返回所有股票数据）
+            df = provider.get_moneyflow(
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-            total_records = 0
-            failed_stocks = []
+            if df is not None and len(df) > 0:
+                # 验证数据质量
+                is_valid, errors, warnings = self.validator.validate_moneyflow(df)
 
-            # 分批获取，避免单次请求数据量过大
-            for i, ts_code in enumerate(stock_list):
-                try:
-                    df = provider.get_moneyflow(
-                        ts_code=ts_code,
-                        trade_date=trade_date,
-                        start_date=start_date,
-                        end_date=end_date
-                    )
+                if errors:
+                    logger.warning(f"资金流向数据验证发现错误: {errors}")
+                    # 尝试修复数据
+                    df = self.validator.fix_data(df, 'moneyflow')
+                    # 重新验证
+                    is_valid, errors, warnings = self.validator.validate_moneyflow(df)
 
-                    if df is not None and len(df) > 0:
-                        # 验证数据质量
-                        is_valid, errors, warnings = self.validator.validate_moneyflow(df)
+                if warnings:
+                    logger.debug(f"资金流向数据验证警告: {warnings}")
 
-                        if errors:
-                            logger.warning(f"资金流向数据验证发现错误 [{ts_code}]: {errors}")
-                            # 尝试修复数据
-                            df = self.validator.fix_data(df, 'moneyflow')
-                            # 重新验证
-                            is_valid, errors, warnings = self.validator.validate_moneyflow(df)
+                await self._insert_moneyflow(df)
 
-                        if warnings:
-                            logger.debug(f"资金流向数据验证警告 [{ts_code}]: {warnings}")
-
-                        await self._insert_moneyflow(df)
-                        total_records += len(df)
-
-                    # 控制请求频率，避免触发限流
-                    if i < len(stock_list) - 1:
-                        await asyncio.sleep(0.5)
-
-                except Exception as e:
-                    logger.warning(f"获取 {ts_code} 资金流向失败: {e}")
-                    failed_stocks.append(ts_code)
-                    continue
-
-            message = f"成功同步 {total_records} 条资金流向数据"
-            if failed_stocks:
-                message += f"，{len(failed_stocks)} 只股票失败"
-
-            logger.info(message)
-            return {
-                "task_id": task_id,
-                "status": "success",
-                "records": total_records,
-                "failed_stocks": failed_stocks,
-                "message": message
-            }
+                logger.info(f"成功同步资金流向数据 {len(df)} 条")
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": len(df),
+                    "message": f"成功同步 {len(df)} 条资金流向数据"
+                }
+            else:
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": 0,
+                    "message": "无数据需要同步"
+                }
 
         except Exception as e:
             logger.error(f"同步资金流向失败: {str(e)}")
@@ -825,17 +822,29 @@ class ExtendedDataSyncService:
         """
         获取活跃股票列表（内部方法）
         根据成交额排名获取前100只活跃股票
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD
+
+        Returns:
+            股票代码列表（TS代码格式，如 000001.SZ）
         """
         async with get_async_db() as db:
+            # 将 YYYYMMDD 格式转换为 date 对象
+            from datetime import datetime
+            date_obj = datetime.strptime(trade_date, '%Y%m%d').date()
+
             query = text("""
-                SELECT ts_code
+                SELECT code
                 FROM stock_daily
-                WHERE trade_date = :trade_date
+                WHERE date = :date
+                  AND code NOT LIKE 'TEST%'
+                  AND amount > 0
                 ORDER BY amount DESC
                 LIMIT 100
             """)
 
-            result = await db.execute(query, {"trade_date": trade_date})
+            result = await db.execute(query, {"date": date_obj})
             rows = result.fetchall()
             return [row[0] for row in rows]
 
@@ -887,29 +896,25 @@ class ExtendedDataSyncService:
             await db.commit()
 
     async def _insert_moneyflow(self, df: pd.DataFrame):
-        """插入资金流向数据"""
+        """插入资金流向数据（Tushare标准接口）"""
         async with get_async_db() as db:
             records = df.to_dict('records')
 
             for record in records:
-                # 转换日期字符串为日期对象
-                if 'trade_date' in record and isinstance(record['trade_date'], str):
-                    from datetime import datetime
-                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
-
+                # 保持trade_date为字符串格式（YYYYMMDD）
                 query = text("""
                     INSERT INTO moneyflow (
                         ts_code, trade_date, buy_sm_vol, buy_sm_amount,
                         sell_sm_vol, sell_sm_amount, buy_md_vol, buy_md_amount,
                         sell_md_vol, sell_md_amount, buy_lg_vol, buy_lg_amount,
                         sell_lg_vol, sell_lg_amount, buy_elg_vol, buy_elg_amount,
-                        sell_elg_vol, sell_elg_amount, net_mf_vol, net_mf_amount, trade_count
+                        sell_elg_vol, sell_elg_amount, net_mf_vol, net_mf_amount
                     ) VALUES (
                         :ts_code, :trade_date, :buy_sm_vol, :buy_sm_amount,
                         :sell_sm_vol, :sell_sm_amount, :buy_md_vol, :buy_md_amount,
                         :sell_md_vol, :sell_md_amount, :buy_lg_vol, :buy_lg_amount,
                         :sell_lg_vol, :sell_lg_amount, :buy_elg_vol, :buy_elg_amount,
-                        :sell_elg_vol, :sell_elg_amount, :net_mf_vol, :net_mf_amount, :trade_count
+                        :sell_elg_vol, :sell_elg_amount, :net_mf_vol, :net_mf_amount
                     )
                     ON CONFLICT (ts_code, trade_date) DO UPDATE SET
                         buy_sm_vol = EXCLUDED.buy_sm_vol,
@@ -930,7 +935,7 @@ class ExtendedDataSyncService:
                         sell_elg_amount = EXCLUDED.sell_elg_amount,
                         net_mf_vol = EXCLUDED.net_mf_vol,
                         net_mf_amount = EXCLUDED.net_mf_amount,
-                        trade_count = EXCLUDED.trade_count
+                        updated_at = CURRENT_TIMESTAMP
                 """)
 
                 await db.execute(query, record)

@@ -1287,7 +1287,7 @@ class ApiClient {
   }
 
   /**
-   * 异步同步个股资金流向数据
+   * 异步同步个股资金流向数据（东方财富DC）
    * 通过Celery任务异步执行，立即返回任务ID
    */
   async syncMoneyflowStockDcAsync(params?: {
@@ -1306,13 +1306,59 @@ class ApiClient {
   }
 
   /**
-   * 获取主力资金流入排名前N的股票
+   * 获取主力资金流入排名前N的股票（东方财富DC）
    */
   async getTopMoneyflowStocks(params?: {
     limit?: number        // 返回记录数
     trade_date?: string   // YYYY-MM-DD
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.get('/api/moneyflow-stock-dc/top', { params })
+    return response.data
+  }
+
+  // ========== 个股资金流向API（Tushare标准） ==========
+
+  /**
+   * 获取个股资金流向数据（Tushare标准接口）
+   */
+  async getMoneyflow(params?: {
+    ts_code?: string      // 股票代码
+    start_date?: string   // YYYY-MM-DD
+    end_date?: string     // YYYY-MM-DD
+    limit?: number
+    offset?: number
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/moneyflow', { params })
+    return response.data
+  }
+
+  /**
+   * 异步同步个股资金流向数据（Tushare标准接口）
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncMoneyflowAsync(params?: {
+    ts_code?: string      // 股票代码
+    trade_date?: string   // YYYY-MM-DD
+    start_date?: string   // YYYY-MM-DD
+    end_date?: string     // YYYY-MM-DD
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/moneyflow/sync-async', null, { params })
+    return response.data
+  }
+
+  /**
+   * 获取资金净流入排名前N的股票（Tushare标准接口）
+   */
+  async getTopMoneyflowTushare(params?: {
+    limit?: number        // 返回记录数
+    trade_date?: string   // YYYY-MM-DD
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/moneyflow/top', { params })
     return response.data
   }
 

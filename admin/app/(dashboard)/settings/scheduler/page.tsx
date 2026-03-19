@@ -468,10 +468,13 @@ export default function SchedulerSettingsPage() {
       // 新增扩展数据任务
       'extended.sync_daily_basic': '每日指标',
       'extended.sync_moneyflow': '资金流向',
+      'tasks.sync_moneyflow': '个股资金流向（Tushare）',
       'tasks.sync_moneyflow_hsgt': '沪深港通资金',
       'moneyflow_hsgt': '沪深港通资金',
       'tasks.sync_moneyflow_mkt_dc': '大盘资金流向',
       'moneyflow_mkt_dc': '大盘资金流向',
+      'tasks.sync_moneyflow_ind_dc': '板块资金流向（DC）',
+      'tasks.sync_moneyflow_stock_dc': '个股资金流向（DC）',
       'extended.sync_margin': '融资融券',
       'extended.sync_stk_limit': '涨跌停价格',
       'extended.sync_block_trade': '大宗交易',
@@ -485,10 +488,13 @@ export default function SchedulerSettingsPage() {
     const points: Record<string, number> = {
       'extended.sync_daily_basic': 120,
       'extended.sync_moneyflow': 2000,  // 高消耗
-      'tasks.sync_moneyflow_hsgt': 2000,  // 高消耗
+      'tasks.sync_moneyflow': 2000,  // 个股资金流向（Tushare）高消耗
+      'tasks.sync_moneyflow_hsgt': 2000,  // 沪深港通高消耗
       'moneyflow_hsgt': 2000,  // 高消耗
       'tasks.sync_moneyflow_mkt_dc': 120,
       'moneyflow_mkt_dc': 120,
+      'tasks.sync_moneyflow_ind_dc': 6000,  // 板块资金流向（DC）高消耗
+      'tasks.sync_moneyflow_stock_dc': 5000,  // 个股资金流向（DC）高消耗
       'extended.sync_margin': 300,
       'extended.sync_stk_limit': 120,
       'extended.sync_block_trade': 300,

@@ -173,6 +173,11 @@ const navItems: NavItem[] = [
         icon: TrendingUp
       },
       {
+        name: '个股资金流向（Tushare）',
+        href: '/data/moneyflow',
+        icon: Activity
+      },
+      {
         name: '大盘资金流向（DC）',
         href: '/data/moneyflow-mkt-dc',
         icon: LineChart
