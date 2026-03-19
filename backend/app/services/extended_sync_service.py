@@ -11,16 +11,21 @@ from enum import Enum
 from dataclasses import dataclass
 import asyncio
 import pandas as pd
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db, get_async_db
 from app.core.config import settings
 from loguru import logger
 from core.src.providers import DataProviderFactory
 from core.src.data.validators.extended_validator import ExtendedDataValidator
 from app.services.trading_calendar_service import trading_calendar_service
 from app.services.data_availability_config import DataAvailabilityConfig
+from app.repositories import (
+    MoneyflowRepository,
+    MoneyflowHsgtRepository,
+    MoneyflowMktDcRepository,
+    MoneyflowIndDcRepository,
+    MoneyflowStockDcRepository,
+    MarginDetailRepository
+)
 
 
 class DataType(str, Enum):
@@ -83,6 +88,13 @@ class ExtendedDataSyncService:
     def __init__(self):
         self.provider_factory = DataProviderFactory()
         self.validator = ExtendedDataValidator()
+        # 初始化 Repositories
+        self.moneyflow_repo = MoneyflowRepository()
+        self.moneyflow_hsgt_repo = MoneyflowHsgtRepository()
+        self.moneyflow_mkt_dc_repo = MoneyflowMktDcRepository()
+        self.moneyflow_ind_dc_repo = MoneyflowIndDcRepository()
+        self.moneyflow_stock_dc_repo = MoneyflowStockDcRepository()
+        self.margin_detail_repo = MarginDetailRepository()
 
     def _get_provider(self):
         """获取Tushare数据提供者"""
@@ -124,9 +136,6 @@ class ExtendedDataSyncService:
 
         return result_date
 
-    def _convert_date_string_to_date(self, date_str: str) -> datetime.date:
-        """转换YYYYMMDD格式字符串为date对象"""
-        return datetime.strptime(date_str, '%Y%m%d').date()
 
     async def _validate_and_fix_data(
         self,
@@ -231,64 +240,9 @@ class ExtendedDataSyncService:
                 error=str(e)
             ).to_dict()
 
-    async def _upsert_records(
-        self,
-        df: pd.DataFrame,
-        table_name: str,
-        conflict_columns: List[str],
-        update_columns: List[str],
-        date_fields: Optional[List[str]] = None,
-        keep_date_as_string: bool = False
-    ):
-        """
-        通用UPSERT插入方法(INSERT ... ON CONFLICT DO UPDATE)
-
-        Args:
-            df: 数据DataFrame
-            table_name: 目标表名
-            conflict_columns: 唯一性冲突检测列
-            update_columns: 冲突时需要更新的列
-            date_fields: 需要转换的日期字段
-            keep_date_as_string: 保持日期为字符串(某些表使用VARCHAR存储日期)
-        """
-        async with get_async_db() as db:
-            records = df.to_dict('records')
-
-            for record in records:
-                # 转换日期字段
-                if date_fields and not keep_date_as_string:
-                    for field in date_fields:
-                        if field in record and isinstance(record[field], str) and record[field]:
-                            record[field] = self._convert_date_string_to_date(record[field])
-
-                # 构建INSERT语句
-                columns = list(record.keys())
-                placeholders = [f":{col}" for col in columns]
-
-                insert_clause = f"""
-                    INSERT INTO {table_name} ({', '.join(columns)})
-                    VALUES ({', '.join(placeholders)})
-                """
-
-                # 构建ON CONFLICT UPDATE语句
-                conflict_clause = f"ON CONFLICT ({', '.join(conflict_columns)})"
-                update_clause = ", ".join([
-                    f"{col} = EXCLUDED.{col}" for col in update_columns
-                ])
-
-                # 添加updated_at字段(如果存在)
-                if 'updated_at' not in update_columns:
-                    update_clause += ", updated_at = CURRENT_TIMESTAMP"
-
-                query = text(f"""
-                    {insert_clause}
-                    {conflict_clause} DO UPDATE SET
-                    {update_clause}
-                """)
-
-                await db.execute(query, record)
-
-            await db.commit()
+    # NOTE: _upsert_records 方法已被移除
+    # 所有数据插入操作现在通过 Repository 层实现
+    # 请使用相应的 Repository.bulk_upsert() 方法
 
     # ========== 公共同步方法 ==========
 
@@ -615,9 +569,14 @@ class ExtendedDataSyncService:
 
         Returns:
             股票代码列表(TS格式,如000001.SZ)
+
+        TODO: 创建 StockDailyRepository 并使用专用方法
         """
+        from app.core.database import get_async_db
+        from sqlalchemy import text
+
         async with get_async_db() as db:
-            date_obj = self._convert_date_string_to_date(trade_date)
+            date_obj = datetime.strptime(trade_date, '%Y%m%d').date()
 
             query = text("""
                 SELECT code
@@ -636,141 +595,148 @@ class ExtendedDataSyncService:
     # ========== 私有数据插入方法 ==========
 
     async def _insert_daily_basic(self, df: pd.DataFrame):
-        """插入每日指标数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="daily_basic",
-            conflict_columns=["ts_code", "trade_date"],
-            update_columns=[
-                "close", "turnover_rate", "turnover_rate_f", "volume_ratio",
-                "pe", "pe_ttm", "pb", "ps", "ps_ttm", "dv_ratio", "dv_ttm",
-                "total_share", "float_share", "free_share", "total_mv", "circ_mv"
-            ],
-            date_fields=["trade_date"]
-        )
+        """
+        插入每日指标数据
+
+        TODO: 创建 DailyBasicRepository 并使用 bulk_upsert 方法
+        """
+        # 临时保留直接插入逻辑，等待创建对应的 Repository
+        from app.core.database import get_async_db
+        from sqlalchemy import text
+
+        async with get_async_db() as db:
+            records = df.to_dict('records')
+            for record in records:
+                # 转换日期字段
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
+                columns = list(record.keys())
+                placeholders = [f":{col}" for col in columns]
+
+                query = text(f"""
+                    INSERT INTO daily_basic ({', '.join(columns)})
+                    VALUES ({', '.join(placeholders)})
+                    ON CONFLICT (ts_code, trade_date) DO UPDATE SET
+                        close = EXCLUDED.close,
+                        turnover_rate = EXCLUDED.turnover_rate,
+                        turnover_rate_f = EXCLUDED.turnover_rate_f,
+                        volume_ratio = EXCLUDED.volume_ratio,
+                        pe = EXCLUDED.pe,
+                        pe_ttm = EXCLUDED.pe_ttm,
+                        pb = EXCLUDED.pb,
+                        ps = EXCLUDED.ps,
+                        ps_ttm = EXCLUDED.ps_ttm,
+                        dv_ratio = EXCLUDED.dv_ratio,
+                        dv_ttm = EXCLUDED.dv_ttm,
+                        total_share = EXCLUDED.total_share,
+                        float_share = EXCLUDED.float_share,
+                        free_share = EXCLUDED.free_share,
+                        total_mv = EXCLUDED.total_mv,
+                        circ_mv = EXCLUDED.circ_mv,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+                await db.execute(query, record)
+            await db.commit()
 
     async def _insert_moneyflow(self, df: pd.DataFrame):
         """插入资金流向数据(Tushare标准接口)"""
-        # moneyflow表的trade_date使用VARCHAR(8)存储YYYYMMDD格式
-        await self._upsert_records(
-            df=df,
-            table_name="moneyflow",
-            conflict_columns=["ts_code", "trade_date"],
-            update_columns=[
-                "buy_sm_vol", "buy_sm_amount", "sell_sm_vol", "sell_sm_amount",
-                "buy_md_vol", "buy_md_amount", "sell_md_vol", "sell_md_amount",
-                "buy_lg_vol", "buy_lg_amount", "sell_lg_vol", "sell_lg_amount",
-                "buy_elg_vol", "buy_elg_amount", "sell_elg_vol", "sell_elg_amount",
-                "net_mf_vol", "net_mf_amount"
-            ],
-            keep_date_as_string=True  # 保持字符串格式
-        )
+        await asyncio.to_thread(self.moneyflow_repo.bulk_upsert, df)
 
     async def _insert_moneyflow_hsgt(self, df: pd.DataFrame):
         """插入沪深港通资金流向数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="moneyflow_hsgt",
-            conflict_columns=["trade_date"],
-            update_columns=[
-                "ggt_ss", "ggt_sz", "hgt", "sgt", "north_money", "south_money"
-            ],
-            keep_date_as_string=True
-        )
+        await asyncio.to_thread(self.moneyflow_hsgt_repo.bulk_upsert, df)
 
     async def _insert_moneyflow_mkt_dc(self, df: pd.DataFrame):
         """插入大盘资金流向数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="moneyflow_mkt_dc",
-            conflict_columns=["trade_date"],
-            update_columns=[
-                "close_sh", "pct_change_sh", "close_sz", "pct_change_sz",
-                "net_amount", "net_amount_rate",
-                "buy_elg_amount", "buy_elg_amount_rate",
-                "buy_lg_amount", "buy_lg_amount_rate",
-                "buy_md_amount", "buy_md_amount_rate",
-                "buy_sm_amount", "buy_sm_amount_rate"
-            ],
-            keep_date_as_string=True
-        )
+        await asyncio.to_thread(self.moneyflow_mkt_dc_repo.bulk_upsert, df)
 
     async def _insert_moneyflow_ind_dc(self, df: pd.DataFrame):
         """插入板块资金流向数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="moneyflow_ind_dc",
-            conflict_columns=["trade_date", "ts_code"],
-            update_columns=[
-                "content_type", "name", "pct_change", "close",
-                "net_amount", "net_amount_rate",
-                "buy_elg_amount", "buy_elg_amount_rate",
-                "buy_lg_amount", "buy_lg_amount_rate",
-                "buy_md_amount", "buy_md_amount_rate",
-                "buy_sm_amount", "buy_sm_amount_rate",
-                "buy_sm_amount_stock", "rank"
-            ],
-            keep_date_as_string=True
-        )
+        await asyncio.to_thread(self.moneyflow_ind_dc_repo.bulk_upsert, df)
 
     async def _insert_moneyflow_stock_dc(self, df: pd.DataFrame):
         """插入个股资金流向数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="moneyflow_stock_dc",
-            conflict_columns=["trade_date", "ts_code"],
-            update_columns=[
-                "name", "pct_change", "close",
-                "net_amount", "net_amount_rate",
-                "buy_elg_amount", "buy_elg_amount_rate",
-                "buy_lg_amount", "buy_lg_amount_rate",
-                "buy_md_amount", "buy_md_amount_rate",
-                "buy_sm_amount", "buy_sm_amount_rate"
-            ],
-            keep_date_as_string=True
-        )
+        await asyncio.to_thread(self.moneyflow_stock_dc_repo.bulk_upsert, df)
 
     async def _insert_margin_detail(self, df: pd.DataFrame):
         """插入融资融券数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="margin_detail",
-            conflict_columns=["ts_code", "trade_date"],
-            update_columns=[
-                "rzye", "rqye", "rzmre", "rqyl", "rzche", "rqchl", "rqmcl", "rzrqye"
-            ],
-            date_fields=["trade_date"]
-        )
+        await asyncio.to_thread(self.margin_detail_repo.bulk_upsert, df)
 
     async def _insert_stk_limit(self, df: pd.DataFrame):
-        """插入涨跌停价格数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="stk_limit",
-            conflict_columns=["ts_code", "trade_date"],
-            update_columns=["pre_close", "up_limit", "down_limit"],
-            date_fields=["trade_date"]
-        )
+        """
+        插入涨跌停价格数据
+
+        TODO: 创建 StkLimitRepository 并使用 bulk_upsert 方法
+        """
+        from app.core.database import get_async_db
+        from sqlalchemy import text
+
+        async with get_async_db() as db:
+            records = df.to_dict('records')
+            for record in records:
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
+                columns = list(record.keys())
+                placeholders = [f":{col}" for col in columns]
+
+                query = text(f"""
+                    INSERT INTO stk_limit ({', '.join(columns)})
+                    VALUES ({', '.join(placeholders)})
+                    ON CONFLICT (ts_code, trade_date) DO UPDATE SET
+                        pre_close = EXCLUDED.pre_close,
+                        up_limit = EXCLUDED.up_limit,
+                        down_limit = EXCLUDED.down_limit,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+                await db.execute(query, record)
+            await db.commit()
 
     async def _insert_adj_factor(self, df: pd.DataFrame):
-        """插入复权因子数据"""
-        await self._upsert_records(
-            df=df,
-            table_name="adj_factor",
-            conflict_columns=["ts_code", "trade_date"],
-            update_columns=["adj_factor"],
-            date_fields=["trade_date"]
-        )
+        """
+        插入复权因子数据
+
+        TODO: 创建 AdjFactorRepository 并使用 bulk_upsert 方法
+        """
+        from app.core.database import get_async_db
+        from sqlalchemy import text
+
+        async with get_async_db() as db:
+            records = df.to_dict('records')
+            for record in records:
+                if 'trade_date' in record and isinstance(record['trade_date'], str):
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
+
+                columns = list(record.keys())
+                placeholders = [f":{col}" for col in columns]
+
+                query = text(f"""
+                    INSERT INTO adj_factor ({', '.join(columns)})
+                    VALUES ({', '.join(placeholders)})
+                    ON CONFLICT (ts_code, trade_date) DO UPDATE SET
+                        adj_factor = EXCLUDED.adj_factor,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+                await db.execute(query, record)
+            await db.commit()
 
     async def _insert_block_trade(self, df: pd.DataFrame):
-        """插入大宗交易数据"""
+        """
+        插入大宗交易数据
+
+        TODO: 创建 BlockTradeRepository 并使用 bulk_insert 方法
+        """
+        from app.core.database import get_async_db
+        from sqlalchemy import text
+
         async with get_async_db() as db:
             records = df.to_dict('records')
 
             for record in records:
                 # 转换日期字符串为日期对象
                 if 'trade_date' in record and isinstance(record['trade_date'], str):
-                    record['trade_date'] = self._convert_date_string_to_date(record['trade_date'])
+                    record['trade_date'] = datetime.strptime(record['trade_date'], '%Y%m%d').date()
 
                 # 大宗交易数据不使用UPSERT,直接插入
                 query = text("""
@@ -786,7 +752,14 @@ class ExtendedDataSyncService:
             await db.commit()
 
     async def _insert_suspend(self, df: pd.DataFrame):
-        """插入停复牌信息"""
+        """
+        插入停复牌信息
+
+        TODO: 创建 SuspendRepository 并使用 bulk_insert 方法
+        """
+        from app.core.database import get_async_db
+        from sqlalchemy import text
+
         async with get_async_db() as db:
             records = df.to_dict('records')
 
@@ -795,7 +768,7 @@ class ExtendedDataSyncService:
                 date_fields = ['suspend_date', 'resume_date', 'ann_date']
                 for field in date_fields:
                     if field in record and isinstance(record[field], str) and record[field]:
-                        record[field] = self._convert_date_string_to_date(record[field])
+                        record[field] = datetime.strptime(record[field], '%Y%m%d').date()
 
                 # 停复牌信息不使用UPSERT,直接插入
                 query = text("""

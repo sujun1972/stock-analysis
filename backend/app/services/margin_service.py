@@ -7,21 +7,21 @@
 """
 
 import asyncio
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
 from loguru import logger
 
-from src.database.db_manager import DatabaseManager
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
+from app.repositories import MarginRepository
 
 
 class MarginService:
     """融资融券交易汇总服务"""
 
     def __init__(self):
-        self.db_manager = DatabaseManager()
+        self.margin_repo = MarginRepository()
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
@@ -146,58 +146,9 @@ class MarginService:
         if len(df) == 0:
             return 0
 
-        # 构建SQL语句（使用标准SQL占位符）
-        insert_query = """
-            INSERT INTO margin (
-                trade_date, exchange_id, rzye, rzmre, rzche, rqye, rqmcl, rzrqye, rqyl, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (trade_date, exchange_id)
-            DO UPDATE SET
-                rzye = EXCLUDED.rzye,
-                rzmre = EXCLUDED.rzmre,
-                rzche = EXCLUDED.rzche,
-                rqye = EXCLUDED.rqye,
-                rqmcl = EXCLUDED.rqmcl,
-                rzrqye = EXCLUDED.rzrqye,
-                rqyl = EXCLUDED.rqyl,
-                updated_at = CURRENT_TIMESTAMP
-        """
-
-        # 准备数据
-        values = []
-        for _, row in df.iterrows():
-            values.append((
-                str(row['trade_date']),
-                str(row['exchange_id']),
-                float(row['rzye']) if pd.notna(row['rzye']) else None,
-                float(row['rzmre']) if pd.notna(row['rzmre']) else None,
-                float(row['rzche']) if pd.notna(row['rzche']) else None,
-                float(row['rqye']) if pd.notna(row['rqye']) else None,
-                float(row['rqmcl']) if pd.notna(row['rqmcl']) else None,
-                float(row['rzrqye']) if pd.notna(row['rzrqye']) else None,
-                float(row['rqyl']) if pd.notna(row['rqyl']) else None,
-                datetime.now()
-            ))
-
-        # 执行批量插入（使用 get_connection + executemany 模式）
-        def _batch_insert():
-            conn = self.db_manager.get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.executemany(insert_query, values)
-                conn.commit()
-                cursor.close()
-                logger.info(f"成功批量插入 {len(values)} 条融资融券数据")
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"批量插入失败: {e}")
-                raise
-            finally:
-                self.db_manager.release_connection(conn)
-
-        await asyncio.to_thread(_batch_insert)
-
-        return len(values)
+        # 使用 Repository 批量插入
+        records = await asyncio.to_thread(self.margin_repo.bulk_upsert, df)
+        return records
 
     async def get_margin_data(
         self,
@@ -221,77 +172,30 @@ class MarginService:
             包含数据和统计信息的字典
         """
         try:
-            # 构建查询条件
-            conditions = []
-            params = []
+            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
+            start_date_fmt = start_date.replace('-', '') if start_date else None
+            end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            if start_date:
-                conditions.append("trade_date >= %s")
-                params.append(start_date.replace('-', ''))
-
-            if end_date:
-                conditions.append("trade_date <= %s")
-                params.append(end_date.replace('-', ''))
-
-            if exchange_id:
-                conditions.append("exchange_id = %s")
-                params.append(exchange_id)
-
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-            # 查询总数
-            count_query = f"SELECT COUNT(*) FROM margin WHERE {where_clause}"
-            total = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                count_query,
-                tuple(params)
-            )
-            total = total[0][0] if total else 0
-
-            # 查询数据
+            # 计算分页参数
             offset = (page - 1) * page_size
-            data_query = f"""
-                SELECT
-                    trade_date,
-                    exchange_id,
-                    rzye,
-                    rzmre,
-                    rzche,
-                    rqye,
-                    rqmcl,
-                    rzrqye,
-                    rqyl,
-                    created_at,
-                    updated_at
-                FROM margin
-                WHERE {where_clause}
-                ORDER BY trade_date DESC, exchange_id
-                LIMIT %s OFFSET %s
-            """
-            params.extend([page_size, offset])
 
-            rows = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                data_query,
-                tuple(params)
+            # 使用 Repository 查询数据
+            data = await asyncio.to_thread(
+                self.margin_repo.get_by_date_range,
+                start_date_fmt,
+                end_date_fmt,
+                exchange_id=exchange_id,
+                limit=page_size,
+                offset=offset
             )
 
-            # 转换为字典列表
-            data = []
-            for row in rows:
-                data.append({
-                    'trade_date': row[0],
-                    'exchange_id': row[1],
-                    'rzye': float(row[2]) if row[2] is not None else None,
-                    'rzmre': float(row[3]) if row[3] is not None else None,
-                    'rzche': float(row[4]) if row[4] is not None else None,
-                    'rqye': float(row[5]) if row[5] is not None else None,
-                    'rqmcl': float(row[6]) if row[6] is not None else None,
-                    'rzrqye': float(row[7]) if row[7] is not None else None,
-                    'rqyl': float(row[8]) if row[8] is not None else None,
-                    'created_at': row[9].isoformat() if row[9] else None,
-                    'updated_at': row[10].isoformat() if row[10] else None
-                })
+            # 获取总数
+            total = await asyncio.to_thread(
+                self.margin_repo.get_record_count,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt,
+                exchange_id=exchange_id
+            )
 
             return {
                 "data": data,
@@ -320,52 +224,18 @@ class MarginService:
             统计数据字典
         """
         try:
-            # 构建查询条件
-            conditions = []
-            params = []
+            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
+            start_date_fmt = start_date.replace('-', '') if start_date else None
+            end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            if start_date:
-                conditions.append("trade_date >= %s")
-                params.append(start_date.replace('-', ''))
-
-            if end_date:
-                conditions.append("trade_date <= %s")
-                params.append(end_date.replace('-', ''))
-
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-            # 统计查询
-            stats_query = f"""
-                SELECT
-                    AVG(rzrqye) as avg_rzrqye,
-                    SUM(rzrqye) as total_rzrqye,
-                    MAX(rzye) as max_rzye,
-                    MAX(rqye) as max_rqye
-                FROM margin
-                WHERE {where_clause}
-            """
-
-            result = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                stats_query,
-                tuple(params)
+            # 使用 Repository 获取统计数据
+            stats = await asyncio.to_thread(
+                self.margin_repo.get_statistics,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt
             )
 
-            if result and result[0]:
-                row = result[0]
-                return {
-                    "avg_rzrqye": float(row[0]) if row[0] is not None else 0,
-                    "total_rzrqye": float(row[1]) if row[1] is not None else 0,
-                    "max_rzye": float(row[2]) if row[2] is not None else 0,
-                    "max_rqye": float(row[3]) if row[3] is not None else 0
-                }
-            else:
-                return {
-                    "avg_rzrqye": 0,
-                    "total_rzrqye": 0,
-                    "max_rzye": 0,
-                    "max_rqye": 0
-                }
+            return stats
 
         except Exception as e:
             logger.error(f"获取融资融券统计数据失败: {str(e)}")

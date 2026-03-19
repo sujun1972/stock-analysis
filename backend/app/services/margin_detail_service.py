@@ -13,16 +13,16 @@ from datetime import datetime, timedelta
 import pandas as pd
 from loguru import logger
 
-from src.database.db_manager import DatabaseManager
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
+from app.repositories import MarginDetailRepository
 
 
 class MarginDetailService:
     """融资融券交易明细服务"""
 
     def __init__(self):
-        self.db_manager = DatabaseManager()
+        self.margin_detail_repo = MarginDetailRepository()
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
@@ -111,21 +111,13 @@ class MarginDetailService:
             交易日期 YYYYMMDD
         """
         try:
-            # 从数据库获取最近一个有数据的交易日
-            query = """
-                SELECT DISTINCT trade_date
-                FROM stock_daily
-                ORDER BY trade_date DESC
-                LIMIT 1
-            """
-            result = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                query,
-                ()
+            # 使用 Repository 获取最近交易日
+            latest_date = await asyncio.to_thread(
+                self.margin_detail_repo.get_latest_trade_date
             )
 
-            if result and result[0]:
-                return result[0][0]
+            if latest_date:
+                return latest_date
             else:
                 # 如果没有数据，返回前一天
                 return (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
@@ -179,63 +171,9 @@ class MarginDetailService:
         if len(df) == 0:
             return 0
 
-        # 构建SQL语句（使用标准SQL占位符）
-        insert_query = """
-            INSERT INTO margin_detail (
-                trade_date, ts_code, name, rzye, rqye, rzmre, rqyl,
-                rzche, rqchl, rqmcl, rzrqye, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (trade_date, ts_code)
-            DO UPDATE SET
-                name = EXCLUDED.name,
-                rzye = EXCLUDED.rzye,
-                rqye = EXCLUDED.rqye,
-                rzmre = EXCLUDED.rzmre,
-                rqyl = EXCLUDED.rqyl,
-                rzche = EXCLUDED.rzche,
-                rqchl = EXCLUDED.rqchl,
-                rqmcl = EXCLUDED.rqmcl,
-                rzrqye = EXCLUDED.rzrqye,
-                updated_at = CURRENT_TIMESTAMP
-        """
-
-        # 准备数据
-        values = []
-        for _, row in df.iterrows():
-            values.append((
-                str(row['trade_date']),
-                str(row['ts_code']),
-                str(row['name']) if pd.notna(row.get('name')) else None,
-                float(row['rzye']) if pd.notna(row['rzye']) else None,
-                float(row['rqye']) if pd.notna(row['rqye']) else None,
-                float(row['rzmre']) if pd.notna(row['rzmre']) else None,
-                float(row['rqyl']) if pd.notna(row['rqyl']) else None,
-                float(row['rzche']) if pd.notna(row['rzche']) else None,
-                float(row['rqchl']) if pd.notna(row['rqchl']) else None,
-                float(row['rqmcl']) if pd.notna(row['rqmcl']) else None,
-                float(row['rzrqye']) if pd.notna(row['rzrqye']) else None,
-                datetime.now()
-            ))
-
-        # 执行批量插入（使用 get_connection + executemany 模式）
-        def _batch_insert():
-            conn = self.db_manager.get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.executemany(insert_query, values)
-                conn.commit()
-                cursor.close()
-                logger.info(f"成功批量插入 {len(values)} 条融资融券明细数据")
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"批量插入失败: {e}")
-                raise
-            finally:
-                self.db_manager.release_connection(conn)
-
-        await asyncio.to_thread(_batch_insert)
-
-        return len(values)
+        # 使用 Repository 批量插入
+        records = await asyncio.to_thread(self.margin_detail_repo.bulk_upsert, df)
+        return records
 
     async def get_margin_detail_data(
         self,
@@ -259,92 +197,30 @@ class MarginDetailService:
             包含数据和统计信息的字典
         """
         try:
-            # 构建查询条件
-            conditions = []
-            params = []
+            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
+            start_date_fmt = start_date.replace('-', '') if start_date else None
+            end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            if start_date:
-                # 兼容 date 类型和 varchar 类型
-                conditions.append("(trade_date >= %s::date OR trade_date::text >= %s)")
-                params.append(start_date)
-                params.append(start_date.replace('-', ''))
-
-            if end_date:
-                # 兼容 date 类型和 varchar 类型
-                conditions.append("(trade_date <= %s::date OR trade_date::text <= %s)")
-                params.append(end_date)
-                params.append(end_date.replace('-', ''))
-
-            if ts_code:
-                conditions.append("ts_code = %s")
-                params.append(ts_code)
-
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-            # 查询总数
-            count_query = f"SELECT COUNT(*) FROM margin_detail WHERE {where_clause}"
-            total = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                count_query,
-                tuple(params)
-            )
-            total = total[0][0] if total else 0
-
-            # 查询数据
+            # 计算分页参数
             offset = (page - 1) * page_size
-            data_query = f"""
-                SELECT
-                    trade_date,
-                    ts_code,
-                    name,
-                    rzye,
-                    rqye,
-                    rzmre,
-                    rqyl,
-                    rzche,
-                    rqchl,
-                    rqmcl,
-                    rzrqye,
-                    created_at,
-                    updated_at
-                FROM margin_detail
-                WHERE {where_clause}
-                ORDER BY trade_date DESC, rzrqye DESC NULLS LAST
-                LIMIT %s OFFSET %s
-            """
-            params.extend([page_size, offset])
 
-            rows = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                data_query,
-                tuple(params)
+            # 使用 Repository 查询数据
+            data = await asyncio.to_thread(
+                self.margin_detail_repo.get_by_date_range,
+                start_date_fmt,
+                end_date_fmt,
+                ts_code=ts_code,
+                limit=page_size,
+                offset=offset
             )
 
-            # 转换为字典列表
-            data = []
-            for row in rows:
-                # 处理 trade_date：可能是 date 对象或字符串
-                trade_date_value = row[0]
-                if hasattr(trade_date_value, 'strftime'):
-                    trade_date_str = trade_date_value.strftime('%Y%m%d')
-                else:
-                    trade_date_str = str(trade_date_value)
-
-                data.append({
-                    'trade_date': trade_date_str,
-                    'ts_code': row[1],
-                    'name': row[2],
-                    'rzye': float(row[3]) if row[3] is not None else None,
-                    'rqye': float(row[4]) if row[4] is not None else None,
-                    'rzmre': float(row[5]) if row[5] is not None else None,
-                    'rqyl': float(row[6]) if row[6] is not None else None,
-                    'rzche': float(row[7]) if row[7] is not None else None,
-                    'rqchl': float(row[8]) if row[8] is not None else None,
-                    'rqmcl': float(row[9]) if row[9] is not None else None,
-                    'rzrqye': float(row[10]) if row[10] is not None else None,
-                    'created_at': row[11].isoformat() if row[11] else None,
-                    'updated_at': row[12].isoformat() if row[12] else None
-                })
+            # 获取总数
+            total = await asyncio.to_thread(
+                self.margin_detail_repo.get_record_count,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt,
+                ts_code=ts_code
+            )
 
             return {
                 "data": data,
@@ -373,56 +249,18 @@ class MarginDetailService:
             统计数据字典
         """
         try:
-            # 构建查询条件
-            conditions = []
-            params = []
+            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
+            start_date_fmt = start_date.replace('-', '') if start_date else None
+            end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            if start_date:
-                # 兼容 date 类型和 varchar 类型
-                conditions.append("(trade_date >= %s::date OR trade_date::text >= %s)")
-                params.append(start_date)
-                params.append(start_date.replace('-', ''))
-
-            if end_date:
-                # 兼容 date 类型和 varchar 类型
-                conditions.append("(trade_date <= %s::date OR trade_date::text <= %s)")
-                params.append(end_date)
-                params.append(end_date.replace('-', ''))
-
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-            # 统计查询
-            stats_query = f"""
-                SELECT
-                    AVG(rzrqye) as avg_rzrqye,
-                    SUM(rzrqye) as total_rzrqye,
-                    MAX(rzrqye) as max_rzrqye,
-                    COUNT(DISTINCT ts_code) as stock_count
-                FROM margin_detail
-                WHERE {where_clause}
-            """
-
-            result = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                stats_query,
-                tuple(params)
+            # 使用 Repository 获取统计数据
+            stats = await asyncio.to_thread(
+                self.margin_detail_repo.get_statistics,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt
             )
 
-            if result and result[0]:
-                row = result[0]
-                return {
-                    "avg_rzrqye": float(row[0]) if row[0] is not None else 0,
-                    "total_rzrqye": float(row[1]) if row[1] is not None else 0,
-                    "max_rzrqye": float(row[2]) if row[2] is not None else 0,
-                    "stock_count": int(row[3]) if row[3] is not None else 0
-                }
-            else:
-                return {
-                    "avg_rzrqye": 0,
-                    "total_rzrqye": 0,
-                    "max_rzrqye": 0,
-                    "stock_count": 0
-                }
+            return stats
 
         except Exception as e:
             logger.error(f"获取融资融券明细统计数据失败: {str(e)}")
@@ -446,60 +284,23 @@ class MarginDetailService:
         try:
             # 如果未指定日期，获取最新交易日
             if not trade_date:
-                latest_query = """
-                    SELECT DISTINCT trade_date
-                    FROM margin_detail
-                    ORDER BY trade_date DESC
-                    LIMIT 1
-                """
-                result = await asyncio.to_thread(
-                    self.db_manager._execute_query,
-                    latest_query,
-                    ()
+                latest_date = await asyncio.to_thread(
+                    self.margin_detail_repo.get_latest_trade_date
                 )
-                trade_date = result[0][0] if result and result[0] else None
+                trade_date = latest_date
 
             if not trade_date:
                 return []
 
-            # 格式化日期（处理字符串和日期对象）
-            if isinstance(trade_date, str):
-                trade_date_formatted = trade_date.replace('-', '')
-            else:
-                # 如果是日期对象，转换为YYYYMMDD格式
-                trade_date_formatted = trade_date.strftime('%Y%m%d') if hasattr(trade_date, 'strftime') else str(trade_date)
+            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
+            trade_date_formatted = trade_date.replace('-', '') if '-' in trade_date else trade_date
 
-            # 查询TOP股票
-            # 注意：trade_date 列类型可能是 date 或 varchar，需要兼容处理
-            query = """
-                SELECT
-                    ts_code,
-                    name,
-                    rzrqye,
-                    rzye,
-                    rqye
-                FROM margin_detail
-                WHERE trade_date::text = %s OR trade_date = %s::date
-                ORDER BY rzrqye DESC NULLS LAST
-                LIMIT %s
-            """
-
-            rows = await asyncio.to_thread(
-                self.db_manager._execute_query,
-                query,
-                (trade_date_formatted, trade_date_formatted, limit)
+            # 使用 Repository 查询 TOP 股票
+            top_stocks = await asyncio.to_thread(
+                self.margin_detail_repo.get_top_by_rzrqye,
+                trade_date=trade_date_formatted,
+                limit=limit
             )
-
-            # 转换为字典列表
-            top_stocks = []
-            for row in rows:
-                top_stocks.append({
-                    'ts_code': row[0],
-                    'name': row[1],
-                    'rzrqye': float(row[2]) if row[2] is not None else 0,
-                    'rzye': float(row[3]) if row[3] is not None else 0,
-                    'rqye': float(row[4]) if row[4] is not None else 0
-                })
 
             return top_stocks
 
