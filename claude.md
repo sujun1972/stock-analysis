@@ -277,6 +277,12 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
   - 优先使用 `@/components/ui/date-picker`（弹出式日历）
   - 避免使用HTML5原生 `<input type="date">`
   - 日期控件对齐：使用 `items-end` 让按钮与输入框底部对齐
+- **HTML 嵌套规范**（避免水合错误）：
+  - `<p>` 标签内不能包含块级元素（如 `<div>`）
+  - 需要在 `<p>` 内使用 flex 布局时，直接在 `<p>` 上添加 `flex` 类
+  - 错误示例：`<p><div className="flex">...</div></p>`
+  - 正确示例：`<p className="flex">...</p>`
+  - 适用于所有渲染为 `<p>` 的组件（如 `CardDescription`）
 
 ### 定时任务页面优化
 定时任务配置页面（`/settings/scheduler`）已优化任务名称显示：

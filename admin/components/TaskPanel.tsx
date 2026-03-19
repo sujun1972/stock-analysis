@@ -392,13 +392,11 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
                                 </span>
                               </div>
                               <CardTitle className="text-base truncate">{task.displayName}</CardTitle>
-                              <CardDescription className="text-xs mt-1">
-                                <div className="flex items-center gap-2">
-                                  <CalendarIcon className="h-3 w-3" />
-                                  <span>{formatTime(task.endTime || task.startTime)}</span>
-                                  <span className="text-muted-foreground">·</span>
-                                  <span>耗时 {formatDuration(task.startTime, task.endTime)}</span>
-                                </div>
+                              <CardDescription className="text-xs mt-1 flex items-center gap-2">
+                                <CalendarIcon className="h-3 w-3" />
+                                <span>{formatTime(task.endTime || task.startTime)}</span>
+                                <span className="text-muted-foreground">·</span>
+                                <span>耗时 {formatDuration(task.startTime, task.endTime)}</span>
                               </CardDescription>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
