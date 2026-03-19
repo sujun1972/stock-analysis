@@ -1362,6 +1362,129 @@ class ApiClient {
     return response.data
   }
 
+  // ========== 融资融券交易汇总API ==========
+
+  /**
+   * 获取融资融券交易汇总数据
+   */
+  async getMargin(params?: {
+    start_date?: string   // YYYY-MM-DD
+    end_date?: string     // YYYY-MM-DD
+    exchange_id?: string  // 交易所代码（SSE/SZSE/BSE）
+    page?: number
+    page_size?: number
+  }): Promise<ApiResponse<{
+    data: any[]
+    total: number
+    page: number
+    page_size: number
+  }>> {
+    const response = await axiosInstance.get('/api/margin', { params })
+    return response.data
+  }
+
+  /**
+   * 获取融资融券交易汇总统计数据
+   */
+  async getMarginStatistics(params?: {
+    start_date?: string   // YYYY-MM-DD
+    end_date?: string     // YYYY-MM-DD
+  }): Promise<ApiResponse<{
+    avg_rzrqye: number
+    total_rzrqye: number
+    max_rzye: number
+    max_rqye: number
+  }>> {
+    const response = await axiosInstance.get('/api/margin/statistics', { params })
+    return response.data
+  }
+
+  /**
+   * 异步同步融资融券交易汇总数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncMarginAsync(params?: {
+    trade_date?: string   // YYYY-MM-DD
+    start_date?: string   // YYYY-MM-DD
+    end_date?: string     // YYYY-MM-DD
+    exchange_id?: string  // 交易所代码（SSE/SZSE/BSE）
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/margin/sync-async', null, { params })
+    return response.data
+  }
+
+  // ========== 融资融券交易明细API ==========
+
+  /**
+   * 获取融资融券交易明细数据
+   */
+  async getMarginDetail(params: {
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+    ts_code?: string     // 股票代码
+    page?: number
+    page_size?: number
+  }): Promise<ApiResponse<{
+    data: any[]
+    total: number
+    page: number
+    page_size: number
+  }>> {
+    const response = await axiosInstance.get('/api/margin-detail', { params })
+    return response.data
+  }
+
+  /**
+   * 获取融资融券交易明细统计数据
+   */
+  async getMarginDetailStatistics(params?: {
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+  }): Promise<ApiResponse<{
+    avg_rzrqye: number
+    total_rzrqye: number
+    max_rzrqye: number
+    stock_count: number
+  }>> {
+    const response = await axiosInstance.get('/api/margin-detail/statistics', { params })
+    return response.data
+  }
+
+  /**
+   * 获取融资融券余额TOP股票
+   */
+  async getMarginDetailTopStocks(params?: {
+    trade_date?: string  // YYYY-MM-DD
+    limit?: number
+  }): Promise<ApiResponse<any[]>> {
+    const response = await axiosInstance.get('/api/margin-detail/top-stocks', { params })
+    return response.data
+  }
+
+  /**
+   * 异步同步融资融券交易明细数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncMarginDetailAsync(params?: {
+    trade_date?: string  // YYYY-MM-DD
+    ts_code?: string     // 股票代码
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/margin-detail/sync-async', null, { params })
+    return response.data
+  }
+
   // ========== 板块资金流向API ==========
 
   /**

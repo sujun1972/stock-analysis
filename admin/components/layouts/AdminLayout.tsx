@@ -46,7 +46,8 @@ import {
   TrendingUp as TrendingUpIcon,
   Wrench,
   DollarSign,
-  BarChart3
+  BarChart3,
+  Wallet
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -195,6 +196,22 @@ const navItems: NavItem[] = [
     ]
   },
   {
+    name: '两融数据',
+    icon: Wallet,
+    children: [
+      {
+        name: '融资融券交易汇总',
+        href: '/data/margin',
+        icon: BarChart3
+      },
+      {
+        name: '融资融券交易明细',
+        href: '/data/margin-detail',
+        icon: FileText
+      }
+    ]
+  },
+  {
     name: '数据中心',
     icon: Database,
     children: [
@@ -320,17 +337,24 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   /**
    * 判断菜单项是否处于激活状态
    * 对于有子菜单的项，检查子菜单是否有激活项
+   *
+   * 改进：避免短路径匹配长路径的问题（如 /data/margin 匹配 /data/margin-detail）
    */
   const isActive = (item: NavItem) => {
     if (item.href) {
       if (item.href === '/') {
         return pathname === '/'
       }
-      return pathname.startsWith(item.href)
+      // 精确匹配或者匹配后面跟着 / 的路径
+      return pathname === item.href || pathname.startsWith(item.href + '/')
     }
     // 如果有子菜单，检查子菜单是否有激活项
     if (item.children) {
-      return item.children.some(child => child.href && pathname.startsWith(child.href))
+      return item.children.some(child => {
+        if (!child.href) return false
+        if (child.href === '/') return pathname === '/'
+        return pathname === child.href || pathname.startsWith(child.href + '/')
+      })
     }
     return false
   }
@@ -453,7 +477,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       <div className="py-1">
                         {item.children.map((child) => {
                           const ChildIcon = child.icon
-                          const childActive = child.href && pathname.startsWith(child.href)
+                          const childActive = child.href && (pathname === child.href || pathname.startsWith(child.href + '/'))
                           return (
                             <Link
                               key={child.href}
@@ -480,7 +504,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     <div className="mt-1 ml-4 space-y-1">
                       {item.children.map((child) => {
                         const ChildIcon = child.icon
-                        const childActive = child.href && pathname.startsWith(child.href)
+                        const childActive = child.href && (pathname === child.href || pathname.startsWith(child.href + '/'))
                         return (
                           <Link
                             key={child.href}
@@ -507,7 +531,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     <div className="md:hidden mt-1 ml-4 space-y-1">
                       {item.children.map((child) => {
                         const ChildIcon = child.icon
-                        const childActive = child.href && pathname.startsWith(child.href)
+                        const childActive = child.href && (pathname === child.href || pathname.startsWith(child.href + '/'))
                         return (
                           <Link
                             key={child.href}

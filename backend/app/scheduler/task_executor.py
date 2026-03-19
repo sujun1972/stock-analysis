@@ -114,12 +114,26 @@ class TaskExecutor:
             'category': '扩展数据',
             'display_order': 350
         },
+        'tasks.sync_margin': {
+            'task': 'tasks.sync_margin',
+            'name': '融资融券交易汇总',
+            'description': '同步交易所融资融券交易汇总数据（按交易所统计）',
+            'category': '两融及转融通',
+            'display_order': 510
+        },
+        'tasks.sync_margin_detail': {
+            'task': 'tasks.sync_margin_detail',
+            'name': '融资融券交易明细',
+            'description': '同步个股融资融券交易明细数据（2000积分/次，单次最大6000行）',
+            'category': '两融及转融通',
+            'display_order': 515
+        },
         'extended.sync_margin': {
             'task': 'extended.sync_margin',
-            'name': '融资融券同步',
-            'description': '同步两融余额和明细数据',
-            'category': '扩展数据',
-            'display_order': 360
+            'name': '融资融券明细（个股-旧版）',
+            'description': '同步个股融资融券余额和明细数据（已废弃，建议使用新版）',
+            'category': '两融及转融通',
+            'display_order': 520
         },
         'extended.sync_stk_limit': {
             'task': 'extended.sync_stk_limit',

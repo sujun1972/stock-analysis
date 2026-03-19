@@ -476,9 +476,242 @@ useEffect(() => {
 
 ---
 
-## 四、移动端响应式设计
+## 四、DataTable 组件正确使用方法
 
-### 4.1 移动端卡片视图
+### 4.1 列定义规范
+
+**正确的列定义格式**：
+
+```typescript
+import { Column } from '@/components/common/DataTable'
+
+const columns: Column<DataType>[] = useMemo(() => [
+  {
+    key: 'field_name',           // 字段唯一标识
+    header: '列头显示文字',       // ⚠️ 使用 header 而不是 label
+    accessor: (row) => row.value  // 访问器函数（返回显示内容）
+  },
+  {
+    key: 'date_field',
+    header: '日期',               // 可以是字符串
+    accessor: (row) => formatDate(row.date)
+  },
+  {
+    key: 'exchange',
+    header: (                     // 也可以是 ReactNode（响应式列头）
+      <>
+        <span className="sm:hidden">交</span>
+        <span className="hidden sm:inline">交易所</span>
+      </>
+    ),
+    accessor: (row) => row.exchange_id
+  }
+], [])
+```
+
+**❌ 错误示例**：
+```typescript
+// 错误：使用了 label 而不是 header
+const columns: Column<DataType>[] = [
+  {
+    key: 'field_name',
+    label: '列头',  // ❌ 错误！应该使用 header
+    accessor: (row) => row.value
+  }
+]
+```
+
+### 4.2 DataTable 使用规范
+
+**正确的 DataTable 属性传递**：
+
+```typescript
+<DataTable
+  columns={columns}                // ✅ 列定义
+  data={data}                      // ✅ 数据数组
+  loading={loading}                // ✅ 加载状态
+  error={error}                    // ✅ 错误信息
+  emptyMessage="暂无数据"          // ✅ 空数据提示
+  pagination={{                    // ✅ 分页对象（重要！）
+    page,                          // 当前页码
+    pageSize,                      // 每页大小
+    total,                         // 总记录数
+    onPageChange: (newPage) => {   // 页码变更回调
+      setPage(newPage)
+    },
+    onPageSizeChange: (newPageSize) => {  // 每页大小变更回调
+      setPageSize(newPageSize)
+      setPage(1)  // 重置到第一页
+    },
+    pageSizeOptions: [10, 20, 30, 50, 100]  // 可选的每页大小
+  }}
+/>
+```
+
+**❌ 错误示例**：
+```typescript
+// 错误：将分页参数直接作为独立属性传递
+<DataTable
+  columns={columns}
+  data={data}
+  loading={loading}
+  error={error}
+  page={page}              // ❌ 错误！
+  pageSize={pageSize}      // ❌ 错误！
+  total={total}            // ❌ 错误！
+  onPageChange={setPage}   // ❌ 错误！
+/>
+```
+
+### 4.3 完整的表格布局结构
+
+**推荐的响应式表格结构**：
+
+```typescript
+{/* 数据表格 */}
+<Card className="p-0 sm:p-0 overflow-hidden">
+  {/* 移动端视图（在前） */}
+  <div className="sm:hidden">
+    <div className="px-4 py-3 border-b bg-muted/50">
+      <h3 className="text-sm font-medium">数据列表</h3>
+    </div>
+    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+      {!loading && !error && data.map((item, index) => (
+        <div
+          key={index}
+          className={`p-4 transition-colors ${
+            index % 2 === 0
+              ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20'
+              : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20'
+          }`}
+        >
+          {mobileCard(item)}
+        </div>
+      ))}
+    </div>
+
+    {/* 移动端状态显示 */}
+    {loading && (
+      <div className="p-8 text-center">
+        <div className="flex flex-col items-center justify-center gap-2">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <span className="text-sm text-muted-foreground">加载中...</span>
+        </div>
+      </div>
+    )}
+    {error && (
+      <div className="p-8 text-center">
+        <p className="text-sm text-destructive">{error}</p>
+      </div>
+    )}
+    {!loading && !error && data.length === 0 && (
+      <div className="p-8 text-center">
+        <p className="text-sm text-muted-foreground">暂无数据</p>
+      </div>
+    )}
+
+    {/* 移动端分页 */}
+    {!loading && !error && data.length > 0 && (
+      <div className="p-4 border-t bg-muted/30">
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(Math.max(1, page - 1))}
+            disabled={page === 1}
+          >
+            上一页
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            第 {page} / {Math.ceil(total / pageSize)} 页
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
+            disabled={page >= Math.ceil(total / pageSize)}
+          >
+            下一页
+          </Button>
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* 桌面端表格视图（在后） */}
+  <div className="hidden sm:block">
+    <DataTable
+      columns={columns}
+      data={data}
+      loading={loading}
+      error={error}
+      emptyMessage="暂无数据"
+      pagination={{
+        page,
+        pageSize,
+        total,
+        onPageChange: (newPage) => {
+          setPage(newPage)
+        },
+        onPageSizeChange: (newPageSize) => {
+          setPageSize(newPageSize)
+          setPage(1)
+        },
+        pageSizeOptions: [10, 20, 30, 50, 100]
+      }}
+    />
+  </div>
+</Card>
+```
+
+**关键点**：
+- ✅ Card 使用 `className="p-0 sm:p-0 overflow-hidden"`
+- ✅ 移动端视图在前，桌面端在后
+- ✅ 移动端需要独立的加载、错误、空数据状态显示
+- ✅ 移动端需要独立的分页控件
+- ✅ 桌面端使用 DataTable 组件的 pagination 对象
+
+### 4.4 DataTable 接口定义参考
+
+```typescript
+export interface Column<T> {
+  key: string                      // 列唯一标识
+  header: string | ReactNode       // 列头（支持响应式）
+  accessor?: (item: T) => ReactNode  // 访问器函数
+  sortable?: boolean               // 是否可排序
+  className?: string               // 列样式
+  headerClassName?: string         // 列头样式
+  cellClassName?: string           // 单元格样式
+  width?: string | number          // 列宽
+  align?: 'left' | 'center' | 'right'  // 对齐方式
+  hideOnMobile?: boolean          // 移动端隐藏
+}
+
+export interface PaginationConfig {
+  page: number                     // 当前页码
+  pageSize: number                 // 每页大小
+  total: number                    // 总记录数
+  onPageChange: (page: number) => void         // 页码变更回调
+  onPageSizeChange?: (pageSize: number) => void  // 每页大小变更回调
+  pageSizeOptions?: number[]       // 可选的每页大小选项
+}
+
+export interface DataTableProps<T> {
+  data: T[]                        // 数据数组
+  columns: Column<T>[]             // 列定义
+  loading?: boolean                // 加载状态
+  error?: string | null            // 错误信息
+  emptyMessage?: string | ReactNode  // 空数据提示
+  pagination?: PaginationConfig    // 分页配置（可选）
+  // ... 其他属性
+}
+```
+
+---
+
+## 五、移动端响应式设计
+
+### 5.1 移动端卡片视图
 
 参考沪深港通页面的最佳实践：
 
@@ -638,9 +871,15 @@ CREATE TABLE {resource} (
 - [ ] 注册任务完成回调
 - [ ] 调用 `triggerPoll()` 触发轮询
 - [ ] 实现组件卸载清理
+- [ ] **DataTable 组件正确配置**：
+  - [ ] 列定义使用 `header` 而不是 `label`
+  - [ ] 传递 `pagination` 对象（包含 page, pageSize, total, onPageChange, onPageSizeChange）
+  - [ ] 添加 `emptyMessage` 属性
 - [ ] 实现移动端卡片视图（斑马纹 + 淡蓝色交互）
+- [ ] 添加移动端独立的加载、错误、空数据状态显示
 - [ ] 添加移动端分页控件
 - [ ] 添加同步按钮UI（loading状态）
+- [ ] Card容器使用 `className="p-0 sm:p-0 overflow-hidden"`
 
 ### 测试
 - [ ] 测试异步同步功能（点击按钮后任务正常提交）
@@ -710,5 +949,120 @@ CREATE TABLE {resource} (
 
 ---
 
-**最后更新**: 2026-03-18
-**版本**: 1.0.0
+## 十一、常见错误及解决方案
+
+### 错误 1: DataTable 列头不显示
+
+**症状**：表格列头显示为空白或显示不正确
+
+**原因**：列定义使用了错误的属性名 `label` 而不是 `header`
+
+**解决方案**：
+```typescript
+// ❌ 错误
+const columns: Column<DataType>[] = [
+  { key: 'name', label: '名称', accessor: (row) => row.name }
+]
+
+// ✅ 正确
+const columns: Column<DataType>[] = [
+  { key: 'name', header: '名称', accessor: (row) => row.name }
+]
+```
+
+### 错误 2: DataTable 分页控件不显示
+
+**症状**：表格底部没有分页控件
+
+**原因**：将分页参数作为独立属性传递，而不是传递 `pagination` 对象
+
+**解决方案**：
+```typescript
+// ❌ 错误
+<DataTable
+  columns={columns}
+  data={data}
+  page={page}
+  pageSize={pageSize}
+  total={total}
+  onPageChange={setPage}
+/>
+
+// ✅ 正确
+<DataTable
+  columns={columns}
+  data={data}
+  pagination={{
+    page,
+    pageSize,
+    total,
+    onPageChange: (newPage) => setPage(newPage),
+    onPageSizeChange: (newPageSize) => {
+      setPageSize(newPageSize)
+      setPage(1)
+    },
+    pageSizeOptions: [10, 20, 30, 50, 100]
+  }}
+/>
+```
+
+### 错误 3: 批量插入数据库失败
+
+**症状**：`'DatabaseManager' object has no attribute '_execute_values'`
+
+**原因**：使用了不存在的 `_execute_values` 方法
+
+**解决方案**：
+```python
+# ❌ 错误
+await asyncio.to_thread(
+    self.db_manager._execute_values,
+    insert_query,
+    values
+)
+
+# ✅ 正确
+def _batch_insert():
+    conn = self.db_manager.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.executemany(insert_query, values)
+        conn.commit()
+        cursor.close()
+    except Exception as e:
+        conn.rollback()
+        raise
+    finally:
+        self.db_manager.release_connection(conn)
+
+await asyncio.to_thread(_batch_insert)
+```
+
+### 错误 4: Select 组件空值错误
+
+**症状**：`A <Select.Item /> must have a value prop that is not an empty string`
+
+**原因**：Select 组件不接受空字符串作为 value
+
+**解决方案**：
+```typescript
+// ❌ 错误
+<Select value={exchangeId} onValueChange={setExchangeId}>
+  <SelectItem value="">全部</SelectItem>
+  <SelectItem value="SSE">上交所</SelectItem>
+</Select>
+
+// ✅ 正确
+<Select
+  value={exchangeId || 'ALL'}
+  onValueChange={(value) => setExchangeId(value === 'ALL' ? '' : value)}
+>
+  <SelectItem value="ALL">全部</SelectItem>
+  <SelectItem value="SSE">上交所</SelectItem>
+</Select>
+```
+
+---
+
+**最后更新**: 2026-03-19
+**版本**: 1.1.0

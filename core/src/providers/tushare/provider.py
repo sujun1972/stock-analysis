@@ -950,12 +950,52 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取复权因子数据失败: {e}")
             raise TushareDataError(f"获取复权因子数据失败: {str(e)}")
 
+    def get_margin(self,
+                   trade_date: Optional[str] = None,
+                   start_date: Optional[str] = None,
+                   end_date: Optional[str] = None,
+                   exchange_id: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取融资融券交易汇总数据
+        积分消耗：2000分
+        单次请求最大返回4000行数据
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            exchange_id: 交易所代码（SSE上交所/SZSE深交所/BSE北交所）
+
+        Returns:
+            pd.DataFrame: 融资融券交易汇总数据，包含以下字段：
+                - trade_date: 交易日期
+                - exchange_id: 交易所代码
+                - rzye: 融资余额(元)
+                - rzmre: 融资买入额(元)
+                - rzche: 融资偿还额(元)
+                - rqye: 融券余额(元)
+                - rqmcl: 融券卖出量(股,份,手)
+                - rzrqye: 融资融券余额(元)
+                - rqyl: 融券余量(股,份,手)
+        """
+        try:
+            logger.info(f"获取融资融券交易汇总: trade_date={trade_date}, exchange_id={exchange_id}")
+            df = self.api_client.query('margin',
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date,
+                                     exchange_id=exchange_id)
+            return df
+        except Exception as e:
+            logger.error(f"获取融资融券交易汇总失败: {e}")
+            raise TushareDataError(f"获取融资融券交易汇总失败: {str(e)}")
+
     def get_margin_detail(self, ts_code: Optional[str] = None,
                          trade_date: Optional[str] = None,
                          start_date: Optional[str] = None,
                          end_date: Optional[str] = None) -> pd.DataFrame:
         """
-        获取融资融券详细数据
+        获取融资融券详细数据（个股）
         积分消耗：300分
 
         Args:
