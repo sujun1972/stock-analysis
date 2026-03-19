@@ -447,6 +447,125 @@ docker-compose down
 - **性能优化器**: `/backend/app/services/performance_optimizer.py`
 - **缓存服务**: `/backend/app/services/cache_service.py`
 - **数据质量服务**: `/backend/app/services/data_quality_service.py`
+- **回测编排服务**: `/backend/app/services/backtest_orchestration_service.py`
+
+## Backend 架构规范
+
+### 分层架构
+
+Backend 项目采用清晰的三层架构，确保代码的可维护性和可测试性：
+
+```
+┌─────────────────────────────────────────┐
+│  API Layer (endpoints/)                 │
+│  - 路由定义                              │
+│  - 参数验证 (Pydantic)                   │
+│  - 错误处理                              │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Schema Layer (schemas/)                │
+│  - Pydantic 模型定义                     │
+│  - 数据验证规则                          │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Service Layer (services/)              │
+│  - 业务逻辑编排                          │
+│  - 数据处理和转换                        │
+│  - 第三方服务调用                        │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Repository Layer (repositories/)       │
+│  - 数据库访问                            │
+│  - ORM 操作封装                          │
+└─────────────────────────────────────────┘
+```
+
+### 核心原则
+
+1. **单一职责**：每个层只负责自己的职责
+   - API 层：只处理 HTTP 请求/响应
+   - Schema 层：只定义数据模型和验证规则
+   - Service 层：只处理业务逻辑
+   - Repository 层：只处理数据持久化
+
+2. **依赖注入**：服务层通过构造函数注入依赖
+   ```python
+   class BacktestOrchestrationService:
+       def __init__(self):
+           self.data_adapter = DataAdapter()
+           self.strategy_repo = StrategyRepository()
+   ```
+
+3. **可测试性**：服务层可独立测试，无需启动 FastAPI
+   ```python
+   # 单元测试示例
+   service = BacktestOrchestrationService()
+   result = service.execute_backtest(params)
+   assert result['metrics']['sharpe_ratio'] > 1.0
+   ```
+
+### 回测模块架构示例
+
+以回测功能为例，展示如何应用分层架构：
+
+**Schema 层** (`/backend/app/schemas/backtest_schemas.py`):
+```python
+class BacktestExecutionParams(BaseModel):
+    """回测执行参数"""
+    strategy_id: int
+    stock_pool: List[str]
+    start_date: str
+    end_date: str
+    initial_capital: float = 1000000.0
+    # ... 其他参数
+```
+
+**Service 层** (`/backend/app/services/backtest_orchestration_service.py`):
+```python
+class BacktestOrchestrationService:
+    """回测编排服务 - 协调整个回测流程"""
+
+    def execute_backtest(self, params: BacktestExecutionParams) -> Dict:
+        # 1. 加载策略
+        strategy = self._load_strategy(params)
+        # 2. 加载数据
+        market_data = self._load_market_data(...)
+        # 3. 执行回测
+        result = self._run_backtest_engine(...)
+        # 4. 返回结果
+        return formatted_result
+```
+
+**API 层** (`/backend/app/api/endpoints/backtest.py`):
+```python
+@router.post("")
+async def run_backtest(params: BacktestExecutionParams):
+    # 1. 创建服务实例
+    service = BacktestOrchestrationService()
+    # 2. 调用服务层
+    result = service.execute_backtest(params)
+    # 3. 返回响应
+    return ApiResponse.success(data=result)
+```
+
+### 新增功能开发流程
+
+1. **定义 Schema**：在 `schemas/` 中定义请求/响应模型
+2. **实现 Service**：在 `services/` 中实现业务逻辑
+3. **添加 API**：在 `api/endpoints/` 中定义路由
+4. **编写测试**：在 `tests/` 中添加单元测试
+
+### 注意事项
+
+- ✅ API 层应保持简洁（一般不超过50行/端点）
+- ✅ 复杂业务逻辑应放在 Service 层
+- ✅ Service 层方法应拆分为小的私有方法
+- ✅ 使用 Pydantic 模型进行参数验证
+- ❌ 避免在 API 层直接访问数据库
+- ❌ 避免在 Service 层处理 HTTP 相关逻辑
 
 ## 开发提示
 
