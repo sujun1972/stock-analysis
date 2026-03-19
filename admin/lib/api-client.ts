@@ -1270,6 +1270,53 @@ class ApiClient {
     return response.data
   }
 
+  // ========== 板块资金流向API ==========
+
+  /**
+   * 获取板块资金流向数据
+   */
+  async getMoneyflowIndDc(params: {
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+    content_type?: string  // 数据类型(行业、概念、地域)
+    ts_code?: string     // 板块代码
+    limit?: number
+    offset?: number
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/moneyflow-ind-dc', { params })
+    return response.data
+  }
+
+  /**
+   * 异步同步板块资金流向数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncMoneyflowIndDcAsync(params?: {
+    trade_date?: string  // YYYY-MM-DD
+    start_date?: string  // YYYY-MM-DD
+    end_date?: string    // YYYY-MM-DD
+    content_type?: string  // 资金类型(行业、概念、地域)
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/moneyflow-ind-dc/sync-async', null, { params })
+    return response.data
+  }
+
+  /**
+   * 获取最新板块资金流向数据
+   */
+  async getLatestMoneyflowIndDc(params?: {
+    content_type?: string  // 数据类型(行业、概念、地域)
+    limit?: number
+  }): Promise<ApiResponse<any>> {
+    const response = await axiosInstance.get('/api/moneyflow-ind-dc/latest', { params })
+    return response.data
+  }
+
   // ========== 市场状态相关API ==========
 
   /**

@@ -1109,6 +1109,65 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取大盘资金流向失败: {e}")
             raise TushareDataError(f"获取大盘资金流向失败: {str(e)}")
 
+    def get_moneyflow_ind_dc(self,
+                             ts_code: Optional[str] = None,
+                             trade_date: Optional[str] = None,
+                             start_date: Optional[str] = None,
+                             end_date: Optional[str] = None,
+                             content_type: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取板块资金流向数据（东财概念及行业板块资金流向 DC）
+        积分消耗：6000分
+
+        Args:
+            ts_code: 代码
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            content_type: 资金类型(行业、概念、地域)
+
+        Returns:
+            pd.DataFrame: 板块资金流向数据，包含以下字段：
+                - trade_date: 交易日期
+                - content_type: 数据类型
+                - ts_code: DC板块代码（行业、概念、地域）
+                - name: 板块名称
+                - pct_change: 板块涨跌幅（%）
+                - close: 板块最新指数
+                - net_amount: 今日主力净流入净额（元）
+                - net_amount_rate: 今日主力净流入净占比%
+                - buy_elg_amount: 今日超大单净流入净额（元）
+                - buy_elg_amount_rate: 今日超大单净流入净占比%
+                - buy_lg_amount: 今日大单净流入净额（元）
+                - buy_lg_amount_rate: 今日大单净流入净占比%
+                - buy_md_amount: 今日中单净流入净额（元）
+                - buy_md_amount_rate: 今日中单净流入净占比%
+                - buy_sm_amount: 今日小单净流入净额（元）
+                - buy_sm_amount_rate: 今日小单净流入净占比%
+                - buy_sm_amount_stock: 今日主力净流入最大股
+                - rank: 序号
+        """
+        try:
+            logger.info(f"获取板块资金流向: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}, content_type={content_type}")
+
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if content_type:
+                params['content_type'] = content_type
+
+            df = self.api_client.query('moneyflow_ind_dc', **params)
+            return df
+        except Exception as e:
+            logger.error(f"获取板块资金流向失败: {e}")
+            raise TushareDataError(f"获取板块资金流向失败: {str(e)}")
+
     def get_stk_limit(self, ts_code: Optional[str] = None,
                      trade_date: Optional[str] = None,
                      start_date: Optional[str] = None,

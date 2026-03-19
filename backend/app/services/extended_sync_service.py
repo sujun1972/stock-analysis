@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, get_async_db
 from app.core.config import settings
 from loguru import logger
-# from app.services.base_service import BaseService
 from core.src.providers import DataProviderFactory
 from core.src.data.validators.extended_validator import ExtendedDataValidator
 from app.services.trading_calendar_service import trading_calendar_service
@@ -661,6 +660,87 @@ class ExtendedDataSyncService:
                 "error": str(e)
             }
 
+    async def sync_moneyflow_ind_dc(self,
+                                     ts_code: Optional[str] = None,
+                                     trade_date: Optional[str] = None,
+                                     start_date: Optional[str] = None,
+                                     end_date: Optional[str] = None,
+                                     content_type: Optional[str] = None) -> Dict[str, Any]:
+        """
+        同步板块资金流向数据（东财概念及行业板块资金流向 DC）
+
+        包含行业、概念、地域板块的资金流向数据，包括主力资金、超大单、大单、中单、小单的流入流出情况。
+        数据从Tushare获取，每天盘后更新。
+
+        Args:
+            ts_code: 代码
+            trade_date: 单个交易日期 (YYYYMMDD格式)
+            start_date: 开始日期 (YYYYMMDD格式)
+            end_date: 结束日期 (YYYYMMDD格式)
+            content_type: 资金类型(行业、概念、地域)
+
+        Returns:
+            同步结果，包含成功/失败状态和记录数
+
+        Note:
+            - 优先级：P2
+            - 调用频率：每日盘后
+            - 积分消耗：6000
+            - 单次最大可调取5000条数据
+        """
+        task_id = self._generate_task_id("moneyflow_ind_dc")
+
+        try:
+            logger.info(f"开始同步板块资金流向: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}, content_type={content_type}")
+
+            provider = self._get_provider()
+
+            # 如果没有指定日期，默认同步最近交易日
+            if not trade_date and not start_date:
+                # 使用同步版本（兼容Celery任务）
+                calculated_date = trading_calendar_service.get_latest_data_date_sync()
+                logger.info(f"计算的最近交易日期: {calculated_date}")
+
+                # 板块资金流向支持当前日期
+                trade_date = calculated_date
+                logger.info(f"板块资金流向: 使用日期 {trade_date}")
+
+            # 获取数据
+            df = provider.get_moneyflow_ind_dc(
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                content_type=content_type
+            )
+
+            if df is not None and len(df) > 0:
+                await self._insert_moneyflow_ind_dc(df)
+
+                logger.info(f"成功同步板块资金流向数据 {len(df)} 条")
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": len(df),
+                    "message": f"成功同步 {len(df)} 条板块资金流向数据"
+                }
+            else:
+                return {
+                    "task_id": task_id,
+                    "status": "success",
+                    "records": 0,
+                    "message": "无数据需要同步"
+                }
+
+        except Exception as e:
+            logger.error(f"同步板块资金流向失败: {str(e)}")
+            return {
+                "task_id": task_id,
+                "status": "error",
+                "records": 0,
+                "error": str(e)
+            }
+
     # ========== 辅助方法 ==========
 
     async def _get_active_stocks(self, trade_date: str) -> List[str]:
@@ -859,6 +939,62 @@ class ExtendedDataSyncService:
                         buy_md_amount_rate = EXCLUDED.buy_md_amount_rate,
                         buy_sm_amount = EXCLUDED.buy_sm_amount,
                         buy_sm_amount_rate = EXCLUDED.buy_sm_amount_rate,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+
+                await db.execute(query, record)
+
+            await db.commit()
+
+    async def _insert_moneyflow_ind_dc(self, df: pd.DataFrame):
+        """
+        插入板块资金流向数据到数据库
+
+        使用UPSERT策略，如果数据已存在则更新，避免重复数据。
+
+        Args:
+            df: 包含板块资金流向数据的DataFrame
+        """
+        async with get_async_db() as db:
+            records = df.to_dict('records')
+
+            for record in records:
+                # trade_date在这个接口中已经是字符串格式(YYYYMMDD)，直接使用
+                query = text("""
+                    INSERT INTO moneyflow_ind_dc (
+                        trade_date, content_type, ts_code, name, pct_change, close,
+                        net_amount, net_amount_rate,
+                        buy_elg_amount, buy_elg_amount_rate,
+                        buy_lg_amount, buy_lg_amount_rate,
+                        buy_md_amount, buy_md_amount_rate,
+                        buy_sm_amount, buy_sm_amount_rate,
+                        buy_sm_amount_stock, rank
+                    ) VALUES (
+                        :trade_date, :content_type, :ts_code, :name, :pct_change, :close,
+                        :net_amount, :net_amount_rate,
+                        :buy_elg_amount, :buy_elg_amount_rate,
+                        :buy_lg_amount, :buy_lg_amount_rate,
+                        :buy_md_amount, :buy_md_amount_rate,
+                        :buy_sm_amount, :buy_sm_amount_rate,
+                        :buy_sm_amount_stock, :rank
+                    )
+                    ON CONFLICT (trade_date, ts_code) DO UPDATE SET
+                        content_type = EXCLUDED.content_type,
+                        name = EXCLUDED.name,
+                        pct_change = EXCLUDED.pct_change,
+                        close = EXCLUDED.close,
+                        net_amount = EXCLUDED.net_amount,
+                        net_amount_rate = EXCLUDED.net_amount_rate,
+                        buy_elg_amount = EXCLUDED.buy_elg_amount,
+                        buy_elg_amount_rate = EXCLUDED.buy_elg_amount_rate,
+                        buy_lg_amount = EXCLUDED.buy_lg_amount,
+                        buy_lg_amount_rate = EXCLUDED.buy_lg_amount_rate,
+                        buy_md_amount = EXCLUDED.buy_md_amount,
+                        buy_md_amount_rate = EXCLUDED.buy_md_amount_rate,
+                        buy_sm_amount = EXCLUDED.buy_sm_amount,
+                        buy_sm_amount_rate = EXCLUDED.buy_sm_amount_rate,
+                        buy_sm_amount_stock = EXCLUDED.buy_sm_amount_stock,
+                        rank = EXCLUDED.rank,
                         updated_at = CURRENT_TIMESTAMP
                 """)
 

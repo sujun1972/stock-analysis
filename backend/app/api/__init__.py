@@ -24,6 +24,7 @@ from .endpoints import (
     ml,
     moneyflow_hsgt,  # 沪深港通资金流向
     moneyflow_mkt_dc,  # 大盘资金流向
+    moneyflow_ind_dc,  # 板块资金流向
     notification_channels,
     notification_monitoring,  # Phase 3: 通知监控
     notifications,
@@ -76,6 +77,7 @@ router.include_router(extended_data.router, prefix="/extended-data", tags=["扩�
 router.include_router(data_quality.router, prefix="/data-quality", tags=["数据质量"])
 router.include_router(moneyflow_hsgt.router, prefix="/moneyflow-hsgt", tags=["沪深港通资金流向"])  # 沪深港通资金流向API
 router.include_router(moneyflow_mkt_dc.router, prefix="/moneyflow-mkt-dc", tags=["大盘资金流向"])  # 大盘资金流向API
+router.include_router(moneyflow_ind_dc.router, prefix="/moneyflow-ind-dc", tags=["板块资金流向"])  # 板块资金流向API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

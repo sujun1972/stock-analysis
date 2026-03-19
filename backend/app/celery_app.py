@@ -110,6 +110,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载大盘资金流向任务模块失败: {e}")
 
+try:
+    from app.tasks import moneyflow_ind_dc_tasks
+    logger.info(f"✅ 已加载板块资金流向任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载板块资金流向任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 

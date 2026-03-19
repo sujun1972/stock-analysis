@@ -45,7 +45,8 @@ import {
   PackageMinus,
   TrendingUp as TrendingUpIcon,
   Wrench,
-  DollarSign
+  DollarSign,
+  BarChart3
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -175,6 +176,11 @@ const navItems: NavItem[] = [
         name: '大盘资金流向（DC）',
         href: '/data/moneyflow-mkt-dc',
         icon: LineChart
+      },
+      {
+        name: '板块资金流向（DC）',
+        href: '/data/moneyflow-ind-dc',
+        icon: BarChart3
       }
     ]
   },
