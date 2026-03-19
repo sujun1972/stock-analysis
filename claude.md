@@ -567,6 +567,51 @@ async def run_backtest(params: BacktestExecutionParams):
 - ❌ 避免在 API 层直接访问数据库
 - ❌ 避免在 Service 层处理 HTTP 相关逻辑
 
+### 模块化拆分最佳实践
+
+当单个 API 端点文件超过 500 行时，应考虑按功能模块拆分为包结构：
+
+**拆分示例** (sentiment 模块重构):
+```
+# 重构前
+endpoints/sentiment.py (1018行) - 单一文件
+
+# 重构后
+endpoints/sentiment/
+├── __init__.py          # 路由聚合
+├── schemas.py           # Pydantic 数据模型
+├── query.py             # 查询类端点
+├── sync.py              # 同步类端点
+├── cycle.py             # 情绪周期端点
+└── ai_analysis.py       # AI分析端点
+```
+
+**拆分原则**：
+1. **按功能域划分**：查询、同步、分析等不同功能分到不同文件
+2. **Schema 独立**：所有 Pydantic 模型集中在 `schemas.py`
+3. **路由聚合**：在 `__init__.py` 中统一注册子路由
+4. **向后兼容**：确保 API 路径和响应格式保持不变
+
+**路由注册示例** (`__init__.py`):
+```python
+from fastapi import APIRouter
+from . import query, sync, cycle, ai_analysis
+
+router = APIRouter()
+
+# 注册子路由
+router.include_router(query.router, tags=["sentiment-query"])
+router.include_router(sync.router, tags=["sentiment-sync"])
+router.include_router(cycle.router, prefix="/cycle", tags=["sentiment-cycle"])
+router.include_router(ai_analysis.router, prefix="/ai-analysis", tags=["sentiment-ai"])
+```
+
+**优势**：
+- 更好的代码组织和可维护性
+- 降低单个文件的复杂度
+- 便于并行开发和代码审查
+- 符合单一职责原则
+
 ## 开发提示
 
 1. 修改代码后，前端项目（admin）会自动热重载
