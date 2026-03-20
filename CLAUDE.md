@@ -936,6 +936,8 @@ class MarginService:
   - `ExperimentRunner` - 实验运行器（已使用 ExperimentRepository）
   - `ModelRanker` - 模型排名器（已使用 ExperimentRepository）
   - `ModelPredictor` - 模型预测器（已使用 ExperimentRepository）
+- **任务历史记录辅助服务** （✨ 新增于 2026-03-20）：
+  - `TaskHistoryHelper` - 统一的 Celery 任务历史记录创建服务
 
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
@@ -984,6 +986,56 @@ class MarginService:
 - `SuspendRepository` - 停复牌信息
 - `PremarketRepository` - 盘前数据
 - `TaskExecutionHistoryRepository` - 定时任务执行历史（task_execution_history 表）
+
+### 任务历史记录统一管理（✨ 2026-03-20）
+
+#### TaskHistoryHelper 辅助服务
+
+为了消除代码重复，创建了统一的 `TaskHistoryHelper` 服务类，封装 Celery 任务历史记录的创建逻辑。
+
+**使用场景**：
+所有异步同步任务（`/sync-async` 端点）都应使用 `TaskHistoryHelper` 创建任务历史记录。
+
+**使用示例**：
+```python
+from app.services import TaskHistoryHelper
+
+# 提交 Celery 任务
+celery_task = sync_moneyflow_task.apply_async(kwargs={...})
+
+# 使用 TaskHistoryHelper 创建任务历史记录
+helper = TaskHistoryHelper()
+task_data = await helper.create_task_record(
+    celery_task_id=celery_task.id,
+    task_name='tasks.sync_moneyflow',
+    display_name='个股资金流向（Tushare）',
+    task_type='data_sync',
+    user_id=current_user.id,
+    task_params={
+        'ts_code': ts_code,
+        'trade_date': trade_date_formatted,
+        ...
+    },
+    source='moneyflow_page'
+)
+
+return ApiResponse.success(data=task_data, ...)
+```
+
+**已迁移的 API 端点**（✨ 2026-03-20）：
+- ✅ `moneyflow.py` - 个股资金流向（Tushare）
+- ✅ `moneyflow_hsgt.py` - 沪深港通资金流向
+- ✅ `moneyflow_mkt_dc.py` - 大盘资金流向（DC）
+- ✅ `moneyflow_ind_dc.py` - 板块资金流向（DC）
+- ✅ `moneyflow_stock_dc.py` - 个股资金流向（DC）
+- ✅ `margin.py` - 融资融券交易汇总
+- ✅ `margin_detail.py` - 融资融券交易明细
+
+**重构收益**：
+- 消除了约 **250 行重复代码**（7 个文件 × 35 行/文件）
+- 移除 7 处 `DatabaseManager` 直接使用
+- 移除 7 处 `INSERT INTO celery_task_history` SQL 语句
+- 统一任务历史记录创建逻辑，便于维护
 
 **待重构的 Service**（包含直接 SQL，优先级较低）：
 - ⚠️ `batch_manager.py` - 批次管理器（4处直接 SQL）

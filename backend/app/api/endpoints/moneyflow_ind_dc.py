@@ -1,7 +1,6 @@
 """板块资金流向API（东财概念及行业板块资金流向 DC）"""
 
 import asyncio
-import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from loguru import logger
@@ -86,7 +85,7 @@ async def sync_moneyflow_ind_dc_async(
     """异步同步板块资金流向数据"""
     try:
         from app.tasks.moneyflow_ind_dc_tasks import sync_moneyflow_ind_dc_task
-        from src.database.db_manager import DatabaseManager
+        from app.services import TaskHistoryHelper
 
         trade_date_formatted = trade_date.replace('-', '') if trade_date else None
         start_date_formatted = start_date.replace('-', '') if start_date else None
@@ -102,25 +101,26 @@ async def sync_moneyflow_ind_dc_async(
             }
         )
 
-        db_manager = DatabaseManager()
-        await asyncio.to_thread(
-            db_manager._execute_update,
-            """INSERT INTO celery_task_history
-               (celery_task_id, task_name, display_name, task_type, user_id, status, params, metadata, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
-            (
-                celery_task.id, 'tasks.sync_moneyflow_ind_dc', '板块资金流向', 'data_sync',
-                current_user.id, 'pending',
-                json.dumps({'trade_date': trade_date_formatted, 'start_date': start_date_formatted,
-                            'end_date': end_date_formatted, 'content_type': content_type}),
-                json.dumps({"trigger": "manual", "source": "moneyflow_ind_dc_page"})
-            )
+        # 使用 TaskHistoryHelper 创建任务历史记录
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_moneyflow_ind_dc',
+            display_name='板块资金流向',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={
+                'trade_date': trade_date_formatted,
+                'start_date': start_date_formatted,
+                'end_date': end_date_formatted,
+                'content_type': content_type
+            },
+            source='moneyflow_ind_dc_page'
         )
 
         logger.info(f"板块资金流向同步任务已提交: {celery_task.id}")
         return ApiResponse.success(
-            data={"celery_task_id": celery_task.id, "task_name": "tasks.sync_moneyflow_ind_dc",
-                  "display_name": "板块资金流向", "status": "pending"},
+            data=task_data,
             message="任务已提交，正在后台执行"
         )
     except Exception as e:

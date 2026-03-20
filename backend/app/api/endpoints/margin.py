@@ -3,7 +3,6 @@
 """
 
 import asyncio
-import json
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
@@ -105,7 +104,7 @@ async def sync_margin_async(
     """
     try:
         from app.tasks.margin_tasks import sync_margin_task
-        from src.database.db_manager import DatabaseManager
+        from app.services import TaskHistoryHelper
 
         # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
         trade_date_formatted = trade_date.replace('-', '') if trade_date else None
@@ -122,50 +121,27 @@ async def sync_margin_async(
             }
         )
 
-        # 记录任务到celery_task_history表，用于任务面板显示
-        db_manager = DatabaseManager()
-        history_query = """
-            INSERT INTO celery_task_history
-            (celery_task_id, task_name, display_name, task_type, user_id, status, params, metadata, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-        """
-
-        task_params = {
-            'trade_date': trade_date_formatted,
-            'start_date': start_date_formatted,
-            'end_date': end_date_formatted,
-            'exchange_id': exchange_id
-        }
-
-        task_metadata = {
-            "trigger": "manual",
-            "source": "margin_page"
-        }
-
-        await asyncio.to_thread(
-            db_manager._execute_update,
-            history_query,
-            (
-                celery_task.id,
-                'tasks.sync_margin',
-                '融资融券交易汇总',
-                'data_sync',
-                current_user.id,
-                'pending',
-                json.dumps(task_params),
-                json.dumps(task_metadata)
-            )
+        # 使用 TaskHistoryHelper 创建任务历史记录
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_margin',
+            display_name='融资融券交易汇总',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={
+                'trade_date': trade_date_formatted,
+                'start_date': start_date_formatted,
+                'end_date': end_date_formatted,
+                'exchange_id': exchange_id
+            },
+            source='margin_page'
         )
 
         logger.info(f"融资融券交易汇总同步任务已提交: {celery_task.id}")
 
         return ApiResponse.success(
-            data={
-                "celery_task_id": celery_task.id,
-                "task_name": "tasks.sync_margin",
-                "display_name": "融资融券交易汇总",
-                "status": "pending"
-            },
+            data=task_data,
             message="任务已提交，正在后台执行"
         )
 

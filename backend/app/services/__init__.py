@@ -34,6 +34,9 @@ from .hk_hold_service import HkHoldService
 # 定时任务管理服务
 from .scheduled_task_service import ScheduledTaskService
 
+# 任务历史记录辅助服务
+from .task_history_helper import TaskHistoryHelper
+
 __all__ = [
     # 数据下载服务（已废弃，保留向后兼容）
     "DataDownloadService",
@@ -58,4 +61,6 @@ __all__ = [
     "HkHoldService",
     # 定时任务管理服务
     "ScheduledTaskService",
+    # 任务历史记录辅助服务
+    "TaskHistoryHelper",
 ]

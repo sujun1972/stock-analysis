@@ -3,12 +3,15 @@
 根据多维度指标自动筛选最优模型
 """
 
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
 from loguru import logger
 
 from app.repositories.experiment_repository import ExperimentRepository
+
+if TYPE_CHECKING:
+    from src.database.db_manager import DatabaseManager
 
 
 class ModelRanker:
@@ -316,7 +319,8 @@ class ModelSelector:
     提供多种策略选择最优模型组合
     """
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(self, db_manager: Optional["DatabaseManager"] = None):
+        from src.database.db_manager import DatabaseManager
         self.db = db_manager or DatabaseManager()
         self.ranker = ModelRanker(db_manager)
 

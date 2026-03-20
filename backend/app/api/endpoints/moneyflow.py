@@ -10,7 +10,6 @@
 """
 
 import asyncio
-import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from loguru import logger
@@ -138,7 +137,7 @@ async def sync_moneyflow_async(
     """
     try:
         from app.tasks.moneyflow_tasks import sync_moneyflow_task
-        from src.database.db_manager import DatabaseManager
+        from app.services import TaskHistoryHelper
 
         # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
         trade_date_formatted = trade_date.replace('-', '') if trade_date else None
@@ -156,50 +155,27 @@ async def sync_moneyflow_async(
             }
         )
 
-        # 记录任务到celery_task_history表，用于任务面板显示
-        db_manager = DatabaseManager()
-        history_query = """
-            INSERT INTO celery_task_history
-            (celery_task_id, task_name, display_name, task_type, user_id, status, params, metadata, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-        """
-
-        task_params = {
-            'ts_code': ts_code,
-            'trade_date': trade_date_formatted,
-            'start_date': start_date_formatted,
-            'end_date': end_date_formatted
-        }
-
-        task_metadata = {
-            "trigger": "manual",
-            "source": "moneyflow_page"
-        }
-
-        await asyncio.to_thread(
-            db_manager._execute_update,
-            history_query,
-            (
-                celery_task.id,
-                'tasks.sync_moneyflow',
-                '个股资金流向（Tushare）',
-                'data_sync',
-                current_user.id,
-                'pending',
-                json.dumps(task_params),
-                json.dumps(task_metadata)
-            )
+        # 使用 TaskHistoryHelper 创建任务历史记录
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_moneyflow',
+            display_name='个股资金流向（Tushare）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={
+                'ts_code': ts_code,
+                'trade_date': trade_date_formatted,
+                'start_date': start_date_formatted,
+                'end_date': end_date_formatted
+            },
+            source='moneyflow_page'
         )
 
         logger.info(f"个股资金流向同步任务已提交: {celery_task.id}")
 
         return ApiResponse.success(
-            data={
-                "celery_task_id": celery_task.id,
-                "task_name": "tasks.sync_moneyflow",
-                "display_name": "个股资金流向（Tushare）",
-                "status": "pending"
-            },
+            data=task_data,
             message="任务已提交，正在后台执行"
         )
 
