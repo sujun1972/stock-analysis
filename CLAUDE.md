@@ -765,6 +765,97 @@ count = repo.bulk_upsert(df)
 - ✅ 使用类型提示（Type Hints）
 - ✅ 添加 Examples 示例代码
 
+### 股票数据服务模块（Stock Services）
+
+股票数据服务已从单一的 `DataDownloadService` 重构为模块化的专门服务，符合单一职责原则。
+
+#### 服务架构
+
+**模块位置**：`backend/app/services/stock/`
+
+**核心服务**：
+
+1. **StockListService** - 股票列表管理
+   - 下载和更新股票列表
+   - 自动市场分类（使用 `MarketClassifier` 工具）
+   - 股票信息查询（带缓存）
+   - 市场分布统计
+
+2. **DailyDataService** - 日线数据管理
+   - 下载单只股票日线数据
+   - 统一数据格式转换（使用 `DataTransformer` 工具）
+   - 增量更新支持
+   - 数据覆盖情况查询
+
+3. **BatchDownloadService** - 批量下载编排
+   - 串行下载（带延迟，避免限流）
+   - 并发下载（高性能模式）
+   - 增量批量更新
+   - 智能模式选择
+
+4. **DataValidationService** - 数据验证
+   - 单只/批量股票数据验证
+   - 数据质量报告生成
+   - 缺失数据识别
+   - 过期数据检测
+   - 质量分数计算和改进建议
+
+**工具类**（`backend/app/utils/`）：
+
+1. **MarketClassifier** - 市场分类工具
+   - 根据股票代码自动判断市场类型
+   - 支持上海主板、科创板、深圳主板、创业板、北交所
+   - 提供过滤、统计、验证等功能
+
+2. **DataTransformer** - 数据转换工具
+   - 统一日线数据和股票列表格式转换
+   - 列名映射（中文 → 英文）
+   - 日期格式标准化
+   - 数据类型转换和验证
+
+#### 使用示例
+
+```python
+from app.services.stock import (
+    StockListService,
+    DailyDataService,
+    BatchDownloadService,
+    DataValidationService
+)
+
+# 股票列表下载
+stock_list_service = StockListService()
+result = await stock_list_service.download_and_save()
+
+# 单只股票下载
+daily_data_service = DailyDataService()
+count = await daily_data_service.download_and_save('000001', years=5)
+
+# 批量下载
+batch_service = BatchDownloadService()
+result = await batch_service.download_batch_concurrent(max_concurrent=20)
+
+# 数据验证
+validation_service = DataValidationService()
+report = await validation_service.get_data_quality_report()
+print(f"数据质量分数: {report['quality_score']}/100")
+```
+
+#### 重构收益
+
+| 指标 | 重构前 | 重构后 | 改善 |
+|------|--------|--------|------|
+| **服务类数量** | 1个庞大类 | 4个专门类 + 2个工具类 | 模块化 ✅ |
+| **单一职责** | 5个混合职责 | 每个类1个职责 | 符合SRP ✅ |
+| **DatabaseManager** | 直接使用 | 完全移除 | 架构合规 ✅ |
+| **akshare直接调用** | 有 | 移除 | 统一Provider ✅ |
+| **数据转换逻辑** | 分散在Service | 集中在工具类 | 代码复用 ✅ |
+| **可测试性** | 低（依赖多） | 高（独立模块） | 易测试 ✅ |
+
+#### 废弃说明
+
+`DataDownloadService` 已标记为废弃（`@deprecated`），计划于 2026年9月 移除。现有代码继续工作，但会显示废弃警告。建议迁移到新的专门服务。
+
 ### Service 层重构最佳实践
 
 Service 层应避免直接使用 `DatabaseManager` 或编写 SQL，而是通过 Repository 层访问数据库。
@@ -811,19 +902,27 @@ class MarginService:
 5. ✅ 保持 Service 层专注于业务逻辑编排
 
 **已重构的 Service**：
-- `MarginService` - 融资融券交易汇总服务
-- `MarginDetailService` - 融资融券交易明细服务
-- `ExtendedDataSyncService` - 扩展数据同步服务（部分）
-- `MoneyflowService` - 个股资金流向服务（Tushare标准）
-- `MoneyflowHsgtService` - 沪深港通资金流向服务
-- `MoneyflowMktDcService` - 大盘资金流向服务（东财DC）
-- `MoneyflowIndDcService` - 板块资金流向服务（东财DC）
-- `MoneyflowStockDcService` - 个股资金流向服务（东财DC）
-- `DailyBasicService` - 每日指标服务
-- `BlockTradeService` - 大宗交易服务
-- `StkLimitService` - 涨跌停价格服务
-- `HkHoldService` - 北向资金持股服务
-- `SyncStatusManager` - 同步状态管理服务（✅ 已完全重构）
+- **股票数据服务（Stock Services）**：
+  - `StockListService` - 股票列表管理服务
+  - `DailyDataService` - 日线数据管理服务
+  - `BatchDownloadService` - 批量下载编排服务
+  - `DataValidationService` - 数据验证服务
+- **资金流向服务**：
+  - `MoneyflowService` - 个股资金流向服务（Tushare标准）
+  - `MoneyflowHsgtService` - 沪深港通资金流向服务
+  - `MoneyflowMktDcService` - 大盘资金流向服务（东财DC）
+  - `MoneyflowIndDcService` - 板块资金流向服务（东财DC）
+  - `MoneyflowStockDcService` - 个股资金流向服务（东财DC）
+- **融资融券服务**：
+  - `MarginService` - 融资融券交易汇总服务
+  - `MarginDetailService` - 融资融券交易明细服务
+- **扩展数据服务**：
+  - `DailyBasicService` - 每日指标服务
+  - `BlockTradeService` - 大宗交易服务
+  - `StkLimitService` - 涨跌停价格服务
+  - `HkHoldService` - 北向资金持股服务
+- **配置和同步服务**：
+  - `SyncStatusManager` - 同步状态管理服务
 
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
@@ -855,13 +954,11 @@ class MarginService:
 - `SuspendRepository` - 停复牌信息
 - `PremarketRepository` - 盘前数据
 
-**待重构的 Service**（包含直接 SQL）：
+**待重构的 Service**（包含直接 SQL，优先级较低）：
 - ⚠️ `batch_manager.py` - 批次管理器（4处直接 SQL）
 - ⚠️ `experiment_runner.py` - 实验运行器（3处直接 SQL）
 - ⚠️ `model_ranker.py` - 模型排名器（6处直接 SQL）
 - ⚠️ `model_predictor.py` - 模型预测器（1处直接 SQL）
-- ⚠️ `data_provider_service.py` - 数据提供服务
-- ⚠️ `data_source_manager.py` - 数据源管理器（已废弃，由 DataSourceConfigService 替代）
 - ⚠️ `backtest_data_loader.py` - 回测数据加载器
 - ⚠️ `backtest_service.py` - 回测服务
 - ⚠️ `training_task_manager.py` - 训练任务管理器

@@ -3,7 +3,16 @@ Services层
 业务逻辑服务
 """
 
+# 数据下载服务（已废弃）
 from .data_service import DataDownloadService
+
+# 股票数据服务（新架构）
+from .stock import (
+    StockListService,
+    DailyDataService,
+    BatchDownloadService,
+    DataValidationService,
+)
 
 # 资金流向服务
 from .moneyflow_service import MoneyflowService
@@ -23,7 +32,13 @@ from .stk_limit_service import StkLimitService
 from .hk_hold_service import HkHoldService
 
 __all__ = [
+    # 数据下载服务（已废弃，保留向后兼容）
     "DataDownloadService",
+    # 股票数据服务（推荐使用）
+    "StockListService",
+    "DailyDataService",
+    "BatchDownloadService",
+    "DataValidationService",
     # 资金流向服务
     "MoneyflowService",
     "MoneyflowHsgtService",

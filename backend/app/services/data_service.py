@@ -1,13 +1,55 @@
 """
-数据下载服务
-封装数据下载功能（支持配置化数据源）
+数据下载服务（已废弃）
 
-重构说明：
-- 依赖 DataProviderService 管理数据提供者
-- 依赖 StockDataRepository 访问数据库
-- 专注于数据下载流程编排
-- 移除直接的数据库操作和提供者创建逻辑
+⚠️ 废弃警告：
+此类已被拆分为更专门的服务类，建议迁移到新的服务：
+
+- StockListService: 股票列表管理
+- DailyDataService: 日线数据管理
+- BatchDownloadService: 批量下载编排
+- DataValidationService: 数据验证
+
+迁移指南：
+    from app.services.stock import (
+        StockListService,
+        DailyDataService,
+        BatchDownloadService,
+        DataValidationService
+    )
+
+    # 股票列表下载
+    stock_list_service = StockListService()
+    await stock_list_service.download_and_save()
+
+    # 单只股票下载
+    daily_data_service = DailyDataService()
+    await daily_data_service.download_and_save('000001', years=5)
+
+    # 批量下载
+    batch_service = BatchDownloadService()
+    await batch_service.download_batch_serial(codes=['000001', '600000'])
+
+    # 数据验证
+    validation_service = DataValidationService()
+    report = await validation_service.get_data_quality_report()
+
+计划移除时间：2026年9月
+
+重构原因：
+- 移除 DatabaseManager 直接依赖
+- 移除 akshare 直接调用
+- 符合单一职责原则
+- 提高代码可测试性和可维护性
 """
+
+import warnings
+
+warnings.warn(
+    "DataDownloadService is deprecated and will be removed in version 2.0. "
+    "Use StockListService, DailyDataService, BatchDownloadService, or DataValidationService instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import asyncio
 from datetime import datetime, timedelta
