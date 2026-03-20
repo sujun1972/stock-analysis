@@ -555,7 +555,7 @@ async def run_backtest(params: BacktestExecutionParams):
 
 Repository 层负责所有数据库访问操作，为 Service 层提供简洁的数据访问接口。
 
-**已实现的 Repository**：
+#### 已实现的 Repository
 
 1. **资金流向 - Tushare标准**
    - `MoneyflowRepository` - 个股资金流向（小单/中单/大单/特大单）
@@ -572,26 +572,147 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `MarginRepository` - 融资融券交易汇总（按交易所统计）
    - `MarginDetailRepository` - 融资融券交易明细（个股级别）
 
-**Repository 标准方法**：
+5. **扩展数据**
+   - `DailyBasicRepository` - 每日指标数据（换手率、市盈率、市净率等）
+   - `HkHoldRepository` - 北向资金持股数据
+   - `StkLimitRepository` - 涨跌停价格数据
+   - `BlockTradeRepository` - 大宗交易数据
+   - `ConceptRepository` - 概念板块和股票关系管理
 
-每个 Repository 都实现以下核心方法：
+6. **策略和回测**
+   - `StrategyRepository` - 统一策略管理
+   - `StrategyConfigRepository` - 策略配置（旧架构）
+   - `DynamicStrategyRepository` - 动态策略（旧架构）
+   - `StrategyExecutionRepository` - 策略执行历史
+   - `ExperimentRepository` - 实验管理
+   - `BatchRepository` - 批处理操作
 
-```python
-class XxxRepository(BaseRepository):
-    # 查询操作
-    def get_by_date_range(start_date, end_date, **filters) -> List[Dict]
-    def get_statistics(start_date, end_date) -> Dict
-    def get_latest_trade_date() -> Optional[str]
-    def get_by_trade_date(trade_date) -> List[Dict]
+#### Repository 开发规范
 
-    # 写入操作
-    def bulk_upsert(df: pd.DataFrame) -> int
-    def delete_by_date_range(start_date, end_date) -> int
+**强制规则**：
 
-    # 数据验证
-    def exists_by_date(trade_date) -> bool
-    def get_record_count(start_date, end_date) -> int
-```
+1. **禁止在 API 层写 SQL**
+   ```python
+   # ❌ 错误示例
+   @router.get("/data")
+   def get_data(db: Session = Depends(get_db)):
+       result = db.execute(text("SELECT..."))  # ❌ 在 API 层操作数据库
+   ```
+
+2. **禁止 Service 层直接使用 DatabaseManager**
+   ```python
+   # ❌ 错误示例
+   class MyService:
+       def __init__(self):
+           self.db = DatabaseManager()  # ❌ 应使用 Repository
+   ```
+
+3. **强制使用三层架构**
+   ```
+   API Layer (endpoints/)         ← 只处理 HTTP 请求/响应
+     ↓ 调用
+   Service Layer (services/)      ← 只处理业务逻辑
+     ↓ 调用
+   Repository Layer (repositories/) ← 只处理数据访问
+     ↓ 访问
+   Database
+   ```
+
+**创建新 Repository 的标准**：
+
+1. **继承 BaseRepository**
+   ```python
+   from app.repositories.base_repository import BaseRepository
+
+   class YourRepository(BaseRepository):
+       TABLE_NAME = "your_table_name"
+
+       def __init__(self, db=None):
+           super().__init__(db)
+           logger.debug("✓ YourRepository initialized")
+   ```
+
+2. **实现标准方法**
+   ```python
+   class XxxRepository(BaseRepository):
+       # 查询操作
+       def get_by_date_range(start_date, end_date, **filters) -> List[Dict]
+       def get_statistics(start_date, end_date) -> Dict
+       def get_latest_trade_date() -> Optional[str]
+       def get_by_trade_date(trade_date) -> List[Dict]
+
+       # 写入操作
+       def bulk_upsert(df: pd.DataFrame) -> int
+       def delete_by_date_range(start_date, end_date) -> int
+
+       # 数据验证
+       def exists_by_date(trade_date) -> bool
+       def get_record_count(start_date, end_date) -> int
+   ```
+
+3. **添加完整文档注释**
+   ```python
+   def get_by_date_range(
+       self,
+       start_date: str,
+       end_date: str,
+       ts_code: Optional[str] = None
+   ) -> List[Dict]:
+       """
+       按日期范围查询数据
+
+       Args:
+           start_date: 开始日期，格式：YYYYMMDD
+           end_date: 结束日期，格式：YYYYMMDD
+           ts_code: 股票代码（可选）
+
+       Returns:
+           数据列表
+
+       Examples:
+           >>> repo = YourRepository()
+           >>> data = repo.get_by_date_range('20240101', '20240131')
+       """
+   ```
+
+4. **使用参数化查询**
+   ```python
+   # ✅ 正确：使用参数化查询
+   query = "SELECT * FROM table WHERE trade_date >= %s AND trade_date <= %s"
+   result = self.execute_query(query, (start_date, end_date))
+
+   # ❌ 错误：字符串拼接（SQL 注入风险）
+   query = f"SELECT * FROM table WHERE trade_date >= '{start_date}'"
+   ```
+
+5. **实现 UPSERT 语义**
+   ```python
+   def bulk_upsert(self, df: pd.DataFrame) -> int:
+       """批量插入/更新数据"""
+       query = f"""
+           INSERT INTO {self.TABLE_NAME} (col1, col2, col3)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (unique_key)
+           DO UPDATE SET
+               col2 = EXCLUDED.col2,
+               col3 = EXCLUDED.col3,
+               updated_at = NOW()
+       """
+   ```
+
+6. **完整的异常处理**
+   ```python
+   try:
+       result = self.execute_query(query, params)
+       return result
+   except PsycopgDatabaseError as e:
+       logger.error(f"查询失败: {e}")
+       raise QueryError(
+           "数据查询失败",
+           error_code="YOUR_QUERY_FAILED",
+           reason=str(e)
+       )
+   ```
 
 **使用示例**：
 
@@ -625,6 +746,8 @@ count = repo.bulk_upsert(df)
 - ✅ 支持可选参数，提供灵活的查询能力
 - ✅ 完整的异常处理（`QueryError`, `DatabaseError`）
 - ✅ 继承 `BaseRepository`，复用 SQL 注入防护
+- ✅ 使用类型提示（Type Hints）
+- ✅ 添加 Examples 示例代码
 
 ### Service 层重构最佳实践
 
@@ -704,9 +827,13 @@ class MarginService:
 
 ### API 层重构最佳实践
 
-当 API 端点包含直接 SQL 查询时，应重构为使用 Repository 层。
+当 API 端点包含直接 SQL 查询时，应重构为使用 Service + Repository 层。
 
-**重构前的反模式**（extended_data.py 示例）：
+#### 重构模式 1：简单查询（直接使用 Repository）
+
+适用于：纯数据查询，无复杂业务逻辑
+
+**重构前的反模式**：
 ```python
 # ❌ 42行代码，直接写 SQL
 @router.get("/daily-basic/{ts_code}")
@@ -736,12 +863,108 @@ def get_daily_basic(ts_code: str, start_date: Optional[date] = None, ...):
     return ApiResponse.success(data={"items": items, "count": len(items)})
 ```
 
+#### 重构模式 2：复杂业务逻辑（Service + Repository）
+
+适用于：包含数据转换、统计分析、多表查询等业务逻辑
+
+**重构前的反模式**：
+```python
+# ❌ API 层包含业务逻辑
+@router.get("/moneyflow")
+async def get_moneyflow(
+    ts_code: Optional[str] = None,
+    start_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    # 1. 查询数据（SQL）
+    query = text("SELECT ... FROM moneyflow WHERE ...")
+    result = db.execute(query, params)
+    items = [dict(row) for row in result]
+
+    # 2. 查询统计（SQL）
+    stats_query = text("SELECT AVG(...), MAX(...) FROM moneyflow WHERE ...")
+    stats_result = db.execute(stats_query, params)
+    statistics = dict(stats_result.fetchone())
+
+    # 3. 日期格式转换（业务逻辑）
+    for item in items:
+        item['trade_date'] = format_date(item['trade_date'])
+
+    # 4. 单位换算（业务逻辑）
+    for item in items:
+        item['net_mf_amount'] = item['net_mf_amount'] / 10000  # 万元
+
+    return {"items": items, "statistics": statistics}
+```
+
+**重构后的正确模式**：
+
+```python
+# API 层 - 只处理 HTTP
+@router.get("/moneyflow")
+async def get_moneyflow(
+    ts_code: Optional[str] = None,
+    start_date: Optional[str] = None,
+    limit: int = 30
+):
+    service = MoneyflowService()
+    result = await service.get_moneyflow_data(ts_code, start_date, limit)
+    return ApiResponse.success(data=result)
+
+# Service 层 - 只处理业务逻辑
+class MoneyflowService:
+    def __init__(self):
+        self.moneyflow_repo = MoneyflowRepository()
+
+    async def get_moneyflow_data(self, ts_code, start_date, limit):
+        # 1. 日期格式转换（业务逻辑）
+        start_date_fmt = start_date.replace('-', '') if start_date else None
+
+        # 2. 获取数据（通过 Repository）
+        items = self.moneyflow_repo.get_by_date_range(
+            start_date=start_date_fmt,
+            ts_code=ts_code,
+            limit=limit
+        )
+
+        # 3. 获取统计（通过 Repository）
+        statistics = self.moneyflow_repo.get_statistics(
+            start_date=start_date_fmt,
+            ts_code=ts_code
+        )
+
+        # 4. 单位换算（业务逻辑）
+        for item in items:
+            item['net_mf_amount'] = item['net_mf_amount'] / 10000
+
+        return {
+            "items": items,
+            "statistics": statistics,
+            "total": len(items)
+        }
+
+# Repository 层 - 只处理数据访问
+class MoneyflowRepository(BaseRepository):
+    def get_by_date_range(self, start_date, ts_code, limit):
+        query = """
+            SELECT trade_date, ts_code, net_mf_amount, ...
+            FROM moneyflow
+            WHERE trade_date >= %s AND ts_code = %s
+            ORDER BY trade_date DESC
+            LIMIT %s
+        """
+        return self.execute_query(query, (start_date, ts_code, limit))
+```
+
 **重构收益**：
 - ✅ 代码行数减少 40-70%
 - ✅ SQL 集中在 Repository，便于维护和测试
+- ✅ 业务逻辑集中在 Service，便于复用
+- ✅ API 层代码减少到 5-10 行
 - ✅ 参数化查询，防止 SQL 注入
 - ✅ 统一的错误处理和日志记录
-- ✅ Repository 可被多个端点复用
+- ✅ Service 和 Repository 可被多个端点复用
+- ✅ 易于编写单元测试
 
 ### 注意事项
 
@@ -971,3 +1194,229 @@ TASK_MAPPING = {
 **问题4: 前端显示时间不正确**
 - **原因**: 时区处理问题
 - **解决**: API 返回时添加 'Z' 后缀标记 UTC 时间，前端自动转换
+
+## Repository 层开发检查清单
+
+### 新增 Repository 检查清单
+
+在创建新的 Repository 时，请确认以下事项：
+
+**基础结构**：
+- [ ] 继承 `BaseRepository`
+- [ ] 定义 `TABLE_NAME` 类常量
+- [ ] 实现 `__init__` 方法并调用 `super().__init__(db)`
+- [ ] 添加类级别文档注释
+
+**标准方法**：
+- [ ] 实现 `get_by_date_range()` - 按日期范围查询
+- [ ] 实现 `get_statistics()` - 获取统计信息
+- [ ] 实现 `get_latest_trade_date()` - 获取最新交易日期
+- [ ] 实现 `bulk_upsert()` - 批量插入/更新（UPSERT）
+- [ ] 实现 `delete_by_date_range()` - 按日期范围删除
+- [ ] 实现 `exists_by_date()` - 检查数据是否存在
+- [ ] 实现 `get_record_count()` - 获取记录数
+
+**代码质量**：
+- [ ] 所有方法都有完整的文档注释（Args, Returns, Examples）
+- [ ] 使用类型提示（Type Hints）
+- [ ] 使用参数化查询（避免 SQL 注入）
+- [ ] 实现完整的异常处理（`QueryError`, `DatabaseError`）
+- [ ] 添加日志记录（`logger.debug`, `logger.error`）
+- [ ] 每个方法至少有一个 Example 示例
+
+**SQL 查询**：
+- [ ] 使用 `%s` 占位符进行参数绑定
+- [ ] 避免字符串拼接用户输入
+- [ ] 使用 `ON CONFLICT DO UPDATE` 实现 UPSERT
+- [ ] 为常用查询添加适当的 `ORDER BY` 和 `LIMIT`
+
+**导出注册**：
+- [ ] 在 `repositories/__init__.py` 中导入新 Repository
+- [ ] 在 `__all__` 列表中添加新 Repository 名称
+- [ ] 添加适当的分类注释
+
+### 重构 Service 检查清单
+
+在重构现有 Service 使用 Repository 时，请确认：
+
+**移除直接数据库访问**：
+- [ ] 移除 `from src.database.db_manager import DatabaseManager`
+- [ ] 移除 `self.db_manager = DatabaseManager()`
+- [ ] 移除所有手写的 SQL 语句（`INSERT`, `SELECT`, `UPDATE`, `DELETE`）
+- [ ] 移除 `self.db_manager._execute_query()` 调用
+- [ ] 移除 `self.db_manager._execute_update()` 调用
+
+**使用 Repository**：
+- [ ] 导入对应的 Repository（`from app.repositories import XxxRepository`）
+- [ ] 在 `__init__` 中注入 Repository 实例
+- [ ] 使用 `asyncio.to_thread()` 调用 Repository 的同步方法
+- [ ] 保持 Service 方法为 `async` 函数
+
+**业务逻辑保留**：
+- [ ] 日期格式转换逻辑保留在 Service
+- [ ] 单位换算逻辑保留在 Service
+- [ ] 数据聚合和排序逻辑保留在 Service
+- [ ] 第三方服务调用（Tushare）保留在 Service
+- [ ] 数据验证和清洗逻辑保留在 Service
+
+**示例对比**：
+```python
+# ❌ 重构前
+class MarginService:
+    def __init__(self):
+        self.db_manager = DatabaseManager()
+
+    async def get_data(self):
+        query = "SELECT * FROM margin WHERE ..."
+        result = await asyncio.to_thread(
+            self.db_manager._execute_query, query, params
+        )
+
+# ✅ 重构后
+class MarginService:
+    def __init__(self):
+        self.margin_repo = MarginRepository()
+
+    async def get_data(self):
+        result = await asyncio.to_thread(
+            self.margin_repo.get_by_date_range, start_date, end_date
+        )
+```
+
+### 重构 API 检查清单
+
+在重构 API endpoint 时，请确认：
+
+**移除直接数据库访问**：
+- [ ] 移除 `from sqlalchemy import text`
+- [ ] 移除 `db: Session = Depends(get_db)` 参数
+- [ ] 移除所有 `text()` 包裹的 SQL 语句
+- [ ] 移除 `db.execute()` 调用
+- [ ] 移除手动数据转换逻辑（`[dict(row) for row in result]`）
+
+**使用 Service 或 Repository**：
+- [ ] 简单查询：直接使用 Repository
+- [ ] 复杂业务：创建对应的 Service 类
+- [ ] 导入对应的 Service/Repository
+- [ ] 在函数内创建 Service/Repository 实例
+- [ ] 调用 Service/Repository 方法获取数据
+
+**API 层简化**：
+- [ ] API 函数不超过 30 行（不含文档注释）
+- [ ] 只包含参数验证（由 Pydantic 自动完成）
+- [ ] 只包含调用 Service/Repository
+- [ ] 使用 `ApiResponse.success()` 返回统一格式
+- [ ] 移除业务逻辑（日期转换、单位换算等）
+
+**示例对比**：
+```python
+# ❌ 重构前（50行）
+@router.get("/moneyflow")
+async def get_moneyflow(
+    ts_code: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = text("SELECT ... FROM moneyflow WHERE ...")
+    result = db.execute(query, params)
+    items = [dict(row) for row in result]
+    # 统计查询...
+    # 数据转换...
+    return {"items": items, "statistics": stats}
+
+# ✅ 重构后（8行）
+@router.get("/moneyflow")
+async def get_moneyflow(ts_code: Optional[str] = None):
+    service = MoneyflowService()
+    result = await service.get_moneyflow_data(ts_code)
+    return ApiResponse.success(data=result)
+```
+
+### 新功能开发检查清单
+
+开发新功能时，请按以下顺序开发，并确认每个步骤：
+
+**1. Schema 层**：
+- [ ] 在 `schemas/` 中创建 Pydantic 模型
+- [ ] 定义请求参数模型（继承 `BaseModel`）
+- [ ] 定义响应数据模型
+- [ ] 添加数据验证规则（`Field` 约束）
+
+**2. Repository 层**（如需要）：
+- [ ] 评估是否需要新的 Repository（或复用现有）
+- [ ] 按照 "新增 Repository 检查清单" 创建
+- [ ] 在 `repositories/__init__.py` 中导出
+
+**3. Service 层**：
+- [ ] 在 `services/` 中创建 Service 类
+- [ ] 在 `__init__` 中注入 Repository 依赖
+- [ ] 实现业务逻辑方法（`async` 函数）
+- [ ] 使用 `asyncio.to_thread()` 调用 Repository
+- [ ] 添加完整的文档注释和类型提示
+
+**4. API 层**：
+- [ ] 在 `api/endpoints/` 中创建路由
+- [ ] 使用 Pydantic 模型进行参数验证
+- [ ] 调用 Service 层方法
+- [ ] 使用 `ApiResponse.success()` 返回统一格式
+- [ ] 添加 API 文档注释（FastAPI 自动生成 OpenAPI）
+
+**5. 测试**：
+- [ ] 编写 Repository 单元测试
+- [ ] 编写 Service 单元测试
+- [ ] 编写 API 集成测试
+- [ ] 测试异常情况和边界条件
+
+### 代码审查检查清单
+
+提交代码前，请自查：
+
+**架构合规性**：
+- [ ] 没有在 API 层写 SQL
+- [ ] 没有在 Service 层使用 `DatabaseManager`
+- [ ] 所有数据库访问都通过 Repository
+- [ ] API -> Service -> Repository 分层清晰
+
+**代码质量**：
+- [ ] 所有方法都有类型提示
+- [ ] 所有方法都有文档注释
+- [ ] 使用参数化查询（无 SQL 注入风险）
+- [ ] 完整的异常处理和日志记录
+- [ ] 没有硬编码的魔法数字或字符串
+
+**性能考虑**：
+- [ ] 使用 `bulk_upsert()` 进行批量插入
+- [ ] 避免 N+1 查询问题
+- [ ] 为高频查询添加索引（数据库层）
+- [ ] 考虑使用缓存（对于静态或低频变更数据）
+
+**安全性**：
+- [ ] 所有用户输入都经过验证（Pydantic）
+- [ ] 使用参数化查询防止 SQL 注入
+- [ ] 敏感信息（密码、Token）不记录在日志中
+- [ ] API 端点添加适当的权限验证（`require_admin`, `get_current_user`）
+
+### 常见问题快速排查
+
+**问题：API 返回 500 错误**
+- [ ] 检查 Service 是否正确注入 Repository
+- [ ] 检查 Repository 方法签名是否正确
+- [ ] 检查是否使用 `asyncio.to_thread()` 调用同步方法
+- [ ] 查看日志查找具体错误信息
+
+**问题：数据没有插入数据库**
+- [ ] 检查 `bulk_upsert()` 是否返回非零值
+- [ ] 检查数据库连接是否正常
+- [ ] 检查是否有唯一键冲突
+- [ ] 检查 DataFrame 是否包含必需列
+
+**问题：查询结果为空**
+- [ ] 检查日期格式（YYYYMMDD vs YYYY-MM-DD）
+- [ ] 检查表名是否正确（`TABLE_NAME` 常量）
+- [ ] 检查 WHERE 条件是否过于严格
+- [ ] 使用 `get_record_count()` 验证数据是否存在
+
+**问题：性能较慢**
+- [ ] 检查是否使用批量操作（而非循环单条插入）
+- [ ] 检查查询是否添加了适当的索引
+- [ ] 检查是否有不必要的 N+1 查询
+- [ ] 考虑使用数据库查询日志分析慢查询
