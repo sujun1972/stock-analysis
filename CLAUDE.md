@@ -389,6 +389,137 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 - DataTable 组件使用 `accessor` 函数而非 `render` 来自定义列渲染
 - 新增任务时，优先在数据库中设置元数据，确保排序和分类正确
 
+### 前端页面模块化重构最佳实践
+
+当单个页面文件超过 **500 行**时，应考虑模块化重构，提升代码可维护性和复用性。
+
+#### 重构策略
+
+采用 **Hooks + Components** 架构：
+
+```
+page/
+├── page.tsx              # 主页面（编排和组合）
+├── hooks/                # 自定义 Hooks
+│   ├── index.ts         # 统一导出
+│   ├── useXxxData.ts    # 数据加载和管理
+│   ├── useXxxConfig.ts  # 配置管理
+│   └── useXxxActions.ts # 操作逻辑
+└── components/           # 子组件
+    ├── index.ts         # 统一导出
+    ├── ControlPanel.tsx # 控制面板
+    ├── XxxTab.tsx       # 标签页组件
+    └── XxxCard.tsx      # 卡片组件
+```
+
+#### 拆分原则
+
+1. **单一职责原则 (SRP)**
+   - 每个 Hook 只负责一个功能域（数据/配置/操作）
+   - 每个 Component 只负责一个 UI 模块
+   - 主页面只负责组合和编排
+
+2. **依赖注入**
+   - 通过 props 传递依赖，便于测试
+   - 避免组件内部直接访问全局状态
+
+3. **组件组合**
+   - 通过组合而非继承实现功能复用
+   - 使用 `children` 和 `render props` 模式
+
+#### 实施步骤
+
+**第一步：提取自定义 Hooks**
+
+将状态管理和副作用逻辑提取为 Hooks：
+
+```typescript
+// hooks/useXxxData.ts
+export function useXxxData() {
+  const [data, setData] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const result = await apiClient.get('/api/xxx')
+      setData(result.data)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  return { data, isLoading, loadData }
+}
+```
+
+**第二步：拆分子组件**
+
+按功能模块拆分为独立组件：
+
+```typescript
+// components/ControlPanel.tsx
+interface ControlPanelProps {
+  date: Date
+  onDateChange: (date: Date) => void
+  onSync: () => void
+  isSyncing: boolean
+}
+
+export function ControlPanel({ date, onDateChange, onSync, isSyncing }: ControlPanelProps) {
+  return (
+    <Card>
+      {/* 控制面板 UI */}
+    </Card>
+  )
+}
+```
+
+**第三步：重构主页面**
+
+主页面简化为组合和编排：
+
+```typescript
+// page.tsx
+import { useXxxData, useXxxActions } from './hooks'
+import { ControlPanel, XxxTab } from './components'
+
+export default function XxxPage() {
+  const { data, isLoading, loadData } = useXxxData()
+  const { handleSync, isSyncing } = useXxxActions()
+
+  return (
+    <div>
+      <ControlPanel
+        date={date}
+        onDateChange={setDate}
+        onSync={handleSync}
+        isSyncing={isSyncing}
+      />
+      <XxxTab data={data} isLoading={isLoading} />
+    </div>
+  )
+}
+```
+
+#### 重构收益
+
+| 指标 | 重构前 | 重构后 | 改善 |
+|------|--------|--------|------|
+| 主页面行数 | 1000+行 | 200-300行 | ↓ 70-80% |
+| 最大函数行数 | 500+行 | 50-100行 | ↓ 80-90% |
+| 文件数量 | 1个庞大文件 | 10-15个专门文件 | ✅ 模块化 |
+| 代码复用 | 低 | 高 | ✅ Hooks和组件可复用 |
+| 可测试性 | 低 | 高 | ✅ 独立测试 |
+
+#### 参考示例
+
+**盘前预期管理系统** (`/sentiment/premarket`) 是完整的模块化重构示例：
+- 原始文件：1,010 行
+- 重构后主页面：259 行（↓ 74%）
+- 3个自定义 Hooks（253 行）
+- 7个子组件（794 行）
+
 ## 常用命令
 
 ### 查看容器状态
