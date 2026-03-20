@@ -626,6 +626,74 @@ count = repo.bulk_upsert(df)
 - ✅ 完整的异常处理（`QueryError`, `DatabaseError`）
 - ✅ 继承 `BaseRepository`，复用 SQL 注入防护
 
+### Service 层重构最佳实践
+
+Service 层应避免直接使用 `DatabaseManager` 或编写 SQL，而是通过 Repository 层访问数据库。
+
+**重构前的反模式**：
+```python
+class MarginService:
+    def __init__(self):
+        self.db_manager = DatabaseManager()  # ❌ 直接使用 DB
+
+    async def _insert_margin_data(self, df):
+        insert_query = """INSERT INTO..."""  # ❌ 在 Service 写 SQL
+        await asyncio.to_thread(
+            self.db_manager._execute_update, ...
+        )
+```
+
+**重构后的正确模式**：
+```python
+class MarginService:
+    def __init__(self):
+        self.margin_repo = MarginRepository()  # ✅ 使用 Repository
+
+    async def sync_margin(self, params):
+        # 1. 从 Tushare 获取数据
+        df = await self._fetch_from_tushare(params)
+
+        # 2. 数据验证和清洗
+        df = self._validate_and_clean_data(df)
+
+        # 3. 通过 Repository 保存
+        records = await asyncio.to_thread(
+            self.margin_repo.bulk_upsert, df
+        )  # ✅ SQL 在 Repository
+
+        return {"status": "success", "records": records}
+```
+
+**重构检查清单**：
+1. ✅ Service 构造函数中注入 Repository 实例
+2. ✅ 移除所有 `DatabaseManager` 的使用
+3. ✅ 移除所有手写的 SQL 语句
+4. ✅ 使用 `asyncio.to_thread()` 调用 Repository 的同步方法
+5. ✅ 保持 Service 层专注于业务逻辑编排
+
+**已重构的 Service**：
+- `MarginService` - 融资融券交易汇总服务
+- `MarginDetailService` - 融资融券交易明细服务
+- `ExtendedDataSyncService` - 扩展数据同步服务（部分）
+
+**已创建的扩展数据 Repository**：
+- ✅ `DailyBasicRepository` - 每日指标数据
+- ✅ `HkHoldRepository` - 北向资金持股数据
+- ✅ `StkLimitRepository` - 涨跌停价格数据
+- ✅ `BlockTradeRepository` - 大宗交易数据
+- ✅ `ConceptRepository` - 概念板块和股票关系管理
+
+**已重构的 API 端点**：
+- ✅ `extended_data.py` - 5个端点（daily-basic, hk-hold, limit-prices, block-trade, stats/summary）
+- ✅ `concepts.py` - 5个端点（概念列表、详情、股票查询、概念更新）
+- ✅ `stocks.py` - 概念过滤功能
+
+**待创建的 Repository**（优先级较低）：
+- `AdjFactorRepository` - 复权因子数据
+- `SuspendRepository` - 停复牌信息
+- `PremarketRepository` - 盘前数据
+- `SentimentRepository` - 市场情绪数据
+
 ### 新增功能开发流程
 
 1. **定义 Schema**：在 `schemas/` 中定义请求/响应模型
@@ -634,13 +702,56 @@ count = repo.bulk_upsert(df)
 4. **添加 API**：在 `api/endpoints/` 中定义路由
 5. **编写测试**：在 `tests/` 中添加单元测试
 
+### API 层重构最佳实践
+
+当 API 端点包含直接 SQL 查询时，应重构为使用 Repository 层。
+
+**重构前的反模式**（extended_data.py 示例）：
+```python
+# ❌ 42行代码，直接写 SQL
+@router.get("/daily-basic/{ts_code}")
+def get_daily_basic(ts_code: str, db: Session = Depends(get_db)):
+    query_str = """
+        SELECT ts_code, trade_date, close, turnover_rate, ...
+        FROM daily_basic
+        WHERE ts_code = :ts_code
+        ORDER BY trade_date DESC LIMIT :limit
+    """
+    params = {"ts_code": ts_code, "limit": limit}
+    result = db.execute(text(query_str), params)
+    rows = result.fetchall()
+    data = [dict(row._mapping) for row in rows]  # 手动转换
+    return {"code": 0, "data": data, ...}
+```
+
+**重构后的正确模式**：
+```python
+# ✅ 10行代码，调用 Repository
+@router.get("/daily-basic/{ts_code}")
+def get_daily_basic(ts_code: str, start_date: Optional[date] = None, ...):
+    repo = DailyBasicRepository()
+    items = repo.get_by_code_and_date_range(
+        ts_code, start_date_str, end_date_str, limit
+    )
+    return ApiResponse.success(data={"items": items, "count": len(items)})
+```
+
+**重构收益**：
+- ✅ 代码行数减少 40-70%
+- ✅ SQL 集中在 Repository，便于维护和测试
+- ✅ 参数化查询，防止 SQL 注入
+- ✅ 统一的错误处理和日志记录
+- ✅ Repository 可被多个端点复用
+
 ### 注意事项
 
 - ✅ API 层应保持简洁（一般不超过50行/端点）
 - ✅ 复杂业务逻辑应放在 Service 层
 - ✅ Service 层方法应拆分为小的私有方法
 - ✅ 使用 Pydantic 模型进行参数验证
-- ❌ 避免在 API 层直接访问数据库
+- ✅ 使用 `ApiResponse.success()` 返回统一格式
+- ❌ 避免在 API 层直接访问数据库（使用 Repository）
+- ❌ 避免在 API 层编写 SQL 查询
 - ❌ 避免在 Service 层处理 HTTP 相关逻辑
 
 ### 模块化拆分最佳实践
