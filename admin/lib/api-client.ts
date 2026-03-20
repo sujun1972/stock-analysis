@@ -1,3 +1,41 @@
+/**
+ * @file lib/api-client.ts
+ * @deprecated 此文件已废弃，将于 2024年9月20日 移除
+ * @see {@link ./api/MIGRATION.md} 查看迁移指南
+ *
+ * ⚠️ **重要提示**: 此文件已被拆分为多个模块化 API 文件
+ *
+ * **推荐使用新的模块化 API**:
+ * ```typescript
+ * // 旧方式（仍然有效，但不推荐）
+ * import { apiClient } from '@/lib/api-client'
+ *
+ * // 新方式（推荐）
+ * import { sentimentApi, moneyflowApi, marginApi } from '@/lib/api'
+ * ```
+ *
+ * **新模块列表**:
+ * - `sentiment.ts` - 市场情绪 API
+ * - `moneyflow.ts` - 资金流向 API
+ * - `margin.ts` - 融资融券 API
+ * - `scheduler.ts` - 定时任务 API
+ * - `celery-tasks.ts` - Celery 任务 API
+ * - `concepts.ts` - 概念板块 API
+ * - `config.ts` - 系统配置 API
+ * - `sync.ts` - 数据同步 API
+ * - `extended-data.ts` - 扩展数据 API
+ * - `monitor.ts` - 系统监控 API
+ *
+ * **向后兼容性**: ✅ 100% 兼容，旧代码无需修改即可继续工作
+ *
+ * **迁移时间表**:
+ * - 2024-03-20: 创建新模块
+ * - 2024-06-20: 标记为废弃（当前）
+ * - 2024-09-20: 完全移除此文件
+ *
+ * 详细信息请查看: lib/api/MIGRATION.md
+ */
+
 import axios, { AxiosInstance } from 'axios'
 import type {
   StockInfo,

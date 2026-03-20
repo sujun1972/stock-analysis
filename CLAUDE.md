@@ -223,6 +223,71 @@ triggerPoll()  // Header 图标即时更新
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
+### API 客户端模块化架构
+
+Admin 项目采用模块化的 API 客户端架构（2024-03-20 重构完成）：
+
+#### 架构概述
+将原有的 2,133 行单一 `api-client.ts` 文件拆分为 15+ 个功能专门的模块文件，提升代码可维护性和开发体验。
+
+#### 模块列表
+```
+lib/api/
+├── base.ts              # 基础 API 类和 axios 实例
+├── auth.ts              # 认证相关 API
+├── users.ts             # 用户管理 API
+├── stocks.ts            # 股票相关 API
+├── strategies.ts        # 策略管理 API
+├── sentiment.ts         # 市场情绪 API
+├── moneyflow.ts         # 资金流向 API
+├── margin.ts            # 融资融券 API
+├── scheduler.ts         # 定时任务 API
+├── celery-tasks.ts      # Celery 任务管理 API
+├── concepts.ts          # 概念板块 API
+├── config.ts            # 系统配置 API
+├── sync.ts              # 数据同步 API
+├── extended-data.ts     # 扩展数据 API
+├── monitor.ts           # 系统监控 API
+├── index.ts             # 统一导出
+└── MIGRATION.md         # 迁移指南
+```
+
+#### 使用方式
+
+**新代码（推荐）**：
+```typescript
+// 从专门的模块导入
+import { sentimentApi, moneyflowApi, marginApi } from '@/lib/api'
+
+const sentiment = await sentimentApi.getSentimentDaily()
+const moneyflow = await moneyflowApi.getMoneyflowMktDc(params)
+```
+
+**旧代码（向后兼容）**：
+```typescript
+// 继续使用统一的 apiClient 对象
+import { apiClient } from '@/lib/api-client'
+
+const sentiment = await apiClient.getSentimentDaily()
+```
+
+#### 关键特性
+- ✅ **100% 向后兼容** - 现有代码无需修改
+- ✅ **模块化架构** - 每个模块 < 220 行，易于维护
+- ✅ **完整类型定义** - 每个模块都有 TypeScript 类型
+- ✅ **统一基础类** - 所有 API 继承自 `BaseApiClient`
+- ✅ **单例模式** - 每个模块提供单例实例
+
+#### 开发规范
+1. **新功能开发**：优先使用新的模块化 API
+2. **修改现有代码**：可选择性迁移，不强制要求
+3. **导入类型**：从对应模块导入类型定义
+   ```typescript
+   import type { SentimentListParams } from '@/lib/api/sentiment'
+   ```
+
+详细信息请查看：`admin/lib/api/MIGRATION.md`
+
 ### 响应式设计规范
 
 Admin项目全面支持移动端访问，采用移动优先的响应式设计：
