@@ -18,6 +18,7 @@ from typing import Dict, Any
 
 from .task_metadata_service import TaskMetadataService
 from .cron_parser import CronParser
+from app.repositories import ScheduledTaskRepository
 
 
 class DatabaseScheduler(Scheduler):
@@ -30,6 +31,7 @@ class DatabaseScheduler(Scheduler):
         self._db_schedule = {}  # 数据库中的定时任务
         self.metadata_service = TaskMetadataService()
         self.cron_parser = CronParser()
+        self.task_repo = ScheduledTaskRepository()
         super().__init__(*args, **kwargs)
         logger.info("🔧 DatabaseScheduler 已初始化")
 
@@ -42,7 +44,7 @@ class DatabaseScheduler(Scheduler):
 
     def load_schedule_from_db(self) -> Dict[str, Dict[str, Any]]:
         """
-        从数据库加载定时任务配置
+        从数据库加载定时任务配置（使用 Repository 层）
 
         Returns:
             任务配置字典，格式:
@@ -55,27 +57,15 @@ class DatabaseScheduler(Scheduler):
             }
         """
         try:
-            from src.database.db_manager import DatabaseManager
-
-            db = DatabaseManager()
-
-            # 只查询已启用的定时任务
-            query = """
-                SELECT
-                    task_name,
-                    module,
-                    cron_expression,
-                    params
-                FROM scheduled_tasks
-                WHERE enabled = true
-                ORDER BY id
-            """
-
-            result = db._execute_query(query)
+            # 使用 Repository 查询已启用的定时任务
+            enabled_tasks = self.task_repo.get_enabled_tasks()
 
             schedule = {}
-            for row in result:
-                task_name, module, cron_expr, params = row
+            for task_dict in enabled_tasks:
+                task_name = task_dict['task_name']
+                module = task_dict['module']
+                cron_expr = task_dict['cron_expression']
+                params = task_dict['params']
 
                 try:
                     # 解析Cron表达式

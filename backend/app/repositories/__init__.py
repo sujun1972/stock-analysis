@@ -21,6 +21,14 @@ from .block_trade_repository import BlockTradeRepository
 from .concept_repository import ConceptRepository
 from .sync_log_repository import SyncLogRepository
 from .config_repository import ConfigRepository
+from .celery_task_history_repository import CeleryTaskHistoryRepository
+from .scheduled_task_repository import ScheduledTaskRepository
+from .trading_calendar_repository import TradingCalendarRepository
+from .market_sentiment_repository import MarketSentimentRepository
+from .limit_up_pool_repository import LimitUpPoolRepository
+from .dragon_tiger_list_repository import DragonTigerListRepository
+from .sentiment_cycle_repository import SentimentCycleRepository
+from .sentiment_ai_analysis_repository import SentimentAiAnalysisRepository
 
 __all__ = [
     "BaseRepository",
@@ -53,4 +61,15 @@ __all__ = [
     # 配置和同步
     "ConfigRepository",
     "SyncLogRepository",
+    # 任务管理
+    "CeleryTaskHistoryRepository",
+    "ScheduledTaskRepository",
+    # 交易日历
+    "TradingCalendarRepository",
+    # 市场情绪
+    "MarketSentimentRepository",
+    "LimitUpPoolRepository",
+    "DragonTigerListRepository",
+    "SentimentCycleRepository",
+    "SentimentAiAnalysisRepository",
 ]
