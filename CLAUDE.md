@@ -586,6 +586,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `StrategyExecutionRepository` - 策略执行历史
    - `ExperimentRepository` - 实验管理
    - `BatchRepository` - 批处理操作
+   - `StockDailyRepository` - 股票日线数据（支持回测数据加载）
 
 7. **配置和同步**
    - `ConfigRepository` - 系统配置管理
@@ -602,6 +603,9 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `DragonTigerListRepository` - 龙虎榜数据（机构席位、游资动向）
    - `SentimentCycleRepository` - 情绪周期数据（赚钱效应指数）
    - `SentimentAiAnalysisRepository` - AI情绪分析结果
+
+10. **用户管理**
+   - `UserQuotaRepository` - 用户配额管理（配额重置、配额查询、使用量统计）
 
 #### Repository 开发规范
 
@@ -925,6 +929,11 @@ class MarginService:
   - `SyncStatusManager` - 同步状态管理服务
 - **回测历史服务**：
   - `BacktestHistoryService` - 回测历史管理服务
+- **回测和实验服务** （✨ 新增于 2026-03-20）：
+  - `BacktestDataLoader` - 回测数据加载服务（已使用 StockDailyRepository）
+  - `ExperimentRunner` - 实验运行器（已使用 ExperimentRepository）
+  - `ModelRanker` - 模型排名器（已使用 ExperimentRepository）
+  - `ModelPredictor` - 模型预测器（已使用 ExperimentRepository）
 
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
@@ -933,6 +942,8 @@ class MarginService:
 - ✅ `BlockTradeRepository` - 大宗交易数据
 - ✅ `ConceptRepository` - 概念板块和股票关系管理
 - ✅ `SyncLogRepository` - 同步日志管理（sync_log 表）
+- ✅ `StockDailyRepository` - 股票日线数据（2026-03-20 新增）
+- ✅ `UserQuotaRepository` - 用户配额管理（2026-03-20 新增）
 
 **已重构的 API 端点**：
 - ✅ `extended_data.py` - 7个端点全部重构完成：
@@ -951,6 +962,7 @@ class MarginService:
 - ✅ `moneyflow_ind_dc.py` - 3个端点（查询、同步、最新），使用 MoneyflowIndDcService
 - ✅ `moneyflow_stock_dc.py` - 3个端点（查询、同步、排名），使用 MoneyflowStockDcService
 - ✅ `backtest_history.py` - 3个端点（用户回测历史、详情、删除），使用 BacktestHistoryService
+- ✅ `profile.py` - 用户配额管理端点，使用 UserQuotaRepository（移除存储过程直接调用）
 
 **待创建的 Repository**（优先级较低）：
 - `AdjFactorRepository` - 复权因子数据
@@ -959,11 +971,6 @@ class MarginService:
 
 **待重构的 Service**（包含直接 SQL，优先级较低）：
 - ⚠️ `batch_manager.py` - 批次管理器（4处直接 SQL）
-- ⚠️ `experiment_runner.py` - 实验运行器（3处直接 SQL）
-- ⚠️ `model_ranker.py` - 模型排名器（6处直接 SQL）
-- ⚠️ `model_predictor.py` - 模型预测器（1处直接 SQL）
-- ⚠️ `backtest_data_loader.py` - 回测数据加载器
-- ⚠️ `backtest_service.py` - 回测服务（策略执行相关）
 - ⚠️ `training_task_manager.py` - 训练任务管理器
 
 **重构优先级**：
@@ -971,9 +978,15 @@ class MarginService:
    - `SystemConfigService` - 已使用 ConfigRepository
    - `DataSourceConfigService` - 已使用 ConfigRepository
    - `SyncStatusManager` - 已使用 ConfigRepository + SyncLogRepository
-2. **中优先级**：数据同步和扩展数据服务（✅ 大部分完成）
+2. **中优先级**：数据同步和扩展数据服务（✅ 已完成）
    - 资金流向、融资融券、每日指标等服务已全部重构
-3. **低优先级**：回测和机器学习相关服务（待重构）
+3. **中高优先级**：回测和机器学习相关服务（✅ 2026-03-20 完成）
+   - `BacktestDataLoader` - 已使用 StockDailyRepository（移除 DatabaseManager）
+   - `ExperimentRunner` - 已使用 ExperimentRepository（移除 3 处直接 SQL）
+   - `ModelRanker` - 已使用 ExperimentRepository（移除 6 处直接 SQL）
+   - `ModelPredictor` - 已使用 ExperimentRepository（移除 1 处直接 SQL）
+   - `profile.py` API - 已使用 UserQuotaRepository（移除存储过程直接调用）
+4. **低优先级**：批次管理器和训练任务管理器（待重构）
    - 这些服务使用频率较低，可后续迭代重构
 
 ### 新增功能开发流程

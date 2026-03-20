@@ -1,5 +1,5 @@
 """
-模型排名和筛选系统
+模型排名和筛选系统（重构版）
 根据多维度指标自动筛选最优模型
 """
 
@@ -7,14 +7,21 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 from loguru import logger
-from src.database.db_manager import DatabaseManager
+
+from app.repositories.experiment_repository import ExperimentRepository
 
 
 class ModelRanker:
     """模型排名器"""
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
-        self.db = db_manager or DatabaseManager()
+    def __init__(self, db=None):
+        """
+        初始化模型排名器
+
+        Args:
+            db: DatabaseManager 实例（可选，传递给 Repository）
+        """
+        self.experiment_repo = ExperimentRepository(db)
 
         # 默认权重配置
         self.default_weights = {
@@ -113,53 +120,21 @@ class ModelRanker:
         Returns:
             符合条件的模型列表
         """
-        conditions = ["batch_id = %s", "status = 'completed'", "backtest_status = 'completed'"]
-        params = [batch_id]
-
-        if min_sharpe is not None:
-            conditions.append("(backtest_metrics->>'sharpe_ratio')::FLOAT >= %s")
-            params.append(min_sharpe)
-
-        if max_drawdown is not None:
-            conditions.append("(backtest_metrics->>'max_drawdown')::FLOAT >= %s")
-            params.append(max_drawdown)
-
-        if min_annual_return is not None:
-            conditions.append("(backtest_metrics->>'annual_return')::FLOAT >= %s")
-            params.append(min_annual_return)
-
-        if min_win_rate is not None:
-            conditions.append("(backtest_metrics->>'win_rate')::FLOAT >= %s")
-            params.append(min_win_rate)
-
-        if min_ic is not None:
-            conditions.append("(train_metrics->>'ic')::FLOAT >= %s")
-            params.append(min_ic)
-
-        query = f"""
-            SELECT
-                id,
-                experiment_name,
-                model_id,
-                config,
-                train_metrics,
-                backtest_metrics,
-                rank_score,
-                rank_position
-            FROM experiments
-            WHERE {' AND '.join(conditions)}
-            ORDER BY rank_score DESC NULLS LAST
-        """
-
-        if top_n:
-            query += f" LIMIT {top_n}"
-
-        results = self.db._execute_query(query, tuple(params))
+        # 使用 Repository 筛选实验
+        experiments = self.experiment_repo.filter_experiments_by_metrics(
+            batch_id=batch_id,
+            min_sharpe=min_sharpe,
+            max_drawdown=max_drawdown,
+            min_annual_return=min_annual_return,
+            min_win_rate=min_win_rate,
+            min_ic=min_ic,
+            top_n=top_n,
+        )
 
         models = []
-        for row in results:
+        for exp in experiments:
             # 提取回测指标（扁平化字段，便于前端直接使用）
-            backtest_metrics = row[5] or {}
+            backtest_metrics = exp['backtest_metrics'] or {}
 
             # 转换为百分比（前端期望百分比格式，如 2.78 表示 2.78%）
             annual_return_pct = None
@@ -172,14 +147,14 @@ class ModelRanker:
 
             models.append(
                 {
-                    "experiment_id": row[0],  # 使用 experiment_id 作为主键
-                    "experiment_name": row[1],
-                    "model_id": row[2],
-                    "config": row[3],
-                    "train_metrics": row[4],
+                    "experiment_id": exp['id'],  # 使用 experiment_id 作为主键
+                    "experiment_name": exp['experiment_name'],
+                    "model_id": exp['model_id'],
+                    "config": exp['config'],
+                    "train_metrics": exp['train_metrics'],
                     "backtest_metrics": backtest_metrics,
-                    "rank_score": float(row[6]) if row[6] else None,
-                    "rank_position": row[7],
+                    "rank_score": exp['rank_score'],
+                    "rank_position": exp['rank_position'],
                     # 扁平化回测指标（前端直接访问，百分比格式）
                     "annual_return": annual_return_pct,  # 百分比（如 2.78 表示 2.78%）
                     "sharpe_ratio": backtest_metrics.get("sharpe_ratio"),  # 比率（不需转换）
@@ -204,16 +179,10 @@ class ModelRanker:
         """
         logger.info(f"📊 分析批次 {batch_id} 的参数重要性...")
 
-        # 获取所有完成的实验
-        query = """
-            SELECT config, rank_score
-            FROM experiments
-            WHERE batch_id = %s AND status = 'completed' AND rank_score IS NOT NULL
-        """
+        # 获取所有完成的实验（使用 Repository）
+        experiments = self.experiment_repo.get_experiments_with_rank_scores(batch_id)
 
-        results = self.db._execute_query(query, (batch_id,))
-
-        if not results:
+        if not experiments:
             logger.warning("没有可用的实验数据")
             return {}
 
@@ -221,9 +190,9 @@ class ModelRanker:
         param_values = {}
         scores = []
 
-        for row in results:
-            config = row[0]
-            score = float(row[1])
+        for exp in experiments:
+            config = exp['config']
+            score = exp['rank_score']
             scores.append(score)
 
             # 提取关键参数
@@ -285,113 +254,58 @@ class ModelRanker:
         return report
 
     def _get_summary(self, batch_id: int) -> Dict:
-        """获取批次摘要"""
+        """
+        获取批次摘要
 
-        query = "SELECT * FROM batch_statistics WHERE batch_id = %s"
-        result = self.db._execute_query(query, (batch_id,))
+        注意：batch_statistics 可能是视图或表，暂时保留直接查询
+        TODO: 如果需要，可创建 BatchRepository 来管理此查询
+        """
+        from app.services.batch_manager import BatchManager
 
-        if result:
-            row = result[0]
+        batch_manager = BatchManager()
+        batch_info = batch_manager.get_batch_info(batch_id)
+
+        if batch_info:
             return {
-                "batch_name": row[1],
-                "strategy": row[2],
-                "status": row[3],
-                "total_experiments": row[4],
-                "completed_experiments": row[5],
-                "failed_experiments": row[6],
-                "success_rate_pct": float(row[8]) if row[8] else 0,
-                "avg_rank_score": float(row[13]) if row[13] else None,
-                "max_rank_score": float(row[14]) if row[14] else None,
-                "duration_hours": float(row[12]) if row[12] else None,
+                "batch_name": batch_info.get("batch_name"),
+                "strategy": batch_info.get("strategy"),
+                "status": batch_info.get("status"),
+                "total_experiments": batch_info.get("total_experiments"),
+                "completed_experiments": batch_info.get("completed"),
+                "failed_experiments": batch_info.get("failed"),
+                "success_rate_pct": batch_info.get("success_rate", 0),
+                "avg_rank_score": batch_info.get("avg_rank_score"),
+                "max_rank_score": batch_info.get("max_rank_score"),
+                "duration_hours": batch_info.get("duration_hours"),
             }
 
         return {}
 
     def _get_performance_distribution(self, batch_id: int) -> Dict:
-        """获取性能分布统计"""
-
-        query = """
-            SELECT
-                COUNT(*) as total,
-                AVG((backtest_metrics->>'annual_return')::FLOAT) as avg_return,
-                STDDEV((backtest_metrics->>'annual_return')::FLOAT) as std_return,
-                AVG((backtest_metrics->>'sharpe_ratio')::FLOAT) as avg_sharpe,
-                AVG((backtest_metrics->>'max_drawdown')::FLOAT) as avg_drawdown,
-                AVG((train_metrics->>'ic')::FLOAT) as avg_ic
-            FROM experiments
-            WHERE batch_id = %s AND status = 'completed' AND backtest_status = 'completed'
-        """
-
-        result = self.db._execute_query(query, (batch_id,))
-
-        if result and result[0][0]:
-            row = result[0]
-            return {
-                "total_models": row[0],
-                "avg_annual_return": round(float(row[1]), 2) if row[1] else None,
-                "std_annual_return": round(float(row[2]), 2) if row[2] else None,
-                "avg_sharpe_ratio": round(float(row[3]), 2) if row[3] else None,
-                "avg_max_drawdown": round(float(row[4]), 2) if row[4] else None,
-                "avg_ic": round(float(row[5]), 4) if row[5] else None,
-            }
-
-        return {}
+        """获取性能分布统计（使用 Repository）"""
+        return self.experiment_repo.get_performance_statistics(batch_id)
 
     def _get_best_configurations(self, batch_id: int) -> Dict:
-        """找出最佳配置组合"""
+        """找出最佳配置组合（使用 Repository）"""
 
         # 按模型类型分组
-        query = """
-            SELECT
-                config->>'model_type' as model_type,
-                AVG(rank_score) as avg_score,
-                COUNT(*) as count
-            FROM experiments
-            WHERE batch_id = %s AND status = 'completed'
-            GROUP BY config->>'model_type'
-            ORDER BY avg_score DESC
-        """
-
-        result = self.db._execute_query(query, (batch_id,))
-
-        best_model_type = result[0] if result else None
+        model_types = self.experiment_repo.get_best_configurations_by_model_type(batch_id)
+        best_model_type = model_types[0] if model_types else None
 
         # 按预测周期分组
-        query = """
-            SELECT
-                config->>'target_period' as target_period,
-                AVG(rank_score) as avg_score,
-                COUNT(*) as count
-            FROM experiments
-            WHERE batch_id = %s AND status = 'completed'
-            GROUP BY config->>'target_period'
-            ORDER BY avg_score DESC
-        """
-
-        result = self.db._execute_query(query, (batch_id,))
-
-        best_target_period = result[0] if result else None
+        target_periods = self.experiment_repo.get_best_configurations_by_target_period(batch_id)
+        best_target_period = target_periods[0] if target_periods else None
 
         return {
             "best_model_type": {
-                "model_type": best_model_type[0] if best_model_type else None,
-                "avg_score": (
-                    float(best_model_type[1]) if best_model_type and best_model_type[1] else None
-                ),
-                "count": best_model_type[2] if best_model_type else 0,
+                "model_type": best_model_type['model_type'] if best_model_type else None,
+                "avg_score": best_model_type['avg_score'] if best_model_type else None,
+                "count": best_model_type['count'] if best_model_type else 0,
             },
             "best_target_period": {
-                "target_period": (
-                    int(best_target_period[0])
-                    if best_target_period and best_target_period[0]
-                    else None
-                ),
-                "avg_score": (
-                    float(best_target_period[1])
-                    if best_target_period and best_target_period[1]
-                    else None
-                ),
-                "count": best_target_period[2] if best_target_period else 0,
+                "target_period": best_target_period['target_period'] if best_target_period else None,
+                "avg_score": best_target_period['avg_score'] if best_target_period else None,
+                "count": best_target_period['count'] if best_target_period else 0,
             },
         }
 

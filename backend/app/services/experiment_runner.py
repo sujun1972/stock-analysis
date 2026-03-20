@@ -1,5 +1,5 @@
 """
-实验运行器
+实验运行器（重构版）
 负责执行实验的训练和回测
 """
 
@@ -9,8 +9,6 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from loguru import logger
-from psycopg2.extras import Json
-from src.database.db_manager import DatabaseManager
 
 from app.core.exceptions import BackendError, DatabaseError
 from app.repositories.experiment_repository import ExperimentRepository
@@ -30,16 +28,15 @@ class ExperimentRunner:
     - 实验状态更新
     """
 
-    def __init__(self, db: Optional[DatabaseManager] = None):
+    def __init__(self, db=None):
         """
         初始化实验运行器
 
         Args:
-            db: DatabaseManager 实例（可选，用于依赖注入）
+            db: DatabaseManager 实例（可选，用于依赖注入，传递给 Repository 和 Service）
         """
-        self.db = db or DatabaseManager()
-        self.backtest_service = BacktestService(self.db)
-        self.experiment_repo = ExperimentRepository(self.db)
+        self.backtest_service = BacktestService(db)
+        self.experiment_repo = ExperimentRepository(db)
 
         # 运行中的批次
         self.running_batches: Dict[int, asyncio.Task] = {}
@@ -338,14 +335,17 @@ class ExperimentRunner:
         await batch_manager.update_batch_status(batch_id, status, **kwargs)
 
     async def _get_pending_experiments(self, batch_id: int) -> List:
-        """获取待执行的实验"""
-        query = """
-            SELECT id, batch_id, experiment_name, config
-            FROM experiments
-            WHERE batch_id = %s AND status = 'pending'
-            ORDER BY id
-        """
-        return await asyncio.to_thread(self.db._execute_query, query, (batch_id,))
+        """获取待执行的实验（使用 Repository）"""
+        experiments = await asyncio.to_thread(
+            self.experiment_repo.find_experiments_by_batch, batch_id=batch_id, status='pending'
+        )
+
+        # 转换为元组格式（与原逻辑兼容）
+        result = []
+        for exp in experiments:
+            result.append((exp['id'], exp['batch_id'], exp['experiment_name'], exp['config']))
+
+        return result
 
     async def _update_experiment_status(self, exp_id: int, status: str, **kwargs):
         """更新实验状态"""
@@ -363,24 +363,17 @@ class ExperimentRunner:
         train_completed_at: datetime,
         train_duration: int,
     ):
-        """更新实验训练结果"""
-        query = """
-            UPDATE experiments
-            SET model_id = %s, train_metrics = %s, feature_importance = %s,
-                model_path = %s, train_completed_at = %s, train_duration_seconds = %s
-            WHERE id = %s
-        """
-        # 注意：train_metrics 和 feature_importance 是 JSONB 字段，需要用 Json() 包装
-        params = (
+        """更新实验训练结果（使用 Repository）"""
+        await asyncio.to_thread(
+            self.experiment_repo.update_train_result,
+            exp_id,
             model_id,
-            Json(train_metrics) if train_metrics else None,
-            Json(feature_importance) if feature_importance else None,
-            str(model_path),
+            train_metrics,
+            feature_importance,
+            model_path,
             train_completed_at,
             train_duration,
-            exp_id,
         )
-        await asyncio.to_thread(self.db._execute_update, query, params)
 
     async def _update_experiment_backtest_result(
         self,
@@ -389,23 +382,14 @@ class ExperimentRunner:
         backtest_completed_at: datetime,
         backtest_duration: int,
     ):
-        """更新实验回测结果"""
-        query = """
-            UPDATE experiments
-            SET backtest_status = 'completed',
-                backtest_metrics = %s,
-                backtest_completed_at = %s,
-                backtest_duration_seconds = %s
-            WHERE id = %s
-        """
-        # 注意：backtest_metrics 是 JSONB 字段，需要用 Json() 包装
-        params = (
-            Json(backtest_metrics) if backtest_metrics else None,
+        """更新实验回测结果（使用 Repository）"""
+        await asyncio.to_thread(
+            self.experiment_repo.update_backtest_result,
+            exp_id,
+            backtest_metrics,
             backtest_completed_at,
             backtest_duration,
-            exp_id,
         )
-        await asyncio.to_thread(self.db._execute_update, query, params)
 
     async def _mark_experiment_failed(self, exp_id: int, error_message: str):
         """标记实验失败"""

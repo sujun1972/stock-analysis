@@ -29,6 +29,8 @@ from .limit_up_pool_repository import LimitUpPoolRepository
 from .dragon_tiger_list_repository import DragonTigerListRepository
 from .sentiment_cycle_repository import SentimentCycleRepository
 from .sentiment_ai_analysis_repository import SentimentAiAnalysisRepository
+from .stock_daily_repository import StockDailyRepository
+from .user_quota_repository import UserQuotaRepository
 
 __all__ = [
     "BaseRepository",
@@ -72,4 +74,8 @@ __all__ = [
     "DragonTigerListRepository",
     "SentimentCycleRepository",
     "SentimentAiAnalysisRepository",
+    # 股票数据
+    "StockDailyRepository",
+    # 用户管理
+    "UserQuotaRepository",
 ]

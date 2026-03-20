@@ -1,5 +1,5 @@
 """
-回测数据加载器
+回测数据加载器（重构版）
 负责加载和准备回测所需的数据
 """
 
@@ -8,9 +8,9 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 from loguru import logger
-from src.database.db_manager import DatabaseManager
 
 from app.core.exceptions import DataQueryError
+from app.repositories.stock_daily_repository import StockDailyRepository
 
 
 class BacktestDataLoader:
@@ -24,14 +24,14 @@ class BacktestDataLoader:
     - 股票代码规范化
     """
 
-    def __init__(self, db: Optional[DatabaseManager] = None):
+    def __init__(self, db=None):
         """
         初始化数据加载器
 
         Args:
-            db: DatabaseManager 实例（可选，用于依赖注入）
+            db: DatabaseManager 实例（可选，用于依赖注入，传递给 Repository）
         """
-        self.db = db or DatabaseManager()
+        self.stock_daily_repo = StockDailyRepository(db)
 
     def normalize_symbol(self, symbol: str) -> str:
         """
@@ -56,8 +56,8 @@ class BacktestDataLoader:
 
         Args:
             symbol: 股票代码
-            start_date: 开始日期
-            end_date: 结束日期
+            start_date: 开始日期（YYYY-MM-DD）
+            end_date: 结束日期（YYYY-MM-DD）
 
         Returns:
             价格数据DataFrame（已标准化）
@@ -68,9 +68,12 @@ class BacktestDataLoader:
         # 标准化股票代码
         normalized_symbol = self.normalize_symbol(symbol)
 
-        # 加载数据
+        # 加载数据（使用 Repository）
         df = await asyncio.to_thread(
-            self.db.load_daily_data, normalized_symbol, start_date=start_date, end_date=end_date
+            self.stock_daily_repo.get_by_code_and_date_range,
+            normalized_symbol,
+            start_date=start_date,
+            end_date=end_date,
         )
 
         if df is None or len(df) == 0:
@@ -87,8 +90,8 @@ class BacktestDataLoader:
 
         Args:
             symbols: 股票代码列表
-            start_date: 开始日期
-            end_date: 结束日期
+            start_date: 开始日期（YYYY-MM-DD）
+            end_date: 结束日期（YYYY-MM-DD）
 
         Returns:
             股票代码 -> DataFrame 的字典
@@ -102,7 +105,7 @@ class BacktestDataLoader:
             normalized_symbol = self.normalize_symbol(symbol)
             try:
                 df = await asyncio.to_thread(
-                    self.db.load_daily_data,
+                    self.stock_daily_repo.get_by_code_and_date_range,
                     normalized_symbol,
                     start_date=start_date,
                     end_date=end_date,
@@ -133,8 +136,8 @@ class BacktestDataLoader:
         加载基准数据（默认沪深300）
 
         Args:
-            start_date: 开始日期
-            end_date: 结束日期
+            start_date: 开始日期（YYYY-MM-DD）
+            end_date: 结束日期（YYYY-MM-DD）
             benchmark_code: 基准代码（默认 000300 沪深300）
 
         Returns:
@@ -142,7 +145,10 @@ class BacktestDataLoader:
         """
         try:
             df = await asyncio.to_thread(
-                self.db.load_daily_data, benchmark_code, start_date=start_date, end_date=end_date
+                self.stock_daily_repo.get_by_code_and_date_range,
+                benchmark_code,
+                start_date=start_date,
+                end_date=end_date,
             )
 
             if df is None or len(df) == 0:
@@ -162,7 +168,7 @@ class BacktestDataLoader:
 
         except DataQueryError:
             # 数据查询错误记录日志，但返回None（基准数据不是必需的）
-            logger.warning(f"获取基准数据失败: 数据查询错误")
+            logger.warning("获取基准数据失败: 数据查询错误")
             return None
         except Exception as e:
             logger.error(f"获取基准数据失败: {e}")

@@ -1,5 +1,5 @@
 """
-模型预测服务
+模型预测服务（重构版）
 负责使用训练好的模型进行预测
 """
 
@@ -11,9 +11,9 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 from loguru import logger
 from src.data_pipeline import DataPipeline
-from src.database.db_manager import DatabaseManager
 
 from app.core.exceptions import BackendError, DataNotFoundError, DataQueryError
+from app.repositories.experiment_repository import ExperimentRepository
 from app.utils.data_cleaning import sanitize_float_values
 
 
@@ -27,14 +27,14 @@ class ModelPredictor:
     - 处理预测结果
     """
 
-    def __init__(self, db: Optional[DatabaseManager] = None):
+    def __init__(self, db=None):
         """
         初始化预测服务
 
         Args:
-            db: DatabaseManager 实例（可选，用于依赖注入）
+            db: DatabaseManager 实例（可选，用于依赖注入，传递给 Repository）
         """
-        self.db = db or DatabaseManager()
+        self.experiment_repo = ExperimentRepository(db)
 
     async def predict(
         self,
@@ -154,22 +154,22 @@ class ModelPredictor:
         Returns:
             预测结果
         """
-        # 查询实验信息
-        query = """
-            SELECT id, model_id, config, model_path, status
-            FROM experiments
-            WHERE id = %s
-        """
+        # 查询实验信息（使用 Repository）
+        experiment = await asyncio.to_thread(
+            self.experiment_repo.get_experiment_detail, experiment_id
+        )
 
-        results = await asyncio.to_thread(self.db._execute_query, query, (experiment_id,))
-
-        if not results or len(results) == 0:
+        if not experiment:
             raise ValueError(f"实验不存在: {experiment_id}")
 
-        exp_id, model_id, config, model_path, status = results[0]
+        if experiment['status'] != "completed":
+            raise ValueError(
+                f"实验未完成训练: {experiment_id} (状态: {experiment['status']})"
+            )
 
-        if status != "completed":
-            raise ValueError(f"实验未完成训练: {experiment_id} (状态: {status})")
+        model_id = experiment['model_id']
+        config = experiment['config']
+        model_path = experiment['model_path']
 
         if not model_path or not Path(model_path).exists():
             raise ValueError(f"模型文件不存在: {model_path}")

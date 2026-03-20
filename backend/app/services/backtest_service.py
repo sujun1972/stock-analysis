@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Dict, List, Optional, Union
 
 from loguru import logger
-from src.database.db_manager import DatabaseManager
 
 from app.core.exceptions import BacktestError, DataQueryError
 from app.services.backtest_data_loader import BacktestDataLoader
@@ -25,12 +24,12 @@ class BacktestService:
     提供统一的接口供API层调用。
     """
 
-    def __init__(self, db: Optional[DatabaseManager] = None):
+    def __init__(self, db=None):
         """
         初始化回测服务
 
         Args:
-            db: DatabaseManager 实例（可选，用于依赖注入）
+            db: DatabaseManager 实例（可选，用于依赖注入，传递给子服务）
         """
         # 委托给专门的服务
         self.data_loader = BacktestDataLoader(db)

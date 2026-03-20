@@ -5,8 +5,6 @@
 
 from typing import Any, Dict, List, Optional
 
-from src.database.db_manager import DatabaseManager
-
 from app.repositories.experiment_repository import ExperimentRepository
 from app.services.batch_manager import BatchManager
 from app.services.experiment_runner import ExperimentRunner
@@ -21,12 +19,12 @@ class ExperimentService:
     提供统一的接口供API层调用。
     """
 
-    def __init__(self, db: Optional[DatabaseManager] = None):
+    def __init__(self, db=None):
         """
         初始化服务
 
         Args:
-            db: DatabaseManager 实例（可选，用于依赖注入）
+            db: DatabaseManager 实例（可选，用于依赖注入，传递给子服务）
         """
         # 委托给专门的服务
         self.batch_manager = BatchManager(db)

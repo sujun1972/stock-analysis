@@ -119,28 +119,32 @@ async def change_password(
 
 @router.get("/quota")
 async def get_my_quota(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     查看我的配额
 
     返回当前用户的配额信息（包含剩余配额计算）
     """
+    from app.repositories import UserQuotaRepository
+
+    # 使用 Repository 代替直接调用存储过程
+    quota_repo = UserQuotaRepository()
+
     # 先重置过期的配额
-    db.execute("SELECT reset_quota_if_needed(:user_id)", {"user_id": current_user.id})
-    db.commit()
+    quota_repo.reset_quota_if_needed(current_user.id)
 
     # 查询配额
-    quota = db.query(UserQuota).filter(UserQuota.user_id == current_user.id).first()
-    if not quota:
+    quota_data = quota_repo.get_by_user_id(current_user.id)
+
+    if not quota_data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="配额记录不存在"
         )
 
     return ApiResponse.success(
-        data=UserQuotaResponse.model_validate(quota),
+        data=quota_data,
         message="获取配额成功"
     ).to_dict()
 
