@@ -388,3 +388,196 @@ class StrategyExecutionRepository(BaseRepository):
             'pending': row[4],
             'avg_duration_ms': float(row[5]) if row[5] else None,
         }
+
+    def list_by_user_with_pagination(
+        self,
+        username: str,
+        page: int = 1,
+        page_size: int = 20,
+        status_filter: Optional[str] = None,
+        strategy_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        分页查询用户的回测历史记录（带策略关联）
+
+        Args:
+            username: 用户名
+            page: 页码（从1开始）
+            page_size: 每页数量
+            status_filter: 状态筛选（可选）
+            strategy_id: 策略ID筛选（可选）
+
+        Returns:
+            包含 total, items 的字典
+
+        Examples:
+            >>> repo = StrategyExecutionRepository()
+            >>> result = repo.list_by_user_with_pagination('admin', page=1, page_size=20)
+            >>> print(f"总数: {result['total']}, 记录数: {len(result['items'])}")
+        """
+        # 构建查询条件
+        conditions = ["se.executed_by = %s"]
+        params = [username]
+
+        if status_filter:
+            conditions.append("se.status = %s")
+            params.append(status_filter)
+
+        if strategy_id:
+            conditions.append("CAST(se.execution_params->>'strategy_id' AS INT) = %s")
+            params.append(strategy_id)
+
+        where_clause = " AND ".join(conditions)
+
+        # 查询总数
+        count_query = f"""
+            SELECT COUNT(*)
+            FROM strategy_executions se
+            WHERE {where_clause}
+        """
+        count_result = self.execute_query(count_query, tuple(params))
+        total = count_result[0][0] if count_result else 0
+
+        # 查询数据（带策略关联）
+        offset = (page - 1) * page_size
+        data_params = params + [page_size, offset]
+
+        query = f"""
+            SELECT
+                se.id,
+                se.execution_type,
+                se.status,
+                se.metrics,
+                se.execution_params,
+                se.error_message,
+                se.execution_duration_ms,
+                se.started_at,
+                se.completed_at,
+                se.created_at,
+                s.id as strategy_id,
+                s.name as strategy_name,
+                s.display_name as strategy_display_name,
+                s.source_type as strategy_source_type
+            FROM strategy_executions se
+            LEFT JOIN strategies s ON (
+                s.id = CAST(se.execution_params->>'strategy_id' AS INT)
+            )
+            WHERE {where_clause}
+            ORDER BY se.created_at DESC
+            LIMIT %s OFFSET %s
+        """
+
+        results = self.execute_query(query, tuple(data_params))
+
+        items = []
+        for row in results:
+            items.append({
+                'id': row[0],
+                'execution_type': row[1],
+                'status': row[2],
+                'metrics': row[3],
+                'execution_params': row[4],
+                'error_message': row[5],
+                'execution_duration_ms': row[6],
+                'started_at': row[7].isoformat() if row[7] else None,
+                'completed_at': row[8].isoformat() if row[8] else None,
+                'created_at': row[9].isoformat() if row[9] else None,
+                'strategy': {
+                    'id': row[10],
+                    'name': row[11],
+                    'display_name': row[12],
+                    'source_type': row[13],
+                } if row[10] else None,
+            })
+
+        return {
+            'total': total,
+            'items': items
+        }
+
+    def get_by_id_with_strategy(self, execution_id: int) -> Optional[Dict[str, Any]]:
+        """
+        根据 ID 获取执行记录（带策略详情）
+
+        Args:
+            execution_id: 执行记录 ID
+
+        Returns:
+            执行记录字典（包含策略信息），不存在则返回 None
+
+        Examples:
+            >>> repo = StrategyExecutionRepository()
+            >>> detail = repo.get_by_id_with_strategy(123)
+            >>> if detail:
+            >>>     print(f"策略: {detail['strategy']['display_name']}")
+        """
+        query = """
+            SELECT
+                se.id,
+                se.execution_type,
+                se.status,
+                se.metrics,
+                se.execution_params,
+                se.result,
+                se.error_message,
+                se.execution_duration_ms,
+                se.started_at,
+                se.completed_at,
+                se.created_at,
+                se.executed_by,
+                s.id as strategy_id,
+                s.name as strategy_name,
+                s.display_name as strategy_display_name,
+                s.source_type as strategy_source_type,
+                s.code as strategy_code
+            FROM strategy_executions se
+            LEFT JOIN strategies s ON (
+                s.id = CAST(se.execution_params->>'strategy_id' AS INT)
+            )
+            WHERE se.id = %s
+        """
+
+        results = self.execute_query(query, (execution_id,))
+        if not results:
+            return None
+
+        row = results[0]
+        return {
+            'id': row[0],
+            'execution_type': row[1],
+            'status': row[2],
+            'metrics': row[3],
+            'execution_params': row[4],
+            'result': row[5],
+            'error_message': row[6],
+            'execution_duration_ms': row[7],
+            'started_at': row[8].isoformat() if row[8] else None,
+            'completed_at': row[9].isoformat() if row[9] else None,
+            'created_at': row[10].isoformat() if row[10] else None,
+            'executed_by': row[11],
+            'strategy': {
+                'id': row[12],
+                'name': row[13],
+                'display_name': row[14],
+                'source_type': row[15],
+                'code': row[16],
+            } if row[12] else None,
+        }
+
+    def delete_by_id(self, execution_id: int) -> int:
+        """
+        根据 ID 删除执行记录
+
+        Args:
+            execution_id: 执行记录 ID
+
+        Returns:
+            受影响的行数
+
+        Examples:
+            >>> repo = StrategyExecutionRepository()
+            >>> deleted = repo.delete_by_id(123)
+            >>> print(f"已删除 {deleted} 条记录")
+        """
+        query = "DELETE FROM strategy_executions WHERE id = %s"
+        return self.execute_update(query, (execution_id,))

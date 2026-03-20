@@ -923,6 +923,8 @@ class MarginService:
   - `HkHoldService` - 北向资金持股服务
 - **配置和同步服务**：
   - `SyncStatusManager` - 同步状态管理服务
+- **回测历史服务**：
+  - `BacktestHistoryService` - 回测历史管理服务
 
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
@@ -948,6 +950,7 @@ class MarginService:
 - ✅ `moneyflow_mkt_dc.py` - 3个端点（查询、同步、最新），使用 MoneyflowMktDcService
 - ✅ `moneyflow_ind_dc.py` - 3个端点（查询、同步、最新），使用 MoneyflowIndDcService
 - ✅ `moneyflow_stock_dc.py` - 3个端点（查询、同步、排名），使用 MoneyflowStockDcService
+- ✅ `backtest_history.py` - 3个端点（用户回测历史、详情、删除），使用 BacktestHistoryService
 
 **待创建的 Repository**（优先级较低）：
 - `AdjFactorRepository` - 复权因子数据
@@ -960,7 +963,7 @@ class MarginService:
 - ⚠️ `model_ranker.py` - 模型排名器（6处直接 SQL）
 - ⚠️ `model_predictor.py` - 模型预测器（1处直接 SQL）
 - ⚠️ `backtest_data_loader.py` - 回测数据加载器
-- ⚠️ `backtest_service.py` - 回测服务
+- ⚠️ `backtest_service.py` - 回测服务（策略执行相关）
 - ⚠️ `training_task_manager.py` - 训练任务管理器
 
 **重构优先级**：
