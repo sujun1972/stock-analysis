@@ -173,8 +173,9 @@ class MarginService:
         """
         try:
             # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
-            start_date_fmt = start_date.replace('-', '') if start_date else None
-            end_date_fmt = end_date.replace('-', '') if end_date else None
+            # 如果没有指定日期，使用默认的最小/最大日期
+            start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
+            end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
             # 计算分页参数
             offset = (page - 1) * page_size

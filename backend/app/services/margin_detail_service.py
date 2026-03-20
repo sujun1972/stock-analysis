@@ -287,13 +287,22 @@ class MarginDetailService:
                 latest_date = await asyncio.to_thread(
                     self.margin_detail_repo.get_latest_trade_date
                 )
-                trade_date = latest_date
+                # 将 datetime.date 对象转换为字符串
+                if latest_date:
+                    from datetime import date
+                    if isinstance(latest_date, date):
+                        trade_date = latest_date.strftime('%Y%m%d')
+                    else:
+                        trade_date = latest_date
 
             if not trade_date:
                 return []
 
             # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
-            trade_date_formatted = trade_date.replace('-', '') if '-' in trade_date else trade_date
+            if isinstance(trade_date, str):
+                trade_date_formatted = trade_date.replace('-', '') if '-' in trade_date else trade_date
+            else:
+                trade_date_formatted = trade_date
 
             # 使用 Repository 查询 TOP 股票
             top_stocks = await asyncio.to_thread(

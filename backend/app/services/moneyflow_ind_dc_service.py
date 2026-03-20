@@ -21,7 +21,10 @@ class MoneyflowIndDcService:
         limit: int = 50,
         offset: int = 0
     ) -> Dict:
-        """获取板块资金流向数据"""
+        """获取板块资金流向数据
+
+        Note: ts_code 参数保留用于 API 兼容性，但目前未使用
+        """
         start_date_fmt = start_date.replace('-', '') if start_date else None
         end_date_fmt = end_date.replace('-', '') if end_date else None
 
@@ -29,7 +32,6 @@ class MoneyflowIndDcService:
             start_date=start_date_fmt or '19900101',
             end_date=end_date_fmt or '29991231',
             content_type=content_type,
-            ts_code=ts_code,
             limit=limit,
             offset=offset
         )
@@ -37,8 +39,7 @@ class MoneyflowIndDcService:
         total_count = self.repo.get_record_count(
             start_date=start_date_fmt,
             end_date=end_date_fmt,
-            content_type=content_type,
-            ts_code=ts_code
+            content_type=content_type
         )
 
         statistics = self.repo.get_statistics(
@@ -53,7 +54,9 @@ class MoneyflowIndDcService:
                 if key in item and item[key]:
                     item[key] = round(item[key] / 100000000, 2)
 
-        for key in ['avg_net', 'max_net', 'min_net', 'total_net', 'avg_elg', 'max_elg', 'avg_lg', 'max_lg']:
+        # 统计数据单位换算（使用正确的字段名）
+        for key in ['avg_net_amount', 'max_net_amount', 'min_net_amount', 'total_net_amount',
+                    'avg_buy_elg_amount', 'max_buy_elg_amount', 'avg_buy_lg_amount', 'max_buy_lg_amount']:
             if key in statistics and statistics[key]:
                 statistics[key] = round(statistics[key] / 100000000, 2)
 

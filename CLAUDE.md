@@ -350,6 +350,22 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
   - 错误示例：`<p><div className="flex">...</div></p>`
   - 正确示例：`<p className="flex">...</p>`
   - 适用于所有渲染为 `<p>` 的组件（如 `CardDescription`）
+- **空值安全处理**（避免运行时错误）：
+  - 格式化函数必须处理 `null` 和 `undefined`：
+    ```typescript
+    const formatAmount = (amount: number | null | undefined) => {
+      if (amount === null || amount === undefined) return '0.00'
+      return amount.toFixed(2)
+    }
+    ```
+  - 条件判断使用空值合并运算符 `??`：
+    ```typescript
+    <span className={(value ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
+    ```
+  - 统计数据显示添加默认值：
+    ```typescript
+    板块数: {statistics.sector_count ?? 0}
+    ```
 
 ### 定时任务页面架构
 定时任务配置页面（`/settings/scheduler`）采用数据库驱动的元数据管理：
@@ -2294,6 +2310,21 @@ async def get_moneyflow(ts_code: Optional[str] = None):
 - [ ] 检查表名是否正确（`TABLE_NAME` 常量）
 - [ ] 检查 WHERE 条件是否过于严格
 - [ ] 使用 `get_record_count()` 验证数据是否存在
+- [ ] 检查日期参数是否为 None（Service 层应提供默认值 `'19900101'` / `'29991231'`）
+
+**问题：日期类型不一致**
+- [ ] 数据库表的 `trade_date` 列类型可能不同：
+  - `VARCHAR` 类型 → 返回字符串（如 `margin` 表）
+  - `DATE` 类型 → 返回 `datetime.date` 对象（如 `margin_detail` 表）
+- [ ] Repository 层应统一转换为字符串：
+  ```python
+  "trade_date": row[0].strftime('%Y%m%d') if hasattr(row[0], 'strftime') else row[0]
+  ```
+- [ ] Service 层应处理可能的 `datetime.date` 对象：
+  ```python
+  if isinstance(date_value, date):
+      date_str = date_value.strftime('%Y%m%d')
+  ```
 
 **问题：性能较慢**
 - [ ] 检查是否使用批量操作（而非循环单条插入）

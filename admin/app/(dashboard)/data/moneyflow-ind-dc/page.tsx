@@ -36,19 +36,17 @@ interface MoneyflowIndDcData {
 }
 
 interface Statistics {
-  avg_net: number
-  max_net: number
-  min_net: number
-  total_net: number
-  avg_elg: number
-  max_elg: number
-  avg_lg: number
-  max_lg: number
-  avg_pct: number
+  avg_net_amount: number
+  max_net_amount: number
+  min_net_amount: number
+  total_net_amount: number
+  avg_buy_elg_amount: number
+  max_buy_elg_amount: number
+  avg_buy_lg_amount: number
+  max_buy_lg_amount: number
   latest_date: string
   earliest_date: string
   count: number
-  type_count: number
   sector_count: number
 }
 
@@ -218,12 +216,14 @@ export default function MoneyflowIndDcPage() {
   }
 
   // 格式化金额（元 -> 亿元）
-  const formatAmount = (amount: number) => {
+  const formatAmount = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined) return '0.00'
     return (amount / 100000000).toFixed(2)
   }
 
   // 格式化百分比
-  const formatPercent = (value: number) => {
+  const formatPercent = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return '0.00%'
     return `${value.toFixed(2)}%`
   }
 
@@ -252,7 +252,7 @@ export default function MoneyflowIndDcPage() {
       key: 'pct_change',
       header: '涨跌幅',
       accessor: (row) => (
-        <span className={row.pct_change >= 0 ? 'text-red-600' : 'text-green-600'}>
+        <span className={(row.pct_change ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
           {formatPercent(row.pct_change)}
         </span>
       ),
@@ -262,7 +262,7 @@ export default function MoneyflowIndDcPage() {
       key: 'net_amount',
       header: '主力净流入',
       accessor: (row) => (
-        <span className={row.net_amount >= 0 ? 'text-red-600' : 'text-green-600'}>
+        <span className={(row.net_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
           {formatAmount(row.net_amount)}亿
         </span>
       ),
@@ -278,7 +278,7 @@ export default function MoneyflowIndDcPage() {
       key: 'buy_elg_amount',
       header: '超大单',
       accessor: (row) => (
-        <span className={row.buy_elg_amount >= 0 ? 'text-red-600' : 'text-green-600'}>
+        <span className={(row.buy_elg_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
           {formatAmount(row.buy_elg_amount)}亿
         </span>
       ),
@@ -288,7 +288,7 @@ export default function MoneyflowIndDcPage() {
       key: 'buy_lg_amount',
       header: '大单',
       accessor: (row) => (
-        <span className={row.buy_lg_amount >= 0 ? 'text-red-600' : 'text-green-600'}>
+        <span className={(row.buy_lg_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
           {formatAmount(row.buy_lg_amount)}亿
         </span>
       ),
@@ -319,13 +319,13 @@ export default function MoneyflowIndDcPage() {
       </div>
       <div className="flex justify-between items-center">
         <span className="text-sm text-gray-600 dark:text-gray-400">涨跌幅</span>
-        <span className={item.pct_change >= 0 ? 'text-red-600' : 'text-green-600'}>
+        <span className={(item.pct_change ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
           {formatPercent(item.pct_change)}
         </span>
       </div>
       <div className="flex justify-between items-center">
         <span className="text-sm text-gray-600 dark:text-gray-400">主力净流入</span>
-        <span className={item.net_amount >= 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
+        <span className={(item.net_amount ?? 0) >= 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
           {formatAmount(item.net_amount)}亿
         </span>
       </div>
@@ -362,11 +362,11 @@ export default function MoneyflowIndDcPage() {
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${statistics.avg_net >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatAmount(statistics.avg_net)}亿
+              <div className={`text-2xl font-bold ${(statistics.avg_net_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatAmount(statistics.avg_net_amount)}亿
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                板块数: {statistics.sector_count}
+                板块数: {statistics.sector_count ?? 0}
               </p>
             </CardContent>
           </Card>
@@ -378,10 +378,10 @@ export default function MoneyflowIndDcPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-red-600">
-                {formatAmount(statistics.max_net)}亿
+                {formatAmount(statistics.max_net_amount)}亿
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                最高涨幅: {formatPercent(statistics.avg_pct)}
+                最早日期: {statistics.earliest_date || 'N/A'}
               </p>
             </CardContent>
           </Card>
@@ -393,10 +393,10 @@ export default function MoneyflowIndDcPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {formatAmount(statistics.min_net)}亿
+                {formatAmount(statistics.min_net_amount)}亿
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                数据类型: {statistics.type_count}种
+                最新日期: {statistics.latest_date || 'N/A'}
               </p>
             </CardContent>
           </Card>
@@ -407,11 +407,11 @@ export default function MoneyflowIndDcPage() {
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${statistics.avg_elg >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatAmount(statistics.avg_elg)}亿
+              <div className={`text-2xl font-bold ${(statistics.avg_buy_elg_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatAmount(statistics.avg_buy_elg_amount)}亿
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                记录数: {statistics.count}
+                记录数: {statistics.count ?? 0}
               </p>
             </CardContent>
           </Card>

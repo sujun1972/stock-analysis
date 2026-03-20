@@ -102,7 +102,7 @@ class MarginDetailRepository(BaseRepository):
 
             return [
                 {
-                    "trade_date": row[0],
+                    "trade_date": row[0].strftime('%Y%m%d') if hasattr(row[0], 'strftime') else row[0],
                     "ts_code": row[1],
                     "name": row[2],
                     "rzye": float(row[3]) if row[3] else 0,
@@ -257,7 +257,7 @@ class MarginDetailRepository(BaseRepository):
 
             return [
                 {
-                    "trade_date": row[0],
+                    "trade_date": row[0].strftime('%Y%m%d') if hasattr(row[0], 'strftime') else row[0],
                     "ts_code": row[1],
                     "name": row[2],
                     "rzrqye": float(row[3]) if row[3] else 0,
@@ -296,7 +296,11 @@ class MarginDetailRepository(BaseRepository):
                 query = f"SELECT MAX(trade_date) FROM {self.TABLE_NAME}"
                 result = self.execute_query(query)
 
-            return result[0][0] if result and result[0][0] else None
+            if result and result[0][0]:
+                date_value = result[0][0]
+                # 将 datetime.date 转换为字符串 YYYYMMDD
+                return date_value.strftime('%Y%m%d') if hasattr(date_value, 'strftime') else date_value
+            return None
         except Exception as e:
             logger.error(f"获取最新交易日期失败: {e}")
             return None
@@ -334,7 +338,7 @@ class MarginDetailRepository(BaseRepository):
 
             return [
                 {
-                    "trade_date": row[0],
+                    "trade_date": row[0].strftime('%Y%m%d') if hasattr(row[0], 'strftime') else row[0],
                     "ts_code": row[1],
                     "name": row[2],
                     "rzye": float(row[3]) if row[3] else 0,
