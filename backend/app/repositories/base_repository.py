@@ -266,3 +266,84 @@ class BaseRepository:
 
         query = f"DELETE FROM {table} WHERE {id_column} = %s"
         return self.execute_update(query, (id_value,))
+
+    def execute_query_returning(
+        self, query: str, params: Optional[Tuple] = None
+    ) -> List[Tuple]:
+        """
+        执行带 RETURNING 子句的查询（用于 INSERT/UPDATE）
+
+        Args:
+            query: SQL 语句（包含 RETURNING 子句）
+            params: 参数
+
+        Returns:
+            RETURNING 返回的结果列表
+
+        Examples:
+            >>> repo = BaseRepository()
+            >>> result = repo.execute_query_returning(
+            ...     "INSERT INTO table (col1) VALUES (%s) RETURNING id", (value,)
+            ... )
+            >>> new_id = result[0][0]
+        """
+        try:
+            conn = self.db.get_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(query, params or ())
+                result = cursor.fetchall()
+                conn.commit()
+                cursor.close()
+                return result
+            finally:
+                self.db.release_connection(conn)
+        except (OperationalError, InterfaceError, PsycopgDatabaseError) as e:
+            logger.error(f"数据库 RETURNING 查询失败: {query[:100]}... - {e}")
+            raise DatabaseError(
+                "数据库 RETURNING 查询失败",
+                error_code="DB_RETURNING_QUERY_FAILED",
+                operation="insert_or_update",
+                query_preview=query[:100],
+                reason=str(e),
+            )
+
+    def execute_batch(self, query: str, values: List[Tuple]) -> int:
+        """
+        批量执行语句（如批量插入）
+
+        Args:
+            query: SQL 语句
+            values: 参数列表
+
+        Returns:
+            受影响的总行数
+
+        Examples:
+            >>> repo = BaseRepository()
+            >>> values = [(1, 'a'), (2, 'b'), (3, 'c')]
+            >>> count = repo.execute_batch(
+            ...     "INSERT INTO table (id, name) VALUES (%s, %s)", values
+            ... )
+        """
+        try:
+            conn = self.db.get_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.executemany(query, values)
+                affected_rows = cursor.rowcount
+                conn.commit()
+                cursor.close()
+                logger.info(f"✓ 批量操作成功: {affected_rows} 行")
+                return affected_rows
+            finally:
+                self.db.release_connection(conn)
+        except (OperationalError, InterfaceError, PsycopgDatabaseError) as e:
+            logger.error(f"批量操作失败: {query[:100]}... - {e}")
+            raise DatabaseError(
+                "批量操作失败",
+                error_code="DB_BATCH_FAILED",
+                operation="batch_insert",
+                query_preview=query[:100],
+                reason=str(e),
+            )

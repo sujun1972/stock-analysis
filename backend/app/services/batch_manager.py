@@ -4,15 +4,13 @@
 """
 
 import asyncio
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from psycopg2.extras import Json
-from src.database.db_manager import DatabaseManager
 
 from app.core.exceptions import DatabaseError
 from app.repositories.batch_repository import BatchRepository
+from app.repositories.experiment_repository import ExperimentRepository
 from app.services.parameter_grid import ParameterGrid
 
 
@@ -27,15 +25,12 @@ class BatchManager:
     - 批次统计信息
     """
 
-    def __init__(self, db: Optional[DatabaseManager] = None):
+    def __init__(self):
         """
         初始化批次管理器
-
-        Args:
-            db: DatabaseManager 实例（可选，用于依赖注入）
         """
-        self.db = db or DatabaseManager()
-        self.batch_repo = BatchRepository(self.db)
+        self.batch_repo = BatchRepository()
+        self.experiment_repo = ExperimentRepository()
 
     async def create_batch(
         self,
@@ -100,7 +95,7 @@ class BatchManager:
         tags: Optional[list] = None,
     ) -> int:
         """
-        创建批次记录
+        创建批次记录（使用 Repository）
 
         Args:
             batch_name: 批次名称
@@ -114,64 +109,23 @@ class BatchManager:
         Returns:
             batch_id: 批次ID（对应 experiment_batches.id）
         """
-        # 注意：experiment_batches 表的主键是 id，会自动生成
-        # RETURNING 子句应该返回 id，而不是 batch_id
-        query = """
-            INSERT INTO experiment_batches (
-                batch_name, description, strategy, param_space, status, total_experiments,
-                completed_experiments, failed_experiments, running_experiments,
-                config, tags, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """
-
-        params = (
-            batch_name,
-            description,
-            strategy,
-            Json(
-                param_space if param_space else {}
-            ),  # param_space (JSONB, NOT NULL) - wrap with Json()
-            "pending",
-            total_experiments,
-            0,  # completed_experiments
-            0,  # failed_experiments
-            0,  # running_experiments
-            Json(config if config else {}),  # config (JSONB) - wrap with Json()
-            tags if tags else [],  # tags (VARCHAR[])
-            datetime.now(),
+        # 使用 BatchRepository 创建批次
+        batch_id = await asyncio.to_thread(
+            self.batch_repo.create_batch,
+            batch_name=batch_name,
+            strategy=strategy,
+            param_space=param_space,
+            total_experiments=total_experiments,
+            description=description,
+            config=config,
+            tags=tags,
         )
-
-        # 使用单独的连接来执行 INSERT ... RETURNING 并提交事务
-        def _execute_insert_with_returning():
-            conn = self.db.get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                result = cursor.fetchone()
-                conn.commit()  # 必须提交事务！
-                cursor.close()
-                return result[0]  # 返回 id
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"创建批次记录失败: {e}")
-                raise DatabaseError(
-                    "批次记录创建失败",
-                    error_code="BATCH_RECORD_CREATE_FAILED",
-                    batch_name=batch_name,
-                    reason=str(e),
-                )
-            finally:
-                self.db.release_connection(conn)
-
-        batch_id = await asyncio.to_thread(_execute_insert_with_returning)
-        logger.info(f"✓ 批次记录已创建: batch_id={batch_id}")
 
         return batch_id
 
     async def _create_experiments(self, batch_id: int, configs: List[Dict]):
         """
-        创建实验记录
+        创建实验记录（使用 Repository）
 
         Args:
             batch_id: 批次ID
@@ -179,40 +133,26 @@ class BatchManager:
         """
         logger.info(f"创建 {len(configs)} 个实验记录...")
 
-        insert_query = """
-            INSERT INTO experiments (
-                batch_id, experiment_name, experiment_hash, config,
-                status, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s)
-        """
-
-        # 批量插入
+        # 准备实验数据
         experiments = []
         for config in configs:
             experiment_name = self._generate_experiment_name(config)
             experiment_hash = config.get("experiment_hash", "")
 
-            experiments.append(
-                (
-                    batch_id,
-                    experiment_name,
-                    experiment_hash,
-                    Json(config),  # config (JSONB) - wrap with Json()
-                    "pending",
-                    datetime.now(),
-                )
-            )
+            experiments.append({
+                'name': experiment_name,
+                'hash': experiment_hash,
+                'config': config,
+            })
 
-        # 执行批量插入
-        conn = self.db.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.executemany(insert_query, experiments)
-            conn.commit()
-            cursor.close()
-            logger.info(f"✓ 创建了 {len(experiments)} 个实验记录")
-        finally:
-            self.db.release_connection(conn)
+        # 使用 ExperimentRepository 批量创建实验
+        count = await asyncio.to_thread(
+            self.experiment_repo.bulk_create_experiments,
+            batch_id,
+            experiments
+        )
+
+        logger.info(f"✓ 创建了 {count} 个实验记录")
 
     def _generate_experiment_name(self, config: Dict) -> str:
         """生成实验名称"""
@@ -234,30 +174,18 @@ class BatchManager:
 
     async def increment_batch_counter(self, batch_id: int, counter_type: str):
         """
-        增加批次计数器
+        增加批次计数器（使用 Repository）
 
         Args:
             batch_id: 批次ID
             counter_type: 计数器类型 ('completed', 'failed', 'running')
         """
-        field_map = {
-            "completed": "completed_experiments",
-            "failed": "failed_experiments",
-            "running": "running_experiments",
-        }
-
-        field = field_map.get(counter_type)
-        if not field:
-            raise ValueError(f"未知的计数器类型: {counter_type}")
-
-        # 注意：experiment_batches 表的主键是 id，不是 batch_id
-        query = f"""
-            UPDATE experiment_batches
-            SET {field} = {field} + 1
-            WHERE id = %s
-        """
-
-        await asyncio.to_thread(self.db._execute_update, query, (batch_id,))
+        # 使用 BatchRepository 增加计数器
+        await asyncio.to_thread(
+            self.batch_repo.increment_batch_counter,
+            batch_id,
+            counter_type
+        )
 
     async def get_batch_info(self, batch_id: int) -> Optional[Dict]:
         """
@@ -306,33 +234,28 @@ class BatchManager:
 
     async def calculate_rankings(self, batch_id: int):
         """
-        计算实验排名
+        计算实验排名（使用 Repository）
 
         Args:
             batch_id: 批次ID
         """
         logger.info(f"计算批次 {batch_id} 的排名...")
 
-        # 查询所有完成的实验
-        query = """
-            SELECT id, backtest_metrics
-            FROM experiments
-            WHERE batch_id = %s
-              AND status = 'completed'
-              AND backtest_status = 'completed'
-              AND backtest_metrics IS NOT NULL
-        """
+        # 使用 ExperimentRepository 获取已完成的实验
+        experiments = await asyncio.to_thread(
+            self.experiment_repo.get_completed_experiments_for_ranking,
+            batch_id
+        )
 
-        results = await asyncio.to_thread(self.db._execute_query, query, (batch_id,))
-
-        if not results:
+        if not experiments:
             logger.warning(f"批次 {batch_id} 没有完成的实验")
             return
 
         # 计算综合排名分数
         scored_experiments = []
-        for row in results:
-            exp_id, metrics = row[0], row[1]
+        for exp in experiments:
+            exp_id = exp['id']
+            metrics = exp['backtest_metrics']
 
             # 计算排名分数（根据你的评分逻辑）
             rank_score = self._calculate_rank_score(metrics)
@@ -341,15 +264,13 @@ class BatchManager:
         # 按分数排序
         scored_experiments.sort(key=lambda x: x[1], reverse=True)
 
-        # 更新排名
+        # 使用 ExperimentRepository 批量更新排名
         for position, (exp_id, score) in enumerate(scored_experiments, 1):
-            update_query = """
-                UPDATE experiments
-                SET rank_score = %s, rank_position = %s
-                WHERE id = %s
-            """
             await asyncio.to_thread(
-                self.db._execute_update, update_query, (score, position, exp_id)
+                self.experiment_repo.update_rank,
+                exp_id,
+                score,
+                position
             )
 
         logger.info(f"✓ 完成排名计算: {len(scored_experiments)} 个实验")

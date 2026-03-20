@@ -5,6 +5,8 @@ Experiment Repository
 
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
+from app.core.exceptions import DatabaseError
 
 from .base_repository import BaseRepository
 
@@ -569,3 +571,249 @@ class ExperimentRepository(BaseRepository):
             })
 
         return configurations
+
+    def bulk_create_experiments(
+        self, batch_id: int, experiments: List[Dict[str, Any]]
+    ) -> int:
+        """
+        批量创建实验记录
+
+        Args:
+            batch_id: 批次ID
+            experiments: 实验配置列表，每个包含 name, hash, config
+
+        Returns:
+            创建的实验数量
+
+        Examples:
+            >>> repo = ExperimentRepository()
+            >>> experiments = [
+            ...     {'name': 'exp1', 'hash': 'abc', 'config': {'lr': 0.01}},
+            ...     {'name': 'exp2', 'hash': 'def', 'config': {'lr': 0.001}}
+            ... ]
+            >>> count = repo.bulk_create_experiments(1, experiments)
+        """
+        from datetime import datetime
+        from psycopg2.extras import Json
+
+        query = """
+            INSERT INTO experiments (
+                batch_id, experiment_name, experiment_hash, config,
+                status, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+        """
+
+        # 准备批量插入数据
+        values = []
+        for exp in experiments:
+            values.append((
+                batch_id,
+                exp.get('name', ''),
+                exp.get('hash', ''),
+                Json(exp.get('config', {})),
+                'pending',
+                datetime.now(),
+            ))
+
+        # 执行批量插入
+        return self.execute_batch(query, values)
+
+    def get_completed_experiments_for_ranking(
+        self, batch_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        获取已完成的实验用于排名计算
+
+        Args:
+            batch_id: 批次ID
+
+        Returns:
+            实验列表（包含 id 和 backtest_metrics）
+
+        Examples:
+            >>> repo = ExperimentRepository()
+            >>> exps = repo.get_completed_experiments_for_ranking(1)
+        """
+        query = """
+            SELECT id, backtest_metrics
+            FROM experiments
+            WHERE batch_id = %s
+              AND status = 'completed'
+              AND backtest_status = 'completed'
+              AND backtest_metrics IS NOT NULL
+        """
+
+        results = self.execute_query(query, (batch_id,))
+
+        experiments = []
+        for row in results:
+            experiments.append({
+                'id': row[0],
+                'backtest_metrics': row[1],  # JSONB
+            })
+
+        return experiments
+
+    def update_rank(self, experiment_id: int, rank_score: float, rank_position: int) -> int:
+        """
+        更新实验排名
+
+        Args:
+            experiment_id: 实验ID
+            rank_score: 排名分数
+            rank_position: 排名位置
+
+        Returns:
+            受影响的行数
+
+        Examples:
+            >>> repo = ExperimentRepository()
+            >>> repo.update_rank(123, 0.85, 1)
+        """
+        query = """
+            UPDATE experiments
+            SET rank_score = %s, rank_position = %s
+            WHERE id = %s
+        """
+
+        return self.execute_update(query, (rank_score, rank_position, experiment_id))
+
+    def create_experiment(
+        self,
+        batch_id: Optional[int],
+        experiment_name: str,
+        model_id: str,
+        model_path: str,
+        config: Dict[str, Any],
+        train_metrics: Dict[str, Any],
+        status: str = 'completed',
+        has_baseline: bool = False,
+        baseline_metrics: Optional[Dict[str, Any]] = None,
+        comparison_result: Optional[Dict[str, Any]] = None,
+        recommendation: Optional[str] = None,
+        total_samples: Optional[int] = None,
+        successful_symbols: Optional[List[str]] = None,
+    ) -> int:
+        """
+        创建实验记录（用于池化训练）
+
+        Args:
+            batch_id: 批次ID（手动训练为 None）
+            experiment_name: 实验名称
+            model_id: 模型ID
+            model_path: 模型路径
+            config: 实验配置
+            train_metrics: 训练指标
+            status: 状态
+            has_baseline: 是否有基准模型
+            baseline_metrics: 基准指标
+            comparison_result: 对比结果
+            recommendation: 推荐
+            total_samples: 总样本数
+            successful_symbols: 成功的股票列表
+
+        Returns:
+            实验ID
+
+        Examples:
+            >>> repo = ExperimentRepository()
+            >>> exp_id = repo.create_experiment(
+            ...     None, 'POOLED_test', 'model_123', '/path/to/model',
+            ...     {'lr': 0.01}, {'ic': 0.05}, 'completed'
+            ... )
+        """
+        from datetime import datetime
+        from psycopg2.extras import Json
+
+        query = """
+            INSERT INTO experiments (
+                batch_id, experiment_name, model_id, model_path,
+                config, train_metrics, status,
+                has_baseline, baseline_metrics, comparison_result,
+                recommendation, total_samples, successful_symbols,
+                created_at, train_completed_at
+            )
+            VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s
+            )
+            RETURNING id
+        """
+
+        params = (
+            batch_id,
+            experiment_name,
+            model_id,
+            model_path,
+            Json(config),
+            Json(train_metrics),
+            status,
+            has_baseline,
+            Json(baseline_metrics) if baseline_metrics else None,
+            Json(comparison_result) if comparison_result else None,
+            recommendation,
+            total_samples,
+            successful_symbols if successful_symbols else [],
+            datetime.now(),
+            datetime.now(),
+        )
+
+        result = self.execute_query_returning(query, params)
+        if result:
+            exp_id = result[0][0]
+            logger.info(f"✓ 实验记录已创建: experiment_id={exp_id}")
+            return exp_id
+        else:
+            raise DatabaseError(
+                "实验记录创建失败",
+                error_code="EXPERIMENT_CREATE_FAILED",
+                experiment_name=experiment_name,
+                reason="RETURNING 子句未返回结果",
+            )
+
+    def update_backtest_and_rank(
+        self,
+        experiment_id: int,
+        backtest_metrics: Dict[str, Any],
+        rank_score: float,
+    ) -> int:
+        """
+        更新回测结果和排名分数
+
+        Args:
+            experiment_id: 实验ID
+            backtest_metrics: 回测指标
+            rank_score: 排名分数
+
+        Returns:
+            受影响的行数
+
+        Examples:
+            >>> repo = ExperimentRepository()
+            >>> repo.update_backtest_and_rank(
+            ...     123, {'sharpe': 1.5}, 0.85
+            ... )
+        """
+        from datetime import datetime
+        from psycopg2.extras import Json
+
+        query = """
+            UPDATE experiments
+            SET backtest_status = 'completed',
+                backtest_metrics = %s,
+                backtest_completed_at = %s,
+                rank_score = %s
+            WHERE id = %s
+        """
+
+        params = (
+            Json(backtest_metrics),
+            datetime.now(),
+            rank_score,
+            experiment_id,
+        )
+
+        return self.execute_update(query, params)

@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from loguru import logger
-from src.database.db_manager import DatabaseManager
 
-from app.core.exceptions import BackendError, DatabaseError
+from app.core.exceptions import BackendError
+from app.repositories.experiment_repository import ExperimentRepository
 from app.services.core_training import CoreTrainingService
 
 
@@ -28,13 +28,12 @@ class TrainingTaskManager:
     - 执行训练流程
     """
 
-    def __init__(self, models_dir: Optional[Path] = None, db: Optional[DatabaseManager] = None):
+    def __init__(self, models_dir: Optional[Path] = None):
         """
         初始化任务管理器
 
         Args:
             models_dir: 模型存储目录
-            db: DatabaseManager 实例（可选，用于依赖注入）
         """
         self.tasks: Dict[str, Dict[str, Any]] = {}  # 内存中的任务状态
         self.models_dir = models_dir or Path("/data/models/ml_models")
@@ -49,8 +48,8 @@ class TrainingTaskManager:
         self.metadata_file = self.models_dir / "tasks_metadata.json"
         self._load_metadata()
 
-        # 数据库连接
-        self.db = db or DatabaseManager()
+        # Repository 实例
+        self.experiment_repo = ExperimentRepository()
 
     def _load_metadata(self):
         """加载任务元数据"""
@@ -477,7 +476,7 @@ class TrainingTaskManager:
         self, task_id: str, result: Dict[str, Any], config: Dict[str, Any]
     ) -> Optional[int]:
         """
-        保存池化训练结果到数据库的 experiments 表
+        保存池化训练结果到数据库的 experiments 表（使用 Repository）
 
         Args:
             task_id: 任务ID
@@ -487,8 +486,6 @@ class TrainingTaskManager:
         Returns:
             实验ID (experiment.id)，如果保存失败则返回None
         """
-        from psycopg2.extras import Json
-
         try:
             # 生成模型名称：POOLED_symbols_modeltype_period
             symbols = config.get("symbols", [])
@@ -499,81 +496,45 @@ class TrainingTaskManager:
             target_period = config.get("target_period", 10)
             experiment_name = f"POOLED_{symbols_str}_{model_type}_{target_period}d"
 
-            # 准备插入数据
-            # 扩展config，添加训练结果中的关键信息
+            # 准备扩展配置
             extended_config = config.copy()
             extended_config["feature_cols"] = result.get("feature_cols", [])
             extended_config["scaler_path"] = result.get("scaler_path", "")
             extended_config["feature_count"] = result.get("feature_count", 0)
 
-            insert_data = {
-                "batch_id": None,  # 手动训练不属于批次
-                "experiment_name": experiment_name,
-                "model_id": task_id,  # 使用task_id作为model_id
-                "model_path": result.get("lgb_model_path", ""),
-                "config": Json(extended_config),
-                "train_metrics": Json(
-                    {
-                        "ic": result["lgb_metrics"]["test_ic"],
-                        "rank_ic": result["lgb_metrics"]["test_rank_ic"],
-                        "mae": result["lgb_metrics"]["test_mae"],
-                        "r2": result["lgb_metrics"]["test_r2"],
-                        "rmse": result["lgb_metrics"].get("test_rmse", 0),
-                        "train_ic": result["lgb_metrics"]["train_ic"],
-                        "valid_ic": result["lgb_metrics"]["valid_ic"],
-                        "test_ic": result["lgb_metrics"]["test_ic"],
-                    }
-                ),
-                "status": "completed",
-                "has_baseline": result.get("has_baseline", False),
-                "baseline_metrics": Json(result.get("ridge_metrics", {})),
-                "comparison_result": Json(result.get("comparison_result", {})),
-                "recommendation": result.get("recommendation", ""),
-                "total_samples": result.get("total_samples", 0),
-                "successful_symbols": result.get("successful_symbols", []),
+            # 准备训练指标
+            train_metrics = {
+                "ic": result["lgb_metrics"]["test_ic"],
+                "rank_ic": result["lgb_metrics"]["test_rank_ic"],
+                "mae": result["lgb_metrics"]["test_mae"],
+                "r2": result["lgb_metrics"]["test_r2"],
+                "rmse": result["lgb_metrics"].get("test_rmse", 0),
+                "train_ic": result["lgb_metrics"]["train_ic"],
+                "valid_ic": result["lgb_metrics"]["valid_ic"],
+                "test_ic": result["lgb_metrics"]["test_ic"],
             }
 
-            # 执行插入
-            query = """
-                INSERT INTO experiments (
-                    batch_id, experiment_name, model_id, model_path,
-                    config, train_metrics, status,
-                    has_baseline, baseline_metrics, comparison_result,
-                    recommendation, total_samples, successful_symbols,
-                    created_at, train_completed_at
-                )
-                VALUES (
-                    %(batch_id)s, %(experiment_name)s, %(model_id)s, %(model_path)s,
-                    %(config)s, %(train_metrics)s, %(status)s,
-                    %(has_baseline)s, %(baseline_metrics)s, %(comparison_result)s,
-                    %(recommendation)s, %(total_samples)s, %(successful_symbols)s,
-                    NOW(), NOW()
-                )
-                RETURNING id
-            """
+            # 使用 ExperimentRepository 创建实验
+            exp_id = await asyncio.to_thread(
+                self.experiment_repo.create_experiment,
+                batch_id=None,  # 手动训练不属于批次
+                experiment_name=experiment_name,
+                model_id=task_id,  # 使用task_id作为model_id
+                model_path=result.get("lgb_model_path", ""),
+                config=extended_config,
+                train_metrics=train_metrics,
+                status="completed",
+                has_baseline=result.get("has_baseline", False),
+                baseline_metrics=result.get("ridge_metrics", {}),
+                comparison_result=result.get("comparison_result", {}),
+                recommendation=result.get("recommendation", ""),
+                total_samples=result.get("total_samples", 0),
+                successful_symbols=result.get("successful_symbols", []),
+            )
 
-            # 使用连接池直接执行SQL
-            conn = self.db.get_connection()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(query, insert_data)
-                    result = cur.fetchone()
-                    conn.commit()
+            logger.info(f"✓ 池化训练结果已保存到数据库，实验ID: {exp_id}")
+            return exp_id
 
-                    if result:
-                        exp_id = result[0]
-                        logger.info(f"✓ 池化训练结果已保存到数据库，实验ID: {exp_id}")
-                        return exp_id
-                    else:
-                        logger.warning(f"⚠️  池化训练结果保存到数据库失败")
-                        return None
-            finally:
-                self.db.release_connection(conn)
-
-        except DatabaseError as e:
-            logger.error(f"✗ 保存池化训练结果到数据库时出错 (数据库错误): {e}")
-            # 不抛出异常，避免影响训练流程
-            return None
         except Exception as e:
             logger.error(f"✗ 保存池化训练结果到数据库时出错: {e}")
             # 不抛出异常，避免影响训练流程
@@ -581,76 +542,50 @@ class TrainingTaskManager:
 
     async def _update_pooled_backtest_result(self, exp_id: int, backtest_metrics: Dict[str, Any]):
         """
-        更新池化训练实验的回测结果
+        更新池化训练实验的回测结果（使用 Repository）
 
         Args:
             exp_id: 实验ID
             backtest_metrics: 回测指标
         """
-        from datetime import datetime
-
-        from psycopg2.extras import Json
-
         try:
-            query = """
-                UPDATE experiments
-                SET backtest_status = 'completed',
-                    backtest_metrics = %s,
-                    backtest_completed_at = %s
-                WHERE id = %s
-            """
+            # 使用 ExperimentRepository 更新回测结果
+            await asyncio.to_thread(
+                self.experiment_repo.update_backtest_result,
+                exp_id,
+                backtest_metrics,
+                datetime.now(),
+                0  # backtest_duration_seconds (暂时设为0)
+            )
 
-            params = (Json(backtest_metrics) if backtest_metrics else None, datetime.now(), exp_id)
+            logger.info(f"✓ 池化训练回测结果已更新到数据库，实验ID: {exp_id}")
 
-            # 使用连接池执行更新
-            conn = self.db.get_connection()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(query, params)
-                    conn.commit()
-                    logger.info(f"✓ 池化训练回测结果已更新到数据库，实验ID: {exp_id}")
-            finally:
-                self.db.release_connection(conn)
-
-        except DatabaseError as e:
-            logger.error(f"✗ 更新池化训练回测结果时出错 (数据库错误): {e}")
-            # 不抛出异常，避免影响训练流程
         except Exception as e:
             logger.error(f"✗ 更新池化训练回测结果时出错: {e}")
             # 不抛出异常，避免影响训练流程
 
     async def _update_rank_score(self, exp_id: int, rank_score: float):
         """
-        更新实验的综合评分
+        更新实验的综合评分（使用 Repository）
 
         Args:
             exp_id: 实验ID
             rank_score: 综合评分
         """
         try:
-            query = """
-                UPDATE experiments
-                SET rank_score = %s
-                WHERE id = %s
-            """
+            # 使用 ExperimentRepository 更新排名
+            # 注意：这里只更新rank_score，不更新rank_position（设为0表示未计算位置）
+            await asyncio.to_thread(
+                self.experiment_repo.update_rank,
+                exp_id,
+                rank_score,
+                0  # rank_position (0表示未计算位置)
+            )
 
-            params = (rank_score, exp_id)
+            logger.info(
+                f"✓ 综合评分已更新到数据库，实验ID: {exp_id}, 评分: {rank_score:.2f}"
+            )
 
-            # 使用连接池执行更新
-            conn = self.db.get_connection()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(query, params)
-                    conn.commit()
-                    logger.info(
-                        f"✓ 综合评分已更新到数据库，实验ID: {exp_id}, 评分: {rank_score:.2f}"
-                    )
-            finally:
-                self.db.release_connection(conn)
-
-        except DatabaseError as e:
-            logger.error(f"✗ 更新综合评分时出错 (数据库错误): {e}")
-            # 不抛出异常，避免影响训练流程
         except Exception as e:
             logger.error(f"✗ 更新综合评分时出错: {e}")
             # 不抛出异常，避免影响训练流程

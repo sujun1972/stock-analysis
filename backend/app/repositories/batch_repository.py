@@ -288,3 +288,107 @@ class BatchRepository(BaseRepository):
             "max_rank_score": float(row[19]) if row[19] else None,
             "top_model_id": row[20],
         }
+
+    def create_batch(
+        self,
+        batch_name: str,
+        strategy: str,
+        param_space: Dict[str, Any],
+        total_experiments: int,
+        description: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+        tags: Optional[list] = None,
+    ) -> int:
+        """
+        创建批次记录
+
+        Args:
+            batch_name: 批次名称
+            strategy: 策略
+            param_space: 参数空间定义
+            total_experiments: 总实验数
+            description: 描述
+            config: 批次配置
+            tags: 标签列表
+
+        Returns:
+            batch_id: 批次ID（对应 experiment_batches.id）
+
+        Examples:
+            >>> repo = BatchRepository()
+            >>> batch_id = repo.create_batch(
+            ...     'test_batch', 'grid', {'lr': [0.01, 0.001]}, 10
+            ... )
+        """
+        from datetime import datetime
+        from psycopg2.extras import Json
+
+        query = """
+            INSERT INTO experiment_batches (
+                batch_name, description, strategy, param_space, status, total_experiments,
+                completed_experiments, failed_experiments, running_experiments,
+                config, tags, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """
+
+        params = (
+            batch_name,
+            description,
+            strategy,
+            Json(param_space if param_space else {}),
+            "pending",
+            total_experiments,
+            0,  # completed_experiments
+            0,  # failed_experiments
+            0,  # running_experiments
+            Json(config if config else {}),
+            tags if tags else [],
+            datetime.now(),
+        )
+
+        result = self.execute_query_returning(query, params)
+        if result:
+            batch_id = result[0][0]
+            logger.info(f"✓ 批次记录已创建: batch_id={batch_id}")
+            return batch_id
+        else:
+            raise DatabaseError(
+                "批次记录创建失败",
+                error_code="BATCH_RECORD_CREATE_FAILED",
+                batch_name=batch_name,
+                reason="RETURNING 子句未返回结果",
+            )
+
+    def increment_batch_counter(self, batch_id: int, counter_type: str) -> int:
+        """
+        增加批次计数器
+
+        Args:
+            batch_id: 批次ID
+            counter_type: 计数器类型 ('completed', 'failed', 'running')
+
+        Returns:
+            受影响的行数
+
+        Examples:
+            >>> repo = BatchRepository()
+            >>> repo.increment_batch_counter(1, 'completed')
+        """
+        field_map = {
+            "completed": "completed_experiments",
+            "failed": "failed_experiments",
+            "running": "running_experiments",
+        }
+
+        field = field_map.get(counter_type)
+        if not field:
+            raise ValueError(f"未知的计数器类型: {counter_type}")
+
+        query = f"""
+            UPDATE experiment_batches
+            SET {field} = {field} + 1
+            WHERE id = %s
+        """
+
+        return self.execute_update(query, (batch_id,))
