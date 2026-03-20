@@ -19,6 +19,8 @@ from .hk_hold_repository import HkHoldRepository
 from .stk_limit_repository import StkLimitRepository
 from .block_trade_repository import BlockTradeRepository
 from .concept_repository import ConceptRepository
+from .sync_log_repository import SyncLogRepository
+from .config_repository import ConfigRepository
 
 __all__ = [
     "BaseRepository",
@@ -48,4 +50,7 @@ __all__ = [
     "BlockTradeRepository",
     # 概念板块
     "ConceptRepository",
+    # 配置和同步
+    "ConfigRepository",
+    "SyncLogRepository",
 ]

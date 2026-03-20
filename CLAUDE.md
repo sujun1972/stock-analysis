@@ -587,6 +587,10 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `ExperimentRepository` - 实验管理
    - `BatchRepository` - 批处理操作
 
+7. **配置和同步**
+   - `ConfigRepository` - 系统配置管理
+   - `SyncLogRepository` - 同步日志管理（sync_log 表）
+
 #### Repository 开发规范
 
 **强制规则**：
@@ -807,6 +811,7 @@ class MarginService:
 - `BlockTradeService` - 大宗交易服务
 - `StkLimitService` - 涨跌停价格服务
 - `HkHoldService` - 北向资金持股服务
+- `SyncStatusManager` - 同步状态管理服务（✅ 已完全重构）
 
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
@@ -814,6 +819,7 @@ class MarginService:
 - ✅ `StkLimitRepository` - 涨跌停价格数据
 - ✅ `BlockTradeRepository` - 大宗交易数据
 - ✅ `ConceptRepository` - 概念板块和股票关系管理
+- ✅ `SyncLogRepository` - 同步日志管理（sync_log 表）
 
 **已重构的 API 端点**：
 - ✅ `extended_data.py` - 7个端点全部重构完成：
@@ -837,6 +843,27 @@ class MarginService:
 - `SuspendRepository` - 停复牌信息
 - `PremarketRepository` - 盘前数据
 - `SentimentRepository` - 市场情绪数据
+
+**待重构的 Service**（包含直接 SQL）：
+- ⚠️ `batch_manager.py` - 批次管理器（4处直接 SQL）
+- ⚠️ `experiment_runner.py` - 实验运行器（3处直接 SQL）
+- ⚠️ `model_ranker.py` - 模型排名器（6处直接 SQL）
+- ⚠️ `model_predictor.py` - 模型预测器（1处直接 SQL）
+- ⚠️ `data_provider_service.py` - 数据提供服务
+- ⚠️ `data_source_manager.py` - 数据源管理器（已废弃，由 DataSourceConfigService 替代）
+- ⚠️ `backtest_data_loader.py` - 回测数据加载器
+- ⚠️ `backtest_service.py` - 回测服务
+- ⚠️ `training_task_manager.py` - 训练任务管理器
+
+**重构优先级**：
+1. **高优先级**：配置和同步相关服务（✅ 已完成）
+   - `SystemConfigService` - 已使用 ConfigRepository
+   - `DataSourceConfigService` - 已使用 ConfigRepository
+   - `SyncStatusManager` - 已使用 ConfigRepository + SyncLogRepository
+2. **中优先级**：数据同步和扩展数据服务（✅ 大部分完成）
+   - 资金流向、融资融券、每日指标等服务已全部重构
+3. **低优先级**：回测和机器学习相关服务（待重构）
+   - 这些服务使用频率较低，可后续迭代重构
 
 ### 新增功能开发流程
 

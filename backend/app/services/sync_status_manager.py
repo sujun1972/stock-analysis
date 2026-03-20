@@ -11,6 +11,7 @@ from src.database.db_manager import DatabaseManager
 
 from app.core.exceptions import ConfigError, DatabaseError
 from app.repositories.config_repository import ConfigRepository
+from app.repositories.sync_log_repository import SyncLogRepository
 
 
 class SyncStatusManager:
@@ -31,8 +32,8 @@ class SyncStatusManager:
         Args:
             db: DatabaseManager 实例（可选，用于依赖注入）
         """
-        self.db = db or DatabaseManager()
-        self.config_repo = ConfigRepository(self.db)
+        self.config_repo = ConfigRepository(db)
+        self.sync_log_repo = SyncLogRepository(db)
 
     # ==================== 全局同步状态 ====================
 
@@ -197,36 +198,19 @@ class SyncStatusManager:
             Dict: 模块同步状态信息
         """
         try:
-            # 查询该模块最近的同步记录
-            query = """
-                SELECT
-                    status,
-                    total_count,
-                    success_count,
-                    failed_count,
-                    progress,
-                    error_message,
-                    started_at,
-                    completed_at
-                FROM sync_log
-                WHERE data_type = %s
-                ORDER BY started_at DESC
-                LIMIT 1
-            """
+            # 使用 Repository 查询
+            record = await asyncio.to_thread(self.sync_log_repo.get_latest_by_module, module)
 
-            result = await asyncio.to_thread(self.db._execute_query, query, (module,))
-
-            if result and len(result) > 0:
-                row = result[0]
+            if record:
                 return {
-                    "status": row[0] or "idle",
-                    "total": row[1] or 0,
-                    "success": row[2] or 0,
-                    "failed": row[3] or 0,
-                    "progress": row[4] or 0,
-                    "error_message": row[5] or "",
-                    "started_at": row[6].strftime("%Y-%m-%d %H:%M:%S") if row[6] else "",
-                    "completed_at": row[7].strftime("%Y-%m-%d %H:%M:%S") if row[7] else "",
+                    "status": record.get("status") or "idle",
+                    "total": record.get("total_count") or 0,
+                    "success": record.get("success_count") or 0,
+                    "failed": record.get("failed_count") or 0,
+                    "progress": record.get("progress") or 0,
+                    "error_message": record.get("error_message") or "",
+                    "started_at": record.get("started_at") or "",
+                    "completed_at": record.get("completed_at") or "",
                 }
             else:
                 # 没有记录，返回空闲状态
@@ -265,14 +249,9 @@ class SyncStatusManager:
             data_source: 数据源
         """
         try:
-            query = """
-                INSERT INTO sync_log (
-                    task_id, task_type, data_type, data_source, status
-                ) VALUES (%s, %s, %s, %s, %s)
-            """
-
+            # 使用 Repository 创建任务
             await asyncio.to_thread(
-                self.db._execute_update, query, (task_id, "manual", module, data_source, "running")
+                self.sync_log_repo.create_task, task_id, module, data_source, "manual"
             )
 
             logger.info(f"✓ 创建同步任务: {task_id} ({module})")
@@ -313,52 +292,17 @@ class SyncStatusManager:
             error_message: 错误信息
         """
         try:
-            # 构建动态更新语句
-            updates = []
-            params = []
-
-            if status is not None:
-                updates.append("status = %s")
-                params.append(status)
-
-            if total_count is not None:
-                updates.append("total_count = %s")
-                params.append(total_count)
-
-            if success_count is not None:
-                updates.append("success_count = %s")
-                params.append(success_count)
-
-            if failed_count is not None:
-                updates.append("failed_count = %s")
-                params.append(failed_count)
-
-            if progress is not None:
-                updates.append("progress = %s")
-                params.append(progress)
-
-            if error_message is not None:
-                updates.append("error_message = %s")
-                params.append(error_message)
-
-            # 如果状态是完成或失败，设置完成时间和持续时间
-            if status in ["completed", "failed"]:
-                updates.append("completed_at = CURRENT_TIMESTAMP")
-                updates.append(
-                    "duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER"
-                )
-
-            if not updates:
-                return
-
-            query = f"""
-                UPDATE sync_log
-                SET {', '.join(updates)}
-                WHERE task_id = %s
-            """
-            params.append(task_id)
-
-            await asyncio.to_thread(self.db._execute_update, query, tuple(params))
+            # 使用 Repository 更新任务
+            await asyncio.to_thread(
+                self.sync_log_repo.update_task,
+                task_id=task_id,
+                status=status,
+                total_count=total_count,
+                success_count=success_count,
+                failed_count=failed_count,
+                progress=progress,
+                error_message=error_message,
+            )
 
         except DatabaseError:
             # 数据库错误向上传播
@@ -383,36 +327,9 @@ class SyncStatusManager:
             任务信息字典
         """
         try:
-            query = """
-                SELECT
-                    task_id, task_type, data_type, data_source, status,
-                    total_count, success_count, failed_count, progress,
-                    error_message, started_at, completed_at, duration_seconds
-                FROM sync_log
-                WHERE task_id = %s
-            """
-
-            result = await asyncio.to_thread(self.db._execute_query, query, (task_id,))
-
-            if not result:
-                return None
-
-            row = result[0]
-            return {
-                "task_id": row[0],
-                "task_type": row[1],
-                "data_type": row[2],
-                "data_source": row[3],
-                "status": row[4],
-                "total_count": row[5],
-                "success_count": row[6],
-                "failed_count": row[7],
-                "progress": row[8],
-                "error_message": row[9],
-                "started_at": row[10].isoformat() if row[10] else None,
-                "completed_at": row[11].isoformat() if row[11] else None,
-                "duration_seconds": row[12],
-            }
+            # 使用 Repository 查询任务
+            record = await asyncio.to_thread(self.sync_log_repo.get_by_task_id, task_id)
+            return record
 
         except DatabaseError:
             # 数据库错误向上传播
