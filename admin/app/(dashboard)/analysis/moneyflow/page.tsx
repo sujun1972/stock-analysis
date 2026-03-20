@@ -327,7 +327,6 @@ export default function MoneyflowAnalysisPage() {
           <DataTable
             columns={columns}
             data={moneyflowData}
-            pageSize={20}
           />
         </CardContent>
       </Card>

@@ -11,7 +11,7 @@
 
 import { create } from 'zustand'
 
-export type TaskType = 'sync' | 'sentiment' | 'ai_analysis' | 'backtest' | 'premarket' | 'scheduler' | 'other'
+export type TaskType = 'sync' | 'data_sync' | 'sentiment' | 'ai_analysis' | 'backtest' | 'premarket' | 'scheduler' | 'other'
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failure' | 'progress'
 
 export interface Task {

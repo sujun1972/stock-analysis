@@ -646,7 +646,7 @@ export default function StrategiesPage() {
           <DialogHeader>
             <DialogTitle>分配用户</DialogTitle>
             <DialogDescription>
-              为策略 "{editingStrategy?.display_name || editingStrategy?.name}" 分配用户归属
+              为策略「{editingStrategy?.display_name || editingStrategy?.name}」分配用户归属
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -845,7 +845,7 @@ export default function StrategiesPage() {
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
             <DialogDescription>
-              您确定要删除策略 "{deletingStrategy?.display_name || deletingStrategy?.name}" 吗？此操作无法撤销。
+              您确定要删除策略「{deletingStrategy?.display_name || deletingStrategy?.name}」吗？此操作无法撤销。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

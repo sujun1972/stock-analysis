@@ -378,7 +378,7 @@ export default function MarginPage() {
               <label className="text-sm font-medium">开始日期</label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -386,7 +386,7 @@ export default function MarginPage() {
               <label className="text-sm font-medium">结束日期</label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="选择结束日期"
               />
             </div>

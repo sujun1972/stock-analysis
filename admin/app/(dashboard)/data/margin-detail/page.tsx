@@ -410,14 +410,14 @@ export default function MarginDetailPage() {
                 <Label>开始日期</Label>
                 <DatePicker
                   date={startDate}
-                  onSelect={setStartDate}
+                  onDateChange={setStartDate}
                 />
               </div>
               <div className="flex flex-col gap-2">
                 <Label>结束日期</Label>
                 <DatePicker
                   date={endDate}
-                  onSelect={setEndDate}
+                  onDateChange={setEndDate}
                 />
               </div>
             </div>

@@ -132,7 +132,7 @@ export default function MarginPage() {
           <CardTitle>两融余额TOP100</CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={mockData} pageSize={20} />
+          <DataTable columns={columns} data={mockData} />
         </CardContent>
       </Card>
     </div>

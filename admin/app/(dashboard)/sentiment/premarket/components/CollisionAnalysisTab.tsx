@@ -38,7 +38,7 @@ export function CollisionAnalysisTab({
         <AlertTriangleIcon className="h-4 w-4" />
         <AlertTitle>暂无数据</AlertTitle>
         <AlertDescription>
-          {format(date, "yyyy-MM-dd")} 暂无碰撞分析数据，请先同步盘前数据，然后点击"生成碰撞分析"按钮。
+          {format(date, 'yyyy-MM-dd')} 暂无碰撞分析数据，请先同步盘前数据，然后点击「生成碰撞分析」按钮。
         </AlertDescription>
       </Alert>
     )

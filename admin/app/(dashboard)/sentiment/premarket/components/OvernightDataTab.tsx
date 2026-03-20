@@ -32,7 +32,7 @@ export function OvernightDataTab({ overnightData }: OvernightDataTabProps) {
         <AlertTriangleIcon className="h-4 w-4" />
         <AlertTitle>暂无数据</AlertTitle>
         <AlertDescription>
-          请先点击"同步盘前数据"按钮获取隔夜外盘数据
+          请先点击「同步盘前数据」按钮获取隔夜外盘数据
         </AlertDescription>
       </Alert>
     )

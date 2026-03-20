@@ -30,7 +30,7 @@ export function NewsListTab({ newsList }: NewsListTabProps) {
         <AlertTriangleIcon className="h-4 w-4" />
         <AlertTitle>暂无数据</AlertTitle>
         <AlertDescription>
-          请先点击"同步盘前数据"按钮获取盘前核心新闻
+          请先点击「同步盘前数据」按钮获取盘前核心新闻
         </AlertDescription>
       </Alert>
     )

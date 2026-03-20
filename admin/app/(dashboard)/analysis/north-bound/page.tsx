@@ -111,7 +111,7 @@ export default function NorthBoundPage() {
           <CardTitle>北向资金持股TOP50</CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={mockData} pageSize={20} />
+          <DataTable columns={columns} data={mockData} />
         </CardContent>
       </Card>
     </div>
