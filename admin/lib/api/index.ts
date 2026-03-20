@@ -16,6 +16,7 @@ import { UserApiClient, userApi as userApiInst } from './users'
 import { SentimentApiClient, sentimentApi as sentimentApiInst } from './sentiment'
 import { MoneyflowApiClient, moneyflowApi as moneyflowApiInst } from './moneyflow'
 import { MarginApiClient, marginApi as marginApiInst } from './margin'
+import { MarginSecsApi, marginSecsApi as marginSecsApiInst } from './margin-secs'
 import { SchedulerApiClient, schedulerApi as schedulerApiInst } from './scheduler'
 import { CeleryTasksApiClient, celeryTasksApi as celeryTasksApiInst } from './celery-tasks'
 import { ConceptsApiClient, conceptsApi as conceptsApiInst } from './concepts'
@@ -85,6 +86,18 @@ export type {
   MarginDetailStatistics,
   MarginDetailTopParams
 } from './margin'
+
+// 重新导出融资融券标的 API
+export { MarginSecsApi }
+export const marginSecsApi = marginSecsApiInst
+export type {
+  MarginSecsParams,
+  MarginSecsItem,
+  MarginSecsStatistics,
+  MarginSecsData,
+  LatestMarginSecsData,
+  SyncMarginSecsParams
+} from './margin-secs'
 
 // 重新导出定时任务 API
 export { SchedulerApiClient }
@@ -244,6 +257,12 @@ export const apiClient = {
   getMarginDetailStatistics: marginApiInst.getMarginDetailStatistics.bind(marginApiInst),
   getMarginDetailTopStocks: marginApiInst.getMarginDetailTopStocks.bind(marginApiInst),
   syncMarginDetailAsync: marginApiInst.syncMarginDetailAsync.bind(marginApiInst),
+
+  // 融资融券标的相关
+  getMarginSecs: marginSecsApiInst.getMarginSecs.bind(marginSecsApiInst),
+  getLatestMarginSecs: marginSecsApiInst.getLatestMarginSecs.bind(marginSecsApiInst),
+  syncMarginSecsAsync: marginSecsApiInst.syncMarginSecsAsync.bind(marginSecsApiInst),
+  getMarginSecsStatistics: marginSecsApiInst.getMarginSecsStatistics.bind(marginSecsApiInst),
 
   // 定时任务相关
   getScheduledTasks: schedulerApiInst.getScheduledTasks.bind(schedulerApiInst),

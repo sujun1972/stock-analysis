@@ -139,12 +139,19 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '两融及转融通',
         'display_order': 515
     },
+    'sync_margin_secs': {
+        'task': 'extended.sync_margin_secs',
+        'name': '融资融券标的（盘前更新）',
+        'description': '同步沪深京三大交易所融资融券标的（包括ETF），每天盘前更新（2000积分/次）',
+        'category': '两融及转融通',
+        'display_order': 520
+    },
     'extended.sync_margin': {
         'task': 'extended.sync_margin',
         'name': '融资融券明细（个股-旧版）',
         'description': '同步个股融资融券余额和明细数据（已废弃，建议使用新版）',
         'category': '两融及转融通',
-        'display_order': 520
+        'display_order': 530
     },
     'extended.sync_stk_limit': {
         'task': 'extended.sync_stk_limit',

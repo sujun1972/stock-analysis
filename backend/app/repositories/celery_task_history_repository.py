@@ -365,7 +365,7 @@ class CeleryTaskHistoryRepository(BaseRepository):
         created_at = datetime.now()
 
         try:
-            result = self.execute_query(
+            result = self.execute_query_returning(
                 query,
                 (
                     celery_task_id,

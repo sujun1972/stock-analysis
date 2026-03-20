@@ -22,6 +22,7 @@ from .endpoints import (
     llm_logs,
     margin,  # 融资融券交易汇总
     margin_detail,  # 融资融券交易明细
+    margin_secs,  # 融资融券标的（盘前更新）
     market,
     ml,
     moneyflow,  # 个股资金流向（Tushare标准）
@@ -86,6 +87,7 @@ router.include_router(moneyflow_ind_dc.router, prefix="/moneyflow-ind-dc", tags=
 router.include_router(moneyflow_stock_dc.router, prefix="/moneyflow-stock-dc", tags=["个股资金流向（DC）"])  # 个股资金流向API（东方财富DC）
 router.include_router(margin.router, prefix="/margin", tags=["融资融券交易汇总"])  # 融资融券交易汇总API
 router.include_router(margin_detail.router, prefix="/margin-detail", tags=["融资融券交易明细"])  # 融资融券交易明细API
+router.include_router(margin_secs.router, prefix="/margin-secs", tags=["融资融券标的（盘前更新）"])  # 融资融券标的API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

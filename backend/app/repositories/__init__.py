@@ -14,6 +14,7 @@ from .moneyflow_ind_dc_repository import MoneyflowIndDcRepository
 from .moneyflow_stock_dc_repository import MoneyflowStockDcRepository
 from .margin_repository import MarginRepository
 from .margin_detail_repository import MarginDetailRepository
+from .margin_secs_repository import MarginSecsRepository
 from .daily_basic_repository import DailyBasicRepository
 from .hk_hold_repository import HkHoldRepository
 from .stk_limit_repository import StkLimitRepository
@@ -55,6 +56,7 @@ __all__ = [
     # 融资融券
     "MarginRepository",
     "MarginDetailRepository",
+    "MarginSecsRepository",
     # 扩展数据
     "DailyBasicRepository",
     "HkHoldRepository",

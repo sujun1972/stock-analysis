@@ -208,6 +208,11 @@ const navItems: NavItem[] = [
         name: '融资融券交易明细',
         href: '/data/margin-detail',
         icon: FileText
+      },
+      {
+        name: '融资融券标的（盘前更新）',
+        href: '/data/margin-secs',
+        icon: Activity
       }
     ]
   },

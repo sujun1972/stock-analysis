@@ -47,7 +47,7 @@ export class CeleryTasksApiClient extends BaseApiClient {
     data: CeleryTask[]
     total: number
   }>> {
-    return this.get('/api/celery-tasks', { params })
+    return this.get('/api/celery/task-history', { params })
   }
 
   /**
@@ -58,7 +58,7 @@ export class CeleryTasksApiClient extends BaseApiClient {
     data: CeleryTask[]
     total: number
   }>> {
-    return this.get('/api/celery-tasks/active')
+    return this.get('/api/celery/task-history/active')
   }
 
   /**
@@ -70,7 +70,7 @@ export class CeleryTasksApiClient extends BaseApiClient {
     data: CeleryTask[]
     total: number
   }>> {
-    return this.get('/api/celery-tasks/recent', { params: { limit } })
+    return this.get('/api/celery/task-history/recent', { params: { limit } })
   }
 
   /**
@@ -84,7 +84,7 @@ export class CeleryTasksApiClient extends BaseApiClient {
     success: number
     failure: number
   }>> {
-    return this.get('/api/celery-tasks/statistics')
+    return this.get('/api/celery/task-history/statistics/summary')
   }
 
   /**
@@ -93,7 +93,7 @@ export class CeleryTasksApiClient extends BaseApiClient {
    * @returns 任务详情
    */
   async getTask(taskId: string): Promise<ApiResponse<CeleryTask>> {
-    return this.get(`/api/celery-tasks/${taskId}`)
+    return this.get(`/api/celery/task/${taskId}`)
   }
 
   /**
@@ -102,7 +102,7 @@ export class CeleryTasksApiClient extends BaseApiClient {
    * @returns 取消结果
    */
   async cancelTask(taskId: string): Promise<ApiResponse<{ message: string }>> {
-    return this.post(`/api/celery-tasks/${taskId}/cancel`)
+    return this.post(`/api/celery/task/${taskId}/revoke`)
   }
 
   /**
@@ -111,7 +111,7 @@ export class CeleryTasksApiClient extends BaseApiClient {
    * @returns 删除结果
    */
   async deleteTask(taskId: string): Promise<ApiResponse<{ message: string }>> {
-    return this.delete(`/api/celery-tasks/${taskId}`)
+    return this.delete(`/api/celery/task-history/${taskId}`)
   }
 }
 

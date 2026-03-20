@@ -9,6 +9,7 @@ from typing import Optional, Callable, Any
 
 from app.celery_app import celery_app
 from app.services.extended_sync_service import ExtendedDataSyncService
+from app.services.margin_secs_service import MarginSecsService
 from app.core.database import reset_async_engine
 from loguru import logger
 
@@ -445,5 +446,47 @@ EXTENDED_SYNC_SCHEDULES = {
         'description': '同步大宗交易数据',
         'points_consumption': 300,
         'enabled': False  # 默认关闭
+    },
+    'sync-margin-secs': {
+        'task': 'extended.sync_margin_secs',
+        'schedule': '0 8 * * *',  # 每日8:00（盘前更新）
+        'description': '同步融资融券标的（盘前更新）',
+        'points_consumption': 2000,
+        'enabled': False  # 默认关闭，高积分消耗
     }
 }
+
+
+@celery_app.task(name="extended.sync_margin_secs",
+             bind=True,
+             max_retries=3,
+             soft_time_limit=600,
+             time_limit=900)
+def sync_margin_secs_task(self,
+                         trade_date: Optional[str] = None,
+                         exchange: Optional[str] = None,
+                         start_date: Optional[str] = None,
+                         end_date: Optional[str] = None):
+    """
+    同步融资融券标的任务（盘前更新）
+    积分消耗：2000
+    建议执行时间：每日8:00（盘前）
+    """
+    try:
+        logger.info(f"[Celery] 开始执行融资融券标的同步任务: trade_date={trade_date}, exchange={exchange}")
+
+        service = MarginSecsService()
+        result = run_async_in_celery(
+            service.sync_margin_secs,
+            trade_date=trade_date,
+            exchange=exchange,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        logger.info(f"[Celery] 融资融券标的同步任务完成: {result}")
+        return result
+
+    except Exception as e:
+        logger.error(f"[Celery] 融资融券标的同步任务失败: {str(e)}")
+        self.retry(countdown=60, exc=e)

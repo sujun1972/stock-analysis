@@ -785,6 +785,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 4. **融资融券**
    - `MarginRepository` - 融资融券交易汇总（按交易所统计）
    - `MarginDetailRepository` - 融资融券交易明细（个股级别）
+   - `MarginSecsRepository` - 融资融券标的（盘前更新，包括ETF）
 
 5. **扩展数据**
    - `DailyBasicRepository` - 每日指标数据（换手率、市盈率、市净率等）
@@ -1197,6 +1198,7 @@ class ExperimentService:
 - **融资融券服务**：
   - `MarginService` - 融资融券交易汇总服务
   - `MarginDetailService` - 融资融券交易明细服务
+  - `MarginSecsService` - 融资融券标的服务（盘前更新）
 - **扩展数据服务**：
   - `DailyBasicService` - 每日指标服务
   - `BlockTradeService` - 大宗交易服务
@@ -1401,12 +1403,18 @@ return ApiResponse.success(data=task_data, ...)
 - ✅ `moneyflow_stock_dc.py` - 个股资金流向（DC）
 - ✅ `margin.py` - 融资融券交易汇总
 - ✅ `margin_detail.py` - 融资融券交易明细
+- ✅ `margin_secs.py` - 融资融券标的（盘前更新）
 
 **重构收益**：
-- 消除了约 **250 行重复代码**（7 个文件 × 35 行/文件）
-- 移除 7 处 `DatabaseManager` 直接使用
-- 移除 7 处 `INSERT INTO celery_task_history` SQL 语句
+- 消除了约 **280 行重复代码**（8 个文件 × 35 行/文件）
+- 移除 8 处 `DatabaseManager` 直接使用
+- 移除 8 处 `INSERT INTO celery_task_history` SQL 语句
 - 统一任务历史记录创建逻辑，便于维护
+
+**关键修复**（✨ 2026-03-20）：
+- 修复 `CeleryTaskHistoryRepository.create_task_history` 使用错误的数据库操作方法
+- 将 `execute_query()` 改为 `execute_query_returning()` 用于 INSERT RETURNING 语句
+- 此修复解决了任务历史记录无法持久化的问题，确保前端任务轮询和自动刷新正常工作
 
 **重构完成度**（✅ 2026-03-20 全部完成）：
 1. **高优先级**：配置和同步相关服务（✅ 已完成）
