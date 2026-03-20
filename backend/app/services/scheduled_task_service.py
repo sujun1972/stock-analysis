@@ -15,6 +15,7 @@ from loguru import logger
 
 from app.repositories import ScheduledTaskRepository
 from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
+from app.repositories.task_execution_history_repository import TaskExecutionHistoryRepository
 from app.core.exceptions import QueryError, DatabaseError, ValidationError
 
 
@@ -33,6 +34,7 @@ class ScheduledTaskService:
     def __init__(self):
         self.scheduled_task_repo = ScheduledTaskRepository()
         self.celery_task_repo = CeleryTaskHistoryRepository()
+        self.execution_history_repo = TaskExecutionHistoryRepository()
         logger.debug("✓ ScheduledTaskService initialized")
 
     # ==================== Cron 工具方法 ====================
@@ -542,8 +544,6 @@ class ScheduledTaskService:
             )
 
     # ==================== 任务执行历史 ====================
-    # TODO: 创建 TaskExecutionHistoryRepository 后移除直接 SQL 查询
-    # task_execution_history 表用于记录定时任务的执行历史（与 celery_task_history 不同）
 
     async def get_task_execution_history(
         self,
@@ -552,9 +552,6 @@ class ScheduledTaskService:
     ) -> List[Dict]:
         """
         获取任务执行历史（从 task_execution_history 表）
-
-        Note:
-            暂时使用 DatabaseManager 直接查询，待创建 TaskExecutionHistoryRepository 后重构
 
         Args:
             task_id: 任务ID
@@ -568,41 +565,26 @@ class ScheduledTaskService:
             >>> history = await service.get_task_execution_history(1, limit=10)
         """
         try:
-            # TODO: 替换为 TaskExecutionHistoryRepository
-            from src.database.db_manager import DatabaseManager
-            db = DatabaseManager()
+            # 使用 TaskExecutionHistoryRepository 查询
+            records = await asyncio.to_thread(
+                self.execution_history_repo.get_by_task_id,
+                task_id=task_id,
+                limit=limit
+            )
 
-            query = """
-                SELECT
-                    id,
-                    task_name,
-                    module,
-                    status,
-                    started_at,
-                    completed_at,
-                    duration_seconds,
-                    result_summary,
-                    error_message
-                FROM task_execution_history
-                WHERE task_id = %s
-                ORDER BY started_at DESC
-                LIMIT %s
-            """
-
-            result = await asyncio.to_thread(db._execute_query, query, (task_id, limit))
-
+            # 格式化日期字段
             history = []
-            for row in result:
+            for record in records:
                 history.append({
-                    "id": row[0],
-                    "task_name": row[1],
-                    "module": row[2],
-                    "status": row[3],
-                    "started_at": self._format_datetime(row[4]),
-                    "completed_at": self._format_datetime(row[5]),
-                    "duration_seconds": row[6],
-                    "result_summary": row[7],
-                    "error_message": row[8]
+                    "id": record['id'],
+                    "task_name": record['task_name'],
+                    "module": record['module'],
+                    "status": record['status'],
+                    "started_at": self._format_datetime(record.get('started_at')),
+                    "completed_at": self._format_datetime(record.get('completed_at')),
+                    "duration_seconds": record.get('duration_seconds'),
+                    "result_summary": record.get('result_summary'),
+                    "error_message": record.get('error_message')
                 })
 
             return history
@@ -619,9 +601,6 @@ class ScheduledTaskService:
         """
         获取最近的任务执行历史（所有任务）
 
-        Note:
-            暂时使用 DatabaseManager 直接查询，待创建 TaskExecutionHistoryRepository 后重构
-
         Args:
             limit: 返回记录数
 
@@ -633,43 +612,43 @@ class ScheduledTaskService:
             >>> history = await service.get_recent_execution_history(limit=30)
         """
         try:
-            # TODO: 替换为 TaskExecutionHistoryRepository
-            from src.database.db_manager import DatabaseManager
-            db = DatabaseManager()
+            # 使用 TaskExecutionHistoryRepository 查询
+            records = await asyncio.to_thread(
+                self.execution_history_repo.get_recent_executions,
+                limit=limit
+            )
 
-            query = """
-                SELECT
-                    h.id,
-                    h.task_name,
-                    h.module,
-                    h.status,
-                    h.started_at,
-                    h.completed_at,
-                    h.duration_seconds,
-                    h.result_summary,
-                    h.error_message,
-                    t.cron_expression
-                FROM task_execution_history h
-                LEFT JOIN scheduled_tasks t ON h.task_id = t.id
-                ORDER BY h.started_at DESC
-                LIMIT %s
-            """
+            # 关联 scheduled_tasks 表获取 cron_expression
+            # 批量查询任务配置
+            task_ids = list({r['task_id'] for r in records if r.get('task_id')})
+            task_config_map = {}
 
-            result = await asyncio.to_thread(db._execute_query, query, (limit,))
+            if task_ids:
+                for task_id in task_ids:
+                    task_config = await asyncio.to_thread(
+                        self.scheduled_task_repo.get_by_id,
+                        task_id
+                    )
+                    if task_config:
+                        task_config_map[task_id] = task_config
 
+            # 格式化日期字段并关联 cron_expression
             history = []
-            for row in result:
+            for record in records:
+                task_id = record.get('task_id')
+                task_config = task_config_map.get(task_id) if task_id else None
+
                 history.append({
-                    "id": row[0],
-                    "task_name": row[1],
-                    "module": row[2],
-                    "status": row[3],
-                    "started_at": self._format_datetime(row[4]),
-                    "completed_at": self._format_datetime(row[5]),
-                    "duration_seconds": row[6],
-                    "result_summary": row[7],
-                    "error_message": row[8],
-                    "cron_expression": row[9]
+                    "id": record['id'],
+                    "task_name": record['task_name'],
+                    "module": record['module'],
+                    "status": record['status'],
+                    "started_at": self._format_datetime(record.get('started_at')),
+                    "completed_at": self._format_datetime(record.get('completed_at')),
+                    "duration_seconds": record.get('duration_seconds'),
+                    "result_summary": record.get('result_summary'),
+                    "error_message": record.get('error_message'),
+                    "cron_expression": task_config.get('cron_expression') if task_config else None
                 })
 
             return history
@@ -713,25 +692,24 @@ class ScheduledTaskService:
             >>> print(result['celery_task_id'])
         """
         try:
-            # TODO: 替换为 ScheduledTaskRepository.get_by_id
-            from src.database.db_manager import DatabaseManager
-            db = DatabaseManager()
+            # 使用 ScheduledTaskRepository 查询任务配置
+            task_config = await asyncio.to_thread(
+                self.scheduled_task_repo.get_by_id,
+                task_id
+            )
 
-            query = """
-                SELECT id, task_name, module, params, enabled
-                FROM scheduled_tasks
-                WHERE id = %s
-            """
-            result = await asyncio.to_thread(db._execute_query, query, (task_id,))
-
-            if not result:
+            if not task_config:
                 raise QueryError(
                     f"任务 {task_id} 不存在",
                     error_code="TASK_NOT_FOUND",
                     reason=f"Task ID {task_id} not found"
                 )
 
-            task_id_db, task_name, module, params, enabled = result[0]
+            task_id_db = task_config['id']
+            task_name = task_config['task_name']
+            module = task_config['module']
+            params = task_config.get('params', {})
+            enabled = task_config.get('enabled', True)
 
             # 导入任务执行器
             from app.scheduler.task_executor import TaskExecutor
@@ -744,54 +722,54 @@ class ScheduledTaskService:
                 params=params or {}
             )
 
-            # TODO: 创建 TaskExecutionHistoryRepository 后移除以下直接 SQL
             # 记录执行历史到 task_execution_history 表
-            import json
-            history_query = """
-                INSERT INTO task_execution_history (
-                    task_id, task_name, module, status, started_at, result_summary
-                ) VALUES (%s, %s, %s, 'running', NOW(), %s::jsonb)
-                RETURNING id
-            """
-
             result_summary = {
                 "trigger": "manual",
                 "celery_task_id": celery_task_id,
                 "triggered_by": "admin"
             }
 
+            execution_data = {
+                'task_id': task_id_db,
+                'task_name': task_name,
+                'module': module,
+                'status': 'running',
+                'started_at': datetime.now(),
+                'result_summary': result_summary
+            }
+
             await asyncio.to_thread(
-                db._execute_update,
-                history_query,
-                (task_id_db, task_name, module, json.dumps(result_summary))
+                self.execution_history_repo.create,
+                execution_data
             )
 
             # 记录到 celery_task_history 表（用于任务面板显示）
-            # 使用 CeleryTaskHistoryRepository 会更好，但需要适配此场景
             from app.scheduler import TaskMetadataService
             metadata_service = TaskMetadataService()
             display_name = metadata_service.get_friendly_name(module, task_name)
 
-            celery_history_query = """
-                INSERT INTO celery_task_history
-                (celery_task_id, task_name, display_name, task_type, user_id, status, params, metadata, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-
-            task_metadata = json.dumps({
+            import json
+            task_metadata = {
                 "trigger": "manual",
                 "scheduled_task_id": task_id_db,
                 "module": module
-            })
+            }
 
-            params_json = json.dumps(params or {})
-            now = datetime.now()
+            celery_task_data = {
+                'celery_task_id': celery_task_id,
+                'task_name': task_name,
+                'display_name': display_name,
+                'task_type': 'scheduler',
+                'user_id': user_id,
+                'status': 'pending',
+                'params': params or {},
+                'metadata': task_metadata,
+                'created_at': datetime.now()
+            }
 
             await asyncio.to_thread(
-                db._execute_update,
-                celery_history_query,
-                (celery_task_id, task_name, display_name, 'scheduler', user_id,
-                 'pending', params_json, task_metadata, now)
+                self.celery_task_repo.create,
+                celery_task_data
             )
 
             logger.info(f"✓ 手动执行定时任务: {task_name} (ID: {task_id_db}, Celery ID: {celery_task_id})")
@@ -861,32 +839,22 @@ class ScheduledTaskService:
                     "progress": result.info.get('progress', 0) if hasattr(result.info, 'get') else 0
                 }
 
-            # TODO: 替换为 TaskExecutionHistoryRepository
-            # 从数据库获取最近的执行状态
-            from src.database.db_manager import DatabaseManager
-            db = DatabaseManager()
+            # 使用 TaskExecutionHistoryRepository 获取最近的执行状态
+            record = await asyncio.to_thread(
+                self.execution_history_repo.get_latest_by_task_id,
+                task_id
+            )
 
-            query = """
-                SELECT id, status, started_at, completed_at, result_summary, error_message
-                FROM task_execution_history
-                WHERE task_id = %s
-                ORDER BY started_at DESC
-                LIMIT 1
-            """
-
-            result = await asyncio.to_thread(db._execute_query, query, (task_id,))
-
-            if not result:
+            if not record:
                 return {"status": "no_history", "message": "暂无执行历史"}
 
-            row = result[0]
             return {
-                "history_id": row[0],
-                "status": row[1],
-                "started_at": self._format_datetime(row[2]),
-                "completed_at": self._format_datetime(row[3]),
-                "result": row[4],
-                "error": row[5]
+                "history_id": record['id'],
+                "status": record['status'],
+                "started_at": self._format_datetime(record.get('started_at')),
+                "completed_at": self._format_datetime(record.get('completed_at')),
+                "result": record.get('result_summary'),
+                "error": record.get('error_message')
             }
 
         except Exception as e:

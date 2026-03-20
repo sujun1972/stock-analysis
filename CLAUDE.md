@@ -595,6 +595,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 8. **任务管理和交易日历** （✨ 新增于 2026-03-20）
    - `CeleryTaskHistoryRepository` - Celery 任务历史记录管理
    - `ScheduledTaskRepository` - 定时任务配置管理
+   - `TaskExecutionHistoryRepository` - 定时任务执行历史管理（task_execution_history 表）
    - `TradingCalendarRepository` - 交易日历数据管理
 
 9. **市场情绪** （✨ 新增于 2026-03-20）
@@ -604,7 +605,11 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `SentimentCycleRepository` - 情绪周期数据（赚钱效应指数）
    - `SentimentAiAnalysisRepository` - AI情绪分析结果
 
-10. **用户管理**
+10. **股票数据**
+   - `StockDailyRepository` - 股票日线数据（支持回测数据加载）
+   - `StockBasicRepository` - 股票基础信息（代码、名称、市场、行业等）
+
+11. **用户管理**
    - `UserQuotaRepository` - 用户配额管理（配额重置、配额查询、使用量统计）
 
 #### Repository 开发规范
@@ -929,8 +934,8 @@ class MarginService:
   - `SyncStatusManager` - 同步状态管理服务
 - **回测历史服务**：
   - `BacktestHistoryService` - 回测历史管理服务
-- **定时任务管理服务** （✨ 新增于 2026-03-20）：
-  - `ScheduledTaskService` - 定时任务配置和执行管理服务
+- **定时任务管理服务** （✨ 2026-03-20 重构完成）：
+  - `ScheduledTaskService` - 定时任务配置和执行管理服务（已使用 TaskExecutionHistoryRepository）
 - **回测和实验服务** （✨ 新增于 2026-03-20）：
   - `BacktestDataLoader` - 回测数据加载服务（已使用 StockDailyRepository）
   - `ExperimentRunner` - 实验运行器（已使用 ExperimentRepository）
@@ -947,6 +952,8 @@ class MarginService:
 - ✅ `ConceptRepository` - 概念板块和股票关系管理
 - ✅ `SyncLogRepository` - 同步日志管理（sync_log 表）
 - ✅ `StockDailyRepository` - 股票日线数据（2026-03-20 新增）
+- ✅ `StockBasicRepository` - 股票基础信息（2026-03-20 新增）
+- ✅ `TaskExecutionHistoryRepository` - 定时任务执行历史（2026-03-20 新增）
 - ✅ `UserQuotaRepository` - 用户配额管理（2026-03-20 新增）
 
 **已重构的 API 端点**：
@@ -980,12 +987,101 @@ class MarginService:
   - `GET /tasks/{id}/status` - 获取任务执行状态
   - `POST /validate-cron` - 验证Cron表达式
   - **重构成果**：从 898 行减少到 426 行（↓ 53%），移除所有直接 SQL（15 处）
+- ✅ `execution.py` (回测模块) - 股票名称查询重构完成（✨ 2026-03-20）：
+  - 移除直接 SQL 查询（22行 → 3行，↓ 86%）
+  - 使用 StockBasicRepository.get_stock_names() 批量查询
+  - 消除 SQL 注入风险
 
 **待创建的 Repository**（优先级较低）：
 - `AdjFactorRepository` - 复权因子数据
 - `SuspendRepository` - 停复牌信息
 - `PremarketRepository` - 盘前数据
-- `TaskExecutionHistoryRepository` - 定时任务执行历史（task_execution_history 表）
+
+### Repository 层扩展 - StockBasic 和 TaskExecutionHistory（✨ 2026-03-20）
+
+#### 背景
+为了完成 API 层和 Service 层的架构清洁工作，新增了两个核心 Repository：
+1. `StockBasicRepository` - 解决回测模块中股票名称查询的直接 SQL 问题
+2. `TaskExecutionHistoryRepository` - 解决定时任务服务中的 4 处 TODO 和直接 SQL 查询
+
+#### StockBasicRepository
+
+**功能**：
+- 批量获取股票名称映射（核心功能）
+- 按代码、市场、行业查询股票信息
+- 股票列表查询和统计
+
+**关键方法**：
+```python
+def get_stock_names(codes: List[str]) -> Dict[str, str]
+    """批量获取股票名称映射（使用 PostgreSQL ANY 操作符）"""
+
+def get_by_code(code: str) -> Optional[Dict]
+    """按股票代码查询单条记录"""
+
+def count_by_status(status: str) -> int
+    """按状态统计股票数量"""
+```
+
+**应用场景**：
+- 回测模块：为交易记录添加股票名称
+- 股票列表页面：查询和过滤股票
+- 数据验证：检查股票代码是否存在
+
+#### TaskExecutionHistoryRepository
+
+**功能**：
+- 创建和更新任务执行历史记录
+- 按任务ID/任务名称查询执行历史
+- 获取任务执行统计（成功率、平均耗时等）
+- 清理过期历史记录
+
+**关键方法**：
+```python
+def create(execution_data: Dict) -> int
+    """创建任务执行历史记录"""
+
+def get_by_task_id(task_id: int, limit: int) -> List[Dict]
+    """按任务ID查询执行历史"""
+
+def get_statistics_by_task_id(task_id: int, days: int) -> Dict
+    """获取任务执行统计（成功率、平均耗时）"""
+```
+
+**应用场景**：
+- 定时任务管理：查询任务执行历史
+- 任务统计分析：计算成功率、平均耗时
+- 系统监控：识别失败任务
+
+#### 数据格式兼容性处理
+
+**问题**：DatabaseManager 的 `_execute_query()` 返回 `List[Tuple]`，而不是 `List[Dict]`
+
+**解决方案**：添加 `_row_to_dict()` 辅助方法统一转换格式
+
+```python
+def _row_to_dict(self, row: tuple) -> Dict:
+    """将查询结果行转换为字典"""
+    return {
+        'id': row[0],
+        'code': row[1],
+        'name': row[2],
+        ...
+    }
+```
+
+**应用位置**：
+- StockBasicRepository: 8个查询方法
+- TaskExecutionHistoryRepository: 6个查询方法
+
+#### 重构成果
+
+| 模块 | 重构前 | 重构后 | 改善 |
+|------|--------|--------|------|
+| execution.py | 22行直接SQL | 3行Repository调用 | ↓ 86% |
+| scheduled_task_service.py | 4处TODO + 4处直接SQL | 0处TODO，全Repository | ✅ 100% |
+| 新增Repository | 0 | 2（共 982 行） | ✅ 扩展 |
+| SQL注入风险 | 字符串拼接 | 参数化查询 | ✅ 消除 |
 
 ### 任务历史记录统一管理（✨ 2026-03-20）
 

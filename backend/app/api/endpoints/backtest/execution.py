@@ -508,22 +508,13 @@ def execute_backtest_core(
     stock_name_map = {}
     try:
         if not market_data.empty and 'code' in market_data.columns:
-            stock_codes = set(market_data['code'].unique())
+            stock_codes = list(set(market_data['code'].unique()))
 
             if stock_codes:
-                from src.database import DatabaseManager
-                db = DatabaseManager()
-
-                codes_str = "','".join(stock_codes)
-                query = f"SELECT code, name FROM stock_basic WHERE code IN ('{codes_str}')"
-
-                with db.get_connection() as conn:
-                    result_df = pd.read_sql(query, conn)
-                    if not result_df.empty:
-                        stock_name_map = dict(zip(result_df['code'], result_df['name']))
-                        logger.debug(f"已获取 {len(stock_name_map)} 个股票名称")
-                    else:
-                        logger.warning("stock_basic表中未找到股票名称")
+                from app.repositories.stock_basic_repository import StockBasicRepository
+                stock_repo = StockBasicRepository()
+                stock_name_map = stock_repo.get_stock_names(stock_codes)
+                logger.debug(f"已获取 {len(stock_name_map)} 个股票名称")
     except Exception as e:
         logger.warning(f"查询股票名称失败: {e}")
 

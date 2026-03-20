@@ -31,6 +31,8 @@ from .sentiment_cycle_repository import SentimentCycleRepository
 from .sentiment_ai_analysis_repository import SentimentAiAnalysisRepository
 from .stock_daily_repository import StockDailyRepository
 from .user_quota_repository import UserQuotaRepository
+from .stock_basic_repository import StockBasicRepository
+from .task_execution_history_repository import TaskExecutionHistoryRepository
 
 __all__ = [
     "BaseRepository",
@@ -66,6 +68,7 @@ __all__ = [
     # 任务管理
     "CeleryTaskHistoryRepository",
     "ScheduledTaskRepository",
+    "TaskExecutionHistoryRepository",
     # 交易日历
     "TradingCalendarRepository",
     # 市场情绪
@@ -76,6 +79,7 @@ __all__ = [
     "SentimentAiAnalysisRepository",
     # 股票数据
     "StockDailyRepository",
+    "StockBasicRepository",
     # 用户管理
     "UserQuotaRepository",
 ]
