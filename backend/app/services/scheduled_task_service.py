@@ -1,5 +1,30 @@
 """
-定时任务管理服务
+定时任务管理服务（已废弃）
+
+⚠️ DEPRECATED: 此文件已废弃，请使用模块化的新架构
+
+新架构位置：app.services.scheduler
+- CronService: Cron 表达式工具
+- TaskConfigService: 任务配置管理（CRUD）
+- TaskHistoryService: 任务执行历史查询
+- TaskExecutionService: 任务执行和状态查询
+- ScheduledTaskService: 统一服务（向后兼容）
+
+迁移示例：
+    # 旧代码
+    from app.services.scheduled_task_service import ScheduledTaskService
+
+    # 新代码（推荐）
+    from app.services.scheduler import TaskConfigService, CronService
+
+    # 新代码（向后兼容）
+    from app.services.scheduler import ScheduledTaskService
+
+计划移除时间：2026年9月
+
+---
+
+原有文档（已过时）：
 
 负责定时任务配置的业务逻辑，包括：
 - 任务配置的 CRUD 操作
@@ -7,6 +32,16 @@
 - 任务执行状态管理
 - 任务执行历史查询
 """
+
+import warnings
+
+# 显示废弃警告
+warnings.warn(
+    "scheduled_task_service.py 已废弃，请使用 app.services.scheduler 模块。"
+    "详见文件顶部的迁移指南。",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import asyncio
 from typing import Any, Dict, List, Optional

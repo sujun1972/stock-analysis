@@ -1509,6 +1509,90 @@ TASK_MAPPING = {
 - TaskExecutor 保留 `TASK_MAPPING` 属性访问（通过 `@property`）
 - 现有代码无需修改即可使用
 
+### Service 层模块化拆分（Scheduler 服务）
+
+**背景**：`ScheduledTaskService` 原有 918 行代码，包含 8 个混合职责，不符合单一职责原则。
+
+**重构架构**：
+
+```
+backend/app/
+├── schemas/
+│   └── scheduler_schemas.py        # Pydantic 数据模型（143 行）
+└── services/
+    ├── scheduler/                  # 新模块化架构
+    │   ├── __init__.py            # 聚合服务，向后兼容（106 行）
+    │   ├── cron_service.py        # Cron 工具（115 行）
+    │   ├── task_config_service.py # 任务配置 CRUD（502 行）
+    │   ├── task_history_service.py # 执行历史查询（139 行）
+    │   └── task_execution_service.py # 任务执行和状态（231 行）
+    └── scheduled_task_service.py  # 废弃（已标记，计划 2026年9月移除）
+```
+
+**职责划分**：
+
+1. **CronService** - Cron 表达式工具
+   - Cron 表达式验证
+   - 计算下次执行时间
+   - 日期格式化工具
+
+2. **TaskConfigService** - 任务配置 CRUD
+   - 任务配置的增删改查
+   - 任务启用/禁用
+   - 分类排序管理
+
+3. **TaskHistoryService** - 执行历史查询
+   - 查询任务执行历史
+   - 格式化历史数据
+   - 关联任务配置信息
+
+4. **TaskExecutionService** - 任务执行和状态
+   - 手动执行定时任务
+   - 查询任务执行状态
+   - 记录执行历史（双表写入）
+
+5. **ScheduledTaskService** - 统一聚合服务
+   - 聚合所有子服务
+   - 向后兼容旧代码
+   - 委托模式实现
+
+**使用方式**：
+
+```python
+# 方式 1：使用专门的服务类（推荐）
+from app.services.scheduler import TaskConfigService, CronService
+
+config_service = TaskConfigService()
+tasks = await config_service.get_all_tasks()
+
+cron_service = CronService()
+is_valid = cron_service.validate_cron_expression("0 9 * * *")
+
+# 方式 2：使用统一服务（向后兼容）
+from app.services.scheduler import ScheduledTaskService
+
+service = ScheduledTaskService()
+tasks = await service.get_all_tasks()
+```
+
+**重构成果**：
+
+| 指标 | 重构前 | 重构后 | 改善 |
+|------|--------|--------|------|
+| 文件数量 | 1 个庞大文件 | 6 个专门文件 | ✅ 模块化 |
+| 最大文件行数 | 918 行 | 502 行 | ↓ 45% |
+| 单一职责 | 8 个混合职责 | 5 个独立职责 | ✅ 符合 SRP |
+| 代码复用 | 重复代码多 | 共享 CronService | ✅ DRY |
+| 可测试性 | 低（依赖多） | 高（独立模块） | ✅ 易测试 |
+| Schema 层 | 无（混在代码中） | 独立 Schema | ✅ 分层清晰 |
+
+**拆分原则**：
+1. **单一职责**：每个服务类只负责一个明确的功能域
+2. **依赖注入**：服务间通过构造函数注入依赖
+3. **Schema 分离**：Pydantic 模型独立到 schemas 层
+4. **向后兼容**：聚合服务使用委托模式，旧代码无需修改
+5. **废弃管理**：清晰标记废弃文件，提供迁移指南
+
 ## 开发提示
 
 1. 修改代码后，前端项目（admin）会自动热重载

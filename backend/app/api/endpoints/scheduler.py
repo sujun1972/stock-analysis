@@ -14,7 +14,7 @@ from app.core.exceptions import DatabaseError, QueryError, ValidationError
 from app.core.dependencies import require_admin
 from app.models.user import User
 from app.models.api_response import ApiResponse
-from app.services.scheduled_task_service import ScheduledTaskService
+from app.services.scheduler import ScheduledTaskService
 
 router = APIRouter()
 

@@ -31,8 +31,14 @@ from .block_trade_service import BlockTradeService
 from .stk_limit_service import StkLimitService
 from .hk_hold_service import HkHoldService
 
-# 定时任务管理服务
-from .scheduled_task_service import ScheduledTaskService
+# 定时任务管理服务（新架构：模块化）
+from .scheduler import (
+    CronService,
+    TaskConfigService,
+    TaskHistoryService,
+    TaskExecutionService,
+    ScheduledTaskService,  # 向后兼容的统一服务
+)
 
 # 任务历史记录辅助服务
 from .task_history_helper import TaskHistoryHelper
@@ -59,8 +65,12 @@ __all__ = [
     "BlockTradeService",
     "StkLimitService",
     "HkHoldService",
-    # 定时任务管理服务
-    "ScheduledTaskService",
+    # 定时任务管理服务（新架构）
+    "CronService",
+    "TaskConfigService",
+    "TaskHistoryService",
+    "TaskExecutionService",
+    "ScheduledTaskService",  # 向后兼容
     # 任务历史记录辅助服务
     "TaskHistoryHelper",
 ]
