@@ -24,10 +24,14 @@ class MLTrainingService:
 
         Args:
             models_dir: 模型存储目录
-            db: DatabaseManager 实例（可选，用于依赖注入）
+            db: DatabaseManager 实例（可选，用于依赖注入，传递给 ModelPredictor）
+
+        Note:
+            - TrainingTaskManager 已使用 Repository 模式，不需要 db 参数
+            - ModelPredictor 仍需要 db 参数
         """
         # 委托给专门的服务
-        self.task_manager = TrainingTaskManager(models_dir, db)
+        self.task_manager = TrainingTaskManager(models_dir)  # 已使用 Repository，无需 db
         self.predictor = ModelPredictor(db)
 
     # ==================== 任务管理接口 ====================

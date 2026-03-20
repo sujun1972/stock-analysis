@@ -1002,6 +1002,37 @@ class MarginService:
 4. ✅ 使用 `asyncio.to_thread()` 调用 Repository 的同步方法
 5. ✅ 保持 Service 层专注于业务逻辑编排
 
+**Facade 服务依赖注入最佳实践** （✨ 2026-03-20）：
+
+在重构后，某些 Service 已经迁移到 Repository 模式，不再需要 `db` 参数。在 Facade 服务中初始化子服务时，需要注意区分：
+
+```python
+# ✅ 正确示例
+class ExperimentService:
+    def __init__(self, db=None):
+        # BatchManager 已使用 Repository，无需 db
+        self.batch_manager = BatchManager()
+
+        # ExperimentRunner 仍需要 db
+        self.experiment_runner = ExperimentRunner(db)
+        self.experiment_repo = ExperimentRepository(db)
+
+# ❌ 错误示例（会导致 TypeError）
+class ExperimentService:
+    def __init__(self, db=None):
+        self.batch_manager = BatchManager(db)  # ❌ BatchManager 不接受 db
+```
+
+**已迁移到 Repository 模式的服务**（无需 db 参数）：
+- `BatchManager` - 使用 `BatchRepository` + `ExperimentRepository`
+- `TrainingTaskManager` - 使用 `ExperimentRepository`
+
+**仍需要 db 参数的服务**：
+- `ExperimentRunner`
+- `ModelPredictor`
+- `ExperimentRepository`
+- 大部分其他 Service 类
+
 **已重构的 Service**：
 - **股票数据服务（Stock Services）**：
   - `StockListService` - 股票列表管理服务

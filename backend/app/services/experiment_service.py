@@ -24,10 +24,14 @@ class ExperimentService:
         初始化服务
 
         Args:
-            db: DatabaseManager 实例（可选，用于依赖注入，传递给子服务）
+            db: DatabaseManager 实例（可选，用于依赖注入，传递给 ExperimentRunner 和 Repository）
+
+        Note:
+            - BatchManager 已使用 Repository 模式，不需要 db 参数
+            - ExperimentRunner 和 ExperimentRepository 仍需要 db 参数
         """
         # 委托给专门的服务
-        self.batch_manager = BatchManager(db)
+        self.batch_manager = BatchManager()  # 已使用 Repository，无需 db
         self.experiment_runner = ExperimentRunner(db)
         self.experiment_repo = ExperimentRepository(db)
 
