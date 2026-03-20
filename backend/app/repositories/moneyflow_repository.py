@@ -9,7 +9,6 @@
 """
 
 from typing import Dict, List, Optional
-from datetime import datetime
 import pandas as pd
 from loguru import logger
 from psycopg2 import DatabaseError as PsycopgDatabaseError
@@ -481,7 +480,8 @@ class MoneyflowRepository(BaseRepository):
     def get_record_count(
         self,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
     ) -> int:
         """
         获取记录数
@@ -489,6 +489,7 @@ class MoneyflowRepository(BaseRepository):
         Args:
             start_date: 开始日期，格式：YYYYMMDD（可选）
             end_date: 结束日期，格式：YYYYMMDD（可选）
+            ts_code: 股票代码（可选）
 
         Returns:
             记录数
@@ -503,6 +504,9 @@ class MoneyflowRepository(BaseRepository):
             if end_date:
                 conditions.append("trade_date <= %s")
                 params.append(end_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
 
             where_clause = " AND ".join(conditions) if conditions else None
 

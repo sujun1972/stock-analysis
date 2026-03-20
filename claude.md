@@ -798,6 +798,11 @@ class MarginService:
 - `MarginService` - 融资融券交易汇总服务
 - `MarginDetailService` - 融资融券交易明细服务
 - `ExtendedDataSyncService` - 扩展数据同步服务（部分）
+- `MoneyflowService` - 个股资金流向服务（Tushare标准）
+- `MoneyflowHsgtService` - 沪深港通资金流向服务
+- `MoneyflowMktDcService` - 大盘资金流向服务（东财DC）
+- `MoneyflowIndDcService` - 板块资金流向服务（东财DC）
+- `MoneyflowStockDcService` - 个股资金流向服务（东财DC）
 
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
@@ -810,6 +815,11 @@ class MarginService:
 - ✅ `extended_data.py` - 5个端点（daily-basic, hk-hold, limit-prices, block-trade, stats/summary）
 - ✅ `concepts.py` - 5个端点（概念列表、详情、股票查询、概念更新）
 - ✅ `stocks.py` - 概念过滤功能
+- ✅ `moneyflow.py` - 3个端点（查询、同步、排名），使用 MoneyflowService
+- ✅ `moneyflow_hsgt.py` - 3个端点（查询、同步、最新），使用 MoneyflowHsgtService
+- ✅ `moneyflow_mkt_dc.py` - 3个端点（查询、同步、最新），使用 MoneyflowMktDcService
+- ✅ `moneyflow_ind_dc.py` - 3个端点（查询、同步、最新），使用 MoneyflowIndDcService
+- ✅ `moneyflow_stock_dc.py` - 3个端点（查询、同步、排名），使用 MoneyflowStockDcService
 
 **待创建的 Repository**（优先级较低）：
 - `AdjFactorRepository` - 复权因子数据
@@ -965,6 +975,23 @@ class MoneyflowRepository(BaseRepository):
 - ✅ 统一的错误处理和日志记录
 - ✅ Service 和 Repository 可被多个端点复用
 - ✅ 易于编写单元测试
+
+**实际重构案例（资金流向模块）**：
+
+| 文件 | 重构前 | 重构后 | 减少比例 |
+|------|--------|--------|----------|
+| moneyflow.py | 409行 | 237行 | ↓ 42% |
+| moneyflow_hsgt.py | 342行 | 213行 | ↓ 38% |
+| moneyflow_mkt_dc.py | 370行 | 154行 | ↓ 58% |
+| moneyflow_ind_dc.py | 418行 | 146行 | ↓ 65% |
+| moneyflow_stock_dc.py | 387行 | 140行 | ↓ 64% |
+| **总计** | **1926行** | **890行** | **↓ 54%** |
+
+重构成果：
+- 创建 5 个 Service 类，封装业务逻辑
+- 移除 API 层所有 SQL 查询（约 800 行）
+- 移除所有数据库依赖 (`db: Session`)
+- 统一使用 `asyncio.to_thread()` 调用 Repository
 
 ### 注意事项
 

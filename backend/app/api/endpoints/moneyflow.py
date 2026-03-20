@@ -13,14 +13,12 @@ import asyncio
 import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 from loguru import logger
 
-from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_admin
 from app.models.user import User
 from app.models.api_response import ApiResponse
+from app.services.moneyflow_service import MoneyflowService
 
 router = APIRouter()
 
@@ -32,8 +30,7 @@ async def get_moneyflow(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     limit: int = Query(30, ge=1, le=1000, description="返回记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """
     获取个股资金流向数据（Tushare标准接口）
@@ -44,148 +41,18 @@ async def get_moneyflow(
         包含资金流向数据的响应
     """
     try:
-        conditions = []
-        params = {}
-
-        # 处理股票代码过滤
-        if ts_code:
-            conditions.append("ts_code = :ts_code")
-            params['ts_code'] = ts_code
-
-        # 处理日期过滤
-        if start_date:
-            # 将YYYY-MM-DD格式转换为YYYYMMDD
-            start_date_formatted = start_date.replace('-', '')
-            conditions.append("trade_date >= :start_date")
-            params['start_date'] = start_date_formatted
-
-        if end_date:
-            end_date_formatted = end_date.replace('-', '')
-            conditions.append("trade_date <= :end_date")
-            params['end_date'] = end_date_formatted
-
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-        # 先获取总数
-        count_query = text(f"""
-            SELECT COUNT(*)
-            FROM moneyflow
-            WHERE {where_clause}
-        """)
-
-        count_result = db.execute(count_query, params)
-        total_count = count_result.scalar() or 0
-
-        # 查询数据
-        query = text(f"""
-            SELECT
-                trade_date,
-                ts_code,
-                buy_sm_vol,
-                buy_sm_amount,
-                sell_sm_vol,
-                sell_sm_amount,
-                buy_md_vol,
-                buy_md_amount,
-                sell_md_vol,
-                sell_md_amount,
-                buy_lg_vol,
-                buy_lg_amount,
-                sell_lg_vol,
-                sell_lg_amount,
-                buy_elg_vol,
-                buy_elg_amount,
-                sell_elg_vol,
-                sell_elg_amount,
-                net_mf_vol,
-                net_mf_amount,
-                created_at,
-                updated_at
-            FROM moneyflow
-            WHERE {where_clause}
-            ORDER BY trade_date DESC, net_mf_amount DESC
-            LIMIT :limit OFFSET :offset
-        """)
-
-        params['limit'] = limit
-        params['offset'] = offset
-
-        result = db.execute(query, params)
-
-        items = []
-        for row in result:
-            items.append({
-                "trade_date": row[0],
-                "ts_code": row[1],
-                "buy_sm_vol": int(row[2]) if row[2] else 0,
-                "buy_sm_amount": float(row[3]) if row[3] else 0,
-                "sell_sm_vol": int(row[4]) if row[4] else 0,
-                "sell_sm_amount": float(row[5]) if row[5] else 0,
-                "buy_md_vol": int(row[6]) if row[6] else 0,
-                "buy_md_amount": float(row[7]) if row[7] else 0,
-                "sell_md_vol": int(row[8]) if row[8] else 0,
-                "sell_md_amount": float(row[9]) if row[9] else 0,
-                "buy_lg_vol": int(row[10]) if row[10] else 0,
-                "buy_lg_amount": float(row[11]) if row[11] else 0,
-                "sell_lg_vol": int(row[12]) if row[12] else 0,
-                "sell_lg_amount": float(row[13]) if row[13] else 0,
-                "buy_elg_vol": int(row[14]) if row[14] else 0,
-                "buy_elg_amount": float(row[15]) if row[15] else 0,
-                "sell_elg_vol": int(row[16]) if row[16] else 0,
-                "sell_elg_amount": float(row[17]) if row[17] else 0,
-                "net_mf_vol": int(row[18]) if row[18] else 0,
-                "net_mf_amount": float(row[19]) if row[19] else 0,
-                "created_at": row[20].isoformat() if row[20] else None,
-                "updated_at": row[21].isoformat() if row[21] else None
-            })
-
-        # 获取汇总统计
-        stats_query = text(f"""
-            SELECT
-                AVG(net_mf_amount) as avg_net,
-                MAX(net_mf_amount) as max_net,
-                MIN(net_mf_amount) as min_net,
-                SUM(net_mf_amount) as total_net,
-                AVG(buy_elg_amount) as avg_elg,
-                MAX(buy_elg_amount) as max_elg,
-                AVG(buy_lg_amount) as avg_lg,
-                MAX(buy_lg_amount) as max_lg,
-                MAX(trade_date) as latest_date,
-                MIN(trade_date) as earliest_date,
-                COUNT(*) as count,
-                COUNT(DISTINCT ts_code) as stock_count
-            FROM moneyflow
-            WHERE {where_clause}
-        """)
-
-        stats_result = db.execute(stats_query, params)
-        stats_row = stats_result.fetchone()
-
-        statistics = None
-        if stats_row:
-            statistics = {
-                "avg_net": float(stats_row[0]) if stats_row[0] else 0,
-                "max_net": float(stats_row[1]) if stats_row[1] else 0,
-                "min_net": float(stats_row[2]) if stats_row[2] else 0,
-                "total_net": float(stats_row[3]) if stats_row[3] else 0,
-                "avg_elg": float(stats_row[4]) if stats_row[4] else 0,
-                "max_elg": float(stats_row[5]) if stats_row[5] else 0,
-                "avg_lg": float(stats_row[6]) if stats_row[6] else 0,
-                "max_lg": float(stats_row[7]) if stats_row[7] else 0,
-                "latest_date": stats_row[8] or "",
-                "earliest_date": stats_row[9] or "",
-                "count": stats_row[10] or 0,
-                "stock_count": stats_row[11] or 0
-            }
+        service = MoneyflowService()
+        result = await asyncio.to_thread(
+            service.get_moneyflow_data,
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset
+        )
 
         return ApiResponse.success(
-            data={
-                "items": items,
-                "statistics": statistics,
-                "total": total_count,
-                "limit": limit,
-                "offset": offset
-            },
+            data=result,
             message="获取个股资金流向成功"
         )
 
@@ -200,8 +67,7 @@ async def sync_moneyflow(
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_admin)
 ):
     """
     同步个股资金流向数据（管理员功能）
@@ -210,7 +76,6 @@ async def sync_moneyflow(
     """
     try:
         from app.services.extended_sync_service import ExtendedDataSyncService
-        import asyncio
 
         service = ExtendedDataSyncService()
 
@@ -347,8 +212,7 @@ async def sync_moneyflow_async(
 async def get_top_moneyflow_stocks(
     limit: int = Query(20, ge=1, le=100, description="返回记录数"),
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """
     获取资金净流入排名前N的股票（默认最新交易日）
@@ -356,50 +220,15 @@ async def get_top_moneyflow_stocks(
     基于净流入额排序
     """
     try:
-        # 如果没有指定日期，获取最新交易日
-        if not trade_date:
-            date_query = text("SELECT MAX(trade_date) FROM moneyflow")
-            date_result = db.execute(date_query)
-            trade_date = date_result.scalar()
-        else:
-            trade_date = trade_date.replace('-', '')
-
-        query = text("""
-            SELECT
-                trade_date,
-                ts_code,
-                net_mf_amount,
-                net_mf_vol,
-                buy_elg_amount,
-                buy_lg_amount,
-                buy_md_amount,
-                buy_sm_amount
-            FROM moneyflow
-            WHERE trade_date = :trade_date
-            ORDER BY net_mf_amount DESC
-            LIMIT :limit
-        """)
-
-        result = db.execute(query, {"trade_date": trade_date, "limit": limit})
-
-        items = []
-        for row in result:
-            items.append({
-                "trade_date": row[0],
-                "ts_code": row[1],
-                "net_mf_amount": float(row[2]) if row[2] else 0,
-                "net_mf_vol": int(row[3]) if row[3] else 0,
-                "buy_elg_amount": float(row[4]) if row[4] else 0,
-                "buy_lg_amount": float(row[5]) if row[5] else 0,
-                "buy_md_amount": float(row[6]) if row[6] else 0,
-                "buy_sm_amount": float(row[7]) if row[7] else 0
-            })
+        service = MoneyflowService()
+        result = await asyncio.to_thread(
+            service.get_top_stocks,
+            trade_date=trade_date,
+            limit=limit
+        )
 
         return ApiResponse.success(
-            data={
-                "items": items,
-                "trade_date": trade_date
-            },
+            data=result,
             message="获取资金流入排名成功"
         )
 

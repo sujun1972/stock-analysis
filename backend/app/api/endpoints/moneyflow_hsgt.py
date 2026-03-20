@@ -9,14 +9,12 @@ import asyncio
 import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 from loguru import logger
 
-from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_admin
 from app.models.user import User
 from app.models.api_response import ApiResponse
+from app.services.moneyflow_hsgt_service import MoneyflowHsgtService
 
 router = APIRouter()
 
@@ -27,8 +25,7 @@ async def get_moneyflow_hsgt(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     limit: int = Query(30, ge=1, le=365, description="返回记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """
     获取沪深港通资金流向数据
@@ -37,115 +34,17 @@ async def get_moneyflow_hsgt(
         包含资金流向数据的响应
     """
     try:
-        conditions = []
-        params = {}
-
-        # 处理日期过滤
-        if start_date:
-            # 将YYYY-MM-DD格式转换为YYYYMMDD
-            start_date_formatted = start_date.replace('-', '')
-            conditions.append("trade_date >= :start_date")
-            params['start_date'] = start_date_formatted
-
-        if end_date:
-            end_date_formatted = end_date.replace('-', '')
-            conditions.append("trade_date <= :end_date")
-            params['end_date'] = end_date_formatted
-
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-        # 先获取总数
-        count_query = text(f"""
-            SELECT COUNT(*)
-            FROM moneyflow_hsgt
-            WHERE {where_clause}
-        """)
-
-        count_result = db.execute(count_query, params)
-        total_count = count_result.scalar() or 0
-
-        # 查询数据
-        query = text(f"""
-            SELECT
-                trade_date,
-                ggt_ss,
-                ggt_sz,
-                hgt,
-                sgt,
-                north_money,
-                south_money,
-                created_at,
-                updated_at
-            FROM moneyflow_hsgt
-            WHERE {where_clause}
-            ORDER BY trade_date DESC
-            LIMIT :limit OFFSET :offset
-        """)
-
-        params['limit'] = limit
-        params['offset'] = offset
-
-        result = db.execute(query, params)
-
-        items = []
-        for row in result:
-            items.append({
-                "trade_date": row[0],
-                "ggt_ss": float(row[1]) if row[1] else 0,  # 港股通（上海）
-                "ggt_sz": float(row[2]) if row[2] else 0,  # 港股通（深圳）
-                "hgt": float(row[3]) if row[3] else 0,     # 沪股通
-                "sgt": float(row[4]) if row[4] else 0,     # 深股通
-                "north_money": float(row[5]) if row[5] else 0,  # 北向资金
-                "south_money": float(row[6]) if row[6] else 0,  # 南向资金
-                "created_at": row[7].isoformat() if row[7] else None,
-                "updated_at": row[8].isoformat() if row[8] else None
-            })
-
-        # 获取汇总统计
-        stats_query = text(f"""
-            SELECT
-                AVG(north_money) as avg_north,
-                MAX(north_money) as max_north,
-                MIN(north_money) as min_north,
-                SUM(north_money) as total_north,
-                AVG(south_money) as avg_south,
-                MAX(south_money) as max_south,
-                MIN(south_money) as min_south,
-                SUM(south_money) as total_south,
-                MAX(trade_date) as latest_date,
-                MIN(trade_date) as earliest_date,
-                COUNT(*) as count
-            FROM moneyflow_hsgt
-            WHERE {where_clause}
-        """)
-
-        stats_result = db.execute(stats_query, params)
-        stats_row = stats_result.fetchone()
-
-        statistics = None
-        if stats_row:
-            statistics = {
-                "avg_north": float(stats_row[0]) if stats_row[0] else 0,
-                "max_north": float(stats_row[1]) if stats_row[1] else 0,
-                "min_north": float(stats_row[2]) if stats_row[2] else 0,
-                "total_north": float(stats_row[3]) if stats_row[3] else 0,
-                "avg_south": float(stats_row[4]) if stats_row[4] else 0,
-                "max_south": float(stats_row[5]) if stats_row[5] else 0,
-                "min_south": float(stats_row[6]) if stats_row[6] else 0,
-                "total_south": float(stats_row[7]) if stats_row[7] else 0,
-                "latest_date": stats_row[8] or "",
-                "earliest_date": stats_row[9] or "",
-                "count": stats_row[10] or 0
-            }
+        service = MoneyflowHsgtService()
+        result = await asyncio.to_thread(
+            service.get_moneyflow_data,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset
+        )
 
         return ApiResponse.success(
-            data={
-                "items": items,
-                "statistics": statistics,
-                "total": total_count,
-                "limit": limit,
-                "offset": offset
-            },
+            data=result,
             message="获取沪深港通资金流向成功"
         )
 
@@ -159,15 +58,13 @@ async def sync_moneyflow_hsgt(
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_admin)
 ):
     """
     同步沪深港通资金流向数据（管理员功能）
     """
     try:
         from app.services.extended_sync_service import ExtendedDataSyncService
-        import asyncio
 
         service = ExtendedDataSyncService()
 
@@ -291,46 +188,20 @@ async def sync_moneyflow_hsgt_async(
 
 @router.get("/latest")
 async def get_latest_moneyflow(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """
     获取最新的资金流向数据
     """
     try:
-        query = text("""
-            SELECT
-                trade_date,
-                ggt_ss,
-                ggt_sz,
-                hgt,
-                sgt,
-                north_money,
-                south_money
-            FROM moneyflow_hsgt
-            ORDER BY trade_date DESC
-            LIMIT 1
-        """)
+        service = MoneyflowHsgtService()
+        data = await asyncio.to_thread(service.get_latest_moneyflow)
 
-        result = db.execute(query)
-        row = result.fetchone()
-
-        if not row:
+        if not data:
             return ApiResponse.success(
                 data=None,
                 message="暂无资金流向数据"
             )
-
-        data = {
-            "trade_date": row[0],
-            "ggt_ss": float(row[1]) if row[1] else 0,
-            "ggt_sz": float(row[2]) if row[2] else 0,
-            "hgt": float(row[3]) if row[3] else 0,
-            "sgt": float(row[4]) if row[4] else 0,
-            "north_money": float(row[5]) if row[5] else 0,
-            "south_money": float(row[6]) if row[6] else 0,
-            "net_inflow": float(row[5]) - float(row[6]) if row[5] and row[6] else 0
-        }
 
         return ApiResponse.success(
             data=data,
