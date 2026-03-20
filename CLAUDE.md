@@ -514,11 +514,29 @@ export default function XxxPage() {
 
 #### 参考示例
 
-**盘前预期管理系统** (`/sentiment/premarket`) 是完整的模块化重构示例：
+**盘前预期管理系统** (`/sentiment/premarket`)：
 - 原始文件：1,010 行
 - 重构后主页面：259 行（↓ 74%）
 - 3个自定义 Hooks（253 行）
 - 7个子组件（794 行）
+
+**用户管理页面** (`/users`)：
+- 原始文件：959 行
+- 重构后主页面：278 行（↓ 71%）
+- 4个自定义 Hooks（336 行）：
+  - `useUserFilters` - 筛选和分页管理
+  - `useUserDialogs` - 对话框状态管理
+  - `useUserForm` - 表单数据和验证
+  - `useUserActions` - 用户操作逻辑
+- 8个子组件（853 行）：
+  - `UserFilters` - 搜索和筛选控件
+  - `UserTableColumns` - 表格列定义
+  - `UserMobileCard` - 移动端卡片视图
+  - `UserActions` - 操作下拉菜单
+  - `CreateUserDialog` - 创建用户对话框
+  - `EditUserDialog` - 编辑用户对话框
+  - `DeleteUserDialog` - 删除确认对话框
+  - `UserDetailDialog` - 用户详情对话框
 
 ## 常用命令
 
