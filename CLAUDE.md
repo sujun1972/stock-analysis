@@ -929,6 +929,8 @@ class MarginService:
   - `SyncStatusManager` - 同步状态管理服务
 - **回测历史服务**：
   - `BacktestHistoryService` - 回测历史管理服务
+- **定时任务管理服务** （✨ 新增于 2026-03-20）：
+  - `ScheduledTaskService` - 定时任务配置和执行管理服务
 - **回测和实验服务** （✨ 新增于 2026-03-20）：
   - `BacktestDataLoader` - 回测数据加载服务（已使用 StockDailyRepository）
   - `ExperimentRunner` - 实验运行器（已使用 ExperimentRepository）
@@ -963,15 +965,30 @@ class MarginService:
 - ✅ `moneyflow_stock_dc.py` - 3个端点（查询、同步、排名），使用 MoneyflowStockDcService
 - ✅ `backtest_history.py` - 3个端点（用户回测历史、详情、删除），使用 BacktestHistoryService
 - ✅ `profile.py` - 用户配额管理端点，使用 UserQuotaRepository（移除存储过程直接调用）
+- ✅ `scheduler.py` - 11个端点全部重构完成（✨ 2026-03-20）：
+  - `GET /tasks` - 获取所有定时任务列表
+  - `GET /tasks/{id}` - 获取任务详情
+  - `POST /tasks` - 创建定时任务
+  - `PUT /tasks/{id}` - 更新定时任务
+  - `DELETE /tasks/{id}` - 删除定时任务
+  - `POST /tasks/{id}/toggle` - 切换任务启用状态
+  - `GET /tasks/{id}/history` - 获取任务执行历史
+  - `GET /history/recent` - 获取最近执行历史
+  - `POST /tasks/{id}/execute` - 手动执行任务
+  - `GET /tasks/{id}/status` - 获取任务执行状态
+  - `POST /validate-cron` - 验证Cron表达式
+  - **重构成果**：从 898 行减少到 426 行（↓ 53%），移除所有直接 SQL（15 处）
 
 **待创建的 Repository**（优先级较低）：
 - `AdjFactorRepository` - 复权因子数据
 - `SuspendRepository` - 停复牌信息
 - `PremarketRepository` - 盘前数据
+- `TaskExecutionHistoryRepository` - 定时任务执行历史（task_execution_history 表）
 
 **待重构的 Service**（包含直接 SQL，优先级较低）：
 - ⚠️ `batch_manager.py` - 批次管理器（4处直接 SQL）
 - ⚠️ `training_task_manager.py` - 训练任务管理器
+- ⚠️ `ScheduledTaskService` - 部分方法仍使用 DatabaseManager 查询 task_execution_history 表（已添加 TODO 注释，待创建 TaskExecutionHistoryRepository 后重构）
 
 **重构优先级**：
 1. **高优先级**：配置和同步相关服务（✅ 已完成）
