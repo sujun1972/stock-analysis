@@ -990,6 +990,40 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取融资融券交易汇总失败: {e}")
             raise TushareDataError(f"获取融资融券交易汇总失败: {str(e)}")
 
+    def get_slb_len(self,
+                    trade_date: Optional[str] = None,
+                    start_date: Optional[str] = None,
+                    end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取转融资交易汇总数据
+        积分消耗：2000分/分钟200次，5000分500次
+        单次请求最大返回5000行数据
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+
+        Returns:
+            pd.DataFrame: 转融资交易汇总数据，包含以下字段：
+                - trade_date: 交易日期
+                - ob: 期初余额(亿元)
+                - auc_amount: 竞价成交金额(亿元)
+                - repo_amount: 再借成交金额(亿元)
+                - repay_amount: 偿还金额(亿元)
+                - cb: 期末余额(亿元)
+        """
+        try:
+            logger.info(f"获取转融资交易汇总: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+            df = self.api_client.query('slb_len',
+                                     trade_date=trade_date,
+                                     start_date=start_date,
+                                     end_date=end_date)
+            return df
+        except Exception as e:
+            logger.error(f"获取转融资交易汇总失败: {e}")
+            raise TushareDataError(f"获取转融资交易汇总失败: {str(e)}")
+
     def get_margin_detail(self, ts_code: Optional[str] = None,
                          trade_date: Optional[str] = None,
                          start_date: Optional[str] = None,

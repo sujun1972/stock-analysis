@@ -213,6 +213,11 @@ const navItems: NavItem[] = [
         name: '融资融券标的（盘前更新）',
         href: '/data/margin-secs',
         icon: Activity
+      },
+      {
+        name: '转融资交易汇总',
+        href: '/data/slb-len',
+        icon: TrendingUp
       }
     ]
   },

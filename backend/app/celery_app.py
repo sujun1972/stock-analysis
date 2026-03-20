@@ -135,6 +135,12 @@ except Exception as e:
     logger.error(f"❌ 加载融资融券交易汇总任务模块失败: {e}")
 
 try:
+    from app.tasks import slb_len_tasks
+    logger.info(f"✅ 已加载转融资交易汇总任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载转融资交易汇总任务模块失败: {e}")
+
+try:
     from app.tasks import margin_detail_tasks
     logger.info(f"✅ 已加载融资融券交易明细任务模块")
 except Exception as e:

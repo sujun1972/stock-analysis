@@ -220,8 +220,374 @@ triggerPoll()  // Header 图标即时更新
 - 板块资金流向页面（`/data/moneyflow-ind-dc`）
 - 个股资金流向页面（Tushare）（`/data/moneyflow`）
 - 个股资金流向页面（DC）（`/data/moneyflow-stock-dc`）
+- 融资融券交易汇总页面（`/data/margin`）
+- 融资融券交易明细页面（`/data/margin-detail`）
+- 融资融券标的页面（`/data/margin-secs`）
+- 转融资交易汇总页面（`/data/slb-len`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
+
+### 新增数据同步功能开发流程
+
+当需要添加新的 Tushare 数据同步功能时，请按照以下标准流程进行开发：
+
+#### 1. 数据库层
+**文件位置**：`db_init/migrations/`
+
+创建数据库迁移脚本：
+```sql
+-- 示例：030_create_your_table.sql
+CREATE TABLE IF NOT EXISTS your_table (
+    trade_date VARCHAR(8) NOT NULL,
+    -- 其他字段
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (trade_date)
+);
+
+CREATE INDEX idx_your_table_date ON your_table(trade_date);
+COMMENT ON TABLE your_table IS 'Tushare接口说明';
+```
+
+执行迁移：
+```bash
+docker-compose exec -T timescaledb psql -U stock_user -d stock_analysis < db_init/migrations/030_create_your_table.sql
+```
+
+#### 2. Repository 层
+**文件位置**：`backend/app/repositories/your_repository.py`
+
+继承 `BaseRepository` 并实现标准方法：
+```python
+from app.repositories.base_repository import BaseRepository
+
+class YourRepository(BaseRepository):
+    TABLE_NAME = "your_table"
+
+    def __init__(self, db=None):
+        super().__init__(db)
+
+    def get_by_date_range(self, start_date, end_date, limit=None):
+        # 实现日期范围查询
+
+    def get_statistics(self, start_date=None, end_date=None):
+        # 实现统计查询
+
+    def bulk_upsert(self, df):
+        # 实现批量插入/更新（ON CONFLICT DO UPDATE）
+```
+
+**注册 Repository**：在 `backend/app/repositories/__init__.py` 中导出
+
+#### 3. Service 层
+**文件位置**：`backend/app/services/your_service.py`
+
+实现业务逻辑和 Tushare 数据同步：
+```python
+from app.repositories import YourRepository
+from core.src.providers import DataProviderFactory
+
+class YourService:
+    def __init__(self):
+        self.your_repo = YourRepository()
+        self.provider_factory = DataProviderFactory()
+
+    async def sync_data(self, trade_date=None, start_date=None, end_date=None):
+        # 1. 获取 Tushare 数据
+        provider = self._get_provider()
+        df = await asyncio.to_thread(provider.get_your_data, ...)
+
+        # 2. 数据验证和清洗
+        df = self._validate_and_clean_data(df)
+
+        # 3. 批量插入数据库
+        records = await asyncio.to_thread(self.your_repo.bulk_upsert, df)
+
+        return {"status": "success", "records": records}
+```
+
+#### 4. Celery 任务
+**文件位置**：`backend/app/tasks/your_tasks.py`
+
+创建异步任务：
+```python
+from app.celery_app import celery_app
+from app.tasks.extended_sync_tasks import run_async_in_celery
+from app.services.your_service import YourService
+
+@celery_app.task(bind=True, name="tasks.sync_your_data")
+def sync_your_data_task(self, trade_date=None, start_date=None, end_date=None):
+    service = YourService()
+    result = run_async_in_celery(
+        service.sync_data,
+        trade_date=trade_date,
+        start_date=start_date,
+        end_date=end_date
+    )
+    return result
+```
+
+**注册任务**：
+1. 在 `backend/app/celery_app.py` 中导入任务模块
+2. 在 `backend/app/scheduler/task_metadata.py` 中添加任务元数据：
+```python
+'tasks.sync_your_data': {
+    'task': 'tasks.sync_your_data',
+    'name': '任务显示名称',
+    'category': '任务分类',  # 如：基础数据、扩展数据、两融及转融通
+    'display_order': 500,  # 排序号
+    'points_consumption': 2000  # Tushare积分消耗
+}
+```
+
+#### 5. API 端点
+**文件位置**：`backend/app/api/endpoints/your_endpoint.py`
+
+实现 REST API 端点（至少包含以下4个）：
+```python
+from fastapi import APIRouter, Query, Depends
+from app.services.your_service import YourService
+from app.services import TaskHistoryHelper
+
+router = APIRouter()
+
+@router.get("")
+async def get_data(start_date=None, end_date=None, limit=30):
+    """查询数据"""
+    service = YourService()
+    result = await service.get_data(start_date, end_date, limit)
+    return ApiResponse.success(data=result)
+
+@router.get("/statistics")
+async def get_statistics(start_date=None, end_date=None):
+    """获取统计信息"""
+    service = YourService()
+    result = await service.get_statistics(start_date, end_date)
+    return ApiResponse.success(data=result)
+
+@router.get("/latest")
+async def get_latest():
+    """获取最新数据"""
+    service = YourService()
+    result = await service.get_latest_data()
+    return ApiResponse.success(data=result)
+
+@router.post("/sync-async")
+async def sync_async(
+    trade_date=None,
+    start_date=None,
+    end_date=None,
+    current_user: User = Depends(require_admin)
+):
+    """异步同步数据（使用 Celery）"""
+    from app.tasks.your_tasks import sync_your_data_task
+
+    # 日期格式转换（YYYY-MM-DD -> YYYYMMDD）
+    trade_date_fmt = trade_date.replace('-', '') if trade_date else None
+
+    # 提交 Celery 任务
+    celery_task = sync_your_data_task.apply_async(
+        kwargs={'trade_date': trade_date_fmt, ...}
+    )
+
+    # 使用 TaskHistoryHelper 创建任务历史记录
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_your_data',
+        display_name='任务显示名称',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={...},
+        source='your_page'
+    )
+
+    return ApiResponse.success(data=task_data, message="任务已提交")
+```
+
+**注册路由**：在 `backend/app/api/__init__.py` 中添加：
+```python
+from .endpoints import your_endpoint
+router.include_router(your_endpoint.router, prefix="/your-endpoint", tags=["标签名称"])
+```
+
+#### 6. Tushare Provider
+**文件位置**：`core/src/providers/tushare/provider.py`
+
+添加数据获取方法：
+```python
+def get_your_data(self, trade_date=None, start_date=None, end_date=None):
+    """获取数据"""
+    df = self.api_client.query(
+        'your_tushare_api',
+        trade_date=trade_date,
+        start_date=start_date,
+        end_date=end_date
+    )
+    return df
+```
+
+#### 7. 前端 API 客户端
+**文件位置**：`admin/lib/api/your-api.ts`
+
+创建模块化 API 客户端：
+```typescript
+import { BaseApiClient } from './base'
+import type { ApiResponse } from '@/types/api'
+
+export interface YourDataParams {
+  start_date?: string
+  end_date?: string
+  limit?: number
+}
+
+export interface YourData {
+  trade_date: string
+  // 其他字段
+}
+
+export class YourApiClient extends BaseApiClient {
+  async getData(params?: YourDataParams): Promise<ApiResponse<{items: YourData[], total: number}>> {
+    return this.get('/api/your-endpoint', { params })
+  }
+
+  async getStatistics(params): Promise<ApiResponse<any>> {
+    return this.get('/api/your-endpoint/statistics', { params })
+  }
+
+  async syncAsync(params): Promise<ApiResponse<any>> {
+    return this.post('/api/your-endpoint/sync-async', {}, { params })
+  }
+}
+
+export const yourApi = new YourApiClient()
+```
+
+**注册 API**：在 `admin/lib/api/index.ts` 中导出
+
+#### 8. 前端页面
+**文件位置**：`admin/app/(dashboard)/data/your-page/page.tsx`
+
+创建数据展示页面（标准结构）：
+```typescript
+'use client'
+
+import { useState, useEffect } from 'react'
+import { PageHeader } from '@/components/common/PageHeader'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { DataTable, Column } from '@/components/common/DataTable'
+import { DatePicker } from '@/components/common/DatePicker'
+import { toast } from 'sonner'
+import { yourApi } from '@/lib/api'
+import { useTaskStore } from '@/stores/task-store'
+
+export default function YourPage() {
+  const [data, setData] = useState([])
+  const [statistics, setStatistics] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [startDate, setStartDate] = useState(undefined)
+  const [endDate, setEndDate] = useState(undefined)
+  const { addTask, triggerPoll } = useTaskStore()
+
+  const loadData = async () => {
+    // 加载数据逻辑
+  }
+
+  const handleSync = async () => {
+    const response = await yourApi.syncAsync(params)
+
+    if (response.code === 200 && response.data) {
+      addTask({
+        taskId: response.data.celery_task_id,
+        taskName: response.data.task_name,
+        displayName: response.data.display_name,
+        taskType: 'data_sync',
+        status: 'running',
+        progress: 0,
+        startTime: Date.now()
+      })
+
+      triggerPoll()
+      setTimeout(() => loadData().catch(() => {}), 3000)
+    }
+  }
+
+  // 表格列定义
+  const columns: Column<YourData>[] = [...]
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="页面标题" description="页面描述" />
+
+      {/* 统计卡片 */}
+      {statistics && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 统计卡片内容 */}
+      </div>}
+
+      {/* 筛选和操作区域 */}
+      <Card>
+        <CardHeader><CardTitle>数据查询</CardTitle></CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <DatePicker date={startDate} onSelect={setStartDate} />
+            <DatePicker date={endDate} onSelect={setEndDate} />
+            <Button onClick={loadData}>查询</Button>
+            <Button onClick={handleSync}>同步数据</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 数据表格 */}
+      <Card>
+        <CardContent>
+          <DataTable columns={columns} data={data} isLoading={isLoading} />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+```
+
+#### 9. 菜单注册
+**文件位置**：`admin/components/layouts/AdminLayout.tsx`
+
+在相应的菜单组中添加菜单项：
+```typescript
+{
+  name: '菜单显示名称',
+  href: '/data/your-page',
+  icon: YourIcon
+}
+```
+
+#### 10. 重启 Celery Worker
+新增任务后，必须重启 Celery Worker 才能识别：
+```bash
+docker-compose restart celery_worker
+```
+
+验证任务注册：
+```bash
+docker-compose logs celery_worker | grep "tasks.sync_your_data"
+```
+
+#### 开发检查清单
+
+- [ ] 数据库迁移脚本已创建并执行
+- [ ] Repository 层实现了标准方法（get_by_date_range, get_statistics, bulk_upsert）
+- [ ] Service 层实现了数据同步和查询逻辑
+- [ ] Celery 任务已创建并使用 `run_async_in_celery`
+- [ ] 任务元数据已添加到 `task_metadata.py`
+- [ ] API 端点包含查询、统计、最新、异步同步4个接口
+- [ ] API 异步同步端点使用 `TaskHistoryHelper` 创建任务历史
+- [ ] Tushare Provider 添加了数据获取方法
+- [ ] 前端 API 客户端已创建并导出
+- [ ] 前端页面实现了数据展示、筛选、同步功能
+- [ ] 菜单项已添加到 AdminLayout
+- [ ] Celery Worker 已重启并验证任务注册成功
+- [ ] 所有代码遵循项目三层架构（Repository → Service → API）
+- [ ] 日期格式正确处理（数据库 YYYYMMDD ↔ API/前端 YYYY-MM-DD）
 
 ### API 客户端模块化架构
 

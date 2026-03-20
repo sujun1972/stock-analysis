@@ -146,6 +146,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '两融及转融通',
         'display_order': 520
     },
+    'tasks.sync_slb_len': {
+        'task': 'tasks.sync_slb_len',
+        'name': '转融资交易汇总',
+        'description': '同步转融通融资汇总数据（期初余额、竞价成交、再借成交、偿还、期末余额）（2000积分/分钟200次，5000积分500次，单次最大5000行）',
+        'category': '两融及转融通',
+        'display_order': 525,
+        'points_consumption': 2000
+    },
     'extended.sync_margin': {
         'task': 'extended.sync_margin',
         'name': '融资融券明细（个股-旧版）',

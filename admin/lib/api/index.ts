@@ -17,6 +17,7 @@ import { SentimentApiClient, sentimentApi as sentimentApiInst } from './sentimen
 import { MoneyflowApiClient, moneyflowApi as moneyflowApiInst } from './moneyflow'
 import { MarginApiClient, marginApi as marginApiInst } from './margin'
 import { MarginSecsApi, marginSecsApi as marginSecsApiInst } from './margin-secs'
+import { SlbLenApiClient, slbLenApi as slbLenApiInst } from './slb-len'
 import { SchedulerApiClient, schedulerApi as schedulerApiInst } from './scheduler'
 import { CeleryTasksApiClient, celeryTasksApi as celeryTasksApiInst } from './celery-tasks'
 import { ConceptsApiClient, conceptsApi as conceptsApiInst } from './concepts'
@@ -98,6 +99,16 @@ export type {
   LatestMarginSecsData,
   SyncMarginSecsParams
 } from './margin-secs'
+
+// 重新导出转融资交易汇总 API
+export { SlbLenApiClient }
+export const slbLenApi = slbLenApiInst
+export type {
+  SlbLenParams,
+  SlbLenData,
+  SlbLenStatistics,
+  SyncSlbLenParams
+} from './slb-len'
 
 // 重新导出定时任务 API
 export { SchedulerApiClient }
@@ -263,6 +274,12 @@ export const apiClient = {
   getLatestMarginSecs: marginSecsApiInst.getLatestMarginSecs.bind(marginSecsApiInst),
   syncMarginSecsAsync: marginSecsApiInst.syncMarginSecsAsync.bind(marginSecsApiInst),
   getMarginSecsStatistics: marginSecsApiInst.getMarginSecsStatistics.bind(marginSecsApiInst),
+
+  // 转融资交易汇总相关
+  getSlbLen: slbLenApiInst.getSlbLen.bind(slbLenApiInst),
+  getSlbLenStatistics: slbLenApiInst.getSlbLenStatistics.bind(slbLenApiInst),
+  getLatestSlbLen: slbLenApiInst.getLatestSlbLen.bind(slbLenApiInst),
+  syncSlbLenAsync: slbLenApiInst.syncSlbLenAsync.bind(slbLenApiInst),
 
   // 定时任务相关
   getScheduledTasks: schedulerApiInst.getScheduledTasks.bind(schedulerApiInst),
