@@ -1,24 +1,27 @@
 """
 扩展数据API端点
 提供Tushare扩展数据的查询和同步接口
+
+重构说明：
+- 移除了所有直接的 SQL 查询
+- 使用 Service 层处理业务逻辑
+- 符合三层架构规范（API -> Service -> Repository）
 """
 
+import asyncio
 from fastapi import APIRouter, Query, Depends, HTTPException, BackgroundTasks
 from typing import Optional, List
 from datetime import date, datetime
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.api_response import ApiResponse
-from app.repositories import (
-    DailyBasicRepository,
-    HkHoldRepository,
-    StkLimitRepository,
-    BlockTradeRepository,
-    MoneyflowRepository,
-    MarginDetailRepository
+from app.services import (
+    DailyBasicService,
+    HkHoldService,
+    StkLimitService,
+    BlockTradeService,
+    MoneyflowService,
+    MarginDetailService
 )
 from loguru import logger
 from app.tasks.extended_sync_tasks import (
@@ -34,7 +37,7 @@ router = APIRouter(tags=["extended_data"])
 
 
 @router.get("/daily-basic/{ts_code}")
-def get_daily_basic(
+async def get_daily_basic(
     ts_code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
@@ -46,22 +49,22 @@ def get_daily_basic(
     - 用于短线选股和风险评估
     """
     try:
-        # 使用 Repository 层
-        repo = DailyBasicRepository()
+        # 使用 Service 层
+        service = DailyBasicService()
 
-        # 转换日期格式 (date -> YYYYMMDD)
-        start_date_str = start_date.strftime("%Y%m%d") if start_date else None
-        end_date_str = end_date.strftime("%Y%m%d") if end_date else None
+        # 转换日期格式 (date -> YYYY-MM-DD)
+        start_date_str = start_date.strftime("%Y-%m-%d") if start_date else None
+        end_date_str = end_date.strftime("%Y-%m-%d") if end_date else None
 
-        # 调用 Repository 查询
-        items = repo.get_by_code_and_date_range(
+        # 调用 Service 查询
+        result = await service.get_daily_basic_data(
             ts_code=ts_code,
             start_date=start_date_str,
             end_date=end_date_str,
             limit=limit
         )
 
-        return ApiResponse.success(data={"items": items, "count": len(items)})
+        return ApiResponse.success(data=result)
 
     except Exception as e:
         logger.error(f"获取每日指标失败: {str(e)}")
@@ -73,8 +76,7 @@ def get_moneyflow(
     ts_code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
-    limit: int = Query(100, le=500, description="返回记录数"),
-    db: Session = Depends(get_db)
+    limit: int = Query(100, le=500, description="返回记录数")
 ):
     """
     获取个股资金流向
@@ -82,64 +84,25 @@ def get_moneyflow(
     - 判断主力资金动向
     """
     try:
-        query_str = """
-            SELECT
-                ts_code, trade_date,
-                buy_sm_vol, buy_sm_amount, sell_sm_vol, sell_sm_amount,
-                buy_md_vol, buy_md_amount, sell_md_vol, sell_md_amount,
-                buy_lg_vol, buy_lg_amount, sell_lg_vol, sell_lg_amount,
-                buy_elg_vol, buy_elg_amount, sell_elg_vol, sell_elg_amount,
-                net_mf_vol, net_mf_amount, trade_count
-            FROM moneyflow
-            WHERE ts_code = :ts_code
-        """
+        # 使用 Service 层
+        service = MoneyflowService()
 
-        params = {"ts_code": ts_code}
+        # 转换日期格式 (date -> YYYY-MM-DD)
+        start_date_str = start_date.strftime("%Y-%m-%d") if start_date else None
+        end_date_str = end_date.strftime("%Y-%m-%d") if end_date else None
 
-        if start_date:
-            query_str += " AND trade_date >= :start_date"
-            params["start_date"] = start_date
-
-        if end_date:
-            query_str += " AND trade_date <= :end_date"
-            params["end_date"] = end_date
-
-        query_str += " ORDER BY trade_date DESC LIMIT :limit"
-        params["limit"] = limit
-
-        result = db.execute(text(query_str), params)
-        rows = result.fetchall()
-
-        data = []
-        for row in rows:
-            data.append({
-                "ts_code": row.ts_code,
-                "trade_date": row.trade_date.strftime("%Y-%m-%d") if row.trade_date else None,
-                "buy_sm_vol": int(row.buy_sm_vol) if row.buy_sm_vol else None,
-                "buy_sm_amount": float(row.buy_sm_amount) if row.buy_sm_amount else None,
-                "sell_sm_vol": int(row.sell_sm_vol) if row.sell_sm_vol else None,
-                "sell_sm_amount": float(row.sell_sm_amount) if row.sell_sm_amount else None,
-                "buy_md_vol": int(row.buy_md_vol) if row.buy_md_vol else None,
-                "buy_md_amount": float(row.buy_md_amount) if row.buy_md_amount else None,
-                "sell_md_vol": int(row.sell_md_vol) if row.sell_md_vol else None,
-                "sell_md_amount": float(row.sell_md_amount) if row.sell_md_amount else None,
-                "buy_lg_vol": int(row.buy_lg_vol) if row.buy_lg_vol else None,
-                "buy_lg_amount": float(row.buy_lg_amount) if row.buy_lg_amount else None,
-                "sell_lg_vol": int(row.sell_lg_vol) if row.sell_lg_vol else None,
-                "sell_lg_amount": float(row.sell_lg_amount) if row.sell_lg_amount else None,
-                "buy_elg_vol": int(row.buy_elg_vol) if row.buy_elg_vol else None,
-                "buy_elg_amount": float(row.buy_elg_amount) if row.buy_elg_amount else None,
-                "sell_elg_vol": int(row.sell_elg_vol) if row.sell_elg_vol else None,
-                "sell_elg_amount": float(row.sell_elg_amount) if row.sell_elg_amount else None,
-                "net_mf_vol": int(row.net_mf_vol) if row.net_mf_vol else None,
-                "net_mf_amount": float(row.net_mf_amount) if row.net_mf_amount else None,
-                "trade_count": int(row.trade_count) if row.trade_count else None
-            })
+        # 调用 Service 查询
+        result = service.get_moneyflow_data(
+            ts_code=ts_code,
+            start_date=start_date_str,
+            end_date=end_date_str,
+            limit=limit
+        )
 
         return {
             "code": 0,
-            "data": data,
-            "count": len(data),
+            "data": result["items"],
+            "count": result["total"],
             "msg": "success"
         }
 
@@ -149,7 +112,7 @@ def get_moneyflow(
 
 
 @router.get("/hk-hold")
-def get_hk_hold(
+async def get_hk_hold(
     trade_date: Optional[date] = Query(None, description="交易日期"),
     exchange: Optional[str] = Query(None, description="交易所：SH/SZ"),
     top: int = Query(50, le=200, description="返回前N条")
@@ -160,20 +123,20 @@ def get_hk_hold(
     - 外资动向重要参考
     """
     try:
-        # 使用 Repository 层
-        repo = HkHoldRepository()
+        # 使用 Service 层
+        service = HkHoldService()
 
-        # 转换日期格式 (date -> YYYYMMDD)
-        trade_date_str = trade_date.strftime("%Y%m%d") if trade_date else None
+        # 转换日期格式 (date -> YYYY-MM-DD)
+        trade_date_str = trade_date.strftime("%Y-%m-%d") if trade_date else None
 
-        # 调用 Repository 查询
-        items = repo.get_by_date(
+        # 调用 Service 查询
+        result = await service.get_hk_hold_data(
             trade_date=trade_date_str,
             exchange=exchange,
             limit=top
         )
 
-        return ApiResponse.success(data={"items": items, "count": len(items)})
+        return ApiResponse.success(data=result)
 
     except Exception as e:
         logger.error(f"获取北向资金失败: {str(e)}")
@@ -181,12 +144,11 @@ def get_hk_hold(
 
 
 @router.get("/margin/{ts_code}")
-def get_margin_detail(
+async def get_margin_detail(
     ts_code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
-    limit: int = Query(100, le=500, description="返回记录数"),
-    db: Session = Depends(get_db)
+    limit: int = Query(100, le=500, description="返回记录数")
 ):
     """
     获取融资融券数据
@@ -194,49 +156,25 @@ def get_margin_detail(
     - 市场情绪指标
     """
     try:
-        query_str = """
-            SELECT
-                ts_code, trade_date, rzye, rqye, rzmre, rqyl,
-                rzche, rqchl, rqmcl, rzrqye
-            FROM margin_detail
-            WHERE ts_code = :ts_code
-        """
+        # 使用 Service 层
+        service = MarginDetailService()
 
-        params = {"ts_code": ts_code}
+        # 转换日期格式 (date -> YYYY-MM-DD)
+        start_date_str = start_date.strftime("%Y-%m-%d") if start_date else None
+        end_date_str = end_date.strftime("%Y-%m-%d") if end_date else None
 
-        if start_date:
-            query_str += " AND trade_date >= :start_date"
-            params["start_date"] = start_date
-
-        if end_date:
-            query_str += " AND trade_date <= :end_date"
-            params["end_date"] = end_date
-
-        query_str += " ORDER BY trade_date DESC LIMIT :limit"
-        params["limit"] = limit
-
-        result = db.execute(text(query_str), params)
-        rows = result.fetchall()
-
-        data = []
-        for row in rows:
-            data.append({
-                "ts_code": row.ts_code,
-                "trade_date": row.trade_date.strftime("%Y-%m-%d") if row.trade_date else None,
-                "rzye": float(row.rzye) if row.rzye else None,
-                "rqye": float(row.rqye) if row.rqye else None,
-                "rzmre": float(row.rzmre) if row.rzmre else None,
-                "rqyl": int(row.rqyl) if row.rqyl else None,
-                "rzche": float(row.rzche) if row.rzche else None,
-                "rqchl": int(row.rqchl) if row.rqchl else None,
-                "rqmcl": int(row.rqmcl) if row.rqmcl else None,
-                "rzrqye": float(row.rzrqye) if row.rzrqye else None
-            })
+        # 调用 Service 查询
+        result = await service.get_margin_detail_data(
+            ts_code=ts_code,
+            start_date=start_date_str,
+            end_date=end_date_str,
+            limit=limit
+        )
 
         return {
             "code": 0,
-            "data": data,
-            "count": len(data),
+            "data": result["data"],
+            "count": len(result["data"]),
             "msg": "success"
         }
 
@@ -246,7 +184,7 @@ def get_margin_detail(
 
 
 @router.get("/limit-prices")
-def get_limit_prices(
+async def get_limit_prices(
     trade_date: date = Query(..., description="交易日期"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     limit: int = Query(100, le=5000, description="返回记录数")
@@ -257,20 +195,20 @@ def get_limit_prices(
     - 用于交易参考
     """
     try:
-        # 使用 Repository 层
-        repo = StkLimitRepository()
+        # 使用 Service 层
+        service = StkLimitService()
 
-        # 转换日期格式 (date -> YYYYMMDD)
-        trade_date_str = trade_date.strftime("%Y%m%d")
+        # 转换日期格式 (date -> YYYY-MM-DD)
+        trade_date_str = trade_date.strftime("%Y-%m-%d")
 
-        # 调用 Repository 查询
-        items = repo.get_by_date(
+        # 调用 Service 查询
+        result = await service.get_stk_limit_data(
             trade_date=trade_date_str,
             ts_code=ts_code,
             limit=limit
         )
 
-        return ApiResponse.success(data={"items": items, "count": len(items)})
+        return ApiResponse.success(data=result)
 
     except Exception as e:
         logger.error(f"获取涨跌停价格失败: {str(e)}")
@@ -278,7 +216,7 @@ def get_limit_prices(
 
 
 @router.get("/block-trade")
-def get_block_trade(
+async def get_block_trade(
     trade_date: Optional[date] = Query(None, description="交易日期"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     limit: int = Query(100, le=500, description="返回记录数")
@@ -289,20 +227,20 @@ def get_block_trade(
     - 判断机构动向
     """
     try:
-        # 使用 Repository 层
-        repo = BlockTradeRepository()
+        # 使用 Service 层
+        service = BlockTradeService()
 
-        # 转换日期格式 (date -> YYYYMMDD)
-        trade_date_str = trade_date.strftime("%Y%m%d") if trade_date else None
+        # 转换日期格式 (date -> YYYY-MM-DD)
+        trade_date_str = trade_date.strftime("%Y-%m-%d") if trade_date else None
 
-        # 调用 Repository 查询
-        items = repo.get_by_date(
+        # 调用 Service 查询
+        result = await service.get_block_trade_data(
             trade_date=trade_date_str,
             ts_code=ts_code,
             limit=limit
         )
 
-        return ApiResponse.success(data={"items": items, "count": len(items)})
+        return ApiResponse.success(data=result)
 
     except Exception as e:
         logger.error(f"获取大宗交易数据失败: {str(e)}")
@@ -368,22 +306,32 @@ def get_sync_status(task_id: str):
 
 
 @router.get("/stats/summary")
-def get_data_summary():
+async def get_data_summary():
     """
     获取扩展数据统计摘要
+
+    使用 asyncio.gather 并发获取多个统计数据，提高性能
     """
     try:
-        # 使用 Repository 层获取统计信息
-        daily_basic_repo = DailyBasicRepository()
-        moneyflow_repo = MoneyflowRepository()
-        hk_hold_repo = HkHoldRepository()
-        margin_detail_repo = MarginDetailRepository()
+        # 使用 Service 层获取统计信息
+        daily_basic_service = DailyBasicService()
+        moneyflow_service = MoneyflowService()
+        hk_hold_service = HkHoldService()
+        margin_detail_service = MarginDetailService()
+
+        # 并发获取所有统计数据
+        stats_results = await asyncio.gather(
+            daily_basic_service.get_statistics(),
+            moneyflow_service.get_statistics(),
+            hk_hold_service.get_statistics(),
+            margin_detail_service.get_statistics()
+        )
 
         stats = {
-            'daily_basic': daily_basic_repo.get_statistics(),
-            'moneyflow': moneyflow_repo.get_statistics(),
-            'hk_hold': hk_hold_repo.get_statistics(),
-            'margin_detail': margin_detail_repo.get_statistics()
+            'daily_basic': stats_results[0],
+            'moneyflow': stats_results[1],
+            'hk_hold': stats_results[2],
+            'margin_detail': stats_results[3]
         }
 
         return ApiResponse.success(data=stats)

@@ -803,6 +803,10 @@ class MarginService:
 - `MoneyflowMktDcService` - 大盘资金流向服务（东财DC）
 - `MoneyflowIndDcService` - 板块资金流向服务（东财DC）
 - `MoneyflowStockDcService` - 个股资金流向服务（东财DC）
+- `DailyBasicService` - 每日指标服务
+- `BlockTradeService` - 大宗交易服务
+- `StkLimitService` - 涨跌停价格服务
+- `HkHoldService` - 北向资金持股服务
 
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
@@ -812,7 +816,14 @@ class MarginService:
 - ✅ `ConceptRepository` - 概念板块和股票关系管理
 
 **已重构的 API 端点**：
-- ✅ `extended_data.py` - 5个端点（daily-basic, hk-hold, limit-prices, block-trade, stats/summary）
+- ✅ `extended_data.py` - 7个端点全部重构完成：
+  - `GET /daily-basic/{ts_code}` - 使用 DailyBasicService
+  - `GET /moneyflow/{ts_code}` - 使用 MoneyflowService
+  - `GET /hk-hold` - 使用 HkHoldService
+  - `GET /margin/{ts_code}` - 使用 MarginDetailService
+  - `GET /limit-prices` - 使用 StkLimitService
+  - `GET /block-trade` - 使用 BlockTradeService
+  - `GET /stats/summary` - 并发调用多个 Service（使用 asyncio.gather）
 - ✅ `concepts.py` - 5个端点（概念列表、详情、股票查询、概念更新）
 - ✅ `stocks.py` - 概念过滤功能
 - ✅ `moneyflow.py` - 3个端点（查询、同步、排名），使用 MoneyflowService
