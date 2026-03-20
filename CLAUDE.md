@@ -1239,7 +1239,7 @@ class MoneyflowRepository(BaseRepository):
 
 当单个 API 端点文件超过 500 行时，应考虑按功能模块拆分为包结构：
 
-**拆分示例** (sentiment 模块重构):
+**拆分示例 1** (sentiment 模块重构):
 ```
 # 重构前
 endpoints/sentiment.py (1018行) - 单一文件
@@ -1253,6 +1253,29 @@ endpoints/sentiment/
 ├── cycle.py             # 情绪周期端点
 └── ai_analysis.py       # AI分析端点
 ```
+
+**拆分示例 2** (backtest 模块重构):
+```
+# 重构前
+endpoints/backtest.py (2360行) - 单一文件
+
+# 重构后
+endpoints/backtest/
+├── __init__.py          # 路由聚合
+├── schemas.py           # Pydantic 数据模型
+├── execution.py         # 核心回测执行
+├── metrics.py           # 指标计算
+├── parallel.py          # 并行回测
+├── optimization.py      # 参数优化
+├── analysis.py          # 成本和交易分析
+└── async_backtest.py    # 异步回测
+```
+
+**重构收益** (以 backtest 为例):
+- 单文件行数：2360行 → 最大950行 (↓60%)
+- 代码组织：1个混合文件 → 8个专门模块
+- 最大函数：915行 → 约100行/端点 (↓89%)
+- 可维护性：显著提升，功能定位更快速
 
 **拆分原则**：
 1. **按功能域划分**：查询、同步、分析等不同功能分到不同文件
