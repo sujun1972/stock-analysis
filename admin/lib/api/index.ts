@@ -31,6 +31,7 @@ import { LimitListApiClient, limitListApi as limitListApiInst } from './limit-li
 import { LimitStepApiClient, limitStepApi as limitStepApiInst } from './limit-step'
 import { LimitCptApiClient, limitCptApi as limitCptApiInst } from './limit-cpt'
 import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
+import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -468,6 +469,12 @@ export const apiClient = {
   getTopRatedStocks: reportRcApiInst.getTopRated.bind(reportRcApiInst),
   syncReportRcAsync: reportRcApiInst.syncAsync.bind(reportRcApiInst),
 
+  // 个股异常波动相关
+  getStkShock: stkShockApiInst.getData.bind(stkShockApiInst),
+  getStkShockStatistics: stkShockApiInst.getStatistics.bind(stkShockApiInst),
+  getLatestStkShock: stkShockApiInst.getLatest.bind(stkShockApiInst),
+  syncStkShockAsync: stkShockApiInst.syncAsync.bind(stkShockApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -475,6 +482,15 @@ export const apiClient = {
   patch: axiosInst.patch.bind(axiosInst),
   delete: axiosInst.delete.bind(axiosInst),
 }
+
+// 重新导出个股异常波动 API
+export { StkShockApiClient }
+export const stkShockApi = stkShockApiInst
+export type {
+  StkShockParams,
+  StkShockData,
+  StkShockStatistics
+} from './stk-shock'
 
 // 导出默认实例
 export default apiClient

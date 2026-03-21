@@ -267,6 +267,18 @@ const navItems: NavItem[] = [
     ]
   },
   {
+    name: '参考数据',
+    href: '/reference-data',
+    icon: FileText,
+    children: [
+      {
+        name: '个股异常波动',
+        href: '/reference-data/stk-shock',
+        icon: FileText
+      }
+    ]
+  },
+  {
     name: '数据中心',
     icon: Database,
     children: [

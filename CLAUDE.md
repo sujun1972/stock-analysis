@@ -69,6 +69,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 - `/logs` - 日志管理导航页
 - `/monitoring` - 系统监控导航页
 - `/boardgame` - 打板专题导航页（龙虎榜等）
+- `/reference-data` - 参考数据导航页（个股异常波动等）
 
 这些页面以卡片形式展示子功能入口，解决了中间层级页面点击的问题。
 
@@ -231,6 +232,7 @@ triggerPoll()  // Header 图标即时更新
 - 连板天梯页面（`/boardgame/limit-step`）
 - 最强板块统计页面（`/boardgame/limit-cpt`）
 - 卖方盈利预测数据页面（`/features/report-rc`）
+- 个股异常波动页面（`/reference-data/stk-shock`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1225,6 +1227,9 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 
 13. **特色数据** （✨ 新增于 2026-03-21）
    - `ReportRcRepository` - 卖方盈利预测数据（券商研报盈利预测、评级、目标价等）
+
+14. **参考数据** （✨ 新增于 2026-03-21）
+   - `StkShockRepository` - 个股异常波动（根据证券交易所交易规则，记录每日股票交易异常波动情况）
 
 #### Repository 开发规范
 

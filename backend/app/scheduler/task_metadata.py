@@ -204,6 +204,19 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
     },
 
     # ============================================
+    # 参考数据任务（display_order: 450-499）
+    # ============================================
+    'tasks.sync_stk_shock': {
+        'task': 'tasks.sync_stk_shock',
+        'name': '个股异常波动',
+        'description': '根据证券交易所交易规则的有关规定，交易所每日发布股票交易异常波动情况（6000积分/次，单次最大1000行）',
+        'category': '参考数据',
+        'display_order': 450,
+        'points_consumption': 6000,
+        'default_params': {'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
+    # ============================================
     # 打板专题任务（display_order: 550-599）
     # ============================================
     'top_list': {
