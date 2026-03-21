@@ -33,6 +33,7 @@ import { LimitCptApiClient, limitCptApi as limitCptApiInst } from './limit-cpt'
 import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
+import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -508,6 +509,15 @@ export type {
   StkAlertData,
   StkAlertStatistics
 } from './stk-alert'
+
+// 重新导出个股严重异常波动 API
+export { StkHighShockApiClient }
+export const stkHighShockApi = stkHighShockApiInst
+export type {
+  StkHighShockParams,
+  StkHighShockData,
+  StkHighShockStatistics
+} from './stk-high-shock'
 
 // 导出默认实例
 export default apiClient

@@ -277,6 +277,11 @@ const navItems: NavItem[] = [
         icon: FileText
       },
       {
+        name: '个股严重异常波动',
+        href: '/reference-data/stk-high-shock',
+        icon: FileText
+      },
+      {
         name: '交易所重点提示证券',
         href: '/reference-data/stk-alert',
         icon: FileText

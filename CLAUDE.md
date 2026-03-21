@@ -233,6 +233,7 @@ triggerPoll()  // Header 图标即时更新
 - 最强板块统计页面（`/boardgame/limit-cpt`）
 - 卖方盈利预测数据页面（`/features/report-rc`）
 - 个股异常波动页面（`/reference-data/stk-shock`）
+- 个股严重异常波动页面（`/reference-data/stk-high-shock`）
 - 交易所重点提示证券页面（`/reference-data/stk-alert`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
@@ -1231,6 +1232,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 
 14. **参考数据** （✨ 新增于 2026-03-21）
    - `StkShockRepository` - 个股异常波动（根据证券交易所交易规则，记录每日股票交易异常波动情况）
+   - `StkHighShockRepository` - 个股严重异常波动（交易所每日发布的股票交易严重异常波动情况）
    - `StkAlertRepository` - 交易所重点提示证券（记录交易所每日发布的重点提示证券信息）
 
 #### Repository 开发规范
