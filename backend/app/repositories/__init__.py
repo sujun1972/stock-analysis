@@ -42,6 +42,7 @@ from .limit_step_repository import LimitStepRepository
 from .limit_cpt_repository import LimitCptRepository
 from .report_rc_repository import ReportRcRepository
 from .stk_shock_repository import StkShockRepository
+from .stk_alert_repository import StkAlertRepository
 
 __all__ = [
     "BaseRepository",
@@ -104,4 +105,5 @@ __all__ = [
     "ReportRcRepository",
     # 参考数据
     "StkShockRepository",
+    "StkAlertRepository",
 ]

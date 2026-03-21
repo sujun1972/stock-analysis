@@ -32,6 +32,7 @@ import { LimitStepApiClient, limitStepApi as limitStepApiInst } from './limit-st
 import { LimitCptApiClient, limitCptApi as limitCptApiInst } from './limit-cpt'
 import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
+import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -475,6 +476,13 @@ export const apiClient = {
   getLatestStkShock: stkShockApiInst.getLatest.bind(stkShockApiInst),
   syncStkShockAsync: stkShockApiInst.syncAsync.bind(stkShockApiInst),
 
+  // 交易所重点提示证券相关
+  getStkAlert: stkAlertApiInst.getData.bind(stkAlertApiInst),
+  getStkAlertStatistics: stkAlertApiInst.getStatistics.bind(stkAlertApiInst),
+  getLatestStkAlert: stkAlertApiInst.getLatest.bind(stkAlertApiInst),
+  getActiveStkAlert: stkAlertApiInst.getActive.bind(stkAlertApiInst),
+  syncStkAlertAsync: stkAlertApiInst.syncAsync.bind(stkAlertApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -491,6 +499,15 @@ export type {
   StkShockData,
   StkShockStatistics
 } from './stk-shock'
+
+// 重新导出交易所重点提示证券 API
+export { StkAlertApiClient }
+export const stkAlertApi = stkAlertApiInst
+export type {
+  StkAlertParams,
+  StkAlertData,
+  StkAlertStatistics
+} from './stk-alert'
 
 // 导出默认实例
 export default apiClient

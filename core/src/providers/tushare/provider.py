@@ -1654,6 +1654,53 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取个股异常波动失败: {e}")
             raise TushareDataError(f"获取个股异常波动失败: {str(e)}")
 
+    def get_stk_alert(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取交易所重点提示证券数据
+        积分消耗：6000分
+        单次返回最大1000行数据
+
+        Args:
+            ts_code: 股票代码（可选）
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 交易所重点提示证券数据，包含以下列：
+                - ts_code: 股票代码
+                - name: 股票名称
+                - start_date: 交易所重点提示起始日期
+                - end_date: 交易所重点提示参考截至日期
+                - type: 提示类型
+        """
+        try:
+            logger.info(f"获取交易所重点提示证券: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('stk_alert', **params)
+            logger.info(f"获取到 {len(df)} 条交易所重点提示证券记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取交易所重点提示证券失败: {e}")
+            raise TushareDataError(f"获取交易所重点提示证券失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

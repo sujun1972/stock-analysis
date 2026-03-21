@@ -215,6 +215,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 6000,
         'default_params': {'trade_date': None, 'start_date': None, 'end_date': None}
     },
+    'tasks.sync_stk_alert': {
+        'task': 'tasks.sync_stk_alert',
+        'name': '交易所重点提示证券',
+        'description': '根据证券交易所交易规则的有关规定，交易所每日发布重点提示证券（6000积分/次，单次最大1000行）',
+        'category': '参考数据',
+        'display_order': 451,
+        'points_consumption': 6000,
+        'default_params': {'trade_date': None, 'start_date': None, 'end_date': None}
+    },
 
     # ============================================
     # 打板专题任务（display_order: 550-599）
