@@ -49,7 +49,8 @@ import {
   BarChart3,
   Wallet,
   ListOrdered,
-  Building2
+  Building2,
+  Star
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -250,6 +251,17 @@ const navItems: NavItem[] = [
       {
         name: '最强板块统计',
         href: '/boardgame/limit-cpt',
+        icon: TrendingUp
+      }
+    ]
+  },
+  {
+    name: '特色数据',
+    icon: Star,
+    children: [
+      {
+        name: '卖方盈利预测',
+        href: '/features/report-rc',
         icon: TrendingUp
       }
     ]

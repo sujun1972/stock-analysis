@@ -176,6 +176,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载最强板块统计任务模块失败: {e}")
 
+try:
+    from app.tasks import report_rc_tasks
+    logger.info(f"✅ 已加载卖方盈利预测数据任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载卖方盈利预测数据任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 

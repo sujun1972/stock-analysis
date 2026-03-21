@@ -191,6 +191,19 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
     },
 
     # ============================================
+    # 特色数据任务（display_order: 400-449）
+    # ============================================
+    'tasks.sync_report_rc': {
+        'task': 'tasks.sync_report_rc',
+        'name': '卖方盈利预测数据',
+        'description': '获取券商（卖方）每天研报的盈利预测数据，数据从2010年开始（120积分试用，8000积分正式权限）',
+        'category': '特色数据',
+        'display_order': 400,
+        'points_consumption': 8000,
+        'default_params': {'report_date': None}
+    },
+
+    # ============================================
     # 打板专题任务（display_order: 550-599）
     # ============================================
     'top_list': {
@@ -395,12 +408,13 @@ TASK_CATEGORIES = [
     {'name': '扩展数据', 'order': 3},
     {'name': '资金流向', 'order': 4},
     {'name': '两融及转融通', 'order': 5},
-    {'name': '打板专题', 'order': 6},
-    {'name': '市场情绪', 'order': 7},
-    {'name': '盘前分析', 'order': 8},
-    {'name': '质量监控', 'order': 9},
-    {'name': '报告通知', 'order': 10},
-    {'name': '系统维护', 'order': 11}
+    {'name': '特色数据', 'order': 6},
+    {'name': '打板专题', 'order': 7},
+    {'name': '市场情绪', 'order': 8},
+    {'name': '盘前分析', 'order': 9},
+    {'name': '质量监控', 'order': 10},
+    {'name': '报告通知', 'order': 11},
+    {'name': '系统维护', 'order': 12}
 ]
 
 

@@ -40,6 +40,7 @@ from .top_inst_repository import TopInstRepository
 from .limit_list_repository import LimitListRepository
 from .limit_step_repository import LimitStepRepository
 from .limit_cpt_repository import LimitCptRepository
+from .report_rc_repository import ReportRcRepository
 
 __all__ = [
     "BaseRepository",
@@ -98,4 +99,6 @@ __all__ = [
     "LimitListRepository",
     "LimitStepRepository",
     "LimitCptRepository",
+    # 特色数据
+    "ReportRcRepository",
 ]

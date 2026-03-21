@@ -30,6 +30,7 @@ import { TopInstApiClient, topInstApi as topInstApiInst } from './top-inst'
 import { LimitListApiClient, limitListApi as limitListApiInst } from './limit-list'
 import { LimitStepApiClient, limitStepApi as limitStepApiInst } from './limit-step'
 import { LimitCptApiClient, limitCptApi as limitCptApiInst } from './limit-cpt'
+import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -220,6 +221,16 @@ export type {
   LimitCptData,
   LimitCptStatistics
 } from './limit-cpt'
+
+// 重新导出卖方盈利预测数据 API
+export { ReportRcApiClient }
+export const reportRcApi = reportRcApiInst
+export type {
+  ReportRcParams,
+  ReportRcData,
+  ReportRcStatistics,
+  TopRatedStock
+} from './report-rc'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
@@ -449,6 +460,13 @@ export const apiClient = {
   getLatestLimitCpt: limitCptApiInst.getLatest.bind(limitCptApiInst),
   getLimitCptTopRank: limitCptApiInst.getTopRank.bind(limitCptApiInst),
   syncLimitCptAsync: limitCptApiInst.syncAsync.bind(limitCptApiInst),
+
+  // 卖方盈利预测数据相关
+  getReportRc: reportRcApiInst.getData.bind(reportRcApiInst),
+  getReportRcStatistics: reportRcApiInst.getStatistics.bind(reportRcApiInst),
+  getLatestReportRc: reportRcApiInst.getLatest.bind(reportRcApiInst),
+  getTopRatedStocks: reportRcApiInst.getTopRated.bind(reportRcApiInst),
+  syncReportRcAsync: reportRcApiInst.syncAsync.bind(reportRcApiInst),
 
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
