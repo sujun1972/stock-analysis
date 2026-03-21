@@ -285,6 +285,11 @@ const navItems: NavItem[] = [
         name: '交易所重点提示证券',
         href: '/reference-data/stk-alert',
         icon: FileText
+      },
+      {
+        name: '股权质押统计',
+        href: '/reference-data/pledge-stat',
+        icon: TrendingUp
       }
     ]
   },

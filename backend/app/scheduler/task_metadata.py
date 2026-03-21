@@ -235,6 +235,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_pledge_stat': {
+        'task': 'tasks.sync_pledge_stat',
+        'name': '股权质押统计',
+        'description': '获取股票质押统计数据，包括质押次数、无限售/限售股质押数量、总股本、质押比例等（500积分/次，单次最大1000行）',
+        'category': '参考数据',
+        'display_order': 453,
+        'points_consumption': 500,
+        'default_params': {'trade_date': None, 'ts_code': None}
+    },
+
     # ============================================
     # 打板专题任务（display_order: 550-599）
     # ============================================

@@ -55,6 +55,7 @@ from .endpoints import (
     stk_shock,  # 个股异常波动
     stk_alert,  # 交易所重点提示证券
     stk_high_shock,  # 个股严重异常波动
+    pledge_stat,  # 股权质押统计
     users,
 )
 
@@ -108,6 +109,7 @@ router.include_router(report_rc.router, prefix="/report-rc", tags=["卖方盈利
 router.include_router(stk_shock.router, prefix="/stk-shock", tags=["个股异常波动"])  # 个股异常波动API
 router.include_router(stk_alert.router, prefix="/stk-alert", tags=["交易所重点提示证券"])  # 交易所重点提示证券API
 router.include_router(stk_high_shock.router, prefix="/stk-high-shock", tags=["个股严重异常波动"])  # 个股严重异常波动API
+router.include_router(pledge_stat.router, prefix="/pledge-stat", tags=["股权质押统计"])  # 股权质押统计API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

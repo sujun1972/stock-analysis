@@ -1749,6 +1749,47 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取交易所重点提示证券失败: {e}")
             raise TushareDataError(f"获取交易所重点提示证券失败: {str(e)}")
 
+    def get_pledge_stat(
+        self,
+        ts_code: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取股权质押统计数据
+        积分消耗：500分
+        单次返回最大1000行数据
+
+        Args:
+            ts_code: 股票代码（可选）
+            end_date: 截止日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 股权质押统计数据，包含以下列：
+                - ts_code: TS代码
+                - end_date: 截止日期
+                - pledge_count: 质押次数
+                - unrest_pledge: 无限售股质押数量(万)
+                - rest_pledge: 限售股份质押数量(万)
+                - total_share: 总股本
+                - pledge_ratio: 质押比例
+        """
+        try:
+            logger.info(f"获取股权质押统计数据: ts_code={ts_code}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('pledge_stat', **params)
+            logger.info(f"获取到 {len(df)} 条股权质押统计记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取股权质押统计数据失败: {e}")
+            raise TushareDataError(f"获取股权质押统计数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

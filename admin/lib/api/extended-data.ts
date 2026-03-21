@@ -181,6 +181,77 @@ export class ExtendedDataApiClient extends BaseApiClient {
     return this.get('/api/extended-data/suspend', { params })
   }
 
+  // ========== 股权质押统计 (pledge_stat) ==========
+
+  /**
+   * 获取股权质押统计数据
+   * @param params 查询参数
+   * @returns 股权质押统计数据
+   */
+  async getPledgeStat(params?: {
+    start_date?: string
+    end_date?: string
+    ts_code?: string
+    min_pledge_ratio?: number
+    limit?: number
+  }): Promise<ApiResponse<any>> {
+    return this.get('/api/pledge-stat', { params })
+  }
+
+  /**
+   * 获取股权质押统计信息
+   * @param params 查询参数
+   * @returns 统计信息
+   */
+  async getPledgeStatStatistics(params?: {
+    start_date?: string
+    end_date?: string
+  }): Promise<ApiResponse<any>> {
+    return this.get('/api/pledge-stat/statistics', { params })
+  }
+
+  /**
+   * 获取最新股权质押统计数据
+   * @param params 查询参数
+   * @returns 最新数据
+   */
+  async getPledgeStatLatest(params?: {
+    ts_code?: string
+    limit?: number
+  }): Promise<ApiResponse<any>> {
+    return this.get('/api/pledge-stat/latest', { params })
+  }
+
+  /**
+   * 获取高质押比例股票
+   * @param params 查询参数
+   * @returns 高质押比例股票列表
+   */
+  async getHighPledgeStocks(params?: {
+    end_date?: string
+    min_ratio?: number
+    limit?: number
+  }): Promise<ApiResponse<any>> {
+    return this.get('/api/pledge-stat/high-pledge', { params })
+  }
+
+  /**
+   * 异步同步股权质押统计数据
+   * @param params 同步参数
+   * @returns Celery任务信息
+   */
+  async syncPledgeStatAsync(params?: {
+    trade_date?: string
+    ts_code?: string
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/pledge-stat/sync-async', {}, { params })
+  }
+
   // ========== 综合统计 ==========
 
   /**

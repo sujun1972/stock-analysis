@@ -200,6 +200,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载个股严重异常波动任务模块失败: {e}")
 
+try:
+    from app.tasks import pledge_stat_tasks
+    logger.info(f"✅ 已加载股权质押统计任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载股权质押统计任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 

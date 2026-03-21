@@ -44,6 +44,7 @@ from .report_rc_repository import ReportRcRepository
 from .stk_shock_repository import StkShockRepository
 from .stk_alert_repository import StkAlertRepository
 from .stk_high_shock_repository import StkHighShockRepository
+from .pledge_stat_repository import PledgeStatRepository
 
 __all__ = [
     "BaseRepository",
@@ -108,4 +109,5 @@ __all__ = [
     "StkShockRepository",
     "StkAlertRepository",
     "StkHighShockRepository",
+    "PledgeStatRepository",
 ]
