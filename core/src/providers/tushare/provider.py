@@ -1396,6 +1396,47 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取龙虎榜每日明细失败: {e}")
             raise TushareDataError(f"获取龙虎榜每日明细失败: {str(e)}")
 
+    def get_top_inst(self, trade_date: str,
+                    ts_code: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取龙虎榜机构明细
+        积分消耗：5000分
+        单次返回最大10000行数据
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD（必需）
+            ts_code: 股票代码（可选）
+
+        Returns:
+            pd.DataFrame: 龙虎榜机构明细数据，包含以下列：
+                - trade_date: 交易日期
+                - ts_code: 股票代码
+                - exalter: 营业部名称
+                - side: 买卖类型（0：买入金额最大的前5名，1：卖出金额最大的前5名）
+                - buy: 买入额（元）
+                - buy_rate: 买入占总成交比例
+                - sell: 卖出额（元）
+                - sell_rate: 卖出占总成交比例
+                - net_buy: 净成交额（元）
+                - reason: 上榜理由
+        """
+        try:
+            logger.info(f"获取龙虎榜机构明细: trade_date={trade_date}, ts_code={ts_code}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if trade_date:
+                params['trade_date'] = trade_date
+            if ts_code:
+                params['ts_code'] = ts_code
+
+            df = self.api_client.query('top_inst', **params)
+            logger.info(f"获取到 {len(df)} 条龙虎榜机构明细记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取龙虎榜机构明细失败: {e}")
+            raise TushareDataError(f"获取龙虎榜机构明细失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

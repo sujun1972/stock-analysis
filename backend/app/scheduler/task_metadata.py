@@ -203,6 +203,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'trade_date': None}
     },
 
+    'top_inst': {
+        'task': 'tasks.sync_top_inst',
+        'name': '龙虎榜机构明细',
+        'description': '同步龙虎榜机构成交明细数据（营业部名称、买卖类型、买入额、卖出额、净成交额等）（5000积分/次，单次最大10000行）',
+        'category': '打板专题',
+        'display_order': 551,
+        'points_consumption': 5000,
+        'default_params': {'trade_date': None}
+    },
+
     # ============================================
     # 市场情绪任务（display_order: 600-699）
     # ============================================

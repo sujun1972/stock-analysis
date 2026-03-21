@@ -152,6 +152,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载龙虎榜每日明细任务模块失败: {e}")
 
+try:
+    from app.tasks import top_inst_tasks
+    logger.info(f"✅ 已加载龙虎榜机构明细任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载龙虎榜机构明细任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 

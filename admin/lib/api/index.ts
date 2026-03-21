@@ -26,6 +26,7 @@ import { SyncApiClient, syncApi as syncApiInst } from './sync'
 import { ExtendedDataApiClient, extendedDataApi as extendedDataApiInst } from './extended-data'
 import { MonitorApiClient, monitorApi as monitorApiInst } from './monitor'
 import { TopListApiClient, topListApi as topListApiInst } from './top-list'
+import { TopInstApiClient, topInstApi as topInstApiInst } from './top-inst'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -175,11 +176,20 @@ export type {
 // 重新导出龙虎榜 API
 export { TopListApiClient }
 export const topListApi = topListApiInst
+
+// 重新导出龙虎榜机构明细 API
+export { TopInstApiClient }
+export const topInstApi = topInstApiInst
 export type {
   TopListParams,
   TopListItem,
   TopListStatistics
 } from './top-list'
+export type {
+  TopInstParams,
+  TopInstItem,
+  TopInstStatistics
+} from './top-inst'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
@@ -382,6 +392,12 @@ export const apiClient = {
   getLatestTopList: topListApiInst.getLatest.bind(topListApiInst),
   getTopListTopRank: topListApiInst.getTopRank.bind(topListApiInst),
   syncTopListAsync: topListApiInst.syncAsync.bind(topListApiInst),
+
+  // 龙虎榜机构明细相关
+  getTopInst: topInstApiInst.getTopInst.bind(topInstApiInst),
+  getTopInstStatistics: topInstApiInst.getStatistics.bind(topInstApiInst),
+  getLatestTopInst: topInstApiInst.getLatest.bind(topInstApiInst),
+  syncTopInstAsync: topInstApiInst.syncAsync.bind(topInstApiInst),
 
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),

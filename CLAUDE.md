@@ -226,6 +226,7 @@ triggerPoll()  // Header 图标即时更新
 - 融资融券标的页面（`/data/margin-secs`）
 - 转融资交易汇总页面（`/data/slb-len`）
 - 龙虎榜每日明细页面（`/boardgame/top-list`）
+- 龙虎榜机构明细页面（`/boardgame/top-inst`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1210,6 +1211,10 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 
 11. **用户管理**
    - `UserQuotaRepository` - 用户配额管理（配额重置、配额查询、使用量统计）
+
+12. **打板专题** （✨ 新增于 2026-03-21）
+   - `TopListRepository` - 龙虎榜每日明细（涨跌幅偏离值达7%、连续涨跌等上榜股票及席位信息）
+   - `TopInstRepository` - 龙虎榜机构明细（营业部名称、买卖类型、买入额、卖出额、净成交额等）
 
 #### Repository 开发规范
 

@@ -48,7 +48,8 @@ import {
   DollarSign,
   BarChart3,
   Wallet,
-  ListOrdered
+  ListOrdered,
+  Building2
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -230,6 +231,11 @@ const navItems: NavItem[] = [
         name: '龙虎榜每日明细',
         href: '/boardgame/top-list',
         icon: Flame
+      },
+      {
+        name: '龙虎榜机构明细',
+        href: '/boardgame/top-inst',
+        icon: Building2
       }
     ]
   },
