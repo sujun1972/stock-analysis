@@ -34,6 +34,7 @@ import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
+import { RepurchaseApiClient, repurchaseApi as repurchaseApiInst } from './repurchase'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -484,6 +485,12 @@ export const apiClient = {
   getActiveStkAlert: stkAlertApiInst.getActive.bind(stkAlertApiInst),
   syncStkAlertAsync: stkAlertApiInst.syncAsync.bind(stkAlertApiInst),
 
+  // 股票回购相关
+  getRepurchase: repurchaseApiInst.getData.bind(repurchaseApiInst),
+  getRepurchaseStatistics: repurchaseApiInst.getStatistics.bind(repurchaseApiInst),
+  getLatestRepurchase: repurchaseApiInst.getLatest.bind(repurchaseApiInst),
+  syncRepurchaseAsync: repurchaseApiInst.syncAsync.bind(repurchaseApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -518,6 +525,15 @@ export type {
   StkHighShockData,
   StkHighShockStatistics
 } from './stk-high-shock'
+
+// 重新导出股票回购 API
+export { RepurchaseApiClient }
+export const repurchaseApi = repurchaseApiInst
+export type {
+  RepurchaseParams,
+  RepurchaseData,
+  RepurchaseStatistics
+} from './repurchase'
 
 // 导出默认实例
 export default apiClient

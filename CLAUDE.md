@@ -236,6 +236,7 @@ triggerPoll()  // Header 图标即时更新
 - 个股严重异常波动页面（`/reference-data/stk-high-shock`）
 - 交易所重点提示证券页面（`/reference-data/stk-alert`）
 - 股权质押统计页面（`/reference-data/pledge-stat`）
+- 股票回购页面（`/reference-data/repurchase`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1236,6 +1237,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `StkHighShockRepository` - 个股严重异常波动（交易所每日发布的股票交易严重异常波动情况）
    - `StkAlertRepository` - 交易所重点提示证券（记录交易所每日发布的重点提示证券信息）
    - `PledgeStatRepository` - 股权质押统计（股票质押次数、质押数量、质押比例等统计数据）
+   - `RepurchaseRepository` - 股票回购（上市公司回购股票数据，包括回购公告、进度、数量、金额、价格区间等）
 
 #### Repository 开发规范
 

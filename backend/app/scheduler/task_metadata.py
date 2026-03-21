@@ -245,6 +245,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'trade_date': None, 'ts_code': None}
     },
 
+    'tasks.sync_repurchase': {
+        'task': 'tasks.sync_repurchase',
+        'name': '股票回购',
+        'description': '获取上市公司回购股票数据，包括回购公告日期、回购进度、回购数量、回购金额、回购价格区间等（600积分/次）',
+        'category': '参考数据',
+        'display_order': 454,
+        'points_consumption': 600,
+        'default_params': {'ann_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 打板专题任务（display_order: 550-599）
     # ============================================

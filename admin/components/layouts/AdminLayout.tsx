@@ -290,6 +290,11 @@ const navItems: NavItem[] = [
         name: '股权质押统计',
         href: '/reference-data/pledge-stat',
         icon: TrendingUp
+      },
+      {
+        name: '股票回购',
+        href: '/reference-data/repurchase',
+        icon: FileText
       }
     ]
   },

@@ -1790,6 +1790,52 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取股权质押统计数据失败: {e}")
             raise TushareDataError(f"获取股权质押统计数据失败: {str(e)}")
 
+    def get_repurchase(
+        self,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取上市公司回购股票数据
+        积分消耗：600分
+
+        Args:
+            ann_date: 公告日期 YYYYMMDD（可选）
+            start_date: 公告开始日期 YYYYMMDD（可选）
+            end_date: 公告结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 股票回购数据，包含以下列：
+                - ts_code: TS代码
+                - ann_date: 公告日期
+                - end_date: 截止日期
+                - proc: 进度
+                - exp_date: 过期日期
+                - vol: 回购数量
+                - amount: 回购金额
+                - high_limit: 回购最高价
+                - low_limit: 回购最低价
+        """
+        try:
+            logger.info(f"获取股票回购数据: ann_date={ann_date}, start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ann_date:
+                params['ann_date'] = ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('repurchase', **params)
+            logger.info(f"获取到 {len(df)} 条股票回购记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取股票回购数据失败: {e}")
+            raise TushareDataError(f"获取股票回购数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"
