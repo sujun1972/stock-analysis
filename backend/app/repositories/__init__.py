@@ -39,6 +39,7 @@ from .top_list_repository import TopListRepository
 from .top_inst_repository import TopInstRepository
 from .limit_list_repository import LimitListRepository
 from .limit_step_repository import LimitStepRepository
+from .limit_cpt_repository import LimitCptRepository
 
 __all__ = [
     "BaseRepository",
@@ -96,4 +97,5 @@ __all__ = [
     "TopInstRepository",
     "LimitListRepository",
     "LimitStepRepository",
+    "LimitCptRepository",
 ]

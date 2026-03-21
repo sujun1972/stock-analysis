@@ -246,6 +246,11 @@ const navItems: NavItem[] = [
         name: '连板天梯',
         href: '/boardgame/limit-step',
         icon: TrendingUp
+      },
+      {
+        name: '最强板块统计',
+        href: '/boardgame/limit-cpt',
+        icon: TrendingUp
       }
     ]
   },

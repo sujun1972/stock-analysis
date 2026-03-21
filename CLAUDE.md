@@ -229,6 +229,7 @@ triggerPoll()  // Header 图标即时更新
 - 龙虎榜机构明细页面（`/boardgame/top-inst`）
 - 涨跌停列表页面（`/boardgame/limit-list`）
 - 连板天梯页面（`/boardgame/limit-step`）
+- 最强板块统计页面（`/boardgame/limit-cpt`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1217,7 +1218,9 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 12. **打板专题** （✨ 新增于 2026-03-21）
    - `TopListRepository` - 龙虎榜每日明细（涨跌幅偏离值达7%、连续涨跌等上榜股票及席位信息）
    - `TopInstRepository` - 龙虎榜机构明细（营业部名称、买卖类型、买入额、卖出额、净成交额等）
+   - `LimitListRepository` - 涨跌停列表（每日涨停、跌停股票统计，包含涨停原因、连板数等）
    - `LimitStepRepository` - 连板天梯（每日连板个数晋级的股票，用于分析强势热度）
+   - `LimitCptRepository` - 最强板块统计（每天涨停股票最多的概念板块，分析板块轮动和资金动向）
 
 #### Repository 开发规范
 

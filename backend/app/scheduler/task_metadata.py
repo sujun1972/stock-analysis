@@ -230,6 +230,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 8000,
         'default_params': {'trade_date': None, 'nums': None}
     },
+    'limit_cpt': {
+        'task': 'tasks.sync_limit_cpt',
+        'name': '最强板块统计',
+        'description': '获取每天涨停股票最多最强的概念板块，可以分析强势板块的轮动，判断资金动向（8000积分以上每分钟500次，单次最大2000行）',
+        'category': '打板专题',
+        'display_order': 554,
+        'points_consumption': 8000,
+        'default_params': {'trade_date': None, 'ts_code': None}
+    },
 
     # ============================================
     # 市场情绪任务（display_order: 600-699）

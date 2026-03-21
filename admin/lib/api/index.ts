@@ -29,6 +29,7 @@ import { TopListApiClient, topListApi as topListApiInst } from './top-list'
 import { TopInstApiClient, topInstApi as topInstApiInst } from './top-inst'
 import { LimitListApiClient, limitListApi as limitListApiInst } from './limit-list'
 import { LimitStepApiClient, limitStepApi as limitStepApiInst } from './limit-step'
+import { LimitCptApiClient, limitCptApi as limitCptApiInst } from './limit-cpt'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -210,6 +211,15 @@ export type {
   LimitStepData,
   LimitStepStatistics
 } from './limit-step'
+
+// 重新导出最强板块统计 API
+export { LimitCptApiClient }
+export const limitCptApi = limitCptApiInst
+export type {
+  LimitCptParams,
+  LimitCptData,
+  LimitCptStatistics
+} from './limit-cpt'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
@@ -432,6 +442,13 @@ export const apiClient = {
   getLatestLimitStep: limitStepApiInst.getLatest.bind(limitStepApiInst),
   getTopLimitStep: limitStepApiInst.getTop.bind(limitStepApiInst),
   syncLimitStepAsync: limitStepApiInst.syncAsync.bind(limitStepApiInst),
+
+  // 最强板块统计相关
+  getLimitCpt: limitCptApiInst.getData.bind(limitCptApiInst),
+  getLimitCptStatistics: limitCptApiInst.getStatistics.bind(limitCptApiInst),
+  getLatestLimitCpt: limitCptApiInst.getLatest.bind(limitCptApiInst),
+  getLimitCptTopRank: limitCptApiInst.getTopRank.bind(limitCptApiInst),
+  syncLimitCptAsync: limitCptApiInst.syncAsync.bind(limitCptApiInst),
 
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),

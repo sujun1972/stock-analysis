@@ -1555,6 +1555,57 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取连板天梯失败: {e}")
             raise TushareDataError(f"获取连板天梯失败: {str(e)}")
 
+    def get_limit_cpt_list(
+        self,
+        trade_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取最强板块统计（每天涨停股票最多最强的概念板块）
+        积分消耗：8000分
+        单次返回最大2000行数据
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD（可选）
+            ts_code: 板块代码（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 最强板块统计数据，包含以下列：
+                - ts_code: 板块代码
+                - name: 板块名称
+                - trade_date: 交易日期
+                - days: 上榜天数
+                - up_stat: 连板高度（如：9天7板）
+                - cons_nums: 连板家数
+                - up_nums: 涨停家数
+                - pct_chg: 涨跌幅%
+                - rank: 板块热点排名
+        """
+        try:
+            logger.info(f"获取最强板块统计: trade_date={trade_date}, ts_code={ts_code}, start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if trade_date:
+                params['trade_date'] = trade_date
+            if ts_code:
+                params['ts_code'] = ts_code
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('limit_cpt_list', **params)
+            logger.info(f"获取到 {len(df)} 条最强板块统计记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取最强板块统计失败: {e}")
+            raise TushareDataError(f"获取最强板块统计失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"
