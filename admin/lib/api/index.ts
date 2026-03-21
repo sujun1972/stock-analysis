@@ -27,6 +27,7 @@ import { ExtendedDataApiClient, extendedDataApi as extendedDataApiInst } from '.
 import { MonitorApiClient, monitorApi as monitorApiInst } from './monitor'
 import { TopListApiClient, topListApi as topListApiInst } from './top-list'
 import { TopInstApiClient, topInstApi as topInstApiInst } from './top-inst'
+import { LimitListApiClient, limitListApi as limitListApiInst } from './limit-list'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -190,6 +191,15 @@ export type {
   TopInstItem,
   TopInstStatistics
 } from './top-inst'
+
+// 重新导出涨跌停列表 API
+export { LimitListApiClient }
+export const limitListApi = limitListApiInst
+export type {
+  LimitListParams,
+  LimitListData,
+  LimitListStatistics
+} from './limit-list'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
@@ -398,6 +408,13 @@ export const apiClient = {
   getTopInstStatistics: topInstApiInst.getStatistics.bind(topInstApiInst),
   getLatestTopInst: topInstApiInst.getLatest.bind(topInstApiInst),
   syncTopInstAsync: topInstApiInst.syncAsync.bind(topInstApiInst),
+
+  // 涨跌停列表相关
+  getLimitList: limitListApiInst.getData.bind(limitListApiInst),
+  getLimitListStatistics: limitListApiInst.getStatistics.bind(limitListApiInst),
+  getLatestLimitList: limitListApiInst.getLatest.bind(limitListApiInst),
+  getTopLimitUp: limitListApiInst.getTopLimitUp.bind(limitListApiInst),
+  syncLimitListAsync: limitListApiInst.syncAsync.bind(limitListApiInst),
 
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),

@@ -212,6 +212,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 5000,
         'default_params': {'trade_date': None}
     },
+    'limit_list': {
+        'task': 'tasks.sync_limit_list',
+        'name': '涨跌停列表',
+        'description': '同步每日涨跌停、炸板数据（包含行情数据、封板数据、连板统计等）（5000积分/次，单次最大2500行，数据从2020年开始）',
+        'category': '打板专题',
+        'display_order': 552,
+        'points_consumption': 5000,
+        'default_params': {'trade_date': None, 'limit_type': None}
+    },
 
     # ============================================
     # 市场情绪任务（display_order: 600-699）

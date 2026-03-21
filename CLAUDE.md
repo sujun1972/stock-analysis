@@ -227,6 +227,7 @@ triggerPoll()  // Header 图标即时更新
 - 转融资交易汇总页面（`/data/slb-len`）
 - 龙虎榜每日明细页面（`/boardgame/top-list`）
 - 龙虎榜机构明细页面（`/boardgame/top-inst`）
+- 涨跌停列表页面（`/boardgame/limit-list`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1329,7 +1330,57 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
        """
    ```
 
-6. **完整的异常处理**
+6. **Numpy类型转换（重要！）**
+   ```python
+   def bulk_upsert(self, df: pd.DataFrame) -> int:
+       """批量插入/更新数据"""
+       if df is None or df.empty:
+           return 0
+
+       # 辅助函数：将pandas/numpy类型转换为Python原生类型
+       def to_python_type(value):
+           """
+           将pandas/numpy类型转换为Python原生类型
+
+           ⚠️ 关键问题：psycopg2无法直接处理numpy类型（numpy.int64, numpy.float64等）
+           必须转换为Python原生类型（int, float, None）
+           否则会报错：can't adapt type 'numpy.int64' 或 integer out of range
+           """
+           if pd.isna(value):
+               return None
+           # 转换numpy整数类型为Python int
+           if isinstance(value, (pd.Int64Dtype, int)) or hasattr(value, 'item'):
+               try:
+                   return int(value)
+               except (ValueError, TypeError):
+                   return None
+           # 转换numpy浮点类型为Python float
+           if isinstance(value, float) or (hasattr(value, 'dtype') and 'float' in str(value.dtype)):
+               return float(value)
+           return value
+
+       # 准备插入数据（对每个字段应用类型转换）
+       values = []
+       for _, row in df.iterrows():
+           values.append((
+               to_python_type(row.get('col1')),
+               to_python_type(row.get('col2')),
+               to_python_type(row.get('col3')),
+           ))
+
+       # 执行批量插入
+       count = self.execute_batch(query, values)
+       return count
+   ```
+
+   **常见错误和解决方案**：
+   - ❌ 错误：直接使用 `df.where(pd.notnull(df), None)` - 仍保留numpy类型
+   - ❌ 错误：直接使用 `row.get('field')` - 返回numpy类型（如numpy.int64）
+   - ✅ 正确：使用 `to_python_type()` 转换所有字段值
+   - ✅ 正确：检查 `pd.isna()` 处理NULL值
+   - ✅ 正确：使用 `int(value)` 和 `float(value)` 转换numpy类型
+
+7. **完整的异常处理**
    ```python
    try:
        result = self.execute_query(query, params)

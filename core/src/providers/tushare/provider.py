@@ -1437,6 +1437,74 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取龙虎榜机构明细失败: {e}")
             raise TushareDataError(f"获取龙虎榜机构明细失败: {str(e)}")
 
+    def get_limit_list_d(
+        self,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        limit_type: Optional[str] = None,
+        exchange: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取涨跌停列表
+        积分消耗：5000分
+        单次返回最大2500行数据
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+            ts_code: 股票代码（可选）
+            limit_type: 涨跌停类型（U涨停D跌停Z炸板）（可选）
+            exchange: 交易所（SH上交所SZ深交所BJ北交所）（可选）
+
+        Returns:
+            pd.DataFrame: 涨跌停列表数据，包含以下列：
+                - trade_date: 交易日期
+                - ts_code: 股票代码
+                - industry: 所属行业
+                - name: 股票名称
+                - close: 收盘价
+                - pct_chg: 涨跌幅
+                - amount: 成交额
+                - limit_amount: 板上成交金额
+                - float_mv: 流通市值
+                - total_mv: 总市值
+                - turnover_ratio: 换手率
+                - fd_amount: 封单金额
+                - first_time: 首次封板时间
+                - last_time: 最后封板时间
+                - open_times: 炸板次数
+                - up_stat: 涨停统计
+                - limit_times: 连板数
+                - limit: D跌停U涨停Z炸板
+        """
+        try:
+            logger.info(f"获取涨跌停列表: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, limit_type={limit_type}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if ts_code:
+                params['ts_code'] = ts_code
+            if limit_type:
+                params['limit_type'] = limit_type
+            if exchange:
+                params['exchange'] = exchange
+
+            df = self.api_client.query('limit_list_d', **params)
+            logger.info(f"获取到 {len(df)} 条涨跌停列表记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取涨跌停列表失败: {e}")
+            raise TushareDataError(f"获取涨跌停列表失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

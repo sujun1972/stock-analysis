@@ -37,6 +37,7 @@ from .stock_basic_repository import StockBasicRepository
 from .task_execution_history_repository import TaskExecutionHistoryRepository
 from .top_list_repository import TopListRepository
 from .top_inst_repository import TopInstRepository
+from .limit_list_repository import LimitListRepository
 
 __all__ = [
     "BaseRepository",
@@ -92,4 +93,5 @@ __all__ = [
     # 打板专题
     "TopListRepository",
     "TopInstRepository",
+    "LimitListRepository",
 ]

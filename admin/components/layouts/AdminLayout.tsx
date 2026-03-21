@@ -236,6 +236,11 @@ const navItems: NavItem[] = [
         name: '龙虎榜机构明细',
         href: '/boardgame/top-inst',
         icon: Building2
+      },
+      {
+        name: '涨跌停列表',
+        href: '/boardgame/limit-list',
+        icon: TrendingUp
       }
     ]
   },
