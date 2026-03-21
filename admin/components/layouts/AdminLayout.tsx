@@ -47,7 +47,8 @@ import {
   Wrench,
   DollarSign,
   BarChart3,
-  Wallet
+  Wallet,
+  ListOrdered
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -218,6 +219,17 @@ const navItems: NavItem[] = [
         name: '转融资交易汇总',
         href: '/data/slb-len',
         icon: TrendingUp
+      }
+    ]
+  },
+  {
+    name: '打板专题',
+    icon: ListOrdered,
+    children: [
+      {
+        name: '龙虎榜每日明细',
+        href: '/boardgame/top-list',
+        icon: Flame
       }
     ]
   },

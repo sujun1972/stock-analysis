@@ -35,6 +35,7 @@ from .stock_daily_repository import StockDailyRepository
 from .user_quota_repository import UserQuotaRepository
 from .stock_basic_repository import StockBasicRepository
 from .task_execution_history_repository import TaskExecutionHistoryRepository
+from .top_list_repository import TopListRepository
 
 __all__ = [
     "BaseRepository",
@@ -87,4 +88,6 @@ __all__ = [
     "StockBasicRepository",
     # 用户管理
     "UserQuotaRepository",
+    # 打板专题
+    "TopListRepository",
 ]

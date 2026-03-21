@@ -191,6 +191,19 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
     },
 
     # ============================================
+    # 打板专题任务（display_order: 550-599）
+    # ============================================
+    'top_list': {
+        'task': 'tasks.sync_top_list',
+        'name': '龙虎榜每日明细',
+        'description': '同步龙虎榜每日交易明细数据（涨跌幅偏离值达7%、连续涨跌、换手率达20%等上榜股票及席位信息）（2000积分/次，单次最大10000行）',
+        'category': '打板专题',
+        'display_order': 550,
+        'points_consumption': 2000,
+        'default_params': {'trade_date': None}
+    },
+
+    # ============================================
     # 市场情绪任务（display_order: 600-699）
     # ============================================
     'sentiment': {
@@ -345,11 +358,12 @@ TASK_CATEGORIES = [
     {'name': '扩展数据', 'order': 3},
     {'name': '资金流向', 'order': 4},
     {'name': '两融及转融通', 'order': 5},
-    {'name': '市场情绪', 'order': 6},
-    {'name': '盘前分析', 'order': 7},
-    {'name': '质量监控', 'order': 8},
-    {'name': '报告通知', 'order': 9},
-    {'name': '系统维护', 'order': 10}
+    {'name': '打板专题', 'order': 6},
+    {'name': '市场情绪', 'order': 7},
+    {'name': '盘前分析', 'order': 8},
+    {'name': '质量监控', 'order': 9},
+    {'name': '报告通知', 'order': 10},
+    {'name': '系统维护', 'order': 11}
 ]
 
 

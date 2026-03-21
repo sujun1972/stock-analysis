@@ -46,6 +46,7 @@ from .endpoints import (
     strategy_publish,
     sync,
     system_logs,
+    top_list,  # 龙虎榜每日明细
     users,
 )
 
@@ -90,6 +91,7 @@ router.include_router(margin.router, prefix="/margin", tags=["融资融券交易
 router.include_router(margin_detail.router, prefix="/margin-detail", tags=["融资融券交易明细"])  # 融资融券交易明细API
 router.include_router(margin_secs.router, prefix="/margin-secs", tags=["融资融券标的（盘前更新）"])  # 融资融券标的API
 router.include_router(slb_len.router, prefix="/slb-len", tags=["转融资交易汇总"])  # 转融资交易汇总API
+router.include_router(top_list.router, prefix="/top-list", tags=["龙虎榜每日明细"])  # 龙虎榜每日明细API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

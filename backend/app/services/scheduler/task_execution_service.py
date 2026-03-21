@@ -122,21 +122,16 @@ class TaskExecutionService:
                 "module": module
             }
 
-            celery_task_data = {
-                'celery_task_id': celery_task_id,
-                'task_name': task_name,
-                'display_name': display_name,
-                'task_type': 'scheduler',
-                'user_id': user_id,
-                'status': 'pending',
-                'params': params or {},
-                'metadata': task_metadata,
-                'created_at': datetime.now()
-            }
-
+            # 记录到 celery_task_history 表（使用单独参数）
             await asyncio.to_thread(
-                self.celery_task_repo.create,
-                celery_task_data
+                self.celery_task_repo.create_task_history,
+                celery_task_id=celery_task_id,
+                task_name=task_name,
+                display_name=display_name,
+                task_type='scheduler',
+                user_id=user_id,
+                params=params or {},
+                metadata=task_metadata
             )
 
             logger.info(f"✓ 手动执行定时任务: {task_name} (ID: {task_id_db}, Celery ID: {celery_task_id})")

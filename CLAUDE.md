@@ -68,6 +68,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 - `/sync` - 数据同步导航页
 - `/logs` - 日志管理导航页
 - `/monitoring` - 系统监控导航页
+- `/boardgame` - 打板专题导航页（龙虎榜等）
 
 这些页面以卡片形式展示子功能入口，解决了中间层级页面点击的问题。
 
@@ -224,6 +225,7 @@ triggerPoll()  // Header 图标即时更新
 - 融资融券交易明细页面（`/data/margin-detail`）
 - 融资融券标的页面（`/data/margin-secs`）
 - 转融资交易汇总页面（`/data/slb-len`）
+- 龙虎榜每日明细页面（`/boardgame/top-list`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 

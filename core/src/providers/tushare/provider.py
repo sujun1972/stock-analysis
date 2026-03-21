@@ -1350,6 +1350,52 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取停复牌信息失败: {e}")
             raise TushareDataError(f"获取停复牌信息失败: {str(e)}")
 
+    def get_top_list(self, trade_date: str,
+                    ts_code: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取龙虎榜每日明细
+        积分消耗：2000分
+        单次返回最大10000行数据
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD（必需）
+            ts_code: 股票代码（可选）
+
+        Returns:
+            pd.DataFrame: 龙虎榜明细数据，包含以下列：
+                - trade_date: 交易日期
+                - ts_code: 股票代码
+                - name: 股票名称
+                - close: 收盘价
+                - pct_change: 涨跌幅
+                - turnover_rate: 换手率
+                - amount: 总成交额
+                - l_sell: 龙虎榜卖出额
+                - l_buy: 龙虎榜买入额
+                - l_amount: 龙虎榜成交额
+                - net_amount: 龙虎榜净买入额
+                - net_rate: 龙虎榜净买额占比
+                - amount_rate: 龙虎榜成交额占比
+                - float_values: 当日流通市值
+                - reason: 上榜理由
+        """
+        try:
+            logger.info(f"获取龙虎榜每日明细: trade_date={trade_date}, ts_code={ts_code}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if trade_date:
+                params['trade_date'] = trade_date
+            if ts_code:
+                params['ts_code'] = ts_code
+
+            df = self.api_client.query('top_list', **params)
+            logger.info(f"获取到 {len(df)} 条龙虎榜记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取龙虎榜每日明细失败: {e}")
+            raise TushareDataError(f"获取龙虎榜每日明细失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

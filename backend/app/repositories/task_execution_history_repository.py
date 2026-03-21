@@ -5,6 +5,7 @@ Task Execution History Repository
 
 from typing import Dict, List, Optional
 from datetime import datetime
+import json
 from loguru import logger
 
 from app.repositories.base_repository import BaseRepository
@@ -91,13 +92,18 @@ class TaskExecutionHistoryRepository(BaseRepository):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """
+            # 将 result_summary dict 转换为 JSON 字符串
+            result_summary = execution_data.get('result_summary')
+            if result_summary and isinstance(result_summary, dict):
+                result_summary = json.dumps(result_summary)
+
             params = (
                 execution_data.get('task_id'),
                 execution_data.get('task_name'),
                 execution_data.get('module'),
                 execution_data.get('status', 'pending'),
                 execution_data.get('started_at') or datetime.now(),
-                execution_data.get('result_summary'),
+                result_summary,
                 execution_data.get('error_message'),
                 execution_data.get('sync_log_id')
             )
@@ -158,6 +164,10 @@ class TaskExecutionHistoryRepository(BaseRepository):
             ... )
         """
         try:
+            # 将 result_summary dict 转换为 JSON 字符串
+            if result_summary and isinstance(result_summary, dict):
+                result_summary = json.dumps(result_summary)
+
             query = f"""
                 UPDATE {self.TABLE_NAME}
                 SET
