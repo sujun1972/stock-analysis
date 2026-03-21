@@ -1505,6 +1505,56 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取涨跌停列表失败: {e}")
             raise TushareDataError(f"获取涨跌停列表失败: {str(e)}")
 
+    def get_limit_step(
+        self,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        nums: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取连板天梯（每天连板个数晋级的股票）
+        积分消耗：8000分以上每分钟500次，每天总量不限制
+        单次返回最大2000行数据
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+            ts_code: 股票代码（可选）
+            nums: 连板次数，支持多个输入，例如 nums='2,3'（可选）
+
+        Returns:
+            pd.DataFrame: 连板天梯数据，包含以下列：
+                - ts_code: 股票代码
+                - name: 股票名称
+                - trade_date: 交易日期
+                - nums: 连板次数
+        """
+        try:
+            logger.info(f"获取连板天梯: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, nums={nums}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if ts_code:
+                params['ts_code'] = ts_code
+            if nums:
+                params['nums'] = nums
+
+            df = self.api_client.query('limit_step', **params)
+            logger.info(f"获取到 {len(df)} 条连板天梯记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取连板天梯失败: {e}")
+            raise TushareDataError(f"获取连板天梯失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

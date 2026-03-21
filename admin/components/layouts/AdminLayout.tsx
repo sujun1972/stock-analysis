@@ -241,6 +241,11 @@ const navItems: NavItem[] = [
         name: '涨跌停列表',
         href: '/boardgame/limit-list',
         icon: TrendingUp
+      },
+      {
+        name: '连板天梯',
+        href: '/boardgame/limit-step',
+        icon: TrendingUp
       }
     ]
   },

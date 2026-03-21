@@ -38,6 +38,7 @@ from .task_execution_history_repository import TaskExecutionHistoryRepository
 from .top_list_repository import TopListRepository
 from .top_inst_repository import TopInstRepository
 from .limit_list_repository import LimitListRepository
+from .limit_step_repository import LimitStepRepository
 
 __all__ = [
     "BaseRepository",
@@ -94,4 +95,5 @@ __all__ = [
     "TopListRepository",
     "TopInstRepository",
     "LimitListRepository",
+    "LimitStepRepository",
 ]

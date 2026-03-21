@@ -28,6 +28,7 @@ import { MonitorApiClient, monitorApi as monitorApiInst } from './monitor'
 import { TopListApiClient, topListApi as topListApiInst } from './top-list'
 import { TopInstApiClient, topInstApi as topInstApiInst } from './top-inst'
 import { LimitListApiClient, limitListApi as limitListApiInst } from './limit-list'
+import { LimitStepApiClient, limitStepApi as limitStepApiInst } from './limit-step'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -200,6 +201,15 @@ export type {
   LimitListData,
   LimitListStatistics
 } from './limit-list'
+
+// 重新导出连板天梯 API
+export { LimitStepApiClient }
+export const limitStepApi = limitStepApiInst
+export type {
+  LimitStepParams,
+  LimitStepData,
+  LimitStepStatistics
+} from './limit-step'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
@@ -415,6 +425,13 @@ export const apiClient = {
   getLatestLimitList: limitListApiInst.getLatest.bind(limitListApiInst),
   getTopLimitUp: limitListApiInst.getTopLimitUp.bind(limitListApiInst),
   syncLimitListAsync: limitListApiInst.syncAsync.bind(limitListApiInst),
+
+  // 连板天梯相关
+  getLimitStep: limitStepApiInst.getData.bind(limitStepApiInst),
+  getLimitStepStatistics: limitStepApiInst.getStatistics.bind(limitStepApiInst),
+  getLatestLimitStep: limitStepApiInst.getLatest.bind(limitStepApiInst),
+  getTopLimitStep: limitStepApiInst.getTop.bind(limitStepApiInst),
+  syncLimitStepAsync: limitStepApiInst.syncAsync.bind(limitStepApiInst),
 
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),

@@ -221,6 +221,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 5000,
         'default_params': {'trade_date': None, 'limit_type': None}
     },
+    'limit_step': {
+        'task': 'tasks.sync_limit_step',
+        'name': '连板天梯',
+        'description': '同步每天连板个数晋级的股票，可以分析出每天连续涨停进阶个数，判断强势热度（8000积分以上每分钟500次，单次最大2000行）',
+        'category': '打板专题',
+        'display_order': 553,
+        'points_consumption': 8000,
+        'default_params': {'trade_date': None, 'nums': None}
+    },
 
     # ============================================
     # 市场情绪任务（display_order: 600-699）

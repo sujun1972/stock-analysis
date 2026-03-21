@@ -164,6 +164,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载涨跌停列表任务模块失败: {e}")
 
+try:
+    from app.tasks import limit_step_tasks
+    logger.info(f"✅ 已加载连板天梯任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载连板天梯任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 

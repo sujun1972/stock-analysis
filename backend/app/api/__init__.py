@@ -49,6 +49,7 @@ from .endpoints import (
     top_list,  # 龙虎榜每日明细
     top_inst,  # 龙虎榜机构明细
     limit_list,  # 涨跌停列表
+    limit_step,  # 连板天梯
     users,
 )
 
@@ -96,6 +97,7 @@ router.include_router(slb_len.router, prefix="/slb-len", tags=["转融资交易�
 router.include_router(top_list.router, prefix="/top-list", tags=["龙虎榜每日明细"])  # 龙虎榜每日明细API
 router.include_router(top_inst.router, prefix="/top-inst", tags=["龙虎榜机构明细"])  # 龙虎榜机构明细API
 router.include_router(limit_list.router, prefix="/limit-list", tags=["涨跌停列表"])  # 涨跌停列表API
+router.include_router(limit_step.router, prefix="/limit-step", tags=["连板天梯"])  # 连板天梯API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])
