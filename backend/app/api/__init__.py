@@ -62,6 +62,7 @@ from .endpoints import (
     block_trade,  # 大宗交易
     stk_holdertrade,  # 股东增减持
     income,  # 利润表数据
+    balancesheet,  # 资产负债表数据
     users,
 )
 
@@ -122,6 +123,7 @@ router.include_router(stk_holdernumber.router, prefix="/stk-holdernumber", tags=
 router.include_router(block_trade.router, prefix="/block-trade", tags=["大宗交易"])  # 大宗交易API
 router.include_router(stk_holdertrade.router, prefix="/stk-holdertrade", tags=["股东增减持"])  # 股东增减持API
 router.include_router(income.router, prefix="/income", tags=["利润表数据"])  # 利润表数据API
+router.include_router(balancesheet.router, prefix="/balancesheet", tags=["资产负债表数据"])  # 资产负债表数据API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

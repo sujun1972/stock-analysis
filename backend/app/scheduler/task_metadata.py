@@ -421,6 +421,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 800,
         'points_consumption': 2000
     },
+    'tasks.sync_balancesheet': {
+        'task': 'tasks.sync_balancesheet',
+        'name': '资产负债表数据',
+        'description': '同步上市公司资产负债表数据（资产、负债、所有者权益等，2000积分/次）',
+        'category': '财务数据',
+        'display_order': 801,
+        'points_consumption': 2000
+    },
 
     # ============================================
     # 质量监控任务（display_order: 900-999）

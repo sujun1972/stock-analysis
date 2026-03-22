@@ -40,6 +40,7 @@ import { StkHolderNumberApiClient, stkHolderNumberApi as stkHolderNumberApiInst 
 import { BlockTradeApiClient, blockTradeApi as blockTradeApiInst } from './block-trade'
 import { StkHoldertradeApiClient, stkHoldertradeApi as stkHoldertradeApiInst } from './stk-holdertrade-api'
 import { IncomeApiClient, incomeApi as incomeApiInst } from './income-api'
+import { BalancesheetApiClient, balancesheetApi as balancesheetApiInst } from './balancesheet-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -511,6 +512,18 @@ export const apiClient = {
   getLatestStkHoldertrade: stkHoldertradeApiInst.getLatest.bind(stkHoldertradeApiInst),
   syncStkHoldertradeAsync: stkHoldertradeApiInst.syncAsync.bind(stkHoldertradeApiInst),
 
+  // 利润表相关
+  getIncomeData: incomeApiInst.getData.bind(incomeApiInst),
+  getIncomeStatistics: incomeApiInst.getStatistics.bind(incomeApiInst),
+  getLatestIncome: incomeApiInst.getLatest.bind(incomeApiInst),
+  syncIncomeAsync: incomeApiInst.syncAsync.bind(incomeApiInst),
+
+  // 资产负债表相关
+  getBalancesheetData: balancesheetApiInst.getData.bind(balancesheetApiInst),
+  getBalancesheetStatistics: balancesheetApiInst.getStatistics.bind(balancesheetApiInst),
+  getLatestBalancesheet: balancesheetApiInst.getLatest.bind(balancesheetApiInst),
+  syncBalancesheetAsync: balancesheetApiInst.syncAsync.bind(balancesheetApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -601,6 +614,15 @@ export type {
   IncomeData,
   IncomeStatistics
 } from './income-api'
+
+// 重新导出资产负债表 API
+export { BalancesheetApiClient }
+export const balancesheetApi = balancesheetApiInst
+export type {
+  BalancesheetDataParams,
+  BalancesheetData,
+  BalancesheetStatistics
+} from './balancesheet-api'
 
 // 导出默认实例
 export default apiClient

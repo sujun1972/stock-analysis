@@ -327,6 +327,11 @@ const navItems: NavItem[] = [
         name: '利润表',
         href: '/financial/income',
         icon: TrendingUp
+      },
+      {
+        name: '资产负债表',
+        href: '/financial/balancesheet',
+        icon: DollarSign
       }
     ]
   },
