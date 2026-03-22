@@ -2588,6 +2588,58 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取主营业务构成数据失败: {e}")
             raise TushareDataError(f"获取主营业务构成数据失败: {str(e)}")
 
+    def get_disclosure_date(
+        self,
+        ts_code: Optional[str] = None,
+        end_date: Optional[str] = None,
+        pre_date: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        actual_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取财报披露计划日期
+        积分消耗：500分起
+
+        Args:
+            ts_code: TS股票代码（可选）
+            end_date: 财报周期（每个季度最后一天的日期，如20181231表示2018年年报，20180630表示中报）
+            pre_date: 计划披露日期 YYYYMMDD（可选）
+            ann_date: 最新披露公告日 YYYYMMDD（可选）
+            actual_date: 实际披露日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 财报披露计划数据，包含以下列：
+                - ts_code: TS代码
+                - ann_date: 最新披露公告日
+                - end_date: 报告期
+                - pre_date: 预计披露日期
+                - actual_date: 实际披露日期
+                - modify_date: 披露日期修正记录
+        """
+        try:
+            logger.info(f"获取财报披露计划: ts_code={ts_code}, end_date={end_date}, "
+                       f"pre_date={pre_date}, ann_date={ann_date}, actual_date={actual_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if end_date:
+                params['end_date'] = end_date
+            if pre_date:
+                params['pre_date'] = pre_date
+            if ann_date:
+                params['ann_date'] = ann_date
+            if actual_date:
+                params['actual_date'] = actual_date
+
+            df = self.api_client.query('disclosure_date', **params)
+            logger.info(f"获取到 {len(df)} 条财报披露计划记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取财报披露计划失败: {e}")
+            raise TushareDataError(f"获取财报披露计划失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

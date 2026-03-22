@@ -200,6 +200,41 @@ export interface FinaMainbzSyncParams {
   end_date?: string     // YYYY-MM-DD
 }
 
+// ============================================
+// 财报披露计划数据类型定义
+// ============================================
+export interface DisclosureDateData {
+  ts_code: string
+  ann_date: string      // 最新披露公告日
+  end_date: string      // 报告期
+  pre_date?: string     // 预计披露日期
+  actual_date?: string  // 实际披露日期
+  modify_date?: string  // 披露日期修正记录
+}
+
+export interface DisclosureDateStatistics {
+  total_count: number     // 总记录数
+  stock_count: number     // 股票数量
+  period_count: number    // 报告期数量
+  disclosed_count: number // 已披露数量
+  pending_count: number   // 待披露数量
+}
+
+export interface DisclosureDateParams {
+  ts_code?: string
+  start_date?: string   // YYYY-MM-DD
+  end_date?: string     // YYYY-MM-DD
+  limit?: number
+}
+
+export interface DisclosureDateSyncParams {
+  ts_code?: string
+  end_date?: string     // YYYY-MM-DD（报告期）
+  pre_date?: string     // YYYY-MM-DD
+  ann_date?: string     // YYYY-MM-DD
+  actual_date?: string  // YYYY-MM-DD
+}
+
 export class FinancialDataApiClient extends BaseApiClient {
   // ============================================
   // 财务指标数据 API
@@ -353,6 +388,45 @@ export class FinancialDataApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/fina-mainbz/sync-async', null, { params })
+  }
+
+  // ============================================
+  // 财报披露计划数据 API
+  // ============================================
+
+  /**
+   * 获取财报披露计划数据
+   */
+  async getDisclosureDate(params?: DisclosureDateParams): Promise<ApiResponse<{
+    items: DisclosureDateData[]
+    statistics: DisclosureDateStatistics
+    total: number
+  }>> {
+    return this.get('/api/disclosure-date', { params })
+  }
+
+  /**
+   * 获取财报披露计划统计信息
+   */
+  async getDisclosureDateStatistics(params?: {
+    ts_code?: string
+    start_date?: string
+    end_date?: string
+  }): Promise<ApiResponse<DisclosureDateStatistics>> {
+    return this.get('/api/disclosure-date/statistics', { params })
+  }
+
+  /**
+   * 异步同步财报披露计划数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncDisclosureDateAsync(params?: DisclosureDateSyncParams): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/disclosure-date/sync-async', null, { params })
   }
 }
 

@@ -489,6 +489,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 807,
         'points_consumption': 2000
     },
+    'tasks.sync_disclosure_date': {
+        'task': 'tasks.sync_disclosure_date',
+        'name': '财报披露计划',
+        'description': '同步财报披露计划日期（预计披露日期、实际披露日期等，500积分起）',
+        'category': '财务数据',
+        'display_order': 808,
+        'points_consumption': 500
+    },
 
     # ============================================
     # 质量监控任务（display_order: 900-999）

@@ -51,7 +51,8 @@ import {
   PieChart,
   ListOrdered,
   Building2,
-  Star
+  Star,
+  Calendar
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -368,6 +369,11 @@ const navItems: NavItem[] = [
         name: '主营业务构成',
         href: '/financial/fina-mainbz',
         icon: PieChart
+      },
+      {
+        name: '财报披露计划',
+        href: '/financial/disclosure-date',
+        icon: Calendar
       }
     ]
   },
