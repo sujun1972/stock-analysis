@@ -7,6 +7,71 @@ import { BaseApiClient } from './base'
 import type { ApiResponse } from '@/types/api'
 
 // ============================================
+// 财务指标数据类型定义
+// ============================================
+export interface FinaIndicatorData {
+  ts_code: string
+  ann_date: string
+  end_date: string
+  // 每股指标
+  eps?: number
+  dt_eps?: number
+  bps?: number
+  revenue_ps?: number
+  capital_rese_ps?: number
+  // 收益率指标
+  roe?: number
+  roe_waa?: number
+  roe_dt?: number
+  roa?: number
+  roic?: number
+  // 资产负债结构
+  debt_to_assets?: number
+  assets_to_eqt?: number
+  current_ratio?: number
+  quick_ratio?: number
+  // 利润率指标
+  netprofit_margin?: number
+  grossprofit_margin?: number
+  // 营运能力
+  ar_turn?: number
+  inv_turn?: number
+  assets_turn?: number
+  // 成长能力
+  basic_eps_yoy?: number
+  netprofit_yoy?: number
+  or_yoy?: number
+  roe_yoy?: number
+}
+
+export interface FinaIndicatorStatistics {
+  total_count: number
+  stock_count: number
+  avg_eps: number
+  avg_roe: number
+  avg_debt_ratio: number
+  avg_netprofit_margin: number
+  max_roe: number
+  min_debt_ratio: number
+}
+
+export interface FinaIndicatorParams {
+  ts_code?: string
+  start_date?: string  // YYYY-MM-DD
+  end_date?: string    // YYYY-MM-DD
+  period?: string      // YYYY-MM-DD
+  limit?: number
+}
+
+export interface FinaIndicatorSyncParams {
+  ts_code?: string
+  ann_date?: string     // YYYY-MM-DD
+  start_date?: string   // YYYY-MM-DD
+  end_date?: string     // YYYY-MM-DD
+  period?: string       // YYYY-MM-DD
+}
+
+// ============================================
 // 分红送股数据类型定义
 // ============================================
 export interface DividendData {
@@ -53,6 +118,45 @@ export interface DividendSyncParams {
 }
 
 export class FinancialDataApiClient extends BaseApiClient {
+  // ============================================
+  // 财务指标数据 API
+  // ============================================
+
+  /**
+   * 获取财务指标数据
+   */
+  async getFinaIndicator(params?: FinaIndicatorParams): Promise<ApiResponse<{
+    items: FinaIndicatorData[]
+    statistics: FinaIndicatorStatistics
+    total: number
+  }>> {
+    return this.get('/api/fina-indicator', { params })
+  }
+
+  /**
+   * 获取财务指标统计信息
+   */
+  async getFinaIndicatorStatistics(params?: {
+    ts_code?: string
+    start_date?: string
+    end_date?: string
+  }): Promise<ApiResponse<FinaIndicatorStatistics>> {
+    return this.get('/api/fina-indicator/statistics', { params })
+  }
+
+  /**
+   * 异步同步财务指标数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncFinaIndicatorAsync(params?: FinaIndicatorSyncParams): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/fina-indicator/sync-async', null, { params })
+  }
+
   // ============================================
   // 分红送股数据 API
   // ============================================

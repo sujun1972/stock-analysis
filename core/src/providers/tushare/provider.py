@@ -2000,6 +2000,52 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取业绩预告数据失败: {e}")
             raise TushareDataError(f"获取业绩预告数据失败: {str(e)}")
 
+    def get_fina_indicator(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        period: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取财务指标数据
+        积分消耗：2000分
+        注意：每次请求最多返回100条记录
+
+        Args:
+            ts_code: 股票代码 (可选)
+            ann_date: 公告日期 YYYYMMDD（可选）
+            start_date: 报告期开始日期 YYYYMMDD（可选）
+            end_date: 报告期结束日期 YYYYMMDD（可选）
+            period: 报告期 YYYYMMDD（可选，如20231231表示年报）
+
+        Returns:
+            pd.DataFrame: 财务指标数据，包含150+财务指标字段
+        """
+        try:
+            logger.info(f"获取财务指标数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if period:
+                params['period'] = period
+
+            df = self.api_client.query('fina_indicator_vip', **params)
+            logger.info(f"获取到 {len(df)} 条财务指标记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取财务指标数据失败: {e}")
+            raise TushareDataError(f"获取财务指标数据失败: {str(e)}")
+
     def get_express(
         self,
         ts_code: Optional[str] = None,

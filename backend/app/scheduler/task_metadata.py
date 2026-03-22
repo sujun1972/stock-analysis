@@ -465,6 +465,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 803,
         'points_consumption': 2000
     },
+    'tasks.sync_fina_indicator': {
+        'task': 'tasks.sync_fina_indicator',
+        'name': '财务指标数据',
+        'description': '同步上市公司财务指标数据（150+财务指标，包括EPS、ROE、资产负债率等，2000积分/次，每次最多100条记录）',
+        'category': '财务数据',
+        'display_order': 804,
+        'points_consumption': 2000
+    },
 
     # ============================================
     # 质量监控任务（display_order: 900-999）

@@ -352,6 +352,11 @@ const navItems: NavItem[] = [
         name: '分红送股',
         href: '/financial/dividend',
         icon: DollarSign
+      },
+      {
+        name: '财务指标',
+        href: '/financial/fina-indicator',
+        icon: TrendingUp
       }
     ]
   },
