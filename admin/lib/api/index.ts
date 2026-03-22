@@ -550,6 +550,11 @@ export const apiClient = {
   getDividendStatistics: financialDataApiInst.getDividendStatistics.bind(financialDataApiInst),
   syncDividendAsync: financialDataApiInst.syncDividendAsync.bind(financialDataApiInst),
 
+  // 主营业务构成相关
+  getFinaMainbz: financialDataApiInst.getFinaMainbz.bind(financialDataApiInst),
+  getFinaMainbzStatistics: financialDataApiInst.getFinaMainbzStatistics.bind(financialDataApiInst),
+  syncFinaMainbzAsync: financialDataApiInst.syncFinaMainbzAsync.bind(financialDataApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -684,7 +689,11 @@ export type {
   DividendData,
   DividendStatistics,
   DividendParams,
-  DividendSyncParams
+  DividendSyncParams,
+  FinaMainbzData,
+  FinaMainbzStatistics,
+  FinaMainbzParams,
+  FinaMainbzSyncParams
 } from './financial-data'
 
 // 导出默认实例

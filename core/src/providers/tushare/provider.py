@@ -2534,6 +2534,60 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取现金流量表数据失败: {e}")
             raise TushareDataError(f"获取现金流量表数据失败: {str(e)}")
 
+    def get_fina_mainbz_vip(
+        self,
+        ts_code: Optional[str] = None,
+        period: Optional[str] = None,
+        type: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取上市公司主营业务构成数据（分产品/地区/行业）
+        积分消耗：2000分
+
+        Args:
+            ts_code: TS股票代码（可选）
+            period: 报告期 YYYYMMDD（可选，每个季度最后一天的日期，如20231231表示年报）
+            type: 类型（可选）P按产品 D按地区 I按行业
+            start_date: 报告期开始日期 YYYYMMDD（可选）
+            end_date: 报告期结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 主营业务构成数据，包含以下列：
+                - ts_code: TS股票代码
+                - end_date: 报告期
+                - bz_item: 主营业务来源
+                - bz_sales: 主营业务收入(元)
+                - bz_profit: 主营业务利润(元)
+                - bz_cost: 主营业务成本(元)
+                - curr_type: 货币代码
+                - update_flag: 是否更新
+        """
+        try:
+            logger.info(f"获取主营业务构成数据: ts_code={ts_code}, period={period}, type={type}, "
+                       f"start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if period:
+                params['period'] = period
+            if type:
+                params['type'] = type
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('fina_mainbz_vip', **params)
+            logger.info(f"获取到 {len(df)} 条主营业务构成记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取主营业务构成数据失败: {e}")
+            raise TushareDataError(f"获取主营业务构成数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

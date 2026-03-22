@@ -1,0 +1,185 @@
+"""
+主营业务构成数据 API 端点
+"""
+
+import asyncio
+import json
+from typing import Optional
+from fastapi import APIRouter, Query, Depends, HTTPException
+from loguru import logger
+
+from app.core.dependencies import require_admin, get_current_user
+from app.models.user import User
+from app.services.fina_mainbz_service import FinaMainbzService
+from app.models.api_response import ApiResponse
+from app.services import TaskHistoryHelper
+
+router = APIRouter()
+
+
+@router.get("")
+async def get_fina_mainbz(
+    ts_code: Optional[str] = Query(None, description="股票代码，格式：TSXXXXXX.XX"),
+    start_date: Optional[str] = Query(None, description="报告期开始日期，格式：YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="报告期结束日期，格式：YYYY-MM-DD"),
+    period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD（每个季度最后一天）"),
+    type: Optional[str] = Query(None, description="类型：P按产品 D按地区 I按行业"),
+    limit: int = Query(30, description="限制返回数量，默认30")
+):
+    """
+    查询主营业务构成数据
+
+    主营业务构成数据包括主营业务收入、利润、成本等，可按产品/地区/行业分类查看
+    """
+    try:
+        # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+        end_date_formatted = end_date.replace('-', '') if end_date else None
+        period_formatted = period.replace('-', '') if period else None
+
+        service = FinaMainbzService()
+        result = await service.get_fina_mainbz_data(
+            ts_code=ts_code,
+            start_date=start_date_formatted,
+            end_date=end_date_formatted,
+            period=period_formatted,
+            type=type,
+            limit=limit
+        )
+
+        return ApiResponse.success(data=result)
+
+    except Exception as e:
+        logger.error(f"查询主营业务构成数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/statistics")
+async def get_statistics(
+    ts_code: Optional[str] = Query(None, description="股票代码"),
+    start_date: Optional[str] = Query(None, description="报告期开始日期，格式：YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="报告期结束日期，格式：YYYY-MM-DD")
+):
+    """
+    获取主营业务构成统计信息
+    """
+    try:
+        # 日期格式转换
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+        end_date_formatted = end_date.replace('-', '') if end_date else None
+
+        service = FinaMainbzService()
+        statistics = await service.get_statistics(
+            ts_code=ts_code,
+            start_date=start_date_formatted,
+            end_date=end_date_formatted
+        )
+
+        return ApiResponse.success(data=statistics)
+
+    except Exception as e:
+        logger.error(f"获取主营业务构成统计信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/latest")
+async def get_latest_fina_mainbz(
+    ts_code: Optional[str] = Query(None, description="股票代码"),
+    type: Optional[str] = Query(None, description="类型：P按产品 D按地区 I按行业"),
+    limit: int = Query(30, description="限制返回数量")
+):
+    """
+    获取最新主营业务构成数据（按报告期排序）
+    """
+    try:
+        service = FinaMainbzService()
+        result = await service.get_fina_mainbz_data(
+            ts_code=ts_code,
+            type=type,
+            limit=limit
+        )
+
+        return ApiResponse.success(data=result)
+
+    except Exception as e:
+        logger.error(f"获取最新主营业务构成数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-async")
+async def sync_fina_mainbz_async(
+    ts_code: Optional[str] = Query(None, description="股票代码，格式：TSXXXXXX.XX"),
+    period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD（每个季度最后一天）"),
+    type: Optional[str] = Query(None, description="类型：P按产品 D按地区 I按行业"),
+    start_date: Optional[str] = Query(None, description="报告期开始日期，格式：YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="报告期结束日期，格式：YYYY-MM-DD"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    异步同步主营业务构成数据（通过Celery任务）
+
+    该接口立即返回Celery任务ID，不等待任务完成。
+    前端可以通过任务面板查看进度和结果。
+
+    注意：
+    - 积分消耗：2000分/次
+    - 建议按报告期或股票代码分批同步
+
+    Args:
+        ts_code: 股票代码，格式：TSXXXXXX.XX
+        period: 报告期，格式：YYYY-MM-DD（如2023-12-31表示年报）
+        type: 类型，P按产品 D按地区 I按行业
+        start_date: 报告期开始日期，格式：YYYY-MM-DD
+        end_date: 报告期结束日期，格式：YYYY-MM-DD
+        current_user: 当前登录用户（管理员）
+
+    Returns:
+        包含Celery任务ID和任务信息的响应
+    """
+    try:
+        from app.tasks.fina_mainbz_tasks import sync_fina_mainbz_task
+
+        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
+        period_formatted = period.replace('-', '') if period else None
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+        end_date_formatted = end_date.replace('-', '') if end_date else None
+
+        # 提交Celery任务（异步执行）
+        celery_task = sync_fina_mainbz_task.apply_async(
+            kwargs={
+                'ts_code': ts_code,
+                'period': period_formatted,
+                'type': type,
+                'start_date': start_date_formatted,
+                'end_date': end_date_formatted
+            }
+        )
+
+        # 使用 TaskHistoryHelper 创建任务历史记录
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_fina_mainbz',
+            display_name='主营业务构成',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={
+                'ts_code': ts_code,
+                'period': period_formatted,
+                'type': type,
+                'start_date': start_date_formatted,
+                'end_date': end_date_formatted
+            },
+            source='fina_mainbz_page'
+        )
+
+        logger.info(f"主营业务构成同步任务已提交: {celery_task.id}")
+
+        return ApiResponse.success(
+            data=task_data,
+            message="任务已提交，正在后台执行"
+        )
+
+    except Exception as e:
+        logger.error(f"提交主营业务构成同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

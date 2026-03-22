@@ -158,6 +158,48 @@ export interface FinaAuditSyncParams {
   period?: string       // YYYY-MM-DD
 }
 
+// ============================================
+// 主营业务构成数据类型定义
+// ============================================
+export interface FinaMainbzData {
+  ts_code: string
+  end_date: string
+  bz_item: string
+  bz_sales?: number
+  bz_profit?: number
+  bz_cost?: number
+  curr_type?: string
+  update_flag?: string
+}
+
+export interface FinaMainbzStatistics {
+  total_count: number
+  stock_count: number
+  period_count: number
+  bz_item_count: number
+  avg_bz_sales: number
+  total_bz_sales: number
+  max_bz_sales: number
+  min_bz_sales: number
+}
+
+export interface FinaMainbzParams {
+  ts_code?: string
+  start_date?: string   // YYYY-MM-DD
+  end_date?: string     // YYYY-MM-DD
+  period?: string       // YYYY-MM-DD
+  type?: string         // P按产品 D按地区 I按行业
+  limit?: number
+}
+
+export interface FinaMainbzSyncParams {
+  ts_code?: string
+  period?: string       // YYYY-MM-DD
+  type?: string         // P按产品 D按地区 I按行业
+  start_date?: string   // YYYY-MM-DD
+  end_date?: string     // YYYY-MM-DD
+}
+
 export class FinancialDataApiClient extends BaseApiClient {
   // ============================================
   // 财务指标数据 API
@@ -280,6 +322,37 @@ export class FinancialDataApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/fina-audit/sync-async', null, { params })
+  }
+
+  // ============================================
+  // 主营业务构成数据 API
+  // ============================================
+
+  /**
+   * 获取主营业务构成数据
+   */
+  async getFinaMainbz(params?: FinaMainbzParams): Promise<ApiResponse<{ items: FinaMainbzData[], total: number }>> {
+    return this.get('/api/fina-mainbz', { params })
+  }
+
+  /**
+   * 获取主营业务构成统计信息
+   */
+  async getFinaMainbzStatistics(params?: { ts_code?: string, start_date?: string, end_date?: string }): Promise<ApiResponse<FinaMainbzStatistics>> {
+    return this.get('/api/fina-mainbz/statistics', { params })
+  }
+
+  /**
+   * 异步同步主营业务构成数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncFinaMainbzAsync(params: FinaMainbzSyncParams): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/fina-mainbz/sync-async', null, { params })
   }
 }
 

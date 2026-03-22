@@ -284,6 +284,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载财务审计意见任务模块失败: {e}")
 
+try:
+    from app.tasks import fina_mainbz_tasks
+    logger.info(f"✅ 已加载主营业务构成任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载主营业务构成任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 

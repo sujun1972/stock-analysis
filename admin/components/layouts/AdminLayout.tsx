@@ -48,6 +48,7 @@ import {
   DollarSign,
   BarChart3,
   Wallet,
+  PieChart,
   ListOrdered,
   Building2,
   Star
@@ -362,6 +363,11 @@ const navItems: NavItem[] = [
         name: '审计意见',
         href: '/financial/fina-audit',
         icon: TrendingUp
+      },
+      {
+        name: '主营业务构成',
+        href: '/financial/fina-mainbz',
+        icon: PieChart
       }
     ]
   },

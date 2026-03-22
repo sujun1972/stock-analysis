@@ -69,6 +69,7 @@ from .endpoints import (
     dividend,  # 分红送股数据
     fina_indicator,  # 财务指标数据
     fina_audit,  # 财务审计意见数据
+    fina_mainbz,  # 主营业务构成数据
     users,
 )
 
@@ -136,6 +137,7 @@ router.include_router(express.router, prefix="/express", tags=["业绩快报"]) 
 router.include_router(dividend.router, prefix="/dividend", tags=["分红送股数据"])  # 分红送股数据API
 router.include_router(fina_indicator.router, prefix="/fina-indicator", tags=["财务指标数据"])  # 财务指标数据API
 router.include_router(fina_audit.router, prefix="/fina-audit", tags=["财务审计意见数据"])  # 财务审计意见数据API
+router.include_router(fina_mainbz.router, prefix="/fina-mainbz", tags=["主营业务构成数据"])  # 主营业务构成数据API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

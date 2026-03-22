@@ -57,6 +57,7 @@ from .express_repository import ExpressRepository
 from .dividend_repository import DividendRepository
 from .fina_indicator_repository import FinaIndicatorRepository
 from .fina_audit_repository import FinaAuditRepository
+from .fina_mainbz_repository import FinaMainbzRepository
 
 __all__ = [
     "BaseRepository",
@@ -135,4 +136,5 @@ __all__ = [
     "DividendRepository",
     "FinaIndicatorRepository",
     "FinaAuditRepository",
+    "FinaMainbzRepository",
 ]

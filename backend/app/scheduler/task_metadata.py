@@ -481,6 +481,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 806,
         'points_consumption': 500
     },
+    'tasks.sync_fina_mainbz': {
+        'task': 'tasks.sync_fina_mainbz',
+        'name': '主营业务构成',
+        'description': '同步上市公司主营业务构成数据（按产品/地区/行业分类，2000积分/次）',
+        'category': '财务数据',
+        'display_order': 807,
+        'points_consumption': 2000
+    },
 
     # ============================================
     # 质量监控任务（display_order: 900-999）
