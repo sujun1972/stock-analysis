@@ -240,6 +240,7 @@ triggerPoll()  // Header 图标即时更新
 - 限售股解禁页面（`/reference-data/share-float`）
 - 股东人数页面（`/reference-data/stk-holdernumber`）
 - 大宗交易页面（`/reference-data/block-trade`）
+- 股东增减持页面（`/reference-data/stk-holdertrade`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1189,7 +1190,6 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `DailyBasicRepository` - 每日指标数据（换手率、市盈率、市净率等）
    - `HkHoldRepository` - 北向资金持股数据
    - `StkLimitRepository` - 涨跌停价格数据
-   - `BlockTradeRepository` - 大宗交易数据
    - `ConceptRepository` - 概念板块和股票关系管理
 
 6. **策略和回测**
@@ -1244,6 +1244,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `ShareFloatRepository` - 限售股解禁（股票限售股解禁数据，包括公告日期、解禁日期、解禁数量、解禁比例、股东名称等）
    - `StkHolderNumberRepository` - 股东人数（上市公司股东户数数据，包括股票代码、公告日期、截止日期、股东户数等，600积分/次）
    - `BlockTradeRepository` - 大宗交易（股票大宗交易数据，包括成交价、成交量、成交金额、买卖方营业部等，300积分/次）
+   - `StkHoldertradeRepository` - 股东增减持（上市公司股东增减持数据，包括股东名称、增减持类型、变动数量、变动比例、均价等，2000积分/次）
 
 #### Repository 开发规范
 

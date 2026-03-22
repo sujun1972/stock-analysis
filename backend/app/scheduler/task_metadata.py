@@ -284,6 +284,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'ann_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_stk_holdertrade': {
+        'task': 'tasks.sync_stk_holdertrade',
+        'name': '股东增减持',
+        'description': '获取上市公司股东增减持数据，了解重要股东近期及历史上的股份增减变化（2000积分/次，单次最大3000行）',
+        'category': '参考数据',
+        'display_order': 457,
+        'points_consumption': 2000,
+        'default_params': {'ts_code': None, 'ann_date': None, 'start_date': None, 'end_date': None, 'trade_type': None, 'holder_type': None}
+    },
+
     # ============================================
     # 打板专题任务（display_order: 550-599）
     # ============================================

@@ -48,6 +48,7 @@ from .pledge_stat_repository import PledgeStatRepository
 from .repurchase_repository import RepurchaseRepository
 from .share_float_repository import ShareFloatRepository
 from .stk_holdernumber_repository import StkHolderNumberRepository
+from .stk_holdertrade_repository import StkHoldertradeRepository
 
 __all__ = [
     "BaseRepository",
@@ -116,4 +117,5 @@ __all__ = [
     "RepurchaseRepository",
     "ShareFloatRepository",
     "StkHolderNumberRepository",
+    "StkHoldertradeRepository",
 ]

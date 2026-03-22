@@ -1939,6 +1939,70 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取股票回购数据失败: {e}")
             raise TushareDataError(f"获取股票回购数据失败: {str(e)}")
 
+    def get_stk_holdertrade(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        trade_type: Optional[str] = None,
+        holder_type: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取上市公司股东增减持数据
+        积分消耗：2000分
+
+        Args:
+            ts_code: TS股票代码（可选）
+            ann_date: 公告日期 YYYYMMDD（可选）
+            start_date: 公告开始日期 YYYYMMDD（可选）
+            end_date: 公告结束日期 YYYYMMDD（可选）
+            trade_type: 交易类型 IN=增持 DE=减持（可选）
+            holder_type: 股东类型 G=高管 P=个人 C=公司（可选）
+
+        Returns:
+            pd.DataFrame: 股东增减持数据，包含以下列：
+                - ts_code: TS股票代码
+                - ann_date: 公告日期
+                - holder_name: 股东名称
+                - holder_type: 股东类型 G=高管 P=个人 C=公司
+                - in_de: 类型 IN=增持 DE=减持
+                - change_vol: 变动数量
+                - change_ratio: 占流通比例(%)
+                - after_share: 变动后持股
+                - after_ratio: 变动后占流通比例(%)
+                - avg_price: 平均价格
+                - total_share: 持股总数
+                - begin_date: 增减持开始日期
+                - close_date: 增减持结束日期
+        """
+        try:
+            logger.info(f"获取股东增减持数据: ts_code={ts_code}, ann_date={ann_date}, "
+                       f"start_date={start_date}, end_date={end_date}, "
+                       f"trade_type={trade_type}, holder_type={holder_type}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if trade_type:
+                params['trade_type'] = trade_type
+            if holder_type:
+                params['holder_type'] = holder_type
+
+            df = self.api_client.query('stk_holdertrade', **params)
+            logger.info(f"获取到 {len(df)} 条股东增减持记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取股东增减持数据失败: {e}")
+            raise TushareDataError(f"获取股东增减持数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

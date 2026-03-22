@@ -60,6 +60,7 @@ from .endpoints import (
     share_float,  # 限售股解禁
     stk_holdernumber,  # 股东人数
     block_trade,  # 大宗交易
+    stk_holdertrade,  # 股东增减持
     users,
 )
 
@@ -118,6 +119,7 @@ router.include_router(repurchase.router, prefix="/repurchase", tags=["股票回�
 router.include_router(share_float.router, prefix="/share-float", tags=["限售股解禁"])  # 限售股解禁API
 router.include_router(stk_holdernumber.router, prefix="/stk-holdernumber", tags=["股东人数"])  # 股东人数API
 router.include_router(block_trade.router, prefix="/block-trade", tags=["大宗交易"])  # 大宗交易API
+router.include_router(stk_holdertrade.router, prefix="/stk-holdertrade", tags=["股东增减持"])  # 股东增减持API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

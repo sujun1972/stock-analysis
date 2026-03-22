@@ -38,6 +38,7 @@ import { RepurchaseApiClient, repurchaseApi as repurchaseApiInst } from './repur
 import { ShareFloatApiClient, shareFloatApi as shareFloatApiInst } from './share-float'
 import { StkHolderNumberApiClient, stkHolderNumberApi as stkHolderNumberApiInst } from './stk-holdernumber'
 import { BlockTradeApiClient, blockTradeApi as blockTradeApiInst } from './block-trade'
+import { StkHoldertradeApiClient, stkHoldertradeApi as stkHoldertradeApiInst } from './stk-holdertrade-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -503,6 +504,12 @@ export const apiClient = {
   getLatestBlockTrade: blockTradeApiInst.getLatest.bind(blockTradeApiInst),
   syncBlockTradeAsync: blockTradeApiInst.syncAsync.bind(blockTradeApiInst),
 
+  // 股东增减持相关
+  getStkHoldertrade: stkHoldertradeApiInst.getStkHoldertrade.bind(stkHoldertradeApiInst),
+  getStkHoldertradeStatistics: stkHoldertradeApiInst.getStatistics.bind(stkHoldertradeApiInst),
+  getLatestStkHoldertrade: stkHoldertradeApiInst.getLatest.bind(stkHoldertradeApiInst),
+  syncStkHoldertradeAsync: stkHoldertradeApiInst.syncAsync.bind(stkHoldertradeApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -573,6 +580,17 @@ export type {
   BlockTradeData,
   BlockTradeStatistics
 } from './block-trade'
+
+// 重新导出股东增减持 API
+export { StkHoldertradeApiClient }
+export const stkHoldertradeApi = stkHoldertradeApiInst
+export type {
+  StkHoldertradeParams,
+  StkHoldertradeData,
+  StkHoldertradeStatistics,
+  StkHoldertradeListResponse,
+  SyncStkHoldertradeParams
+} from './stk-holdertrade-api'
 
 // 导出默认实例
 export default apiClient

@@ -310,6 +310,11 @@ const navItems: NavItem[] = [
         name: '大宗交易',
         href: '/reference-data/block-trade',
         icon: Building2
+      },
+      {
+        name: '股东增减持',
+        href: '/reference-data/stk-holdertrade',
+        icon: Users
       }
     ]
   },

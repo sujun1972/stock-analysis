@@ -230,6 +230,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载大宗交易任务模块失败: {e}")
 
+try:
+    from app.tasks import stk_holdertrade_tasks
+    logger.info(f"✅ 已加载股东增减持任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载股东增减持任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 
