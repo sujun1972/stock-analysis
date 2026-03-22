@@ -300,6 +300,11 @@ const navItems: NavItem[] = [
         name: '限售股解禁',
         href: '/reference-data/share-float',
         icon: FileText
+      },
+      {
+        name: '大宗交易',
+        href: '/reference-data/block-trade',
+        icon: Building2
       }
     ]
   },

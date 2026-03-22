@@ -3,7 +3,7 @@
 
 提供大宗交易数据的同步和查询功能
 数据来源：Tushare Pro block_trade 接口
-积分消耗：2000分/次
+积分消耗：300分/次
 """
 
 import asyncio
@@ -148,6 +148,8 @@ class BlockTradeService:
     async def get_block_trade_data(
         self,
         trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         limit: int = 100
     ) -> Dict[str, Any]:
@@ -155,7 +157,9 @@ class BlockTradeService:
         查询大宗交易数据
 
         Args:
-            trade_date: 交易日期 YYYY-MM-DD
+            trade_date: 交易日期 YYYY-MM-DD（优先级最高）
+            start_date: 开始日期 YYYY-MM-DD
+            end_date: 结束日期 YYYY-MM-DD
             ts_code: 股票代码
             limit: 返回记录数
 
@@ -166,7 +170,7 @@ class BlockTradeService:
             # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
             trade_date_fmt = trade_date.replace('-', '') if trade_date else None
 
-            # 使用 Repository 查询数据
+            # 优先使用trade_date，否则使用get_by_date查询（可以不传日期查所有）
             items = await asyncio.to_thread(
                 self.block_trade_repo.get_by_date,
                 trade_date=trade_date_fmt,
@@ -214,4 +218,41 @@ class BlockTradeService:
 
         except Exception as e:
             logger.error(f"获取大宗交易统计数据失败: {str(e)}")
+            raise
+
+    async def get_latest_data(self) -> Dict[str, Any]:
+        """
+        获取最新大宗交易数据
+
+        Returns:
+            最新数据字典
+        """
+        try:
+            # 使用 Repository 获取最新交易日期
+            latest_date = await asyncio.to_thread(
+                self.block_trade_repo.get_latest_trade_date
+            )
+
+            if not latest_date:
+                return {
+                    "items": [],
+                    "latest_date": None,
+                    "count": 0
+                }
+
+            # 获取最新日期的数据
+            items = await asyncio.to_thread(
+                self.block_trade_repo.get_by_date,
+                trade_date=latest_date,
+                limit=100
+            )
+
+            return {
+                "items": items,
+                "latest_date": latest_date,
+                "count": len(items)
+            }
+
+        except Exception as e:
+            logger.error(f"获取最新大宗交易数据失败: {str(e)}")
             raise

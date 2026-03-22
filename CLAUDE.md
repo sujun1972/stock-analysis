@@ -238,6 +238,7 @@ triggerPoll()  // Header 图标即时更新
 - 股权质押统计页面（`/reference-data/pledge-stat`）
 - 股票回购页面（`/reference-data/repurchase`）
 - 限售股解禁页面（`/reference-data/share-float`）
+- 大宗交易页面（`/reference-data/block-trade`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1240,6 +1241,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `PledgeStatRepository` - 股权质押统计（股票质押次数、质押数量、质押比例等统计数据）
    - `RepurchaseRepository` - 股票回购（上市公司回购股票数据，包括回购公告、进度、数量、金额、价格区间等）
    - `ShareFloatRepository` - 限售股解禁（股票限售股解禁数据，包括公告日期、解禁日期、解禁数量、解禁比例、股东名称等）
+   - `BlockTradeRepository` - 大宗交易（股票大宗交易数据，包括成交价、成交量、成交金额、买卖方营业部等，300积分/次）
 
 #### Repository 开发规范
 

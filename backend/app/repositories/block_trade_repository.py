@@ -73,7 +73,7 @@ class BlockTradeRepository(BaseRepository):
 
             query = f"""
                 SELECT
-                    id, ts_code, trade_date, price, vol, amount, buyer, seller,
+                    ts_code, trade_date, price, vol, amount, buyer, seller,
                     created_at, updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
@@ -86,16 +86,15 @@ class BlockTradeRepository(BaseRepository):
 
             return [
                 {
-                    "id": row[0],
-                    "ts_code": row[1],
-                    "trade_date": row[2],
-                    "price": float(row[3]) if row[3] is not None else None,
-                    "vol": float(row[4]) if row[4] is not None else 0,
-                    "amount": float(row[5]) if row[5] is not None else 0,
-                    "buyer": row[6],
-                    "seller": row[7],
-                    "created_at": row[8].isoformat() if row[8] else None,
-                    "updated_at": row[9].isoformat() if row[9] else None
+                    "ts_code": row[0],
+                    "trade_date": row[1],
+                    "price": float(row[2]) if row[2] is not None else None,
+                    "vol": float(row[3]) if row[3] is not None else 0,
+                    "amount": float(row[4]) if row[4] is not None else 0,
+                    "buyer": row[5],
+                    "seller": row[6],
+                    "created_at": row[7].isoformat() if row[7] else None,
+                    "updated_at": row[8].isoformat() if row[8] else None
                 }
                 for row in results
             ]
@@ -144,7 +143,7 @@ class BlockTradeRepository(BaseRepository):
 
             query = f"""
                 SELECT
-                    id, ts_code, trade_date, price, vol, amount, buyer, seller,
+                    ts_code, trade_date, price, vol, amount, buyer, seller,
                     created_at, updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
@@ -157,16 +156,15 @@ class BlockTradeRepository(BaseRepository):
 
             return [
                 {
-                    "id": row[0],
-                    "ts_code": row[1],
-                    "trade_date": row[2],
-                    "price": float(row[3]) if row[3] is not None else None,
-                    "vol": float(row[4]) if row[4] is not None else 0,
-                    "amount": float(row[5]) if row[5] is not None else 0,
-                    "buyer": row[6],
-                    "seller": row[7],
-                    "created_at": row[8].isoformat() if row[8] else None,
-                    "updated_at": row[9].isoformat() if row[9] else None
+                    "ts_code": row[0],
+                    "trade_date": row[1],
+                    "price": float(row[2]) if row[2] is not None else None,
+                    "vol": float(row[3]) if row[3] is not None else 0,
+                    "amount": float(row[4]) if row[4] is not None else 0,
+                    "buyer": row[5],
+                    "seller": row[6],
+                    "created_at": row[7].isoformat() if row[7] else None,
+                    "updated_at": row[8].isoformat() if row[8] else None
                 }
                 for row in results
             ]
@@ -269,11 +267,9 @@ class BlockTradeRepository(BaseRepository):
 
     # ==================== 写入操作 ====================
 
-    def bulk_insert(self, df: pd.DataFrame) -> int:
+    def bulk_upsert(self, df: pd.DataFrame) -> int:
         """
-        批量插入大宗交易数据
-
-        注意：大宗交易数据一般不需要更新，只插入新数据
+        批量插入/更新大宗交易数据
 
         Args:
             df: 大宗交易数据 DataFrame，必须包含相应列
@@ -290,66 +286,64 @@ class BlockTradeRepository(BaseRepository):
             return 0
 
         try:
-            # 验证必需列
-            required_columns = {'trade_date', 'ts_code'}
-            if not required_columns.issubset(df.columns):
-                missing = required_columns - set(df.columns)
-                raise ValueError(
-                    f"大宗交易 DataFrame 缺少必需列: {', '.join(missing)}"
-                )
+            # 辅助函数：将pandas/numpy类型转换为Python原生类型
+            def to_python_type(value):
+                """
+                将pandas/numpy类型转换为Python原生类型
 
-            # 构建插入语句
-            columns = ['ts_code', 'trade_date', 'price', 'vol', 'amount', 'buyer', 'seller']
+                ⚠️ 关键问题：psycopg2无法直接处理numpy类型
+                必须转换为Python原生类型（int, float, None）
+                """
+                if pd.isna(value):
+                    return None
+                # 转换numpy整数类型为Python int
+                if isinstance(value, (pd.Int64Dtype, int)) or hasattr(value, 'item'):
+                    try:
+                        return int(value)
+                    except (ValueError, TypeError):
+                        return None
+                # 转换numpy浮点类型为Python float
+                if isinstance(value, float) or (hasattr(value, 'dtype') and 'float' in str(value.dtype)):
+                    return float(value)
+                return value
 
-            # 确保所有列都存在（缺失的填充为NULL）
-            for col in columns:
-                if col not in df.columns:
-                    df[col] = None
-
-            # 准备数据
-            values = []
-            for _, row in df.iterrows():
-                values.append(tuple(row[col] for col in columns))
-
-            if not values:
-                return 0
-
-            # 构建SQL（使用ON CONFLICT DO NOTHING避免重复插入）
-            placeholders = ','.join(['%s'] * len(columns))
-            columns_str = ','.join(columns)
-
+            # 准备UPSERT查询
             query = f"""
-                INSERT INTO {self.TABLE_NAME} ({columns_str}, updated_at)
-                VALUES ({placeholders}, NOW())
-                ON CONFLICT (trade_date, ts_code, price, vol)
-                DO NOTHING
+                INSERT INTO {self.TABLE_NAME}
+                (ts_code, trade_date, price, vol, amount, buyer, seller, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (ts_code, trade_date, buyer, seller)
+                DO UPDATE SET
+                    price = EXCLUDED.price,
+                    vol = EXCLUDED.vol,
+                    amount = EXCLUDED.amount,
+                    updated_at = NOW()
             """
 
-            # 批量执行
-            conn = self.db.get_connection()
-            try:
-                cursor = conn.cursor()
-                affected_rows = 0
-                for value_tuple in values:
-                    cursor.execute(query, value_tuple)
-                    affected_rows += cursor.rowcount
-                conn.commit()
-                cursor.close()
+            # 准备插入数据（对每个字段应用类型转换）
+            values = []
+            for _, row in df.iterrows():
+                values.append((
+                    to_python_type(row.get('ts_code')),
+                    to_python_type(row.get('trade_date')),
+                    to_python_type(row.get('price')),
+                    to_python_type(row.get('vol')),
+                    to_python_type(row.get('amount')),
+                    to_python_type(row.get('buyer')),
+                    to_python_type(row.get('seller'))
+                ))
 
-                logger.info(f"✓ 批量插入大宗交易数据: {affected_rows} 条")
-                return affected_rows
+            # 执行批量插入
+            count = self.execute_batch(query, values)
 
-            finally:
-                self.db.release_connection(conn)
+            logger.info(f"成功插入/更新 {count} 条大宗交易记录")
+            return count
 
-        except ValueError:
-            raise
-        except PsycopgDatabaseError as e:
+        except Exception as e:
             logger.error(f"批量插入大宗交易数据失败: {e}")
-            raise DatabaseError(
-                "大宗交易数据批量插入失败",
-                error_code="BLOCK_TRADE_BULK_INSERT_FAILED",
-                count=len(df),
+            raise QueryError(
+                "批量插入大宗交易数据失败",
+                error_code="BLOCK_TRADE_BULK_UPSERT_FAILED",
                 reason=str(e)
             )
 

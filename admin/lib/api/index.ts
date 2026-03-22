@@ -36,6 +36,7 @@ import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
 import { RepurchaseApiClient, repurchaseApi as repurchaseApiInst } from './repurchase'
 import { ShareFloatApiClient, shareFloatApi as shareFloatApiInst } from './share-float'
+import { BlockTradeApiClient, blockTradeApi as blockTradeApiInst } from './block-trade'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -167,7 +168,6 @@ export type {
   DailyBasicParams,
   HkHoldParams,
   LimitPricesParams,
-  BlockTradeParams,
   ExtendedDataSummary
 } from './extended-data'
 
@@ -415,8 +415,6 @@ export const apiClient = {
   syncHkHold: extendedDataApiInst.syncHkHold.bind(extendedDataApiInst),
   getLimitPrices: extendedDataApiInst.getLimitPrices.bind(extendedDataApiInst),
   syncLimitPrices: extendedDataApiInst.syncLimitPrices.bind(extendedDataApiInst),
-  getBlockTrade: extendedDataApiInst.getBlockTrade.bind(extendedDataApiInst),
-  syncBlockTrade: extendedDataApiInst.syncBlockTrade.bind(extendedDataApiInst),
   getAdjFactor: extendedDataApiInst.getAdjFactor.bind(extendedDataApiInst),
   syncAdjFactor: extendedDataApiInst.syncAdjFactor.bind(extendedDataApiInst),
   getSuspendInfo: extendedDataApiInst.getSuspendInfo.bind(extendedDataApiInst),
@@ -492,6 +490,18 @@ export const apiClient = {
   getLatestRepurchase: repurchaseApiInst.getLatest.bind(repurchaseApiInst),
   syncRepurchaseAsync: repurchaseApiInst.syncAsync.bind(repurchaseApiInst),
 
+  // 限售股解禁相关
+  getShareFloat: shareFloatApiInst.getData.bind(shareFloatApiInst),
+  getShareFloatStatistics: shareFloatApiInst.getStatistics.bind(shareFloatApiInst),
+  getLatestShareFloat: shareFloatApiInst.getLatest.bind(shareFloatApiInst),
+  syncShareFloatAsync: shareFloatApiInst.syncAsync.bind(shareFloatApiInst),
+
+  // 大宗交易相关
+  getBlockTrade: blockTradeApiInst.getData.bind(blockTradeApiInst),
+  getBlockTradeStatistics: blockTradeApiInst.getStatistics.bind(blockTradeApiInst),
+  getLatestBlockTrade: blockTradeApiInst.getLatest.bind(blockTradeApiInst),
+  syncBlockTradeAsync: blockTradeApiInst.syncAsync.bind(blockTradeApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -544,6 +554,15 @@ export type {
   ShareFloatData,
   ShareFloatStatistics
 } from './share-float'
+
+// 重新导出大宗交易 API
+export { BlockTradeApiClient }
+export const blockTradeApi = blockTradeApiInst
+export type {
+  BlockTradeParams,
+  BlockTradeData,
+  BlockTradeStatistics
+} from './block-trade'
 
 // 导出默认实例
 export default apiClient

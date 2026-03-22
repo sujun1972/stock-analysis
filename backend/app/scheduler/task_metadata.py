@@ -168,6 +168,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '扩展数据',
         'display_order': 370
     },
+    'tasks.sync_block_trade': {
+        'task': 'tasks.sync_block_trade',
+        'name': '大宗交易',
+        'description': '同步大宗交易数据（成交价、成交量、成交金额、买卖方营业部等，300积分/次，单次最大1000行）',
+        'category': '扩展数据',
+        'display_order': 371,
+        'points_consumption': 300,
+        'default_params': {'trade_date': None, 'ts_code': None, 'start_date': None, 'end_date': None}
+    },
     'extended.sync_block_trade': {
         'task': 'extended.sync_block_trade',
         'name': '大宗交易同步',

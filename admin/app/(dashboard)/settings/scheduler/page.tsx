@@ -12,6 +12,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { Play, Loader2 } from 'lucide-react'
@@ -666,23 +673,28 @@ export default function SchedulerSettingsPage() {
                   <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                     任务分类
                   </label>
-                  <select
+                  <Select
                     value={editingTask.category || '其他'}
-                    onChange={(e) => setEditingTask({ ...editingTask, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onValueChange={(value) => setEditingTask({ ...editingTask, category: value })}
                   >
-                    <option value="基础数据">基础数据</option>
-                    <option value="行情数据">行情数据</option>
-                    <option value="扩展数据">扩展数据</option>
-                    <option value="资金流向">资金流向</option>
-                    <option value="两融及转融通">两融及转融通</option>
-                    <option value="市场情绪">市场情绪</option>
-                    <option value="盘前分析">盘前分析</option>
-                    <option value="质量监控">质量监控</option>
-                    <option value="报告通知">报告通知</option>
-                    <option value="系统维护">系统维护</option>
-                    <option value="其他">其他</option>
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择任务分类" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="基础数据">基础数据</SelectItem>
+                      <SelectItem value="行情数据">行情数据</SelectItem>
+                      <SelectItem value="扩展数据">扩展数据</SelectItem>
+                      <SelectItem value="资金流向">资金流向</SelectItem>
+                      <SelectItem value="两融及转融通">两融及转融通</SelectItem>
+                      <SelectItem value="市场情绪">市场情绪</SelectItem>
+                      <SelectItem value="盘前分析">盘前分析</SelectItem>
+                      <SelectItem value="质量监控">质量监控</SelectItem>
+                      <SelectItem value="报告通知">报告通知</SelectItem>
+                      <SelectItem value="系统维护">系统维护</SelectItem>
+                      <SelectItem value="参考数据">参考数据</SelectItem>
+                      <SelectItem value="其他">其他</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* 显示顺序 */}
