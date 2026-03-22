@@ -411,81 +411,93 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
     },
 
     # ============================================
-    # 质量监控任务（display_order: 800-899）
+    # 财务数据同步任务（display_order: 800-899）
+    # ============================================
+    'tasks.sync_income': {
+        'task': 'tasks.sync_income',
+        'name': '利润表数据',
+        'description': '同步上市公司利润表数据（营业收入、净利润、每股收益等，2000积分/次）',
+        'category': '财务数据',
+        'display_order': 800,
+        'points_consumption': 2000
+    },
+
+    # ============================================
+    # 质量监控任务（display_order: 900-999）
     # ============================================
     'quality.daily_report': {
         'task': 'app.tasks.quality_tasks.generate_daily_quality_report',
         'name': '每日质量报告',
         'description': '生成每日数据质量报告',
         'category': '质量监控',
-        'display_order': 800
+        'display_order': 900
     },
     'quality.weekly_report': {
         'task': 'app.tasks.quality_tasks.generate_weekly_quality_report',
         'name': '周度质量报告',
         'description': '生成周度数据质量趋势报告',
         'category': '质量监控',
-        'display_order': 810
+        'display_order': 910
     },
     'quality.real_time_check': {
         'task': 'app.tasks.quality_tasks.real_time_quality_check',
         'name': '实时质量检查',
         'description': '实时数据质量检查，发现异常立即告警',
         'category': '质量监控',
-        'display_order': 820
+        'display_order': 920
     },
     'quality.integrity_check': {
         'task': 'app.tasks.quality_tasks.data_integrity_check',
         'name': '数据完整性检查',
         'description': '检查数据完整性，修复缺失数据',
         'category': '质量监控',
-        'display_order': 830
+        'display_order': 930
     },
     'quality.trend_analysis': {
         'task': 'app.tasks.quality_tasks.quality_trend_analysis',
         'name': '质量趋势分析',
         'description': '分析数据质量趋势，预测潜在问题',
         'category': '质量监控',
-        'display_order': 840
+        'display_order': 940
     },
     'quality.cleanup_alerts': {
         'task': 'app.tasks.quality_tasks.cleanup_old_alerts',
         'name': '清理过期告警',
         'description': '清理过期的质量告警记录',
         'category': '质量监控',
-        'display_order': 850
+        'display_order': 950
     },
 
     # ============================================
-    # 报告通知任务（display_order: 900-999）
+    # 报告通知任务（display_order: 1000-1099）
     # ============================================
     'notification.send_email': {
         'task': 'app.tasks.notification_tasks.send_email_notification',
         'name': '邮件通知',
         'description': '发送邮件通知',
         'category': '报告通知',
-        'display_order': 900
+        'display_order': 1000
     },
     'notification.send_telegram': {
         'task': 'app.tasks.notification_tasks.send_telegram_notification',
         'name': 'Telegram通知',
         'description': '发送Telegram消息通知',
         'category': '报告通知',
-        'display_order': 910
+        'display_order': 1010
     },
     'notification.cleanup': {
         'task': 'app.tasks.notification_tasks.cleanup_expired_notifications',
         'name': '清理过期通知',
         'description': '清理过期的通知记录',
         'category': '报告通知',
-        'display_order': 920
+        'display_order': 1020
     },
     'notification.health_check': {
         'task': 'app.tasks.notification_tasks.notification_health_check',
         'name': '通知系统健康检查',
         'description': '检查通知系统运行状态',
         'category': '报告通知',
-        'display_order': 930
+        'display_order': 1030
     }
 }
 
@@ -503,9 +515,10 @@ TASK_CATEGORIES = [
     {'name': '打板专题', 'order': 7},
     {'name': '市场情绪', 'order': 8},
     {'name': '盘前分析', 'order': 9},
-    {'name': '质量监控', 'order': 10},
-    {'name': '报告通知', 'order': 11},
-    {'name': '系统维护', 'order': 12}
+    {'name': '财务数据', 'order': 10},
+    {'name': '质量监控', 'order': 11},
+    {'name': '报告通知', 'order': 12},
+    {'name': '系统维护', 'order': 13}
 ]
 
 

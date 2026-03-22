@@ -39,6 +39,7 @@ import { ShareFloatApiClient, shareFloatApi as shareFloatApiInst } from './share
 import { StkHolderNumberApiClient, stkHolderNumberApi as stkHolderNumberApiInst } from './stk-holdernumber'
 import { BlockTradeApiClient, blockTradeApi as blockTradeApiInst } from './block-trade'
 import { StkHoldertradeApiClient, stkHoldertradeApi as stkHoldertradeApiInst } from './stk-holdertrade-api'
+import { IncomeApiClient, incomeApi as incomeApiInst } from './income-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -591,6 +592,15 @@ export type {
   StkHoldertradeListResponse,
   SyncStkHoldertradeParams
 } from './stk-holdertrade-api'
+
+// 重新导出利润表 API
+export { IncomeApiClient }
+export const incomeApi = incomeApiInst
+export type {
+  IncomeDataParams,
+  IncomeData,
+  IncomeStatistics
+} from './income-api'
 
 // 导出默认实例
 export default apiClient

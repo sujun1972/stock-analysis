@@ -319,6 +319,18 @@ const navItems: NavItem[] = [
     ]
   },
   {
+    name: '财务数据',
+    href: '/financial',
+    icon: FileText,
+    children: [
+      {
+        name: '利润表',
+        href: '/financial/income',
+        icon: TrendingUp
+      }
+    ]
+  },
+  {
     name: '数据中心',
     icon: Database,
     children: [
