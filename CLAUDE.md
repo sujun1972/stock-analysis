@@ -248,6 +248,7 @@ triggerPoll()  // Header 图标即时更新
 - 业绩快报页面（`/financial/express`）
 - 分红送股页面（`/financial/dividend`）
 - 财务指标页面（`/financial/fina-indicator`）
+- 财务审计意见页面（`/financial/fina-audit`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1261,6 +1262,7 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `ForecastRepository` - 业绩预告（上市公司业绩预告数据，包括预告类型、净利润变动幅度、预告值、变动原因等，2000积分/次）
    - `ExpressRepository` - 业绩快报（上市公司业绩快报数据，包括营业收入、利润、资产、每股收益、净资产收益率、同比增长率等，2000积分/次）
    - `FinaIndicatorRepository` - 财务指标（上市公司财务指标数据，包括150+财务指标：EPS、ROE、毛利率、资产负债率等，2000积分/次，每次最多100条）
+   - `FinaAuditRepository` - 财务审计意见（上市公司定期财务审计意见数据，包括审计结果、审计费用、会计事务所、签字会计师等，500积分/次）
 
 #### Repository 开发规范
 

@@ -117,6 +117,47 @@ export interface DividendSyncParams {
   imp_ann_date?: string   // YYYY-MM-DD
 }
 
+// ============================================
+// 财务审计意见数据类型定义
+// ============================================
+export interface FinaAuditData {
+  ts_code: string
+  ann_date: string
+  end_date: string
+  audit_result?: string
+  audit_fees?: number
+  audit_agency?: string
+  audit_sign?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface FinaAuditStatistics {
+  total_count: number
+  stock_count: number
+  agency_count: number
+  avg_fees: number
+  max_fees: number
+  min_fees: number
+}
+
+export interface FinaAuditParams {
+  ts_code?: string
+  ann_date?: string     // YYYY-MM-DD
+  start_date?: string   // YYYY-MM-DD
+  end_date?: string     // YYYY-MM-DD
+  period?: string       // YYYY-MM-DD
+  limit?: number
+}
+
+export interface FinaAuditSyncParams {
+  ts_code: string       // 必填
+  ann_date?: string     // YYYY-MM-DD
+  start_date?: string   // YYYY-MM-DD
+  end_date?: string     // YYYY-MM-DD
+  period?: string       // YYYY-MM-DD
+}
+
 export class FinancialDataApiClient extends BaseApiClient {
   // ============================================
   // 财务指标数据 API
@@ -194,6 +235,51 @@ export class FinancialDataApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/dividend/sync-async', null, { params })
+  }
+
+  // ============================================
+  // 财务审计意见数据 API
+  // ============================================
+
+  /**
+   * 获取财务审计意见数据
+   */
+  async getFinaAudit(params?: FinaAuditParams): Promise<ApiResponse<{
+    items: FinaAuditData[]
+    statistics: FinaAuditStatistics
+    total: number
+  }>> {
+    return this.get('/api/fina-audit', { params })
+  }
+
+  /**
+   * 获取财务审计意见统计信息
+   */
+  async getFinaAuditStatistics(params?: {
+    start_date?: string
+    end_date?: string
+  }): Promise<ApiResponse<FinaAuditStatistics>> {
+    return this.get('/api/fina-audit/statistics', { params })
+  }
+
+  /**
+   * 获取指定股票的最新审计意见
+   */
+  async getLatestAudit(ts_code: string): Promise<ApiResponse<FinaAuditData | null>> {
+    return this.get(`/api/fina-audit/latest/${ts_code}`)
+  }
+
+  /**
+   * 异步同步财务审计意见数据
+   * 通过Celery任务异步执行，立即返回任务ID
+   */
+  async syncFinaAuditAsync(params: FinaAuditSyncParams): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/fina-audit/sync-async', null, { params })
   }
 }
 

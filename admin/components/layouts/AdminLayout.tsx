@@ -357,6 +357,11 @@ const navItems: NavItem[] = [
         name: '财务指标',
         href: '/financial/fina-indicator',
         icon: TrendingUp
+      },
+      {
+        name: '审计意见',
+        href: '/financial/fina-audit',
+        icon: TrendingUp
       }
     ]
   },

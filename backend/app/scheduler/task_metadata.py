@@ -470,8 +470,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'name': '财务指标数据',
         'description': '同步上市公司财务指标数据（150+财务指标，包括EPS、ROE、资产负债率等，2000积分/次，每次最多100条记录）',
         'category': '财务数据',
-        'display_order': 804,
+        'display_order': 805,
         'points_consumption': 2000
+    },
+    'tasks.sync_fina_audit': {
+        'task': 'tasks.sync_fina_audit',
+        'name': '财务审计意见',
+        'description': '同步上市公司定期财务审计意见数据（审计结果、审计费用、会计事务所等，500积分/次）',
+        'category': '财务数据',
+        'display_order': 806,
+        'points_consumption': 500
     },
 
     # ============================================

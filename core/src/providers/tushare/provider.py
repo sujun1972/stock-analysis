@@ -2189,6 +2189,56 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取分红送股数据失败: {e}")
             raise TushareDataError(f"获取分红送股数据失败: {str(e)}")
 
+    def get_fina_audit(
+        self,
+        ts_code: str,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        period: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取上市公司定期财务审计意见数据
+        积分消耗：500分
+
+        Args:
+            ts_code: TS股票代码（必需）
+            ann_date: 公告日期 YYYYMMDD（可选）
+            start_date: 公告开始日期 YYYYMMDD（可选）
+            end_date: 公告结束日期 YYYYMMDD（可选）
+            period: 报告期 YYYYMMDD（可选，每个季度最后一天的日期）
+
+        Returns:
+            pd.DataFrame: 财务审计意见数据，包含以下列：
+                - ts_code: TS股票代码
+                - ann_date: 公告日期
+                - end_date: 报告期
+                - audit_result: 审计结果
+                - audit_fees: 审计总费用（元）
+                - audit_agency: 会计事务所
+                - audit_sign: 签字会计师
+        """
+        try:
+            logger.info(f"获取财务审计意见数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {'ts_code': ts_code}
+            if ann_date:
+                params['ann_date'] = ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if period:
+                params['period'] = period
+
+            df = self.api_client.query('fina_audit', **params)
+            logger.info(f"获取到 {len(df)} 条财务审计意见记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取财务审计意见数据失败: {e}")
+            raise TushareDataError(f"获取财务审计意见数据失败: {str(e)}")
+
     def get_stk_holdertrade(
         self,
         ts_code: Optional[str] = None,
