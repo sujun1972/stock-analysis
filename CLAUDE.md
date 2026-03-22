@@ -2312,6 +2312,98 @@ tasks = await service.get_all_tasks()
 4. **向后兼容**：聚合服务使用委托模式，旧代码无需修改
 5. **废弃管理**：清晰标记废弃文件，提供迁移指南
 
+### Extended Sync Service 模块化重构（数据同步服务）
+
+扩展数据同步服务已从 788 行的单一文件重构为按数据分类划分的模块化架构。
+
+**重构前的问题**：
+- ❌ 单一类包含 30 个方法，违反单一职责原则
+- ❌ 混合了 8 种不同数据类型的同步逻辑
+- ❌ 大量重复的 `_insert_xxx` 方法（10 个类似方法）
+
+**模块结构**：
+```
+services/extended_sync/
+├── __init__.py                      # 统一导出和聚合服务
+├── common.py                        # 公共组件（枚举、数据类）
+├── base_sync_service.py             # 基础同步服务（模板方法）
+├── basic_data_sync.py               # 基础数据同步
+├── moneyflow_sync.py                # 资金流向同步
+├── margin_sync.py                   # 两融数据同步
+├── reference_data_sync.py           # 参考数据同步
+└── REFACTORING_SUMMARY.md           # 重构文档
+```
+
+**按数据分类划分**（符合定时任务分类标准）：
+
+1. **基础数据** (`BasicDataSyncService`)
+   - daily_basic, stk_limit, adj_factor, suspend
+
+2. **资金流向** (`MoneyflowSyncService`)
+   - moneyflow（Tushare标准）
+   - moneyflow_hsgt（沪深港通）
+   - moneyflow_mkt_dc（大盘，东方财富）
+   - moneyflow_ind_dc（板块，东方财富）
+   - moneyflow_stock_dc（个股，东方财富）
+
+3. **两融数据** (`MarginSyncService`)
+   - margin_detail（融资融券交易明细）
+
+4. **参考数据** (`ReferenceDataSyncService`)
+   - block_trade（大宗交易）
+
+**预留扩展分类**：
+- 行情数据 (`MarketDataSyncService`)
+- 财务数据 (`FinancialDataSyncService`)
+- 特色数据 (`SpecialDataSyncService`)
+- 打板数据 (`LimitUpSyncService`)
+
+**使用方式**：
+
+```python
+# 方式 1：使用专门的服务类（推荐）
+from app.services.extended_sync import moneyflow_sync_service
+
+result = await moneyflow_sync_service.sync_moneyflow_hsgt(
+    start_date='20240301',
+    end_date='20240315'
+)
+
+# 方式 2：使用聚合服务（向后兼容）
+from app.services.extended_sync import extended_sync_service
+
+result = await extended_sync_service.sync_moneyflow_hsgt(
+    start_date='20240301',
+    end_date='20240315'
+)
+
+# 方式 3：旧路径（显示警告，但仍可用）
+from app.services.extended_sync_service import extended_sync_service
+
+# ⚠️ 会显示 DeprecationWarning
+result = await extended_sync_service.sync_moneyflow_hsgt(...)
+```
+
+**重构成果**：
+
+| 指标 | 重构前 | 重构后 | 改善 |
+|------|--------|--------|------|
+| 最大文件行数 | 788行 | 257行 | ↓ 67% |
+| 方法数/类 | 30个/1个类 | 5-8个/类 | ✅ 单一职责 |
+| 文件数量 | 1个庞大文件 | 7个专门文件 | ✅ 模块化 |
+| 代码重复 | 高（10个重复方法） | 低 | ✅ DRY原则 |
+| 可测试性 | 低（依赖多） | 高（独立模块） | ✅ 易测试 |
+
+**设计模式**：
+1. **模板方法模式**：`BaseSyncService._sync_data_template()` 定义统一的同步流程
+2. **策略模式**：通过传入不同的 `fetch_method` 和 `insert_method` 实现不同策略
+3. **依赖注入**：各服务类在构造函数中注入 Repository 依赖
+
+**向后兼容**：
+- ✅ 100% 向后兼容，所有现有代码无需修改
+- ✅ 11个受影响的文件（6个Tasks + 5个API）继续正常工作
+- ✅ 旧文件已标记废弃，计划 2026年9月 移除
+
 ## 开发提示
 
 1. 修改代码后，前端项目（admin）会自动热重载
