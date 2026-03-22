@@ -1939,6 +1939,67 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取股票回购数据失败: {e}")
             raise TushareDataError(f"获取股票回购数据失败: {str(e)}")
 
+    def get_forecast(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        period: Optional[str] = None,
+        type_: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取业绩预告数据
+        积分消耗：2000分
+
+        Args:
+            ts_code: 股票代码 (可选)
+            ann_date: 公告日期 YYYYMMDD（可选）
+            start_date: 公告开始日期 YYYYMMDD（可选）
+            end_date: 公告结束日期 YYYYMMDD（可选）
+            period: 报告期 YYYYMMDD（可选，如20171231表示年报）
+            type_: 预告类型（可选，如预增/预减/扭亏/首亏）
+
+        Returns:
+            pd.DataFrame: 业绩预告数据，包含以下列：
+                - ts_code: TS股票代码
+                - ann_date: 公告日期
+                - end_date: 报告期
+                - type: 业绩预告类型
+                - p_change_min: 预告净利润变动幅度下限（%）
+                - p_change_max: 预告净利润变动幅度上限（%）
+                - net_profit_min: 预告净利润下限（万元）
+                - net_profit_max: 预告净利润上限（万元）
+                - last_parent_net: 上年同期归属母公司净利润
+                - first_ann_date: 首次公告日
+                - summary: 业绩预告摘要
+                - change_reason: 业绩变动原因
+        """
+        try:
+            logger.info(f"获取业绩预告数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}, type={type_}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if period:
+                params['period'] = period
+            if type_:
+                params['type'] = type_
+
+            df = self.api_client.query('forecast_vip', **params)
+            logger.info(f"获取到 {len(df)} 条业绩预告记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取业绩预告数据失败: {e}")
+            raise TushareDataError(f"获取业绩预告数据失败: {str(e)}")
+
     def get_stk_holdertrade(
         self,
         ts_code: Optional[str] = None,

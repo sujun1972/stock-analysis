@@ -37,6 +37,7 @@ import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from '.
 import { RepurchaseApiClient, repurchaseApi as repurchaseApiInst } from './repurchase'
 import { ShareFloatApiClient, shareFloatApi as shareFloatApiInst } from './share-float'
 import { StkHolderNumberApiClient, stkHolderNumberApi as stkHolderNumberApiInst } from './stk-holdernumber'
+import { ForecastApiClient, forecastApi as forecastApiInst } from './forecast'
 import { BlockTradeApiClient, blockTradeApi as blockTradeApiInst } from './block-trade'
 import { StkHoldertradeApiClient, stkHoldertradeApi as stkHoldertradeApiInst } from './stk-holdertrade-api'
 import { IncomeApiClient, incomeApi as incomeApiInst } from './income-api'
@@ -495,6 +496,12 @@ export const apiClient = {
   getLatestRepurchase: repurchaseApiInst.getLatest.bind(repurchaseApiInst),
   syncRepurchaseAsync: repurchaseApiInst.syncAsync.bind(repurchaseApiInst),
 
+  // 业绩预告相关
+  getForecast: forecastApiInst.getData.bind(forecastApiInst),
+  getForecastStatistics: forecastApiInst.getStatistics.bind(forecastApiInst),
+  getLatestForecast: forecastApiInst.getLatest.bind(forecastApiInst),
+  syncForecastAsync: forecastApiInst.syncAsync.bind(forecastApiInst),
+
   // 限售股解禁相关
   getShareFloat: shareFloatApiInst.getData.bind(shareFloatApiInst),
   getShareFloatStatistics: shareFloatApiInst.getStatistics.bind(shareFloatApiInst),
@@ -565,6 +572,15 @@ export type {
   StkHighShockData,
   StkHighShockStatistics
 } from './stk-high-shock'
+
+// 重新导出业绩预告 API
+export { ForecastApiClient }
+export const forecastApi = forecastApiInst
+export type {
+  ForecastParams,
+  ForecastData,
+  ForecastStatistics
+} from './forecast'
 
 // 重新导出股票回购 API
 export { RepurchaseApiClient }

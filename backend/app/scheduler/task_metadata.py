@@ -264,6 +264,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ann_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_forecast': {
+        'task': 'tasks.sync_forecast',
+        'name': '业绩预告',
+        'description': '获取业绩预告数据，包括公告日期、报告期、预告类型、净利润变动幅度、净利润预告值、业绩变动原因等（2000积分/次）',
+        'category': '财务数据',
+        'display_order': 478,
+        'points_consumption': 2000,
+        'default_params': {'ann_date': None, 'start_date': None, 'end_date': None, 'period': None, 'type_': None}
+    },
+
     'tasks.sync_share_float': {
         'task': 'tasks.sync_share_float',
         'name': '限售股解禁',

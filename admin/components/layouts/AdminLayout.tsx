@@ -337,6 +337,11 @@ const navItems: NavItem[] = [
         name: '现金流量表',
         href: '/financial/cashflow',
         icon: Activity
+      },
+      {
+        name: '业绩预告',
+        href: '/financial/forecast',
+        icon: TrendingUp
       }
     ]
   },
