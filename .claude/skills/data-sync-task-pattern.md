@@ -1072,7 +1072,81 @@ await asyncio.to_thread(_batch_insert)
 </Select>
 ```
 
+### 错误 5: DataProviderFactory 使用错误
+
+**症状**：`'DataProviderFactory' object has no attribute 'get_provider'`
+
+**原因**：DataProviderFactory 使用了不存在的 `get_provider()` 方法
+
+**解决方案**：
+
+```python
+# ❌ 错误
+from core.src.providers import DataProviderFactory
+
+class YourService:
+    def __init__(self):
+        self.provider_factory = DataProviderFactory()
+
+    def _get_provider(self):
+        return self.provider_factory.get_provider('tushare')  # ❌ 错误！没有这个方法
+
+# ✅ 正确
+from core.src.providers import DataProviderFactory
+
+class YourService:
+    def __init__(self):
+        self.provider_factory = DataProviderFactory()
+
+    def _get_provider(self):
+        """获取 Tushare Provider"""
+        from app.core.config import settings
+        return self.provider_factory.create_provider(
+            source='tushare',
+            token=settings.TUSHARE_TOKEN
+        )
+```
+
+**关键点**：
+- ✅ 使用 `create_provider()` 方法而不是 `get_provider()`
+- ✅ 必须传递 `source='tushare'` 参数
+- ✅ 必须传递 `token=settings.TUSHARE_TOKEN` 参数
+- ✅ 从 `app.core.config` 导入 `settings` 获取 Tushare Token
+
+**完整示例**（参考 `forecast_service.py`）：
+
+```python
+from core.src.providers import DataProviderFactory
+from app.core.config import settings
+
+class ExpressService:
+    def __init__(self):
+        self.express_repo = ExpressRepository()
+        self.provider_factory = DataProviderFactory()
+
+    def _get_provider(self):
+        """获取 Tushare Provider"""
+        return self.provider_factory.create_provider(
+            source='tushare',
+            token=settings.TUSHARE_TOKEN
+        )
+
+    async def sync_express(self, ...):
+        # 获取 Tushare Provider
+        provider = self._get_provider()
+
+        # 调用 Provider 方法获取数据
+        df = await asyncio.to_thread(
+            provider.get_express,
+            ts_code=ts_code,
+            ann_date=ann_date,
+            start_date=start_date,
+            end_date=end_date,
+            period=period
+        )
+```
+
 ---
 
-**最后更新**: 2026-03-19
+**最后更新**: 2026-03-22
 **版本**: 1.1.0

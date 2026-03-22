@@ -65,6 +65,7 @@ from .endpoints import (
     income,  # 利润表数据
     balancesheet,  # 资产负债表数据
     cashflow,  # 现金流量表数据
+    express,  # 业绩快报
     users,
 )
 
@@ -128,6 +129,7 @@ router.include_router(stk_holdertrade.router, prefix="/stk-holdertrade", tags=["
 router.include_router(income.router, prefix="/income", tags=["利润表数据"])  # 利润表数据API
 router.include_router(balancesheet.router, prefix="/balancesheet", tags=["资产负债表数据"])  # 资产负债表数据API
 router.include_router(cashflow.router, prefix="/cashflow", tags=["现金流量表数据"])  # 现金流量表数据API
+router.include_router(express.router, prefix="/express", tags=["业绩快报"])  # 业绩快报API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

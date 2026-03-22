@@ -219,6 +219,12 @@ except Exception as e:
     logger.error(f"❌ 加载业绩预告任务模块失败: {e}")
 
 try:
+    from app.tasks import express_tasks
+    logger.info(f"✅ 已加载业绩快报任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载业绩快报任务模块失败: {e}")
+
+try:
     from app.tasks import share_float_tasks
     logger.info(f"✅ 已加载限售股解禁任务模块")
 except Exception as e:

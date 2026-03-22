@@ -342,6 +342,11 @@ const navItems: NavItem[] = [
         name: '业绩预告',
         href: '/financial/forecast',
         icon: TrendingUp
+      },
+      {
+        name: '业绩快报',
+        href: '/financial/express',
+        icon: TrendingUp
       }
     ]
   },

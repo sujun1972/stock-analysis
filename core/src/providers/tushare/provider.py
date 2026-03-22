@@ -2000,6 +2000,83 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取业绩预告数据失败: {e}")
             raise TushareDataError(f"获取业绩预告数据失败: {str(e)}")
 
+    def get_express(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        period: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取业绩快报数据
+        积分消耗：2000分
+
+        Args:
+            ts_code: 股票代码 (可选)
+            ann_date: 公告日期 YYYYMMDD（可选）
+            start_date: 公告开始日期 YYYYMMDD（可选）
+            end_date: 公告结束日期 YYYYMMDD（可选）
+            period: 报告期 YYYYMMDD（可选，如20171231表示年报，20170630半年报）
+
+        Returns:
+            pd.DataFrame: 业绩快报数据，包含以下列：
+                - ts_code: TS股票代码
+                - ann_date: 公告日期
+                - end_date: 报告期
+                - revenue: 营业收入(元)
+                - operate_profit: 营业利润(元)
+                - total_profit: 利润总额(元)
+                - n_income: 净利润(元)
+                - total_assets: 总资产(元)
+                - total_hldr_eqy_exc_min_int: 股东权益合计(不含少数股东权益)(元)
+                - diluted_eps: 每股收益(摊薄)(元)
+                - diluted_roe: 净资产收益率(摊薄)(%)
+                - yoy_net_profit: 去年同期修正后净利润
+                - bps: 每股净资产
+                - yoy_sales: 同比增长率:营业收入
+                - yoy_op: 同比增长率:营业利润
+                - yoy_tp: 同比增长率:利润总额
+                - yoy_dedu_np: 同比增长率:归属母公司股东的净利润
+                - yoy_eps: 同比增长率:基本每股收益
+                - yoy_roe: 同比增减:加权平均净资产收益率
+                - growth_assets: 比年初增长率:总资产
+                - yoy_equity: 比年初增长率:归属母公司的股东权益
+                - growth_bps: 比年初增长率:归属于母公司股东的每股净资产
+                - or_last_year: 去年同期营业收入
+                - op_last_year: 去年同期营业利润
+                - tp_last_year: 去年同期利润总额
+                - np_last_year: 去年同期净利润
+                - eps_last_year: 去年同期每股收益
+                - open_net_assets: 期初净资产
+                - open_bps: 期初每股净资产
+                - perf_summary: 业绩简要说明
+                - is_audit: 是否审计：1是 0否
+                - remark: 备注
+        """
+        try:
+            logger.info(f"获取业绩快报数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if period:
+                params['period'] = period
+
+            df = self.api_client.query('express_vip', **params)
+            logger.info(f"获取到 {len(df)} 条业绩快报记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取业绩快报数据失败: {e}")
+            raise TushareDataError(f"获取业绩快报数据失败: {str(e)}")
+
     def get_stk_holdertrade(
         self,
         ts_code: Optional[str] = None,

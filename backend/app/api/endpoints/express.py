@@ -1,0 +1,172 @@
+"""
+业绩快报数据 API 端点
+"""
+
+import asyncio
+import json
+from typing import Optional
+from fastapi import APIRouter, Query, Depends, HTTPException
+from loguru import logger
+
+from app.models.api_response import ApiResponse
+from app.core.dependencies import require_admin, get_current_user
+from app.models.user import User
+from app.services.express_service import ExpressService
+from app.services import TaskHistoryHelper
+
+router = APIRouter()
+
+
+@router.get("")
+async def get_express(
+    ts_code: Optional[str] = Query(None, description="股票代码"),
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD"),
+    limit: int = Query(30, description="限制返回数量")
+):
+    """
+    查询业绩快报数据
+
+    Args:
+        ts_code: 股票代码（可选）
+        start_date: 开始日期，格式：YYYY-MM-DD（可选）
+        end_date: 结束日期，格式：YYYY-MM-DD（可选）
+        period: 报告期，格式：YYYY-MM-DD（可选）
+        limit: 限制返回数量（默认30）
+
+    Returns:
+        业绩快报数据列表
+    """
+    try:
+        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
+        start_date_fmt = start_date.replace('-', '') if start_date else None
+        end_date_fmt = end_date.replace('-', '') if end_date else None
+        period_fmt = period.replace('-', '') if period else None
+
+        service = ExpressService()
+        result = await service.get_express_data(
+            ts_code=ts_code,
+            start_date=start_date_fmt,
+            end_date=end_date_fmt,
+            period=period_fmt,
+            limit=limit
+        )
+
+        return ApiResponse.success(data=result)
+
+    except Exception as e:
+        logger.error(f"查询业绩快报数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/statistics")
+async def get_statistics(
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    ts_code: Optional[str] = Query(None, description="股票代码")
+):
+    """
+    获取业绩快报统计信息
+
+    Args:
+        start_date: 开始日期（可选）
+        end_date: 结束日期（可选）
+        ts_code: 股票代码（可选）
+
+    Returns:
+        统计信息
+    """
+    try:
+        # 转换日期格式
+        start_date_fmt = start_date.replace('-', '') if start_date else None
+        end_date_fmt = end_date.replace('-', '') if end_date else None
+
+        service = ExpressService()
+        stats = await service.get_statistics(
+            start_date=start_date_fmt,
+            end_date=end_date_fmt,
+            ts_code=ts_code
+        )
+
+        return ApiResponse.success(data=stats)
+
+    except Exception as e:
+        logger.error(f"获取业绩快报统计信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-async")
+async def sync_express_async(
+    ts_code: Optional[str] = Query(None, description="股票代码"),
+    ann_date: Optional[str] = Query(None, description="公告日期，格式：YYYY-MM-DD"),
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    异步同步业绩快报数据（通过Celery任务）
+
+    该接口立即返回Celery任务ID，不等待任务完成。
+    前端可以通过任务面板查看进度和结果。
+
+    Args:
+        ts_code: 股票代码（可选）
+        ann_date: 公告日期，格式：YYYY-MM-DD（可选）
+        start_date: 开始日期，格式：YYYY-MM-DD（可选）
+        end_date: 结束日期，格式：YYYY-MM-DD（可选）
+        period: 报告期，格式：YYYY-MM-DD（可选）
+        current_user: 当前登录用户（管理员）
+
+    Returns:
+        包含Celery任务ID和任务信息的响应
+    """
+    try:
+        from app.tasks.express_tasks import sync_express_task
+
+        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
+        ann_date_formatted = ann_date.replace('-', '') if ann_date else None
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+        end_date_formatted = end_date.replace('-', '') if end_date else None
+        period_formatted = period.replace('-', '') if period else None
+
+        # 提交Celery任务（异步执行）
+        celery_task = sync_express_task.apply_async(
+            kwargs={
+                'ts_code': ts_code,
+                'ann_date': ann_date_formatted,
+                'start_date': start_date_formatted,
+                'end_date': end_date_formatted,
+                'period': period_formatted
+            }
+        )
+
+        # 使用 TaskHistoryHelper 创建任务历史记录
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_express',
+            display_name='业绩快报',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={
+                'ts_code': ts_code,
+                'ann_date': ann_date_formatted,
+                'start_date': start_date_formatted,
+                'end_date': end_date_formatted,
+                'period': period_formatted
+            },
+            source='express_page'
+        )
+
+        logger.info(f"业绩快报同步任务已提交: {celery_task.id}")
+
+        return ApiResponse.success(
+            data=task_data,
+            message="任务已提交，正在后台执行"
+        )
+
+    except Exception as e:
+        logger.error(f"提交业绩快报同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

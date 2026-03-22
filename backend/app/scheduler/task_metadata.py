@@ -271,6 +271,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '财务数据',
         'display_order': 478,
         'points_consumption': 2000,
+        'default_params': {'ts_code': None, 'ann_date': None, 'start_date': None, 'end_date': None, 'period': None, 'type_': None}
+    },
+
+    'tasks.sync_express': {
+        'task': 'tasks.sync_express',
+        'name': '业绩快报',
+        'description': '获取上市公司业绩快报，包括营业收入、利润、资产、每股收益、净资产收益率、同比增长率等（2000积分/次）',
+        'category': '财务数据',
+        'display_order': 479,
+        'points_consumption': 2000,
         'default_params': {'ann_date': None, 'start_date': None, 'end_date': None, 'period': None, 'type_': None}
     },
 

@@ -686,6 +686,7 @@ export default function SchedulerSettingsPage() {
                       <SelectItem value="扩展数据">扩展数据</SelectItem>
                       <SelectItem value="资金流向">资金流向</SelectItem>
                       <SelectItem value="两融及转融通">两融及转融通</SelectItem>
+                      <SelectItem value="财务数据">财务数据</SelectItem>
                       <SelectItem value="市场情绪">市场情绪</SelectItem>
                       <SelectItem value="盘前分析">盘前分析</SelectItem>
                       <SelectItem value="质量监控">质量监控</SelectItem>

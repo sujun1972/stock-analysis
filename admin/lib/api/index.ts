@@ -43,6 +43,7 @@ import { StkHoldertradeApiClient, stkHoldertradeApi as stkHoldertradeApiInst } f
 import { IncomeApiClient, incomeApi as incomeApiInst } from './income-api'
 import { BalancesheetApiClient, balancesheetApi as balancesheetApiInst } from './balancesheet-api'
 import { CashflowApiClient, cashflowApi as cashflowApiInst } from './cashflow-api'
+import { ExpressApiClient, expressApi as expressApiInst } from './express'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -538,6 +539,11 @@ export const apiClient = {
   getLatestCashflow: cashflowApiInst.getLatest.bind(cashflowApiInst),
   syncCashflowAsync: cashflowApiInst.syncAsync.bind(cashflowApiInst),
 
+  // 业绩快报相关
+  getExpressData: expressApiInst.getData.bind(expressApiInst),
+  getExpressStatistics: expressApiInst.getStatistics.bind(expressApiInst),
+  syncExpressAsync: expressApiInst.syncAsync.bind(expressApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -655,6 +661,15 @@ export type {
   CashflowData,
   CashflowStatistics
 } from './cashflow-api'
+
+// 重新导出业绩快报 API
+export { ExpressApiClient }
+export const expressApi = expressApiInst
+export type {
+  ExpressParams,
+  ExpressData,
+  ExpressStatistics
+} from './express'
 
 // 导出默认实例
 export default apiClient
