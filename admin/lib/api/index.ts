@@ -35,6 +35,7 @@ import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
 import { RepurchaseApiClient, repurchaseApi as repurchaseApiInst } from './repurchase'
+import { ShareFloatApiClient, shareFloatApi as shareFloatApiInst } from './share-float'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -534,6 +535,15 @@ export type {
   RepurchaseData,
   RepurchaseStatistics
 } from './repurchase'
+
+// 重新导出限售股解禁 API
+export { ShareFloatApiClient }
+export const shareFloatApi = shareFloatApiInst
+export type {
+  ShareFloatParams,
+  ShareFloatData,
+  ShareFloatStatistics
+} from './share-float'
 
 // 导出默认实例
 export default apiClient

@@ -1790,6 +1790,59 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取股权质押统计数据失败: {e}")
             raise TushareDataError(f"获取股权质押统计数据失败: {str(e)}")
 
+    def get_share_float(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        float_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取限售股解禁数据
+        积分消耗：120分
+
+        Args:
+            ts_code: TS股票代码（可选）
+            ann_date: 公告日期 YYYYMMDD（可选）
+            float_date: 解禁日期 YYYYMMDD（可选）
+            start_date: 解禁开始日期 YYYYMMDD（可选）
+            end_date: 解禁结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 限售股解禁数据，包含以下列：
+                - ts_code: TS代码
+                - ann_date: 公告日期
+                - float_date: 解禁日期
+                - float_share: 流通股份(股)
+                - float_ratio: 流通股份占总股本比率
+                - holder_name: 股东名称
+                - share_type: 股份类型
+        """
+        try:
+            logger.info(f"获取限售股解禁数据: ts_code={ts_code}, ann_date={ann_date}, "
+                       f"float_date={float_date}, start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if float_date:
+                params['float_date'] = float_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('share_float', **params)
+            logger.info(f"获取到 {len(df)} 条限售股解禁记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取限售股解禁数据失败: {e}")
+            raise TushareDataError(f"获取限售股解禁数据失败: {str(e)}")
+
     def get_repurchase(
         self,
         ann_date: Optional[str] = None,

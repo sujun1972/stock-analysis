@@ -46,6 +46,7 @@ from .stk_alert_repository import StkAlertRepository
 from .stk_high_shock_repository import StkHighShockRepository
 from .pledge_stat_repository import PledgeStatRepository
 from .repurchase_repository import RepurchaseRepository
+from .share_float_repository import ShareFloatRepository
 
 __all__ = [
     "BaseRepository",
@@ -112,4 +113,5 @@ __all__ = [
     "StkHighShockRepository",
     "PledgeStatRepository",
     "RepurchaseRepository",
+    "ShareFloatRepository",
 ]

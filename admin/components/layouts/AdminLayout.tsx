@@ -295,6 +295,11 @@ const navItems: NavItem[] = [
         name: '股票回购',
         href: '/reference-data/repurchase',
         icon: FileText
+      },
+      {
+        name: '限售股解禁',
+        href: '/reference-data/share-float',
+        icon: FileText
       }
     ]
   },

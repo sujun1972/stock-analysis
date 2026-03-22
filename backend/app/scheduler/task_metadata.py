@@ -255,6 +255,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ann_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_share_float': {
+        'task': 'tasks.sync_share_float',
+        'name': '限售股解禁',
+        'description': '获取限售股解禁数据，包括公告日期、解禁日期、流通股份、流通比率、股东名称、股份类型等（120积分/次，单次最大6000行）',
+        'category': '参考数据',
+        'display_order': 455,
+        'points_consumption': 120,
+        'default_params': {'ts_code': None, 'ann_date': None, 'float_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 打板专题任务（display_order: 550-599）
     # ============================================
