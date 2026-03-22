@@ -2157,6 +2157,83 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取资产负债表数据失败: {e}")
             raise TushareDataError(f"获取资产负债表数据失败: {str(e)}")
 
+    def get_cashflow(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        f_ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        period: Optional[str] = None,
+        report_type: Optional[str] = None,
+        comp_type: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取上市公司现金流量表数据（cashflow_vip接口）
+
+        积分消耗: 2000
+
+        Args:
+            ts_code: 股票代码（可选）
+            ann_date: 公告日期（YYYYMMDD格式）
+            f_ann_date: 实际公告日期（YYYYMMDD格式）
+            start_date: 报告期开始日期（YYYYMMDD格式）
+            end_date: 报告期结束日期（YYYYMMDD格式）
+            period: 报告期（YYYYMMDD格式，如20231231表示年报）
+            report_type: 报告类型
+                1-合并报表
+                2-单季合并
+                3-调整单季合并表
+                4-调整合并报表
+                5-调整前合并报表
+                6-母公司报表
+                7-母公司单季表
+                8-母公司调整单季表
+                9-母公司调整表
+                10-母公司调整前报表
+                11-调整前合并报表
+                12-母公司调整前报表
+            comp_type: 公司类型（1一般工商业 2银行 3保险 4证券）
+
+        Returns:
+            pd.DataFrame: 现金流量表数据
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 查询某股票某报告期数据
+            >>> df = provider.get_cashflow(ts_code='600000.SH', period='20231231')
+            >>> # 查询某报告期所有股票数据
+            >>> df = provider.get_cashflow(period='20231231')
+            >>> # 查询日期范围内的数据
+            >>> df = provider.get_cashflow(start_date='20230101', end_date='20231231')
+        """
+        try:
+            params = {}
+
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if f_ann_date:
+                params['f_ann_date'] = f_ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if period:
+                params['period'] = period
+            if report_type:
+                params['report_type'] = report_type
+            if comp_type:
+                params['comp_type'] = comp_type
+
+            df = self.api_client.query('cashflow_vip', **params)
+            logger.info(f"获取到 {len(df)} 条现金流量表记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取现金流量表数据失败: {e}")
+            raise TushareDataError(f"获取现金流量表数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

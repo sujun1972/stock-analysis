@@ -41,6 +41,7 @@ import { BlockTradeApiClient, blockTradeApi as blockTradeApiInst } from './block
 import { StkHoldertradeApiClient, stkHoldertradeApi as stkHoldertradeApiInst } from './stk-holdertrade-api'
 import { IncomeApiClient, incomeApi as incomeApiInst } from './income-api'
 import { BalancesheetApiClient, balancesheetApi as balancesheetApiInst } from './balancesheet-api'
+import { CashflowApiClient, cashflowApi as cashflowApiInst } from './cashflow-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -524,6 +525,12 @@ export const apiClient = {
   getLatestBalancesheet: balancesheetApiInst.getLatest.bind(balancesheetApiInst),
   syncBalancesheetAsync: balancesheetApiInst.syncAsync.bind(balancesheetApiInst),
 
+  // 现金流量表相关
+  getCashflowData: cashflowApiInst.getCashflowData.bind(cashflowApiInst),
+  getCashflowStatistics: cashflowApiInst.getStatistics.bind(cashflowApiInst),
+  getLatestCashflow: cashflowApiInst.getLatest.bind(cashflowApiInst),
+  syncCashflowAsync: cashflowApiInst.syncAsync.bind(cashflowApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -623,6 +630,15 @@ export type {
   BalancesheetData,
   BalancesheetStatistics
 } from './balancesheet-api'
+
+// 重新导出现金流量表 API
+export { CashflowApiClient }
+export const cashflowApi = cashflowApiInst
+export type {
+  CashflowQueryParams,
+  CashflowData,
+  CashflowStatistics
+} from './cashflow-api'
 
 // 导出默认实例
 export default apiClient

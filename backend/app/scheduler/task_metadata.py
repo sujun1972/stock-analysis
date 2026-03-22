@@ -429,6 +429,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 801,
         'points_consumption': 2000
     },
+    'tasks.sync_cashflow': {
+        'task': 'tasks.sync_cashflow',
+        'name': '现金流量表数据',
+        'description': '同步上市公司现金流量表数据（经营、投资、筹资活动现金流，2000积分/次）',
+        'category': '财务数据',
+        'display_order': 802,
+        'points_consumption': 2000
+    },
 
     # ============================================
     # 质量监控任务（display_order: 900-999）

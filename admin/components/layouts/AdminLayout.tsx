@@ -332,6 +332,11 @@ const navItems: NavItem[] = [
         name: '资产负债表',
         href: '/financial/balancesheet',
         icon: DollarSign
+      },
+      {
+        name: '现金流量表',
+        href: '/financial/cashflow',
+        icon: Activity
       }
     ]
   },

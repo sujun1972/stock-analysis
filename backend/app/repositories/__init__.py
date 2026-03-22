@@ -51,6 +51,7 @@ from .stk_holdernumber_repository import StkHolderNumberRepository
 from .stk_holdertrade_repository import StkHoldertradeRepository
 from .income_repository import IncomeRepository
 from .balancesheet_repository import BalancesheetRepository
+from .cashflow_repository import CashflowRepository
 
 __all__ = [
     "BaseRepository",
@@ -123,4 +124,5 @@ __all__ = [
     # 财务数据
     "IncomeRepository",
     "BalancesheetRepository",
+    "CashflowRepository",
 ]
