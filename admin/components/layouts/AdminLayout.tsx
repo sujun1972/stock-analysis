@@ -302,6 +302,11 @@ const navItems: NavItem[] = [
         icon: FileText
       },
       {
+        name: '股东人数',
+        href: '/reference-data/stk-holdernumber',
+        icon: Users
+      },
+      {
         name: '大宗交易',
         href: '/reference-data/block-trade',
         icon: Building2

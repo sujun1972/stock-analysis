@@ -1843,6 +1843,56 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取限售股解禁数据失败: {e}")
             raise TushareDataError(f"获取限售股解禁数据失败: {str(e)}")
 
+    def get_stk_holdernumber(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        enddate: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取上市公司股东户数数据
+        积分消耗：600分
+
+        Args:
+            ts_code: TS股票代码（可选）
+            ann_date: 公告日期 YYYYMMDD（可选）
+            start_date: 公告开始日期 YYYYMMDD（可选）
+            end_date: 公告结束日期 YYYYMMDD（可选）
+            enddate: 截止日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 股东户数数据，包含以下列：
+                - ts_code: TS代码
+                - ann_date: 公告日期
+                - end_date: 截止日期
+                - holder_num: 股东户数
+        """
+        try:
+            logger.info(f"获取股东户数数据: ts_code={ts_code}, ann_date={ann_date}, "
+                       f"start_date={start_date}, end_date={end_date}, enddate={enddate}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if enddate:
+                params['enddate'] = enddate
+
+            df = self.api_client.query('stk_holdernumber', **params)
+            logger.info(f"获取到 {len(df)} 条股东户数记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取股东户数数据失败: {e}")
+            raise TushareDataError(f"获取股东户数数据失败: {str(e)}")
+
     def get_repurchase(
         self,
         ann_date: Optional[str] = None,

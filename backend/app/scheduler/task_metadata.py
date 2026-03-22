@@ -274,6 +274,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'ann_date': None, 'float_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_stk_holdernumber': {
+        'task': 'tasks.sync_stk_holdernumber',
+        'name': '股东人数',
+        'description': '获取上市公司股东户数数据（数据不定期公布，包含股票代码、公告日期、截止日期、股东户数等）（600积分/次，单次最大3000行）',
+        'category': '参考数据',
+        'display_order': 456,
+        'points_consumption': 600,
+        'default_params': {'ts_code': None, 'ann_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 打板专题任务（display_order: 550-599）
     # ============================================

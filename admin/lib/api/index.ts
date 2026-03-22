@@ -36,6 +36,7 @@ import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
 import { RepurchaseApiClient, repurchaseApi as repurchaseApiInst } from './repurchase'
 import { ShareFloatApiClient, shareFloatApi as shareFloatApiInst } from './share-float'
+import { StkHolderNumberApiClient, stkHolderNumberApi as stkHolderNumberApiInst } from './stk-holdernumber'
 import { BlockTradeApiClient, blockTradeApi as blockTradeApiInst } from './block-trade'
 
 // 重新导出基础类和实例
@@ -554,6 +555,15 @@ export type {
   ShareFloatData,
   ShareFloatStatistics
 } from './share-float'
+
+// 重新导出股东人数 API
+export { StkHolderNumberApiClient }
+export const stkHolderNumberApi = stkHolderNumberApiInst
+export type {
+  StkHolderNumberParams,
+  StkHolderNumberData,
+  StkHolderNumberStatistics
+} from './stk-holdernumber'
 
 // 重新导出大宗交易 API
 export { BlockTradeApiClient }

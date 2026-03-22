@@ -58,6 +58,7 @@ from .endpoints import (
     pledge_stat,  # 股权质押统计
     repurchase,  # 股票回购
     share_float,  # 限售股解禁
+    stk_holdernumber,  # 股东人数
     block_trade,  # 大宗交易
     users,
 )
@@ -115,6 +116,7 @@ router.include_router(stk_high_shock.router, prefix="/stk-high-shock", tags=["�
 router.include_router(pledge_stat.router, prefix="/pledge-stat", tags=["股权质押统计"])  # 股权质押统计API
 router.include_router(repurchase.router, prefix="/repurchase", tags=["股票回购"])  # 股票回购API
 router.include_router(share_float.router, prefix="/share-float", tags=["限售股解禁"])  # 限售股解禁API
+router.include_router(stk_holdernumber.router, prefix="/stk-holdernumber", tags=["股东人数"])  # 股东人数API
 router.include_router(block_trade.router, prefix="/block-trade", tags=["大宗交易"])  # 大宗交易API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
