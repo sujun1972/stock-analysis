@@ -44,6 +44,7 @@ import { IncomeApiClient, incomeApi as incomeApiInst } from './income-api'
 import { BalancesheetApiClient, balancesheetApi as balancesheetApiInst } from './balancesheet-api'
 import { CashflowApiClient, cashflowApi as cashflowApiInst } from './cashflow-api'
 import { ExpressApiClient, expressApi as expressApiInst } from './express'
+import { FinancialDataApiClient, financialDataApi as financialDataApiInst } from './financial-data'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -544,6 +545,11 @@ export const apiClient = {
   getExpressStatistics: expressApiInst.getStatistics.bind(expressApiInst),
   syncExpressAsync: expressApiInst.syncAsync.bind(expressApiInst),
 
+  // 分红送股相关
+  getDividend: financialDataApiInst.getDividend.bind(financialDataApiInst),
+  getDividendStatistics: financialDataApiInst.getDividendStatistics.bind(financialDataApiInst),
+  syncDividendAsync: financialDataApiInst.syncDividendAsync.bind(financialDataApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -670,6 +676,16 @@ export type {
   ExpressData,
   ExpressStatistics
 } from './express'
+
+// 重新导出分红送股 API
+export { FinancialDataApiClient }
+export const financialDataApi = financialDataApiInst
+export type {
+  DividendData,
+  DividendStatistics,
+  DividendParams,
+  DividendSyncParams
+} from './financial-data'
 
 // 导出默认实例
 export default apiClient

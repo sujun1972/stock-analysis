@@ -241,6 +241,12 @@ triggerPoll()  // Header 图标即时更新
 - 股东人数页面（`/reference-data/stk-holdernumber`）
 - 大宗交易页面（`/reference-data/block-trade`）
 - 股东增减持页面（`/reference-data/stk-holdertrade`）
+- 利润表页面（`/financial/income`）
+- 资产负债表页面（`/financial/balancesheet`）
+- 现金流量表页面（`/financial/cashflow`）
+- 业绩预告页面（`/financial/forecast`）
+- 业绩快报页面（`/financial/express`）
+- 分红送股页面（`/financial/dividend`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 

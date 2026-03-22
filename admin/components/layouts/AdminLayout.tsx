@@ -347,6 +347,11 @@ const navItems: NavItem[] = [
         name: '业绩快报',
         href: '/financial/express',
         icon: TrendingUp
+      },
+      {
+        name: '分红送股',
+        href: '/financial/dividend',
+        icon: DollarSign
       }
     ]
   },

@@ -2077,6 +2077,72 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取业绩快报数据失败: {e}")
             raise TushareDataError(f"获取业绩快报数据失败: {str(e)}")
 
+    def get_dividend(
+        self,
+        ts_code: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        record_date: Optional[str] = None,
+        ex_date: Optional[str] = None,
+        imp_ann_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取分红送股数据
+        积分消耗：2000分
+
+        Args:
+            ts_code: TS股票代码（可选）
+            ann_date: 公告日期 YYYYMMDD（可选）
+            record_date: 股权登记日 YYYYMMDD（可选）
+            ex_date: 除权除息日 YYYYMMDD（可选）
+            imp_ann_date: 实施公告日 YYYYMMDD（可选）
+            注意：以上参数至少有一个不能为空
+
+        Returns:
+            pd.DataFrame: 分红送股数据，包含以下列：
+                - ts_code: TS代码
+                - end_date: 分红年度
+                - ann_date: 预案公告日
+                - div_proc: 实施进度
+                - stk_div: 每股送转
+                - stk_bo_rate: 每股送股比例
+                - stk_co_rate: 每股转增比例
+                - cash_div: 每股分红（税后）
+                - cash_div_tax: 每股分红（税前）
+                - record_date: 股权登记日
+                - ex_date: 除权除息日
+                - pay_date: 派息日
+                - div_listdate: 红股上市日
+                - imp_ann_date: 实施公告日
+                - base_date: 基准日
+                - base_share: 基准股本（万）
+        """
+        try:
+            logger.info(f"获取分红送股数据: ts_code={ts_code}, ann_date={ann_date}, record_date={record_date}, ex_date={ex_date}, imp_ann_date={imp_ann_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if ann_date:
+                params['ann_date'] = ann_date
+            if record_date:
+                params['record_date'] = record_date
+            if ex_date:
+                params['ex_date'] = ex_date
+            if imp_ann_date:
+                params['imp_ann_date'] = imp_ann_date
+
+            # 至少需要一个参数
+            if not params:
+                raise ValueError("至少需要提供一个查询参数: ts_code, ann_date, record_date, ex_date, imp_ann_date")
+
+            df = self.api_client.query('dividend', **params)
+            logger.info(f"获取到 {len(df)} 条分红送股记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取分红送股数据失败: {e}")
+            raise TushareDataError(f"获取分红送股数据失败: {str(e)}")
+
     def get_stk_holdertrade(
         self,
         ts_code: Optional[str] = None,
