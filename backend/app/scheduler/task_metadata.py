@@ -252,6 +252,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'hk_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_hk_hold': {
+        'task': 'tasks.sync_hk_hold',
+        'name': '沪深港股通持股明细',
+        'description': '获取沪深港股通持股明细数据，包含沪股通、深股通、港股通的每日持股情况（120积分试用，2000积分正式）。注意：交易所于2024年8月20开始停止发布日度北向资金数据，改为季度披露',
+        'category': '特色数据',
+        'display_order': 405,
+        'points_consumption': 2000,
+        'default_params': {'code': None, 'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'exchange': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================

@@ -35,6 +35,7 @@ import { CyqPerfApiClient, cyqPerfApi as cyqPerfApiInst } from './cyq-perf-api'
 import { CyqChipsApiClient, cyqChipsApi as cyqChipsApiInst } from './cyq-chips-api'
 import { CcassHoldApiClient, ccassHoldApi as ccassHoldApiInst } from './ccass-hold-api'
 import { CcassHoldDetailApiClient, ccassHoldDetailApi as ccassHoldDetailApiInst } from './ccass-hold-detail-api'
+import { HkHoldApiClient, hkHoldApi as hkHoldApiInst } from './hk-hold-api'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -284,6 +285,15 @@ export type {
   CcassHoldDetailData,
   CcassHoldDetailStatistics
 } from './ccass-hold-detail-api'
+
+// 重新导出北向资金持股 API
+export { HkHoldApiClient }
+export const hkHoldApi = hkHoldApiInst
+export type {
+  HkHoldQueryParams,
+  HkHoldData,
+  HkHoldStatistics
+} from './hk-hold-api'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {

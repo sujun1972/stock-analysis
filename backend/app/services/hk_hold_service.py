@@ -34,8 +34,9 @@ class HkHoldService:
 
     async def sync_hk_hold(
         self,
-        trade_date: Optional[str] = None,
+        code: Optional[str] = None,
         ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         exchange: Optional[str] = None
@@ -44,17 +45,18 @@ class HkHoldService:
         同步北向资金持股数据
 
         Args:
+            code: 原始代码（如 90000）
+            ts_code: 股票代码（如 600000.SH）
             trade_date: 交易日期 YYYYMMDD
-            ts_code: 股票代码
             start_date: 开始日期 YYYYMMDD
             end_date: 结束日期 YYYYMMDD
-            exchange: 交易所代码（SH上交所/SZ深交所）
+            exchange: 交易所代码（SH上交所/SZ深交所/HK港股通）
 
         Returns:
             同步结果字典
         """
         try:
-            logger.info(f"开始同步北向资金持股: trade_date={trade_date}, ts_code={ts_code}, start_date={start_date}, end_date={end_date}, exchange={exchange}")
+            logger.info(f"开始同步北向资金持股: code={code}, ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}, exchange={exchange}")
 
             # 如果没有指定任何日期，默认同步最近30天
             if not trade_date and not start_date and not end_date:
@@ -68,8 +70,9 @@ class HkHoldService:
             # 从Tushare获取数据
             df = await asyncio.to_thread(
                 provider.get_hk_hold,
-                trade_date=trade_date,
+                code=code,
                 ts_code=ts_code,
+                trade_date=trade_date,
                 start_date=start_date,
                 end_date=end_date,
                 exchange=exchange
@@ -97,7 +100,7 @@ class HkHoldService:
             }
 
         except Exception as e:
-            logger.error(f"同步北向资金持股失败: {str(e)}", exc_info=True)
+            logger.error("同步北向资金持股失败: {}", str(e), exc_info=True)
             return {
                 "status": "error",
                 "records": 0,

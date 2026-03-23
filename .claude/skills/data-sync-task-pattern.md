@@ -650,6 +650,78 @@ const handleSync = async () => {
 **参考实现**：
 - `/admin/app/(dashboard)/features/ccass-hold-detail/page.tsx` (完整实现)
 
+### 3.2.8 全可选参数模式（无强制参数的API）
+
+某些 Tushare API 的所有参数都是可选的（如 `hk_hold`），不传参数时会返回默认数据集。此时应：
+
+**适用场景**：
+- API 文档明确所有参数为可选
+- 不传参数时 API 能正常返回数据（如返回最近30天数据）
+- 用户可能需要同步全量数据
+
+**实现要点**：
+
+1. **移除前端参数验证**：
+```typescript
+// ❌ 错误：强制要求至少一个参数
+if (!hasCode && !hasTsCode && !hasTradeDate && !hasDateRange) {
+  toast.error('参数错误', { description: '请至少填写一个参数' })
+  return
+}
+
+// ✅ 正确：直接构建参数对象，允许为空
+const params: any = {}
+if (syncCode.trim()) params.code = syncCode.trim()
+if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
+// ... 其他参数
+```
+
+2. **更新对话框描述**：
+```typescript
+<DialogDescription>
+  所有参数均为可选，不填写参数将同步所有可用数据
+</DialogDescription>
+```
+
+3. **后端 Service 层提供默认值**（可选）：
+```python
+async def sync_hk_hold(self, code=None, ts_code=None, trade_date=None, ...):
+    # 如果没有指定任何日期，默认同步最近30天
+    if not trade_date and not start_date and not end_date:
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
+        logger.info(f"未指定日期，默认同步最近30天: {start_date} ~ {end_date}")
+```
+
+4. **API 文档注释更新**：
+```python
+"""
+异步同步数据（通过Celery任务）
+
+注意：所有参数均为可选，不传参数时将同步所有可用数据
+
+Args:
+    code: 原始代码（可选）
+    ts_code: 股票代码（可选）
+    trade_date: 交易日期（可选）
+    ...
+"""
+```
+
+**关键差异对比**：
+
+| 特性 | 强制参数模式 | 全可选参数模式 |
+|------|-------------|---------------|
+| 前端验证 | ✅ 必须至少一个参数 | ❌ 无需验证，允许空参数 |
+| 对话框描述 | "请至少填写一个参数" | "所有参数均为可选" |
+| 后端处理 | 直接传递参数 | 提供默认值（如最近30天） |
+| 用户体验 | 必须输入才能同步 | 可直接点击同步获取默认数据 |
+
+**参考实现**：
+- `/admin/app/(dashboard)/features/hk-hold/page.tsx` (全可选参数)
+- `/backend/app/api/endpoints/hk_hold.py` (无参数验证)
+- `/backend/app/services/hk_hold_service.py` (默认同步最近30天)
+
 ---
 
 ## 四、DataTable 组件正确使用方法

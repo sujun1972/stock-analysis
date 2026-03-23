@@ -317,18 +317,20 @@ class HkHoldRepository(BaseRepository):
             if not values:
                 return 0
 
-            # 构建SQL
+            # 构建SQL - UPSERT语义
+            # 主键: (code, trade_date, exchange) - 必须与数据库表定义一致
             placeholders = ','.join(['%s'] * len(columns))
             columns_str = ','.join(columns)
+            # 排除主键字段，只更新非主键列
             update_columns = ','.join([
                 f"{col} = EXCLUDED.{col}"
-                for col in columns if col not in ['trade_date', 'code']
+                for col in columns if col not in ['code', 'trade_date', 'exchange']
             ])
 
             query = f"""
                 INSERT INTO {self.TABLE_NAME} ({columns_str}, updated_at)
                 VALUES ({placeholders}, NOW())
-                ON CONFLICT (trade_date, code)
+                ON CONFLICT (code, trade_date, exchange)
                 DO UPDATE SET
                     {update_columns},
                     updated_at = NOW()

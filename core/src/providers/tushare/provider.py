@@ -2789,6 +2789,64 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取中央结算系统持股汇总数据失败: {e}")
             raise TushareDataError(f"获取中央结算系统持股汇总数据失败: {str(e)}")
 
+    def get_hk_hold(
+        self,
+        code: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        exchange: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取沪深港股通持股明细数据
+        积分消耗：120积分（试用），2000积分（正式）
+        说明：交易所于从2024年8月20开始停止发布日度北向资金数据，改为季度披露
+
+        Args:
+            code: 原始代码（如 90000）
+            ts_code: 股票代码（如 600000.SH）
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+            exchange: 类型：SH沪股通（北向）SZ深股通（北向）HK港股通（南向持股）
+
+        Returns:
+            pd.DataFrame: 沪深港股通持股明细数据，包含以下列：
+                - code: 原始代码
+                - trade_date: 交易日期
+                - ts_code: TS代码
+                - name: 股票名称
+                - vol: 持股数量(股)
+                - ratio: 持股占比（%），占已发行股份百分比
+                - exchange: 类型
+        """
+        try:
+            logger.info(f"获取沪深港股通持股明细数据: code={code}, ts_code={ts_code}, "
+                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}, exchange={exchange}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if code:
+                params['code'] = code
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if exchange:
+                params['exchange'] = exchange
+
+            df = self.api_client.query('hk_hold', **params)
+            logger.info(f"获取到 {len(df)} 条沪深港股通持股明细记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取沪深港股通持股明细数据失败: {e}")
+            raise TushareDataError(f"获取沪深港股通持股明细数据失败: {str(e)}")
+
     def get_ccass_hold_detail(
         self,
         ts_code: Optional[str] = None,
