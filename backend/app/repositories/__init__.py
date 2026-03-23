@@ -62,6 +62,7 @@ from .disclosure_date_repository import DisclosureDateRepository
 from .cyq_perf_repository import CyqPerfRepository
 from .cyq_chips_repository import CyqChipsRepository
 from .ccass_hold_repository import CcassHoldRepository
+from .ccass_hold_detail_repository import CcassHoldDetailRepository
 
 __all__ = [
     "BaseRepository",
@@ -125,6 +126,7 @@ __all__ = [
     "CyqPerfRepository",
     "CyqChipsRepository",
     "CcassHoldRepository",
+    "CcassHoldDetailRepository",
     # 参考数据
     "StkShockRepository",
     "StkAlertRepository",

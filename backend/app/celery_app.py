@@ -201,6 +201,12 @@ except Exception as e:
     logger.error(f"❌ 加载中央结算系统持股汇总任务模块失败: {e}")
 
 try:
+    from app.tasks import ccass_hold_detail_tasks
+    logger.info(f"✅ 已加载中央结算系统持股明细任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载中央结算系统持股明细任务模块失败: {e}")
+
+try:
     from app.tasks import stk_shock_tasks
     logger.info(f"✅ 已加载个股异常波动任务模块")
 except Exception as e:

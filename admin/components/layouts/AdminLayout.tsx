@@ -280,6 +280,11 @@ const navItems: NavItem[] = [
         name: '中央结算系统持股汇总',
         href: '/features/ccass-hold',
         icon: Database
+      },
+      {
+        name: '中央结算系统持股明细',
+        href: '/features/ccass-hold-detail',
+        icon: Database
       }
     ]
   },

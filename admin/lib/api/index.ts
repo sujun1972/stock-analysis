@@ -34,6 +34,7 @@ import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
 import { CyqPerfApiClient, cyqPerfApi as cyqPerfApiInst } from './cyq-perf-api'
 import { CyqChipsApiClient, cyqChipsApi as cyqChipsApiInst } from './cyq-chips-api'
 import { CcassHoldApiClient, ccassHoldApi as ccassHoldApiInst } from './ccass-hold-api'
+import { CcassHoldDetailApiClient, ccassHoldDetailApi as ccassHoldDetailApiInst } from './ccass-hold-detail-api'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -274,6 +275,15 @@ export type {
   CcassHoldData,
   CcassHoldStatistics
 } from './ccass-hold-api'
+
+// 重新导出中央结算系统持股明细 API
+export { CcassHoldDetailApiClient }
+export const ccassHoldDetailApi = ccassHoldDetailApiInst
+export type {
+  CcassHoldDetailParams,
+  CcassHoldDetailData,
+  CcassHoldDetailStatistics
+} from './ccass-hold-detail-api'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {

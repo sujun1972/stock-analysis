@@ -484,6 +484,172 @@ useEffect(() => {
 </Button>
 ```
 
+### 3.2.7 参数验证对话框模式（适用于强制参数的API）
+
+对于Tushare等外部API要求至少提供一个参数的情况，应使用参数验证对话框，避免用户提交无效请求。
+
+**适用场景**：
+- Tushare API返回"参数校验失败，至少输入一个参数"错误
+- 需要用户手动输入同步参数（股票代码、日期范围等）
+- API消耗大量积分，需要用户明确输入参数
+
+**完整实现示例**（参考 `ccass-hold-detail/page.tsx`）：
+
+```typescript
+// 1. 添加对话框状态
+const [showSyncDialog, setShowSyncDialog] = useState(false)
+const [syncTsCode, setSyncTsCode] = useState<string>('')
+const [syncHkCode, setSyncHkCode] = useState<string>('')
+const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
+const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
+// 2. 打开/关闭对话框
+const openSyncDialog = () => {
+  setShowSyncDialog(true)
+}
+
+const closeSyncDialog = () => {
+  setShowSyncDialog(false)
+  setSyncTsCode('')
+  setSyncHkCode('')
+  setSyncTradeDate(undefined)
+  setSyncStartDate(undefined)
+  setSyncEndDate(undefined)
+}
+
+// 3. 修改同步函数，添加参数验证
+const handleSync = async () => {
+  // 参数验证：至少提供一个参数
+  const hasTsCode = syncTsCode.trim() !== ''
+  const hasHkCode = syncHkCode.trim() !== ''
+  const hasTradeDate = syncTradeDate !== undefined
+  const hasDateRange = syncStartDate !== undefined || syncEndDate !== undefined
+
+  if (!hasTsCode && !hasHkCode && !hasTradeDate && !hasDateRange) {
+    toast.error('参数错误', {
+      description: '请至少填写股票代码、港交所代码、交易日期或日期范围中的一个'
+    })
+    return
+  }
+
+  setSyncing(true)
+
+  const params: any = {}
+  if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
+  if (syncHkCode.trim()) params.hk_code = syncHkCode.trim()
+  if (syncTradeDate) params.trade_date = syncTradeDate.toISOString().split('T')[0]
+  if (syncStartDate) params.start_date = syncStartDate.toISOString().split('T')[0]
+  if (syncEndDate) params.end_date = syncEndDate.toISOString().split('T')[0]
+
+  const response = await apiClient.sync{Resource}Async(params)
+
+  // ... 处理响应，添加任务到存储
+
+  closeSyncDialog()  // 成功后关闭对话框
+  setSyncing(false)
+}
+
+// 4. 对话框UI组件
+<Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
+  <DialogContent className="sm:max-w-[500px]">
+    <DialogHeader>
+      <DialogTitle>同步{资源名称}</DialogTitle>
+      <DialogDescription>
+        请至少填写一个参数（股票代码、交易日期或日期范围）
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="grid gap-4 py-4">
+      {/* 股票代码输入 */}
+      <div className="grid gap-2">
+        <Label htmlFor="sync-ts-code">股票代码</Label>
+        <Input
+          id="sync-ts-code"
+          placeholder="如：00960.HK"
+          value={syncTsCode}
+          onChange={(e) => setSyncTsCode(e.target.value)}
+        />
+      </div>
+
+      {/* 交易日期选择 */}
+      <div className="grid gap-2">
+        <Label>交易日期</Label>
+        <DatePicker
+          date={syncTradeDate}
+          onSelect={setSyncTradeDate}
+          placeholder="选择交易日期"
+        />
+      </div>
+
+      {/* 日期范围选择 */}
+      <div className="grid gap-2">
+        <Label>日期范围（可选）</Label>
+        <div className="flex gap-2 items-center">
+          <DatePicker
+            date={syncStartDate}
+            onSelect={setSyncStartDate}
+            placeholder="开始日期"
+          />
+          <span className="text-muted-foreground">至</span>
+          <DatePicker
+            date={syncEndDate}
+            onSelect={setSyncEndDate}
+            placeholder="结束日期"
+          />
+        </div>
+      </div>
+
+      {/* 积分消耗警告（如适用） */}
+      <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 border border-amber-200 dark:border-amber-800">
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          <strong>注意：</strong>此接口消耗 8000 积分/次，单次最大返回 6000 条数据
+        </p>
+      </div>
+    </div>
+
+    <DialogFooter>
+      <Button variant="outline" onClick={closeSyncDialog} disabled={syncing}>
+        取消
+      </Button>
+      <Button onClick={handleSync} disabled={syncing}>
+        {syncing ? (
+          <>
+            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+            同步中...
+          </>
+        ) : (
+          <>
+            <RefreshCw className="h-4 w-4 mr-1" />
+            开始同步
+          </>
+        )}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+// 5. 修改同步按钮为打开对话框
+<Button
+  variant="default"
+  onClick={openSyncDialog}  // 改为打开对话框
+  disabled={syncing}
+>
+  <RefreshCw className="h-4 w-4 mr-1" />
+  同步数据
+</Button>
+```
+
+**关键点**：
+- ✅ 至少提供一个参数的验证逻辑
+- ✅ Toast 错误提示引导用户填写参数
+- ✅ 对话框关闭时清空所有输入
+- ✅ 成功提交后自动关闭对话框
+- ✅ 高积分消耗API显示警告提示
+
+**参考实现**：
+- `/admin/app/(dashboard)/features/ccass-hold-detail/page.tsx` (完整实现)
+
 ---
 
 ## 四、DataTable 组件正确使用方法

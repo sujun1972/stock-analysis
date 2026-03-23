@@ -242,6 +242,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'hk_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_ccass_hold_detail': {
+        'task': 'tasks.sync_ccass_hold_detail',
+        'name': '中央结算系统持股明细',
+        'description': '获取中央结算系统机构席位持股明细数据，数据覆盖全历史，根据交易所披露时间，当日数据在下一交易日早上9点前完成（8000积分/次，单次最大6000条，每分钟可请求300次）',
+        'category': '特色数据',
+        'display_order': 404,
+        'points_consumption': 8000,
+        'default_params': {'ts_code': None, 'hk_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================
