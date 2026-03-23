@@ -59,6 +59,7 @@ from .fina_indicator_repository import FinaIndicatorRepository
 from .fina_audit_repository import FinaAuditRepository
 from .fina_mainbz_repository import FinaMainbzRepository
 from .disclosure_date_repository import DisclosureDateRepository
+from .cyq_perf_repository import CyqPerfRepository
 
 __all__ = [
     "BaseRepository",
@@ -119,6 +120,7 @@ __all__ = [
     "LimitCptRepository",
     # 特色数据
     "ReportRcRepository",
+    "CyqPerfRepository",
     # 参考数据
     "StkShockRepository",
     "StkAlertRepository",

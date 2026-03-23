@@ -265,6 +265,11 @@ const navItems: NavItem[] = [
         name: '卖方盈利预测',
         href: '/features/report-rc',
         icon: TrendingUp
+      },
+      {
+        name: '每日筹码及胜率',
+        href: '/features/cyq-perf',
+        icon: BarChart3
       }
     ]
   },

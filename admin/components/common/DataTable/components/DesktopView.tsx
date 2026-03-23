@@ -110,7 +110,7 @@ export function DesktopView<T>({
                     {column.sortable && (
                       <SortIcon
                         sorted={sort?.key === column.key}
-                        direction={sort?.key === column.key ? sort.direction : null}
+                        direction={sort?.key === column.key ? sort?.direction : null}
                       />
                     )}
                   </div>

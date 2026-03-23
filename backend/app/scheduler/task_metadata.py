@@ -212,6 +212,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'report_date': None}
     },
 
+    'tasks.sync_cyq_perf': {
+        'task': 'tasks.sync_cyq_perf',
+        'name': '每日筹码及胜率',
+        'description': '获取A股每日筹码平均成本和胜率情况，数据从2018年开始，每天18-19点更新（5000积分/天20000次，10000积分/天200000次，15000积分/天不限，单次最大5000条）',
+        'category': '特色数据',
+        'display_order': 401,
+        'points_consumption': 5000,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================

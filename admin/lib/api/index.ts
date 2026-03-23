@@ -31,6 +31,7 @@ import { LimitListApiClient, limitListApi as limitListApiInst } from './limit-li
 import { LimitStepApiClient, limitStepApi as limitStepApiInst } from './limit-step'
 import { LimitCptApiClient, limitCptApi as limitCptApiInst } from './limit-cpt'
 import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
+import { CyqPerfApiClient, cyqPerfApi as cyqPerfApiInst } from './cyq-perf-api'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -244,6 +245,15 @@ export type {
   ReportRcStatistics,
   TopRatedStock
 } from './report-rc'
+
+// 重新导出每日筹码及胜率 API
+export { CyqPerfApiClient }
+export const cyqPerfApi = cyqPerfApiInst
+export type {
+  CyqPerfParams,
+  CyqPerfData,
+  CyqPerfStatistics
+} from './cyq-perf-api'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
@@ -478,6 +488,13 @@ export const apiClient = {
   getLatestReportRc: reportRcApiInst.getLatest.bind(reportRcApiInst),
   getTopRatedStocks: reportRcApiInst.getTopRated.bind(reportRcApiInst),
   syncReportRcAsync: reportRcApiInst.syncAsync.bind(reportRcApiInst),
+
+  // 每日筹码及胜率相关
+  getCyqPerf: cyqPerfApiInst.getData.bind(cyqPerfApiInst),
+  getCyqPerfStatistics: cyqPerfApiInst.getStatistics.bind(cyqPerfApiInst),
+  getLatestCyqPerf: cyqPerfApiInst.getLatest.bind(cyqPerfApiInst),
+  getTopWinnerStocks: cyqPerfApiInst.getTopWinner.bind(cyqPerfApiInst),
+  syncCyqPerfAsync: cyqPerfApiInst.syncAsync.bind(cyqPerfApiInst),
 
   // 个股异常波动相关
   getStkShock: stkShockApiInst.getData.bind(stkShockApiInst),
