@@ -300,6 +300,11 @@ const navItems: NavItem[] = [
         name: '股票收盘集合竞价',
         href: '/features/stk-auction-c',
         icon: TrendingUp
+      },
+      {
+        name: '神奇九转指标',
+        href: '/features/stk-nineturn',
+        icon: Activity
       }
     ]
   },

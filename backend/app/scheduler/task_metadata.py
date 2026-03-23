@@ -281,6 +281,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': None
     },
 
+    'tasks.sync_stk_nineturn': {
+        'task': 'tasks.sync_stk_nineturn',
+        'name': '神奇九转指标',
+        'description': '神奇九转(又称"九转序列")是一种基于技术分析的股票趋势反转指标，通过识别股价在上涨或下跌过程中连续9天的特定走势来判断潜在反转点。数据从2023年开始，每天21点更新，涉及分钟数据（6000积分/次，单次最大10000行）',
+        'category': '特色数据',
+        'display_order': 408,
+        'points_consumption': 6000,
+        'default_params': {'ts_code': None, 'trade_date': None, 'freq': 'daily', 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================

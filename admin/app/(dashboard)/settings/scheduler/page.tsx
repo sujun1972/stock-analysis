@@ -253,11 +253,11 @@ export default function SchedulerSettingsPage() {
       accessor: (item: ScheduledTask) => {
         const taskInfo = getTaskInfo(item)
         return (
-          <div>
-            <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={taskInfo.description}>
+          <div className="max-w-[280px]">
+            <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={taskInfo.name}>
               {taskInfo.name}
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 truncate" title={taskInfo.description}>
+            <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2" title={taskInfo.description}>
               {taskInfo.description}
             </div>
             <div className="mt-1">
@@ -268,13 +268,13 @@ export default function SchedulerSettingsPage() {
           </div>
         )
       },
-      width: 250
+      width: 280
     },
     {
       key: 'module',
       header: '模块',
       accessor: (item: ScheduledTask) => (
-        <div className="space-y-1">
+        <div className="space-y-1 max-w-[160px]">
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
             {getModuleLabel(item.module)}
           </span>
@@ -290,7 +290,8 @@ export default function SchedulerSettingsPage() {
             </div>
           )}
         </div>
-      )
+      ),
+      width: 160
     },
     {
       key: 'cron_expression',
@@ -299,7 +300,8 @@ export default function SchedulerSettingsPage() {
         <code className="text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
           {item.cron_expression}
         </code>
-      )
+      ),
+      width: 140
     },
     {
       key: 'next_run_at',
@@ -330,7 +332,7 @@ export default function SchedulerSettingsPage() {
         }
 
         return (
-          <div className="text-xs space-y-1">
+          <div className="text-xs space-y-1 max-w-[200px]">
             {item.next_run_at ? (
               <>
                 <div className="text-blue-700 dark:text-blue-300 truncate" title={`下次执行: ${item.next_run_at}`}>
@@ -363,7 +365,7 @@ export default function SchedulerSettingsPage() {
           </div>
         )
       },
-      width: 250
+      width: 200
     },
     {
       key: 'last_status',
@@ -372,7 +374,8 @@ export default function SchedulerSettingsPage() {
         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(item.last_status)}`}>
           {item.last_status}
         </span>
-      ) : null
+      ) : null,
+      width: 100
     },
     {
       key: 'enabled',
@@ -395,7 +398,8 @@ export default function SchedulerSettingsPage() {
             }`}
           />
         </button>
-      )
+      ),
+      width: 80
     },
     {
       key: 'id',
@@ -431,7 +435,8 @@ export default function SchedulerSettingsPage() {
             编辑
           </button>
         </div>
-      )
+      ),
+      width: 120
     }
   ], [executingTasks, handleExecute, handleToggle])
 

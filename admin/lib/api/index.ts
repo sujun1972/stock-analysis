@@ -38,6 +38,7 @@ import { CcassHoldDetailApiClient, ccassHoldDetailApi as ccassHoldDetailApiInst 
 import { HkHoldApiClient, hkHoldApi as hkHoldApiInst } from './hk-hold-api'
 import { StkAuctionOApiClient, stkAuctionOApi as stkAuctionOApiInst } from './stk-auction-o'
 import { StkAuctionCApiClient, stkAuctionCApi as stkAuctionCApiInst } from './stk-auction-c'
+import { StkNineturnApiClient, stkNineturnApi as stkNineturnApiInst } from './stk-nineturn-api'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -314,6 +315,16 @@ export type {
   StkAuctionCData,
   StkAuctionCStatistics
 } from './stk-auction-c'
+
+// 重新导出神奇九转指标 API
+export { StkNineturnApiClient }
+export const stkNineturnApi = stkNineturnApiInst
+export type {
+  StkNineturnParams,
+  StkNineturnData,
+  StkNineturnStatistics,
+  TurnSignal
+} from './stk-nineturn-api'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {

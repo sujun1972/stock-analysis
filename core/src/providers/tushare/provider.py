@@ -3018,6 +3018,82 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取中央结算系统持股明细数据失败: {e}")
             raise TushareDataError(f"获取中央结算系统持股明细数据失败: {str(e)}")
 
+    def get_stk_nineturn(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        freq: str = 'daily',
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取神奇九转指标数据
+
+        神奇九转(又称"九转序列")是一种基于技术分析的股票趋势反转指标,
+        通过识别股价在上涨或下跌过程中连续9天的特定走势来判断潜在反转点。
+
+        Args:
+            ts_code: 股票代码 (如 '000001.SZ')
+            trade_date: 交易日期 (格式: YYYYMMDD)
+            freq: 频率 (daily:日线)
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+
+        Returns:
+            pd.DataFrame: 神奇九转数据
+                - ts_code: 股票代码
+                - trade_date: 交易日期
+                - freq: 频率
+                - open: 开盘价
+                - high: 最高价
+                - low: 最低价
+                - close: 收盘价
+                - vol: 成交量
+                - amount: 成交额
+                - up_count: 上九转计数
+                - down_count: 下九转计数
+                - nine_up_turn: 是否上九转(+9表示上九转)
+                - nine_down_turn: 是否下九转(-9表示下九转)
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 获取单只股票数据
+            >>> df = provider.get_stk_nineturn(ts_code='000001.SZ', freq='daily')
+            >>> # 获取指定日期范围数据
+            >>> df = provider.get_stk_nineturn(start_date='20240101', end_date='20240131')
+
+        Notes:
+            - 权限要求: 6000积分
+            - 单次限制: 最大返回10000行数据
+            - 数据起始: 20230101
+            - 建议配合60分钟级别数据使用效果更好
+        """
+        try:
+            logger.info(f"获取神奇九转指标数据: ts_code={ts_code}, trade_date={trade_date}, freq={freq}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if freq:
+                params['freq'] = freq
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('stk_nineturn', **params)
+            logger.info(f"获取到 {len(df)} 条神奇九转指标记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取神奇九转指标数据失败: {e}")
+            raise TushareDataError(f"获取神奇九转指标数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"
