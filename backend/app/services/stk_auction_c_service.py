@@ -1,10 +1,10 @@
 """
-股票开盘集合竞价服务
+股票收盘集合竞价服务
 
-提供股票开盘集合竞价数据的同步和查询功能
-数据来源：Tushare Pro stk_auction_o 接口
+提供股票收盘集合竞价数据的同步和查询功能
+数据来源：Tushare Pro stk_auction_c 接口
 积分消耗：需要开通股票分钟权限
-说明：每天盘后更新，单次请求最大返回10000行数据
+说明：每天盘后更新,单次请求最大返回10000行数据
 """
 
 import asyncio
@@ -15,14 +15,14 @@ from loguru import logger
 
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
-from app.repositories import StkAuctionORepository
+from app.repositories import StkAuctionCRepository
 
 
-class StkAuctionOService:
-    """股票开盘集合竞价服务"""
+class StkAuctionCService:
+    """股票收盘集合竞价服务"""
 
     def __init__(self):
-        self.stk_auction_o_repo = StkAuctionORepository()
+        self.stk_auction_c_repo = StkAuctionCRepository()
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
@@ -32,7 +32,7 @@ class StkAuctionOService:
             token=settings.TUSHARE_TOKEN
         )
 
-    async def sync_stk_auction_o(
+    async def sync_stk_auction_c(
         self,
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
@@ -40,7 +40,7 @@ class StkAuctionOService:
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        同步股票开盘集合竞价数据
+        同步股票收盘集合竞价数据
 
         Args:
             ts_code: 股票代码
@@ -52,20 +52,20 @@ class StkAuctionOService:
             同步结果字典
         """
         try:
-            logger.info(f"开始同步开盘集合竞价: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+            logger.info(f"开始同步收盘集合竞价: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
-            # 如果没有指定任何参数，默认同步最近1个交易日
+            # 如果没有指定任何参数,默认同步最近1个交易日
             if not ts_code and not trade_date and not start_date and not end_date:
-                # 获取最近的交易日（假设最近3天内有交易日）
+                # 获取最近的交易日(假设最近3天内有交易日)
                 trade_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
-                logger.info(f"未指定参数，默认同步最近交易日: {trade_date}")
+                logger.info(f"未指定参数,默认同步最近交易日: {trade_date}")
 
             # 获取数据提供者
             provider = self._get_provider()
 
             # 从Tushare获取数据
             df = await asyncio.to_thread(
-                provider.get_stk_auction_o,
+                provider.get_stk_auction_c,
                 ts_code=ts_code,
                 trade_date=trade_date,
                 start_date=start_date,
@@ -73,7 +73,7 @@ class StkAuctionOService:
             )
 
             if df is None or len(df) == 0:
-                logger.warning("未获取到开盘集合竞价数据")
+                logger.warning("未获取到收盘集合竞价数据")
                 return {
                     "status": "success",
                     "records": 0,
@@ -84,17 +84,17 @@ class StkAuctionOService:
             df = self._validate_and_clean_data(df)
 
             # 插入数据库
-            records = await self._insert_stk_auction_o_data(df)
+            records = await self._insert_stk_auction_c_data(df)
 
-            logger.info(f"成功同步开盘集合竞价数据 {records} 条")
+            logger.info(f"成功同步收盘集合竞价数据 {records} 条")
             return {
                 "status": "success",
                 "records": records,
-                "message": f"成功同步 {records} 条开盘集合竞价数据"
+                "message": f"成功同步 {records} 条收盘集合竞价数据"
             }
 
         except Exception as e:
-            logger.error("同步开盘集合竞价失败: {}", str(e), exc_info=True)
+            logger.error("同步收盘集合竞价失败: {}", str(e), exc_info=True)
             return {
                 "status": "error",
                 "records": 0,
@@ -126,12 +126,12 @@ class StkAuctionOService:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        logger.info(f"数据清洗完成，有效数据 {len(df)} 条")
+        logger.info(f"数据清洗完成,有效数据 {len(df)} 条")
         return df
 
-    async def _insert_stk_auction_o_data(self, df: pd.DataFrame) -> int:
+    async def _insert_stk_auction_c_data(self, df: pd.DataFrame) -> int:
         """
-        插入开盘集合竞价数据到数据库
+        插入收盘集合竞价数据到数据库
 
         Args:
             df: 数据DataFrame
@@ -144,11 +144,11 @@ class StkAuctionOService:
 
         # 使用Repository的批量插入方法
         return await asyncio.to_thread(
-            self.stk_auction_o_repo.bulk_upsert,
+            self.stk_auction_c_repo.bulk_upsert,
             df
         )
 
-    async def get_stk_auction_o_data(
+    async def get_stk_auction_c_data(
         self,
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
@@ -157,12 +157,12 @@ class StkAuctionOService:
         offset: int = 0
     ) -> Dict[str, Any]:
         """
-        查询开盘集合竞价数据
+        查询收盘集合竞价数据
 
         Args:
-            ts_code: 股票代码（可选）
-            start_date: 开始日期 YYYYMMDD（可选）
-            end_date: 结束日期 YYYYMMDD（可选）
+            ts_code: 股票代码(可选)
+            start_date: 开始日期 YYYYMMDD(可选)
+            end_date: 结束日期 YYYYMMDD(可选)
             limit: 返回记录数
             offset: 偏移量
 
@@ -172,7 +172,7 @@ class StkAuctionOService:
         try:
             # 查询数据
             items = await asyncio.to_thread(
-                self.stk_auction_o_repo.get_by_date_range,
+                self.stk_auction_c_repo.get_by_date_range,
                 start_date=start_date,
                 end_date=end_date,
                 ts_code=ts_code,
@@ -182,7 +182,7 @@ class StkAuctionOService:
 
             # 查询总记录数
             total = await asyncio.to_thread(
-                self.stk_auction_o_repo.get_record_count,
+                self.stk_auction_c_repo.get_record_count,
                 start_date=start_date,
                 end_date=end_date,
                 ts_code=ts_code
@@ -190,7 +190,7 @@ class StkAuctionOService:
 
             # 查询统计信息
             statistics = await asyncio.to_thread(
-                self.stk_auction_o_repo.get_statistics,
+                self.stk_auction_c_repo.get_statistics,
                 start_date=start_date,
                 end_date=end_date
             )
@@ -202,12 +202,12 @@ class StkAuctionOService:
             }
 
         except Exception as e:
-            logger.error(f"查询开盘集合竞价数据失败: {e}")
+            logger.error(f"查询收盘集合竞价数据失败: {e}")
             raise
 
     async def get_latest_data(self) -> Dict[str, Any]:
         """
-        获取最新的开盘集合竞价数据
+        获取最新的收盘集合竞价数据
 
         Returns:
             最新数据字典
@@ -215,7 +215,7 @@ class StkAuctionOService:
         try:
             # 获取最新交易日期
             latest_date = await asyncio.to_thread(
-                self.stk_auction_o_repo.get_latest_trade_date
+                self.stk_auction_c_repo.get_latest_trade_date
             )
 
             if not latest_date:
@@ -227,7 +227,7 @@ class StkAuctionOService:
 
             # 获取该日期的数据
             items = await asyncio.to_thread(
-                self.stk_auction_o_repo.get_by_trade_date,
+                self.stk_auction_c_repo.get_by_trade_date,
                 trade_date=latest_date,
                 limit=100
             )
@@ -239,7 +239,7 @@ class StkAuctionOService:
             }
 
         except Exception as e:
-            logger.error(f"获取最新开盘集合竞价数据失败: {e}")
+            logger.error(f"获取最新收盘集合竞价数据失败: {e}")
             raise
 
     async def get_top_by_vol(
@@ -248,7 +248,7 @@ class StkAuctionOService:
         limit: int = 20
     ) -> List[Dict[str, Any]]:
         """
-        按成交量排名查询开盘集合竞价数据
+        按成交量排名查询收盘集合竞价数据
 
         Args:
             trade_date: 交易日期 YYYYMMDD
@@ -259,7 +259,7 @@ class StkAuctionOService:
         """
         try:
             return await asyncio.to_thread(
-                self.stk_auction_o_repo.get_top_by_vol,
+                self.stk_auction_c_repo.get_top_by_vol,
                 trade_date=trade_date,
                 limit=limit
             )

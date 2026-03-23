@@ -10,14 +10,14 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { stkAuctionOApi } from '@/lib/api'
-import type { StkAuctionOData, StkAuctionOStatistics } from '@/lib/api/stk-auction-o'
+import { stkAuctionCApi } from '@/lib/api/stk-auction-c'
+import type { StkAuctionCData, StkAuctionCStatistics } from '@/lib/api/stk-auction-c'
 import { useTaskStore } from '@/stores/task-store'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
 
-export default function StkAuctionOPage() {
-  const [data, setData] = useState<StkAuctionOData[]>([])
-  const [statistics, setStatistics] = useState<StkAuctionOStatistics | null>(null)
+export default function StkAuctionCPage() {
+  const [data, setData] = useState<StkAuctionCData[]>([])
+  const [statistics, setStatistics] = useState<StkAuctionCStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
@@ -49,7 +49,7 @@ export default function StkAuctionOPage() {
       if (startDate) params.start_date = startDate.toISOString().split('T')[0]
       if (endDate) params.end_date = endDate.toISOString().split('T')[0]
 
-      const response = await stkAuctionOApi.getData(params)
+      const response = await stkAuctionCApi.getData(params)
 
       if (response.code === 200 && response.data) {
         setData(response.data.items || [])
@@ -99,7 +99,7 @@ export default function StkAuctionOPage() {
     if (syncEndDate) params.end_date = syncEndDate.toISOString().split('T')[0]
 
     try {
-      const response = await stkAuctionOApi.syncAsync(params)
+      const response = await stkAuctionCApi.syncAsync(params)
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -117,7 +117,7 @@ export default function StkAuctionOPage() {
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', { description: '开盘集合竞价数据已更新' })
+            toast.success('数据同步完成', { description: '收盘集合竞价数据已更新' })
           } else if (task.status === 'failure') {
             toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
@@ -155,7 +155,7 @@ export default function StkAuctionOPage() {
     return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
 
-  const columns: Column<StkAuctionOData>[] = useMemo(() => [
+  const columns: Column<StkAuctionCData>[] = useMemo(() => [
     {
       key: 'ts_code',
       header: '股票代码',
@@ -203,7 +203,7 @@ export default function StkAuctionOPage() {
     }
   ], [])
 
-  const mobileCard = useCallback((item: StkAuctionOData) => (
+  const mobileCard = useCallback((item: StkAuctionCData) => (
     <div className="space-y-2">
       <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">股票代码</span>
@@ -235,8 +235,8 @@ export default function StkAuctionOPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="股票开盘集合竞价"
-        description="股票开盘9:30集合竞价数据，每天盘后更新"
+        title="股票收盘集合竞价"
+        description="股票收盘9:30集合竞价数据，每天盘后更新"
       />
 
       {statistics && (
@@ -358,7 +358,7 @@ export default function StkAuctionOPage() {
       <Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>同步开盘集合竞价数据</DialogTitle>
+            <DialogTitle>同步收盘集合竞价数据</DialogTitle>
             <DialogDescription>
               所有参数均为可选，不填写参数将同步最近交易日数据
             </DialogDescription>

@@ -64,6 +64,7 @@ from .cyq_chips_repository import CyqChipsRepository
 from .ccass_hold_repository import CcassHoldRepository
 from .ccass_hold_detail_repository import CcassHoldDetailRepository
 from .stk_auction_o_repository import StkAuctionORepository
+from .stk_auction_c_repository import StkAuctionCRepository
 
 __all__ = [
     "BaseRepository",
@@ -129,6 +130,7 @@ __all__ = [
     "CcassHoldRepository",
     "CcassHoldDetailRepository",
     "StkAuctionORepository",
+    "StkAuctionCRepository",
     # 参考数据
     "StkShockRepository",
     "StkAlertRepository",

@@ -295,6 +295,11 @@ const navItems: NavItem[] = [
         name: '股票开盘集合竞价',
         href: '/features/stk-auction-o',
         icon: Clock
+      },
+      {
+        name: '股票收盘集合竞价',
+        href: '/features/stk-auction-c',
+        icon: TrendingUp
       }
     ]
   },

@@ -2848,6 +2848,65 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取开盘集合竞价数据失败: {str(e)}")
             raise TushareDataError(f"获取开盘集合竞价数据失败: {str(e)}")
 
+    def get_stk_auction_c(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取股票收盘集合竞价数据
+        积分消耗：需要开通股票分钟权限
+        说明：每天盘后更新,单次请求最大返回10000行数据
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期(YYYYMMDD)
+            start_date: 开始日期(YYYYMMDD)
+            end_date: 结束日期(YYYYMMDD)
+
+        Returns:
+            pd.DataFrame: 收盘集合竞价数据,包含以下列:
+                - ts_code: 股票代码
+                - trade_date: 交易日期
+                - close: 收盘集合竞价收盘价
+                - open: 收盘集合竞价开盘价
+                - high: 收盘集合竞价最高价
+                - low: 收盘集合竞价最低价
+                - vol: 收盘集合竞价成交量
+                - amount: 收盘集合竞价成交额
+                - vwap: 收盘集合竞价均价
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> df = provider.get_stk_auction_c(trade_date='20241122')
+            >>> df = provider.get_stk_auction_c(ts_code='600000.SH', start_date='20241101', end_date='20241130')
+        """
+        try:
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('stk_auction_c', **params)
+
+            if df is None or df.empty:
+                logger.warning(f"未获取到收盘集合竞价数据: {params}")
+                return pd.DataFrame()
+
+            logger.info(f"✓ 获取到 {len(df)} 条收盘集合竞价数据")
+            return df
+
+        except Exception as e:
+            logger.error(f"获取收盘集合竞价数据失败: {str(e)}")
+            raise TushareDataError(f"获取收盘集合竞价数据失败: {str(e)}")
+
     def get_hk_hold(
         self,
         code: Optional[str] = None,

@@ -1,11 +1,11 @@
 """
-股票开盘集合竞价数据访问层
+股票收盘集合竞价数据访问层
 
-提供股票开盘集合竞价数据的增删改查操作，支持按日期、股票代码查询，
+提供股票收盘集合竞价数据的增删改查操作,支持按日期、股票代码查询,
 以及批量插入、统计分析等功能。
 
-数据表: stk_auction_o
-数据源: Tushare pro.stk_auction_o()
+数据表: stk_auction_c
+数据源: Tushare pro.stk_auction_c()
 """
 
 from typing import Dict, List, Optional
@@ -17,9 +17,9 @@ from app.core.exceptions import DatabaseError, QueryError
 from app.repositories.base_repository import BaseRepository
 
 
-class StkAuctionORepository(BaseRepository):
+class StkAuctionCRepository(BaseRepository):
     """
-    股票开盘集合竞价数据访问层
+    股票收盘集合竞价数据访问层
 
     职责:
     - 按日期和股票代码查询集合竞价数据
@@ -28,12 +28,12 @@ class StkAuctionORepository(BaseRepository):
     - 查询成交量排名
     """
 
-    TABLE_NAME = "stk_auction_o"
+    TABLE_NAME = "stk_auction_c"
 
     def __init__(self, db=None):
         """初始化Repository"""
         super().__init__(db)
-        logger.debug("✓ StkAuctionORepository initialized")
+        logger.debug("✓ StkAuctionCRepository initialized")
 
     # ==================== 查询操作 ====================
 
@@ -49,9 +49,9 @@ class StkAuctionORepository(BaseRepository):
         按日期范围和股票代码查询集合竞价数据
 
         Args:
-            start_date: 开始日期，格式：YYYYMMDD（可选）
-            end_date: 结束日期，格式：YYYYMMDD（可选）
-            ts_code: 股票代码（可选）
+            start_date: 开始日期,格式:YYYYMMDD(可选)
+            end_date: 结束日期,格式:YYYYMMDD(可选)
+            ts_code: 股票代码(可选)
             limit: 返回记录数
             offset: 偏移量
 
@@ -59,7 +59,7 @@ class StkAuctionORepository(BaseRepository):
             集合竞价数据列表
 
         Examples:
-            >>> repo = StkAuctionORepository()
+            >>> repo = StkAuctionCRepository()
             >>> data = repo.get_by_date_range('20240101', '20240131')
             >>> data = repo.get_by_date_range(ts_code='600000.SH', limit=30, offset=0)
         """
@@ -67,7 +67,7 @@ class StkAuctionORepository(BaseRepository):
             conditions = []
             params = []
 
-            # 如果没有指定任何日期，使用合理的默认范围
+            # 如果没有指定任何日期,使用合理的默认范围
             if not start_date:
                 start_date = '19900101'
             if not end_date:
@@ -117,10 +117,10 @@ class StkAuctionORepository(BaseRepository):
             ]
 
         except PsycopgDatabaseError as e:
-            logger.error(f"查询开盘集合竞价数据失败: {e}")
+            logger.error(f"查询收盘集合竞价数据失败: {e}")
             raise QueryError(
-                "开盘集合竞价数据查询失败",
-                error_code="STK_AUCTION_O_QUERY_FAILED",
+                "收盘集合竞价数据查询失败",
+                error_code="STK_AUCTION_C_QUERY_FAILED",
                 start_date=start_date,
                 end_date=end_date,
                 ts_code=ts_code,
@@ -137,15 +137,15 @@ class StkAuctionORepository(BaseRepository):
         按交易日期查询集合竞价数据
 
         Args:
-            trade_date: 交易日期，格式：YYYYMMDD
-            ts_code: 股票代码（可选）
+            trade_date: 交易日期,格式:YYYYMMDD
+            ts_code: 股票代码(可选)
             limit: 返回记录数
 
         Returns:
             集合竞价数据列表
 
         Examples:
-            >>> repo = StkAuctionORepository()
+            >>> repo = StkAuctionCRepository()
             >>> data = repo.get_by_trade_date('20241122')
             >>> data = repo.get_by_trade_date('20241122', ts_code='600000.SH')
         """
@@ -191,10 +191,10 @@ class StkAuctionORepository(BaseRepository):
             ]
 
         except PsycopgDatabaseError as e:
-            logger.error(f"查询指定日期集合竞价数据失败: {e}")
+            logger.error(f"查询指定日期收盘集合竞价数据失败: {e}")
             raise QueryError(
-                "指定日期集合竞价数据查询失败",
-                error_code="STK_AUCTION_O_DATE_QUERY_FAILED",
+                "指定日期收盘集合竞价数据查询失败",
+                error_code="STK_AUCTION_C_DATE_QUERY_FAILED",
                 trade_date=trade_date,
                 ts_code=ts_code,
                 reason=str(e)
@@ -209,8 +209,8 @@ class StkAuctionORepository(BaseRepository):
         获取集合竞价统计信息
 
         Args:
-            start_date: 开始日期，格式：YYYYMMDD（可选）
-            end_date: 结束日期，格式：YYYYMMDD（可选）
+            start_date: 开始日期,格式:YYYYMMDD(可选)
+            end_date: 结束日期,格式:YYYYMMDD(可选)
 
         Returns:
             统计信息字典
@@ -270,10 +270,10 @@ class StkAuctionORepository(BaseRepository):
             }
 
         except PsycopgDatabaseError as e:
-            logger.error(f"获取集合竞价统计失败: {e}")
+            logger.error(f"获取收盘集合竞价统计失败: {e}")
             raise QueryError(
-                "集合竞价统计查询失败",
-                error_code="STK_AUCTION_O_STATS_FAILED",
+                "收盘集合竞价统计查询失败",
+                error_code="STK_AUCTION_C_STATS_FAILED",
                 reason=str(e)
             )
 
@@ -282,7 +282,7 @@ class StkAuctionORepository(BaseRepository):
         获取最新交易日期
 
         Returns:
-            最新交易日期（格式：YYYYMMDD），如果没有数据则返回None
+            最新交易日期(格式:YYYYMMDD),如果没有数据则返回None
         """
         try:
             query = f"SELECT MAX(trade_date) FROM {self.TABLE_NAME}"
@@ -301,7 +301,7 @@ class StkAuctionORepository(BaseRepository):
         按成交量排名查询集合竞价数据
 
         Args:
-            trade_date: 交易日期，格式：YYYYMMDD
+            trade_date: 交易日期,格式:YYYYMMDD
             limit: 返回记录数
 
         Returns:
@@ -342,7 +342,7 @@ class StkAuctionORepository(BaseRepository):
             logger.error(f"查询成交量排名失败: {e}")
             raise QueryError(
                 "成交量排名查询失败",
-                error_code="STK_AUCTION_O_TOP_FAILED",
+                error_code="STK_AUCTION_C_TOP_FAILED",
                 trade_date=trade_date,
                 reason=str(e)
             )
@@ -356,7 +356,7 @@ class StkAuctionORepository(BaseRepository):
         使用 ON CONFLICT DO UPDATE 实现 upsert 语义。
 
         Args:
-            df: 集合竞价数据 DataFrame，必须包含 ts_code, trade_date 等列
+            df: 集合竞价数据 DataFrame,必须包含 ts_code, trade_date 等列
 
         Returns:
             影响的行数
@@ -371,7 +371,7 @@ class StkAuctionORepository(BaseRepository):
             >>> print(f"插入/更新了 {count} 条记录")
         """
         if df.empty:
-            logger.warning("DataFrame为空，跳过插入")
+            logger.warning("DataFrame为空,跳过插入")
             return 0
 
         try:
@@ -380,16 +380,16 @@ class StkAuctionORepository(BaseRepository):
             if not required_columns.issubset(df.columns):
                 missing = required_columns - set(df.columns)
                 raise ValueError(
-                    f"开盘集合竞价 DataFrame 缺少必需列: {', '.join(missing)}"
+                    f"收盘集合竞价 DataFrame 缺少必需列: {', '.join(missing)}"
                 )
 
-            # 辅助函数：将pandas/numpy类型转换为Python原生类型
+            # 辅助函数:将pandas/numpy类型转换为Python原生类型
             def to_python_type(value):
                 """
                 将pandas/numpy类型转换为Python原生类型
 
-                关键问题：psycopg2无法直接处理numpy类型
-                必须转换为Python原生类型（int, float, None）
+                关键问题:psycopg2无法直接处理numpy类型
+                必须转换为Python原生类型(int, float, None)
                 """
                 if pd.isna(value):
                     return None
@@ -404,12 +404,12 @@ class StkAuctionORepository(BaseRepository):
             # 构建插入语句
             columns = ['ts_code', 'trade_date', 'close', 'open', 'high', 'low', 'vol', 'amount', 'vwap']
 
-            # 确保所有列都存在（缺失的填充为NULL）
+            # 确保所有列都存在(缺失的填充为NULL)
             for col in columns:
                 if col not in df.columns:
                     df[col] = None
 
-            # 准备插入数据（对每个字段应用类型转换）
+            # 准备插入数据(对每个字段应用类型转换)
             values = []
             for _, row in df.iterrows():
                 values.append((
@@ -431,7 +431,7 @@ class StkAuctionORepository(BaseRepository):
             # 主键: (ts_code, trade_date)
             placeholders = ','.join(['%s'] * len(columns))
             columns_str = ','.join(columns)
-            # 排除主键字段，只更新非主键列
+            # 排除主键字段,只更新非主键列
             update_columns = ','.join([
                 f"{col} = EXCLUDED.{col}"
                 for col in columns if col not in ['ts_code', 'trade_date']
@@ -457,7 +457,7 @@ class StkAuctionORepository(BaseRepository):
                 conn.commit()
                 cursor.close()
 
-                logger.info(f"✓ 批量插入/更新开盘集合竞价数据: {affected_rows} 条")
+                logger.info(f"✓ 批量插入/更新收盘集合竞价数据: {affected_rows} 条")
                 return affected_rows
 
             finally:
@@ -466,10 +466,10 @@ class StkAuctionORepository(BaseRepository):
         except ValueError:
             raise
         except PsycopgDatabaseError as e:
-            logger.error(f"批量插入开盘集合竞价数据失败: {e}")
+            logger.error(f"批量插入收盘集合竞价数据失败: {e}")
             raise DatabaseError(
-                "开盘集合竞价数据批量插入失败",
-                error_code="STK_AUCTION_O_BULK_INSERT_FAILED",
+                "收盘集合竞价数据批量插入失败",
+                error_code="STK_AUCTION_C_BULK_INSERT_FAILED",
                 count=len(df),
                 reason=str(e)
             )
@@ -484,9 +484,9 @@ class StkAuctionORepository(BaseRepository):
         删除指定日期范围的集合竞价数据
 
         Args:
-            start_date: 开始日期，格式：YYYYMMDD
-            end_date: 结束日期，格式：YYYYMMDD
-            ts_code: 股票代码（可选，不指定则删除所有股票）
+            start_date: 开始日期,格式:YYYYMMDD
+            end_date: 结束日期,格式:YYYYMMDD
+            ts_code: 股票代码(可选,不指定则删除所有股票)
 
         Returns:
             删除的行数
@@ -503,14 +503,14 @@ class StkAuctionORepository(BaseRepository):
             query = f"DELETE FROM {self.TABLE_NAME} WHERE {where_clause}"
 
             count = self.execute_update(query, tuple(params))
-            logger.info(f"✓ 删除开盘集合竞价数据: {count} 条")
+            logger.info(f"✓ 删除收盘集合竞价数据: {count} 条")
             return count
 
         except PsycopgDatabaseError as e:
-            logger.error(f"删除开盘集合竞价数据失败: {e}")
+            logger.error(f"删除收盘集合竞价数据失败: {e}")
             raise DatabaseError(
-                "开盘集合竞价数据删除失败",
-                error_code="STK_AUCTION_O_DELETE_FAILED",
+                "收盘集合竞价数据删除失败",
+                error_code="STK_AUCTION_C_DELETE_FAILED",
                 start_date=start_date,
                 end_date=end_date,
                 reason=str(e)
@@ -523,8 +523,8 @@ class StkAuctionORepository(BaseRepository):
         检查指定日期的数据是否存在
 
         Args:
-            trade_date: 交易日期，格式：YYYYMMDD
-            ts_code: 股票代码（可选）
+            trade_date: 交易日期,格式:YYYYMMDD
+            ts_code: 股票代码(可选)
 
         Returns:
             是否存在
@@ -556,9 +556,9 @@ class StkAuctionORepository(BaseRepository):
         获取记录数
 
         Args:
-            start_date: 开始日期，格式：YYYYMMDD（可选）
-            end_date: 结束日期，格式：YYYYMMDD（可选）
-            ts_code: 股票代码（可选）
+            start_date: 开始日期,格式:YYYYMMDD(可选)
+            end_date: 结束日期,格式:YYYYMMDD(可选)
+            ts_code: 股票代码(可选)
 
         Returns:
             记录数
@@ -567,7 +567,7 @@ class StkAuctionORepository(BaseRepository):
             conditions = []
             params = []
 
-            # 如果没有指定任何日期，使用合理的默认范围
+            # 如果没有指定任何日期,使用合理的默认范围
             if not start_date:
                 start_date = '19900101'
             if not end_date:

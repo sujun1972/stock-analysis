@@ -272,6 +272,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_stk_auction_c': {
+        'task': 'tasks.sync_stk_auction_c',
+        'name': '股票收盘集合竞价',
+        'description': '股票收盘15:00集合竞价数据，每天盘后更新',
+        'category': '特色数据',
+        'display_order': 407,
+        'points_consumption': None
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================
