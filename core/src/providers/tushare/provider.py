@@ -2691,6 +2691,52 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取筹码及胜率数据失败: {e}")
             raise TushareDataError(f"获取筹码及胜率数据失败: {str(e)}")
 
+    def get_cyq_chips(
+        self,
+        ts_code: str,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取A股每日的筹码分布情况，提供各价位占比
+        数据从2018年开始，每天18~19点之间更新当日数据
+        积分消耗：5000积分每天20000次，10000积分每天200000次，15000积分每天不限总量
+        单次最大2000条，可以按股票代码和日期循环提取
+
+        Args:
+            ts_code: 股票代码（必填）
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 筹码分布数据，包含以下列：
+                - ts_code: 股票代码
+                - trade_date: 交易日期
+                - price: 成本价格
+                - percent: 价格占比(%)
+        """
+        try:
+            logger.info(f"获取筹码分布数据: ts_code={ts_code}, trade_date={trade_date}, "
+                       f"start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {'ts_code': ts_code}
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('cyq_chips', **params)
+            logger.info(f"获取到 {len(df)} 条筹码分布记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取筹码分布数据失败: {e}")
+            raise TushareDataError(f"获取筹码分布数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

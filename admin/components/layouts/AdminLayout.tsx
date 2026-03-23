@@ -47,8 +47,8 @@ import {
   Wrench,
   DollarSign,
   BarChart3,
-  Wallet,
   PieChart,
+  Wallet,
   ListOrdered,
   Building2,
   Star,
@@ -270,6 +270,11 @@ const navItems: NavItem[] = [
         name: '每日筹码及胜率',
         href: '/features/cyq-perf',
         icon: BarChart3
+      },
+      {
+        name: '每日筹码分布',
+        href: '/features/cyq-chips',
+        icon: PieChart
       }
     ]
   },

@@ -32,6 +32,7 @@ import { LimitStepApiClient, limitStepApi as limitStepApiInst } from './limit-st
 import { LimitCptApiClient, limitCptApi as limitCptApiInst } from './limit-cpt'
 import { ReportRcApiClient, reportRcApi as reportRcApiInst } from './report-rc'
 import { CyqPerfApiClient, cyqPerfApi as cyqPerfApiInst } from './cyq-perf-api'
+import { CyqChipsApiClient, cyqChipsApi as cyqChipsApiInst } from './cyq-chips-api'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -254,6 +255,15 @@ export type {
   CyqPerfData,
   CyqPerfStatistics
 } from './cyq-perf-api'
+
+// 重新导出每日筹码分布 API
+export { CyqChipsApiClient }
+export const cyqChipsApi = cyqChipsApiInst
+export type {
+  CyqChipsParams,
+  CyqChipsData,
+  CyqChipsStatistics
+} from './cyq-chips-api'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {

@@ -222,6 +222,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_cyq_chips': {
+        'task': 'tasks.sync_cyq_chips',
+        'name': '每日筹码分布',
+        'description': '获取A股每日的筹码分布情况，提供各价位占比，数据从2018年开始，每天18-19点更新（5000积分/天20000次，10000积分/天200000次，15000积分/天不限，单次最大2000条）',
+        'category': '特色数据',
+        'display_order': 402,
+        'points_consumption': 5000,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================
