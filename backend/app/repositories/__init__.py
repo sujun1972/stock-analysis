@@ -66,6 +66,7 @@ from .ccass_hold_detail_repository import CcassHoldDetailRepository
 from .stk_auction_o_repository import StkAuctionORepository
 from .stk_auction_c_repository import StkAuctionCRepository
 from .stk_nineturn_repository import StkNineturnRepository
+from .stk_ah_comparison_repository import StkAhComparisonRepository
 
 __all__ = [
     "BaseRepository",
@@ -133,6 +134,7 @@ __all__ = [
     "StkAuctionORepository",
     "StkAuctionCRepository",
     "StkNineturnRepository",
+    "StkAhComparisonRepository",
     # 参考数据
     "StkShockRepository",
     "StkAlertRepository",

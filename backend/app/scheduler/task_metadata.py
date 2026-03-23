@@ -291,6 +291,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'freq': 'daily', 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_stk_ah_comparison': {
+        'task': 'tasks.sync_stk_ah_comparison',
+        'name': 'AH股比价',
+        'description': 'AH股比价数据，可根据交易日期获取历史数据。用于分析同时在A股和港股上市的股票价格比价。每天盘后17:00更新，数据从2025年8月12日开始，由于历史不好补充，只能累积（5000积分起，单次最大1000行）',
+        'category': '特色数据',
+        'display_order': 409,
+        'points_consumption': 5000,
+        'default_params': {'hk_code': None, 'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================

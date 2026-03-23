@@ -3094,6 +3094,83 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取神奇九转指标数据失败: {e}")
             raise TushareDataError(f"获取神奇九转指标数据失败: {str(e)}")
 
+    def get_stk_ah_comparison(
+        self,
+        hk_code: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取AH股比价数据
+
+        获取AH股同时在A股和港股上市的股票的价格比价数据,
+        用于分析同一公司在两个市场的估值差异和溢价情况。
+
+        Args:
+            hk_code: 港股股票代码 (如 '02068.HK')
+            ts_code: A股股票代码 (如 '601068.SH')
+            trade_date: 交易日期 (格式: YYYYMMDD)
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+
+        Returns:
+            pd.DataFrame: AH股比价数据
+                - hk_code: 港股股票代码
+                - ts_code: A股股票代码
+                - trade_date: 交易日期
+                - hk_name: 港股股票名称
+                - hk_pct_chg: 港股股票涨跌幅
+                - hk_close: 港股股票收盘价
+                - name: A股股票名称
+                - close: A股股票收盘价
+                - pct_chg: A股股票涨跌幅
+                - ah_comparison: 比价(A/H)
+                - ah_premium: 溢价(A/H)%
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 获取某一天所有AH股比价数据
+            >>> df = provider.get_stk_ah_comparison(trade_date='20250812')
+            >>> # 获取指定A股的AH股比价数据
+            >>> df = provider.get_stk_ah_comparison(ts_code='601068.SH')
+            >>> # 获取指定日期范围数据
+            >>> df = provider.get_stk_ah_comparison(start_date='20250812', end_date='20250820')
+
+        Notes:
+            - 权限要求: 5000积分起
+            - 单次限制: 最大返回1000行数据
+            - 数据起始: 20250812
+            - 每天盘后17:00更新
+            - 由于历史不好补充，只能累积
+        """
+        try:
+            logger.info(f"获取AH股比价数据: hk_code={hk_code}, ts_code={ts_code}, trade_date={trade_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if hk_code:
+                params['hk_code'] = hk_code
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('stk_ah_comparison', **params)
+            logger.info(f"获取到 {len(df)} 条AH股比价记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取AH股比价数据失败: {e}")
+            raise TushareDataError(f"获取AH股比价数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

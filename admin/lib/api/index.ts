@@ -39,6 +39,7 @@ import { HkHoldApiClient, hkHoldApi as hkHoldApiInst } from './hk-hold-api'
 import { StkAuctionOApiClient, stkAuctionOApi as stkAuctionOApiInst } from './stk-auction-o'
 import { StkAuctionCApiClient, stkAuctionCApi as stkAuctionCApiInst } from './stk-auction-c'
 import { StkNineturnApiClient, stkNineturnApi as stkNineturnApiInst } from './stk-nineturn-api'
+import { StkAhComparisonApiClient, stkAhComparisonApi as stkAhComparisonApiInst } from './stk-ah-comparison'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -325,6 +326,17 @@ export type {
   StkNineturnStatistics,
   TurnSignal
 } from './stk-nineturn-api'
+
+// 重新导出AH股比价 API
+export { StkAhComparisonApiClient }
+export const stkAhComparisonApi = stkAhComparisonApiInst
+export type {
+  StkAhComparisonParams,
+  StkAhComparisonData,
+  StkAhComparisonStatistics,
+  TopPremiumParams,
+  SyncAsyncParams
+} from './stk-ah-comparison'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
@@ -642,6 +654,13 @@ export const apiClient = {
   getFinaMainbz: financialDataApiInst.getFinaMainbz.bind(financialDataApiInst),
   getFinaMainbzStatistics: financialDataApiInst.getFinaMainbzStatistics.bind(financialDataApiInst),
   syncFinaMainbzAsync: financialDataApiInst.syncFinaMainbzAsync.bind(financialDataApiInst),
+
+  // AH股比价相关
+  getStkAhComparison: stkAhComparisonApiInst.getData.bind(stkAhComparisonApiInst),
+  getStkAhComparisonStatistics: stkAhComparisonApiInst.getStatistics.bind(stkAhComparisonApiInst),
+  getLatestStkAhComparison: stkAhComparisonApiInst.getLatest.bind(stkAhComparisonApiInst),
+  getTopPremiumStocks: stkAhComparisonApiInst.getTopPremium.bind(stkAhComparisonApiInst),
+  syncStkAhComparisonAsync: stkAhComparisonApiInst.syncAsync.bind(stkAhComparisonApiInst),
 
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),

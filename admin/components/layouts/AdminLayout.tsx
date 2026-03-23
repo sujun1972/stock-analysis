@@ -305,6 +305,11 @@ const navItems: NavItem[] = [
         name: '神奇九转指标',
         href: '/features/stk-nineturn',
         icon: Activity
+      },
+      {
+        name: 'AH股比价',
+        href: '/features/stk-ah-comparison',
+        icon: TrendingUp
       }
     ]
   },
