@@ -251,6 +251,7 @@ triggerPoll()  // Header 图标即时更新
 - 财务审计意见页面（`/financial/fina-audit`）
 - 主营业务构成页面（`/financial/fina-mainbz`）
 - 财报披露计划页面（`/financial/disclosure-date`）
+- 中央结算系统持股汇总页面（`/features/ccass-hold`）
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1243,8 +1244,9 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `LimitStepRepository` - 连板天梯（每日连板个数晋级的股票，用于分析强势热度）
    - `LimitCptRepository` - 最强板块统计（每天涨停股票最多的概念板块，分析板块轮动和资金动向）
 
-13. **特色数据** （✨ 新增于 2026-03-21）
+13. **特色数据** （✨ 新增于 2026-03-21，更新于 2026-03-23）
    - `ReportRcRepository` - 卖方盈利预测数据（券商研报盈利预测、评级、目标价等）
+   - `CcassHoldRepository` - 中央结算系统持股汇总（港股通持股数据，包括持股数量、持股比例等，5000积分/次）
 
 14. **参考数据** （✨ 新增于 2026-03-21，更新于 2026-03-22）
    - `StkShockRepository` - 个股异常波动（根据证券交易所交易规则，记录每日股票交易异常波动情况）

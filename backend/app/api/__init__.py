@@ -54,6 +54,7 @@ from .endpoints import (
     report_rc,  # 卖方盈利预测数据
     cyq_perf,  # 每日筹码及胜率
     cyq_chips,  # 每日筹码分布
+    ccass_hold,  # 中央结算系统持股汇总
     stk_shock,  # 个股异常波动
     stk_alert,  # 交易所重点提示证券
     stk_high_shock,  # 个股严重异常波动
@@ -125,6 +126,7 @@ router.include_router(limit_cpt.router, prefix="/limit-cpt", tags=["最强板块
 router.include_router(report_rc.router, prefix="/report-rc", tags=["卖方盈利预测数据"])  # 卖方盈利预测数据API
 router.include_router(cyq_perf.router, prefix="/cyq-perf", tags=["每日筹码及胜率"])  # 每日筹码及胜率API
 router.include_router(cyq_chips.router, prefix="/cyq-chips", tags=["每日筹码分布"])  # 每日筹码分布API
+router.include_router(ccass_hold.router, prefix="/ccass-hold", tags=["中央结算系统持股汇总"])  # 中央结算系统持股汇总API
 router.include_router(stk_shock.router, prefix="/stk-shock", tags=["个股异常波动"])  # 个股异常波动API
 router.include_router(stk_alert.router, prefix="/stk-alert", tags=["交易所重点提示证券"])  # 交易所重点提示证券API
 router.include_router(stk_high_shock.router, prefix="/stk-high-shock", tags=["个股严重异常波动"])  # 个股严重异常波动API

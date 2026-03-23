@@ -693,6 +693,8 @@ export default function SchedulerSettingsPage() {
                       <SelectItem value="报告通知">报告通知</SelectItem>
                       <SelectItem value="系统维护">系统维护</SelectItem>
                       <SelectItem value="参考数据">参考数据</SelectItem>
+                      <SelectItem value="特色数据">特色数据</SelectItem>
+                      <SelectItem value="打板专题">打板专题</SelectItem>
                       <SelectItem value="其他">其他</SelectItem>
                     </SelectContent>
                   </Select>

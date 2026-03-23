@@ -2737,6 +2737,58 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取筹码分布数据失败: {e}")
             raise TushareDataError(f"获取筹码分布数据失败: {str(e)}")
 
+    def get_ccass_hold(
+        self,
+        ts_code: Optional[str] = None,
+        hk_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取中央结算系统持股汇总数据
+        积分消耗：120积分（试用），5000积分（正式）
+
+        Args:
+            ts_code: 股票代码（如 605009.SH）
+            hk_code: 港交所代码（如 95009）
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 中央结算系统持股汇总数据，包含以下列：
+                - trade_date: 交易日期
+                - ts_code: 股票代号
+                - name: 股票名称
+                - shareholding: 于中央结算系统的持股量(股)
+                - hold_nums: 参与者数目（个）
+                - hold_ratio: 占于上交所上市及交易的A股总数的百分比（%）
+        """
+        try:
+            logger.info(f"获取中央结算系统持股汇总数据: ts_code={ts_code}, hk_code={hk_code}, "
+                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if hk_code:
+                params['hk_code'] = hk_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('ccass_hold', **params)
+            logger.info(f"获取到 {len(df)} 条中央结算系统持股汇总记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取中央结算系统持股汇总数据失败: {e}")
+            raise TushareDataError(f"获取中央结算系统持股汇总数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

@@ -61,6 +61,7 @@ from .fina_mainbz_repository import FinaMainbzRepository
 from .disclosure_date_repository import DisclosureDateRepository
 from .cyq_perf_repository import CyqPerfRepository
 from .cyq_chips_repository import CyqChipsRepository
+from .ccass_hold_repository import CcassHoldRepository
 
 __all__ = [
     "BaseRepository",
@@ -123,6 +124,7 @@ __all__ = [
     "ReportRcRepository",
     "CyqPerfRepository",
     "CyqChipsRepository",
+    "CcassHoldRepository",
     # 参考数据
     "StkShockRepository",
     "StkAlertRepository",

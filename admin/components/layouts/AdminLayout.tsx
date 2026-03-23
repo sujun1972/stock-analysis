@@ -275,6 +275,11 @@ const navItems: NavItem[] = [
         name: '每日筹码分布',
         href: '/features/cyq-chips',
         icon: PieChart
+      },
+      {
+        name: '中央结算系统持股汇总',
+        href: '/features/ccass-hold',
+        icon: Database
       }
     ]
   },
