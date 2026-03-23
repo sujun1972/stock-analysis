@@ -57,6 +57,7 @@ from .endpoints import (
     ccass_hold,  # 中央结算系统持股汇总
     ccass_hold_detail,  # 中央结算系统持股明细
     hk_hold,  # 沪深港股通持股明细
+    stk_auction_o,  # 股票开盘集合竞价
     stk_shock,  # 个股异常波动
     stk_alert,  # 交易所重点提示证券
     stk_high_shock,  # 个股严重异常波动
@@ -131,6 +132,7 @@ router.include_router(cyq_chips.router, prefix="/cyq-chips", tags=["每日筹码
 router.include_router(ccass_hold.router, prefix="/ccass-hold", tags=["中央结算系统持股汇总"])  # 中央结算系统持股汇总API
 router.include_router(ccass_hold_detail.router, prefix="/ccass-hold-detail", tags=["中央结算系统持股明细"])  # 中央结算系统持股明细API
 router.include_router(hk_hold.router, prefix="/hk-hold", tags=["沪深港股通持股明细"])  # 沪深港股通持股明细API
+router.include_router(stk_auction_o.router, prefix="/stk-auction-o", tags=["股票开盘集合竞价"])  # 股票开盘集合竞价API
 router.include_router(stk_shock.router, prefix="/stk-shock", tags=["个股异常波动"])  # 个股异常波动API
 router.include_router(stk_alert.router, prefix="/stk-alert", tags=["交易所重点提示证券"])  # 交易所重点提示证券API
 router.include_router(stk_high_shock.router, prefix="/stk-high-shock", tags=["个股严重异常波动"])  # 个股严重异常波动API

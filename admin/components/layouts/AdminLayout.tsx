@@ -290,6 +290,11 @@ const navItems: NavItem[] = [
         name: '北向资金持股',
         href: '/features/hk-hold',
         icon: TrendingUp
+      },
+      {
+        name: '股票开盘集合竞价',
+        href: '/features/stk-auction-o',
+        icon: Clock
       }
     ]
   },

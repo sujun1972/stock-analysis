@@ -262,6 +262,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'code': None, 'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'exchange': None}
     },
 
+    'tasks.sync_stk_auction_o': {
+        'task': 'tasks.sync_stk_auction_o',
+        'name': '股票开盘集合竞价',
+        'description': '获取股票开盘9:30集合竞价数据，包含开盘价、收盘价、最高价、最低价、成交量、成交额、均价等数据（需要开通股票分钟权限）。每天盘后更新，单次请求最大返回10000行数据',
+        'category': '特色数据',
+        'display_order': 406,
+        'points_consumption': None,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================

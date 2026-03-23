@@ -36,6 +36,7 @@ import { CyqChipsApiClient, cyqChipsApi as cyqChipsApiInst } from './cyq-chips-a
 import { CcassHoldApiClient, ccassHoldApi as ccassHoldApiInst } from './ccass-hold-api'
 import { CcassHoldDetailApiClient, ccassHoldDetailApi as ccassHoldDetailApiInst } from './ccass-hold-detail-api'
 import { HkHoldApiClient, hkHoldApi as hkHoldApiInst } from './hk-hold-api'
+import { StkAuctionOApiClient, stkAuctionOApi as stkAuctionOApiInst } from './stk-auction-o'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -294,6 +295,15 @@ export type {
   HkHoldData,
   HkHoldStatistics
 } from './hk-hold-api'
+
+// 重新导出股票开盘集合竞价 API
+export { StkAuctionOApiClient }
+export const stkAuctionOApi = stkAuctionOApiInst
+export type {
+  StkAuctionOParams,
+  StkAuctionOData,
+  StkAuctionOStatistics
+} from './stk-auction-o'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {

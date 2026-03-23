@@ -207,6 +207,12 @@ except Exception as e:
     logger.error(f"❌ 加载沪深港股通持股明细任务模块失败: {e}")
 
 try:
+    from app.tasks import stk_auction_o_tasks
+    logger.info(f"✅ 已加载股票开盘集合竞价任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载股票开盘集合竞价任务模块失败: {e}")
+
+try:
     from app.tasks import ccass_hold_detail_tasks
     logger.info(f"✅ 已加载中央结算系统持股明细任务模块")
 except Exception as e:
