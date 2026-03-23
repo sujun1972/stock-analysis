@@ -237,6 +237,12 @@ except Exception as e:
     logger.error(f"❌ 加载AH股比价任务模块失败: {e}")
 
 try:
+    from app.tasks import stk_surv_tasks
+    logger.info(f"✅ 已加载机构调研表任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载机构调研表任务模块失败: {e}")
+
+try:
     from app.tasks import stk_shock_tasks
     logger.info(f"✅ 已加载个股异常波动任务模块")
 except Exception as e:

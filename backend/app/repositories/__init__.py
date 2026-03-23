@@ -67,6 +67,7 @@ from .stk_auction_o_repository import StkAuctionORepository
 from .stk_auction_c_repository import StkAuctionCRepository
 from .stk_nineturn_repository import StkNineturnRepository
 from .stk_ah_comparison_repository import StkAhComparisonRepository
+from .stk_surv_repository import StkSurvRepository
 
 __all__ = [
     "BaseRepository",
@@ -135,6 +136,7 @@ __all__ = [
     "StkAuctionCRepository",
     "StkNineturnRepository",
     "StkAhComparisonRepository",
+    "StkSurvRepository",
     # 参考数据
     "StkShockRepository",
     "StkAlertRepository",

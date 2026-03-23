@@ -310,6 +310,11 @@ const navItems: NavItem[] = [
         name: 'AH股比价',
         href: '/features/stk-ah-comparison',
         icon: TrendingUp
+      },
+      {
+        name: '机构调研表',
+        href: '/features/stk-surv',
+        icon: Users
       }
     ]
   },

@@ -301,6 +301,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'hk_code': None, 'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_stk_surv': {
+        'task': 'tasks.sync_stk_surv',
+        'name': '机构调研表',
+        'description': '获取上市公司机构调研记录数据，包括调研日期、机构参与人员、接待地点、接待方式、接待公司等信息。数据从较早期开始，实时更新（5000积分/次，单次最大100行，可循环或分页提取）',
+        'category': '特色数据',
+        'display_order': 410,
+        'points_consumption': 5000,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================

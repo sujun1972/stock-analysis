@@ -3171,6 +3171,75 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取AH股比价数据失败: {e}")
             raise TushareDataError(f"获取AH股比价数据失败: {str(e)}")
 
+    def get_stk_surv(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取机构调研表数据
+
+        获取上市公司机构调研记录数据，包括调研日期、机构参与人员、
+        接待地点、接待方式、接待公司等信息。
+
+        Args:
+            ts_code: 股票代码 (如 '002223.SZ')
+            trade_date: 调研日期 (格式: YYYYMMDD)
+            start_date: 调研开始日期 (格式: YYYYMMDD)
+            end_date: 调研结束日期 (格式: YYYYMMDD)
+
+        Returns:
+            pd.DataFrame: 机构调研数据
+                - ts_code: 股票代码
+                - name: 股票名称
+                - surv_date: 调研日期
+                - fund_visitors: 机构参与人员
+                - rece_place: 接待地点
+                - rece_mode: 接待方式
+                - rece_org: 接待的公司
+                - org_type: 接待公司类型
+                - comp_rece: 上市公司接待人员
+                - content: 调研内容
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 获取某只股票某天的调研数据
+            >>> df = provider.get_stk_surv(ts_code='002223.SZ', trade_date='20211024')
+            >>> # 获取某只股票某日期范围的调研数据
+            >>> df = provider.get_stk_surv(ts_code='002223.SZ', start_date='20211001', end_date='20211031')
+
+        Notes:
+            - 权限要求: 5000积分/次
+            - 单次限制: 最大返回100行数据，可循环或分页提取
+            - 数据起始: 较早期数据都有
+            - 更新频率: 实时更新
+        """
+        try:
+            logger.info(f"获取机构调研数据: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('stk_surv', **params)
+            logger.info(f"获取到 {len(df)} 条机构调研记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取机构调研数据失败: {e}")
+            raise TushareDataError(f"获取机构调研数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

@@ -40,6 +40,7 @@ import { StkAuctionOApiClient, stkAuctionOApi as stkAuctionOApiInst } from './st
 import { StkAuctionCApiClient, stkAuctionCApi as stkAuctionCApiInst } from './stk-auction-c'
 import { StkNineturnApiClient, stkNineturnApi as stkNineturnApiInst } from './stk-nineturn-api'
 import { StkAhComparisonApiClient, stkAhComparisonApi as stkAhComparisonApiInst } from './stk-ah-comparison'
+import { StkSurvApiClient, stkSurvApi as stkSurvApiInst } from './stk-surv-api'
 import { StkShockApiClient, stkShockApi as stkShockApiInst } from './stk-shock'
 import { StkAlertApiClient, stkAlertApi as stkAlertApiInst } from './stk-alert'
 import { StkHighShockApiClient, stkHighShockApi as stkHighShockApiInst } from './stk-high-shock'
@@ -337,6 +338,15 @@ export type {
   TopPremiumParams,
   SyncAsyncParams
 } from './stk-ah-comparison'
+
+// 重新导出机构调研表 API
+export { StkSurvApiClient }
+export const stkSurvApi = stkSurvApiInst
+export type {
+  StkSurvParams,
+  StkSurvData,
+  StkSurvStatistics
+} from './stk-surv-api'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {
