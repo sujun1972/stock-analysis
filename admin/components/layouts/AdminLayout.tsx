@@ -315,6 +315,11 @@ const navItems: NavItem[] = [
         name: '机构调研表',
         href: '/features/stk-surv',
         icon: Users
+      },
+      {
+        name: '券商每月荐股',
+        href: '/features/broker-recommend',
+        icon: TrendingUpIcon
       }
     ]
   },

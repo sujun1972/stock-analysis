@@ -2141,6 +2141,105 @@ class ApiClient {
     return response.data
   }
 
+  // ========== 券商每月荐股 API ==========
+
+  /**
+   * 查询券商荐股数据
+   */
+  async getBrokerRecommend(params?: {
+    month?: string  // YYYY-MM
+    start_month?: string  // YYYY-MM
+    end_month?: string  // YYYY-MM
+    broker?: string
+    ts_code?: string
+    limit?: number
+  }): Promise<ApiResponse<{
+    items: Array<{
+      month: string
+      broker: string
+      ts_code: string
+      name: string
+      created_at: string
+      updated_at: string
+    }>
+    total: number
+  }>> {
+    const response = await axiosInstance.get('/api/broker-recommend', { params })
+    return response.data
+  }
+
+  /**
+   * 获取券商荐股统计信息
+   */
+  async getBrokerRecommendStatistics(params?: {
+    start_month?: string
+    end_month?: string
+  }): Promise<ApiResponse<{
+    month_count: number
+    broker_count: number
+    stock_count: number
+    total_records: number
+  }>> {
+    const response = await axiosInstance.get('/api/broker-recommend/statistics', { params })
+    return response.data
+  }
+
+  /**
+   * 获取最新月度券商荐股数据
+   */
+  async getBrokerRecommendLatest(): Promise<ApiResponse<{
+    latest_month: string
+    items: any[]
+    total: number
+  }>> {
+    const response = await axiosInstance.get('/api/broker-recommend/latest')
+    return response.data
+  }
+
+  /**
+   * 获取券商列表
+   */
+  async getBrokerList(params?: {
+    month?: string
+  }): Promise<ApiResponse<{
+    brokers: string[]
+  }>> {
+    const response = await axiosInstance.get('/api/broker-recommend/brokers', { params })
+    return response.data
+  }
+
+  /**
+   * 获取热门股票（被推荐次数最多）
+   */
+  async getBrokerRecommendTopStocks(params: {
+    month: string
+    limit?: number
+  }): Promise<ApiResponse<{
+    stocks: Array<{
+      ts_code: string
+      name: string
+      recommend_count: number
+    }>
+  }>> {
+    const response = await axiosInstance.get('/api/broker-recommend/top-stocks', { params })
+    return response.data
+  }
+
+  /**
+   * 异步同步券商荐股数据
+   */
+  async syncBrokerRecommendAsync(params?: {
+    month?: string  // YYYY-MM
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    const response = await axiosInstance.post('/api/broker-recommend/sync-async', null, { params })
+    return response.data
+  }
+
   // ========== 系统设置 API ==========
 
   /**

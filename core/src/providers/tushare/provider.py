@@ -3240,6 +3240,49 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取机构调研数据失败: {e}")
             raise TushareDataError(f"获取机构调研数据失败: {str(e)}")
 
+    def get_broker_recommend(
+        self,
+        month: str
+    ) -> pd.DataFrame:
+        """
+        获取券商每月荐股数据
+
+        获取券商月度金股推荐数据，一般在每月1-3日内更新当月数据。
+
+        Args:
+            month: 月度 (格式: YYYYMM，必需)
+
+        Returns:
+            pd.DataFrame: 券商荐股数据
+                - month: 月度
+                - broker: 券商名称
+                - ts_code: 股票代码
+                - name: 股票简称
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 获取2021年6月的券商荐股数据
+            >>> df = provider.get_broker_recommend(month='202106')
+
+        Notes:
+            - 权限要求: 6000积分/次
+            - 单次限制: 最大返回1000行数据
+            - 数据起始: 较早期数据都有
+            - 更新频率: 每月1-3日更新当月数据
+        """
+        try:
+            logger.info(f"获取券商荐股数据: month={month}")
+
+            df = self.api_client.query('broker_recommend', month=month)
+            logger.info(f"获取到 {len(df)} 条券商荐股记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取券商荐股数据失败: {e}")
+            raise TushareDataError(f"获取券商荐股数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

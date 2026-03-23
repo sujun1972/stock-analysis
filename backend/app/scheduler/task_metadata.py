@@ -311,6 +311,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_broker_recommend': {
+        'task': 'tasks.sync_broker_recommend',
+        'name': '券商每月荐股',
+        'description': '获取券商月度金股推荐数据，一般在每月1-3日内更新当月数据（6000积分/次，单次最大1000行）',
+        'category': '特色数据',
+        'display_order': 411,
+        'points_consumption': 6000,
+        'default_params': {'month': None}
+    },
+
     # ============================================
     # 参考数据任务（display_order: 450-499）
     # ============================================
