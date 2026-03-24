@@ -70,6 +70,7 @@ from .stk_ah_comparison_repository import StkAhComparisonRepository
 from .stk_surv_repository import StkSurvRepository
 from .broker_recommend_repository import BrokerRecommendRepository
 from .suspend_repository import SuspendRepository
+from .stk_limit_d_repository import StkLimitDRepository
 
 __all__ = [
     "BaseRepository",
@@ -99,6 +100,7 @@ __all__ = [
     "DailyBasicRepository",
     "HkHoldRepository",
     "StkLimitRepository",
+    "StkLimitDRepository",
     "BlockTradeRepository",
     "SuspendRepository",
     # 概念板块

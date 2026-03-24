@@ -255,6 +255,12 @@ except Exception as e:
     logger.error(f"❌ 加载每日停复牌信息任务模块失败: {e}")
 
 try:
+    from app.tasks import stk_limit_d_tasks
+    logger.info(f"✅ 已加载每日涨跌停价格任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载每日涨跌停价格任务模块失败: {e}")
+
+try:
     from app.tasks import stk_shock_tasks
     logger.info(f"✅ 已加载个股异常波动任务模块")
 except Exception as e:

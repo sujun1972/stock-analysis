@@ -3343,6 +3343,68 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取停复牌数据失败: {e}")
             raise TushareDataError(f"获取停复牌数据失败: {str(e)}")
 
+    def get_stk_limit_d(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取每日涨跌停价格
+
+        接口: stk_limit
+        描述: 获取全市场（包含A/B股和基金）每日涨跌停价格，包括涨停价格、跌停价格等
+        限量: 单次最多提取5800条记录
+        积分: 2000积分
+        更新: 每个交易日8点40左右更新当日股票涨跌停价格
+
+        Args:
+            ts_code: 股票代码（可选）
+            trade_date: 交易日期 (格式: YYYYMMDD)
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+
+        Returns:
+            pd.DataFrame: 每日涨跌停价格数据
+                - trade_date: 交易日期
+                - ts_code: TS股票代码
+                - pre_close: 昨日收盘价
+                - up_limit: 涨停价
+                - down_limit: 跌停价
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 获取单日全部股票数据涨跌停价格
+            >>> df = provider.get_stk_limit_d(trade_date='20190625')
+            >>> # 获取单个股票数据
+            >>> df = provider.get_stk_limit_d(ts_code='002149.SZ', start_date='20190115', end_date='20190615')
+
+        Notes:
+            - 权限要求: 2000积分
+            - 单次限制: 最多5800条
+            - 更新时间: 每交易日8:40
+        """
+        try:
+            logger.info(f"获取每日涨跌停价格: ts_code={ts_code}, trade_date={trade_date}, "
+                       f"start_date={start_date}, end_date={end_date}")
+
+            df = self.api_client.query(
+                'stk_limit',
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
+            logger.info(f"获取到 {len(df)} 条每日涨跌停价格记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取每日涨跌停价格失败: {e}")
+            raise TushareDataError(f"获取每日涨跌停价格失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

@@ -82,6 +82,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'suspend_type': None}
     },
 
+    'tasks.sync_stk_limit_d': {
+        'task': 'tasks.sync_stk_limit_d',
+        'name': '每日涨跌停价格',
+        'description': '获取全市场每日涨跌停价格，包括涨停价格、跌停价格等（每交易日8:40更新，2000积分/次，单次最大5800条）',
+        'category': '行情数据',
+        'display_order': 220,
+        'points_consumption': 2000,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）
     # ============================================

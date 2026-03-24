@@ -56,6 +56,7 @@ import { CashflowApiClient, cashflowApi as cashflowApiInst } from './cashflow-ap
 import { ExpressApiClient, expressApi as expressApiInst } from './express'
 import { FinancialDataApiClient, financialDataApi as financialDataApiInst } from './financial-data'
 import { SuspendApiClient, suspendApi as suspendApiInst } from './suspend'
+import { StkLimitDApiClient, stkLimitDApi as stkLimitDApiInst } from './stk-limit-d'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -823,6 +824,15 @@ export type {
   SuspendListParams,
   SuspendSyncParams
 } from './suspend'
+
+// 重新导出每日涨跌停价格 API
+export { StkLimitDApiClient }
+export const stkLimitDApi = stkLimitDApiInst
+export type {
+  StkLimitDData,
+  StkLimitDStatistics,
+  StkLimitDParams
+} from './stk-limit-d'
 
 // 导出默认实例
 export default apiClient

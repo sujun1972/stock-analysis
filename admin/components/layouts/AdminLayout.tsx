@@ -442,6 +442,11 @@ const navItems: NavItem[] = [
         name: '每日停复牌信息',
         href: '/market/suspend',
         icon: PauseCircle
+      },
+      {
+        name: '每日涨跌停价格',
+        href: '/market/stk-limit-d',
+        icon: TrendingUpIcon
       }
     ]
   },
