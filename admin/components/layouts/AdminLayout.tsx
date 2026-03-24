@@ -452,6 +452,11 @@ const navItems: NavItem[] = [
         name: '沪深股通十大成交股',
         href: '/market/hsgt-top10',
         icon: TrendingUpIcon
+      },
+      {
+        name: '港股通十大成交股',
+        href: '/market/ggt-top10',
+        icon: TrendingUpIcon
       }
     ]
   },

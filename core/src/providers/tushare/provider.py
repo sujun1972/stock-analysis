@@ -3470,6 +3470,75 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取沪深股通十大成交股失败: {e}")
             raise TushareDataError(f"获取沪深股通十大成交股失败: {str(e)}")
 
+    def get_ggt_top10(self,
+                      ts_code: Optional[str] = None,
+                      trade_date: Optional[str] = None,
+                      start_date: Optional[str] = None,
+                      end_date: Optional[str] = None,
+                      market_type: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取港股通十大成交股数据
+        接口: ggt_top10
+        描述: 获取港股通每日成交数据，其中包括沪市、深市详细数据，每天18~20点之间完成当日更新
+
+        Args:
+            ts_code: 股票代码（可选，与trade_date二选一）
+            trade_date: 交易日期 YYYYMMDD（可选，与ts_code二选一）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+            market_type: 市场类型 2:港股通(沪) 4:港股通(深)（可选）
+
+        Returns:
+            pd.DataFrame: 港股通十大成交股数据，包含以下字段：
+                - trade_date: 交易日期
+                - ts_code: 股票代码
+                - name: 股票名称
+                - close: 收盘价
+                - p_change: 涨跌幅
+                - rank: 资金排名
+                - market_type: 市场类型（2：港股通(沪) 4：港股通(深)）
+                - amount: 累计成交金额（元）
+                - net_amount: 净买入金额（元）
+                - sh_amount: 沪市成交金额（元）
+                - sh_net_amount: 沪市净买入金额（元）
+                - sh_buy: 沪市买入金额（元）
+                - sh_sell: 沪市卖出金额（元）
+                - sz_amount: 深市成交金额（元）
+                - sz_net_amount: 深市净买入金额（元）
+                - sz_buy: 深市买入金额（元）
+                - sz_sell: 深市卖出金额（元）
+        """
+        try:
+            logger.info(f"获取港股通十大成交股: ts_code={ts_code}, trade_date={trade_date}, "
+                       f"start_date={start_date}, end_date={end_date}, market_type={market_type}")
+
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if market_type:
+                params['market_type'] = market_type
+
+            # ggt_top10接口要求必须指定ts_code或trade_date之一
+            # 如果两者都未指定，默认获取昨日数据
+            if not ts_code and not trade_date:
+                from datetime import datetime, timedelta
+                yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
+                params['trade_date'] = yesterday
+                logger.info(f"未指定核心参数，默认获取昨日数据: trade_date={yesterday}")
+
+            df = self.api_client.query('ggt_top10', **params)
+            logger.info(f"获取到 {len(df)} 条港股通十大成交股记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取港股通十大成交股失败: {e}")
+            raise TushareDataError(f"获取港股通十大成交股失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

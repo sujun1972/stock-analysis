@@ -267,6 +267,12 @@ except Exception as e:
     logger.error(f"❌ 加载沪深股通十大成交股任务模块失败: {e}")
 
 try:
+    from app.tasks import ggt_top10_tasks
+    logger.info(f"✅ 已加载港股通十大成交股任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载港股通十大成交股任务模块失败: {e}")
+
+try:
     from app.tasks import stk_shock_tasks
     logger.info(f"✅ 已加载个股异常波动任务模块")
 except Exception as e:

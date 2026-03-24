@@ -99,6 +99,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 250,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'market_type': None}
     },
+    'tasks.sync_ggt_top10': {
+        'task': 'tasks.sync_ggt_top10',
+        'name': '港股通十大成交股',
+        'description': '获取港股通每日成交数据，包括港股通(沪)、港股通(深)前十大成交详细数据，每天18~20点之间完成当日更新',
+        'category': '行情数据',
+        'display_order': 260,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'market_type': None}
+    },
 
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）
