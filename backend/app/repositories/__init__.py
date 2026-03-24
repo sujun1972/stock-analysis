@@ -69,6 +69,7 @@ from .stk_nineturn_repository import StkNineturnRepository
 from .stk_ah_comparison_repository import StkAhComparisonRepository
 from .stk_surv_repository import StkSurvRepository
 from .broker_recommend_repository import BrokerRecommendRepository
+from .suspend_repository import SuspendRepository
 
 __all__ = [
     "BaseRepository",
@@ -99,6 +100,7 @@ __all__ = [
     "HkHoldRepository",
     "StkLimitRepository",
     "BlockTradeRepository",
+    "SuspendRepository",
     # 概念板块
     "ConceptRepository",
     # 配置和同步

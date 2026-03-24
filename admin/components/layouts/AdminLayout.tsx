@@ -48,6 +48,7 @@ import {
   DollarSign,
   BarChart3,
   PieChart,
+  PauseCircle,
   Wallet,
   ListOrdered,
   Building2,
@@ -429,6 +430,18 @@ const navItems: NavItem[] = [
         name: '财报披露计划',
         href: '/financial/disclosure-date',
         icon: Calendar
+      }
+    ]
+  },
+  {
+    name: '行情数据',
+    href: '/market',
+    icon: TrendingUpIcon,
+    children: [
+      {
+        name: '每日停复牌信息',
+        href: '/market/suspend',
+        icon: PauseCircle
       }
     ]
   },

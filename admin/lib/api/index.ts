@@ -55,6 +55,7 @@ import { BalancesheetApiClient, balancesheetApi as balancesheetApiInst } from '.
 import { CashflowApiClient, cashflowApi as cashflowApiInst } from './cashflow-api'
 import { ExpressApiClient, expressApi as expressApiInst } from './express'
 import { FinancialDataApiClient, financialDataApi as financialDataApiInst } from './financial-data'
+import { SuspendApiClient, suspendApi as suspendApiInst } from './suspend'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -812,6 +813,16 @@ export type {
   FinaMainbzParams,
   FinaMainbzSyncParams
 } from './financial-data'
+
+// 重新导出停复牌 API
+export { SuspendApiClient }
+export const suspendApi = suspendApiInst
+export type {
+  SuspendData,
+  SuspendStatistics,
+  SuspendListParams,
+  SuspendSyncParams
+} from './suspend'
 
 // 导出默认实例
 export default apiClient

@@ -73,6 +73,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'years': 1}
     },
 
+    'tasks.sync_suspend': {
+        'task': 'tasks.sync_suspend',
+        'name': '每日停复牌信息',
+        'description': '按日期方式获取股票每日停复牌信息，包括停牌时间段、停复牌类型等（不定期更新）',
+        'category': '行情数据',
+        'display_order': 210,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'suspend_type': None}
+    },
+
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）
     # ============================================

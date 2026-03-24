@@ -249,6 +249,12 @@ except Exception as e:
     logger.error(f"❌ 加载券商每月荐股任务模块失败: {e}")
 
 try:
+    from app.tasks import suspend_tasks
+    logger.info(f"✅ 已加载每日停复牌信息任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载每日停复牌信息任务模块失败: {e}")
+
+try:
     from app.tasks import stk_shock_tasks
     logger.info(f"✅ 已加载个股异常波动任务模块")
 except Exception as e:

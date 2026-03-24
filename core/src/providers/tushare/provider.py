@@ -3283,6 +3283,66 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取券商荐股数据失败: {e}")
             raise TushareDataError(f"获取券商荐股数据失败: {str(e)}")
 
+    def get_suspend_d(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        suspend_type: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取股票每日停复牌信息
+
+        按日期方式获取股票每日停复牌信息。
+
+        Args:
+            ts_code: 股票代码（可输入多值，逗号分隔）
+            trade_date: 交易日期 (格式: YYYYMMDD)
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+            suspend_type: 停复牌类型: S-停牌, R-复牌
+
+        Returns:
+            pd.DataFrame: 停复牌数据
+                - ts_code: 股票代码
+                - trade_date: 停复牌日期
+                - suspend_timing: 日内停牌时间段
+                - suspend_type: 停复牌类型（S-停牌，R-复牌）
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 获取2020年3月12日的停牌股票
+            >>> df = provider.get_suspend_d(suspend_type='S', trade_date='20200312')
+            >>> # 获取某只股票的停复牌记录
+            >>> df = provider.get_suspend_d(ts_code='000001.SZ', start_date='20240101', end_date='20240331')
+
+        Notes:
+            - 权限要求: 无特殊要求
+            - 数据起始: 根据实际停复牌情况
+            - 更新频率: 不定期
+        """
+        try:
+            logger.info(f"获取停复牌数据: ts_code={ts_code}, trade_date={trade_date}, "
+                       f"start_date={start_date}, end_date={end_date}, suspend_type={suspend_type}")
+
+            df = self.api_client.query(
+                'suspend_d',
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                suspend_type=suspend_type
+            )
+            logger.info(f"获取到 {len(df)} 条停复牌记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取停复牌数据失败: {e}")
+            raise TushareDataError(f"获取停复牌数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"
