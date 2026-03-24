@@ -62,6 +62,7 @@ import { FinancialDataApiClient, financialDataApi as financialDataApiInst } from
 import { SuspendApiClient, suspendApi as suspendApiInst } from './suspend'
 import { StkLimitDApiClient, stkLimitDApi as stkLimitDApiInst } from './stk-limit-d'
 import { AdjFactorApiClient, adjFactorApi as adjFactorApiInst } from './adj-factor-api'
+import { NewStockApiClient, newStockApi as newStockApiInst } from './new-stock-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -868,6 +869,15 @@ export type {
   AdjFactorStatistics,
   AdjFactorParams
 } from './adj-factor-api'
+
+// 重新导出新股列表 API
+export { NewStockApiClient }
+export const newStockApi = newStockApiInst
+export type {
+  NewStockData,
+  NewStockStatistics,
+  NewStockParams
+} from './new-stock-api'
 
 // 导出默认实例
 export default apiClient

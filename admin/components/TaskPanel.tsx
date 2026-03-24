@@ -319,7 +319,7 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
                               </div>
                               <CardTitle className="text-base truncate">{task.displayName}</CardTitle>
                               <CardDescription className="text-xs mt-1 font-mono truncate">
-                                ID: {task.taskId.substring(0, 16)}...
+                                ID: {task.taskId ? task.taskId.substring(0, 16) : 'N/A'}...
                               </CardDescription>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">

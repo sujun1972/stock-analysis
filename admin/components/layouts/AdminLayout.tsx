@@ -53,7 +53,8 @@ import {
   ListOrdered,
   Building2,
   Star,
-  Calendar
+  Calendar,
+  Layers
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -434,6 +435,17 @@ const navItems: NavItem[] = [
     ]
   },
   {
+    name: '基础数据',
+    icon: Layers,
+    children: [
+      {
+        name: '新股列表同步',
+        href: '/sync/new-stocks',
+        icon: PackagePlus
+      }
+    ]
+  },
+  {
     name: '行情数据',
     href: '/market',
     icon: TrendingUpIcon,
@@ -488,11 +500,6 @@ const navItems: NavItem[] = [
         name: '数据初始化',
         href: '/sync/initialize',
         icon: RefreshCw
-      },
-      {
-        name: '新股列表同步',
-        href: '/sync/new-stocks',
-        icon: PackagePlus
       },
       {
         name: '退市列表同步',

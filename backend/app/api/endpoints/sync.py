@@ -171,18 +171,27 @@ async def sync_new_stocks(
         任务ID和任务名称
     """
     from app.tasks.sync_tasks import sync_new_stocks_task
+    from app.services import TaskHistoryHelper
 
     # 启动异步任务
-    task = sync_new_stocks_task.delay(days=request.days)
+    celery_task = sync_new_stocks_task.delay(days=request.days)
+
+    # 使用 TaskHistoryHelper 创建任务历史记录
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_new_stocks',
+        display_name=f'新股列表同步(最近{request.days}天)',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'days': request.days},
+        source='new_stocks_page'
+    )
 
     return ApiResponse.success(
-        data={
-            "task_id": task.id,
-            "task_name": "新股列表同步",
-            "display_name": f"新股列表同步(最近{request.days}天)"
-        },
+        data=task_data,
         message="新股列表同步任务已启动"
-    ).to_dict()
+    )
 
 
 @router.post("/delisted-stocks")

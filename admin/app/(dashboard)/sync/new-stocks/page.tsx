@@ -1,375 +1,387 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { apiClient } from '@/lib/api-client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
-import logger from '@/lib/logger'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DataTable, Column } from '@/components/common/DataTable'
+import { DatePicker } from '@/components/ui/date-picker'
+import { toast } from 'sonner'
+import { newStockApi } from '@/lib/api'
+import type { NewStockData, NewStockStatistics } from '@/lib/api/new-stock-api'
+import { useTaskStore } from '@/stores/task-store'
+import { TrendingUp, Calendar, BarChart3, PieChart } from 'lucide-react'
 
-interface ModuleSyncStatus {
-  status: string
-  total: number
-  success: number
-  failed: number
-  progress: number
-  error_message: string
-  started_at: string
-  completed_at: string
-}
-
-interface ScheduledTask {
-  id: number
-  task_name: string
-  module: string
-  description: string
-  cron_expression: string
-  enabled: boolean
-  params: any
-}
-
-export default function NewStocksSyncPage() {
-  const router = useRouter()
-  const [syncStatus, setSyncStatus] = useState<ModuleSyncStatus | null>(null)
+export default function NewStocksPage() {
+  const [data, setData] = useState<NewStockData[]>([])
+  const [statistics, setStatistics] = useState<NewStockStatistics | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [days, setDays] = useState(30) // 默认获取最近 30 天的新股
-  const [scheduledTask, setScheduledTask] = useState<ScheduledTask | null>(null)
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [days, setDays] = useState<number>(30)
+  const [market, setMarket] = useState<string>('all')
+
+  // 分页状态
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(30)
+  const [total, setTotal] = useState(0)
+
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
   useEffect(() => {
-    loadSyncStatus()
-    loadScheduledTask()
-    const interval = setInterval(() => {
-      if (syncStatus?.status === 'running') {
-        loadSyncStatus()
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [syncStatus?.status])
+    loadData().catch(() => {})
+  }, [])
 
-  const loadSyncStatus = async () => {
-    try {
-      const response = await apiClient.getModuleSyncStatus('new_stocks')
-      if (response.data) {
-        setSyncStatus(response.data)
-      }
-    } catch (err) {
-      logger.error('Failed to load sync status', err)
+  // 分页变化时重新加载数据
+  useEffect(() => {
+    loadData().catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize])
+
+  // 组件卸载时清理所有活跃的任务回调
+  useEffect(() => {
+    return () => {
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((callback, taskId) => {
+        unregisterCompletionCallback(taskId, callback)
+      })
+      callbacks.clear()
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const loadScheduledTask = async () => {
+  const loadData = async () => {
     try {
-      const response = await apiClient.getScheduledTasks()
-      if (response.data) {
-        const task = response.data.find(t => t.task_name === 'daily_new_stocks_sync')
-        setScheduledTask(task || null)
+      setIsLoading(true)
+
+      const params: any = {
+        limit: pageSize,
+        offset: (page - 1) * pageSize
       }
-    } catch (err) {
-      logger.error('Failed to load scheduled task', err)
-    }
-  }
 
-  const handleToggleTask = async () => {
-    if (!scheduledTask) return
-    try {
-      await apiClient.toggleScheduledTask(scheduledTask.id)
-      await loadScheduledTask()
-    } catch (err: any) {
-      setError(err.message || '切换定时任务失败')
+      // 日期参数优先级：days > start_date/end_date
+      if (days && !startDate && !endDate) {
+        params.days = days
+      } else {
+        if (startDate) params.start_date = formatDate(startDate)
+        if (endDate) params.end_date = formatDate(endDate)
+      }
+
+      if (market !== 'all') {
+        params.market = market
+      }
+
+      const [dataResponse, statsResponse] = await Promise.all([
+        newStockApi.getData(params),
+        newStockApi.getStatistics({ days: days || 90 })
+      ])
+
+      if (dataResponse.code === 200 && dataResponse.data) {
+        setData(dataResponse.data.items)
+        setTotal(dataResponse.data.total || dataResponse.data.items.length)
+      }
+
+      if (statsResponse.code === 200 && statsResponse.data) {
+        setStatistics(statsResponse.data)
+      }
+    } catch (error) {
+      toast.error('加载数据失败')
+      console.error(error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleSync = async () => {
-    setIsLoading(true)
-    setError(null)
-    setSuccessMessage(null)
+    try {
+      const response = await newStockApi.syncAsync({
+        days: days || 30
+      })
 
-    // 启动同步请求（不等待完成）
-    apiClient.syncNewStocks(days)
-      .then((response) => {
-        if (response.data) {
-          setSuccessMessage(`成功同步新股列表！共获取 ${response.data.total || 0} 只新股`)
-          setTimeout(() => setSuccessMessage(null), 5000)
+      if (response.code === 200 && response.data) {
+        const taskId = response.data.celery_task_id
+
+        if (!taskId) {
+          toast.error('任务ID缺失')
+          return
         }
-        setIsLoading(false)
-      })
-      .catch((err: any) => {
-        const errorMessage = err.response?.data?.detail || err.message || '同步新股列表失败'
-        setError(errorMessage)
-        logger.error('Sync error', err)
-        setIsLoading(false)
-      })
 
-    // 立即开始轮询状态（每2秒一次）
-    const pollInterval = setInterval(async () => {
-      await loadSyncStatus()
+        addTask({
+          taskId,
+          taskName: response.data.task_name,
+          displayName: response.data.display_name,
+          taskType: 'data_sync',
+          status: 'running',
+          progress: 0,
+          startTime: Date.now()
+        })
 
-      // 如果状态不是 running，停止轮询
-      const status = syncStatus?.status
-      if (status && status !== 'running') {
-        clearInterval(pollInterval)
+        // 注册任务完成回调：自动刷新数据
+        const completionCallback = (task: any) => {
+          if (task.status === 'success') {
+            loadData().catch(() => {})
+            toast.success('数据同步完成', {
+              description: '新股列表数据已更新'
+            })
+          } else if (task.status === 'failure') {
+            toast.error('数据同步失败', {
+              description: task.error || '同步过程中发生错误'
+            })
+          }
+          unregisterCompletionCallback(taskId, completionCallback)
+          activeCallbacksRef.current.delete(taskId)
+        }
+
+        activeCallbacksRef.current.set(taskId, completionCallback)
+        registerCompletionCallback(taskId, completionCallback)
+
+        triggerPoll()
+        toast.success('同步任务已提交', {
+          description: '可在任务面板查看进度'
+        })
+      } else {
+        toast.error(response.message || '同步任务提交失败')
       }
-    }, 2000)
-
-    // 30秒后强制停止轮询（防止无限轮询）
-    setTimeout(() => {
-      clearInterval(pollInterval)
-    }, 30000)
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'running': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-      case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'failed': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+    } catch (error) {
+      toast.error('同步任务提交失败')
+      console.error(error)
     }
   }
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'running': return '同步中'
-      case 'completed': return '已完成'
-      case 'failed': return '失败'
-      default: return '空闲'
-    }
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
+
+  const columns: Column<NewStockData>[] = [
+    {
+      key: 'code',
+      header: '股票代码',
+      accessor: (row) => row.code,
+      className: 'font-mono'
+    },
+    {
+      key: 'name',
+      header: '股票名称',
+      accessor: (row) => row.name
+    },
+    {
+      key: 'market',
+      header: '市场类型',
+      accessor: (row) => row.market,
+      className: 'hidden md:table-cell'
+    },
+    {
+      key: 'industry',
+      header: '所属行业',
+      accessor: (row) => row.industry || '-',
+      className: 'hidden lg:table-cell'
+    },
+    {
+      key: 'area',
+      header: '地区',
+      accessor: (row) => row.area || '-',
+      className: 'hidden xl:table-cell'
+    },
+    {
+      key: 'list_date',
+      header: '上市日期',
+      accessor: (row) => row.list_date
+    },
+    {
+      key: 'status',
+      header: '状态',
+      accessor: (row) => row.status,
+      className: 'hidden md:table-cell'
+    }
+  ]
 
   return (
-        <div className="space-y-6">
-      {/* 页面标题 */}
+    <div className="space-y-6">
       <PageHeader
-        title="新股列表同步"
-        description="获取最近上市的新股信息，支持增量更新。建议每日同步以保持数据最新。"
+        title="新股列表"
+        description="查询和管理最近上市的新股信息（Tushare new_share接口）"
       />
 
-      {/* 错误提示 */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 sm:p-4">
-          <p className="text-sm sm:text-base text-red-800 dark:text-red-200 break-words">{error}</p>
+      {/* 统计卡片 */}
+      {statistics && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                总数量
+              </CardTitle>
+              <PieChart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{statistics.total_count}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                统计范围内新上市股票
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                最近7天
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{statistics.recent_7_days}</div>
+              <p className="text-xs text-muted-foreground mt-1">新上市</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                最近30天
+              </CardTitle>
+              <Calendar className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{statistics.recent_30_days}</div>
+              <p className="text-xs text-muted-foreground mt-1">新上市</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                最近90天
+              </CardTitle>
+              <BarChart3 className="h-4 w-4 text-purple-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-600">{statistics.recent_90_days}</div>
+              <p className="text-xs text-muted-foreground mt-1">新上市</p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
-      {/* 成功提示 */}
-      {successMessage && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 sm:p-4">
-          <p className="text-sm sm:text-base text-green-800 dark:text-green-200 break-words">{successMessage}</p>
-        </div>
-      )}
-
-      {/* 当前状态 */}
+      {/* 筛选和操作区域 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base sm:text-lg">上次同步信息</CardTitle>
+          <CardTitle>数据查询</CardTitle>
         </CardHeader>
-        <CardContent>
-        {syncStatus ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
-                <span className={`inline-block px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(syncStatus.status)}`}>
-                  {getStatusText(syncStatus.status)}
-                </span>
-              </div>
-              <div>
-                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">开始时间</div>
-                <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white break-all">
-                  {syncStatus.started_at || '未同步'}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">完成时间</div>
-                <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white break-all">
-                  {syncStatus.completed_at || '-'}
-                </div>
-              </div>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">最近天数</label>
+              <Input
+                type="number"
+                min="1"
+                max="365"
+                value={days}
+                onChange={(e) => setDays(parseInt(e.target.value) || 30)}
+                placeholder="如：30"
+              />
             </div>
 
-            {syncStatus.status === 'completed' && syncStatus.success > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">同步总数</div>
-                  <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
-                    {syncStatus.total || 0} 只
+            <div className="space-y-2">
+              <label className="text-sm font-medium">开始日期</label>
+              <DatePicker date={startDate} onSelect={setStartDate} />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">结束日期</label>
+              <DatePicker date={endDate} onSelect={setEndDate} />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">市场类型</label>
+              <Select value={market} onValueChange={setMarket}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部市场</SelectItem>
+                  <SelectItem value="主板">主板</SelectItem>
+                  <SelectItem value="科创板">科创板</SelectItem>
+                  <SelectItem value="创业板">创业板</SelectItem>
+                  <SelectItem value="北交所">北交所</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={loadData} disabled={isLoading}>
+              {isLoading ? '查询中...' : '查询'}
+            </Button>
+            <Button onClick={handleSync} variant="outline">
+              同步数据
+            </Button>
+            <Button
+              onClick={() => {
+                setDays(30)
+                setStartDate(undefined)
+                setEndDate(undefined)
+                setMarket('all')
+              }}
+              variant="ghost"
+            >
+              重置
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 数据表格 */}
+      <Card>
+        <CardContent className="pt-6">
+          <DataTable
+            columns={columns}
+            data={data}
+            loading={isLoading}
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: (newPage) => {
+                setPage(newPage)
+              },
+              onPageSizeChange: (newPageSize) => {
+                setPageSize(newPageSize)
+                setPage(1)
+              },
+              pageSizeOptions: [10, 20, 30, 50, 100]
+            }}
+            mobileCard={(item) => (
+              <div className="p-4 space-y-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-mono font-semibold">{item.code}</div>
+                    <div className="text-sm text-muted-foreground">{item.name}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium">上市日期</div>
+                    <div className="text-xs">{item.list_date}</div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">成功</div>
-                  <div className="text-sm sm:text-base font-medium text-green-600 dark:text-green-400">
-                    {syncStatus.success || 0} 只
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                  <div>
+                    <div className="text-xs text-muted-foreground">市场类型</div>
+                    <div className="text-sm font-medium">{item.market}</div>
                   </div>
-                </div>
-                <div>
-                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">失败</div>
-                  <div className="text-sm sm:text-base font-medium text-red-600 dark:text-red-400">
-                    {syncStatus.failed || 0} 只
+                  <div>
+                    <div className="text-xs text-muted-foreground">行业</div>
+                    <div className="text-sm font-medium">{item.industry || '-'}</div>
                   </div>
                 </div>
               </div>
             )}
-
-            {syncStatus.error_message && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                <div className="text-sm font-medium text-red-900 dark:text-red-200 mb-1">错误详情：</div>
-                <div className="text-sm text-red-800 dark:text-red-300 whitespace-pre-wrap">
-                  {syncStatus.error_message}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-gray-600 dark:text-gray-400">加载状态中...</div>
-        )}
+          />
         </CardContent>
       </Card>
-
-      {/* 定时任务配置 */}
-      <Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
-        <CardHeader>
-          <CardTitle className="text-base sm:text-lg">定时任务配置</CardTitle>
-        </CardHeader>
-        <CardContent>
-        {scheduledTask ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">任务描述</div>
-                <div className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
-                  {scheduledTask.description}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">执行计划</div>
-                <code className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 px-2 py-1 rounded break-all">
-                  {scheduledTask.cron_expression}
-                </code>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                启用自动同步：系统将按照 Cron 表达式自动执行同步任务
-              </div>
-              <button
-                onClick={handleToggleTask}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
-                  scheduledTask.enabled
-                    ? 'bg-purple-600'
-                    : 'bg-gray-200 dark:bg-gray-700'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    scheduledTask.enabled ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              更多定时任务配置请访问 <a href="/settings/scheduler" className="text-purple-600 dark:text-purple-400 hover:underline">系统设置 - 定时任务</a>
-            </div>
-          </div>
-        ) : (
-          <div className="text-gray-600 dark:text-gray-400">加载定时任务配置中...</div>
-        )}
-        </CardContent>
-      </Card>
-
-      {/* 同步操作 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base sm:text-lg">开始同步</CardTitle>
-        </CardHeader>
-        <CardContent>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              同步范围（最近 N 天上市的新股）
-            </label>
-            <input
-              type="number"
-              value={days}
-              onChange={(e) => setDays(parseInt(e.target.value) || 30)}
-              min="1"
-              max="365"
-              className="w-full md:w-48 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              建议设置为 30-60 天，以获取最近的新股上市信息
-            </p>
-          </div>
-
-          <button
-            onClick={handleSync}
-            disabled={isLoading || syncStatus?.status === 'running'}
-            className="btn-primary w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading || syncStatus?.status === 'running' ? '同步中...' : '开始同步新股列表'}
-          </button>
-        </div>
-        </CardContent>
-      </Card>
-
-      {/* 数据说明 */}
-      <Card className="bg-gray-50 dark:bg-gray-800">
-        <CardHeader>
-          <CardTitle className="text-lg">数据说明</CardTitle>
-        </CardHeader>
-        <CardContent>
-        <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <strong className="block mb-2 text-base">数据内容：</strong>
-              <ul className="list-disc list-inside space-y-1.5">
-                <li>新股代码和名称</li>
-                <li>上市日期</li>
-                <li>发行价格</li>
-                <li>市场类型</li>
-                <li>所属行业和地区</li>
-              </ul>
-            </div>
-            <div>
-              <strong className="block mb-2 text-base">数据用途：</strong>
-              <ul className="list-disc list-inside space-y-1.5">
-                <li>及时发现新上市股票</li>
-                <li>新股表现跟踪分析</li>
-                <li>自动更新股票池</li>
-                <li>新股投资策略研究</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-        </CardContent>
-      </Card>
-
-      {/* 注意事项 */}
-      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-        <CardHeader>
-          <CardTitle className="text-lg text-blue-900 dark:text-blue-200">使用建议</CardTitle>
-        </CardHeader>
-        <CardContent>
-        <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-300">
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>建议<strong>每日同步一次</strong>，以便及时获取新上市股票信息</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>首次同步建议设置较长天数（如 90 天），后续可设置为 30 天</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>同步会<strong>自动添加</strong>新股到股票基础表，状态设为&ldquo;正常&rdquo;</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>可在<a href="/settings" className="underline">系统设置</a>中配置定时任务自动执行</span>
-          </li>
-          </ul>
-        </CardContent>
-      </Card>
-      </div>
+    </div>
   )
 }

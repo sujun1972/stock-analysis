@@ -371,6 +371,217 @@ class StockBasicRepository(BaseRepository):
                 reason=str(e)
             )
 
+    # ==================== 新股查询操作 ====================
+
+    def get_new_stocks(
+        self,
+        start_date: str,
+        end_date: str,
+        market: Optional[str] = None,
+        limit: Optional[int] = 30,
+        offset: Optional[int] = 0
+    ) -> List[Dict]:
+        """
+        查询指定日期范围内上市的新股
+
+        Args:
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+            market: 市场类型筛选（可选）
+            limit: 返回记录数
+            offset: 偏移量
+
+        Returns:
+            新股列表（按上市日期倒序）
+
+        Examples:
+            >>> repo = StockBasicRepository()
+            >>> new_stocks = repo.get_new_stocks('2024-01-01', '2024-12-31')
+            >>> print(f"2024年新上市股票: {len(new_stocks)}只")
+        """
+        try:
+            base_query = f"""
+                SELECT code, name, market, industry, area, list_date, status, data_source
+                FROM {self.TABLE_NAME}
+                WHERE list_date >= %s AND list_date <= %s
+            """
+            params = [start_date, end_date]
+
+            if market:
+                base_query += " AND market = %s"
+                params.append(market)
+
+            base_query += " ORDER BY list_date DESC, code"
+
+            if limit:
+                base_query += " LIMIT %s"
+                params.append(limit)
+
+            if offset:
+                base_query += " OFFSET %s"
+                params.append(offset)
+
+            result = self.execute_query(base_query, tuple(params))
+            logger.debug(f"查询到 {len(result)} 只新股 ({start_date} ~ {end_date})")
+
+            # 转换为字典列表
+            items = []
+            for row in result:
+                items.append({
+                    'code': row[0],
+                    'name': row[1],
+                    'market': row[2],
+                    'industry': row[3],
+                    'area': row[4],
+                    'list_date': row[5].strftime('%Y-%m-%d') if row[5] else None,
+                    'status': row[6],
+                    'data_source': row[7]
+                })
+
+            return items
+
+        except Exception as e:
+            logger.error(f"查询新股列表失败: {e}")
+            raise QueryError(
+                "查询新股列表失败",
+                error_code="NEW_STOCKS_QUERY_FAILED",
+                reason=str(e)
+            )
+
+    def count_new_stocks(
+        self,
+        start_date: str,
+        end_date: str,
+        market: Optional[str] = None
+    ) -> int:
+        """
+        统计指定日期范围内上市的新股数量
+
+        Args:
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+            market: 市场类型筛选（可选）
+
+        Returns:
+            新股数量
+
+        Examples:
+            >>> repo = StockBasicRepository()
+            >>> count = repo.count_new_stocks('2024-01-01', '2024-12-31')
+            >>> print(f"2024年新上市股票: {count}只")
+        """
+        try:
+            query = f"""
+                SELECT COUNT(*) as count
+                FROM {self.TABLE_NAME}
+                WHERE list_date >= %s AND list_date <= %s
+            """
+            params = [start_date, end_date]
+
+            if market:
+                query += " AND market = %s"
+                params.append(market)
+
+            result = self.execute_query(query, tuple(params))
+            count = result[0][0] if result else 0
+            logger.debug(f"新股数量: {count} ({start_date} ~ {end_date})")
+            return count
+
+        except Exception as e:
+            logger.error(f"统计新股数量失败: {e}")
+            raise QueryError(
+                "统计新股数量失败",
+                error_code="NEW_STOCKS_COUNT_FAILED",
+                reason=str(e)
+            )
+
+    def get_new_stocks_statistics(
+        self,
+        start_date: str,
+        end_date: str
+    ) -> Dict:
+        """
+        获取新股统计信息
+
+        Args:
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+
+        Returns:
+            统计信息字典
+
+        Examples:
+            >>> repo = StockBasicRepository()
+            >>> stats = repo.get_new_stocks_statistics('2024-01-01', '2024-12-31')
+            >>> print(f"市场分布: {stats['market_distribution']}")
+        """
+        try:
+            from datetime import datetime, timedelta
+
+            # 总数
+            total_count = self.count_new_stocks(start_date, end_date)
+
+            # 市场分布
+            market_query = f"""
+                SELECT market, COUNT(*) as count
+                FROM {self.TABLE_NAME}
+                WHERE list_date >= %s AND list_date <= %s
+                GROUP BY market
+                ORDER BY count DESC
+            """
+            market_result = self.execute_query(market_query, (start_date, end_date))
+            market_distribution = {row[0]: row[1] for row in market_result}
+
+            # 行业分布（取前10）
+            industry_query = f"""
+                SELECT industry, COUNT(*) as count
+                FROM {self.TABLE_NAME}
+                WHERE list_date >= %s AND list_date <= %s
+                  AND industry IS NOT NULL
+                GROUP BY industry
+                ORDER BY count DESC
+                LIMIT 10
+            """
+            industry_result = self.execute_query(industry_query, (start_date, end_date))
+            industry_distribution = {row[0]: row[1] for row in industry_result}
+
+            # 计算不同时间段的新股数量
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+
+            # 最近7天
+            recent_7_start = (end_date_obj - timedelta(days=7)).strftime('%Y-%m-%d')
+            recent_7_days = self.count_new_stocks(recent_7_start, end_date)
+
+            # 最近30天
+            recent_30_start = (end_date_obj - timedelta(days=30)).strftime('%Y-%m-%d')
+            recent_30_days = self.count_new_stocks(recent_30_start, end_date)
+
+            # 最近90天
+            recent_90_start = (end_date_obj - timedelta(days=90)).strftime('%Y-%m-%d')
+            recent_90_days = self.count_new_stocks(recent_90_start, end_date)
+
+            stats = {
+                'total_count': total_count,
+                'market_distribution': market_distribution,
+                'industry_distribution': industry_distribution,
+                'recent_7_days': recent_7_days,
+                'recent_30_days': recent_30_days,
+                'recent_90_days': recent_90_days
+            }
+
+            logger.debug(f"新股统计: 总数={total_count}, 市场分布={len(market_distribution)}, "
+                        f"最近7天={recent_7_days}, 最近30天={recent_30_days}")
+
+            return stats
+
+        except Exception as e:
+            logger.error(f"获取新股统计信息失败: {e}")
+            raise QueryError(
+                "获取新股统计信息失败",
+                error_code="NEW_STOCKS_STATISTICS_FAILED",
+                reason=str(e)
+            )
+
     # ==================== 检查操作 ====================
 
     def exists(self, code: str) -> bool:
