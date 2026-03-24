@@ -3470,6 +3470,48 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取沪深股通十大成交股失败: {e}")
             raise TushareDataError(f"获取沪深股通十大成交股失败: {str(e)}")
 
+    def get_ggt_daily(self,
+                      trade_date: Optional[str] = None,
+                      start_date: Optional[str] = None,
+                      end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取港股通每日成交统计数据
+        接口: ggt_daily
+        描述: 获取港股通每日成交信息，数据从2014年开始
+        积分: 2000积分
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD，支持单日和多日输入（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: 港股通每日成交统计数据，包含以下字段：
+                - trade_date: 交易日期
+                - buy_amount: 买入成交金额（亿元）
+                - buy_volume: 买入成交笔数（万笔）
+                - sell_amount: 卖出成交金额（亿元）
+                - sell_volume: 卖出成交笔数（万笔）
+        """
+        try:
+            logger.info(f"获取港股通每日成交统计: trade_date={trade_date}, "
+                       f"start_date={start_date}, end_date={end_date}")
+
+            params = {}
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('ggt_daily', **params)
+            logger.info(f"获取到 {len(df)} 条港股通每日成交统计记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取港股通每日成交统计失败: {e}")
+            raise TushareDataError(f"获取港股通每日成交统计失败: {str(e)}")
+
     def get_ggt_top10(self,
                       ts_code: Optional[str] = None,
                       trade_date: Optional[str] = None,

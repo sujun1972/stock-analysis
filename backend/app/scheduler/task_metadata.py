@@ -107,6 +107,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 260,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'market_type': None}
     },
+    'tasks.sync_ggt_daily': {
+        'task': 'tasks.sync_ggt_daily',
+        'name': '港股通每日成交统计',
+        'description': '获取港股通每日成交信息，数据从2014年开始（Tushare ggt_daily接口，2000积分/次）',
+        'category': '行情数据',
+        'display_order': 270,
+        'points_consumption': 2000,
+        'default_params': {'trade_date': None, 'start_date': None, 'end_date': None}
+    },
 
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）

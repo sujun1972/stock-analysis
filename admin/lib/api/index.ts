@@ -17,6 +17,7 @@ import { SentimentApiClient, sentimentApi as sentimentApiInst } from './sentimen
 import { MoneyflowApiClient, moneyflowApi as moneyflowApiInst } from './moneyflow'
 import { HsgtTop10ApiClient, hsgtTop10Api as hsgtTop10ApiInst } from './hsgt-top10'
 import { GgtTop10ApiClient, ggtTop10Api as ggtTop10ApiInst } from './ggt-top10'
+import { GgtDailyApiClient, ggtDailyApi as ggtDailyApiInst } from './ggt-daily'
 import { MarginApiClient, marginApi as marginApiInst } from './margin'
 import { MarginSecsApi, marginSecsApi as marginSecsApiInst } from './margin-secs'
 import { SlbLenApiClient, slbLenApi as slbLenApiInst } from './slb-len'
@@ -109,6 +110,11 @@ export type { HsgtTop10Data, HsgtTop10Params, HsgtTop10Statistics } from './hsgt
 export { GgtTop10ApiClient }
 export const ggtTop10Api = ggtTop10ApiInst
 export type { GgtTop10Data, GgtTop10Params, GgtTop10Statistics } from './ggt-top10'
+
+// 重新导出港股通每日成交统计 API
+export { GgtDailyApiClient }
+export const ggtDailyApi = ggtDailyApiInst
+export type { GgtDailyData, GgtDailyParams, GgtDailyStatistics } from './ggt-daily'
 export type {
   SyncMoneyflowParams,
   SyncTaskResponse,

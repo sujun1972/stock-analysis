@@ -30,6 +30,7 @@ from .endpoints import (
     moneyflow_hsgt,  # 沪深港通资金流向
     hsgt_top10,  # 沪深股通十大成交股
     ggt_top10,  # 港股通十大成交股
+    ggt_daily,  # 港股通每日成交统计
     moneyflow_mkt_dc,  # 大盘资金流向
     moneyflow_ind_dc,  # 板块资金流向
     moneyflow_stock_dc,  # 个股资金流向（东方财富DC）
@@ -125,6 +126,7 @@ router.include_router(moneyflow.router, prefix="/moneyflow", tags=["个股资金
 router.include_router(moneyflow_hsgt.router, prefix="/moneyflow-hsgt", tags=["沪深港通资金流向"])  # 沪深港通资金流向API
 router.include_router(hsgt_top10.router, prefix="/hsgt-top10", tags=["沪深股通十大成交股"])  # 沪深股通十大成交股API
 router.include_router(ggt_top10.router, prefix="/ggt-top10", tags=["港股通十大成交股"])  # 港股通十大成交股API
+router.include_router(ggt_daily.router, prefix="/ggt-daily", tags=["港股通每日成交统计"])  # 港股通每日成交统计API
 router.include_router(moneyflow_mkt_dc.router, prefix="/moneyflow-mkt-dc", tags=["大盘资金流向"])  # 大盘资金流向API
 router.include_router(moneyflow_ind_dc.router, prefix="/moneyflow-ind-dc", tags=["板块资金流向"])  # 板块资金流向API
 router.include_router(moneyflow_stock_dc.router, prefix="/moneyflow-stock-dc", tags=["个股资金流向（DC）"])  # 个股资金流向API（东方财富DC）
