@@ -93,7 +93,7 @@ class DailyBasicRepository(BaseRepository):
             return [
                 {
                     "ts_code": row[0],
-                    "trade_date": row[1],
+                    "trade_date": row[1].strftime('%Y%m%d') if hasattr(row[1], 'strftime') else row[1],
                     "close": float(row[2]) if row[2] is not None else None,
                     "turnover_rate": float(row[3]) if row[3] is not None else None,
                     "turnover_rate_f": float(row[4]) if row[4] is not None else None,
@@ -183,7 +183,7 @@ class DailyBasicRepository(BaseRepository):
             return [
                 {
                     "ts_code": row[0],
-                    "trade_date": row[1],
+                    "trade_date": row[1].strftime('%Y%m%d') if hasattr(row[1], 'strftime') else row[1],
                     "close": float(row[2]) if row[2] is not None else None,
                     "turnover_rate": float(row[3]) if row[3] is not None else None,
                     "turnover_rate_f": float(row[4]) if row[4] is not None else None,
@@ -252,8 +252,11 @@ class DailyBasicRepository(BaseRepository):
             query = f"""
                 SELECT
                     COUNT(DISTINCT ts_code) as stock_count,
+                    MIN(trade_date) as earliest_date,
                     MAX(trade_date) as latest_date,
-                    COUNT(*) as total_records
+                    COUNT(*) as total_records,
+                    AVG(turnover_rate) as avg_turnover_rate,
+                    AVG(pe_ttm) as avg_pe_ttm
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
             """
@@ -262,16 +265,45 @@ class DailyBasicRepository(BaseRepository):
 
             if result and result[0]:
                 row = result[0]
+                # 转换日期格式
+                earliest_date = row[1]
+                latest_date = row[2]
+                if hasattr(earliest_date, 'strftime'):
+                    earliest_date = earliest_date.strftime('%Y%m%d')
+                if hasattr(latest_date, 'strftime'):
+                    latest_date = latest_date.strftime('%Y%m%d')
+
+                # 处理平均值（可能是NaN）
+                import math
+                avg_turnover = float(row[4]) if row[4] is not None else 0.0
+                avg_pe = float(row[5]) if row[5] is not None else 0.0
+
+                # NaN检查
+                if math.isnan(avg_turnover):
+                    avg_turnover = 0.0
+                if math.isnan(avg_pe):
+                    avg_pe = 0.0
+
                 return {
                     "stock_count": row[0] or 0,
-                    "latest_date": row[1] or "",
-                    "total_records": row[2] or 0
+                    "date_range": {
+                        "earliest_date": earliest_date or "",
+                        "latest_date": latest_date or ""
+                    },
+                    "total_records": row[3] or 0,
+                    "avg_turnover_rate": avg_turnover,
+                    "avg_pe_ttm": avg_pe
                 }
 
             return {
                 "stock_count": 0,
-                "latest_date": "",
-                "total_records": 0
+                "date_range": {
+                    "earliest_date": "",
+                    "latest_date": ""
+                },
+                "total_records": 0,
+                "avg_turnover_rate": 0.0,
+                "avg_pe_ttm": 0.0
             }
 
         except PsycopgDatabaseError as e:

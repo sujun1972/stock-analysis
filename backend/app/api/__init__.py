@@ -15,6 +15,7 @@ from .endpoints import (
     config,
     data,
     data_quality,  # 数据质量监控
+    daily_basic,  # 每日指标数据
     dynamic_strategies,
     experiment,
     extended_data,  # 扩展数据接口
@@ -176,6 +177,7 @@ router.include_router(disclosure_date.router, prefix="/disclosure-date", tags=["
 router.include_router(suspend.router, prefix="/suspend", tags=["每日停复牌信息"])  # 每日停复牌信息API
 router.include_router(stk_limit_d.router, prefix="/stk-limit-d", tags=["每日涨跌停价格"])  # 每日涨跌停价格API
 router.include_router(adj_factor.router, prefix="/adj-factor", tags=["复权因子"])  # 复权因子API
+router.include_router(daily_basic.router, prefix="/daily-basic", tags=["每日指标数据"])  # 每日指标数据API
 router.include_router(scheduler.router, prefix="/scheduler", tags=["定时任务"])
 router.include_router(celery_tasks.router, tags=["Celery任务"])  # Celery 任务状态查询
 router.include_router(market.router, prefix="/market", tags=["市场状态"])

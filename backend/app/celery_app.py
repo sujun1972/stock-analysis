@@ -147,6 +147,12 @@ except Exception as e:
     logger.error(f"❌ 加载融资融券交易明细任务模块失败: {e}")
 
 try:
+    from app.tasks import daily_basic_tasks
+    logger.info(f"✅ 已加载每日指标任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载每日指标任务模块失败: {e}")
+
+try:
     from app.tasks import top_list_tasks
     logger.info(f"✅ 已加载龙虎榜每日明细任务模块")
 except Exception as e:

@@ -91,6 +91,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 2000,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
+
+    'tasks.sync_daily_basic': {
+        'task': 'tasks.sync_daily_basic',
+        'name': '每日指标',
+        'description': '获取全部股票每日重要的基本面指标，可用于选股分析、报表展示等（2000积分/次，单次最大6000条）',
+        'category': '行情数据',
+        'display_order': 230,
+        'points_consumption': 2000,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
     'tasks.sync_hsgt_top10': {
         'task': 'tasks.sync_hsgt_top10',
         'name': '沪深股通十大成交股',

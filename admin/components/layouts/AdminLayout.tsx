@@ -449,6 +449,11 @@ const navItems: NavItem[] = [
         icon: TrendingUpIcon
       },
       {
+        name: '每日指标',
+        href: '/market/daily-basic',
+        icon: BarChart3
+      },
+      {
         name: '复权因子',
         href: '/market/adj-factor',
         icon: Database

@@ -264,7 +264,7 @@ class SyncLogRepository(BaseRepository):
                 RETURNING id
             """
 
-            result = self.execute_query(query, (task_id, task_type, module, data_source, "running"))
+            result = self.execute_query_returning(query, (task_id, task_type, module, data_source, "running"))
 
             if not result:
                 raise DatabaseError(
