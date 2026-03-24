@@ -67,14 +67,6 @@ export class SyncApiClient extends BaseApiClient {
   }
 
   /**
-   * 同步退市股票
-   * @returns 同步结果
-   */
-  async syncDelistedStocks(): Promise<ApiResponse<{ total: number }>> {
-    return this.post('/api/sync/delisted-stocks')
-  }
-
-  /**
    * 批量同步日线数据
    * @param params 同步参数
    * @returns 同步结果

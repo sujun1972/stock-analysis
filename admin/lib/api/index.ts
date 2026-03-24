@@ -533,7 +533,6 @@ export const apiClient = {
   getSyncStatus: syncApiInst.getSyncStatus.bind(syncApiInst),
   syncStockList: syncApiInst.syncStockList.bind(syncApiInst),
   syncNewStocks: syncApiInst.syncNewStocks.bind(syncApiInst),
-  syncDelistedStocks: syncApiInst.syncDelistedStocks.bind(syncApiInst),
   syncDailyBatch: syncApiInst.syncDailyBatch.bind(syncApiInst),
   syncDailyStock: syncApiInst.syncDailyStock.bind(syncApiInst),
   syncMinuteData: syncApiInst.syncMinuteData.bind(syncApiInst),

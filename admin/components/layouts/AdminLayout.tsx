@@ -42,7 +42,6 @@ import {
   ArrowUpCircle,
   RefreshCw,
   PackagePlus,
-  PackageMinus,
   TrendingUp as TrendingUpIcon,
   Wrench,
   DollarSign,
@@ -500,11 +499,6 @@ const navItems: NavItem[] = [
         name: '数据初始化',
         href: '/sync/initialize',
         icon: RefreshCw
-      },
-      {
-        name: '退市列表同步',
-        href: '/sync/delisted-stocks',
-        icon: PackageMinus
       },
       {
         name: '实时行情同步',

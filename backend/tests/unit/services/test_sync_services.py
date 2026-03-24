@@ -376,42 +376,6 @@ class TestSyncNewStocks:
             assert result["total"] == 2
 
 
-class TestSyncDelistedStocks:
-    """测试同步退市股票列表"""
-
-    @pytest.mark.asyncio
-    async def test_sync_delisted_stocks_success(self):
-        """测试成功同步退市股票列表"""
-        # Arrange
-        service = StockListSyncService()
-
-        mock_config = {"data_source": "akshare", "tushare_token": ""}
-        mock_delisted = pd.DataFrame({"code": ["000123", "000124"], "name": ["退市A", "退市B"]})
-
-        with (
-            patch.object(
-                service.config_service,
-                "get_data_source_config",
-                new=AsyncMock(return_value=mock_config),
-            ),
-            patch.object(service.config_service, "create_sync_task", new=AsyncMock()),
-            patch.object(service.config_service, "update_sync_task", new=AsyncMock()),
-            patch.object(service.config_service, "update_sync_status", new=AsyncMock()),
-            patch("app.services.stock_list_sync_service.DataProviderFactory.create_provider"),
-            patch(
-                "app.services.stock_list_sync_service.retry_async",
-                new=AsyncMock(return_value=mock_delisted),
-            ),
-            patch("asyncio.to_thread", new=AsyncMock(return_value=2)),
-        ):
-
-            # Act
-            result = await service.sync_delisted_stocks()
-
-            # Assert
-            assert result["total"] == 2
-
-
 # ==================== RealtimeSyncService Tests ====================
 
 

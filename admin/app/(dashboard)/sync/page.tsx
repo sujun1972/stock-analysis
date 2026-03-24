@@ -11,7 +11,6 @@ import { useRouter } from 'next/navigation'
 import {
   RefreshCw,
   PackagePlus,
-  PackageMinus,
   TrendingUp,
   ArrowRight,
   CheckCircle,
@@ -50,15 +49,6 @@ const syncItems: SyncItem[] = [
     color: 'text-green-500',
     status: 'idle',
     lastRun: '2024-03-17 06:00:00'
-  },
-  {
-    title: '退市列表同步',
-    description: '同步退市股票信息，清理无效数据',
-    href: '/sync/delisted-stocks',
-    icon: PackageMinus,
-    color: 'text-red-500',
-    status: 'idle',
-    lastRun: '2024-03-16 18:00:00'
   },
   {
     title: '实时行情同步',

@@ -46,13 +46,6 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 110,
         'default_params': {'days': 30}
     },
-    'delisted_stocks': {
-        'task': 'sync.delisted_stocks',
-        'name': '每周退市同步',
-        'description': '同步退市股票列表',
-        'category': '基础数据',
-        'display_order': 120
-    },
     'concept': {
         'task': 'sync.concept',
         'name': '概念板块同步',

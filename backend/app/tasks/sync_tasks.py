@@ -298,53 +298,6 @@ def sync_new_stocks_task(self: Task, days: int = 30):
 
 @celery_app.task(
     base=SyncTask,
-    name="sync.delisted_stocks",
-    bind=True
-)
-def sync_delisted_stocks_task(self: Task):
-    """
-    异步同步退市股票列表
-
-    Returns:
-        同步结果
-    """
-    try:
-        logger.info("========== [Celery] 开始执行退市股票列表同步任务 ==========")
-
-        # 使用分布式锁
-        lock_key = "sync:delisted_stocks"
-
-        with redis_lock.acquire(lock_key, timeout=300, blocking=False) if redis_lock else _DummyContext() as acquired:
-            if not acquired and redis_lock:
-                logger.warning("⚠️  退市股票列表同步任务已在执行中，跳过本次执行")
-                return {
-                    "status": "locked",
-                    "message": "已有同步任务正在进行"
-                }
-
-            service = StockListSyncService()
-
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(service.sync_delisted_stocks())
-            finally:
-                loop.close()
-
-        logger.info(f"[Celery] 退市股票列表同步完成: {result}")
-
-        return {
-            "status": "success",
-            "total": result.get("total", 0)
-        }
-
-    except Exception as e:
-        logger.error(f"[Celery] 退市股票列表同步失败: {repr(e)}", exc_info=True)
-        raise
-
-
-@celery_app.task(
-    base=SyncTask,
     name="sync.concept",
     bind=True
 )

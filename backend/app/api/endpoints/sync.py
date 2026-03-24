@@ -194,32 +194,6 @@ async def sync_new_stocks(
     )
 
 
-@router.post("/delisted-stocks")
-@handle_api_errors
-async def sync_delisted_stocks(
-    current_user: User = Depends(require_admin)
-):
-    """
-    异步同步退市股票列表
-
-    Returns:
-        任务ID和任务名称
-    """
-    from app.tasks.sync_tasks import sync_delisted_stocks_task
-
-    # 启动异步任务
-    task = sync_delisted_stocks_task.delay()
-
-    return ApiResponse.success(
-        data={
-            "task_id": task.id,
-            "task_name": "退市股票同步",
-            "display_name": "退市股票列表同步"
-        },
-        message="退市股票列表同步任务已启动"
-    ).to_dict()
-
-
 # ==================== Daily Data Sync Endpoints ====================
 
 

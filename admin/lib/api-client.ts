@@ -685,14 +685,6 @@ class ApiClient {
   }
 
   /**
-   * 同步退市列表
-   */
-  async syncDelistedStocks(): Promise<ApiResponse<{ total: number }>> {
-    const response = await axiosInstance.post('/api/sync/delisted-stocks')
-    return response.data
-  }
-
-  /**
    * 批量同步日线数据
    */
   async syncDailyBatch(params: {

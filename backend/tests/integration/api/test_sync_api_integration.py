@@ -7,12 +7,13 @@ Sync API 集成测试
 - POST /api/sync/abort - 中止同步
 - POST /api/sync/stock-list - 同步股票列表
 - POST /api/sync/new-stocks - 同步新股列表
-- POST /api/sync/delisted-stocks - 同步退市股票
 - POST /api/sync/daily/batch - 批量同步日线数据
 - POST /api/sync/daily/{code} - 同步单只股票日线数据
 - POST /api/sync/minute/{code} - 同步分时数据
 - POST /api/sync/realtime - 同步实时行情
 - GET /api/sync/history - 获取同步历史记录
+
+注：退市股票通过股票列表同步自动更新，无需单独端点
 
 作者: Backend Team
 创建日期: 2026-02-03
@@ -35,7 +36,6 @@ from app.api.endpoints.sync import (
     get_sync_status,
     sync_daily_batch,
     sync_daily_stock,
-    sync_delisted_stocks,
     sync_minute_data,
     sync_new_stocks,
     sync_realtime_quotes,
@@ -222,28 +222,6 @@ class TestSyncNewStocks:
             assert response["code"] == 200
             assert response["data"]["total"] == 10
             mock_service.sync_new_stocks.assert_called_once_with(days=30)
-
-
-class TestSyncDelistedStocks:
-    """测试 POST /api/sync/delisted-stocks 端点"""
-
-    @pytest.mark.asyncio
-    async def test_sync_delisted_stocks_success(self):
-        """测试成功同步退市股票"""
-        # Arrange
-        mock_result = {"total": 5}
-
-        with patch("app.api.endpoints.sync.StockListSyncService") as mock_service_class:
-            mock_service = Mock()
-            mock_service.sync_delisted_stocks = AsyncMock(return_value=mock_result)
-            mock_service_class.return_value = mock_service
-
-            # Act
-            response = await sync_delisted_stocks()
-
-            # Assert
-            assert response["code"] == 200
-            assert response["data"]["total"] == 5
 
 
 class TestSyncDailyBatch:
