@@ -2,7 +2,7 @@
 
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Activity, PauseCircle } from 'lucide-react'
+import { Activity, PauseCircle, TrendingUp, Database } from 'lucide-react'
 import Link from 'next/link'
 
 export default function MarketPage() {
@@ -13,6 +13,20 @@ export default function MarketPage() {
       icon: PauseCircle,
       href: '/market/suspend',
       color: 'text-orange-600'
+    },
+    {
+      title: '每日涨跌停价格',
+      description: '查询全市场每日涨跌停价格，包括涨停价、跌停价等（每交易日8:40更新）',
+      icon: TrendingUp,
+      href: '/market/stk-limit-d',
+      color: 'text-red-600'
+    },
+    {
+      title: '复权因子',
+      description: '获取股票复权因子，可提取单只股票全部历史复权因子或单日全部股票的复权因子（盘前9:15~20分更新）',
+      icon: Database,
+      href: '/market/adj-factor',
+      color: 'text-blue-600'
     }
   ]
 

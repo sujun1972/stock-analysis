@@ -3628,6 +3628,60 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取港股通每月成交统计失败: {e}")
             raise TushareDataError(f"获取港股通每月成交统计失败: {str(e)}")
 
+    def get_adj_factor(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取股票复权因子
+
+        说明：
+        - 可提取单只股票全部历史复权因子，也可以提取单日全部股票的复权因子
+        - 更新时间：盘前9点15~20分完成当日复权因子入库
+        - 积分要求：2000积分起，5000以上可高频调取
+
+        Args:
+            ts_code: 股票代码，如 000001.SZ（可选）
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+
+        Returns:
+            DataFrame，包含以下字段：
+            - ts_code: 股票代码
+            - trade_date: 交易日期
+            - adj_factor: 复权因子
+
+        Examples:
+            >>> # 提取000001全部复权因子
+            >>> df = provider.get_adj_factor(ts_code='000001.SZ')
+            >>> # 提取2024年7月18日复权因子
+            >>> df = provider.get_adj_factor(trade_date='20240718')
+
+        Raises:
+            TushareDataError: 数据获取失败
+        """
+        try:
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('adj_factor', **params)
+            logger.info(f"获取到 {len(df)} 条复权因子记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取复权因子失败: {e}")
+            raise TushareDataError(f"获取复权因子失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

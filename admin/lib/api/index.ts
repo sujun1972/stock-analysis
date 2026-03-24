@@ -61,6 +61,7 @@ import { ExpressApiClient, expressApi as expressApiInst } from './express'
 import { FinancialDataApiClient, financialDataApi as financialDataApiInst } from './financial-data'
 import { SuspendApiClient, suspendApi as suspendApiInst } from './suspend'
 import { StkLimitDApiClient, stkLimitDApi as stkLimitDApiInst } from './stk-limit-d'
+import { AdjFactorApiClient, adjFactorApi as adjFactorApiInst } from './adj-factor-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -858,6 +859,15 @@ export type {
   StkLimitDStatistics,
   StkLimitDParams
 } from './stk-limit-d'
+
+// 重新导出复权因子 API
+export { AdjFactorApiClient }
+export const adjFactorApi = adjFactorApiInst
+export type {
+  AdjFactorData,
+  AdjFactorStatistics,
+  AdjFactorParams
+} from './adj-factor-api'
 
 // 导出默认实例
 export default apiClient

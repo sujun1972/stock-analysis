@@ -449,6 +449,11 @@ const navItems: NavItem[] = [
         icon: TrendingUpIcon
       },
       {
+        name: '复权因子',
+        href: '/market/adj-factor',
+        icon: Database
+      },
+      {
         name: '沪深股通十大成交股',
         href: '/market/hsgt-top10',
         icon: TrendingUpIcon

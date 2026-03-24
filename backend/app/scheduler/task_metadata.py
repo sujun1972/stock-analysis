@@ -126,6 +126,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'month': None, 'start_month': None, 'end_month': None}
     },
 
+    'tasks.sync_adj_factor': {
+        'task': 'tasks.sync_adj_factor',
+        'name': '复权因子',
+        'description': '获取股票复权因子，可提取单只股票全部历史复权因子，也可以提取单日全部股票的复权因子（盘前9:15~20分更新，2000积分起，5000以上可高频调取）',
+        'category': '行情数据',
+        'display_order': 280,
+        'points_consumption': 2000,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
+    },
+
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）
     # ============================================
