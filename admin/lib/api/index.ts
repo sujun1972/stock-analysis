@@ -15,6 +15,7 @@ import { StrategyApiClient, strategyApi as strategyApiInst } from './strategies'
 import { UserApiClient, userApi as userApiInst } from './users'
 import { SentimentApiClient, sentimentApi as sentimentApiInst } from './sentiment'
 import { MoneyflowApiClient, moneyflowApi as moneyflowApiInst } from './moneyflow'
+import { HsgtTop10ApiClient, hsgtTop10Api as hsgtTop10ApiInst } from './hsgt-top10'
 import { MarginApiClient, marginApi as marginApiInst } from './margin'
 import { MarginSecsApi, marginSecsApi as marginSecsApiInst } from './margin-secs'
 import { SlbLenApiClient, slbLenApi as slbLenApiInst } from './slb-len'
@@ -97,6 +98,11 @@ export type { SentimentListParams, SyncSentimentBatchParams, DragonTigerListPara
 // 重新导出资金流向 API
 export { MoneyflowApiClient }
 export const moneyflowApi = moneyflowApiInst
+
+// 重新导出沪深股通十大成交股 API
+export { HsgtTop10ApiClient }
+export const hsgtTop10Api = hsgtTop10ApiInst
+export type { HsgtTop10Data, HsgtTop10Params, HsgtTop10Statistics } from './hsgt-top10'
 export type {
   SyncMoneyflowParams,
   SyncTaskResponse,

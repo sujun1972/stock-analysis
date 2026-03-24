@@ -447,6 +447,11 @@ const navItems: NavItem[] = [
         name: '每日涨跌停价格',
         href: '/market/stk-limit-d',
         icon: TrendingUpIcon
+      },
+      {
+        name: '沪深股通十大成交股',
+        href: '/market/hsgt-top10',
+        icon: TrendingUpIcon
       }
     ]
   },

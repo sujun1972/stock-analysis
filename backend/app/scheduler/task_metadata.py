@@ -91,6 +91,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 2000,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
+    'tasks.sync_hsgt_top10': {
+        'task': 'tasks.sync_hsgt_top10',
+        'name': '沪深股通十大成交股',
+        'description': '获取沪股通、深股通每日前十大成交详细数据，每天18~20点之间完成当日更新',
+        'category': '行情数据',
+        'display_order': 250,
+        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'market_type': None}
+    },
 
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）

@@ -3405,6 +3405,71 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取每日涨跌停价格失败: {e}")
             raise TushareDataError(f"获取每日涨跌停价格失败: {str(e)}")
 
+    def get_hsgt_top10(self,
+                       ts_code: Optional[str] = None,
+                       trade_date: Optional[str] = None,
+                       start_date: Optional[str] = None,
+                       end_date: Optional[str] = None,
+                       market_type: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取沪深股通十大成交股数据
+        接口: hsgt_top10
+        描述: 获取沪股通、深股通每日前十大成交详细数据，每天18~20点之间完成当日更新
+
+        Args:
+            ts_code: 股票代码（可选）
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+            market_type: 市场类型 1:沪市 3:深市（可选）
+
+        Returns:
+            pd.DataFrame: 沪深股通十大成交股数据，包含以下字段：
+                - trade_date: 交易日期
+                - ts_code: 股票代码
+                - name: 股票名称
+                - close: 收盘价
+                - change: 涨跌额
+                - rank: 资金排名
+                - market_type: 市场类型（1：沪市 3：深市）
+                - amount: 成交金额（元）
+                - net_amount: 净成交金额（元）
+                - buy: 买入金额（元）
+                - sell: 卖出金额（元）
+        """
+        try:
+            logger.info(f"获取沪深股通十大成交股: ts_code={ts_code}, trade_date={trade_date}, "
+                       f"start_date={start_date}, end_date={end_date}, market_type={market_type}")
+
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if market_type:
+                params['market_type'] = market_type
+
+            # 如果没有指定任何参数，获取最近一个交易日的数据
+            if not params:
+                from datetime import datetime, timedelta
+                # 获取最近5天的数据（确保包含至少一个交易日）
+                end_date = datetime.now().strftime('%Y%m%d')
+                start_date = (datetime.now() - timedelta(days=5)).strftime('%Y%m%d')
+                params['start_date'] = start_date
+                params['end_date'] = end_date
+                logger.info(f"未指定参数，默认获取最近5天数据: {start_date} ~ {end_date}")
+
+            df = self.api_client.query('hsgt_top10', **params)
+            logger.info(f"获取到 {len(df)} 条沪深股通十大成交股记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取沪深股通十大成交股失败: {e}")
+            raise TushareDataError(f"获取沪深股通十大成交股失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

@@ -71,6 +71,7 @@ from .stk_surv_repository import StkSurvRepository
 from .broker_recommend_repository import BrokerRecommendRepository
 from .suspend_repository import SuspendRepository
 from .stk_limit_d_repository import StkLimitDRepository
+from .hsgt_top10_repository import HsgtTop10Repository
 
 __all__ = [
     "BaseRepository",
@@ -86,6 +87,7 @@ __all__ = [
     "MoneyflowRepository",
     # 资金流向 - 沪深港通
     "MoneyflowHsgtRepository",
+    "HsgtTop10Repository",
     # 资金流向 - 东方财富DC
     "MoneyflowMktDcRepository",
     "MoneyflowIndDcRepository",
