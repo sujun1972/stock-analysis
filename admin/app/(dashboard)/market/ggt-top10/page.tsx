@@ -15,15 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { hsgtTop10Api, type HsgtTop10Data, type HsgtTop10Statistics } from '@/lib/api'
+import { ggtTop10Api, type GgtTop10Data, type GgtTop10Statistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, DollarSign } from 'lucide-react'
 
-export default function HsgtTop10Page() {
+export default function GgtTop10Page() {
   // 数据状态
-  const [data, setData] = useState<HsgtTop10Data[]>([])
-  const [statistics, setStatistics] = useState<HsgtTop10Statistics | null>(null)
+  const [data, setData] = useState<GgtTop10Data[]>([])
+  const [statistics, setStatistics] = useState<GgtTop10Statistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -67,8 +67,8 @@ export default function HsgtTop10Page() {
       }
 
       const [dataResponse, statsResponse] = await Promise.all([
-        hsgtTop10Api.getHsgtTop10(params),
-        hsgtTop10Api.getStatistics({
+        ggtTop10Api.getGgtTop10(params),
+        ggtTop10Api.getStatistics({
           start_date: params.start_date,
           end_date: params.end_date,
           market_type: params.market_type
@@ -131,7 +131,7 @@ export default function HsgtTop10Page() {
         params.market_type = marketType
       }
 
-      const response = await hsgtTop10Api.syncAsync(params)
+      const response = await ggtTop10Api.syncAsync(params)
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
