@@ -18,6 +18,7 @@ import { MoneyflowApiClient, moneyflowApi as moneyflowApiInst } from './moneyflo
 import { HsgtTop10ApiClient, hsgtTop10Api as hsgtTop10ApiInst } from './hsgt-top10'
 import { GgtTop10ApiClient, ggtTop10Api as ggtTop10ApiInst } from './ggt-top10'
 import { GgtDailyApiClient, ggtDailyApi as ggtDailyApiInst } from './ggt-daily'
+import { GgtMonthlyApiClient, ggtMonthlyApi as ggtMonthlyApiInst } from './ggt-monthly'
 import { MarginApiClient, marginApi as marginApiInst } from './margin'
 import { MarginSecsApi, marginSecsApi as marginSecsApiInst } from './margin-secs'
 import { SlbLenApiClient, slbLenApi as slbLenApiInst } from './slb-len'
@@ -115,6 +116,12 @@ export type { GgtTop10Data, GgtTop10Params, GgtTop10Statistics } from './ggt-top
 export { GgtDailyApiClient }
 export const ggtDailyApi = ggtDailyApiInst
 export type { GgtDailyData, GgtDailyParams, GgtDailyStatistics } from './ggt-daily'
+
+// 重新导出港股通每月成交统计 API
+export { GgtMonthlyApiClient }
+export const ggtMonthlyApi = ggtMonthlyApiInst
+export type { GgtMonthlyData, GgtMonthlyParams, GgtMonthlyStatistics } from './ggt-monthly'
+
 export type {
   SyncMoneyflowParams,
   SyncTaskResponse,

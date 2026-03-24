@@ -116,6 +116,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 2000,
         'default_params': {'trade_date': None, 'start_date': None, 'end_date': None}
     },
+    'tasks.sync_ggt_monthly': {
+        'task': 'tasks.sync_ggt_monthly',
+        'name': '港股通每月成交统计',
+        'description': '获取港股通每月成交信息，数据从2014年开始，单次最大1000条（Tushare ggt_monthly接口，5000积分/次）',
+        'category': '行情数据',
+        'display_order': 271,
+        'points_consumption': 5000,
+        'default_params': {'month': None, 'start_month': None, 'end_month': None}
+    },
 
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）

@@ -462,6 +462,11 @@ const navItems: NavItem[] = [
         name: '港股通每日成交统计',
         href: '/market/ggt-daily',
         icon: TrendingUpIcon
+      },
+      {
+        name: '港股通每月成交统计',
+        href: '/market/ggt-monthly',
+        icon: TrendingUpIcon
       }
     ]
   },

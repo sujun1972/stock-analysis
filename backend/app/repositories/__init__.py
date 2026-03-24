@@ -74,6 +74,7 @@ from .stk_limit_d_repository import StkLimitDRepository
 from .hsgt_top10_repository import HsgtTop10Repository
 from .ggt_top10_repository import GgtTop10Repository
 from .ggt_daily_repository import GgtDailyRepository
+from .ggt_monthly_repository import GgtMonthlyRepository
 
 __all__ = [
     "BaseRepository",
@@ -92,6 +93,7 @@ __all__ = [
     "HsgtTop10Repository",
     "GgtTop10Repository",
     "GgtDailyRepository",
+    "GgtMonthlyRepository",
     # 资金流向 - 东方财富DC
     "MoneyflowMktDcRepository",
     "MoneyflowIndDcRepository",

@@ -3581,6 +3581,53 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取港股通十大成交股失败: {e}")
             raise TushareDataError(f"获取港股通十大成交股失败: {str(e)}")
 
+    def get_ggt_monthly(self,
+                        month: Optional[str] = None,
+                        start_month: Optional[str] = None,
+                        end_month: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取港股通每月成交统计数据
+        接口: ggt_monthly
+        描述: 获取港股通每月成交信息，数据从2014年开始
+        限量: 单次最大1000
+        积分: 5000积分/次
+
+        Args:
+            month: 月度 YYYYMM，支持多个输入（可选）
+            start_month: 开始月度 YYYYMM（可选）
+            end_month: 结束月度 YYYYMM（可选）
+
+        Returns:
+            pd.DataFrame: 港股通每月成交统计数据，包含以下字段：
+                - month: 月度 YYYYMM
+                - day_buy_amt: 当月日均买入成交金额（亿元）
+                - day_buy_vol: 当月日均买入成交笔数（万笔）
+                - day_sell_amt: 当月日均卖出成交金额（亿元）
+                - day_sell_vol: 当月日均卖出成交笔数（万笔）
+                - total_buy_amt: 总买入成交金额（亿元）
+                - total_buy_vol: 总买入成交笔数（万笔）
+                - total_sell_amt: 总卖出成交金额（亿元）
+                - total_sell_vol: 总卖出成交笔数（万笔）
+        """
+        try:
+            logger.info(f"获取港股通每月成交统计: month={month}, "
+                       f"start_month={start_month}, end_month={end_month}")
+
+            params = {}
+            if month:
+                params['month'] = month
+            if start_month:
+                params['start_month'] = start_month
+            if end_month:
+                params['end_month'] = end_month
+
+            df = self.api_client.query('ggt_monthly', **params)
+            logger.info(f"获取到 {len(df)} 条港股通每月成交统计记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取港股通每月成交统计失败: {e}")
+            raise TushareDataError(f"获取港股通每月成交统计失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

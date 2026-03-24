@@ -279,6 +279,12 @@ except Exception as e:
     logger.error(f"❌ 加载港股通每日成交统计任务模块失败: {e}")
 
 try:
+    from app.tasks import ggt_monthly_tasks
+    logger.info(f"✅ 已加载港股通每月成交统计任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载港股通每月成交统计任务模块失败: {e}")
+
+try:
     from app.tasks import stk_shock_tasks
     logger.info(f"✅ 已加载个股异常波动任务模块")
 except Exception as e:
