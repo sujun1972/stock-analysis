@@ -77,6 +77,9 @@ interface TaskStore {
 
   // 获取活动任务数
   getActiveTaskCount: () => number
+
+  // 检查指定 Celery taskName 是否有活跃任务（running 或 pending）
+  isTaskRunning: (taskName: string) => boolean
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -207,5 +210,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
   getActiveTaskCount: () => {
     return get().getActiveTasks().length
+  },
+
+  isTaskRunning: (taskName) => {
+    return Array.from(get().tasks.values()).some(
+      t => t.taskName === taskName && (t.status === 'running' || t.status === 'pending')
+    )
   }
 }))

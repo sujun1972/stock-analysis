@@ -43,8 +43,6 @@ export default function DcIndexPage() {
   const [tsCode, setTsCode] = useState<string>('')
   const [nameFilter, setNameFilter] = useState<string>('')
   const [idxType, setIdxType] = useState<string>('')
-  const [syncing, setSyncing] = useState(false)
-
   // 同步对话框状态
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [syncTsCode, setSyncTsCode] = useState<string>('')
@@ -61,7 +59,8 @@ export default function DcIndexPage() {
 
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const syncing = isTaskRunning('tasks.sync_dc_index')
 
   const loadData = useCallback(async () => {
     try {
@@ -117,7 +116,6 @@ export default function DcIndexPage() {
 
   const handleSync = async () => {
     try {
-      setSyncing(true)
       setSyncDialogOpen(false)
 
       const params: any = { idx_type: syncIdxType }
@@ -169,8 +167,6 @@ export default function DcIndexPage() {
       toast.error('同步失败', {
         description: err.message || '无法同步数据'
       })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -338,6 +334,21 @@ export default function DcIndexPage() {
           <div>接口：dc_index</div>
           <a href="https://tushare.pro/document/2?doc_id=362" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -443,24 +454,6 @@ export default function DcIndexPage() {
 
             <Button onClick={loadData} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
-            </Button>
-
-            <Button
-              variant="default"
-              onClick={() => setSyncDialogOpen(true)}
-              disabled={syncing}
-            >
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
-              )}
             </Button>
           </div>
         </CardContent>

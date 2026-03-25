@@ -22,10 +22,9 @@ export default function LimitListPage() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [limitType, setLimitType] = useState<string>('ALL')
-  const [syncing, setSyncing] = useState(false)
-
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+  const syncing = isTaskRunning('tasks.sync_limit_list')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -62,8 +61,6 @@ export default function LimitListPage() {
   // 异步同步
   const handleSync = async () => {
     try {
-      setSyncing(true)
-
       const params: any = {}
       if (startDate) params.start_date = startDate.toISOString().split('T')[0]
       if (endDate) params.end_date = endDate.toISOString().split('T')[0]
@@ -108,8 +105,6 @@ export default function LimitListPage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -234,6 +229,21 @@ export default function LimitListPage() {
           <div>接口：limit_list_d</div>
           <a href="https://tushare.pro/document/2?doc_id=298" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
+        actions={
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -310,19 +320,6 @@ export default function LimitListPage() {
             <div className="flex gap-2">
               <Button onClick={loadData} disabled={loading}>
                 查询
-              </Button>
-              <Button onClick={handleSync} disabled={syncing} variant="default">
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
               </Button>
             </div>
           </div>

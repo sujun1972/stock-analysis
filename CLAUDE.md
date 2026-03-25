@@ -230,15 +230,21 @@ triggerPoll()  // Header 图标即时更新
 
 3. **前端页面**：使用任务存储和轮询机制
    ```typescript
-   const { addTask, triggerPoll } = useTaskStore()
+   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+   // 从 task store 实时派生同步状态——不要用本地 useState(false)
+   // 只要后台 Celery 任务仍在运行，syncing 为 true，按钮保持禁用
+   const syncing = isTaskRunning('tasks.your_celery_task_name')
 
    const handleSync = async () => {
      const response = await apiClient.syncDataAsync(params)
 
      if (response.code === 200 && response.data) {
-       // 添加到任务存储
+       const taskId = response.data.celery_task_id
+
        addTask({
-         taskId: response.data.celery_task_id,
+         taskId,
          taskName: response.data.task_name,
          displayName: response.data.display_name,
          taskType: 'data_sync',
@@ -247,13 +253,32 @@ triggerPoll()  // Header 图标即时更新
          startTime: Date.now()
        })
 
-       // 立即触发轮询
-       triggerPoll()
+       // 注册完成回调，任务完成后自动刷新数据
+       const completionCallback = (task: any) => {
+         if (task.status === 'success') {
+           loadData().catch(() => {})
+           toast.success('数据同步完成')
+         }
+         unregisterCompletionCallback(taskId, completionCallback)
+         activeCallbacksRef.current.delete(taskId)
+       }
+       activeCallbacksRef.current.set(taskId, completionCallback)
+       registerCompletionCallback(taskId, completionCallback)
 
-       // 延迟刷新数据
-       setTimeout(() => loadData().catch(() => {}), 3000)
+       triggerPoll()
      }
    }
+
+   // 组件卸载时清理未完成的回调
+   useEffect(() => {
+     return () => {
+       const callbacks = activeCallbacksRef.current
+       callbacks.forEach((callback, taskId) => {
+         unregisterCompletionCallback(taskId, callback)
+       })
+       callbacks.clear()
+     }
+   }, [])
    ```
 
 **优势**：
@@ -571,13 +596,14 @@ export const yourApi = new YourApiClient()
 ```typescript
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { toast } from 'sonner'
+import { RefreshCw } from 'lucide-react'
 import { yourApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 
@@ -587,7 +613,11 @@ export default function YourPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [startDate, setStartDate] = useState(undefined)
   const [endDate, setEndDate] = useState(undefined)
-  const { addTask, triggerPoll } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 实时派生——不要用 useState(false)
+  const syncing = isTaskRunning('tasks.your_celery_task_name')
 
   const loadData = async () => {
     // 加载数据逻辑
@@ -597,8 +627,9 @@ export default function YourPage() {
     const response = await yourApi.syncAsync(params)
 
     if (response.code === 200 && response.data) {
+      const taskId = response.data.celery_task_id
       addTask({
-        taskId: response.data.celery_task_id,
+        taskId,
         taskName: response.data.task_name,
         displayName: response.data.display_name,
         taskType: 'data_sync',
@@ -607,24 +638,57 @@ export default function YourPage() {
         startTime: Date.now()
       })
 
+      const completionCallback = (task: any) => {
+        if (task.status === 'success') {
+          loadData().catch(() => {})
+          toast.success('数据同步完成')
+        }
+        unregisterCompletionCallback(taskId, completionCallback)
+        activeCallbacksRef.current.delete(taskId)
+      }
+      activeCallbacksRef.current.set(taskId, completionCallback)
+      registerCompletionCallback(taskId, completionCallback)
+
       triggerPoll()
-      setTimeout(() => loadData().catch(() => {}), 3000)
     }
   }
+
+  useEffect(() => {
+    return () => {
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((callback, taskId) => {
+        unregisterCompletionCallback(taskId, callback)
+      })
+      callbacks.clear()
+    }
+  }, [])
 
   // 表格列定义
   const columns: Column<YourData>[] = [...]
 
   return (
     <div className="space-y-6">
-      <PageHeader title="页面标题" description="页面描述" />
+      <PageHeader
+        title="页面标题"
+        description="页面描述"
+        actions={
+          // 同步按钮放在 PageHeader actions，不放在查询 Card 里
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
+      />
 
       {/* 统计卡片 */}
       {statistics && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 统计卡片内容 */}
       </div>}
 
-      {/* 筛选和操作区域 */}
+      {/* 筛选和操作区域（只放查询相关控件，不放同步按钮） */}
       <Card>
         <CardHeader><CardTitle>数据查询</CardTitle></CardHeader>
         <CardContent>
@@ -632,7 +696,6 @@ export default function YourPage() {
             <DatePicker date={startDate} onDateChange={setStartDate} />
             <DatePicker date={endDate} onDateChange={setEndDate} />
             <Button onClick={loadData}>查询</Button>
-            <Button onClick={handleSync}>同步数据</Button>
           </div>
         </CardContent>
       </Card>

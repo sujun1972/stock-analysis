@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { topListApi, type TopListItem, type TopListStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
-import { TrendingUp, TrendingDown, BarChart3, ListFilter } from 'lucide-react'
+import { TrendingUp, TrendingDown, BarChart3, ListFilter, RefreshCw } from 'lucide-react'
 
 export default function TopListPage() {
   const [data, setData] = useState<TopListItem[]>([])
@@ -19,7 +19,9 @@ export default function TopListPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
-  const { addTask, triggerPoll } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+  const syncing = isTaskRunning('tasks.sync_top_list')
 
   useEffect(() => {
     loadData().catch(() => {})
@@ -65,8 +67,9 @@ export default function TopListPage() {
       })
 
       if (response.code === 200 && response.data) {
+        const taskId = response.data.celery_task_id
         addTask({
-          taskId: response.data.celery_task_id,
+          taskId,
           taskName: response.data.task_name,
           displayName: response.data.display_name,
           taskType: 'data_sync',
@@ -75,12 +78,19 @@ export default function TopListPage() {
           startTime: Date.now()
         })
 
+        const completionCallback = (task: any) => {
+          if (task.status === 'success') {
+            loadData().catch(() => {})
+            toast.success('数据同步完成')
+          }
+          unregisterCompletionCallback(taskId, completionCallback)
+          activeCallbacksRef.current.delete(taskId)
+        }
+        activeCallbacksRef.current.set(taskId, completionCallback)
+        registerCompletionCallback(taskId, completionCallback)
+
         triggerPoll()
         toast.success(response.message || '同步任务已提交')
-
-        setTimeout(() => {
-          loadData().catch(() => {})
-        }, 3000)
       } else {
         toast.error(response.message || '提交同步任务失败')
       }
@@ -227,6 +237,21 @@ export default function TopListPage() {
           <div>接口：top_list</div>
           <a href="https://tushare.pro/document/2?doc_id=106" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
+        actions={
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -319,9 +344,6 @@ export default function TopListPage() {
             <div className="flex gap-2 w-full sm:w-auto">
               <Button onClick={loadData} disabled={isLoading} className="flex-1 sm:flex-none">
                 查询
-              </Button>
-              <Button onClick={handleSync} variant="outline" className="flex-1 sm:flex-none">
-                同步数据
               </Button>
             </div>
           </div>

@@ -25,16 +25,15 @@ export default function TopInstPage() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [side, setSide] = useState<string>('ALL')
-  const [syncing, setSyncing] = useState(false)
-
   // 分页状态
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
   // 任务管理
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+  const syncing = isTaskRunning('tasks.sync_top_inst')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -92,8 +91,6 @@ export default function TopInstPage() {
   // 异步同步
   const handleSync = async () => {
     try {
-      setSyncing(true)
-
       const params: any = {}
       if (startDate) {
         params.trade_date = startDate.toISOString().split('T')[0]
@@ -138,8 +135,6 @@ export default function TopInstPage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -256,6 +251,21 @@ export default function TopInstPage() {
           <div>接口：top_inst</div>
           <a href="https://tushare.pro/document/2?doc_id=107" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
+        actions={
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -349,19 +359,6 @@ export default function TopInstPage() {
             </div>
             <Button onClick={loadData} disabled={loading}>
               {loading ? '查询中...' : '查询'}
-            </Button>
-            <Button onClick={handleSync} disabled={syncing} variant="default">
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
-              )}
             </Button>
           </div>
         </CardContent>

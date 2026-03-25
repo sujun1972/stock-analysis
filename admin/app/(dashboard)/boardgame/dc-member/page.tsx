@@ -21,8 +21,6 @@ export default function DcMemberPage() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState<string>('')
   const [conCode, setConCode] = useState<string>('')
-  const [syncing, setSyncing] = useState(false)
-
   // 分页状态
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
@@ -31,7 +29,8 @@ export default function DcMemberPage() {
   // 存储活跃的任务回调
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const syncing = isTaskRunning('tasks.sync_dc_member')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -107,8 +106,6 @@ export default function DcMemberPage() {
   // 异步同步数据
   const handleSync = async () => {
     try {
-      setSyncing(true)
-
       const params: any = {}
       if (startDate) params.start_date = startDate.toISOString().split('T')[0]
       if (endDate) params.end_date = endDate.toISOString().split('T')[0]
@@ -162,8 +159,6 @@ export default function DcMemberPage() {
       toast.error('同步失败', {
         description: err.message || '无法同步数据'
       })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -251,6 +246,21 @@ export default function DcMemberPage() {
           <div>接口：dc_member</div>
           <a href="https://tushare.pro/document/2?doc_id=363" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
+        actions={
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -339,24 +349,6 @@ export default function DcMemberPage() {
 
             <Button onClick={loadData} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
-            </Button>
-
-            <Button
-              variant="default"
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
-              )}
             </Button>
           </div>
         </CardContent>
