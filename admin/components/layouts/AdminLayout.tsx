@@ -460,7 +460,12 @@ const navItems: NavItem[] = [
         icon: RefreshCw
       },
       {
-        name: '每日停复牌信息',
+        name: '股票日线数据',
+        href: '/market/daily',
+        icon: LineChart
+      },
+      {
+        name: '每日停复牘信息',
         href: '/market/suspend',
         icon: PauseCircle
       },

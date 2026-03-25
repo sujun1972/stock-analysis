@@ -66,6 +66,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'years': 1}
     },
 
+    'tasks.sync_daily_single': {
+        'task': 'tasks.sync_daily_single',
+        'name': '股票日线数据同步',
+        'description': '同步股票日线数据（支持单只股票或全市场）。单只股票模式：指定code同步历史数据；全市场模式：留空code同步最近交易日全市场数据',
+        'category': '行情数据',
+        'display_order': 205,
+        'points_consumption': 120,  # Tushare daily 接口
+        'default_params': {'code': None, 'start_date': None, 'end_date': None, 'years': 5}
+    },
+
     'tasks.sync_suspend': {
         'task': 'tasks.sync_suspend',
         'name': '每日停复牌信息',

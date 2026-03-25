@@ -191,7 +191,7 @@ class DataDownloadService:
         code: str,
         years: int = 5,
         module: str = "main",
-        use_akshare_direct: bool = True
+        use_akshare_direct: bool = False
     ) -> Optional[int]:
         """
         下载单只股票数据
@@ -200,7 +200,7 @@ class DataDownloadService:
             code: 股票代码
             years: 下载年数
             module: 使用的数据源模块（默认 'main'）
-            use_akshare_direct: 是否直接使用akshare（兼容原有逻辑，默认True）
+            use_akshare_direct: 是否直接使用akshare（默认False，使用Tushare）
 
         Returns:
             保存的记录数，如果无数据则返回 None
@@ -217,9 +217,9 @@ class DataDownloadService:
 
             logger.info(f"下载 {code} ({start_date} - {end_date})")
 
-            # 兼容模式：直接使用 akshare（原有逻辑）
-            # TODO: 后续可以改为使用 provider.get_daily_data()
+            # 默认使用 Tushare Provider（推荐）
             if use_akshare_direct:
+                # 兼容模式：直接使用 akshare
                 df = await asyncio.to_thread(
                     ak.stock_zh_a_hist,
                     symbol=code,
@@ -229,7 +229,7 @@ class DataDownloadService:
                     adjust="qfq",  # 前复权
                 )
             else:
-                # 使用数据提供者（新逻辑）
+                # 使用 Tushare Provider（推荐）
                 provider = await self.provider_service.get_provider(module)
                 response = await asyncio.to_thread(
                     provider.get_daily_data,
@@ -247,7 +247,9 @@ class DataDownloadService:
                 logger.warning(f"  {code}: 无数据")
                 return None
 
-            # 重命名列（如果需要）
+            # Tushare 数据已经由 converter 转换为标准格式
+            # trade_date -> date 的映射在保存时处理
+            # 重命名列（仅用于 AkShare 兼容模式）
             if "日期" in df.columns:
                 df = df.rename(
                     columns={
@@ -266,9 +268,11 @@ class DataDownloadService:
                 )
 
             # 设置日期索引
-            if "date" in df.columns:
-                df["date"] = pd.to_datetime(df["date"])
-                df = df.set_index("date")
+            date_col = "trade_date" if "trade_date" in df.columns else "date"
+            if date_col in df.columns:
+                if df[date_col].dtype == 'object':
+                    df[date_col] = pd.to_datetime(df[date_col])
+                df = df.set_index(date_col)
 
             # 保存到数据库（使用 Repository）
             count = await asyncio.to_thread(self.stock_repo.save_daily_data, df, code)

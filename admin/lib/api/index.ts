@@ -64,6 +64,7 @@ import { StkLimitDApiClient, stkLimitDApi as stkLimitDApiInst } from './stk-limi
 import { AdjFactorApiClient, adjFactorApi as adjFactorApiInst } from './adj-factor-api'
 import { NewStockApiClient, newStockApi as newStockApiInst } from './new-stock-api'
 import { StockRealtimeApiClient, stockRealtimeApi as stockRealtimeApiInst } from './stock-realtime'
+import { StockDailyApiClient, stockDailyApi as stockDailyApiInst } from './stock-daily'
 import { StockListApiClient, stockListApi as stockListApiInst } from './stock-list-api'
 
 // 重新导出基础类和实例
@@ -702,6 +703,11 @@ export const apiClient = {
   getTopPremiumStocks: stkAhComparisonApiInst.getTopPremium.bind(stkAhComparisonApiInst),
   syncStkAhComparisonAsync: stkAhComparisonApiInst.syncAsync.bind(stkAhComparisonApiInst),
 
+  // 股票日线数据相关
+  getStockDailyData: stockDailyApiInst.getData.bind(stockDailyApiInst),
+  getStockDailyStatistics: stockDailyApiInst.getStatistics.bind(stockDailyApiInst),
+  syncStockDailyAsync: stockDailyApiInst.syncAsync.bind(stockDailyApiInst),
+
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
   post: axiosInst.post.bind(axiosInst),
@@ -897,6 +903,16 @@ export type {
   StockListStatistics,
   StockListParams as StockListQueryParams
 } from './stock-list-api'
+
+// 重新导出股票日线数据 API
+export { StockDailyApiClient }
+export const stockDailyApi = stockDailyApiInst
+export type {
+  StockDailyData,
+  StockDailyStatistics,
+  StockDailyParams,
+  SyncDailyParams
+} from './stock-daily'
 
 // 导出默认实例
 export default apiClient

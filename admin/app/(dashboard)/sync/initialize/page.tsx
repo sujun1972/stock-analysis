@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
 import logger from '@/lib/logger'
@@ -10,143 +9,11 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DatePicker } from '@/components/ui/date-picker'
-import { format, subDays, subMonths, subYears } from '@/lib/date-utils'
+import { format, subDays } from '@/lib/date-utils'
 import { addTaskToQueue } from '@/hooks/use-task-polling'
 
-/**
- * 全局同步状态接口（用于日线数据同步）
- */
-interface SyncStatus {
-  status: string
-  last_sync_date: string
-  progress: number
-  total: number
-  completed: number
-}
-
 export default function InitializePage() {
-  const router = useRouter()
-
-  // ========== 日线数据同步相关状态 ==========
-  const [dailySyncStatus, setDailySyncStatus] = useState<SyncStatus | null>(null)
-  const [isDailyLoading, setIsDailyLoading] = useState(false)
-  const [dailyError, setDailyError] = useState<string | null>(null)
-  const [dailySuccess, setDailySuccess] = useState<string | null>(null)
-
-  // 日线数据同步参数 - 使用日期范围
-  const [startDate, setStartDate] = useState<Date>(() => subDays(new Date(), 3)) // 默认3天前
-  const [endDate, setEndDate] = useState<Date>(new Date()) // 默认今天
-  const [datePreset, setDatePreset] = useState<string>('3days') // 默认预设：3天历史
-
-  // 预设日期范围映射
-  const applyDatePreset = (preset: string) => {
-    const today = new Date()
-    setEndDate(today)
-
-    switch (preset) {
-      case '3days':
-        setStartDate(subDays(today, 3))
-        break
-      case '1month':
-        setStartDate(subMonths(today, 1))
-        break
-      case '3years':
-        setStartDate(subYears(today, 3))
-        break
-      case '5years':
-        setStartDate(subYears(today, 5))
-        break
-      case '10years':
-        setStartDate(subYears(today, 10))
-        break
-    }
-  }
-
-  // 当预设改变时应用
-  useEffect(() => {
-    applyDatePreset(datePreset)
-  }, [datePreset])
-
-  // ========== 日线数据同步逻辑 ==========
-  useEffect(() => {
-    loadDailySyncStatus()
-  }, [])
-
-  // 智能轮询：仅在任务进行中时轮询
-  useEffect(() => {
-    if (dailySyncStatus?.status === 'running') {
-      const interval = setInterval(() => {
-        loadDailySyncStatus()
-      }, 3000)
-      return () => clearInterval(interval)
-    }
-  }, [dailySyncStatus?.status])
-
-  const loadDailySyncStatus = async () => {
-    try {
-      const response = await apiClient.getSyncStatus()
-      if (response.data) {
-        setDailySyncStatus(response.data)
-      }
-    } catch (err) {
-      logger.error('Failed to load daily sync status', err)
-    }
-  }
-
-  const handleDailySync = async () => {
-    try {
-      setIsDailyLoading(true)
-      setDailyError(null)
-      setDailySuccess(null)
-
-      // 格式化日期为 YYYY-MM-DD
-      const formattedStartDate = format(startDate, 'yyyy-MM-dd')
-      const formattedEndDate = format(endDate, 'yyyy-MM-dd')
-
-      // 启动异步任务
-      const res = await apiClient.syncDailyBatch({
-        start_date: formattedStartDate,
-        end_date: formattedEndDate
-      }) as any
-
-      if (res.code === 200 && res.data?.task_id) {
-        const { task_id, display_name } = res.data
-
-        // 添加到全局任务队列
-        addTaskToQueue(task_id, 'sync.daily_batch', display_name, 'sync')
-
-        // 显示成功提示
-        toast.success('任务已启动', {
-          description: '日线数据批量同步任务已在后台执行，您可以在右上角查看进度',
-          duration: 5000
-        })
-
-        setDailySuccess('同步任务已启动，请在右上角任务图标查看进度')
-      }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
-      setDailyError(errorMessage)
-      toast.error('启动任务失败', { description: errorMessage })
-      logger.error('Daily sync error', err)
-    } finally {
-      setIsDailyLoading(false)
-    }
-  }
-
-  const handleAbortSync = async () => {
-    try {
-      await apiClient.abortSync()
-      setDailySuccess('正在中止同步，请稍候...')
-      setTimeout(() => setDailySuccess(null), 5000)
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || err.message || '中止同步失败'
-      setDailyError(errorMessage)
-      logger.error('Abort sync error', err)
-      setTimeout(() => setDailyError(null), 5000)
-    }
-  }
 
   // ========== 情绪数据批量同步相关状态 ==========
   const [sentimentSyncing, setSentimentSyncing] = useState(false)
@@ -195,27 +62,6 @@ export default function InitializePage() {
     }
   }
 
-  // ========== 工具函数 ==========
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'running': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-      case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'failed': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      case 'aborted': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'running': return '同步中'
-      case 'completed': return '已完成'
-      case 'failed': return '失败'
-      case 'aborted': return '已中止'
-      default: return '空闲'
-    }
-  }
-
   return (
         <div className="space-y-6">
       {/* 页面标题 */}
@@ -239,220 +85,26 @@ export default function InitializePage() {
             </li>
             <li className="flex items-start">
               <span className="mr-2">•</span>
-              <span>首次使用建议选择较短时间范围（如3天或1个月）进行测试</span>
+              <span>日线数据同步已迁移到"行情数据 &gt; 股票日线数据"页面</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>首次使用建议选择较短时间范围（如3天或1周）进行测试</span>
             </li>
             <li className="flex items-start">
               <span className="mr-2">•</span>
               <span>大批量同步建议在非交易时段进行，避免影响数据源性能</span>
             </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>系统会自动过滤退市和停牌股票，只同步正常交易的股票</span>
-            </li>
           </ul>
         </CardContent>
       </Card>
 
-      {/* ========== 步骤1: 日线数据初始化 ========== */}
-      <Card className="border-2 border-purple-200 dark:border-purple-800">
-        <CardHeader>
-          <div className="flex items-center">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-purple-600 text-white font-bold mr-3">
-              1
-            </div>
-            <CardTitle className="text-xl">
-              日线数据初始化
-            </CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-400">
-            批量同步所有正常股票的历史日线数据（自动过滤退市和停牌股票）
-          </p>
-
-          {/* 错误提示 */}
-          {dailyError && (
-            <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <AlertDescription className="text-red-800 dark:text-red-200">
-                {dailyError}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* 成功提示 */}
-          {dailySuccess && (
-            <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-              <AlertDescription className="text-green-800 dark:text-green-200">
-                {dailySuccess}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* 当前同步状态 */}
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">当前同步状态</h3>
-            {dailySyncStatus ? (
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(dailySyncStatus.status)}`}>
-                      {getStatusText(dailySyncStatus.status)}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">最后同步</div>
-                    <div className="font-medium text-gray-900 dark:text-white">
-                      {dailySyncStatus.last_sync_date || '未同步'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">进度</div>
-                    <div className="font-medium text-gray-900 dark:text-white">
-                      {dailySyncStatus.completed} / {dailySyncStatus.total}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">完成率</div>
-                    <div className="font-medium text-gray-900 dark:text-white">
-                      {dailySyncStatus.progress}%
-                    </div>
-                  </div>
-                </div>
-
-                {/* 进度条 */}
-                {dailySyncStatus.status === 'running' && (
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                    <div
-                      className="bg-purple-600 h-3 rounded-full transition-all duration-300 flex items-center justify-center text-xs text-white"
-                      style={{ width: `${dailySyncStatus.progress}%` }}
-                    >
-                      {dailySyncStatus.progress > 10 && `${dailySyncStatus.progress}%`}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
-            )}
-          </div>
-
-          {/* 同步参数配置 */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">同步参数配置</h3>
-
-            {/* 快捷预设 */}
-            <div className="space-y-2">
-              <Label htmlFor="preset">历史数据范围预设</Label>
-              <Select value={datePreset} onValueChange={setDatePreset} disabled={isDailyLoading || dailySyncStatus?.status === 'running'}>
-                <SelectTrigger id="preset" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3days">3天历史（推荐测试）</SelectItem>
-                  <SelectItem value="1month">1个月历史</SelectItem>
-                  <SelectItem value="3years">3年历史</SelectItem>
-                  <SelectItem value="5years">5年历史（推荐）</SelectItem>
-                  <SelectItem value="10years">10年历史</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                选择预设后，起始日期和结束日期会自动更新
-              </p>
-            </div>
-
-            {/* 日期范围选择 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>起始日期</Label>
-                <DatePicker
-                  date={startDate}
-                  onDateChange={(date) => date && setStartDate(date)}
-                  placeholder="选择起始日期"
-                  disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>结束日期</Label>
-                <DatePicker
-                  date={endDate}
-                  onDateChange={(date) => date && setEndDate(date)}
-                  placeholder="选择结束日期"
-                  disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
-                />
-              </div>
-            </div>
-
-            {/* 日期范围提示 */}
-            <Alert className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
-              <AlertDescription className="text-sm text-purple-800 dark:text-purple-300">
-                <strong>当前选择：</strong>从 {format(startDate, 'yyyy年MM月dd日')} 至 {format(endDate, 'yyyy年MM月dd日')}
-                <br />
-                <strong>同步范围：</strong>所有正常状态股票（自动排除退市、停牌股票）
-              </AlertDescription>
-            </Alert>
-          </div>
-
-          {/* 开始同步和中止按钮 */}
-          <div className="flex flex-wrap gap-3">
-            <Button
-              onClick={handleDailySync}
-              disabled={isDailyLoading || dailySyncStatus?.status === 'running'}
-              className="flex-1 md:flex-initial md:w-auto"
-            >
-              {isDailyLoading || dailySyncStatus?.status === 'running' ? '同步中...' : '开始批量同步'}
-            </Button>
-
-            {(isDailyLoading || dailySyncStatus?.status === 'running') && (
-              <Button
-                onClick={handleAbortSync}
-                variant="destructive"
-                className="flex-1 md:flex-initial md:w-auto"
-              >
-                中止同步
-              </Button>
-            )}
-          </div>
-
-          {/* 数据说明 */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-            <details className="text-sm">
-              <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-                查看数据说明
-              </summary>
-              <div className="mt-3 space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div>
-                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">数据内容：</strong>
-                    <ul className="list-disc list-inside space-y-1.5">
-                      <li>开盘价、收盘价</li>
-                      <li>最高价、最低价</li>
-                      <li>成交量、成交额</li>
-                      <li>涨跌幅、振幅</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">注意事项：</strong>
-                    <ul className="list-disc list-inside space-y-1.5">
-                      <li>同步过程中不要关闭浏览器</li>
-                      <li>同步会覆盖更新现有数据</li>
-                      <li>注意API限流问题</li>
-                      <li>自动过滤退市和停牌股票</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </details>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ========== 步骤2: 情绪数据批量同步 ========== */}
+      {/* ========== 情绪数据批量同步 ========== */}
       <Card className="border-2 border-orange-200 dark:border-orange-800">
         <CardHeader>
           <div className="flex items-center">
             <div className="flex items-center justify-center w-10 h-10 rounded-full bg-orange-600 text-white font-bold mr-3">
-              2
+              1
             </div>
             <CardTitle className="text-xl">
               情绪数据批量同步

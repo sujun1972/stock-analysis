@@ -356,3 +356,82 @@ def sync_concept_task(self: Task, source: Optional[str] = None):
     except Exception as e:
         logger.error(f"[Celery] 概念数据同步失败: {repr(e)}", exc_info=True)
         raise
+
+
+@celery_app.task(
+    base=SyncTask,
+    name="sync.daily_single",
+    bind=True
+)
+def sync_daily_single_task(
+    self: Task,
+    code: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    years: int = 5
+):
+    """
+    异步同步日线数据
+
+    Args:
+        code: 股票代码（可选，留空则同步全市场最近交易日数据）
+        start_date: 开始日期 (YYYYMMDD)
+        end_date: 结束日期 (YYYYMMDD)
+        years: 历史年数
+
+    Returns:
+        {
+            "status": "success|locked",
+            "code": 股票代码或"全市场",
+            "count": 记录数,
+            "date_range": 日期范围
+        }
+    """
+    try:
+        task_desc = code if code else "全市场"
+        logger.info(f"========== [Celery] 开始执行日线数据同步任务: {task_desc} ==========")
+
+        # 使用分布式锁防止并发执行
+        lock_key = f"sync:daily:{code if code else 'all'}"
+
+        with redis_lock.acquire(lock_key, timeout=300, blocking=False) if redis_lock else _DummyContext() as acquired:
+            if not acquired and redis_lock:
+                logger.warning(f"⚠️  {task_desc} 日线数据同步任务已在执行中，跳过本次执行")
+                return {
+                    "status": "locked",
+                    "code": task_desc,
+                    "message": "已有同步任务正在进行"
+                }
+
+            # 创建服务实例
+            from app.services.stock_daily_service import StockDailyService
+            service = StockDailyService()
+
+            # 运行异步任务
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    service.sync_single_stock(
+                        code=code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        years=years
+                    )
+                )
+            finally:
+                loop.close()
+
+        logger.info(f"[Celery] {task_desc} 日线数据同步完成: {result}")
+
+        return {
+            "status": result.get("status", "success"),
+            "code": task_desc,
+            "count": result.get("count", 0),
+            "date_range": result.get("date_range", ""),
+            "message": result.get("message", "")
+        }
+
+    except Exception as e:
+        logger.error(f"[Celery] {code if code else '全市场'} 日线数据同步失败: {repr(e)}", exc_info=True)
+        raise
