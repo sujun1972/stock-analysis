@@ -76,12 +76,17 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 4. **PageHeader 组件**：
    - 现在专注于页面标题、描述和操作按钮
    - 不再包含面包屑功能
+   - 支持 `details` prop：传入 ReactNode，标题旁会出现 ⓘ 图标，点击以 Popover 展示补充信息（如接口名称、文档链接）
    - 用法更简洁：
    ```tsx
    <PageHeader
      title="页面标题"
      description="页面描述"
      actions={<Button>操作</Button>}
+     details={<>
+       <div>接口：your_api</div>
+       <a href="https://tushare.pro/document/2?doc_id=xxx" target="_blank" rel="noopener noreferrer">查看文档</a>
+     </>}
    />
    ```
 

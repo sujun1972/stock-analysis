@@ -184,7 +184,11 @@ export default function LimitStepPage() {
     <div className="space-y-6">
       <PageHeader
         title="连板天梯"
-        description="连续涨停板次数统计（连板天梯）"
+        description="获取每天连板个数晋级的股票，可以分析出每天连续涨停进阶个数，判断强势热度"
+        details={<>
+          <div>接口：limit_step</div>
+          <a href="https://tushare.pro/document/2?doc_id=356" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}

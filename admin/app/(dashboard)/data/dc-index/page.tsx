@@ -333,7 +333,11 @@ export default function DcIndexPage() {
     <div className="space-y-6">
       <PageHeader
         title="东方财富概念板块"
-        description="接口：dc_index，获取东方财富每个交易日的概念/行业/地域板块数据，单次最大5000条"
+        description="获取东方财富每个交易日的概念板块数据，支持按日期查询"
+        details={<>
+          <div>接口：dc_index</div>
+          <a href="https://tushare.pro/document/2?doc_id=362" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}

@@ -246,7 +246,11 @@ export default function DcMemberPage() {
     <div className="space-y-6">
       <PageHeader
         title="东方财富板块成分"
-        description="东方财富板块成分数据，单次最大5000条，6000积分/次"
+        description="获取东方财富板块每日成分数据，可以根据概念板块代码和交易日期，获取历史成分"
+        details={<>
+          <div>接口：dc_member</div>
+          <a href="https://tushare.pro/document/2?doc_id=363" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}

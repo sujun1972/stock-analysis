@@ -251,7 +251,11 @@ export default function TopInstPage() {
     <div className="space-y-6">
       <PageHeader
         title="龙虎榜机构明细"
-        description="查询龙虎榜机构成交明细数据，包含营业部买卖信息"
+        description="龙虎榜机构成交明细"
+        details={<>
+          <div>接口：top_inst</div>
+          <a href="https://tushare.pro/document/2?doc_id=107" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}

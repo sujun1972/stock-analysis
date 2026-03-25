@@ -339,7 +339,11 @@ export default function DcDailyPage() {
     <div className="space-y-6">
       <PageHeader
         title="东财概念板块行情"
-        description="东方财富概念板块、行业板块、地域板块行情数据（历史数据从2020年开始），6000积分/次，单次最大2000条"
+        description="获取东财概念板块、行业指数板块、地域板块行情数据，历史数据开始于2020年"
+        details={<>
+          <div>接口：dc_daily</div>
+          <a href="https://tushare.pro/document/2?doc_id=382" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}

@@ -22,7 +22,8 @@
 
 import React, { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ArrowLeft, Info } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
@@ -52,7 +53,6 @@ interface PageHeaderProps {
    */
   onBack?: () => void
 
-
   /**
    * 额外的 CSS 类名
    */
@@ -72,6 +72,12 @@ interface PageHeaderProps {
    * 底部额外内容（如标签页、筛选器等）
    */
   footer?: ReactNode
+
+  /**
+   * 详细信息内容（ReactNode），点击标题旁的 ⓘ 图标以 Popover 形式展示
+   * 适合放接口名称、文档链接等补充信息
+   */
+  details?: ReactNode
 }
 
 export function PageHeader({
@@ -83,7 +89,8 @@ export function PageHeader({
   className,
   compact = false,
   prefix,
-  footer
+  footer,
+  details
 }: PageHeaderProps) {
   const router = useRouter()
 
@@ -116,7 +123,7 @@ export function PageHeader({
 
           {/* 标题区域 */}
           <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {prefix}
               <h1
                 className={cn(
@@ -126,6 +133,26 @@ export function PageHeader({
               >
                 {title}
               </h1>
+              {details && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-muted-foreground/40 hover:text-muted-foreground transition-colors mt-1"
+                      aria-label="查看详情"
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="bottom"
+                    align="start"
+                    className="w-auto max-w-xs text-sm [&_a]:text-blue-500 [&_a]:underline [&_a:hover]:text-blue-600 space-y-1"
+                  >
+                    {details}
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
             {description && (
               <p

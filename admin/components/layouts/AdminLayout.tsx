@@ -95,16 +95,6 @@ const navItems: NavItem[] = [
         name: 'ST股票列表',
         href: '/data/stock-st',
         icon: AlertTriangle
-      },
-      {
-        name: '板块行情',
-        href: '/data/dc-daily',
-        icon: TrendingUp
-      },
-      {
-        name: '板块成分',
-        href: '/data/dc-member',
-        icon: Layers
       }
     ]
   },
@@ -432,12 +422,12 @@ const navItems: NavItem[] = [
         icon: BarChart3
       },
       {
-        name: '板块成分追踪（DC）',
+        name: '东方财富板块成分',
         href: '/data/dc-member',
         icon: Layers
       },
       {
-        name: '概念板块行情（DC）',
+        name: '东财概念板块行情',
         href: '/data/dc-daily',
         icon: LineChart
       }

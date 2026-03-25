@@ -229,7 +229,11 @@ export default function LimitListPage() {
     <div className="space-y-6">
       <PageHeader
         title="涨跌停列表"
-        description="每日涨跌停、炸板数据（数据从2020年开始）"
+        description="获取A股每日涨跌停、炸板数据情况，数据从2020年开始（不提供ST股票的统计）"
+        details={<>
+          <div>接口：limit_list_d</div>
+          <a href="https://tushare.pro/document/2?doc_id=298" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}

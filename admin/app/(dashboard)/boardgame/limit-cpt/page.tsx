@@ -279,7 +279,11 @@ export default function LimitCptPage() {
     <div className="space-y-6">
       <PageHeader
         title="最强板块统计"
-        description="各板块涨停数据统计与排名（连板梯队）"
+        description="获取每天涨停股票最多最强的概念板块，可以分析强势板块的轮动，判断资金动向"
+        details={<>
+          <div>接口：limit_cpt_list</div>
+          <a href="https://tushare.pro/document/2?doc_id=357" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}

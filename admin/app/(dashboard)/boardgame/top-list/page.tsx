@@ -222,7 +222,11 @@ export default function TopListPage() {
     <div className="space-y-6">
       <PageHeader
         title="龙虎榜每日明细"
-        description="龙虎榜每日交易明细数据，包含涨跌幅偏离值达7%、连续涨跌、换手率达20%等上榜股票及席位信息"
+        description="龙虎榜每日交易明细"
+        details={<>
+          <div>接口：top_list</div>
+          <a href="https://tushare.pro/document/2?doc_id=106" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
       />
 
       {/* 统计卡片 */}
