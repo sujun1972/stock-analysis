@@ -52,7 +52,8 @@ import {
   Star,
   Calendar,
   Layers,
-  AlertTriangle
+  AlertTriangle,
+  CalendarDays
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -95,6 +96,11 @@ const navItems: NavItem[] = [
         name: 'ST股票列表',
         href: '/data/stock-st',
         icon: AlertTriangle
+      },
+      {
+        name: '交易日历',
+        href: '/data/trade-cal',
+        icon: CalendarDays
       }
     ]
   },

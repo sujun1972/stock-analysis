@@ -85,6 +85,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 160,
         'points_consumption': 6000
     },
+    'tasks.sync_trade_cal': {
+        'task': 'tasks.sync_trade_cal',
+        'name': '交易日历',
+        'description': '获取各大交易所交易日历数据，默认同步上交所(SSE)和深交所(SZSE)，支持指定交易所和日期范围',
+        'category': '基础数据',
+        'display_order': 120,
+        'points_consumption': 2000
+    },
 
     # ============================================
     # 行情数据同步任务（display_order: 200-299）

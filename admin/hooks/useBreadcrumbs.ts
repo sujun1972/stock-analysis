@@ -50,7 +50,8 @@ import {
   Star,
   Calendar,
   Layers,
-  AlertTriangle
+  AlertTriangle,
+  CalendarDays
 } from 'lucide-react'
 
 // 路由标签映射
@@ -124,6 +125,7 @@ const routeLabelMap: Record<string, string> = {
   // 基础数据子路由
   'stock-list': '股票列表',
   'stock-st': 'ST股票列表',
+  'trade-cal': '交易日历',
   'dc-index': '东方财富概念板块',
   'dc-member': '东方财富板块成分',
   'dc-daily': '东财概念板块行情',
@@ -244,6 +246,7 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   // 基础数据子路由
   'stock-list': Database,
   'stock-st': AlertTriangle,
+  'trade-cal': CalendarDays,
 
   // 行情数据子路由（对照菜单）
   'daily': LineChart,

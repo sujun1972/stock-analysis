@@ -69,6 +69,7 @@ import { StockRealtimeApiClient, stockRealtimeApi as stockRealtimeApiInst } from
 import { StockDailyApiClient, stockDailyApi as stockDailyApiInst } from './stock-daily'
 import { StockListApiClient, stockListApi as stockListApiInst } from './stock-list-api'
 import { StockStApiClient, stockStApi as stockStApiInst } from './stock-st-api'
+import { TradeCalApiClient, tradeCalApi as tradeCalApiInst } from './trade-cal-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -406,6 +407,16 @@ export type {
   StkSurvData,
   StkSurvStatistics
 } from './stk-surv-api'
+
+// 重新导出交易日历 API
+export { TradeCalApiClient }
+export const tradeCalApi = tradeCalApiInst
+export type {
+  TradeCalParams,
+  TradeCalData,
+  TradeCalStatistics,
+  TradeCalSyncParams
+} from './trade-cal-api'
 
 // 创建统一的 API 客户端对象（向后兼容）
 export const apiClient = {

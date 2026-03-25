@@ -3952,6 +3952,43 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取ST股票列表失败: {e}")
             raise TushareDataError(f"获取ST股票列表失败: {str(e)}")
 
+    def get_trade_calendar(
+        self,
+        exchange: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        is_open: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取交易日历数据
+        积分消耗：2000分
+
+        Args:
+            exchange: 交易所代码（SSE上交所/SZSE深交所/CFFEX中金所/SHFE上期所/CZCE郑商所/DCE大商所/INE上能源）
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            is_open: 是否交易 '0'休市 '1'交易
+
+        Returns:
+            pd.DataFrame: 交易日历数据，包含 exchange, cal_date, is_open, pretrade_date 列
+        """
+        try:
+            logger.info(f"获取交易日历数据: exchange={exchange}, start_date={start_date}, end_date={end_date}")
+            params = {}
+            if exchange is not None:
+                params['exchange'] = exchange
+            if start_date is not None:
+                params['start_date'] = start_date
+            if end_date is not None:
+                params['end_date'] = end_date
+            if is_open is not None:
+                params['is_open'] = is_open
+            df = self.api_client.query('trade_cal', **params)
+            return df
+        except Exception as e:
+            logger.error(f"获取交易日历数据失败: {e}")
+            raise TushareDataError(f"获取交易日历数据失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

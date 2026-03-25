@@ -97,6 +97,7 @@ from .endpoints import (
     dc_member,  # 东方财富板块成分
     dc_index,  # 东方财富板块数据
     dc_daily,  # 东方财富概念板块行情
+    trade_cal,  # 交易日历
     users,
 )
 
@@ -165,6 +166,7 @@ router.include_router(broker_recommend.router, prefix="/broker-recommend", tags=
 router.include_router(dc_member.router, prefix="/dc-member", tags=["东方财富板块成分"])  # 东方财富板块成分API
 router.include_router(dc_index.router, prefix="/dc-index", tags=["东方财富板块数据"])  # 东方财富板块数据API
 router.include_router(dc_daily.router, prefix="/dc-daily", tags=["东方财富概念板块行情"])  # 东方财富概念板块行情API
+router.include_router(trade_cal.router, prefix="/trade-cal", tags=["交易日历"])  # 交易日历API
 router.include_router(stk_shock.router, prefix="/stk-shock", tags=["个股异常波动"])  # 个股异常波动API
 router.include_router(stk_alert.router, prefix="/stk-alert", tags=["交易所重点提示证券"])  # 交易所重点提示证券API
 router.include_router(stk_high_shock.router, prefix="/stk-high-shock", tags=["个股严重异常波动"])  # 个股严重异常波动API

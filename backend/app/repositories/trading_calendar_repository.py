@@ -354,6 +354,121 @@ class TradingCalendarRepository(BaseRepository):
 
         return None
 
+    def get_calendar_paged(
+        self,
+        exchange: str = 'SSE',
+        start_date: str = '19900101',
+        end_date: str = '29991231',
+        is_open: Optional[str] = None,
+        limit: int = 30,
+        offset: int = 0
+    ) -> List[Dict]:
+        """
+        分页查询交易日历数据
+
+        Args:
+            exchange: 交易所代码
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            is_open: 是否交易 '0'休市 '1'交易（可选）
+            limit: 每页记录数
+            offset: 偏移量
+
+        Returns:
+            日历数据列表
+
+        Examples:
+            >>> repo = TradingCalendarRepository()
+            >>> items = repo.get_calendar_paged('SSE', '20260101', '20261231')
+        """
+        conditions = [
+            "exchange = %s",
+            "cal_date >= %s",
+            "cal_date <= %s"
+        ]
+        params = [exchange, start_date, end_date]
+
+        if is_open is not None:
+            conditions.append("is_open = %s")
+            params.append(int(is_open))
+
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT exchange, cal_date, is_open, pretrade_date
+            FROM trade_cal
+            WHERE {where_clause}
+            ORDER BY cal_date DESC
+            LIMIT %s OFFSET %s
+        """
+        params.extend([limit, offset])
+
+        try:
+            result = self.execute_query(query, tuple(params))
+            return [
+                {
+                    "exchange": row[0],
+                    "cal_date": row[1],
+                    "is_open": int(row[2]) if row[2] is not None else 0,
+                    "pretrade_date": row[3]
+                }
+                for row in result
+            ]
+        except Exception as e:
+            logger.error(f"分页查询交易日历失败: {e}")
+            raise QueryError(
+                "分页查询交易日历失败",
+                error_code="CALENDAR_PAGED_QUERY_FAILED",
+                reason=str(e)
+            )
+
+    def get_calendar_count(
+        self,
+        exchange: str = 'SSE',
+        start_date: str = '19900101',
+        end_date: str = '29991231',
+        is_open: Optional[str] = None
+    ) -> int:
+        """
+        统计交易日历记录数
+
+        Args:
+            exchange: 交易所代码
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            is_open: 是否交易 '0'休市 '1'交易（可选）
+
+        Returns:
+            记录数
+
+        Examples:
+            >>> repo = TradingCalendarRepository()
+            >>> count = repo.get_calendar_count('SSE', '20260101', '20261231')
+        """
+        conditions = [
+            "exchange = %s",
+            "cal_date >= %s",
+            "cal_date <= %s"
+        ]
+        params = [exchange, start_date, end_date]
+
+        if is_open is not None:
+            conditions.append("is_open = %s")
+            params.append(int(is_open))
+
+        where_clause = " AND ".join(conditions)
+        query = f"SELECT COUNT(*) FROM trade_cal WHERE {where_clause}"
+
+        try:
+            result = self.execute_query(query, tuple(params))
+            return result[0][0] if result else 0
+        except Exception as e:
+            logger.error(f"统计交易日历记录数失败: {e}")
+            raise QueryError(
+                "统计交易日历记录数失败",
+                error_code="CALENDAR_COUNT_QUERY_FAILED",
+                reason=str(e)
+            )
+
     # ==================== 写入操作 ====================
 
     def bulk_upsert_calendar(self, df: pd.DataFrame, exchange: str = 'SSE') -> int:
@@ -406,7 +521,7 @@ class TradingCalendarRepository(BaseRepository):
                     row.get('pretrade_date', None)
                 ))
 
-            rows_affected = self.execute_batch_update(query, records)
+            rows_affected = self.execute_batch(query, records)
             logger.info(f"批量插入交易日历数据: {rows_affected} 行")
             return rows_affected
 
