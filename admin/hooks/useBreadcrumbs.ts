@@ -39,7 +39,18 @@ import {
   UserCog,
   Shield,
   ChartBar,
-  List
+  List,
+  BarChart3,
+  PieChart,
+  PauseCircle,
+  Wallet,
+  DollarSign,
+  ListOrdered,
+  Building2,
+  Star,
+  Calendar,
+  Layers,
+  AlertTriangle
 } from 'lucide-react'
 
 // 路由标签映射
@@ -55,9 +66,14 @@ const routeLabelMap: Record<string, string> = {
   'logs': '日志管理',
   'monitoring': '系统监控',
   'profile': '个人中心',
+  'boardgame': '打板专题',
+  'features': '特色数据',
+  'market': '行情数据',
+  'financial': '财务数据',
+  'reference-data': '参考数据',
 
   // 市场情绪子路由
-  'data': '数据管理',
+  'data': '基础数据',
   'dragon-tiger': '龙虎榜',
   'limit-up': '涨停板池',
   'ai-analysis': 'AI分析',
@@ -97,10 +113,77 @@ const routeLabelMap: Record<string, string> = {
 
   // 股票管理子路由
   'stock-concepts': '关联概念',
+
+  // 打板专题子路由
+  'top-list': '龙虎榜每日明细',
+  'top-inst': '龙虎榜机构明细',
+  'limit-list': '涨跌停列表',
+  'limit-step': '连板天梯',
+  'limit-cpt': '最强板块统计',
+
+  // 基础数据子路由
+  'stock-list': '股票列表',
+  'stock-st': 'ST股票列表',
+  'dc-index': '东方财富概念板块',
+  'dc-member': '东方财富板块成分',
+  'dc-daily': '东财概念板块行情',
+  'margin': '融资融券交易汇总',
+  'margin-detail': '融资融券交易明细',
+  'margin-secs': '融资融券标的（盘前）',
+  'slb-len': '转融资交易汇总',
+
+  // 行情数据子路由
+  'daily': '股票日线数据',
+  'adj-factor': '复权因子',
+  'daily-basic': '每日指标',
+  'stk-limit-d': '每日涨跌停价格',
+  'suspend': '每日停复牌信息',
+  'hsgt-top10': '沪深股通十大成交股',
+  'ggt-top10': '港股通十大成交股',
+  'ggt-daily': '港股通每日成交统计',
+  'ggt-monthly': '港股通每月成交统计',
+
+  // 财务数据子路由
+  'income': '利润表',
+  'balancesheet': '资产负债表',
+  'cashflow': '现金流量表',
+  'forecast': '业绩预告',
+  'express': '业绩快报',
+  'dividend': '分红送股',
+  'fina-indicator': '财务指标',
+  'fina-audit': '审计意见',
+  'fina-mainbz': '主营业务构成',
+  'disclosure-date': '财报披露计划',
+
+  // 参考数据子路由
+  'stk-shock': '个股异常波动',
+  'stk-high-shock': '个股严重异常波动',
+  'stk-alert': '交易所重点提示证券',
+  'pledge-stat': '股权质押统计',
+  'repurchase': '股票回购',
+  'share-float': '限售股解禁',
+  'block-trade': '大宗交易',
+  'stk-holdernumber': '股东人数',
+  'stk-holdertrade': '股东增减持',
+
+  // 特色数据子路由
+  'report-rc': '卖方盈利预测',
+  'cyq-perf': '每日筹码及胜率',
+  'cyq-chips': '每日筹码分布',
+  'ccass-hold': '中央结算系统持股汇总',
+  'ccass-hold-detail': '中央结算系统持股明细',
+  'hk-hold': '北向资金持股',
+  'stk-auction-o': '股票开盘集合竞价',
+  'stk-auction-c': '股票收盘集合竞价',
+  'stk-nineturn': '神奇九转指标',
+  'stk-ah-comparison': 'AH股比价',
+  'stk-surv': '机构调研表',
+  'broker-recommend': '券商每月荐股',
 }
 
-// 路由图标映射
+// 路由图标映射（与 AdminLayout.tsx 菜单配置保持一致）
 const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  // 顶级路由
   'users': Users,
   'stocks': LineChart,
   'strategies': TrendingUp,
@@ -111,34 +194,122 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   'logs': FileText,
   'monitoring': Activity,
   'profile': UserCog,
+  'boardgame': ListOrdered,   // 打板专题
+  'market': TrendingUpIcon,   // 行情数据
+  'financial': FileText,      // 财务数据
+  'reference-data': FileText, // 参考数据
+  'features': Star,           // 特色数据
+  'data': Layers,             // 基础数据（默认，具体路径由 parentOverrides 覆盖）
 
-  // 子路由图标
-  'data': ChartBar,
-  'dragon-tiger': Flame,
-  'limit-up': ArrowUpCircle,
-  'cycle': TrendingUp,
+  // 市场情绪子路由
   'ai-analysis': Sparkles,
   'premarket': Clock,
-  'moneyflow-hsgt': TrendingUp,
-  'moneyflow': Activity,
-  'moneyflow-mkt-dc': LineChart,
-  'moneyflow-ind-dc': ChartBar,
-  'moneyflow-stock-dc': TrendingUp,
+
+  // 系统设置子路由
   'system': Wrench,
   'datasource': Database,
   'ai-config': Sparkles,
   'prompt-templates': FileText,
   'scheduler': Clock,
   'notification-channels': Bell,
+
+  // 日志管理子路由
+  'llm-calls': Brain,
+  'system-logs': ScrollText,
+
+  // 系统监控子路由
+  'performance': Activity,
+  'notifications': Bell,
+
+  // 数据同步子路由
   'initialize': RefreshCw,
   'new-stocks': PackagePlus,
   'delisted-stocks': PackageMinus,
-  'realtime': TrendingUpIcon,
-  'llm-calls': Brain,
-  'performance': Activity,
-  'notifications': Bell,
+  'realtime': RefreshCw,
+
+  // 策略管理子路由
   'new': PackagePlus,
   'pending-review': List,
+
+  // 打板专题子路由（对照菜单）
+  'top-list': Flame,
+  'top-inst': Building2,
+  'limit-list': TrendingUp,
+  'limit-step': TrendingUp,
+  'limit-cpt': TrendingUp,
+  'dc-index': BarChart3,
+  'dc-member': Layers,
+  'dc-daily': LineChart,
+
+  // 基础数据子路由
+  'stock-list': Database,
+  'stock-st': AlertTriangle,
+
+  // 行情数据子路由（对照菜单）
+  'daily': LineChart,
+  'adj-factor': Database,
+  'daily-basic': BarChart3,
+  'stk-limit-d': TrendingUpIcon,
+  'suspend': PauseCircle,
+  'hsgt-top10': TrendingUpIcon,
+  'ggt-top10': TrendingUpIcon,
+  'ggt-daily': TrendingUpIcon,
+  'ggt-monthly': TrendingUpIcon,
+
+  // 财务数据子路由（对照菜单）
+  'income': TrendingUp,
+  'balancesheet': DollarSign,
+  'cashflow': Activity,
+  'forecast': TrendingUp,
+  'express': TrendingUp,
+  'dividend': DollarSign,
+  'fina-indicator': TrendingUp,
+  'fina-audit': TrendingUp,
+  'fina-mainbz': PieChart,
+  'disclosure-date': Calendar,
+
+  // 参考数据子路由（对照菜单）
+  'stk-shock': FileText,
+  'stk-high-shock': FileText,
+  'stk-alert': FileText,
+  'pledge-stat': TrendingUp,
+  'repurchase': FileText,
+  'share-float': FileText,
+  'block-trade': Building2,
+  'stk-holdernumber': Users,
+  'stk-holdertrade': Users,
+
+  // 特色数据子路由（对照菜单）
+  'report-rc': TrendingUp,
+  'cyq-perf': BarChart3,
+  'cyq-chips': PieChart,
+  'ccass-hold': Database,
+  'ccass-hold-detail': Database,
+  'hk-hold': TrendingUp,
+  'stk-auction-o': Clock,
+  'stk-auction-c': TrendingUp,
+  'stk-nineturn': Activity,
+  'stk-ah-comparison': TrendingUp,
+  'stk-surv': Users,
+  'broker-recommend': TrendingUpIcon,
+
+  // 两融数据子路由（对照菜单）
+  'margin': BarChart3,
+  'margin-detail': FileText,
+  'margin-secs': Activity,
+  'slb-len': TrendingUp,
+
+  // 资金流向子路由（对照菜单）
+  'moneyflow': Activity,
+  'moneyflow-stock-dc': TrendingUpIcon,
+  'moneyflow-ind-dc': BarChart3,
+  'moneyflow-mkt-dc': LineChart,
+  'moneyflow-hsgt': TrendingUp,
+
+  // 其他
+  'dragon-tiger': Flame,
+  'limit-up': ArrowUpCircle,
+  'cycle': TrendingUp,
 }
 
 /**
@@ -181,6 +352,22 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     const items: BreadcrumbItem[] = []
     let currentPath = ''
 
+    // 某些页面的 URL 父级 segment 与菜单归属不一致，需要按完整 pathname 覆盖
+    // 例如 /data/dc-daily 在打板专题菜单下，但 URL 首段是 data
+    const parentOverrides: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
+      // 两融数据下的 /data/* 页面
+      '/data/margin':          { label: '两融数据', icon: Wallet },
+      '/data/margin-detail':   { label: '两融数据', icon: Wallet },
+      '/data/margin-secs':     { label: '两融数据', icon: Wallet },
+      '/data/slb-len':         { label: '两融数据', icon: Wallet },
+      // 资金流向下的 /data/* 页面
+      '/data/moneyflow':          { label: '资金流向', icon: DollarSign },
+      '/data/moneyflow-stock-dc': { label: '资金流向', icon: DollarSign },
+      '/data/moneyflow-ind-dc':   { label: '资金流向', icon: DollarSign },
+      '/data/moneyflow-mkt-dc':   { label: '资金流向', icon: DollarSign },
+      '/data/moneyflow-hsgt':     { label: '资金流向', icon: DollarSign },
+    }
+
     segments.forEach((segment, index) => {
       currentPath += `/${segment}`
 
@@ -190,6 +377,13 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
 
       let label = routeLabelMap[segment] || segment
       let icon = routeIconMap[segment]
+
+      // 对父级 segment（index=0）按完整 pathname 做覆盖
+      if (index === 0 && parentOverrides[pathname]) {
+        const override = parentOverrides[pathname]
+        label = override.label
+        if (override.icon) icon = override.icon
+      }
 
       // 处理动态路由
       if (isDynamic && index > 0) {

@@ -389,6 +389,7 @@ const navItems: NavItem[] = [
   },
   {
     name: '打板专题',
+    href: '/boardgame',
     icon: ListOrdered,
     children: [
       {
@@ -418,17 +419,17 @@ const navItems: NavItem[] = [
       },
       {
         name: '东方财富概念板块',
-        href: '/data/dc-index',
+        href: '/boardgame/dc-index',
         icon: BarChart3
       },
       {
         name: '东方财富板块成分',
-        href: '/data/dc-member',
+        href: '/boardgame/dc-member',
         icon: Layers
       },
       {
         name: '东财概念板块行情',
-        href: '/data/dc-daily',
+        href: '/boardgame/dc-daily',
         icon: LineChart
       }
     ]
@@ -546,7 +547,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     navItems.forEach(item => {
       if (item.children) {
         const hasActiveChild = item.children.some(
-          child => child.href && pathname.startsWith(child.href)
+          child => child.href && (pathname === child.href || pathname.startsWith(child.href + '/'))
         )
         if (hasActiveChild) {
           openMenus.push(item.name)
@@ -599,20 +600,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
    * 改进：避免短路径匹配长路径的问题（如 /data/margin 匹配 /data/margin-detail）
    */
   const isActive = (item: NavItem) => {
-    if (item.href) {
-      if (item.href === '/') {
-        return pathname === '/'
-      }
-      // 精确匹配或者匹配后面跟着 / 的路径
-      return pathname === item.href || pathname.startsWith(item.href + '/')
-    }
-    // 如果有子菜单，检查子菜单是否有激活项
     if (item.children) {
+      // parent 自身 href 精确匹配（如 /boardgame 页面本身）
+      if (item.href && pathname === item.href) {
+        return true
+      }
+      // 检查子菜单是否有激活项
       return item.children.some(child => {
         if (!child.href) return false
         if (child.href === '/') return pathname === '/'
         return pathname === child.href || pathname.startsWith(child.href + '/')
       })
+    }
+    if (item.href) {
+      if (item.href === '/') {
+        return pathname === '/'
+      }
+      return pathname === item.href || pathname.startsWith(item.href + '/')
     }
     return false
   }
@@ -693,8 +697,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               return (
                 <div key={item.name} className="relative menu-item-with-submenu">
                   {/* 父菜单项 */}
-                  <button
-                    onClick={() => toggleMenu(item.name)}
+                  <div
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
                       active
@@ -704,23 +707,46 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     )}
                     title={isCollapsed ? item.name : undefined}
                   >
-                    <Icon className={cn(
-                      "w-5 h-5 flex-shrink-0",
-                      isCollapsed && "md:w-6 md:h-6"
-                    )} />
-                    <span className={cn(
-                      "font-medium flex-1 text-left",
-                      isCollapsed && "md:hidden"
-                    )}>
-                      {item.name}
-                    </span>
-                    {!isCollapsed && (
-                      <ChevronDown className={cn(
-                        "w-4 h-4 transition-transform",
-                        isOpen && "rotate-180"
-                      )} />
+                    {/* 图标+名称区域：有 href 则跳转，否则展开菜单 */}
+                    {item.href && !isCollapsed ? (
+                      <Link
+                        href={item.href}
+                        onClick={handleMenuClick}
+                        className="flex items-center gap-3 flex-1 min-w-0"
+                      >
+                        <Icon className="w-5 h-5 flex-shrink-0" />
+                        <span className="font-medium flex-1 text-left truncate">{item.name}</span>
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => item.href ? router.push(item.href) : toggleMenu(item.name)}
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                      >
+                        <Icon className={cn(
+                          "w-5 h-5 flex-shrink-0",
+                          isCollapsed && "md:w-6 md:h-6"
+                        )} />
+                        <span className={cn(
+                          "font-medium flex-1 text-left",
+                          isCollapsed && "md:hidden"
+                        )}>
+                          {item.name}
+                        </span>
+                      </button>
                     )}
-                  </button>
+                    {/* 展开/收起箭头 - 仅展开状态显示，独立点击区域 */}
+                    {!isCollapsed && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleMenu(item.name) }}
+                        className="p-1 rounded hover:bg-white/10 flex-shrink-0"
+                      >
+                        <ChevronDown className={cn(
+                          "w-4 h-4 transition-transform",
+                          isOpen && "rotate-180"
+                        )} />
+                      </button>
+                    )}
+                  </div>
 
                   {/* 收起时的悬浮子菜单 - 仅大屏幕 */}
                   {isCollapsed && item.children && (
@@ -777,7 +803,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           >
                             <ChildIcon className="w-4 h-4" />
                             <span className="font-medium">{child.name}</span>
-                            {childActive && <ChevronRight className="w-3 h-3 ml-auto" />}
                           </Link>
                         )
                       })}
@@ -804,7 +829,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           >
                             <ChildIcon className="w-4 h-4" />
                             <span className="font-medium">{child.name}</span>
-                            {childActive && <ChevronRight className="w-3 h-3 ml-auto" />}
                           </Link>
                         )
                       })}

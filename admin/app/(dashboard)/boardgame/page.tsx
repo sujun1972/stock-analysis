@@ -2,28 +2,76 @@
 
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ListOrdered, TrendingUp } from 'lucide-react'
+import {
+  Flame,
+  Building2,
+  TrendingUp,
+  BarChart3,
+  Layers,
+  LineChart
+} from 'lucide-react'
 import Link from 'next/link'
 
-export default function BoardGamePage() {
-  const modules = [
-    {
-      title: '龙虎榜每日明细',
-      description: '查看涨跌幅偏离值达7%、连续涨跌、换手率达20%等上榜股票及席位信息',
-      icon: ListOrdered,
-      href: '/boardgame/top-list',
-      color: 'text-blue-600'
-    },
-    // 未来可以添加更多打板相关功能
-    // {
-    //   title: '涨停板分析',
-    //   description: '涨停板数据分析和连板天梯',
-    //   icon: TrendingUp,
-    //   href: '/boardgame/limit-up',
-    //   color: 'text-red-600'
-    // }
-  ]
+const modules = [
+  {
+    title: '龙虎榜每日明细',
+    description: '龙虎榜每日交易明细',
+    icon: Flame,
+    href: '/boardgame/top-list',
+    color: 'text-orange-500'
+  },
+  {
+    title: '龙虎榜机构明细',
+    description: '龙虎榜机构成交明细',
+    icon: Building2,
+    href: '/boardgame/top-inst',
+    color: 'text-blue-600'
+  },
+  {
+    title: '涨跌停列表',
+    description: '获取A股每日涨跌停、炸板数据情况，数据从2020年开始（不提供ST股票的统计）',
+    icon: TrendingUp,
+    href: '/boardgame/limit-list',
+    color: 'text-red-500'
+  },
+  {
+    title: '连板天梯',
+    description: '获取每天连板个数晋级的股票，可以分析出每天连续涨停进阶个数，判断强势热度',
+    icon: TrendingUp,
+    href: '/boardgame/limit-step',
+    color: 'text-red-600'
+  },
+  {
+    title: '最强板块统计',
+    description: '获取每天涨停股票最多最强的概念板块，可以分析强势板块的轮动，判断资金动向',
+    icon: TrendingUp,
+    href: '/boardgame/limit-cpt',
+    color: 'text-purple-600'
+  },
+  {
+    title: '东方财富概念板块',
+    description: '获取东方财富每个交易日的概念板块数据，支持按日期查询',
+    icon: BarChart3,
+    href: '/boardgame/dc-index',
+    color: 'text-green-600'
+  },
+  {
+    title: '东方财富板块成分',
+    description: '获取东方财富板块每日成分数据，可以根据概念板块代码和交易日期，获取历史成分',
+    icon: Layers,
+    href: '/boardgame/dc-member',
+    color: 'text-green-500'
+  },
+  {
+    title: '东财概念板块行情',
+    description: '获取东财概念板块、行业指数板块、地域板块行情数据，历史数据开始于2020年',
+    icon: LineChart,
+    href: '/boardgame/dc-daily',
+    color: 'text-teal-600'
+  },
+]
 
+export default function BoardGamePage() {
   return (
     <div className="space-y-6">
       <PageHeader
