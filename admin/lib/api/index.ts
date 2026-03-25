@@ -24,7 +24,6 @@ import { MarginSecsApi, marginSecsApi as marginSecsApiInst } from './margin-secs
 import { SlbLenApiClient, slbLenApi as slbLenApiInst } from './slb-len'
 import { SchedulerApiClient, schedulerApi as schedulerApiInst } from './scheduler'
 import { CeleryTasksApiClient, celeryTasksApi as celeryTasksApiInst } from './celery-tasks'
-import { ConceptsApiClient, conceptsApi as conceptsApiInst } from './concepts'
 import { ConfigApiClient, configApi as configApiInst } from './config'
 import { SyncApiClient, syncApi as syncApiInst } from './sync'
 import { ExtendedDataApiClient, extendedDataApi as extendedDataApiInst } from './extended-data'
@@ -80,7 +79,7 @@ export type { LoginRequest, LoginResponse, RegisterRequest, UpdatePasswordReques
 // 重新导出股票 API
 export { StockApiClient }
 export const stockApi = stockApiInst
-export type { StockListParams, UpdateStockRequest, StockConceptRequest } from './stocks'
+export type { StockListParams, UpdateStockRequest } from './stocks'
 
 // 重新导出策略 API
 export { StrategyApiClient }
@@ -187,11 +186,6 @@ export type {
 export { CeleryTasksApiClient }
 export const celeryTasksApi = celeryTasksApiInst
 export type { CeleryTaskParams, CeleryTask } from './celery-tasks'
-
-// 重新导出概念板块 API
-export { ConceptsApiClient }
-export const conceptsApi = conceptsApiInst
-export type { ConceptListParams, ConceptStocksParams, UpdateConceptRequest } from './concepts'
 
 // 重新导出系统配置 API
 export { ConfigApiClient }
@@ -410,9 +404,6 @@ export const apiClient = {
   getStock: stockApiInst.getStock.bind(stockApiInst),
   updateStock: stockApiInst.updateStock.bind(stockApiInst),
   updateStockList: stockApiInst.updateStockList.bind(stockApiInst),
-  getStockConcepts: stockApiInst.getStockConcepts.bind(stockApiInst),
-  updateStockConcepts: stockApiInst.updateStockConcepts.bind(stockApiInst),
-  batchUpdateStockConcepts: stockApiInst.batchUpdateStockConcepts.bind(stockApiInst),
   getStockDaily: stockApiInst.getStockDaily.bind(stockApiInst),
   getStockMinute: stockApiInst.getStockMinute.bind(stockApiInst),
   syncStockData: stockApiInst.syncStockData.bind(stockApiInst),
@@ -505,14 +496,6 @@ export const apiClient = {
   getTask: celeryTasksApiInst.getTask.bind(celeryTasksApiInst),
   cancelTask: celeryTasksApiInst.cancelTask.bind(celeryTasksApiInst),
   deleteTask: celeryTasksApiInst.deleteTask.bind(celeryTasksApiInst),
-
-  // 概念板块相关
-  getConcepts: conceptsApiInst.getConcepts.bind(conceptsApiInst),
-  getConcept: conceptsApiInst.getConcept.bind(conceptsApiInst),
-  getConceptStocks: conceptsApiInst.getConceptStocks.bind(conceptsApiInst),
-  syncConcepts: conceptsApiInst.syncConcepts.bind(conceptsApiInst),
-  updateConcept: conceptsApiInst.updateConcept.bind(conceptsApiInst),
-  deleteConcept: conceptsApiInst.deleteConcept.bind(conceptsApiInst),
 
   // 系统配置相关
   getDataSourceConfig: configApiInst.getDataSourceConfig.bind(configApiInst),

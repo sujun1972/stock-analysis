@@ -28,52 +28,6 @@ router = APIRouter()
 # 全局 Data Adapter 实例
 data_adapter = DataAdapter()
 
-# 添加 core 模块到路径（用于概念筛选）
-core_path = Path(__file__).parent.parent.parent.parent.parent / "core"
-if str(core_path) not in sys.path:
-    sys.path.insert(0, str(core_path))
-
-
-def filter_stocks_by_concepts(stocks: List[Dict[str, Any]], concept_codes_str: str) -> List[Dict[str, Any]]:
-    """
-    按概念筛选股票列表
-
-    Args:
-        stocks: 股票列表
-        concept_codes_str: 概念代码字符串，多个概念用逗号分隔（如: 309264,301154）
-
-    Returns:
-        筛选后的股票列表
-    """
-    from app.repositories import ConceptRepository
-
-    # 解析概念列表（支持多个概念，逗号分隔）
-    concept_codes = [c.strip() for c in concept_codes_str.split(',') if c.strip()]
-
-    if not concept_codes:
-        return stocks
-
-    # 使用 Repository 层查询
-    repo = ConceptRepository()
-    stock_codes_with_suffix = repo.get_stocks_by_concept_codes(concept_codes)
-
-    # stock_concept中的code格式: 000001.SZ
-    # stock_info中的code格式: 000001
-    # 需要提取前缀进行匹配
-    concept_stock_codes = set()
-    for stock_code_with_suffix in stock_codes_with_suffix:
-        stock_code = stock_code_with_suffix.split('.')[0]  # 提取: 000001
-        concept_stock_codes.add(stock_code)
-
-    # 过滤股票列表
-    filtered_stocks = [
-        stock for stock in stocks
-        if stock.get("code") in concept_stock_codes
-    ]
-
-    return filtered_stocks
-
-
 @router.get(
     "/list",
     summary="获取股票列表",
@@ -146,7 +100,6 @@ async def get_stock_list(
     industry: Optional[str] = Query(None, description="行业筛选，如: 银行、医药、计算机"),
     status_filter: str = Query("正常", description="股票状态筛选，如: 正常、退市、暂停上市", alias="status"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配，如: 平安、000001"),
-    concepts: Optional[str] = Query(None, description="概念板块筛选，多个概念用逗号分隔，如: 白酒概念,消费概念"),
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(20, ge=1, le=100, description="每页记录数，范围: 1-100"),
 ):
@@ -160,7 +113,6 @@ async def get_stock_list(
     ## 功能说明
     - 支持按市场类型筛选（深圳主板/上海主板/创业板/科创板/北交所）
     - 支持按行业筛选（银行/医药/计算机等）
-    - 支持按概念板块筛选
     - 支持按股票状态筛选（正常/退市/暂停上市等）
     - 支持股票代码和名称的模糊搜索
     - 支持分页查询，避免一次返回大量数据
@@ -198,11 +150,7 @@ async def get_stock_list(
             or search_lower in stock.get("name", "").lower()
         ]
 
-    # 4. Backend 职责：概念筛选
-    if concepts:
-        stocks = filter_stocks_by_concepts(stocks, concepts)
-
-    # 5. Backend 职责：分页
+    # 4. Backend 职责：分页
     total = len(stocks)
     start = (page - 1) * page_size
     end = start + page_size
@@ -242,7 +190,6 @@ async def get_stock_codes(
     industry: Optional[str] = Query(None, description="行业筛选，如: 银行、医药、计算机"),
     status_filter: str = Query("正常", description="股票状态筛选，如: 正常、退市、暂停上市", alias="status"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
-    concepts: Optional[str] = Query(None, description="概念板块筛选，多个概念用逗号分隔"),
     limit: int = Query(500, ge=1, le=1000, description="最大返回数量，范围: 1-1000，默认 500"),
 ):
     """
@@ -288,11 +235,7 @@ async def get_stock_codes(
             if search_lower in stock.get("code", "").lower() or search_lower in stock.get("name", "").lower()
         ]
 
-    # 4. 概念筛选
-    if concepts:
-        stocks = filter_stocks_by_concepts(stocks, concepts)
-
-    # 5. 提取股票代码（去除后缀）并限制数量
+    # 4. 提取股票代码（去除后缀）并限制数量
     codes = []
     for stock in stocks[:limit]:
         code = stock.get("code", "")
@@ -301,7 +244,7 @@ async def get_stock_codes(
             code = code.split(".")[0]
         codes.append(code)
 
-    # 6. 返回结果
+    # 5. 返回结果
     return ApiResponse.success(
         data={
             "codes": codes,

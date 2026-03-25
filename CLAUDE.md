@@ -21,6 +21,30 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 - `/core` - 核心业务逻辑
 - `/db_init` - 数据库初始化脚本
 
+## 已移除功能
+
+以下功能已从系统中移除（2026-03-25）：
+
+1. **概念标签管理**
+   - 概念板块管理页面（`/concepts`）
+   - 股票概念关联功能
+   - 概念筛选功能
+   - 相关数据库表：`concept`、`stock_concept`
+   - 相关API：`/api/concepts/*`、`/api/stocks/**/concepts`
+   - 相关Repository：`ConceptRepository`
+   - 相关Service：`ConceptSyncService`
+
+2. **股票管理页面**
+   - 股票列表管理页面（`/stocks`）
+   - 股票详情页面（`/stocks/[code]`）
+   - 注：股票相关API和数据保留，仅移除前端页面
+
+3. **数据中心**
+   - 数据初始化页面（`/sync/initialize`）
+   - 数据中心导航页面（`/sync`）
+   - 扩展数据页面（`/sync/extended`）
+   - 注：数据同步API和功能保留，仅移除前端页面
+
 ## Admin 项目新增功能
 
 ### 面包屑导航
@@ -664,7 +688,6 @@ lib/api/
 ├── margin.ts            # 融资融券 API
 ├── scheduler.ts         # 定时任务 API
 ├── celery-tasks.ts      # Celery 任务管理 API
-├── concepts.ts          # 概念板块 API
 ├── config.ts            # 系统配置 API
 ├── sync.ts              # 数据同步 API
 ├── extended-data.ts     # 扩展数据 API
@@ -1300,7 +1323,6 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `DailyBasicRepository` - 每日指标数据（换手率、市盈率、市净率等）
    - `HkHoldRepository` - 北向资金持股数据
    - `StkLimitRepository` - 涨跌停价格数据
-   - `ConceptRepository` - 概念板块和股票关系管理
    - `SuspendRepository` - 每日停复牌信息（停牌时间段、停复牌类型，支持分页查询）**（✨ 新增于 2026-03-24）**
    - `StkLimitDRepository` - 每日涨跌停价格（昨收价、涨停价、跌停价，每交易日8:40更新）**（✨ 新增于 2026-03-24）**
    - `AdjFactorRepository` - 复权因子（股票复权因子数据，盘前9:15~20分更新，支持单只股票历史查询）**（✨ 新增于 2026-03-24）**
@@ -1832,7 +1854,6 @@ class ExperimentService:
 - ✅ `HkHoldRepository` - 北向资金持股数据
 - ✅ `StkLimitRepository` - 涨跌停价格数据
 - ✅ `BlockTradeRepository` - 大宗交易数据
-- ✅ `ConceptRepository` - 概念板块和股票关系管理
 - ✅ `SyncLogRepository` - 同步日志管理（sync_log 表）
 - ✅ `StockDailyRepository` - 股票日线数据（2026-03-20 新增）
 - ✅ `StockBasicRepository` - 股票基础信息（2026-03-20 新增）
@@ -1848,8 +1869,6 @@ class ExperimentService:
   - `GET /limit-prices` - 使用 StkLimitService
   - `GET /block-trade` - 使用 BlockTradeService
   - `GET /stats/summary` - 并发调用多个 Service（使用 asyncio.gather）
-- ✅ `concepts.py` - 5个端点（概念列表、详情、股票查询、概念更新）
-- ✅ `stocks.py` - 概念过滤功能
 - ✅ `moneyflow.py` - 3个端点（查询、同步、排名），使用 MoneyflowService
 - ✅ `moneyflow_hsgt.py` - 3个端点（查询、同步、最新），使用 MoneyflowHsgtService
 - ✅ `moneyflow_mkt_dc.py` - 3个端点（查询、同步、最新），使用 MoneyflowMktDcService

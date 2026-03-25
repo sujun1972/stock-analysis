@@ -31,10 +31,6 @@ export interface UpdateStockRequest {
   concepts?: number[]
 }
 
-export interface StockConceptRequest {
-  stock_code: string
-  concept_ids: number[]
-}
 
 /**
  * 股票 API 客户端
@@ -75,31 +71,6 @@ export class StockApiClient extends BaseApiClient {
    */
   async updateStockList(): Promise<ApiResponse<{ total: number }>> {
     return this.post('/api/stocks/sync')
-  }
-
-  /**
-   * 获取股票概念列表
-   */
-  async getStockConcepts(code: string): Promise<ApiResponse<Concept[]>> {
-    return this.get(`/api/stocks/${code}/concepts`)
-  }
-
-  /**
-   * 更新股票概念
-   */
-  async updateStockConcepts(code: string, conceptIds: number[]): Promise<ApiResponse<{ message: string }>> {
-    return this.post(`/api/stocks/${code}/concepts`, { concept_ids: conceptIds })
-  }
-
-  /**
-   * 批量更新股票概念
-   */
-  async batchUpdateStockConcepts(updates: StockConceptRequest[]): Promise<ApiResponse<{
-    success: number
-    failed: number
-    errors: string[]
-  }>> {
-    return this.post('/api/stocks/concepts/batch', { updates })
   }
 
   /**

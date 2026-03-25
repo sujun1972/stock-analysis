@@ -29,7 +29,6 @@ import {
   ChevronRight,
   ChevronDown,
   Users,
-  Tag,
   TrendingUp,
   LineChart,
   Sparkles,
@@ -77,42 +76,6 @@ const navItems: NavItem[] = [
     name: '控制台',
     href: '/',
     icon: LayoutDashboard
-  },
-  {
-    name: '用户管理',
-    href: '/users',
-    icon: Users
-  },
-  {
-    name: '股票管理',
-    href: '/stocks',
-    icon: LineChart
-  },
-  {
-    name: '策略管理',
-    href: '/strategies',
-    icon: TrendingUp
-  },
-  {
-    name: '概念管理',
-    href: '/concepts',
-    icon: Tag
-  },
-  {
-    name: '市场情绪',
-    icon: Zap,
-    children: [
-      {
-        name: 'AI分析',
-        href: '/sentiment/ai-analysis',
-        icon: Sparkles
-      },
-      {
-        name: '盘前预期',
-        href: '/sentiment/premarket',
-        icon: Clock
-      }
-    ]
   },
   {
     name: '基础数据',
@@ -456,6 +419,32 @@ const navItems: NavItem[] = [
     ]
   },
   {
+    name: '用户管理',
+    href: '/users',
+    icon: Users
+  },
+  {
+    name: '策略管理',
+    href: '/strategies',
+    icon: TrendingUp
+  },
+  {
+    name: '市场情绪',
+    icon: Zap,
+    children: [
+      {
+        name: 'AI分析',
+        href: '/sentiment/ai-analysis',
+        icon: Sparkles
+      },
+      {
+        name: '盘前预期',
+        href: '/sentiment/premarket',
+        icon: Clock
+      }
+    ]
+  },
+  {
     name: '系统设置',
     icon: Settings,
     children: [
@@ -488,17 +477,6 @@ const navItems: NavItem[] = [
         name: '通知渠道',
         href: '/settings/notification-channels',
         icon: Bell
-      }
-    ]
-  },
-  {
-    name: '数据中心',
-    icon: Database,
-    children: [
-      {
-        name: '数据初始化',
-        href: '/sync/initialize',
-        icon: RefreshCw
       }
     ]
   },

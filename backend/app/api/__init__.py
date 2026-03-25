@@ -11,7 +11,6 @@ from .endpoints import (
     backtest,
     backtest_history,
     celery_tasks,  # Celery 任务状态查询
-    concepts,
     config,
     data,
     data_quality,  # 数据质量监控
@@ -109,7 +108,6 @@ router.include_router(profile.router)
 # 注册子路由
 router.include_router(stock_list.router, prefix="/stocks/list", tags=["股票列表管理"])  # 股票列表管理API
 router.include_router(stocks.router, prefix="/stocks", tags=["stocks"])
-router.include_router(concepts.router, prefix="/concepts", tags=["概念板块"])
 router.include_router(data.router, prefix="/data", tags=["data"])
 router.include_router(features.router, prefix="/features", tags=["features"])
 router.include_router(backtest.router, prefix="/backtest", tags=["backtest"])
