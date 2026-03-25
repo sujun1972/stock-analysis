@@ -69,6 +69,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 150,
         'points_consumption': 6000
     },
+    'tasks.sync_dc_index': {
+        'task': 'tasks.sync_dc_index',
+        'name': '东方财富板块数据',
+        'description': '获取东方财富每个交易日的概念/行业/地域板块数据，支持按日期和板块类型查询',
+        'category': '基础数据',
+        'display_order': 155,
+        'points_consumption': 6000
+    },
 
     # ============================================
     # 行情数据同步任务（display_order: 200-299）

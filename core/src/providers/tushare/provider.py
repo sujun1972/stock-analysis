@@ -3350,6 +3350,80 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取东方财富板块成分数据失败: {e}")
             raise TushareDataError(f"获取东方财富板块成分数据失败: {str(e)}")
 
+    def get_dc_index(
+        self,
+        ts_code: Optional[str] = None,
+        name: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        idx_type: str = '概念板块'
+    ) -> pd.DataFrame:
+        """
+        获取东方财富板块数据（概念/行业/地域）
+
+        获取东方财富每个交易日的概念板块数据，支持按板块类型筛选。
+
+        Args:
+            ts_code: 指数代码（可选）
+            name: 板块名称（可选）
+            trade_date: 交易日期 (格式: YYYYMMDD，可选)
+            start_date: 开始日期 (格式: YYYYMMDD，可选)
+            end_date: 结束日期 (格式: YYYYMMDD，可选)
+            idx_type: 板块类型（必填，如 '概念板块'、'行业板块'、'地域板块'）
+
+        Returns:
+            pd.DataFrame: 板块数据
+                - ts_code: 概念代码
+                - trade_date: 交易日期
+                - name: 概念名称
+                - leading: 领涨股票名称
+                - leading_code: 领涨股票代码
+                - pct_change: 涨跌幅
+                - leading_pct: 领涨股票涨跌幅
+                - total_mv: 总市值（万元）
+                - turnover_rate: 换手率
+                - up_num: 上涨家数
+                - down_num: 下降家数
+                - idx_type: 板块类型
+                - level: 行业层级
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> df = provider.get_dc_index(trade_date='20250102', idx_type='概念板块')
+            >>> df = provider.get_dc_index(start_date='20250101', end_date='20250131', idx_type='行业板块')
+
+        Notes:
+            - 权限要求: 6000积分/次
+            - 单次限制: 最大返回5000行数据
+            - idx_type 为必填参数
+        """
+        try:
+            logger.info(f"获取东方财富板块数据: ts_code={ts_code}, name={name}, "
+                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}, idx_type={idx_type}")
+
+            params = {'idx_type': idx_type}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if name:
+                params['name'] = name
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('dc_index', **params)
+            logger.info(f"获取到 {len(df)} 条东方财富板块记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取东方财富板块数据失败: {e}")
+            raise TushareDataError(f"获取东方财富板块数据失败: {str(e)}")
+
     def get_suspend_d(
         self,
         ts_code: Optional[str] = None,

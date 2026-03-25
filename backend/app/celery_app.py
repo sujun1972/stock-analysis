@@ -261,6 +261,12 @@ except Exception as e:
     logger.error(f"❌ 加载东方财富板块成分任务模块失败: {e}")
 
 try:
+    from app.tasks import dc_index_tasks
+    logger.info(f"✅ 已加载东方财富板块数据任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载东方财富板块数据任务模块失败: {e}")
+
+try:
     from app.tasks import suspend_tasks
     logger.info(f"✅ 已加载每日停复牌信息任务模块")
 except Exception as e:

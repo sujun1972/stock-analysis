@@ -97,6 +97,11 @@ const navItems: NavItem[] = [
         icon: AlertTriangle
       },
       {
+        name: '板块数据',
+        href: '/data/dc-index',
+        icon: BarChart3
+      },
+      {
         name: '板块成分',
         href: '/data/dc-member',
         icon: Layers
@@ -422,7 +427,12 @@ const navItems: NavItem[] = [
         icon: TrendingUp
       },
       {
-        name: '板块成分追踪',
+        name: '板块数据行情（DC）',
+        href: '/data/dc-index',
+        icon: BarChart3
+      },
+      {
+        name: '板块成分追踪（DC）',
         href: '/data/dc-member',
         icon: Layers
       }

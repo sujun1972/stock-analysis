@@ -1384,7 +1384,40 @@ class ExpressService:
         )
 ```
 
+### 错误 6: PostgreSQL 保留字导致建表失败
+
+**症状**：`ERROR: syntax error at or near "leading"` 或类似列名报错
+
+**原因**：Tushare 返回的字段名与 PostgreSQL 保留字冲突。常见保留字：`leading`、`level`、`name`、`value`、`type`、`order`、`group`
+
+**解决方案**：在数据库列名中使用别名，并在 Service 层的数据清洗方法中重命名：
+
+```python
+# ❌ 错误：直接使用 Tushare 字段名
+CREATE TABLE dc_index (
+    leading VARCHAR(50),  -- ERROR: 'leading' is a reserved word
+    ...
+)
+
+# ✅ 正确：使用非保留字列名
+CREATE TABLE dc_index (
+    leading_stock VARCHAR(50),  -- 规避保留字
+    ...
+)
+```
+
+```python
+# 在 Service._validate_and_clean_data() 中重命名字段
+if 'leading' in df.columns:
+    df = df.rename(columns={'leading': 'leading_stock'})
+```
+
+**检查方法**：在设计表结构前，用 PostgreSQL 文档或以下查询检查字段名是否为保留字：
+```sql
+SELECT * FROM pg_get_keywords() WHERE word = 'leading' AND catcode = 'R';
+```
+
 ---
 
-**最后更新**: 2026-03-22
-**版本**: 1.1.0
+**最后更新**: 2026-03-25
+**版本**: 1.2.0

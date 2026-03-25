@@ -73,6 +73,7 @@ from .ggt_monthly_repository import GgtMonthlyRepository
 from .stock_realtime_repository import StockRealtimeRepository
 from .stock_st_repository import StockStRepository
 from .dc_member_repository import DcMemberRepository
+from .dc_index_repository import DcIndexRepository
 
 __all__ = [
     "BaseRepository",
@@ -167,4 +168,5 @@ __all__ = [
     "DisclosureDateRepository",
     # 板块数据
     "DcMemberRepository",
+    "DcIndexRepository",
 ]
