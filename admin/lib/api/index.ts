@@ -66,6 +66,7 @@ import { NewStockApiClient, newStockApi as newStockApiInst } from './new-stock-a
 import { StockRealtimeApiClient, stockRealtimeApi as stockRealtimeApiInst } from './stock-realtime'
 import { StockDailyApiClient, stockDailyApi as stockDailyApiInst } from './stock-daily'
 import { StockListApiClient, stockListApi as stockListApiInst } from './stock-list-api'
+import { StockStApiClient, stockStApi as stockStApiInst } from './stock-st-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -906,6 +907,17 @@ export type {
   StockDailyParams,
   SyncDailyParams
 } from './stock-daily'
+
+// 重新导出ST股票列表 API
+export { StockStApiClient }
+export const stockStApi = stockStApiInst
+export type {
+  StockStData,
+  StockStParams,
+  StockStStatistics,
+  StockStResponse,
+  StockStTypeDistribution
+} from './stock-st-api'
 
 // 导出默认实例
 export default apiClient

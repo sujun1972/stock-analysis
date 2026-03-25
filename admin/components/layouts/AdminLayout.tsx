@@ -52,7 +52,8 @@ import {
   Building2,
   Star,
   Calendar,
-  Layers
+  Layers,
+  AlertTriangle
 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -114,126 +115,189 @@ const navItems: NavItem[] = [
     ]
   },
   {
-    name: '系统设置',
-    icon: Settings,
+    name: '基础数据',
+    icon: Layers,
     children: [
       {
-        name: '系统配置',
-        href: '/settings/system',
-        icon: Wrench
-      },
-      {
-        name: '数据源设置',
-        href: '/settings/datasource',
+        name: '股票列表',
+        href: '/data/stock-list',
         icon: Database
       },
       {
-        name: 'AI 配置',
-        href: '/settings/ai-config',
-        icon: Sparkles
+        name: '新股列表同步',
+        href: '/sync/new-stocks',
+        icon: PackagePlus
       },
       {
-        name: '提示词管理',
-        href: '/settings/prompt-templates',
-        icon: FileText
-      },
-      {
-        name: '定时任务',
-        href: '/settings/scheduler',
-        icon: Clock
-      },
-      {
-        name: '通知渠道',
-        href: '/settings/notification-channels',
-        icon: Bell
+        name: 'ST股票列表',
+        href: '/data/stock-st',
+        icon: AlertTriangle
       }
     ]
   },
   {
-    name: '资金流向',
-    icon: DollarSign,
+    name: '行情数据',
+    href: '/market',
+    icon: TrendingUpIcon,
     children: [
       {
-        name: '沪深港通资金流向',
-        href: '/data/moneyflow-hsgt',
-        icon: TrendingUp
-      },
-      {
-        name: '个股资金流向（Tushare）',
-        href: '/data/moneyflow',
-        icon: Activity
-      },
-      {
-        name: '大盘资金流向（DC）',
-        href: '/data/moneyflow-mkt-dc',
+        name: '股票日线数据',
+        href: '/market/daily',
         icon: LineChart
       },
       {
-        name: '板块资金流向（DC）',
-        href: '/data/moneyflow-ind-dc',
+        name: '实时行情同步',
+        href: '/market/realtime',
+        icon: RefreshCw
+      },
+      {
+        name: '复权因子',
+        href: '/market/adj-factor',
+        icon: Database
+      },
+      {
+        name: '每日指标',
+        href: '/market/daily-basic',
         icon: BarChart3
       },
       {
-        name: '个股资金流向（DC）',
-        href: '/data/moneyflow-stock-dc',
+        name: '每日涨跌停价格',
+        href: '/market/stk-limit-d',
+        icon: TrendingUpIcon
+      },
+      {
+        name: '每日停复牘信息',
+        href: '/market/suspend',
+        icon: PauseCircle
+      },
+      {
+        name: '沪深股通十大成交股',
+        href: '/market/hsgt-top10',
+        icon: TrendingUpIcon
+      },
+      {
+        name: '港股通十大成交股',
+        href: '/market/ggt-top10',
+        icon: TrendingUpIcon
+      },
+      {
+        name: '港股通每日成交统计',
+        href: '/market/ggt-daily',
+        icon: TrendingUpIcon
+      },
+      {
+        name: '港股通每月成交统计',
+        href: '/market/ggt-monthly',
         icon: TrendingUpIcon
       }
     ]
   },
   {
-    name: '两融数据',
-    icon: Wallet,
+    name: '财务数据',
+    href: '/financial',
+    icon: FileText,
     children: [
       {
-        name: '融资融券交易汇总',
-        href: '/data/margin',
-        icon: BarChart3
+        name: '利润表',
+        href: '/financial/income',
+        icon: TrendingUp
       },
       {
-        name: '融资融券交易明细',
-        href: '/data/margin-detail',
-        icon: FileText
+        name: '资产负债表',
+        href: '/financial/balancesheet',
+        icon: DollarSign
       },
       {
-        name: '融资融券标的（盘前更新）',
-        href: '/data/margin-secs',
+        name: '现金流量表',
+        href: '/financial/cashflow',
         icon: Activity
       },
       {
-        name: '转融资交易汇总',
-        href: '/data/slb-len',
+        name: '业绩预告',
+        href: '/financial/forecast',
         icon: TrendingUp
+      },
+      {
+        name: '业绩快报',
+        href: '/financial/express',
+        icon: TrendingUp
+      },
+      {
+        name: '分红送股',
+        href: '/financial/dividend',
+        icon: DollarSign
+      },
+      {
+        name: '财务指标',
+        href: '/financial/fina-indicator',
+        icon: TrendingUp
+      },
+      {
+        name: '审计意见',
+        href: '/financial/fina-audit',
+        icon: TrendingUp
+      },
+      {
+        name: '主营业务构成',
+        href: '/financial/fina-mainbz',
+        icon: PieChart
+      },
+      {
+        name: '财报披露计划',
+        href: '/financial/disclosure-date',
+        icon: Calendar
       }
     ]
   },
   {
-    name: '打板专题',
-    icon: ListOrdered,
+    name: '参考数据',
+    href: '/reference-data',
+    icon: FileText,
     children: [
       {
-        name: '龙虎榜每日明细',
-        href: '/boardgame/top-list',
-        icon: Flame
+        name: '个股异常波动',
+        href: '/reference-data/stk-shock',
+        icon: FileText
       },
       {
-        name: '龙虎榜机构明细',
-        href: '/boardgame/top-inst',
+        name: '个股严重异常波动',
+        href: '/reference-data/stk-high-shock',
+        icon: FileText
+      },
+      {
+        name: '交易所重点提示证券',
+        href: '/reference-data/stk-alert',
+        icon: FileText
+      },
+      {
+        name: '股权质押统计',
+        href: '/reference-data/pledge-stat',
+        icon: TrendingUp
+      },
+      {
+        name: '股票回购',
+        href: '/reference-data/repurchase',
+        icon: FileText
+      },
+      {
+        name: '限售股解禁',
+        href: '/reference-data/share-float',
+        icon: FileText
+      },
+      {
+        name: '大宗交易',
+        href: '/reference-data/block-trade',
         icon: Building2
       },
       {
-        name: '涨跌停列表',
-        href: '/boardgame/limit-list',
-        icon: TrendingUp
+        name: '股东人数',
+        href: '/reference-data/stk-holdernumber',
+        icon: Users
       },
       {
-        name: '连板天梯',
-        href: '/boardgame/limit-step',
-        icon: TrendingUp
-      },
-      {
-        name: '最强板块统计',
-        href: '/boardgame/limit-cpt',
-        icon: TrendingUp
+        name: '股东增减持',
+        href: '/reference-data/stk-holdertrade',
+        icon: Users
       }
     ]
   },
@@ -304,184 +368,126 @@ const navItems: NavItem[] = [
     ]
   },
   {
-    name: '参考数据',
-    href: '/reference-data',
-    icon: FileText,
+    name: '两融数据',
+    icon: Wallet,
     children: [
       {
-        name: '个股异常波动',
-        href: '/reference-data/stk-shock',
-        icon: FileText
-      },
-      {
-        name: '个股严重异常波动',
-        href: '/reference-data/stk-high-shock',
-        icon: FileText
-      },
-      {
-        name: '交易所重点提示证券',
-        href: '/reference-data/stk-alert',
-        icon: FileText
-      },
-      {
-        name: '股权质押统计',
-        href: '/reference-data/pledge-stat',
-        icon: TrendingUp
-      },
-      {
-        name: '股票回购',
-        href: '/reference-data/repurchase',
-        icon: FileText
-      },
-      {
-        name: '限售股解禁',
-        href: '/reference-data/share-float',
-        icon: FileText
-      },
-      {
-        name: '股东人数',
-        href: '/reference-data/stk-holdernumber',
-        icon: Users
-      },
-      {
-        name: '大宗交易',
-        href: '/reference-data/block-trade',
-        icon: Building2
-      },
-      {
-        name: '股东增减持',
-        href: '/reference-data/stk-holdertrade',
-        icon: Users
-      }
-    ]
-  },
-  {
-    name: '财务数据',
-    href: '/financial',
-    icon: FileText,
-    children: [
-      {
-        name: '利润表',
-        href: '/financial/income',
-        icon: TrendingUp
-      },
-      {
-        name: '资产负债表',
-        href: '/financial/balancesheet',
-        icon: DollarSign
-      },
-      {
-        name: '现金流量表',
-        href: '/financial/cashflow',
-        icon: Activity
-      },
-      {
-        name: '业绩预告',
-        href: '/financial/forecast',
-        icon: TrendingUp
-      },
-      {
-        name: '业绩快报',
-        href: '/financial/express',
-        icon: TrendingUp
-      },
-      {
-        name: '分红送股',
-        href: '/financial/dividend',
-        icon: DollarSign
-      },
-      {
-        name: '财务指标',
-        href: '/financial/fina-indicator',
-        icon: TrendingUp
-      },
-      {
-        name: '审计意见',
-        href: '/financial/fina-audit',
-        icon: TrendingUp
-      },
-      {
-        name: '主营业务构成',
-        href: '/financial/fina-mainbz',
-        icon: PieChart
-      },
-      {
-        name: '财报披露计划',
-        href: '/financial/disclosure-date',
-        icon: Calendar
-      }
-    ]
-  },
-  {
-    name: '基础数据',
-    icon: Layers,
-    children: [
-      {
-        name: '股票列表',
-        href: '/data/stock-list',
-        icon: Database
-      },
-      {
-        name: '新股列表同步',
-        href: '/sync/new-stocks',
-        icon: PackagePlus
-      }
-    ]
-  },
-  {
-    name: '行情数据',
-    href: '/market',
-    icon: TrendingUpIcon,
-    children: [
-      {
-        name: '实时行情同步',
-        href: '/market/realtime',
-        icon: RefreshCw
-      },
-      {
-        name: '股票日线数据',
-        href: '/market/daily',
-        icon: LineChart
-      },
-      {
-        name: '每日停复牘信息',
-        href: '/market/suspend',
-        icon: PauseCircle
-      },
-      {
-        name: '每日涨跌停价格',
-        href: '/market/stk-limit-d',
-        icon: TrendingUpIcon
-      },
-      {
-        name: '每日指标',
-        href: '/market/daily-basic',
+        name: '融资融券交易汇总',
+        href: '/data/margin',
         icon: BarChart3
       },
       {
-        name: '复权因子',
-        href: '/market/adj-factor',
+        name: '融资融券交易明细',
+        href: '/data/margin-detail',
+        icon: FileText
+      },
+      {
+        name: '融资融券标的（盘前）',
+        href: '/data/margin-secs',
+        icon: Activity
+      },
+      {
+        name: '转融资交易汇总',
+        href: '/data/slb-len',
+        icon: TrendingUp
+      }
+    ]
+  },
+  {
+    name: '资金流向',
+    icon: DollarSign,
+    children: [
+      {
+        name: '个股资金流向',
+        href: '/data/moneyflow',
+        icon: Activity
+      },
+      {
+        name: '个股资金流向（DC）',
+        href: '/data/moneyflow-stock-dc',
+        icon: TrendingUpIcon
+      },
+      {
+        name: '板块资金流向（DC）',
+        href: '/data/moneyflow-ind-dc',
+        icon: BarChart3
+      },
+      {
+        name: '大盘资金流向（DC）',
+        href: '/data/moneyflow-mkt-dc',
+        icon: LineChart
+      },
+      {
+        name: '沪深港通资金流向',
+        href: '/data/moneyflow-hsgt',
+        icon: TrendingUp
+      }
+    ]
+  },
+  {
+    name: '打板专题',
+    icon: ListOrdered,
+    children: [
+      {
+        name: '龙虎榜每日明细',
+        href: '/boardgame/top-list',
+        icon: Flame
+      },
+      {
+        name: '龙虎榜机构明细',
+        href: '/boardgame/top-inst',
+        icon: Building2
+      },
+      {
+        name: '涨跌停列表',
+        href: '/boardgame/limit-list',
+        icon: TrendingUp
+      },
+      {
+        name: '连板天梯',
+        href: '/boardgame/limit-step',
+        icon: TrendingUp
+      },
+      {
+        name: '最强板块统计',
+        href: '/boardgame/limit-cpt',
+        icon: TrendingUp
+      }
+    ]
+  },
+  {
+    name: '系统设置',
+    icon: Settings,
+    children: [
+      {
+        name: '系统配置',
+        href: '/settings/system',
+        icon: Wrench
+      },
+      {
+        name: '数据源设置',
+        href: '/settings/datasource',
         icon: Database
       },
       {
-        name: '沪深股通十大成交股',
-        href: '/market/hsgt-top10',
-        icon: TrendingUpIcon
+        name: 'AI 配置',
+        href: '/settings/ai-config',
+        icon: Sparkles
       },
       {
-        name: '港股通十大成交股',
-        href: '/market/ggt-top10',
-        icon: TrendingUpIcon
+        name: '提示词管理',
+        href: '/settings/prompt-templates',
+        icon: FileText
       },
       {
-        name: '港股通每日成交统计',
-        href: '/market/ggt-daily',
-        icon: TrendingUpIcon
+        name: '定时任务',
+        href: '/settings/scheduler',
+        icon: Clock
       },
       {
-        name: '港股通每月成交统计',
-        href: '/market/ggt-monthly',
-        icon: TrendingUpIcon
+        name: '通知渠道',
+        href: '/settings/notification-channels',
+        icon: Bell
       }
     ]
   },

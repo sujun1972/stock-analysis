@@ -53,6 +53,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '基础数据',
         'display_order': 130
     },
+    'tasks.sync_stock_st': {
+        'task': 'tasks.sync_stock_st',
+        'name': 'ST股票列表',
+        'description': '获取ST股票列表，可根据交易日期获取历史上每天的ST列表',
+        'category': '基础数据',
+        'display_order': 140,
+        'points_consumption': 3000
+    },
 
     # ============================================
     # 行情数据同步任务（display_order: 200-299）

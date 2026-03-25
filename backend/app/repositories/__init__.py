@@ -72,6 +72,7 @@ from .ggt_top10_repository import GgtTop10Repository
 from .ggt_daily_repository import GgtDailyRepository
 from .ggt_monthly_repository import GgtMonthlyRepository
 from .stock_realtime_repository import StockRealtimeRepository
+from .stock_st_repository import StockStRepository
 
 __all__ = [
     "BaseRepository",
@@ -125,6 +126,7 @@ __all__ = [
     "StockDailyRepository",
     "StockBasicRepository",
     "StockRealtimeRepository",
+    "StockStRepository",
     # 用户管理
     "UserQuotaRepository",
     # 打板专题

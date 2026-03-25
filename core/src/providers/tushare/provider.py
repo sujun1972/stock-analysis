@@ -3682,6 +3682,66 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取复权因子失败: {e}")
             raise TushareDataError(f"获取复权因子失败: {str(e)}")
 
+    def get_stock_st(self,
+                     ts_code: Optional[str] = None,
+                     trade_date: Optional[str] = None,
+                     start_date: Optional[str] = None,
+                     end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        获取ST股票列表
+        可根据交易日期获取历史上每天的ST列表
+        积分消耗：3000分起
+
+        数据说明：
+        - 数据从20160101开始
+        - 每天上午9:20更新
+        - 单次请求最大返回1000行数据，可循环提取
+
+        Args:
+            ts_code: 股票代码（可选）
+            trade_date: 交易日期 YYYYMMDD（可选）
+            start_date: 开始日期 YYYYMMDD（可选）
+            end_date: 结束日期 YYYYMMDD（可选）
+
+        Returns:
+            pd.DataFrame: ST股票列表数据，包含以下字段：
+                - ts_code: 股票代码
+                - name: 股票名称
+                - trade_date: 交易日期
+                - type: ST类型
+                - type_name: ST类型名称
+
+        Examples:
+            # 获取20250813日所有的ST股票
+            >>> df = provider.get_stock_st(trade_date='20250813')
+
+            # 获取某只股票的ST历史
+            >>> df = provider.get_stock_st(ts_code='000001.SZ')
+
+            # 获取日期范围内的ST股票
+            >>> df = provider.get_stock_st(start_date='20240101', end_date='20240131')
+        """
+        try:
+            logger.info(f"获取ST股票列表: ts_code={ts_code}, trade_date={trade_date}, "
+                       f"start_date={start_date}, end_date={end_date}")
+
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('stock_st', **params)
+            logger.info(f"获取到 {len(df)} 条ST股票记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取ST股票列表失败: {e}")
+            raise TushareDataError(f"获取ST股票列表失败: {str(e)}")
+
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"
         return f"<TushareProvider token={token_preview}>"

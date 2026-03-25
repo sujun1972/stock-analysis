@@ -416,6 +416,12 @@ try:
 except Exception as e:
     logger.error(f"❌ 加载财报披露计划任务模块失败: {e}")
 
+try:
+    from app.tasks import stock_st_tasks
+    logger.info(f"✅ 已加载ST股票列表任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载ST股票列表任务模块失败: {e}")
+
 # 自动发现任务模块（作为备用）
 celery_app.autodiscover_tasks(['app.tasks'])
 
