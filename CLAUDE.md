@@ -64,14 +64,21 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 #### 父级导航页面
 为了支持面包屑的多级导航，已创建以下父级菜单页面：
 - `/settings` - 系统设置导航页
-- `/sentiment` - 市场情绪导航页
 - `/sync` - 数据同步导航页
 - `/logs` - 日志管理导航页
 - `/monitoring` - 系统监控导航页
-- `/boardgame` - 打板专题导航页（龙虎榜等）
+- `/boardgame` - 打板专题导航页
 - `/reference-data` - 参考数据导航页（个股异常波动等）
 
 这些页面以卡片形式展示子功能入口，解决了中间层级页面点击的问题。
+
+**注意**：市场情绪相关功能已精简（2026-03-25），移除了以下功能：
+- 市场情绪数据管理（大盘情绪指标）
+- 涨停板池（连板天梯、炸板统计）
+- 龙虎榜数据查询
+- 情绪周期分析
+
+保留功能：AI 情绪分析、盘前预期管理
 
 ### 任务管理面板
 
@@ -673,7 +680,7 @@ lib/api/
 // 从专门的模块导入
 import { sentimentApi, moneyflowApi, marginApi } from '@/lib/api'
 
-const sentiment = await sentimentApi.getSentimentDaily()
+const calendar = await sentimentApi.getTradingCalendar({ year: 2024 })
 const moneyflow = await moneyflowApi.getMoneyflowMktDc(params)
 ```
 
@@ -682,7 +689,7 @@ const moneyflow = await moneyflowApi.getMoneyflowMktDc(params)
 // 继续使用统一的 apiClient 对象
 import { apiClient } from '@/lib/api-client'
 
-const sentiment = await apiClient.getSentimentDaily()
+const calendar = await apiClient.getTradingCalendar({ year: 2024 })
 ```
 
 #### 关键特性
@@ -697,7 +704,7 @@ const sentiment = await apiClient.getSentimentDaily()
 2. **修改现有代码**：可选择性迁移，不强制要求
 3. **导入类型**：从对应模块导入类型定义
    ```typescript
-   import type { SentimentListParams } from '@/lib/api/sentiment'
+   import type { TradingCalendarParams } from '@/lib/api/sentiment'
    ```
 
 详细信息请查看：`admin/lib/api/MIGRATION.md`
@@ -1317,12 +1324,14 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
    - `TaskExecutionHistoryRepository` - 定时任务执行历史管理（task_execution_history 表）
    - `TradingCalendarRepository` - 交易日历数据管理
 
-9. **市场情绪** （✨ 新增于 2026-03-20）
-   - `MarketSentimentRepository` - 大盘情绪数据（上证/深证/创业板指数）
-   - `LimitUpPoolRepository` - 涨停板情绪池（连板天梯、炸板数据）
-   - `DragonTigerListRepository` - 龙虎榜数据（机构席位、游资动向）
-   - `SentimentCycleRepository` - 情绪周期数据（赚钱效应指数）
+9. **市场情绪** （✨ 新增于 2026-03-20，精简于 2026-03-25）
    - `SentimentAiAnalysisRepository` - AI情绪分析结果
+
+   **已移除的 Repository**（2026-03-25）：
+   - ~~`MarketSentimentRepository`~~ - 大盘情绪数据
+   - ~~`LimitUpPoolRepository`~~ - 涨停板情绪池
+   - ~~`DragonTigerListRepository`~~ - 龙虎榜数据
+   - ~~`SentimentCycleRepository`~~ - 情绪周期数据
 
 10. **股票数据**
    - `StockDailyRepository` - 股票日线数据（支持回测数据加载）
@@ -2217,19 +2226,19 @@ class MoneyflowRepository(BaseRepository):
 
 当单个 API 端点文件超过 500 行时，应考虑按功能模块拆分为包结构：
 
-**拆分示例 1** (sentiment 模块重构):
+**拆分示例 1** (sentiment 模块重构，已精简):
 ```
 # 重构前
 endpoints/sentiment.py (1018行) - 单一文件
 
-# 重构后
+# 重构后（2026-03-25精简版）
 endpoints/sentiment/
 ├── __init__.py          # 路由聚合
-├── schemas.py           # Pydantic 数据模型
-├── query.py             # 查询类端点
+├── query.py             # 查询类端点（交易日历）
 ├── sync.py              # 同步类端点
-├── cycle.py             # 情绪周期端点
 └── ai_analysis.py       # AI分析端点
+
+注：已移除 cycle.py（情绪周期）和大量市场情绪相关端点
 ```
 
 **拆分示例 2** (backtest 模块重构):
@@ -2264,14 +2273,13 @@ endpoints/backtest/
 **路由注册示例** (`__init__.py`):
 ```python
 from fastapi import APIRouter
-from . import query, sync, cycle, ai_analysis
+from . import query, sync, ai_analysis
 
 router = APIRouter()
 
 # 注册子路由
 router.include_router(query.router, tags=["sentiment-query"])
 router.include_router(sync.router, tags=["sentiment-sync"])
-router.include_router(cycle.router, prefix="/cycle", tags=["sentiment-cycle"])
 router.include_router(ai_analysis.router, prefix="/ai-analysis", tags=["sentiment-ai"])
 ```
 
@@ -2749,11 +2757,11 @@ repo.update_task_config(
 
 根据优先级，接下来将重构以下模块：
 
+**注意**：市场情绪相关 Repository 已移除（2026-03-25），以下为剩余待重构模块：
+
 **第二阶段（近期）**:
-1. `TradingCalendarRepository` - 交易日历
-2. 市场情绪相关 Repository（5个）:
-   - `MarketSentimentRepository`
-   - `LimitUpPoolRepository`
+1. ~~`TradingCalendarRepository`~~ - 交易日历（已完成）
+2. ~~市场情绪相关 Repository（5个）~~ - 已移除功能
    - `DragonTigerListRepository`
    - `SentimentCycleRepository`
    - `SentimentAiAnalysisRepository`

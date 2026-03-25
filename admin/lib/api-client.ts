@@ -1823,29 +1823,6 @@ class ApiClient {
   // ========== 市场情绪相关API ==========
 
   /**
-   * 获取情绪数据列表
-   */
-  async getSentimentList(params?: {
-    page?: number
-    limit?: number
-    start_date?: string
-    end_date?: string
-  }): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.get('/api/sentiment/list', { params })
-    return response.data
-  }
-
-  /**
-   * 获取指定日期情绪数据
-   */
-  async getSentimentDaily(date?: string): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.get('/api/sentiment/daily', {
-      params: { date }
-    })
-    return response.data
-  }
-
-  /**
    * 手动触发同步
    */
   async syncSentimentData(date?: string): Promise<ApiResponse<any>> {
@@ -1877,54 +1854,6 @@ class ApiClient {
   }
 
   /**
-   * 获取涨停板池
-   */
-  async getLimitUpPool(date?: string): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.get('/api/sentiment/limit-up', {
-      params: { date }
-    })
-    return response.data
-  }
-
-  /**
-   * 获取涨停趋势
-   */
-  async getLimitUpTrend(days: number = 30): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.get('/api/sentiment/limit-up/trend', {
-      params: { days }
-    })
-    return response.data
-  }
-
-  /**
-   * 获取龙虎榜
-   */
-  async getDragonTigerList(params?: {
-    date?: string
-    stock_code?: string
-    has_institution?: boolean
-    page?: number
-    limit?: number
-  }): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.get('/api/sentiment/dragon-tiger', { params })
-    return response.data
-  }
-
-  /**
-   * 获取个股龙虎榜历史
-   */
-  async getStockDragonTigerHistory(
-    stockCode: string,
-    days: number = 90
-  ): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.get(
-      `/api/sentiment/dragon-tiger/stock/${stockCode}`,
-      { params: { days } }
-    )
-    return response.data
-  }
-
-  /**
    * 获取交易日历
    */
   async getTradingCalendar(params?: {
@@ -1941,19 +1870,6 @@ class ApiClient {
   async syncTradingCalendar(years: number[]): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/sentiment/calendar/sync', null, {
       params: { years: years.join(',') }
-    })
-    return response.data
-  }
-
-  /**
-   * 统计分析
-   */
-  async getSentimentStatistics(
-    startDate: string,
-    endDate: string
-  ): Promise<ApiResponse<any>> {
-    const response = await axiosInstance.get('/api/sentiment/statistics', {
-      params: { start_date: startDate, end_date: endDate }
     })
     return response.data
   }

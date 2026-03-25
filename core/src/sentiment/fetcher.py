@@ -16,7 +16,6 @@ from ..database.connection_pool_manager import ConnectionPoolManager
 from ..config.data_source_helper import create_provider, get_data_source_config
 from .models import (
     MarketIndices,
-    LimitUpPool,
     DragonTigerRecord,
     TradingCalendar,
     SentimentSyncResult
@@ -418,211 +417,7 @@ class SentimentDataFetcher:
 
     # ========== 3. 涨停板情绪池相关 ==========
 
-    def _filter_st_stocks(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        剔除ST、*ST、退市股
-
-        Args:
-            df: 股票数据
-
-        Returns:
-            过滤后的数据
-        """
-        if '名称' in df.columns:
-            df = df[~df['名称'].str.contains('ST|退|N', na=False)]
-        if '代码' in df.columns:
-            # 剔除北交所（4开头）
-            df = df[~df['代码'].str.startswith('4')]
-
-        return df
-
-    def _calculate_continuous_ladder(self, df: pd.DataFrame) -> Tuple[Dict[str, int], int, int]:
-        """
-        计算连板天梯树
-
-        Args:
-            df: 涨停板数据（包含连板天数列）
-
-        Returns:
-            (连板天梯树, 最高连板天数, 最高连板股票数)
-        """
-        ladder = {}
-        max_days = 0
-        max_count = 0
-
-        if '连板天数' in df.columns:
-            for days in range(2, 11):  # 2-10连板
-                if days < 10:
-                    count = len(df[df['连板天数'] == days])
-                else:
-                    # 10连板及以上
-                    count = len(df[df['连板天数'] >= days])
-
-                if count > 0:
-                    key = f"{days}连板" if days < 10 else "10连板及以上"
-                    ladder[key] = int(count)
-
-                    if days > max_days:
-                        max_days = days
-                        max_count = count
-
-        return ladder, max_days, max_count
-
-    def fetch_limit_up_pool(self, date_str: Optional[str] = None) -> LimitUpPool:
-        """
-        抓取涨停板池数据
-
-        注意：涨停板池是AkShare特有功能，如果配置了Tushare会自动降级使用AkShare
-
-        Args:
-            date_str: 日期字符串
-
-        Returns:
-            涨停板情绪池数据
-        """
-        try:
-            logger.info("开始抓取涨停板池数据...")
-
-            if not date_str:
-                date_str = datetime.now().strftime('%Y-%m-%d')
-
-            # 涨停板池是AkShare特有功能，即使配置了Tushare也使用AkShare
-            if self.data_source == "tushare":
-                logger.warning("涨停板池功能仅AkShare支持，自动降级使用AkShare")
-
-            import akshare as ak
-
-            # 1. 获取涨停板池
-            df_limit_up = ak.stock_zt_pool_em(date=date_str.replace('-', ''))
-            df_limit_up = self._filter_st_stocks(df_limit_up)
-
-            # 2. 获取炸板数据
-            try:
-                df_blast = ak.stock_zt_pool_dtgc_em(date=date_str.replace('-', ''))
-                df_blast = self._filter_st_stocks(df_blast)
-                blast_count = len(df_blast)
-            except Exception as e:
-                logger.warning(f"获取炸板数据失败: {e}")
-                df_blast = pd.DataFrame()
-                blast_count = 0
-
-            # 3. 计算统计数据
-            limit_up_count = len(df_limit_up)
-            blast_rate = blast_count / (blast_count + limit_up_count) if (blast_count + limit_up_count) > 0 else 0
-
-            # 4. 计算连板天梯
-            continuous_ladder, max_days, max_count = self._calculate_continuous_ladder(df_limit_up)
-
-            # 5. 提取涨停股票列表
-            limit_up_stocks = []
-            if not df_limit_up.empty:
-                for _, row in df_limit_up.head(100).iterrows():  # 最多100只
-                    limit_up_stocks.append({
-                        'code': str(row.get('代码', '')),
-                        'name': str(row.get('名称', '')),
-                        'days': int(row.get('连板天数', 1)),
-                        'reason': str(row.get('涨停原因', '')),
-                        'first_limit_time': str(row.get('首次封板时间', ''))
-                    })
-
-            # 6. 提取炸板股票列表
-            blast_stocks = []
-            if not df_blast.empty:
-                for _, row in df_blast.head(100).iterrows():
-                    blast_stocks.append({
-                        'code': str(row.get('代码', '')),
-                        'name': str(row.get('名称', '')),
-                        'blast_times': int(row.get('炸板次数', 1)),
-                        'final_change': float(row.get('最新涨跌幅', 0))
-                    })
-
-            # 7. 获取跌停数据（尝试）
-            limit_down_count = 0
-            try:
-                df_limit_down = ak.stock_zt_pool_dtgc_em(date=date_str.replace('-', ''))
-                limit_down_count = len(self._filter_st_stocks(df_limit_down))
-            except:
-                pass
-
-            pool_data = LimitUpPool(
-                trade_date=date_str,
-                limit_up_count=limit_up_count,
-                limit_down_count=limit_down_count,
-                blast_count=blast_count,
-                blast_rate=round(blast_rate, 4),
-                max_continuous_days=max_days,
-                max_continuous_count=max_count,
-                continuous_ladder=continuous_ladder,
-                limit_up_stocks=limit_up_stocks,
-                blast_stocks=blast_stocks
-            )
-
-            logger.success(f"涨停板池数据抓取成功: 涨停{limit_up_count}只, 炸板{blast_count}只, "
-                          f"炸板率{blast_rate:.2%}, 最高{max_days}连板")
-
-            return pool_data
-
-        except Exception as e:
-            logger.error(f"抓取涨停板池失败: {e}")
-            raise
-
-    def save_limit_up_pool(self, data: LimitUpPool) -> bool:
-        """
-        保存涨停板池数据到数据库
-
-        Args:
-            data: 涨停板池数据
-
-        Returns:
-            是否成功
-        """
-        try:
-            conn = self.pool_manager.get_connection()
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                INSERT INTO limit_up_pool (
-                    trade_date, limit_up_count, limit_down_count, blast_count, blast_rate,
-                    max_continuous_days, max_continuous_count, continuous_ladder,
-                    limit_up_stocks, blast_stocks
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (trade_date)
-                DO UPDATE SET
-                    limit_up_count = EXCLUDED.limit_up_count,
-                    limit_down_count = EXCLUDED.limit_down_count,
-                    blast_count = EXCLUDED.blast_count,
-                    blast_rate = EXCLUDED.blast_rate,
-                    max_continuous_days = EXCLUDED.max_continuous_days,
-                    max_continuous_count = EXCLUDED.max_continuous_count,
-                    continuous_ladder = EXCLUDED.continuous_ladder,
-                    limit_up_stocks = EXCLUDED.limit_up_stocks,
-                    blast_stocks = EXCLUDED.blast_stocks,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (
-                data.trade_date,
-                data.limit_up_count,
-                data.limit_down_count,
-                data.blast_count,
-                data.blast_rate,
-                data.max_continuous_days,
-                data.max_continuous_count,
-                json.dumps(data.continuous_ladder, ensure_ascii=False),
-                json.dumps(data.limit_up_stocks, ensure_ascii=False),
-                json.dumps(data.blast_stocks, ensure_ascii=False)
-            ))
-
-            conn.commit()
-            cursor.close()
-            self.pool_manager.release_connection(conn)
-
-            logger.success(f"涨停板池数据已保存: {data.trade_date}")
-            return True
-
-        except Exception as e:
-            logger.error(f"保存涨停板池数据失败: {e}")
-            return False
-
-    # ========== 4. 龙虎榜相关 ==========
+    # ========== 3. 龙虎榜相关 ==========
 
     def fetch_dragon_tiger_list(self, date_str: str) -> List[DragonTigerRecord]:
         """
@@ -895,16 +690,8 @@ class SentimentDataFetcher:
             import time
             time.sleep(self.rate_limit_delay)
 
-            # 3. 抓取涨停板池
-            logger.info("步骤2/3: 抓取涨停板池...")
-            limit_up_data = self.fetch_limit_up_pool(date_str)
-            if self.save_limit_up_pool(limit_up_data):
-                result.synced_tables.append('limit_up_pool')
-
-            time.sleep(self.rate_limit_delay)
-
-            # 4. 抓取龙虎榜
-            logger.info("步骤3/3: 抓取龙虎榜...")
+            # 3. 抓取龙虎榜
+            logger.info("步骤2/2: 抓取龙虎榜...")
             dragon_tiger_records = self.fetch_dragon_tiger_list(date_str)
             saved_count = self.save_dragon_tiger_list(dragon_tiger_records)
             if saved_count > 0:

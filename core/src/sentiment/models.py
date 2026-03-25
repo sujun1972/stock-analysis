@@ -74,35 +74,6 @@ class BlastStock:
 
 
 @dataclass
-class LimitUpPool:
-    """涨停板情绪池"""
-    trade_date: str
-
-    # 涨跌停统计
-    limit_up_count: int = 0
-    limit_down_count: int = 0
-
-    # 炸板数据
-    blast_count: int = 0
-    blast_rate: float = 0.0
-
-    # 连板数据
-    max_continuous_days: int = 0
-    max_continuous_count: int = 0
-    continuous_ladder: Dict[str, int] = field(default_factory=dict)
-
-    # 股票列表
-    limit_up_stocks: List[Dict] = field(default_factory=list)
-    blast_stocks: List[Dict] = field(default_factory=list)
-
-    # 市场统计
-    total_stocks: int = 0
-    rise_count: int = 0
-    fall_count: int = 0
-    rise_fall_ratio: float = 0.0
-
-
-@dataclass
 class Seat:
     """龙虎榜席位"""
     rank: int

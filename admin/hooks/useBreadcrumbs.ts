@@ -60,7 +60,6 @@ const routeLabelMap: Record<string, string> = {
   'data': '数据管理',
   'dragon-tiger': '龙虎榜',
   'limit-up': '涨停板池',
-  'cycle': '情绪周期',
   'ai-analysis': 'AI分析',
   'premarket': '盘前预期',
   'moneyflow-hsgt': '沪深港通资金流向',

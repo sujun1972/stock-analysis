@@ -26,10 +26,6 @@ from .config_repository import ConfigRepository
 from .celery_task_history_repository import CeleryTaskHistoryRepository
 from .scheduled_task_repository import ScheduledTaskRepository
 from .trading_calendar_repository import TradingCalendarRepository
-from .market_sentiment_repository import MarketSentimentRepository
-from .limit_up_pool_repository import LimitUpPoolRepository
-from .dragon_tiger_list_repository import DragonTigerListRepository
-from .sentiment_cycle_repository import SentimentCycleRepository
 from .sentiment_ai_analysis_repository import SentimentAiAnalysisRepository
 from .stock_daily_repository import StockDailyRepository
 from .user_quota_repository import UserQuotaRepository
@@ -124,10 +120,6 @@ __all__ = [
     # 交易日历
     "TradingCalendarRepository",
     # 市场情绪
-    "MarketSentimentRepository",
-    "LimitUpPoolRepository",
-    "DragonTigerListRepository",
-    "SentimentCycleRepository",
     "SentimentAiAnalysisRepository",
     # 股票数据
     "StockDailyRepository",

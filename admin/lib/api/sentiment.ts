@@ -8,33 +8,14 @@
 import { BaseApiClient } from './base'
 import type { ApiResponse } from '@/types/api'
 import type {
-  MarketSentiment,
-  LimitUpPool,
-  DragonTigerRecord,
   TradingCalendar,
-  SentimentStatistics,
 } from '@/types/sentiment'
 
 // ============== 类型定义 ==============
 
-export interface SentimentListParams {
-  page?: number
-  limit?: number
-  start_date?: string
-  end_date?: string
-}
-
 export interface SyncSentimentBatchParams {
   start_date: string
   end_date: string
-}
-
-export interface DragonTigerListParams {
-  date?: string
-  stock_code?: string
-  has_institution?: boolean
-  page?: number
-  limit?: number
 }
 
 export interface TradingCalendarParams {
@@ -45,24 +26,6 @@ export interface TradingCalendarParams {
 // ============== API 类 ==============
 
 export class SentimentApiClient extends BaseApiClient {
-  /**
-   * 获取情绪数据列表
-   * @param params 查询参数
-   * @returns 情绪数据列表
-   */
-  async getSentimentList(params?: SentimentListParams): Promise<ApiResponse<any>> {
-    return this.get('/api/sentiment/list', { params })
-  }
-
-  /**
-   * 获取指定日期情绪数据
-   * @param date 日期 (YYYY-MM-DD)，不传则返回最新日期
-   * @returns 情绪数据
-   */
-  async getSentimentDaily(date?: string): Promise<ApiResponse<any>> {
-    return this.get('/api/sentiment/daily', { params: { date } })
-  }
-
   /**
    * 手动触发同步情绪数据
    * @param date 日期 (YYYY-MM-DD)，不传则同步最新日期
@@ -91,46 +54,6 @@ export class SentimentApiClient extends BaseApiClient {
   }
 
   /**
-   * 获取涨停板池
-   * @param date 日期 (YYYY-MM-DD)，不传则返回最新日期
-   * @returns 涨停板池数据
-   */
-  async getLimitUpPool(date?: string): Promise<ApiResponse<any>> {
-    return this.get('/api/sentiment/limit-up', { params: { date } })
-  }
-
-  /**
-   * 获取涨停趋势
-   * @param days 天数，默认30天
-   * @returns 涨停趋势数据
-   */
-  async getLimitUpTrend(days: number = 30): Promise<ApiResponse<any>> {
-    return this.get('/api/sentiment/limit-up/trend', { params: { days } })
-  }
-
-  /**
-   * 获取龙虎榜
-   * @param params 查询参数
-   * @returns 龙虎榜数据
-   */
-  async getDragonTigerList(params?: DragonTigerListParams): Promise<ApiResponse<any>> {
-    return this.get('/api/sentiment/dragon-tiger', { params })
-  }
-
-  /**
-   * 获取个股龙虎榜历史
-   * @param stockCode 股票代码
-   * @param days 查询天数，默认90天
-   * @returns 个股龙虎榜历史数据
-   */
-  async getStockDragonTigerHistory(
-    stockCode: string,
-    days: number = 90
-  ): Promise<ApiResponse<any>> {
-    return this.get(`/api/sentiment/dragon-tiger/stock/${stockCode}`, { params: { days } })
-  }
-
-  /**
    * 获取交易日历
    * @param params 查询参数（年份、月份）
    * @returns 交易日历数据
@@ -147,21 +70,6 @@ export class SentimentApiClient extends BaseApiClient {
   async syncTradingCalendar(years: number[]): Promise<ApiResponse<any>> {
     return this.post('/api/sentiment/calendar/sync', null, {
       params: { years: years.join(',') }
-    })
-  }
-
-  /**
-   * 获取情绪统计分析
-   * @param startDate 开始日期 (YYYY-MM-DD)
-   * @param endDate 结束日期 (YYYY-MM-DD)
-   * @returns 统计分析数据
-   */
-  async getSentimentStatistics(
-    startDate: string,
-    endDate: string
-  ): Promise<ApiResponse<any>> {
-    return this.get('/api/sentiment/statistics', {
-      params: { start_date: startDate, end_date: endDate }
     })
   }
 }

@@ -442,18 +442,11 @@ export const apiClient = {
   clearStrategyLogs: strategyApiInst.clearStrategyLogs.bind(strategyApiInst),
 
   // 市场情绪相关
-  getSentimentList: sentimentApiInst.getSentimentList.bind(sentimentApiInst),
-  getSentimentDaily: sentimentApiInst.getSentimentDaily.bind(sentimentApiInst),
   syncSentimentData: sentimentApiInst.syncSentimentData.bind(sentimentApiInst),
   syncSentimentBatch: sentimentApiInst.syncSentimentBatch.bind(sentimentApiInst),
   getSyncTaskStatus: sentimentApiInst.getSyncTaskStatus.bind(sentimentApiInst),
-  getLimitUpPool: sentimentApiInst.getLimitUpPool.bind(sentimentApiInst),
-  getLimitUpTrend: sentimentApiInst.getLimitUpTrend.bind(sentimentApiInst),
-  getDragonTigerList: sentimentApiInst.getDragonTigerList.bind(sentimentApiInst),
-  getStockDragonTigerHistory: sentimentApiInst.getStockDragonTigerHistory.bind(sentimentApiInst),
   getTradingCalendar: sentimentApiInst.getTradingCalendar.bind(sentimentApiInst),
   syncTradingCalendar: sentimentApiInst.syncTradingCalendar.bind(sentimentApiInst),
-  getSentimentStatistics: sentimentApiInst.getSentimentStatistics.bind(sentimentApiInst),
 
   // 资金流向相关
   syncMoneyflowHsgtAsync: moneyflowApiInst.syncMoneyflowHsgtAsync.bind(moneyflowApiInst),

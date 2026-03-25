@@ -7,7 +7,6 @@
 from .fetcher import SentimentDataFetcher
 from .models import (
     MarketIndices,
-    LimitUpPool,
     DragonTigerRecord,
     TradingCalendar
 )
@@ -15,7 +14,6 @@ from .models import (
 __all__ = [
     'SentimentDataFetcher',
     'MarketIndices',
-    'LimitUpPool',
     'DragonTigerRecord',
     'TradingCalendar',
 ]

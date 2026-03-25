@@ -39,7 +39,6 @@ import {
   Brain,
   Bell,
   Flame,
-  ArrowUpCircle,
   RefreshCw,
   PackagePlus,
   TrendingUp as TrendingUpIcon,
@@ -102,26 +101,6 @@ const navItems: NavItem[] = [
     name: '市场情绪',
     icon: Zap,
     children: [
-      {
-        name: '情绪数据',
-        href: '/sentiment/data',
-        icon: Activity
-      },
-      {
-        name: '龙虎榜',
-        href: '/sentiment/dragon-tiger',
-        icon: Flame
-      },
-      {
-        name: '涨停板池',
-        href: '/sentiment/limit-up',
-        icon: ArrowUpCircle
-      },
-      {
-        name: '情绪周期',
-        href: '/sentiment/cycle',
-        icon: TrendingUp
-      },
       {
         name: 'AI分析',
         href: '/sentiment/ai-analysis',
