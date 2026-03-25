@@ -75,6 +75,7 @@ from .hsgt_top10_repository import HsgtTop10Repository
 from .ggt_top10_repository import GgtTop10Repository
 from .ggt_daily_repository import GgtDailyRepository
 from .ggt_monthly_repository import GgtMonthlyRepository
+from .stock_realtime_repository import StockRealtimeRepository
 
 __all__ = [
     "BaseRepository",
@@ -131,6 +132,7 @@ __all__ = [
     # 股票数据
     "StockDailyRepository",
     "StockBasicRepository",
+    "StockRealtimeRepository",
     # 用户管理
     "UserQuotaRepository",
     # 打板专题

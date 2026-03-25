@@ -273,6 +273,12 @@ except Exception as e:
     logger.error(f"❌ 加载复权因子任务模块失败: {e}")
 
 try:
+    from app.tasks import stock_realtime_tasks
+    logger.info(f"✅ 已加载实时行情同步任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载实时行情同步任务模块失败: {e}")
+
+try:
     from app.tasks import hsgt_top10_tasks
     logger.info(f"✅ 已加载沪深股通十大成交股任务模块")
 except Exception as e:

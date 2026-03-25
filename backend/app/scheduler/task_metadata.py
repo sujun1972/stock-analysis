@@ -75,6 +75,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'suspend_type': None}
     },
 
+    'tasks.sync_realtime_quotes': {
+        'task': 'tasks.sync_realtime_quotes',
+        'name': '实时行情同步',
+        'description': '使用Tushare daily接口获取最新行情快照，包括当前价格、涨跌幅、成交量等关键指标',
+        'category': '行情数据',
+        'display_order': 200,
+        'points_consumption': 120,  # 使用daily接口，120积分
+        'default_params': {'codes': None, 'batch_size': 100, 'update_oldest': False, 'data_source': 'akshare'}
+    },
+
     'tasks.sync_stk_limit_d': {
         'task': 'tasks.sync_stk_limit_d',
         'name': '每日涨跌停价格',

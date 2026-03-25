@@ -450,6 +450,11 @@ const navItems: NavItem[] = [
     icon: TrendingUpIcon,
     children: [
       {
+        name: '实时行情同步',
+        href: '/market/realtime',
+        icon: RefreshCw
+      },
+      {
         name: '每日停复牌信息',
         href: '/market/suspend',
         icon: PauseCircle
@@ -499,11 +504,6 @@ const navItems: NavItem[] = [
         name: '数据初始化',
         href: '/sync/initialize',
         icon: RefreshCw
-      },
-      {
-        name: '实时行情同步',
-        href: '/sync/realtime',
-        icon: TrendingUpIcon
       }
     ]
   },
