@@ -12,6 +12,8 @@ import { topListApi, type TopListItem, type TopListStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { TrendingUp, TrendingDown, BarChart3, ListFilter, RefreshCw } from 'lucide-react'
 
+const PAGE_SIZE = 30
+
 export default function TopListPage() {
   const [data, setData] = useState<TopListItem[]>([])
   const [statistics, setStatistics] = useState<TopListStatistics | null>(null)
@@ -19,22 +21,25 @@ export default function TopListPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
   const syncing = isTaskRunning('tasks.sync_top_list')
 
   useEffect(() => {
-    loadData().catch(() => {})
+    loadData(1).catch(() => {})
   }, [])
 
-  const loadData = async () => {
+  const loadData = async (targetPage: number = page) => {
     setIsLoading(true)
     try {
       const params = {
         start_date: startDate?.toISOString().split('T')[0],
         end_date: endDate?.toISOString().split('T')[0],
         ts_code: tsCode || undefined,
-        limit: 30
+        page: targetPage,
+        page_size: PAGE_SIZE
       }
 
       const [dataResponse, statsResponse] = await Promise.all([
@@ -47,6 +52,8 @@ export default function TopListPage() {
 
       if (dataResponse.code === 200 && dataResponse.data) {
         setData(dataResponse.data.items)
+        setTotal(dataResponse.data.total)
+        setPage(targetPage)
       }
 
       if (statsResponse.code === 200 && statsResponse.data) {
@@ -59,10 +66,13 @@ export default function TopListPage() {
     }
   }
 
+  const handleQuery = () => {
+    loadData(1).catch(() => {})
+  }
+
   const handleSync = async () => {
     try {
       const response = await topListApi.syncAsync({
-        trade_date: startDate?.toISOString().split('T')[0],
         ts_code: tsCode || undefined
       })
 
@@ -80,7 +90,7 @@ export default function TopListPage() {
 
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
-            loadData().catch(() => {})
+            loadData(1).catch(() => {})
             toast.success('数据同步完成')
           }
           unregisterCompletionCallback(taskId, completionCallback)
@@ -98,6 +108,17 @@ export default function TopListPage() {
       toast.error(error.message || '提交同步任务失败')
     }
   }
+
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((callback, taskId) => {
+        unregisterCompletionCallback(taskId, callback)
+      })
+      callbacks.clear()
+    }
+  }, [unregisterCompletionCallback])
 
   const columns: Column<TopListItem>[] = [
     {
@@ -342,7 +363,7 @@ export default function TopListPage() {
               />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={loadData} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -358,6 +379,12 @@ export default function TopListPage() {
             data={data}
             loading={isLoading}
             mobileCard={mobileCard}
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total,
+              onPageChange: (newPage) => loadData(newPage)
+            }}
           />
         </CardContent>
       </Card>

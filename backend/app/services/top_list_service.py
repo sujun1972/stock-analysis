@@ -3,11 +3,11 @@
 """
 import asyncio
 from typing import Dict, List, Optional
-from datetime import datetime
 import pandas as pd
 from loguru import logger
 
 from app.repositories import TopListRepository
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from core.src.providers import DataProviderFactory
 
 
@@ -16,6 +16,7 @@ class TopListService:
 
     def __init__(self):
         self.top_list_repo = TopListRepository()
+        self.calendar_repo = TradingCalendarRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ TopListService initialized")
 
@@ -24,7 +25,8 @@ class TopListService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: int = 30
+        page: int = 1,
+        page_size: int = 30
     ) -> Dict:
         """
         获取龙虎榜数据
@@ -33,22 +35,34 @@ class TopListService:
             start_date: 开始日期，格式：YYYY-MM-DD
             end_date: 结束日期，格式：YYYY-MM-DD
             ts_code: 股票代码
-            limit: 返回记录数限制
+            page: 页码（从1开始）
+            page_size: 每页记录数
 
         Returns:
-            数据字典，包含 items 和 total
+            数据字典，包含 items、total、page、page_size
         """
         # 日期格式转换（YYYY-MM-DD -> YYYYMMDD）
         start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
         end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
-        # 从数据库查询
-        items = await asyncio.to_thread(
-            self.top_list_repo.get_by_date_range,
-            start_date=start_date_fmt,
-            end_date=end_date_fmt,
-            ts_code=ts_code,
-            limit=limit
+        offset = (page - 1) * page_size
+
+        # 并发查询数据和总条数
+        items, total = await asyncio.gather(
+            asyncio.to_thread(
+                self.top_list_repo.get_by_date_range,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt,
+                ts_code=ts_code,
+                limit=page_size,
+                offset=offset
+            ),
+            asyncio.to_thread(
+                self.top_list_repo.get_record_count,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt,
+                ts_code=ts_code
+            )
         )
 
         # 日期格式转换（YYYYMMDD -> YYYY-MM-DD）
@@ -73,7 +87,9 @@ class TopListService:
 
         return {
             "items": items,
-            "total": len(items)
+            "total": total,
+            "page": page,
+            "page_size": page_size
         }
 
     async def get_statistics(
@@ -177,12 +193,13 @@ class TopListService:
         Returns:
             同步结果字典
         """
-        # 如果没有指定日期，使用前一个交易日（因为当天可能还没有数据）
+        # 如果没有指定日期，从 trading_calendar 表取最新交易日
+        # 注意：top_list 接口的 trade_date 是必需参数，传 None 不会返回最新日期
         if not trade_date:
-            from datetime import datetime, timedelta
-            yesterday = datetime.now() - timedelta(days=1)
-            trade_date = yesterday.strftime('%Y%m%d')
-            logger.info(f"未指定日期，使用昨天: {trade_date}")
+            trade_date = await asyncio.to_thread(
+                self.calendar_repo.get_latest_trading_day
+            )
+            logger.info(f"未指定日期，使用最新交易日: {trade_date}")
 
         logger.info(f"开始同步龙虎榜数据: trade_date={trade_date}, ts_code={ts_code}")
 

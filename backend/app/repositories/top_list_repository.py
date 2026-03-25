@@ -20,7 +20,8 @@ class TopListRepository(BaseRepository):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询龙虎榜数据
@@ -55,6 +56,7 @@ class TopListRepository(BaseRepository):
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
             limit_clause = f"LIMIT {limit}" if limit else ""
+            offset_clause = f"OFFSET {offset}" if offset else ""
 
             query = f"""
                 SELECT
@@ -65,6 +67,7 @@ class TopListRepository(BaseRepository):
                 {where_clause}
                 ORDER BY trade_date DESC, net_amount DESC
                 {limit_clause}
+                {offset_clause}
             """
 
             result = self.execute_query(query, tuple(params) if params else None)
@@ -376,7 +379,8 @@ class TopListRepository(BaseRepository):
     def get_record_count(
         self,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
     ) -> int:
         """
         获取记录数
@@ -402,6 +406,9 @@ class TopListRepository(BaseRepository):
             if end_date:
                 conditions.append("trade_date <= %s")
                 params.append(end_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 

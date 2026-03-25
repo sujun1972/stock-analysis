@@ -8,7 +8,8 @@ export interface TopListParams {
   start_date?: string
   end_date?: string
   ts_code?: string
-  limit?: number
+  page?: number
+  page_size?: number
 }
 
 /**

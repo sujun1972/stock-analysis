@@ -19,23 +19,12 @@ async def get_top_list(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
-    limit: int = Query(30, ge=1, le=1000, description="返回记录数限制")
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(30, ge=1, le=200, description="每页记录数")
 ):
-    """
-    查询龙虎榜数据
-
-    Args:
-        start_date: 开始日期
-        end_date: 结束日期
-        ts_code: 股票代码
-        limit: 返回记录数限制
-
-    Returns:
-        龙虎榜数据列表
-    """
+    """查询龙虎榜数据（支持分页）"""
     service = TopListService()
 
-    # 日期格式转换
     start_date_str = start_date.strftime('%Y-%m-%d') if start_date else None
     end_date_str = end_date.strftime('%Y-%m-%d') if end_date else None
 
@@ -43,7 +32,8 @@ async def get_top_list(
         start_date=start_date_str,
         end_date=end_date_str,
         ts_code=ts_code,
-        limit=limit
+        page=page,
+        page_size=page_size
     )
 
     return ApiResponse.success(data=result)
@@ -138,7 +128,6 @@ async def sync_async(
         任务提交结果
     """
     from app.tasks.top_list_tasks import sync_top_list_task
-    from datetime import datetime
 
     # 日期格式转换（YYYY-MM-DD -> YYYYMMDD）
     # 如果未提供日期，使用今天

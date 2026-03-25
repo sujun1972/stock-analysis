@@ -351,6 +351,49 @@ triggerPoll()  // Header 图标即时更新
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
+### 同步默认日期规范
+
+**Service 层 sync 方法不得硬编码 `yesterday`**。当 `trade_date=None` 时，根据 Tushare 接口特性选择以下两种正确方式之一：
+
+#### 方式 A：`trade_date` 为可选参数的接口（透传 None）
+
+部分 Tushare 接口（如 `limit_step`、`limit_list_d`）在 `trade_date=None` 时会自动返回最新交易日数据，直接透传 `None` 即可：
+
+```python
+if not trade_date:
+    logger.info("未指定日期，由 Tushare 返回最新交易日数据")  # ✅ 透传 None
+```
+
+#### 方式 B：`trade_date` 为必需参数的接口（从 trading_calendar 取最新交易日）
+
+部分 Tushare 接口（如 `top_list`、`top_inst`）的 `trade_date` 是必需参数，传 `None` 不会返回最新日期，必须从 `TradingCalendarRepository` 查询最新交易日：
+
+```python
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
+
+class YourService:
+    def __init__(self):
+        self.calendar_repo = TradingCalendarRepository()
+
+    async def sync_data(self, trade_date=None):
+        if not trade_date:
+            trade_date = await asyncio.to_thread(
+                self.calendar_repo.get_latest_trading_day
+            )
+            logger.info(f"未指定日期，使用最新交易日: {trade_date}")  # ✅
+```
+
+**错误写法（禁止）**：
+```python
+if not trade_date:
+    yesterday = datetime.now() - timedelta(days=1)
+    trade_date = yesterday.strftime('%Y%m%d')  # ❌ 硬编码昨天，非交易日/节假日会同步到错误日期
+```
+
+**判断依据**：查看 `core/src/providers/tushare/provider.py` 中对应方法的参数签名，若 `trade_date` 标注为必需参数（无默认值），则使用方式 B。
+
+**已修复文件**：`top_list_service.py`、`top_inst_service.py`（已于 2026-03-25 修复，使用方式 B）
+
 ### 新增数据同步功能开发流程
 
 当需要添加新的 Tushare 数据同步功能时，请按照以下标准流程进行开发：

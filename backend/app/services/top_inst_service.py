@@ -3,11 +3,11 @@
 """
 import asyncio
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
 import pandas as pd
 from loguru import logger
 
 from app.repositories import TopInstRepository
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from core.src.providers import DataProviderFactory
 
 
@@ -16,6 +16,7 @@ class TopInstService:
 
     def __init__(self):
         self.top_inst_repo = TopInstRepository()
+        self.calendar_repo = TradingCalendarRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ TopInstService initialized")
 
@@ -171,11 +172,13 @@ class TopInstService:
         Returns:
             同步结果字典
         """
-        # 如果没有指定日期，使用前一个交易日（因为当天可能还没有数据）
+        # 如果没有指定日期，从 trading_calendar 表取最新交易日
+        # 注意：top_inst 接口的 trade_date 是必需参数，传 None 不会返回最新日期
         if not trade_date:
-            yesterday = datetime.now() - timedelta(days=1)
-            trade_date = yesterday.strftime('%Y%m%d')
-            logger.info(f"未指定日期，使用昨天: {trade_date}")
+            trade_date = await asyncio.to_thread(
+                self.calendar_repo.get_latest_trading_day
+            )
+            logger.info(f"未指定日期，使用最新交易日: {trade_date}")
 
         logger.info(f"开始同步龙虎榜机构明细数据: trade_date={trade_date}, ts_code={ts_code}")
 
