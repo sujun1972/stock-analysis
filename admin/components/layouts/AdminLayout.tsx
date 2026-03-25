@@ -438,6 +438,11 @@ const navItems: NavItem[] = [
     icon: Layers,
     children: [
       {
+        name: '股票列表',
+        href: '/data/stock-list',
+        icon: Database
+      },
+      {
         name: '新股列表同步',
         href: '/sync/new-stocks',
         icon: PackagePlus

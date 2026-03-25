@@ -44,6 +44,7 @@ from .endpoints import (
     prompt_templates,
     scheduler,
     sentiment,
+    stock_list,  # 股票列表管理
     stocks,
     strategies,  # Phase 2: 统一策略 API
     strategy,
@@ -104,6 +105,7 @@ router.include_router(users.router)
 router.include_router(profile.router)
 
 # 注册子路由
+router.include_router(stock_list.router, prefix="/stocks/list", tags=["股票列表管理"])  # 股票列表管理API
 router.include_router(stocks.router, prefix="/stocks", tags=["stocks"])
 router.include_router(concepts.router, prefix="/concepts", tags=["概念板块"])
 router.include_router(data.router, prefix="/data", tags=["data"])

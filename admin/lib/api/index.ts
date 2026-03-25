@@ -64,6 +64,7 @@ import { StkLimitDApiClient, stkLimitDApi as stkLimitDApiInst } from './stk-limi
 import { AdjFactorApiClient, adjFactorApi as adjFactorApiInst } from './adj-factor-api'
 import { NewStockApiClient, newStockApi as newStockApiInst } from './new-stock-api'
 import { StockRealtimeApiClient, stockRealtimeApi as stockRealtimeApiInst } from './stock-realtime'
+import { StockListApiClient, stockListApi as stockListApiInst } from './stock-list-api'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -887,6 +888,15 @@ export type {
   StockRealtimeStatistics,
   RealtimeSyncParams
 } from './stock-realtime'
+
+// 重新导出股票列表 API
+export { StockListApiClient }
+export const stockListApi = stockListApiInst
+export type {
+  StockListData,
+  StockListStatistics,
+  StockListParams as StockListQueryParams
+} from './stock-list-api'
 
 // 导出默认实例
 export default apiClient

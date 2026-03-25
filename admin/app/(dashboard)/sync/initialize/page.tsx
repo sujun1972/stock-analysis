@@ -16,20 +16,6 @@ import { format, subDays, subMonths, subYears } from '@/lib/date-utils'
 import { addTaskToQueue } from '@/hooks/use-task-polling'
 
 /**
- * 模块同步状态接口（用于股票列表同步）
- */
-interface ModuleSyncStatus {
-  status: string
-  total: number
-  success: number
-  failed: number
-  progress: number
-  error_message: string
-  started_at: string
-  completed_at: string
-}
-
-/**
  * 全局同步状态接口（用于日线数据同步）
  */
 interface SyncStatus {
@@ -42,12 +28,6 @@ interface SyncStatus {
 
 export default function InitializePage() {
   const router = useRouter()
-
-  // ========== 股票列表同步相关状态 ==========
-  const [stockListStatus, setStockListStatus] = useState<ModuleSyncStatus | null>(null)
-  const [isStockListLoading, setIsStockListLoading] = useState(false)
-  const [stockListError, setStockListError] = useState<string | null>(null)
-  const [stockListSuccess, setStockListSuccess] = useState<string | null>(null)
 
   // ========== 日线数据同步相关状态 ==========
   const [dailySyncStatus, setDailySyncStatus] = useState<SyncStatus | null>(null)
@@ -88,68 +68,6 @@ export default function InitializePage() {
   useEffect(() => {
     applyDatePreset(datePreset)
   }, [datePreset])
-
-  // ========== 股票列表同步逻辑 ==========
-  useEffect(() => {
-    loadStockListStatus()
-  }, [])
-
-  // 智能轮询：仅在任务进行中时轮询
-  useEffect(() => {
-    if (stockListStatus?.status === 'running') {
-      const interval = setInterval(() => {
-        loadStockListStatus()
-      }, 3000)
-      return () => clearInterval(interval)
-    }
-  }, [stockListStatus?.status])
-
-  const loadStockListStatus = async () => {
-    try {
-      const response = await apiClient.getModuleSyncStatus('stock_list')
-      if (response.data) {
-        setStockListStatus(response.data)
-      }
-    } catch (err) {
-      logger.error('Failed to load stock list status', err)
-    }
-  }
-
-  const handleStockListSync = async () => {
-    try {
-      setIsStockListLoading(true)
-      setStockListError(null)
-      setStockListSuccess(null)
-
-      // 启动异步任务
-      const res = await apiClient.syncStockList() as any
-
-      if (res.code === 200 && res.data?.task_id) {
-        const { task_id, display_name } = res.data
-
-        // 添加到全局任务队列
-        addTaskToQueue(task_id, 'sync.stock_list', display_name, 'sync')
-
-        // 显示成功提示
-        toast.success('任务已启动', {
-          description: '股票列表同步任务已在后台执行，您可以在右上角查看进度',
-          duration: 5000
-        })
-
-        setStockListSuccess('同步任务已启动，请在右上角任务图标查看进度')
-
-        // 立即刷新状态以显示"同步中"
-        await loadStockListStatus()
-      }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || err.message || '启动同步任务失败'
-      setStockListError(errorMessage)
-      toast.error('启动任务失败', { description: errorMessage })
-      logger.error('Stock list sync error', err)
-    } finally {
-      setIsStockListLoading(false)
-    }
-  }
 
   // ========== 日线数据同步逻辑 ==========
   useEffect(() => {
@@ -317,7 +235,7 @@ export default function InitializePage() {
           <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-300">
             <li className="flex items-start">
               <span className="mr-2">•</span>
-              <span>建议先完成<strong>步骤1（股票列表初始化）</strong>，再进行步骤2</span>
+              <span>股票列表同步已迁移到"基础数据 &gt; 股票列表"页面</span>
             </li>
             <li className="flex items-start">
               <span className="mr-2">•</span>
@@ -335,151 +253,12 @@ export default function InitializePage() {
         </CardContent>
       </Card>
 
-      {/* ========== 步骤1: 股票列表初始化 ========== */}
-      <Card className="border-2 border-blue-200 dark:border-blue-800">
-        <CardHeader>
-          <div className="flex items-center">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 text-white font-bold mr-3">
-              1
-            </div>
-            <CardTitle className="text-xl">
-              股票列表初始化
-            </CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-400">
-            获取A股市场所有股票基本信息（约5000+只），包括股票代码、名称、行业、地区等
-          </p>
-
-          {/* 错误提示 */}
-          {stockListError && (
-            <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <AlertDescription className="text-red-800 dark:text-red-200">
-                {stockListError}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* 成功提示 */}
-          {stockListSuccess && (
-            <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-              <AlertDescription className="text-green-800 dark:text-green-200">
-                {stockListSuccess}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* 上次同步信息 */}
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">上次同步信息</h3>
-            {stockListStatus ? (
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">状态</div>
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(stockListStatus.status)}`}>
-                      {getStatusText(stockListStatus.status)}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">开始时间</div>
-                    <div className="font-medium text-gray-900 dark:text-white">
-                      {stockListStatus.started_at || '未同步'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">完成时间</div>
-                    <div className="font-medium text-gray-900 dark:text-white">
-                      {stockListStatus.completed_at || '-'}
-                    </div>
-                  </div>
-                </div>
-
-                {stockListStatus.status === 'completed' && stockListStatus.success > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">同步总数</div>
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {stockListStatus.total || 0} 只
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">成功</div>
-                      <div className="font-medium text-green-600 dark:text-green-400">
-                        {stockListStatus.success || 0} 只
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">失败</div>
-                      <div className="font-medium text-red-600 dark:text-red-400">
-                        {stockListStatus.failed || 0} 只
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {stockListStatus.error_message && (
-                  <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-                    <AlertDescription className="text-sm text-red-900 dark:text-red-200">
-                      <div className="font-medium mb-1">错误详情：</div>
-                      <div className="whitespace-pre-wrap">{stockListStatus.error_message}</div>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-600 dark:text-gray-400 text-sm">加载状态中...</div>
-            )}
-          </div>
-
-          {/* 开始同步按钮 */}
-          <Button
-            onClick={handleStockListSync}
-            disabled={isStockListLoading || stockListStatus?.status === 'running'}
-            className="w-full md:w-auto"
-          >
-            {isStockListLoading || stockListStatus?.status === 'running' ? '同步中...' : '开始同步股票列表'}
-          </Button>
-
-          {/* 数据说明 */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-            <details className="text-sm">
-              <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-                查看数据说明
-              </summary>
-              <div className="mt-3 space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div>
-                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">数据内容：</strong>
-                    <ul className="list-disc list-inside space-y-1.5">
-                      <li>股票代码、名称</li>
-                      <li>市场类型</li>
-                      <li>所属行业、地区</li>
-                      <li>上市日期</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <strong className="block mb-2 text-gray-700 dark:text-gray-300">注意事项：</strong>
-                    <ul className="list-disc list-inside space-y-1.5">
-                      <li>建议每月更新一次</li>
-                      <li>同步会覆盖更新现有数据</li>
-                      <li>通常需要几秒到几分钟</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </details>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ========== 步骤2: 日线数据初始化 ========== */}
+      {/* ========== 步骤1: 日线数据初始化 ========== */}
       <Card className="border-2 border-purple-200 dark:border-purple-800">
         <CardHeader>
           <div className="flex items-center">
             <div className="flex items-center justify-center w-10 h-10 rounded-full bg-purple-600 text-white font-bold mr-3">
-              2
+              1
             </div>
             <CardTitle className="text-xl">
               日线数据初始化
@@ -668,12 +447,12 @@ export default function InitializePage() {
         </CardContent>
       </Card>
 
-      {/* ========== 步骤3: 情绪数据批量同步 ========== */}
+      {/* ========== 步骤2: 情绪数据批量同步 ========== */}
       <Card className="border-2 border-orange-200 dark:border-orange-800">
         <CardHeader>
           <div className="flex items-center">
             <div className="flex items-center justify-center w-10 h-10 rounded-full bg-orange-600 text-white font-bold mr-3">
-              3
+              2
             </div>
             <CardTitle className="text-xl">
               情绪数据批量同步

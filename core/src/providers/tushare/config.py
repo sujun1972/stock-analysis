@@ -120,16 +120,41 @@ class TushareFields:
     """Tushare API 字段映射"""
 
     # ========== 股票列表字段 ==========
-    STOCK_LIST_FIELDS = 'ts_code,symbol,name,area,industry,market,list_date'
+    # 请求所有可用字段（与 Tushare stock_basic 接口一致）
+    STOCK_LIST_FIELDS = (
+        'ts_code,symbol,name,area,industry,fullname,enname,cnspell,'
+        'market,exchange,curr_type,list_status,list_date,delist_date,'
+        'is_hs,act_name,act_ent_type'
+    )
+
+    # 字段映射：Tushare 原始字段 → 数据库字段
     STOCK_LIST_RENAME = {
-        'symbol': 'code',
-        'name': 'name',
-        'area': 'area',
-        'industry': 'industry',
-        'market': 'market',
-        'list_date': 'list_date'
+        'ts_code': 'ts_code',        # Tushare 标准代码（如 000001.SZ）
+        'symbol': 'code',             # 股票代码（如 000001）
+        'name': 'name',               # 股票名称
+        'area': 'area',               # 地域
+        'industry': 'industry',       # 所属行业
+        'fullname': 'fullname',       # 股票全称
+        'enname': 'enname',           # 英文全称
+        'cnspell': 'cnspell',         # 拼音缩写
+        'market': 'market',           # 市场类型（主板/创业板/科创板/CDR）
+        'exchange': 'exchange',       # 交易所代码（SSE/SZSE/BSE）
+        'curr_type': 'curr_type',     # 交易货币
+        'list_status': 'list_status', # 上市状态（L/D/P/G）
+        'list_date': 'list_date',     # 上市日期
+        'delist_date': 'delist_date', # 退市日期
+        'is_hs': 'is_hs',             # 是否沪深港通标的（N/H/S）
+        'act_name': 'act_name',       # 实控人名称
+        'act_ent_type': 'act_ent_type' # 实控人企业性质
     }
-    STOCK_LIST_OUTPUT = ['code', 'name', 'market', 'industry', 'area', 'list_date', 'status']
+
+    # 输出字段列表（包含所有 Tushare 字段）
+    STOCK_LIST_OUTPUT = [
+        'ts_code', 'code', 'name', 'fullname', 'enname', 'cnspell',
+        'market', 'exchange', 'area', 'industry', 'curr_type',
+        'list_status', 'list_date', 'delist_date', 'is_hs',
+        'act_name', 'act_ent_type', 'status'
+    ]
 
     # ========== 日线数据字段 ==========
     DAILY_DATA_RENAME = {

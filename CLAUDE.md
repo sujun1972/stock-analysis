@@ -270,6 +270,7 @@ triggerPoll()  // Header 图标即时更新
 - 复权因子页面（`/market/adj-factor`）**（✨ 新增于 2026-03-24，Tushare adj_factor接口，2000积分/次，盘前9:15~20分更新，支持单只股票历史查询或单日全市场查询，包含统计卡片、筛选功能和响应式布局）**
 - 每日指标页面（`/market/daily-basic`）**（✨ 新增于 2026-03-24，Tushare daily_basic接口，2000积分/次，每交易日15:00-17:00更新，单次最大6000条，包含换手率、市盈率、市净率等17个核心指标，带统计卡片、分页查询和异步同步功能）**
 - 新股列表页面（`/sync/new-stocks`）**（✨ 新增于 2026-03-24，使用stock_basic表list_date字段查询新上市股票，支持按天数/日期范围/市场类型筛选，包含统计卡片、分页查询和异步同步功能）**
+- 股票列表页面（`/data/stock-list`）**（✨ 新增于 2026-03-25，完整支持Tushare stock_basic接口17个输出字段，按上市状态/市场/交易所/沪深港通4个维度筛选，5张统计卡片展示全市场概况，支持分页查询和异步同步，已从数据初始化页面迁移至基础数据菜单）**
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -1005,9 +1006,26 @@ docker-compose down
 - **退市股票** (`list_status='D'`) - 已退市的股票
 - **暂停上市** (`list_status='P'`) - 暂停上市的股票
 
+**数据库表结构** (`stock_basic` 表已扩展，2026-03-25更新)：
+- **基础字段**（原有7个）：code, name, ts_code, market, exchange, area, industry
+- **Tushare新增字段**（2026-03-25新增10个）：
+  - `fullname` VARCHAR(100) - 股票全称
+  - `enname` VARCHAR(200) - 英文全称
+  - `cnspell` VARCHAR(100) - 拼音缩写
+  - `curr_type` VARCHAR(10) - 货币代码（CNY/HKD/USD）
+  - `list_date` DATE - 上市日期
+  - `delist_date` DATE - 退市日期
+  - `is_hs` VARCHAR(2) - 沪深港通标志（S/H/N）
+  - `act_name` VARCHAR(200) - 实际控制人名称
+  - `act_ent_type` VARCHAR(100) - 实际控制人企业性质
+  - `status` VARCHAR(10) - 存续状态（L-存续/D-终止）
+- **总计17个字段**，完整对齐Tushare stock_basic接口输出
+
 **关键实现**：
-- **Tushare 接口**: `stock_basic(list_status='D')` 获取退市股票
-- **AkShare 接口**: `stock_info_sh_delist()` 和 `stock_info_sz_delist()` 分别获取沪深退市股票
+- **Tushare 接口**: `stock_basic(exchange='', list_status='', fields='...')` 获取全量17个字段
+- **数据转换**: `TushareDataConverter.convert_stock_list()` 处理字段映射和类型转换
+- **数据插入**: `DataInsertManager.save_stock_list()` 使用 UPSERT 语义（ON CONFLICT UPDATE）
+- **日期处理**: 修复 numpy.datetime64 转换问题，确保 PostgreSQL DATE 类型兼容
 - **自动更新**: 每日股票列表同步会自动更新 `stock_basic` 表中的股票状态
 - **无需单独任务**: 退市股票数据由基础同步自动处理，无需额外的退市同步任务
 

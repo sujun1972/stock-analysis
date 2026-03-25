@@ -54,39 +54,70 @@ class TushareDataConverter:
     @staticmethod
     def convert_stock_list(df: pd.DataFrame) -> pd.DataFrame:
         """
-        转换股票列表数据
+        转换股票列表数据（支持 Tushare stock_basic 接口完整字段）
 
         Args:
-            df: 原始 DataFrame
+            df: 原始 DataFrame（来自 Tushare stock_basic 接口）
 
         Returns:
             pd.DataFrame: 标准化的股票列表
+
+        Examples:
+            >>> df = pro.stock_basic(exchange='', list_status='L', fields='...')
+            >>> df = TushareDataConverter.convert_stock_list(df)
         """
         if df is None or df.empty:
             logger.warning("股票列表数据为空")
             return pd.DataFrame(columns=TushareFields.STOCK_LIST_OUTPUT)
 
-        # 重命名字段
+        # 重命名字段（保持 Tushare 原始字段名）
         df = df.rename(columns=TushareFields.STOCK_LIST_RENAME)
 
-        # 处理市场类型映射
+        # 处理市场类型映射（仅当需要时）
+        # 注意：Tushare 返回的 market 字段已经是中文（主板/创业板/科创板/CDR）
+        # 这里保持不变，后续可根据需要调整
         if 'market' in df.columns:
-            df['market'] = df['market'].map(TushareConfig.MARKET_TYPE_MAP).fillna('其他')
+            # 统一市场类型名称（可选）
+            market_map = {
+                '主板': '主板',
+                '创业板': '创业板',
+                '科创板': '科创板',
+                'CDR': 'CDR',
+                '北交所': '北交所'
+            }
+            df['market'] = df['market'].map(market_map).fillna(df['market'])
 
-        # 转换上市日期
-        if 'list_date' in df.columns:
-            df['list_date'] = pd.to_datetime(
-                df['list_date'],
-                format='%Y%m%d',
-                errors='coerce'
-            ).dt.date
+        # 转换日期字段（上市日期和退市日期）
+        for date_col in ['list_date', 'delist_date']:
+            if date_col in df.columns:
+                df[date_col] = pd.to_datetime(
+                    df[date_col],
+                    format='%Y%m%d',
+                    errors='coerce'
+                ).dt.date
 
-        # 添加默认状态
-        df['status'] = '正常'
+        # 根据 list_status 映射为中文状态
+        if 'list_status' in df.columns:
+            status_map = {
+                'L': '正常',      # 上市
+                'D': '退市',      # 退市
+                'P': '停牌',      # 暂停上市
+                'G': '过会未交易' # 过会未交易
+            }
+            df['status'] = df['list_status'].map(status_map).fillna('正常')
+        else:
+            df['status'] = '正常'
 
-        # 选择标准字段
+        # 确保 code 字段存在（已通过 symbol -> code 映射）
+        if 'code' not in df.columns and 'symbol' in df.columns:
+            df['code'] = df['symbol']
+
+        # 选择标准字段（保留所有 Tushare 字段）
         available_cols = [col for col in TushareFields.STOCK_LIST_OUTPUT if col in df.columns]
-        return df[available_cols].copy()
+        result_df = df[available_cols].copy()
+
+        logger.info(f"成功转换 {len(result_df)} 条股票列表记录")
+        return result_df
 
     @staticmethod
     def convert_daily_data(df: pd.DataFrame) -> pd.DataFrame:

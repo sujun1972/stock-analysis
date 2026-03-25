@@ -54,13 +54,13 @@ class DataInsertManager:
         """
         self.pool_manager = pool_manager
 
-    def save_stock_list(self, df: pd.DataFrame, data_source: str = 'akshare') -> int:
+    def save_stock_list(self, df: pd.DataFrame, data_source: str = 'tushare') -> int:
         """
-        保存股票列表到数据库
+        保存股票列表到数据库（支持 Tushare stock_basic 完整字段）
 
         Args:
-            df: 包含股票信息的DataFrame
-            data_source: 数据源名称 (akshare 或 tushare)
+            df: 包含股票信息的DataFrame（需包含 Tushare stock_basic 接口字段）
+            data_source: 数据源名称 (tushare 或 akshare，默认 tushare)
 
         Returns:
             插入/更新的记录数
@@ -81,26 +81,53 @@ class DataInsertManager:
             delist_date_col = 'delist_date' if 'delist_date' in df.columns else '退市日期'
             status_col = 'status' if 'status' in df.columns else None
 
+            # Tushare 新增字段（如果存在）
+            ts_code_col = 'ts_code' if 'ts_code' in df.columns else None
+            fullname_col = 'fullname' if 'fullname' in df.columns else None
+            enname_col = 'enname' if 'enname' in df.columns else None
+            cnspell_col = 'cnspell' if 'cnspell' in df.columns else None
+            exchange_col = 'exchange' if 'exchange' in df.columns else None
+            curr_type_col = 'curr_type' if 'curr_type' in df.columns else None
+            list_status_col = 'list_status' if 'list_status' in df.columns else None
+            is_hs_col = 'is_hs' if 'is_hs' in df.columns else None
+            act_name_col = 'act_name' if 'act_name' in df.columns else None
+            act_ent_type_col = 'act_ent_type' if 'act_ent_type' in df.columns else None
+
             # 向量化构建记录
             # 使用 where() 替代 fillna(None) 以兼容 pandas 2.x
             import numpy as np
 
             records = list(zip(
+                # 基础字段
                 df[code_col].fillna('').values,
                 df[name_col].fillna('').values,
                 df[market_col].fillna('').values if market_col in df.columns else [''] * len(df),
                 df[industry_col].fillna('').values if industry_col in df.columns else [''] * len(df),
                 df[area_col].fillna('').values if area_col in df.columns else [''] * len(df),
-                df[list_date_col].where(df[list_date_col].notna(), None).values if list_date_col in df.columns else [None] * len(df),
-                df[delist_date_col].where(df[delist_date_col].notna(), None).values if delist_date_col in df.columns else [None] * len(df),
+                df[list_date_col].apply(lambda x: x.date() if pd.notna(x) and hasattr(x, 'date') else x).values if list_date_col in df.columns else [None] * len(df),
+                df[delist_date_col].apply(lambda x: x.date() if pd.notna(x) and hasattr(x, 'date') else x).values if delist_date_col in df.columns else [None] * len(df),
                 df[status_col].fillna('正常').values if status_col in df.columns else ['正常'] * len(df),
-                [data_source] * len(df)
+                [data_source] * len(df),
+                # Tushare 扩展字段
+                df[ts_code_col].fillna('').values if ts_code_col and ts_code_col in df.columns else [''] * len(df),
+                df[fullname_col].fillna('').values if fullname_col and fullname_col in df.columns else [''] * len(df),
+                df[enname_col].fillna('').values if enname_col and enname_col in df.columns else [''] * len(df),
+                df[cnspell_col].fillna('').values if cnspell_col and cnspell_col in df.columns else [''] * len(df),
+                df[exchange_col].fillna('').values if exchange_col and exchange_col in df.columns else [''] * len(df),
+                df[curr_type_col].fillna('CNY').values if curr_type_col and curr_type_col in df.columns else ['CNY'] * len(df),
+                df[list_status_col].fillna('L').values if list_status_col and list_status_col in df.columns else ['L'] * len(df),
+                df[is_hs_col].fillna('N').values if is_hs_col and is_hs_col in df.columns else ['N'] * len(df),
+                df[act_name_col].fillna('').values if act_name_col and act_name_col in df.columns else [''] * len(df),
+                df[act_ent_type_col].fillna('').values if act_ent_type_col and act_ent_type_col in df.columns else [''] * len(df),
             ))
 
-            # 批量插入（冲突时更新）- 使用 stock_basic 表
+            # 批量插入（冲突时更新）- 包含所有 Tushare 字段
             insert_query = """
-                INSERT INTO stock_basic (code, name, market, industry, area, list_date, delist_date, status, data_source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO stock_basic (
+                    code, name, market, industry, area, list_date, delist_date, status, data_source,
+                    ts_code, fullname, enname, cnspell, exchange, curr_type, list_status, is_hs, act_name, act_ent_type
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (code)
                 DO UPDATE SET
                     name = EXCLUDED.name,
@@ -111,6 +138,16 @@ class DataInsertManager:
                     delist_date = EXCLUDED.delist_date,
                     status = EXCLUDED.status,
                     data_source = EXCLUDED.data_source,
+                    ts_code = EXCLUDED.ts_code,
+                    fullname = EXCLUDED.fullname,
+                    enname = EXCLUDED.enname,
+                    cnspell = EXCLUDED.cnspell,
+                    exchange = EXCLUDED.exchange,
+                    curr_type = EXCLUDED.curr_type,
+                    list_status = EXCLUDED.list_status,
+                    is_hs = EXCLUDED.is_hs,
+                    act_name = EXCLUDED.act_name,
+                    act_ent_type = EXCLUDED.act_ent_type,
                     updated_at = CURRENT_TIMESTAMP;
             """
 
