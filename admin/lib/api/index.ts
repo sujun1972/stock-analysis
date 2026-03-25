@@ -40,6 +40,7 @@ import { CcassHoldApiClient, ccassHoldApi as ccassHoldApiInst } from './ccass-ho
 import { CcassHoldDetailApiClient, ccassHoldDetailApi as ccassHoldDetailApiInst } from './ccass-hold-detail-api'
 import { DcMemberApiClient, dcMemberApi as dcMemberApiInst } from './dc-member-api'
 import { DcIndexApiClient, dcIndexApi as dcIndexApiInst } from './dc-index-api'
+import { DcDailyApiClient, dcDailyApi as dcDailyApiInst } from './dc-daily-api'
 import { HkHoldApiClient, hkHoldApi as hkHoldApiInst } from './hk-hold-api'
 import { StkAuctionOApiClient, stkAuctionOApi as stkAuctionOApiInst } from './stk-auction-o'
 import { StkAuctionCApiClient, stkAuctionCApi as stkAuctionCApiInst } from './stk-auction-c'
@@ -323,6 +324,15 @@ export type {
   DcIndexData,
   DcIndexStatistics
 } from './dc-index-api'
+
+// 东方财富概念板块行情
+export { DcDailyApiClient }
+export const dcDailyApi = dcDailyApiInst
+export type {
+  DcDailyParams,
+  DcDailyData,
+  DcDailyStatistics
+} from './dc-daily-api'
 
 // 重新导出中央结算系统持股汇总 API
 export type {

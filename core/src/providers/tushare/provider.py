@@ -3424,6 +3424,75 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取东方财富板块数据失败: {e}")
             raise TushareDataError(f"获取东方财富板块数据失败: {str(e)}")
 
+    def get_dc_daily(
+        self,
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        idx_type: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取东方财富概念板块行情数据
+
+        Args:
+            ts_code: 板块代码（格式：xxxxx.DC，可选）
+            trade_date: 交易日期 (格式: YYYYMMDD，可选)
+            start_date: 开始日期 (格式: YYYYMMDD，可选)
+            end_date: 结束日期 (格式: YYYYMMDD，可选)
+            idx_type: 板块类型（概念板块/行业板块/地域板块，可选）
+
+        Returns:
+            pd.DataFrame: 板块行情数据
+                - ts_code: 板块代码
+                - trade_date: 交易日
+                - close: 收盘点位
+                - open: 开盘点位
+                - high: 最高点位
+                - low: 最低点位
+                - change: 涨跌点位
+                - pct_change: 涨跌幅
+                - vol: 成交量(股)
+                - amount: 成交额(元)
+                - swing: 振幅
+                - turnover_rate: 换手率
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> df = provider.get_dc_daily(trade_date='20250513')
+            >>> df = provider.get_dc_daily(start_date='20250101', end_date='20250131')
+
+        Notes:
+            - 权限要求: 6000积分/次
+            - 单次限制: 最大返回2000行数据
+            - 历史数据从2020年开始
+        """
+        try:
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+            if idx_type:
+                params['idx_type'] = idx_type
+
+            df = self.api_client.query('dc_daily', **params)
+
+            if df is None or df.empty:
+                logger.warning("dc_daily 接口返回空数据")
+                return pd.DataFrame()
+
+            logger.debug(f"获取到 {len(df)} 条东方财富概念板块行情数据")
+            return df
+
+        except Exception as e:
+            logger.error(f"获取东方财富概念板块行情数据失败: {e}")
+            raise TushareDataError(f"获取东方财富概念板块行情数据失败: {e}")
+
     def get_suspend_d(
         self,
         ts_code: Optional[str] = None,

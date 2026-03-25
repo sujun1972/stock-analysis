@@ -74,6 +74,7 @@ from .stock_realtime_repository import StockRealtimeRepository
 from .stock_st_repository import StockStRepository
 from .dc_member_repository import DcMemberRepository
 from .dc_index_repository import DcIndexRepository
+from .dc_daily_repository import DcDailyRepository
 
 __all__ = [
     "BaseRepository",
@@ -169,4 +170,5 @@ __all__ = [
     # 板块数据
     "DcMemberRepository",
     "DcIndexRepository",
+    "DcDailyRepository",
 ]
