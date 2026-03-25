@@ -121,6 +121,22 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 保留功能：AI 情绪分析、盘前预期管理
 
+#### AI 情绪分析数据源（2026-03-25 重构）
+
+AI 情绪分析的数据来源已从已删除的旧表迁移至打板专题数据表：
+
+| 数据 | 旧表（已删除） | 新表（打板专题） |
+|------|--------------|----------------|
+| 涨跌停统计 | `limit_up_pool` | `limit_list_d` |
+| 连板天梯 | `limit_up_pool.continuous_ladder` | `limit_step` |
+| 龙虎榜 | `dragon_tiger_list` | `top_list` |
+| 板块统计 | 无 | `limit_cpt_list` |
+| 大盘指数 | `market_sentiment_daily` | 无（已移除，不影响分析质量） |
+
+**关键实现**：`SentimentAIAnalysisService._fetch_sentiment_data()` 和 `_build_prompt()` 是单一数据源，同时供 Celery 定时任务和 `GET /api/sentiment/ai-analysis/preview-prompt` 端点调用，避免逻辑重复。
+
+**FastAPI 路由注意事项**：`/preview-prompt` 路由必须注册在 `/{date}` 通配符路由**之前**，否则会被拦截。参见 `backend/app/api/endpoints/sentiment/ai_analysis.py`。
+
 ### 任务管理面板
 
 Admin项目采用统一的任务管理面板，位于Header右侧：

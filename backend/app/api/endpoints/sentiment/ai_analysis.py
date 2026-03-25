@@ -2,10 +2,12 @@
 情绪AI分析端点
 
 包含以下功能：
+- 预览提示词（基于打板专题数据）
 - 查询AI分析报告
 - 生成AI分析报告
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 from datetime import datetime
@@ -21,6 +23,89 @@ router = APIRouter()
 
 
 # ========== AI分析相关端点 ==========
+
+@router.get("/preview-prompt")
+async def preview_prompt(
+    date: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    预览基于打板专题数据生成的AI分析提示词
+
+    Args:
+        date: 日期 (YYYY-MM-DD)，默认为最新有数据的交易日
+
+    Returns:
+        生成的提示词文本和数据摘要
+    """
+    try:
+        from app.repositories.top_list_repository import TopListRepository
+        from app.repositories.limit_list_repository import LimitListRepository
+        from app.repositories.limit_step_repository import LimitStepRepository
+        from app.repositories.limit_cpt_repository import LimitCptRepository
+        from app.services.sentiment_ai_analysis_service import sentiment_ai_analysis_service
+
+        top_list_repo = TopListRepository()
+        limit_list_repo = LimitListRepository()
+        limit_step_repo = LimitStepRepository()
+        limit_cpt_repo = LimitCptRepository()
+
+        # 确定查询日期（YYYYMMDD 格式）
+        if date:
+            trade_date_fmt = date.replace('-', '')
+            display_date = date
+        else:
+            dates = await asyncio.gather(
+                asyncio.to_thread(top_list_repo.get_latest_trade_date),
+                asyncio.to_thread(limit_list_repo.get_latest_trade_date),
+                asyncio.to_thread(limit_step_repo.get_latest_trade_date),
+                asyncio.to_thread(limit_cpt_repo.get_latest_trade_date),
+            )
+            valid_dates = [d for d in dates if d]
+            if not valid_dates:
+                return ApiResponse.error(message="暂无打板专题数据，请先同步数据", code=404)
+            trade_date_fmt = max(valid_dates)
+            display_date = f"{trade_date_fmt[:4]}-{trade_date_fmt[4:6]}-{trade_date_fmt[6:]}"
+
+        logger.info(f"预览提示词，交易日: {trade_date_fmt}")
+
+        # 调用 service 的同名方法获取数据并构建 prompt（与生成分析共用同一逻辑）
+        data = await asyncio.to_thread(
+            sentiment_ai_analysis_service._fetch_sentiment_data, display_date
+        )
+        if not data:
+            return ApiResponse.error(message=f"{display_date} 暂无打板专题数据，请先同步数据", code=404)
+
+        prompt = sentiment_ai_analysis_service._build_prompt(data)
+
+        # 统计摘要
+        limit_list_data = data['limit_list_data']
+        limit_up_count = sum(1 for s in limit_list_data if s.get('limit_type') == 'U')
+        limit_down_count = sum(1 for s in limit_list_data if s.get('limit_type') == 'D')
+        blast_count = sum(1 for s in limit_list_data if s.get('limit_type') == 'Z')
+        blast_rate = blast_count / (limit_up_count + blast_count) if (limit_up_count + blast_count) > 0 else 0
+        limit_step_data = data['limit_step_data']
+        step_nums = [int(r.get('nums', 0)) for r in limit_step_data if str(r.get('nums', '')).isdigit()]
+        max_continuous = max(step_nums, default=0)
+
+        return ApiResponse.success(data={
+            "trade_date": display_date,
+            "prompt": prompt,
+            "data_summary": {
+                "limit_up_count": limit_up_count,
+                "limit_down_count": limit_down_count,
+                "blast_count": blast_count,
+                "blast_rate": round(blast_rate, 4),
+                "max_continuous_days": max_continuous,
+                "top_list_count": len(data['top_list_data']),
+                "limit_cpt_count": len(data['limit_cpt_data']),
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"生成提示词失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/{date}")
 async def get_ai_analysis(

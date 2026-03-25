@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarIcon, PlayIcon, RefreshCwIcon, TrendingUpIcon, TrendingDownIcon, AlertTriangleIcon, CheckCircle2Icon, Clock } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { CalendarIcon, PlayIcon, RefreshCwIcon, TrendingUpIcon, TrendingDownIcon, AlertTriangleIcon, CheckCircle2Icon, Clock, FileTextIcon, CopyIcon } from "lucide-react"
 import { format, zhCN } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api-client"
@@ -88,6 +89,10 @@ export default function SentimentAIAnalysisPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingProviders, setIsLoadingProviders] = useState(true)
   const [taskId, setTaskId] = useState<string | null>(null)
+  const [promptDialogOpen, setPromptDialogOpen] = useState(false)
+  const [promptText, setPromptText] = useState<string>("")
+  const [promptDate, setPromptDate] = useState<string>("")
+  const [isLoadingPrompt, setIsLoadingPrompt] = useState(false)
 
   // 格式化日期为 YYYY-MM-DD
   const formatDate = (d: Date) => format(d, "yyyy-MM-dd")
@@ -119,6 +124,30 @@ export default function SentimentAIAnalysisPage() {
       setIsLoading(false)
     }
   }, [date])
+
+  // 预览提示词
+  const handlePreviewPrompt = async () => {
+    setIsLoadingPrompt(true)
+    setPromptDialogOpen(true)
+    try {
+      const dateStr = formatDate(date)
+      const response = await apiClient.get(`/api/sentiment/ai-analysis/preview-prompt`, {
+        params: { date: dateStr }
+      }) as any
+      if (response.code === 200 && response.data) {
+        setPromptText(response.data.prompt)
+        setPromptDate(response.data.trade_date)
+      } else {
+        toast.error(response.message || "获取提示词失败")
+        setPromptDialogOpen(false)
+      }
+    } catch (error: any) {
+      toast.error("获取提示词失败：" + (error.response?.data?.detail || error.message))
+      setPromptDialogOpen(false)
+    } finally {
+      setIsLoadingPrompt(false)
+    }
+  }
 
   // 生成AI分析（异步提交）
   const handleGenerate = async () => {
@@ -396,6 +425,24 @@ export default function SentimentAIAnalysisPage() {
 
             {/* 操作按钮 */}
             <div className="flex gap-2 items-end">
+              <Button
+                variant="outline"
+                onClick={handlePreviewPrompt}
+                disabled={isLoadingPrompt}
+              >
+                {isLoadingPrompt ? (
+                  <>
+                    <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin" />
+                    加载中...
+                  </>
+                ) : (
+                  <>
+                    <FileTextIcon className="mr-2 h-4 w-4" />
+                    生成提示词
+                  </>
+                )}
+              </Button>
+
               <Button
                 onClick={handleGenerate}
                 disabled={isGenerating || taskId !== null || aiProviders.length === 0}
@@ -771,6 +818,48 @@ export default function SentimentAIAnalysisPage() {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* 提示词预览弹窗 */}
+      <Dialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileTextIcon className="h-5 w-5" />
+              打板专题 AI 分析提示词
+              {promptDate && <span className="text-sm font-normal text-muted-foreground">（{promptDate}）</span>}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">
+            {isLoadingPrompt ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <RefreshCwIcon className="h-6 w-6 animate-spin mr-2" />
+                正在从打板专题数据库生成提示词...
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(promptText)
+                      toast.success("提示词已复制到剪贴板")
+                    }}
+                  >
+                    <CopyIcon className="h-4 w-4 mr-1" />
+                    复制全文
+                  </Button>
+                </div>
+                <div className="flex-1 overflow-auto rounded-md border bg-muted/40 min-h-0">
+                  <pre className="p-4 text-xs leading-relaxed whitespace-pre-wrap font-mono">
+                    {promptText}
+                  </pre>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

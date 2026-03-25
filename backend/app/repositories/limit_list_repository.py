@@ -79,10 +79,35 @@ class LimitListRepository(BaseRepository):
         try:
             result = self.execute_query(query, tuple(params))
             logger.debug(f"查询到 {len(result)} 条涨跌停列表数据")
-            return result
+            return [self._row_to_dict(row) for row in result]
         except Exception as e:
             logger.error(f"查询涨跌停列表数据失败: {e}")
             raise
+
+    def _row_to_dict(self, row: tuple) -> Dict:
+        """将查询结果行转换为字典"""
+        return {
+            'trade_date': row[0],
+            'ts_code': row[1],
+            'industry': row[2],
+            'name': row[3],
+            'close': float(row[4]) if row[4] is not None else None,
+            'pct_chg': float(row[5]) if row[5] is not None else None,
+            'amount': float(row[6]) if row[6] is not None else None,
+            'limit_amount': float(row[7]) if row[7] is not None else None,
+            'float_mv': float(row[8]) if row[8] is not None else None,
+            'total_mv': float(row[9]) if row[9] is not None else None,
+            'turnover_ratio': float(row[10]) if row[10] is not None else None,
+            'fd_amount': float(row[11]) if row[11] is not None else None,
+            'first_time': row[12],
+            'last_time': row[13],
+            'open_times': int(row[14]) if row[14] is not None else None,
+            'up_stat': row[15],
+            'limit_times': int(row[16]) if row[16] is not None else None,
+            'limit_type': row[17],
+            'created_at': str(row[18]) if row[18] is not None else None,
+            'updated_at': str(row[19]) if row[19] is not None else None,
+        }
 
     def get_statistics(
         self,

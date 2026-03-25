@@ -1,13 +1,17 @@
 """
 市场情绪AI分析服务
 
-将市场情绪数据（模块1+模块2）通过LLM进行深度分析，生成"四个灵魂拷问"式的盘后报告。
+基于打板专题数据（龙虎榜、涨跌停列表、连板天梯、最强板块）通过LLM生成盘后深度分析报告。
 
 主要功能：
-- 从数据库读取当日完整情绪数据
-- 构建结构化Prompt（灵魂拷问模板）
-- 调用AI服务生成分析报告
-- 解析JSON结果并存储到数据库
+- 从打板专题表读取当日数据（top_list / limit_list_d / limit_step / limit_cpt_list）
+- 构建结构化 Prompt（七节数据 + 四个灵魂拷问）
+- 调用 AI 服务生成 JSON 格式的盘后报告
+- 解析 JSON 结果并存储到 market_sentiment_ai_analysis 表
+
+关键方法：
+- _fetch_sentiment_data: 读取打板专题数据（供 Celery 任务和 preview-prompt 端点共用）
+- _build_prompt: 构建分析 Prompt（供 Celery 任务和 preview-prompt 端点共用）
 
 作者: AI Strategy Team
 创建日期: 2026-03-10
@@ -49,111 +53,6 @@ class SentimentAIAnalysisService:
             }
             self._pool_manager = ConnectionPoolManager(db_config)
         return self._pool_manager
-
-    # 灵魂拷问Prompt模板
-    SOUL_QUESTIONING_PROMPT = """# A股盘后情绪深度分析任务
-
-你是一位拥有20年实战经验的A股短线大师，擅长通过盘后数据精准解读市场情绪和资金动向。
-
-## 今日市场数据（{trade_date}）
-
-### 一、大盘基础数据
-- **上证指数**: 收盘 {sh_close} 点，涨跌幅 {sh_change}%
-- **深证成指**: 收盘 {sz_close} 点，涨跌幅 {sz_change}%
-- **创业板指**: 收盘 {cyb_close} 点，涨跌幅 {cyb_change}%
-- **两市总成交额**: {total_amount} 亿元
-
-### 二、情绪核心数据
-- **涨停家数**: {limit_up_count} 只（剔除ST）
-- **跌停家数**: {limit_down_count} 只
-- **涨跌比**: {rise_fall_ratio:.2f}
-- **炸板率**: {blast_rate:.1%}
-- **最高连板**: {max_continuous_days} 天
-
-#### 连板天梯树（高度分布）:
-{continuous_ladder_text}
-
-#### 涨停股票列表（前10）:
-{limit_up_stocks_text}
-
-#### 炸板股票列表（前5）:
-{blast_stocks_text}
-
-### 三、情绪周期量化结果
-- **周期阶段**: {cycle_stage_cn}
-- **赚钱效应指数**: {money_making_index:.1f}/100
-- **情绪得分**: {sentiment_score:.1f}/100
-- **置信度**: {confidence_score:.1f}%
-- **阶段持续天数**: {stage_duration_days} 天
-
-### 四、龙虎榜资金动向
-
-#### 机构动向（净买入前3）:
-{institution_top_stocks_text}
-
-#### 顶级游资打板（一线游资主导）:
-{hot_money_top_stocks_text}
-
-#### 游资活跃度:
-- 一线顶级游资出现: {top_tier_count} 次
-- 机构出现: {institution_count} 次
-
----
-
-## 请以JSON格式回答以下四个灵魂拷问
-
-**非常重要**: 请将整个分析结果放在一个JSON代码块中，格式如下：
-
-```json
-{{
-  "space_analysis": {{ ... }},
-  "sentiment_analysis": {{ ... }},
-  "capital_flow_analysis": {{ ... }},
-  "tomorrow_tactics": {{ ... }}
-}}
-```
-
-### 1. 【看空间】：今日最高连板是谁？代表什么题材？空间是否被打开？
-
-请在 `space_analysis` 字段中包含：
-- `max_continuous_stock`: 对象，包含 `code`(代码), `name`(名称), `days`(连板天数)
-- `theme`: 题材名称（字符串）
-- `space_level`: "超高空间"/"高空间"/"中等空间"/"低空间"
-- `analysis`: 详细分析文字（150-300字）
-
-### 2. 【看情绪】：结合炸板率和跌停数，今日接力资金赚钱效应如何？是该进攻还是防守？
-
-请在 `sentiment_analysis` 字段中包含：
-- `money_making_effect`: "超强"/"中等"/"较差"/"极差"
-- `strategy`: "激进进攻"/"稳健参与"/"防守为主"/"空仓观望"
-- `reasoning`: 详细推理（150-300字）
-
-### 3. 【看暗流】：分析龙虎榜数据，顶级游资今天主攻了哪个方向？机构在建仓什么？
-
-请在 `capital_flow_analysis` 字段中包含：
-- `hot_money_direction`: 对象，包含 `themes`(题材数组), `stocks`(股票代码数组), `concentration`("高度集中"/"分散"/"无明显方向")
-- `institution_direction`: 对象，包含 `sectors`(行业数组), `style`("防御性"/"进攻性"/"均衡配置")
-- `capital_consensus`: "游资机构共振"/"游资单边进攻"/"机构独立建仓"/"资金分歧"
-- `analysis`: 详细分析（200-400字）
-
-### 4. 【明日战术】：基于以上推演，制定明日集合竞价和开盘半小时的应对策略
-
-请在 `tomorrow_tactics` 字段中包含：
-- `call_auction_tactics`: 对象，包含 `participate_conditions`(参与条件), `avoid_conditions`(禁止条件)
-- `opening_half_hour_tactics`: 对象，包含 `low_buy_opportunities`(低吸机会), `chase_opportunities`(追涨机会), `wait_signals`(观望信号)
-- `buy_conditions`: 数组，包含3个买入条件
-- `stop_loss_conditions`: 数组，包含3个止损条件
-
----
-
-**输出要求**:
-1. 必须输出完整的JSON格式，放在代码块中
-2. 所有分析必须有理有据，引用具体数据
-3. 避免模棱两可，给出明确的操作建议
-4. 不要编造不存在的股票代码（可以用"主流题材龙头"等泛称）
-
-**现在请开始分析！**
-"""
 
     async def generate_ai_analysis(
         self,
@@ -318,203 +217,260 @@ class SentimentAIAnalysisService:
                 db.close()
 
     def _fetch_sentiment_data(self, trade_date: str) -> Optional[Dict[str, Any]]:
-        """从数据库读取完整情绪数据"""
+        """从打板专题表读取数据（与 preview-prompt 端点逻辑保持一致）"""
         try:
-            pool_manager = self._get_pool_manager()
-            conn = pool_manager.get_connection()
-            cursor = conn.cursor()
+            from app.repositories.top_list_repository import TopListRepository
+            from app.repositories.limit_list_repository import LimitListRepository
+            from app.repositories.limit_step_repository import LimitStepRepository
+            from app.repositories.limit_cpt_repository import LimitCptRepository
 
-            # 查询大盘数据
-            cursor.execute("""
-                SELECT
-                    sh_index_close, sh_index_change,
-                    sz_index_close, sz_index_change,
-                    cyb_index_close, cyb_index_change,
-                    total_amount
-                FROM market_sentiment_daily
-                WHERE trade_date = %s
-            """, (trade_date,))
-            market_data = cursor.fetchone()
+            # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
+            trade_date_fmt = trade_date.replace('-', '')
 
-            if not market_data:
-                logger.warning(f"{trade_date} 无大盘数据")
-                cursor.close()
-                conn.close()
+            top_list_repo = TopListRepository()
+            limit_list_repo = LimitListRepository()
+            limit_step_repo = LimitStepRepository()
+            limit_cpt_repo = LimitCptRepository()
+
+            top_list_data = top_list_repo.get_by_trade_date(trade_date_fmt)
+            limit_list_data = limit_list_repo.get_by_date_range(
+                start_date=trade_date_fmt, end_date=trade_date_fmt, limit=200
+            )
+            limit_step_data = limit_step_repo.get_by_trade_date(trade_date_fmt)
+            limit_cpt_data = limit_cpt_repo.get_by_trade_date(trade_date_fmt, limit=20)
+
+            # 如果核心数据（涨跌停）为空，视为无数据
+            if not limit_list_data and not limit_step_data and not top_list_data:
+                logger.warning(f"{trade_date} 打板专题数据为空，请先同步数据")
                 return None
 
-            # 查询涨停板池数据
-            cursor.execute("""
-                SELECT
-                    limit_up_count, limit_down_count, rise_fall_ratio,
-                    blast_rate, max_continuous_days,
-                    continuous_ladder, limit_up_stocks, blast_stocks
-                FROM limit_up_pool
-                WHERE trade_date = %s
-            """, (trade_date,))
-            limit_up_data = cursor.fetchone()
-
-            # 查询情绪周期数据
-            cursor.execute("""
-                SELECT
-                    cycle_stage_cn, money_making_index, sentiment_score,
-                    confidence_score, stage_duration_days
-                FROM market_sentiment_cycle
-                WHERE trade_date = %s
-            """, (trade_date,))
-            cycle_data = cursor.fetchone()
-
-            # 查询机构净买入TOP3
-            cursor.execute("""
-                SELECT
-                    stock_code, stock_name,
-                    net_amount, reason
-                FROM dragon_tiger_list
-                WHERE trade_date = %s
-                  AND has_institution = true
-                ORDER BY net_amount DESC
-                LIMIT 3
-            """, (trade_date,))
-            institution_stocks = cursor.fetchall()
-
-            # 查询一线游资打板数据（简化版，实际应调用hot_money_classifier）
-            cursor.execute("""
-                SELECT
-                    stock_code, stock_name,
-                    buy_amount, reason
-                FROM dragon_tiger_list
-                WHERE trade_date = %s
-                  AND price_change >= 9.5  -- 涨停或接近涨停
-                ORDER BY buy_amount DESC
-                LIMIT 10
-            """, (trade_date,))
-            hot_money_stocks = cursor.fetchall()
-
-            cursor.close()
-            pool_manager.release_connection(conn)
-
-            # 构建数据字典
-            data = {
+            return {
                 "trade_date": trade_date,
-                "sh_close": market_data[0] if market_data[0] else 0,
-                "sh_change": market_data[1] if market_data[1] else 0,
-                "sz_close": market_data[2] if market_data[2] else 0,
-                "sz_change": market_data[3] if market_data[3] else 0,
-                "cyb_close": market_data[4] if market_data[4] else 0,
-                "cyb_change": market_data[5] if market_data[5] else 0,
-                "total_amount": float(market_data[6]) if market_data[6] else 0,
-                "limit_up_count": limit_up_data[0] if limit_up_data else 0,
-                "limit_down_count": limit_up_data[1] if limit_up_data else 0,
-                "rise_fall_ratio": float(limit_up_data[2]) if limit_up_data and limit_up_data[2] else 0,
-                "blast_rate": float(limit_up_data[3]) if limit_up_data and limit_up_data[3] else 0,
-                "max_continuous_days": limit_up_data[4] if limit_up_data else 0,
-                "continuous_ladder": limit_up_data[5] if limit_up_data else {},
-                "limit_up_stocks": limit_up_data[6] if limit_up_data else [],
-                "blast_stocks": limit_up_data[7] if limit_up_data else [],
-                "cycle_stage_cn": cycle_data[0] if cycle_data else "未知",
-                "money_making_index": float(cycle_data[1]) if cycle_data and cycle_data[1] else 0,
-                "sentiment_score": float(cycle_data[2]) if cycle_data and cycle_data[2] else 0,
-                "confidence_score": float(cycle_data[3]) if cycle_data and cycle_data[3] else 0,
-                "stage_duration_days": cycle_data[4] if cycle_data else 0,
-                "institution_stocks": [
-                    {"code": row[0], "name": row[1], "amount": float(row[2]), "reason": row[3]}
-                    for row in institution_stocks
-                ],
-                "hot_money_stocks": [
-                    {"code": row[0], "name": row[1], "amount": float(row[2]), "reason": row[3]}
-                    for row in hot_money_stocks
-                ],
-                "top_tier_count": len(hot_money_stocks),
-                "institution_count": len(institution_stocks)
+                "trade_date_fmt": trade_date_fmt,
+                "top_list_data": top_list_data,
+                "limit_list_data": limit_list_data,
+                "limit_step_data": limit_step_data,
+                "limit_cpt_data": limit_cpt_data,
             }
-
-            return data
 
         except Exception as e:
             logger.error(f"读取情绪数据失败: {str(e)}")
             return None
 
     def _build_prompt(self, data: Dict[str, Any]) -> str:
-        """构建灵魂拷问Prompt"""
-        # 格式化连板天梯
-        ladder = data.get('continuous_ladder', {})
-        ladder_lines = []
-        for days in sorted([int(k) for k in ladder.keys()], reverse=True):
-            count = ladder.get(str(days), 0)
-            if count > 0:
-                ladder_lines.append(f"- {days}连板: {count}只")
-        continuous_ladder_text = "\n".join(ladder_lines) if ladder_lines else "- 无连板数据"
+        """基于打板专题数据构建分析 Prompt（与 preview-prompt 端点逻辑保持一致）"""
+        trade_date = data['trade_date']
+        top_list_data = data['top_list_data']
+        limit_list_data = data['limit_list_data']
+        limit_step_data = data['limit_step_data']
+        limit_cpt_data = data['limit_cpt_data']
 
-        # 格式化涨停股票列表
-        limit_up_stocks = data.get('limit_up_stocks', [])[:10]
-        limit_up_lines = []
-        for idx, stock in enumerate(limit_up_stocks, 1):
-            name = stock.get('name', '未知')
-            code = stock.get('code', '000000')
-            reason = stock.get('reason', '')
-            days = stock.get('days', 1)
-            limit_up_lines.append(f"{idx}. {name}({code}) - {days}连板 - {reason}")
-        limit_up_stocks_text = "\n".join(limit_up_lines) if limit_up_lines else "- 无涨停数据"
+        # 分类涨跌停数据
+        limit_up_list = [s for s in limit_list_data if s.get('limit_type') == 'U']
+        limit_down_list = [s for s in limit_list_data if s.get('limit_type') == 'D']
+        blast_list = [s for s in limit_list_data if s.get('limit_type') == 'Z']
 
-        # 格式化炸板股票列表
-        blast_stocks = data.get('blast_stocks', [])[:5]
-        blast_lines = []
-        for idx, stock in enumerate(blast_stocks, 1):
-            name = stock.get('name', '未知')
-            code = stock.get('code', '000000')
-            reason = stock.get('reason', '')
-            blast_lines.append(f"{idx}. {name}({code}) - {reason}")
-        blast_stocks_text = "\n".join(blast_lines) if blast_lines else "- 无炸板数据"
-
-        # 格式化机构股票
-        institution_stocks = data.get('institution_stocks', [])
-        inst_lines = []
-        for idx, stock in enumerate(institution_stocks, 1):
-            name = stock.get('name', '未知')
-            code = stock.get('code', '000000')
-            amount = stock.get('amount', 0) / 100000000  # 转换为亿
-            reason = stock.get('reason', '')
-            inst_lines.append(f"{idx}. {name}({code}) - 净买入 {amount:.2f}亿 - {reason}")
-        institution_top_stocks_text = "\n".join(inst_lines) if inst_lines else "- 无机构数据"
-
-        # 格式化游资股票
-        hot_money_stocks = data.get('hot_money_stocks', [])
-        hm_lines = []
-        for idx, stock in enumerate(hot_money_stocks, 1):
-            name = stock.get('name', '未知')
-            code = stock.get('code', '000000')
-            amount = stock.get('amount', 0) / 100000000  # 转换为亿
-            reason = stock.get('reason', '')
-            hm_lines.append(f"{idx}. {name}({code}) - 买入 {amount:.2f}亿 - {reason}")
-        hot_money_top_stocks_text = "\n".join(hm_lines) if hm_lines else "- 无游资数据"
-
-        # 填充模板
-        prompt = self.SOUL_QUESTIONING_PROMPT.format(
-            trade_date=data['trade_date'],
-            sh_close=data['sh_close'],
-            sh_change=data['sh_change'],
-            sz_close=data['sz_close'],
-            sz_change=data['sz_change'],
-            cyb_close=data['cyb_close'],
-            cyb_change=data['cyb_change'],
-            total_amount=data['total_amount'] / 100000000,  # 转换为亿
-            limit_up_count=data['limit_up_count'],
-            limit_down_count=data['limit_down_count'],
-            rise_fall_ratio=data['rise_fall_ratio'],
-            blast_rate=data['blast_rate'],
-            max_continuous_days=data['max_continuous_days'],
-            continuous_ladder_text=continuous_ladder_text,
-            limit_up_stocks_text=limit_up_stocks_text,
-            blast_stocks_text=blast_stocks_text,
-            cycle_stage_cn=data['cycle_stage_cn'],
-            money_making_index=data['money_making_index'],
-            sentiment_score=data['sentiment_score'],
-            confidence_score=data['confidence_score'],
-            stage_duration_days=data['stage_duration_days'],
-            institution_top_stocks_text=institution_top_stocks_text,
-            hot_money_top_stocks_text=hot_money_top_stocks_text,
-            top_tier_count=data['top_tier_count'],
-            institution_count=data['institution_count']
+        # 按连板数降序排列
+        limit_up_list_sorted = sorted(
+            limit_up_list,
+            key=lambda x: (x.get('limit_times') or 0),
+            reverse=True
         )
+
+        # 构建连板天梯文本
+        step_by_nums: dict = {}
+        for row in limit_step_data:
+            n = str(row.get('nums', ''))
+            if n not in step_by_nums:
+                step_by_nums[n] = []
+            step_by_nums[n].append(f"{row.get('name', '')}({row.get('ts_code', '')})")
+
+        ladder_lines = []
+        for nums_key in sorted(step_by_nums.keys(), key=lambda x: int(x) if x.isdigit() else 0, reverse=True):
+            stocks_str = '、'.join(step_by_nums[nums_key][:5])
+            if len(step_by_nums[nums_key]) > 5:
+                stocks_str += f" 等{len(step_by_nums[nums_key])}只"
+            ladder_lines.append(f"- {nums_key}连板({len(step_by_nums[nums_key])}只): {stocks_str}")
+        continuous_ladder_text = '\n'.join(ladder_lines) if ladder_lines else '- 暂无连板数据'
+
+        # 涨停股票列表（前15，按连板数排序）
+        limit_up_lines = []
+        for i, s in enumerate(limit_up_list_sorted[:15], 1):
+            lt = s.get('limit_times') or 1
+            ft = s.get('first_time') or '--'
+            ot = s.get('open_times') or 0
+            industry = s.get('industry') or ''
+            limit_up_lines.append(
+                f"{i}. {s.get('name', '')}({s.get('ts_code', '')}) "
+                f"- {lt}连板 | 封板时间:{ft} | 炸板次数:{ot} | 所属行业:{industry}"
+            )
+        limit_up_stocks_text = '\n'.join(limit_up_lines) if limit_up_lines else '- 无涨停数据'
+
+        # 跌停股票列表（前5）
+        limit_down_lines = []
+        for i, s in enumerate(limit_down_list[:5], 1):
+            industry = s.get('industry') or ''
+            limit_down_lines.append(
+                f"{i}. {s.get('name', '')}({s.get('ts_code', '')}) - 所属行业:{industry}"
+            )
+        limit_down_stocks_text = '\n'.join(limit_down_lines) if limit_down_lines else '- 无跌停数据'
+
+        # 炸板股票列表（前5）
+        blast_lines = []
+        for i, s in enumerate(blast_list[:5], 1):
+            ft = s.get('first_time') or '--'
+            industry = s.get('industry') or ''
+            blast_lines.append(
+                f"{i}. {s.get('name', '')}({s.get('ts_code', '')}) "
+                f"- 首次封板:{ft} | 所属行业:{industry}"
+            )
+        blast_stocks_text = '\n'.join(blast_lines) if blast_lines else '- 无炸板数据'
+
+        # 龙虎榜数据（净买入前5 / 净卖出前5）
+        top_list_sorted = sorted(top_list_data, key=lambda x: x.get('net_amount') or 0, reverse=True)
+        net_buy_top5 = top_list_sorted[:5]
+        net_sell_top5 = sorted(top_list_data, key=lambda x: x.get('net_amount') or 0)[:5]
+
+        net_buy_lines = []
+        for i, s in enumerate(net_buy_top5, 1):
+            amt = (s.get('net_amount') or 0) / 1e8
+            reason = s.get('reason') or ''
+            net_buy_lines.append(
+                f"{i}. {s.get('name', '')}({s.get('ts_code', '')}) "
+                f"- 净买入 {amt:.2f}亿 | 上榜原因:{reason}"
+            )
+        net_buy_text = '\n'.join(net_buy_lines) if net_buy_lines else '- 无龙虎榜净买入数据'
+
+        net_sell_lines = []
+        for i, s in enumerate(net_sell_top5, 1):
+            amt = (s.get('net_amount') or 0) / 1e8
+            reason = s.get('reason') or ''
+            net_sell_lines.append(
+                f"{i}. {s.get('name', '')}({s.get('ts_code', '')}) "
+                f"- 净卖出 {abs(amt):.2f}亿 | 上榜原因:{reason}"
+            )
+        net_sell_text = '\n'.join(net_sell_lines) if net_sell_lines else '- 无龙虎榜净卖出数据'
+
+        # 最强板块（前10）
+        cpt_lines = []
+        for i, c in enumerate(limit_cpt_data[:10], 1):
+            cpt_lines.append(
+                f"{i}. {c.get('name', '')}({c.get('ts_code', '')}) "
+                f"- 涨停{c.get('up_nums', 0)}只 | 连板{c.get('cons_nums', 0)}只 "
+                f"| 高度{c.get('up_stat', '')} | 涨幅{c.get('pct_chg', 0) or 0:.2f}%"
+            )
+        cpt_text = '\n'.join(cpt_lines) if cpt_lines else '- 无板块数据'
+
+        # 计算最高连板
+        max_continuous = max(
+            [int(k) for k in step_by_nums.keys() if k.isdigit()],
+            default=0
+        )
+        max_continuous_stock = ''
+        if max_continuous > 0 and str(max_continuous) in step_by_nums:
+            max_continuous_stock = step_by_nums[str(max_continuous)][0]
+
+        # 统计数据
+        limit_up_count = len(limit_up_list)
+        limit_down_count = len(limit_down_list)
+        blast_count = len(blast_list)
+        blast_rate = blast_count / (limit_up_count + blast_count) if (limit_up_count + blast_count) > 0 else 0
+
+        prompt = f"""# A股打板专题盘后深度分析（{trade_date}）
+
+你是一位拥有20年实战经验的A股短线大师，擅长通过盘后数据精准解读市场情绪和资金动向。以下数据均来自当日A股真实市场数据。
+
+## 一、情绪核心数据
+
+- **涨停家数**: {limit_up_count} 只
+- **跌停家数**: {limit_down_count} 只
+- **炸板家数**: {blast_count} 只
+- **炸板率**: {blast_rate:.1%}
+- **最高连板**: {max_continuous} 天（{max_continuous_stock}）
+
+## 二、连板天梯（晋级结构）
+
+{continuous_ladder_text}
+
+## 三、涨停股票列表（前15，按连板数排序）
+
+{limit_up_stocks_text}
+
+## 四、跌停股票列表（前5）
+
+{limit_down_stocks_text}
+
+## 五、炸板股票列表（前5）
+
+{blast_stocks_text}
+
+## 六、最强概念板块 TOP10
+
+{cpt_text}
+
+## 七、龙虎榜资金动向
+
+### 净买入前5（主力资金流入）
+{net_buy_text}
+
+### 净卖出前5（主力资金流出）
+{net_sell_text}
+
+---
+
+## 请以JSON格式回答以下四个灵魂拷问
+
+**非常重要**: 请将整个分析结果放在一个JSON代码块中，格式如下：
+
+```json
+{{
+  "space_analysis": {{ ... }},
+  "sentiment_analysis": {{ ... }},
+  "capital_flow_analysis": {{ ... }},
+  "tomorrow_tactics": {{ ... }}
+}}
+```
+
+### 1. 【看空间】：今日最高连板是谁？代表什么题材？空间是否被打开？
+
+请在 `space_analysis` 字段中包含：
+- `max_continuous_stock`: 对象，包含 `code`(代码), `name`(名称), `days`(连板天数)
+- `theme`: 题材名称（字符串）
+- `space_level`: "超高空间"/"高空间"/"中等空间"/"低空间"
+- `analysis`: 详细分析文字（150-300字）
+
+### 2. 【看情绪】：结合炸板率和跌停数，今日接力资金赚钱效应如何？是该进攻还是防守？
+
+请在 `sentiment_analysis` 字段中包含：
+- `money_making_effect`: "超强"/"中等"/"较差"/"极差"
+- `strategy`: "激进进攻"/"稳健参与"/"防守为主"/"空仓观望"
+- `reasoning`: 详细推理（150-300字）
+
+### 3. 【看暗流】：分析龙虎榜数据，顶级游资今天主攻了哪个方向？机构在建仓什么？
+
+请在 `capital_flow_analysis` 字段中包含：
+- `hot_money_direction`: 对象，包含 `themes`(题材数组), `stocks`(股票代码数组), `concentration`("高度集中"/"分散"/"无明显方向")
+- `institution_direction`: 对象，包含 `sectors`(行业数组), `style`("防御性"/"进攻性"/"均衡配置")
+- `capital_consensus`: "游资机构共振"/"游资单边进攻"/"机构独立建仓"/"资金分歧"
+- `analysis`: 详细分析（200-400字）
+
+### 4. 【明日战术】：基于以上推演，制定明日集合竞价和开盘半小时的应对策略
+
+请在 `tomorrow_tactics` 字段中包含：
+- `call_auction_tactics`: 对象，包含 `participate_conditions`(参与条件), `avoid_conditions`(禁止条件)
+- `opening_half_hour_tactics`: 对象，包含 `low_buy_opportunities`(低吸机会), `chase_opportunities`(追涨机会), `wait_signals`(观望信号)
+- `buy_conditions`: 数组，包含3个买入条件
+- `stop_loss_conditions`: 数组，包含3个止损条件
+
+---
+
+**输出要求**:
+1. 必须输出完整的JSON格式，放在代码块中
+2. 所有分析必须有理有据，引用具体数据
+3. 避免模棱两可，给出明确的操作建议
+4. 不要编造不存在的股票代码（可以用"主流题材龙头"等泛称）
+
+**现在请开始分析！**"""
 
         return prompt
 

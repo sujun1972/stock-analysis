@@ -119,7 +119,7 @@ def daily_sentiment_ai_analysis_task(self, date: str = None, provider: str = "de
                     raise self.retry(
                         exc=Exception(f"等待依赖数据: {error_msg}"),
                         countdown=retry_delay,
-                        kwargs={'date': date, 'provider': provider, 'retry_count': retry_count + 1}
+                        args=[date, provider, retry_count + 1]
                     )
                 else:
                     # 超过重试次数，永久跳过
