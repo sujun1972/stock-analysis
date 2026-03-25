@@ -49,7 +49,7 @@ export default function StkHighShockPage() {
 
       const response = await stkHighShockApi.getData(params)
 
-      if (response.code === 200) {
+      if (response.code === 200 && response.data) {
         setData(response.data.items || [])
         setTotal(response.data.total || 0)
       } else {
@@ -79,7 +79,7 @@ export default function StkHighShockPage() {
 
       const response = await stkHighShockApi.getStatistics(params)
 
-      if (response.code === 200) {
+      if (response.code === 200 && response.data) {
         setStatistics(response.data)
       }
     } catch (err) {
@@ -307,14 +307,14 @@ export default function StkHighShockPage() {
               <label className="text-sm font-medium mb-2 block">开始日期</label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
               />
             </div>
             <div className="w-full sm:w-auto">
               <label className="text-sm font-medium mb-2 block">结束日期</label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
               />
             </div>
             <Button

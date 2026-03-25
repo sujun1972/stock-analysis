@@ -115,24 +115,7 @@ async function fetchTaskStatus(taskId: string, taskName: string) {
   }
 
   try {
-    // 2. 尝试回测任务API
-    if (taskName.includes('backtest')) {
-      const response = await apiClient.getBacktestTaskStatus(taskId)
-      if (response.success && response.data) {
-        return {
-          status: mapStatus(response.data.status),
-          progress: response.data.progress,
-          result: response.data.result,
-          error: response.data.error
-        }
-      }
-    }
-  } catch (error) {
-    // 继续
-  }
-
-  try {
-    // 3. 尝试AI策略生成任务API
+    // 2. 尝试AI策略生成任务API
     if (taskName.includes('ai_strategy') || taskName.includes('generate_strategy')) {
       const response = await apiClient.get(`/api/ai-strategy/task/${taskId}`)
       if (response.data) {
@@ -149,7 +132,7 @@ async function fetchTaskStatus(taskId: string, taskName: string) {
   }
 
   try {
-    // 4. 尝试市场情绪任务API
+    // 3. 尝试市场情绪任务API
     if (taskName.includes('sentiment')) {
       const response = await apiClient.get(`/api/sentiment/task/${taskId}`)
       if (response.data) {
@@ -165,7 +148,7 @@ async function fetchTaskStatus(taskId: string, taskName: string) {
     // 继续
   }
 
-  // 5. 默认返回 null，保持当前状态
+  // 4. 默认返回 null，保持当前状态
   return null
 }
 

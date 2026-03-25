@@ -75,14 +75,14 @@ export default function HsgtTop10Page() {
         })
       ])
 
-      if (dataResponse.code === 200) {
+      if (dataResponse.code === 200 && dataResponse.data) {
         setData(dataResponse.data.items)
         setTotal(dataResponse.data.total)
       } else {
         throw new Error(dataResponse.message || '加载数据失败')
       }
 
-      if (statsResponse.code === 200) {
+      if (statsResponse.code === 200 && statsResponse.data) {
         setStatistics(statsResponse.data)
       }
     } catch (err: any) {
@@ -402,7 +402,7 @@ export default function HsgtTop10Page() {
               <Label htmlFor="start-date">开始日期</Label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -410,7 +410,7 @@ export default function HsgtTop10Page() {
               <Label htmlFor="end-date">结束日期</Label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="选择结束日期"
               />
             </div>

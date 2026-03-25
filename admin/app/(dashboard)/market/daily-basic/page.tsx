@@ -360,15 +360,15 @@ export default function DailyBasicPage() {
             </div>
             <div className="space-y-2">
               <Label>交易日期</Label>
-              <DatePicker date={tradeDate} onSelect={setTradeDate} placeholder="选择日期" />
+              <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="选择日期" />
             </div>
             <div className="space-y-2">
               <Label>开始日期</Label>
-              <DatePicker date={startDate} onSelect={setStartDate} placeholder="开始日期" />
+              <DatePicker date={startDate} onDateChange={setStartDate} placeholder="开始日期" />
             </div>
             <div className="space-y-2">
               <Label>结束日期</Label>
-              <DatePicker date={endDate} onSelect={setEndDate} placeholder="结束日期" />
+              <DatePicker date={endDate} onDateChange={setEndDate} placeholder="结束日期" />
             </div>
             <div className="flex items-end gap-2">
               <Button onClick={loadData} className="flex-1">查询</Button>

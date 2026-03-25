@@ -320,12 +320,12 @@ export default function DividendPage() {
             <div className="flex flex-col sm:flex-row gap-4 items-end">
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="开始日期"
               />
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="结束日期"
               />
               <Button onClick={handleQuery} disabled={loading}>

@@ -718,7 +718,7 @@ export default function SettingsPage() {
             {/* 历史数据回补 */}
             <div>
               <Label>历史数据回补</Label>
-              <Select value={backfillDays} onValueChange={setBackfillDays}>
+              <Select value={backfillDays} onValueChange={(v) => setBackfillDays(v as '0' | '7' | '30' | '90')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

@@ -415,12 +415,12 @@ export default function StkSurvPage() {
             <div className="flex flex-col sm:flex-row gap-4 items-end">
               <div className="flex-1">
                 <label className="text-sm font-medium mb-2 block">开始日期</label>
-                <DatePicker date={startDate} onSelect={setStartDate} />
+                <DatePicker date={startDate} onDateChange={setStartDate} />
               </div>
 
               <div className="flex-1">
                 <label className="text-sm font-medium mb-2 block">结束日期</label>
-                <DatePicker date={endDate} onSelect={setEndDate} />
+                <DatePicker date={endDate} onDateChange={setEndDate} />
               </div>
 
               <Button onClick={loadData} disabled={isLoading}>

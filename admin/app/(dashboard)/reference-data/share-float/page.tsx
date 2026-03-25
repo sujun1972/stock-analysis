@@ -337,14 +337,14 @@ export default function ShareFloatPage() {
               <label className="text-sm font-medium mb-1 block">解禁开始日期</label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
               />
             </div>
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">解禁结束日期</label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
               />
             </div>
             <Button onClick={loadData} disabled={loading}>

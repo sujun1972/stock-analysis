@@ -73,38 +73,6 @@ export function useSyncStockList() {
 }
 
 /**
- * 获取股票概念
- */
-export function useStockConcepts(code: string, enabled = true) {
-  return useQuery({
-    queryKey: ['stock-concepts', code],
-    queryFn: () => stockApi.getStockConcepts(code),
-    enabled: !!code && enabled,
-    staleTime: 10 * 60 * 1000,
-  })
-}
-
-/**
- * 更新股票概念
- */
-export function useUpdateStockConcepts() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: ({ code, conceptIds }: { code: string; conceptIds: number[] }) =>
-      stockApi.updateStockConcepts(code, conceptIds),
-    onSuccess: (response, variables) => {
-      toast.success('概念更新成功')
-      queryClient.invalidateQueries({ queryKey: ['stock-concepts', variables.code] })
-      queryClient.invalidateQueries({ queryKey: ['stocks'] })
-    },
-    onError: (error: any) => {
-      toast.error(error.message || '更新失败')
-    },
-  })
-}
-
-/**
  * 搜索股票
  */
 export function useSearchStocks(keyword: string, limit = 10, enabled = true) {

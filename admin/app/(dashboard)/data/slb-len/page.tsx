@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, Column } from '@/components/common/DataTable'
-import { DatePicker } from '@/components/common/DatePicker'
+import { DatePicker } from '@/components/ui/date-picker'
 import { toast } from 'sonner'
 import { slbLenApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
@@ -113,14 +113,17 @@ export default function SlbLenPage() {
   // 表格列定义
   const columns: Column<SlbLenData>[] = [
     {
+      key: 'trade_date',
       header: '交易日期',
       accessor: (row: SlbLenData) => row.trade_date || '-'
     },
     {
+      key: 'ob',
       header: '期初余额',
       accessor: (row: SlbLenData) => `${row.ob.toFixed(2)} 亿元`
     },
     {
+      key: 'auc_amount',
       header: '竞价成交',
       accessor: (row: SlbLenData) => {
         const val = row.auc_amount
@@ -128,6 +131,7 @@ export default function SlbLenPage() {
       }
     },
     {
+      key: 'repo_amount',
       header: '再借成交',
       accessor: (row: SlbLenData) => {
         const val = row.repo_amount
@@ -135,6 +139,7 @@ export default function SlbLenPage() {
       }
     },
     {
+      key: 'repay_amount',
       header: '偿还金额',
       accessor: (row: SlbLenData) => {
         const val = row.repay_amount
@@ -142,6 +147,7 @@ export default function SlbLenPage() {
       }
     },
     {
+      key: 'cb',
       header: '期末余额',
       accessor: (row: SlbLenData) => `${row.cb.toFixed(2)} 亿元`
     }
@@ -225,7 +231,7 @@ export default function SlbLenPage() {
                 <label className="text-sm font-medium mb-2 block">开始日期</label>
                 <DatePicker
                   date={startDate}
-                  onSelect={setStartDate}
+                  onDateChange={setStartDate}
                   placeholder="选择开始日期"
                 />
               </div>
@@ -233,7 +239,7 @@ export default function SlbLenPage() {
                 <label className="text-sm font-medium mb-2 block">结束日期</label>
                 <DatePicker
                   date={endDate}
-                  onSelect={setEndDate}
+                  onDateChange={setEndDate}
                   placeholder="选择结束日期"
                 />
               </div>
@@ -266,7 +272,7 @@ export default function SlbLenPage() {
           <DataTable
             columns={columns}
             data={data}
-            isLoading={isLoading}
+            loading={isLoading}
             emptyMessage="暂无数据"
           />
         </CardContent>

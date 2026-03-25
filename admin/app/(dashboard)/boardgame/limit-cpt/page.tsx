@@ -332,10 +332,10 @@ export default function LimitCptPage() {
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
-              <DatePicker date={startDate} onSelect={setStartDate} placeholder="开始日期" />
+              <DatePicker date={startDate} onDateChange={setStartDate} placeholder="开始日期" />
             </div>
             <div className="flex-1">
-              <DatePicker date={endDate} onSelect={setEndDate} placeholder="结束日期" />
+              <DatePicker date={endDate} onDateChange={setEndDate} placeholder="结束日期" />
             </div>
             <div className="flex-1">
               <Input

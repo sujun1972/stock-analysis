@@ -228,60 +228,6 @@ export function useGenerateAIAnalysis() {
 }
 
 /**
- * 获取涨停池数据
- */
-export function useLimitUpPool(date: string, enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.sentiment.limitUp(date),
-    queryFn: async () => {
-      const response = await apiClient.getLimitUpPool(date);
-      if (response.code !== 200) {
-        throw new Error(response.message || '获取涨停池失败');
-      }
-      return response.data as {
-        stocks: LimitUpStock[];
-        total: number;
-        stats: {
-          total_limit_up: number;
-          first_limit_up: number;
-          continuous_limit_up: number;
-          open_limit_up: number; // 开板数
-        };
-      };
-    },
-    enabled,
-    ...getQueryConfig('LIST'),
-    refetchInterval: QUERY_TIME.MINUTE * 5, // 交易时间每5分钟刷新
-  });
-}
-
-/**
- * 获取龙虎榜数据
- */
-export function useDragonTigerList(params?: {
-  date?: string;
-  stock_code?: string;
-  page?: number;
-  page_size?: number;
-}) {
-  return useQuery({
-    queryKey: queryKeys.sentiment.dragonTiger(params),
-    queryFn: async () => {
-      const response = await apiClient.getDragonTigerList(params);
-      if (response.code !== 200) {
-        throw new Error(response.message || '获取龙虎榜失败');
-      }
-      return response.data as {
-        items: DragonTigerItem[];
-        total: number;
-      };
-    },
-    ...getQueryConfig('LIST'),
-    staleTime: QUERY_TIME.HOUR, // 龙虎榜数据缓存1小时
-  });
-}
-
-/**
  * 获取情绪周期数据
  */
 export function useSentimentCycle(params?: {

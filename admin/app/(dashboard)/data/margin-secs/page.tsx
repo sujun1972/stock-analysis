@@ -300,7 +300,7 @@ export default function MarginSecsPage() {
                     cx="50%"
                     cy="50%"
                     outerRadius={100}
-                    label={(entry) => {
+                    label={(entry: any) => {
                       const exchangeMap: Record<string, string> = {
                         'SSE': '上交所',
                         'SZSE': '深交所',
@@ -360,7 +360,7 @@ export default function MarginSecsPage() {
               <Label>开始日期</Label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -369,7 +369,7 @@ export default function MarginSecsPage() {
               <Label>结束日期</Label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="选择结束日期"
               />
             </div>
@@ -405,7 +405,7 @@ export default function MarginSecsPage() {
               pagination={{
                 total,
                 pageSize,
-                currentPage: page,
+                page,
                 onPageChange: setPage,
                 onPageSizeChange: setPageSize
               }}

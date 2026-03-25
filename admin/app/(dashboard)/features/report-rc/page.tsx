@@ -333,11 +333,11 @@ export default function ReportRcPage() {
             </div>
             <div>
               <label className="text-sm font-medium mb-2 block">开始日期</label>
-              <DatePicker date={startDate} onSelect={setStartDate} />
+              <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
             <div>
               <label className="text-sm font-medium mb-2 block">结束日期</label>
-              <DatePicker date={endDate} onSelect={setEndDate} />
+              <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
           </div>
 

@@ -104,7 +104,7 @@ export type {
 // 重新导出市场情绪 API
 export { SentimentApiClient }
 export const sentimentApi = sentimentApiInst
-export type { SentimentListParams, SyncSentimentBatchParams, DragonTigerListParams, TradingCalendarParams } from './sentiment'
+export type { SyncSentimentBatchParams, TradingCalendarParams } from './sentiment'
 
 // 重新导出资金流向 API
 export { MoneyflowApiClient }

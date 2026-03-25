@@ -95,7 +95,7 @@ export class TopListApiClient extends BaseApiClient {
    * 异步同步龙虎榜数据
    */
   async syncAsync(params: {
-    trade_date: string
+    trade_date?: string
     ts_code?: string
   }): Promise<ApiResponse<{
     celery_task_id: string

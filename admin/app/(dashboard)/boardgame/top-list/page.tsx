@@ -91,26 +91,31 @@ export default function TopListPage() {
 
   const columns: Column<TopListItem>[] = [
     {
+      key: 'trade_date',
       header: '交易日期',
       accessor: (row) => row.trade_date || '-',
       className: 'w-28'
     },
     {
+      key: 'ts_code',
       header: '股票代码',
       accessor: (row) => row.ts_code || '-',
       className: 'w-28'
     },
     {
+      key: 'name',
       header: '股票名称',
       accessor: (row) => row.name || '-',
       className: 'w-24'
     },
     {
+      key: 'close',
       header: '收盘价',
       accessor: (row) => row.close !== null ? row.close.toFixed(2) : '-',
       className: 'text-right w-24'
     },
     {
+      key: 'pct_change',
       header: '涨跌幅%',
       accessor: (row) => {
         if (row.pct_change === null) return '-'
@@ -124,16 +129,19 @@ export default function TopListPage() {
       className: 'text-right w-24'
     },
     {
+      key: 'turnover_rate',
       header: '换手率%',
       accessor: (row) => row.turnover_rate !== null ? row.turnover_rate.toFixed(2) + '%' : '-',
       className: 'text-right w-24'
     },
     {
+      key: 'amount',
       header: '总成交额(万)',
       accessor: (row) => row.amount !== null ? row.amount.toFixed(2) : '-',
       className: 'text-right w-32'
     },
     {
+      key: 'net_amount',
       header: '龙虎榜净买入(万)',
       accessor: (row) => {
         if (row.net_amount === null) return '-'
@@ -147,11 +155,13 @@ export default function TopListPage() {
       className: 'text-right w-36'
     },
     {
+      key: 'l_amount',
       header: '龙虎榜成交额(万)',
       accessor: (row) => row.l_amount !== null ? row.l_amount.toFixed(2) : '-',
       className: 'text-right w-36'
     },
     {
+      key: 'reason',
       header: '上榜理由',
       accessor: (row) => (
         <div className="max-w-xs truncate" title={row.reason || '-'}>
@@ -286,11 +296,11 @@ export default function TopListPage() {
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">开始日期</label>
-              <DatePicker date={startDate} onSelect={setStartDate} />
+              <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">结束日期</label>
-              <DatePicker date={endDate} onSelect={setEndDate} />
+              <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">股票代码</label>
@@ -320,7 +330,7 @@ export default function TopListPage() {
           <DataTable
             columns={columns}
             data={data}
-            isLoading={isLoading}
+            loading={isLoading}
             mobileCard={mobileCard}
           />
         </CardContent>

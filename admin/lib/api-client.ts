@@ -1174,7 +1174,11 @@ class ApiClient {
    * 更新定时任务
    */
   async updateScheduledTask(taskId: number, data: {
+    display_name?: string
     description?: string
+    category?: string
+    display_order?: number
+    points_consumption?: number
     cron_expression?: string
     enabled?: boolean
     params?: any

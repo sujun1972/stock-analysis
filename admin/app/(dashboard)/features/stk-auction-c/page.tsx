@@ -291,11 +291,11 @@ export default function StkAuctionCPage() {
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1 space-y-2">
               <Label>开始日期</Label>
-              <DatePicker date={startDate} onSelect={setStartDate} placeholder="选择开始日期" />
+              <DatePicker date={startDate} onDateChange={setStartDate} placeholder="选择开始日期" />
             </div>
             <div className="flex-1 space-y-2">
               <Label>结束日期</Label>
-              <DatePicker date={endDate} onSelect={setEndDate} placeholder="选择结束日期" />
+              <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
             </div>
             <Button onClick={loadData} disabled={loading} className="w-full sm:w-auto">
               {loading ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
@@ -379,7 +379,7 @@ export default function StkAuctionCPage() {
               <Label>交易日期</Label>
               <DatePicker
                 date={syncTradeDate}
-                onSelect={setSyncTradeDate}
+                onDateChange={setSyncTradeDate}
                 placeholder="选择交易日期"
               />
             </div>
@@ -389,13 +389,13 @@ export default function StkAuctionCPage() {
               <div className="flex gap-2 items-center">
                 <DatePicker
                   date={syncStartDate}
-                  onSelect={setSyncStartDate}
+                  onDateChange={setSyncStartDate}
                   placeholder="开始日期"
                 />
                 <span className="text-muted-foreground">至</span>
                 <DatePicker
                   date={syncEndDate}
-                  onSelect={setSyncEndDate}
+                  onDateChange={setSyncEndDate}
                   placeholder="结束日期"
                 />
               </div>

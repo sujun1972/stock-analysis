@@ -59,7 +59,7 @@ export default function StockStPage() {
       if (dataResp.code === 200) {
         setData(dataResp.data?.items || [])
         setTotalRecords(dataResp.data?.total || 0)
-        setTotalPages(dataResp.data?.total_pages || 0)
+        setTotalPages(Math.ceil((dataResp.data?.total || 0) / (dataResp.data?.page_size || 30)))
       }
 
       if (statsResp.code === 200) {
@@ -266,11 +266,11 @@ export default function StockStPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">开始日期</label>
-                <DatePicker date={startDate} onSelect={setStartDate} placeholder="选择开始日期" />
+                <DatePicker date={startDate} onDateChange={setStartDate} placeholder="选择开始日期" />
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">结束日期</label>
-                <DatePicker date={endDate} onSelect={setEndDate} placeholder="选择结束日期" />
+                <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">股票代码</label>

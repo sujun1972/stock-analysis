@@ -320,14 +320,14 @@ export default function BlockTradePage() {
               <label className="text-sm font-medium mb-2 block">开始日期</label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
               />
             </div>
             <div className="flex-1">
               <label className="text-sm font-medium mb-2 block">结束日期</label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
               />
             </div>
             <div className="flex items-end gap-2">

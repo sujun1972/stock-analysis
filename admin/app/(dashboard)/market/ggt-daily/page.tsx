@@ -61,7 +61,7 @@ export default function GgtDailyPage() {
 
       const response = await ggtDailyApi.getGgtDaily(params)
 
-      if (response.code === 200) {
+      if (response.code === 200 && response.data) {
         setData(response.data.items)
         setTotal(response.data.total)
         setStatistics(response.data.statistics)
@@ -349,7 +349,7 @@ export default function GgtDailyPage() {
               <label className="text-sm font-medium mb-2 block">开始日期</label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -358,7 +358,7 @@ export default function GgtDailyPage() {
               <label className="text-sm font-medium mb-2 block">结束日期</label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="选择结束日期"
               />
             </div>
@@ -394,7 +394,7 @@ export default function GgtDailyPage() {
           <DataTable
             columns={columns}
             data={data}
-            isLoading={loading}
+            loading={loading}
             emptyMessage="暂无数据"
             pagination={{
               page,

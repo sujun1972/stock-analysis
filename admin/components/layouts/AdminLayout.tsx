@@ -427,7 +427,7 @@ const navItems: NavItem[] = [
         icon: TrendingUp
       },
       {
-        name: '板块数据行情（DC）',
+        name: '东方财富概念板块',
         href: '/data/dc-index',
         icon: BarChart3
       },

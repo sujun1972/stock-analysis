@@ -559,7 +559,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, Column } from '@/components/common/DataTable'
-import { DatePicker } from '@/components/common/DatePicker'
+import { DatePicker } from '@/components/ui/date-picker'
 import { toast } from 'sonner'
 import { yourApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
@@ -612,8 +612,8 @@ export default function YourPage() {
         <CardHeader><CardTitle>数据查询</CardTitle></CardHeader>
         <CardContent>
           <div className="flex gap-4">
-            <DatePicker date={startDate} onSelect={setStartDate} />
-            <DatePicker date={endDate} onSelect={setEndDate} />
+            <DatePicker date={startDate} onDateChange={setStartDate} />
+            <DatePicker date={endDate} onDateChange={setEndDate} />
             <Button onClick={loadData}>查询</Button>
             <Button onClick={handleSync}>同步数据</Button>
           </div>
@@ -623,7 +623,7 @@ export default function YourPage() {
       {/* 数据表格 */}
       <Card>
         <CardContent>
-          <DataTable columns={columns} data={data} isLoading={isLoading} />
+          <DataTable columns={columns} data={data} loading={isLoading} />
         </CardContent>
       </Card>
     </div>

@@ -380,12 +380,12 @@ export default function HkHoldPage() {
 
             <div className="flex-1">
               <label className="text-sm font-medium mb-2 block">开始日期</label>
-              <DatePicker date={startDate} onSelect={setStartDate} />
+              <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
 
             <div className="flex-1">
               <label className="text-sm font-medium mb-2 block">结束日期</label>
-              <DatePicker date={endDate} onSelect={setEndDate} />
+              <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
 
             <Button onClick={loadData} disabled={isLoading}>
@@ -538,7 +538,7 @@ export default function HkHoldPage() {
               <Label>交易日期</Label>
               <DatePicker
                 date={syncTradeDate}
-                onSelect={setSyncTradeDate}
+                onDateChange={setSyncTradeDate}
                 placeholder="选择交易日期"
               />
               <p className="text-xs text-muted-foreground">
@@ -551,13 +551,13 @@ export default function HkHoldPage() {
               <div className="flex gap-2 items-center">
                 <DatePicker
                   date={syncStartDate}
-                  onSelect={setSyncStartDate}
+                  onDateChange={setSyncStartDate}
                   placeholder="开始日期"
                 />
                 <span className="text-muted-foreground">至</span>
                 <DatePicker
                   date={syncEndDate}
-                  onSelect={setSyncEndDate}
+                  onDateChange={setSyncEndDate}
                   placeholder="结束日期"
                 />
               </div>

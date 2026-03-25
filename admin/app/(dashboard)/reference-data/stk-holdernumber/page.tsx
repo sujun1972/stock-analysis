@@ -291,14 +291,14 @@ export default function StkHolderNumberPage() {
             <div className="flex-1 sm:flex-none">
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="开始日期"
               />
             </div>
             <div className="flex-1 sm:flex-none">
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="结束日期"
               />
             </div>

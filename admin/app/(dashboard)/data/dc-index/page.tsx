@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { dcIndexApi, type DcIndexData, type DcIndexStatistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
+import { useTaskStore, type Task } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, Database, Calendar, Layers, TrendingUp, AlertTriangle } from 'lucide-react'
 
@@ -142,8 +142,8 @@ export default function DcIndexPage() {
           startTime: Date.now()
         })
 
-        const callback = (completedTaskId: string, status: string) => {
-          if (completedTaskId === taskId && status === 'success') {
+        const callback = (task: Task) => {
+          if (task.taskId === taskId && task.status === 'success') {
             setTimeout(() => {
               loadData().catch(() => {})
               loadStatistics().catch(() => {})
@@ -332,8 +332,8 @@ export default function DcIndexPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="东方财富板块数据"
-        description="获取东方财富每个交易日的概念/行业/地域板块数据，6000积分/次，单次最大5000条"
+        title="东方财富概念板块"
+        description="接口：dc_index，获取东方财富每个交易日的概念/行业/地域板块数据，单次最大5000条"
       />
 
       {/* 统计卡片 */}
@@ -429,12 +429,12 @@ export default function DcIndexPage() {
 
             <div className="flex-1 min-w-[140px]">
               <label className="text-sm font-medium mb-2 block">开始日期</label>
-              <DatePicker date={startDate} onSelect={setStartDate} />
+              <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
 
             <div className="flex-1 min-w-[140px]">
               <label className="text-sm font-medium mb-2 block">结束日期</label>
-              <DatePicker date={endDate} onSelect={setEndDate} />
+              <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
 
             <Button onClick={loadData} disabled={isLoading}>
@@ -606,17 +606,17 @@ export default function DcIndexPage() {
 
             <div>
               <label className="text-sm font-medium mb-2 block">指定交易日期（可选）</label>
-              <DatePicker date={syncTradeDate} onSelect={setSyncTradeDate} />
+              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
-                <DatePicker date={syncStartDate} onSelect={setSyncStartDate} />
+                <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} />
               </div>
               <div>
                 <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
-                <DatePicker date={syncEndDate} onSelect={setSyncEndDate} />
+                <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} />
               </div>
             </div>
           </div>

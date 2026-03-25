@@ -75,14 +75,14 @@ export default function GgtTop10Page() {
         })
       ])
 
-      if (dataResponse.code === 200) {
+      if (dataResponse.code === 200 && dataResponse.data) {
         setData(dataResponse.data.items)
         setTotal(dataResponse.data.total)
       } else {
         throw new Error(dataResponse.message || '加载数据失败')
       }
 
-      if (statsResponse.code === 200) {
+      if (statsResponse.code === 200 && statsResponse.data) {
         setStatistics(statsResponse.data)
       }
     } catch (err: any) {
@@ -185,7 +185,7 @@ export default function GgtTop10Page() {
   }
 
   // 表格列定义
-  const columns: Column<HsgtTop10Data>[] = useMemo(() => [
+  const columns: Column<GgtTop10Data>[] = useMemo(() => [
     {
       key: 'trade_date',
       header: '交易日期',
@@ -278,7 +278,7 @@ export default function GgtTop10Page() {
   ], [])
 
   // 移动端卡片视图
-  const mobileCard = useCallback((item: HsgtTop10Data) => (
+  const mobileCard = useCallback((item: GgtTop10Data) => (
     <div className="space-y-2">
       <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
         <div>
@@ -402,7 +402,7 @@ export default function GgtTop10Page() {
               <Label htmlFor="start-date">开始日期</Label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -410,7 +410,7 @@ export default function GgtTop10Page() {
               <Label htmlFor="end-date">结束日期</Label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="选择结束日期"
               />
             </div>

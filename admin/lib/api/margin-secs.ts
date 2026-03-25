@@ -78,14 +78,14 @@ export class MarginSecsApi extends BaseApiClient {
    * 获取融资融券标的数据
    */
   async getMarginSecs(params?: MarginSecsParams): Promise<ApiResponse<MarginSecsData>> {
-    return this.get<MarginSecsData>('/api/margin-secs', { params })
+    return this.get<ApiResponse<MarginSecsData>>('/api/margin-secs', { params })
   }
 
   /**
    * 获取最新交易日的融资融券标的数据
    */
   async getLatestMarginSecs(exchange?: string): Promise<ApiResponse<LatestMarginSecsData>> {
-    return this.get<LatestMarginSecsData>('/api/margin-secs/latest', {
+    return this.get<ApiResponse<LatestMarginSecsData>>('/api/margin-secs/latest', {
       params: exchange ? { exchange } : undefined
     })
   }
@@ -94,7 +94,7 @@ export class MarginSecsApi extends BaseApiClient {
    * 异步同步融资融券标的数据
    */
   async syncMarginSecsAsync(params?: SyncMarginSecsParams): Promise<ApiResponse<SyncTaskResponse>> {
-    return this.post<SyncTaskResponse>('/api/margin-secs/sync-async', params)
+    return this.post<ApiResponse<SyncTaskResponse>>('/api/margin-secs/sync-async', params)
   }
 
   /**
@@ -105,7 +105,7 @@ export class MarginSecsApi extends BaseApiClient {
     end_date?: string
     exchange?: string
   }): Promise<ApiResponse<MarginSecsStatistics>> {
-    return this.get<MarginSecsStatistics>('/api/margin-secs/statistics', { params })
+    return this.get<ApiResponse<MarginSecsStatistics>>('/api/margin-secs/statistics', { params })
   }
 }
 

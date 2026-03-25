@@ -386,7 +386,7 @@ export default function StkAhComparisonPage() {
               <Label>开始日期</Label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -394,7 +394,7 @@ export default function StkAhComparisonPage() {
               <Label>结束日期</Label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="选择结束日期"
               />
             </div>
@@ -540,7 +540,7 @@ export default function StkAhComparisonPage() {
               <Label>交易日期</Label>
               <DatePicker
                 date={syncTradeDate}
-                onSelect={setSyncTradeDate}
+                onDateChange={setSyncTradeDate}
                 placeholder="选择交易日期"
               />
             </div>
@@ -550,13 +550,13 @@ export default function StkAhComparisonPage() {
               <div className="flex gap-2 items-center">
                 <DatePicker
                   date={syncStartDate}
-                  onSelect={setSyncStartDate}
+                  onDateChange={setSyncStartDate}
                   placeholder="开始日期"
                 />
                 <span className="text-muted-foreground">至</span>
                 <DatePicker
                   date={syncEndDate}
-                  onSelect={setSyncEndDate}
+                  onDateChange={setSyncEndDate}
                   placeholder="结束日期"
                 />
               </div>

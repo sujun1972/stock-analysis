@@ -360,11 +360,11 @@ export default function StkHoldertradePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">开始日期</label>
-              <DatePicker date={startDate} onSelect={setStartDate} />
+              <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">结束日期</label>
-              <DatePicker date={endDate} onSelect={setEndDate} />
+              <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">股票代码</label>

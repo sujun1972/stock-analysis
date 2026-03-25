@@ -346,14 +346,14 @@ export default function PledgeStatPage() {
             <div className="flex-1">
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="开始日期"
               />
             </div>
             <div className="flex-1">
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="截止日期"
               />
             </div>

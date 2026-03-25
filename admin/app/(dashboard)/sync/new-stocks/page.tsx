@@ -288,12 +288,12 @@ export default function NewStocksPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">开始日期</label>
-              <DatePicker date={startDate} onSelect={setStartDate} />
+              <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">结束日期</label>
-              <DatePicker date={endDate} onSelect={setEndDate} />
+              <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
 
             <div className="space-y-2">

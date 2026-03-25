@@ -337,7 +337,7 @@ export default function FinaAuditPage() {
               <Label>公告日期</Label>
               <DatePicker
                 date={annDate}
-                onSelect={setAnnDate}
+                onDateChange={setAnnDate}
                 placeholder="选择公告日期"
               />
             </div>
@@ -347,7 +347,7 @@ export default function FinaAuditPage() {
               <Label>开始日期</Label>
               <DatePicker
                 date={startDate}
-                onSelect={setStartDate}
+                onDateChange={setStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -357,7 +357,7 @@ export default function FinaAuditPage() {
               <Label>结束日期</Label>
               <DatePicker
                 date={endDate}
-                onSelect={setEndDate}
+                onDateChange={setEndDate}
                 placeholder="选择结束日期"
               />
             </div>
@@ -367,7 +367,7 @@ export default function FinaAuditPage() {
               <Label>报告期</Label>
               <DatePicker
                 date={period}
-                onSelect={setPeriod}
+                onDateChange={setPeriod}
                 placeholder="选择报告期"
               />
             </div>

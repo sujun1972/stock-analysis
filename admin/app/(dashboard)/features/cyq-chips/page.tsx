@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -45,7 +45,6 @@ export default function CyqChipsPage() {
   const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   const { addTask, triggerPoll } = useTaskStore()
-  const taskCompletedRef = useRef(false)
 
   // 更新分页数据
   const updatePaginatedData = useCallback(() => {
@@ -125,7 +124,6 @@ export default function CyqChipsPage() {
     }
 
     setIsSyncing(true)
-    taskCompletedRef.current = false
 
     try {
       const params = {
@@ -144,68 +142,7 @@ export default function CyqChipsPage() {
           taskType: 'data_sync',
           status: 'running',
           progress: 0,
-          startTime: Date.now(),
-          onComplete: () => {
-            if (!taskCompletedRef.current) {
-              taskCompletedRef.current = true
-              toast.success('数据同步完成，正在加载数据...')
-
-              // 同步完成后，自动设置查询条件并刷新数据
-              setTimeout(() => {
-                // 如果查询条件与同步条件不同，更新查询条件
-                if (queryTsCode !== syncTsCode) {
-                  setQueryTsCode(syncTsCode)
-                  setQueryStartDate(syncStartDate)
-                  setQueryEndDate(syncEndDate)
-                }
-
-                // 使用同步的参数重新加载数据
-                const params = {
-                  ts_code: syncTsCode,
-                  start_date: syncStartDate ? syncStartDate.toISOString().split('T')[0] : undefined,
-                  end_date: syncEndDate ? syncEndDate.toISOString().split('T')[0] : undefined,
-                  limit: 1000
-                }
-
-                setIsLoading(true)
-                cyqChipsApi.getData(params)
-                  .then(response => {
-                    if (response.code === 200 && response.data) {
-                      const items = response.data.items || []
-                      setAllData(items)
-                      setTotal(items.length)
-                      setCurrentPage(1)
-
-                      // 加载统计数据
-                      const statsParams = {
-                        ts_code: syncTsCode,
-                        start_date: syncStartDate ? syncStartDate.toISOString().split('T')[0] : undefined,
-                        end_date: syncEndDate ? syncEndDate.toISOString().split('T')[0] : undefined,
-                      }
-                      cyqChipsApi.getStatistics(statsParams)
-                        .then(statsResp => {
-                          if (statsResp.code === 200 && statsResp.data) {
-                            setStatistics(statsResp.data)
-                          }
-                        })
-                        .catch(err => console.error('加载统计数据失败:', err))
-
-                      toast.success(`成功加载 ${items.length} 条数据`)
-                    }
-                  })
-                  .catch(error => {
-                    console.error('加载数据失败:', error)
-                    toast.error('加载数据失败')
-                  })
-                  .finally(() => {
-                    setIsLoading(false)
-                  })
-              }, 2000)
-            }
-          },
-          onError: (error) => {
-            toast.error(`同步失败: ${error}`)
-          }
+          startTime: Date.now()
         })
 
         triggerPoll()
@@ -221,12 +158,6 @@ export default function CyqChipsPage() {
       setIsSyncing(false)
     }
   }
-
-  useEffect(() => {
-    return () => {
-      taskCompletedRef.current = false
-    }
-  }, [])
 
   // 移动端卡片视图
   const renderMobileCard = (item: CyqChipsData) => (
@@ -387,7 +318,7 @@ export default function CyqChipsPage() {
               <Label>开始日期</Label>
               <DatePicker
                 date={queryStartDate}
-                onSelect={setQueryStartDate}
+                onDateChange={setQueryStartDate}
                 placeholder="选择开始日期"
               />
             </div>
@@ -396,7 +327,7 @@ export default function CyqChipsPage() {
               <Label>结束日期</Label>
               <DatePicker
                 date={queryEndDate}
-                onSelect={setQueryEndDate}
+                onDateChange={setQueryEndDate}
                 placeholder="选择结束日期"
               />
             </div>
@@ -560,7 +491,7 @@ export default function CyqChipsPage() {
               <Label>开始日期</Label>
               <DatePicker
                 date={syncStartDate}
-                onSelect={setSyncStartDate}
+                onDateChange={setSyncStartDate}
                 placeholder="选择开始日期"
               />
               <p className="text-xs text-muted-foreground">
@@ -572,7 +503,7 @@ export default function CyqChipsPage() {
               <Label>结束日期</Label>
               <DatePicker
                 date={syncEndDate}
-                onSelect={setSyncEndDate}
+                onDateChange={setSyncEndDate}
                 placeholder="选择结束日期"
               />
               <p className="text-xs text-muted-foreground">
