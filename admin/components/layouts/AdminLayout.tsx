@@ -95,6 +95,11 @@ const navItems: NavItem[] = [
         name: 'ST股票列表',
         href: '/data/stock-st',
         icon: AlertTriangle
+      },
+      {
+        name: '板块成分',
+        href: '/data/dc-member',
+        icon: Layers
       }
     ]
   },
@@ -415,6 +420,11 @@ const navItems: NavItem[] = [
         name: '最强板块统计',
         href: '/boardgame/limit-cpt',
         icon: TrendingUp
+      },
+      {
+        name: '板块成分追踪',
+        href: '/data/dc-member',
+        icon: Layers
       }
     ]
   },

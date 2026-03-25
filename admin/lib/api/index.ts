@@ -38,6 +38,7 @@ import { CyqPerfApiClient, cyqPerfApi as cyqPerfApiInst } from './cyq-perf-api'
 import { CyqChipsApiClient, cyqChipsApi as cyqChipsApiInst } from './cyq-chips-api'
 import { CcassHoldApiClient, ccassHoldApi as ccassHoldApiInst } from './ccass-hold-api'
 import { CcassHoldDetailApiClient, ccassHoldDetailApi as ccassHoldDetailApiInst } from './ccass-hold-detail-api'
+import { DcMemberApiClient, dcMemberApi as dcMemberApiInst } from './dc-member-api'
 import { HkHoldApiClient, hkHoldApi as hkHoldApiInst } from './hk-hold-api'
 import { StkAuctionOApiClient, stkAuctionOApi as stkAuctionOApiInst } from './stk-auction-o'
 import { StkAuctionCApiClient, stkAuctionCApi as stkAuctionCApiInst } from './stk-auction-c'
@@ -303,6 +304,17 @@ export type {
 // 重新导出中央结算系统持股汇总 API
 export { CcassHoldApiClient }
 export const ccassHoldApi = ccassHoldApiInst
+
+// 东方财富板块成分
+export { DcMemberApiClient }
+export const dcMemberApi = dcMemberApiInst
+export type {
+  DcMemberParams,
+  DcMemberData,
+  DcMemberStatistics
+} from './dc-member-api'
+
+// 重新导出中央结算系统持股汇总 API
 export type {
   CcassHoldParams,
   CcassHoldData,

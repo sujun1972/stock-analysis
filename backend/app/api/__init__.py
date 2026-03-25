@@ -94,6 +94,7 @@ from .endpoints import (
     new_stocks,  # 新股列表
     stock_realtime,  # 实时行情
     stock_st,  # ST股票列表
+    dc_member,  # 东方财富板块成分
     users,
 )
 
@@ -159,6 +160,7 @@ router.include_router(stk_nineturn.router, prefix="/stk-nineturn", tags=["神奇
 router.include_router(stk_ah_comparison.router, prefix="/stk-ah-comparison", tags=["AH股比价"])  # AH股比价API
 router.include_router(stk_surv.router, prefix="/stk-surv", tags=["机构调研表"])  # 机构调研表API
 router.include_router(broker_recommend.router, prefix="/broker-recommend", tags=["券商每月荐股"])  # 券商每月荐股API
+router.include_router(dc_member.router, prefix="/dc-member", tags=["东方财富板块成分"])  # 东方财富板块成分API
 router.include_router(stk_shock.router, prefix="/stk-shock", tags=["个股异常波动"])  # 个股异常波动API
 router.include_router(stk_alert.router, prefix="/stk-alert", tags=["交易所重点提示证券"])  # 交易所重点提示证券API
 router.include_router(stk_high_shock.router, prefix="/stk-high-shock", tags=["个股严重异常波动"])  # 个股严重异常波动API

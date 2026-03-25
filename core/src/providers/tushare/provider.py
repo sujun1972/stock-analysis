@@ -3283,6 +3283,73 @@ class TushareProvider(BaseDataProvider):
             logger.error(f"获取券商荐股数据失败: {e}")
             raise TushareDataError(f"获取券商荐股数据失败: {str(e)}")
 
+    def get_dc_member(
+        self,
+        ts_code: Optional[str] = None,
+        con_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取东方财富板块成分数据
+
+        获取东方财富板块每日成分数据，可以根据概念板块代码和交易日期，获取历史成分。
+
+        Args:
+            ts_code: 板块指数代码（如 BK1184.DC，可选）
+            con_code: 成分股票代码（如 002117.SZ，可选）
+            trade_date: 交易日期 (格式: YYYYMMDD，可选)
+            start_date: 开始日期 (格式: YYYYMMDD，可选)
+            end_date: 结束日期 (格式: YYYYMMDD，可选)
+
+        Returns:
+            pd.DataFrame: 板块成分数据
+                - trade_date: 交易日期
+                - ts_code: 概念代码（如 BK1184.DC）
+                - con_code: 成分代码（股票代码）
+                - name: 成分股名称
+
+        Raises:
+            TushareDataError: 数据获取失败
+
+        Examples:
+            >>> provider = TushareProvider(token='your_token')
+            >>> # 获取2025年1月2日的人形机器人概念板块成分列表
+            >>> df = provider.get_dc_member(trade_date='20250102', ts_code='BK1184.DC')
+            >>> # 获取某只股票的板块历史成分记录
+            >>> df = provider.get_dc_member(con_code='002117.SZ', start_date='20250101', end_date='20250131')
+
+        Notes:
+            - 权限要求: 6000积分/次
+            - 单次限制: 最大返回5000行数据，可以通过日期和代码循环获取
+            - 数据来源: 东方财富
+            - 注意: 本接口只限个人学习和研究使用，如需商业用途，请自行联系东方财富解决数据采购问题
+        """
+        try:
+            logger.info(f"获取东方财富板块成分数据: ts_code={ts_code}, con_code={con_code}, "
+                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+
+            # 构建查询参数（只包含非空参数）
+            params = {}
+            if ts_code:
+                params['ts_code'] = ts_code
+            if con_code:
+                params['con_code'] = con_code
+            if trade_date:
+                params['trade_date'] = trade_date
+            if start_date:
+                params['start_date'] = start_date
+            if end_date:
+                params['end_date'] = end_date
+
+            df = self.api_client.query('dc_member', **params)
+            logger.info(f"获取到 {len(df)} 条东方财富板块成分记录")
+            return df
+        except Exception as e:
+            logger.error(f"获取东方财富板块成分数据失败: {e}")
+            raise TushareDataError(f"获取东方财富板块成分数据失败: {str(e)}")
+
     def get_suspend_d(
         self,
         ts_code: Optional[str] = None,
