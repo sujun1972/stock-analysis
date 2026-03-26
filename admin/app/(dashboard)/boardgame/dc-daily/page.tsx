@@ -184,9 +184,9 @@ export default function DcDailyPage() {
   const columns: Column<DcDailyData>[] = [
     {
       key: 'ts_code',
-      header: '板块代码',
-      accessor: (row) => row.ts_code,
-      width: 120,
+      header: '板块',
+      accessor: (row) => row.board_name ? `${row.board_name}[${row.ts_code}]` : row.ts_code,
+      width: 200,
       cellClassName: 'whitespace-nowrap'
     },
     {
@@ -293,7 +293,9 @@ export default function DcDailyPage() {
   const mobileCard = (item: DcDailyData) => (
     <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
       <div className="flex justify-between items-start mb-2">
-        <div className="font-semibold text-base">{item.ts_code}</div>
+        <div className="font-semibold text-base">
+          {item.board_name ? `${item.board_name}[${item.ts_code}]` : item.ts_code}
+        </div>
         <div className="text-right">
           <div className={`font-bold ${pctChangeColor(item.pct_change)}`}>
             {formatPct(item.pct_change)}

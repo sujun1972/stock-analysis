@@ -361,12 +361,45 @@ triggerPoll()  // Header 图标即时更新
 - 每日指标页面（`/market/daily-basic`）**（✨ 新增于 2026-03-24，Tushare daily_basic接口，2000积分/次，每交易日15:00-17:00更新，单次最大6000条，包含换手率、市盈率、市净率等17个核心指标，带统计卡片、分页查询和异步同步功能）**
 - 新股列表页面（`/sync/new-stocks`）**（✨ 新增于 2026-03-24，使用stock_basic表list_date字段查询新上市股票，支持按天数/日期范围/市场类型筛选，包含统计卡片、分页查询和异步同步功能）**
 - 股票列表页面（`/data/stock-list`）**（✨ 新增于 2026-03-25，完整支持Tushare stock_basic接口17个输出字段，按上市状态/市场/交易所/沪深港通4个维度筛选，5张统计卡片展示全市场概况，支持分页查询和异步同步，已从数据初始化页面迁移至基础数据菜单）**
-- 东方财富板块成分页面（`/boardgame/dc-member`）**（✨ 新增于 2026-03-25，Tushare dc_member接口，6000积分/次，单次最大5000条，获取东方财富板块每日成分数据，支持按板块代码/成分股代码/日期范围筛选，4张统计卡片，异步同步功能，归属打板专题菜单）**
+- 东方财富板块成分页面（`/boardgame/dc-member`）**（✨ 新增于 2026-03-25，Tushare dc_member接口，6000积分/次，单次最大5000条，获取东方财富板块每日成分数据，支持按板块代码/成分股代码/日期范围筛选，4张统计卡片，异步同步功能，归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期、成分股列合并名称+纯代码可点击跳转分析页面、板块列合并名称+代码（板块名称从 dc_index 最新一天缓存注入）、后端排序（白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+板块名称映射、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**
 - 东方财富板块数据页面（`/boardgame/dc-index`）**（✨ 新增于 2026-03-25，Tushare dc_index接口，6000积分/次，单次最大5000条，获取东方财富每个交易日的概念/行业/地域板块行情数据，idx_type为必填参数，含领涨股、涨跌幅、换手率、总市值、上涨/下跌家数等字段，注意数据库列名leading_stock（规避PostgreSQL保留字leading），归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期+板块类型，后端排序（pct_change/leading_pct/turnover_rate/total_mv/up_num/down_num 白名单），分页查询（100条/页），默认加载最近有数据的交易日并回填日期选择器，板块列合并名称+代码，领涨股列合并名称+纯代码可点击跳转分析页面，同步支持"全部"选项依次提交概念/行业/地域三个任务（共18000积分）**
-- 东财概念板块行情页面（`/boardgame/dc-daily`）**（✨ 新增于 2026-03-25，Tushare dc_daily接口，6000积分/次，单次最大2000条，获取东方财富概念/行业/地域板块OHLCV行情数据（收盘/开盘/最高/最低点位、涨跌点、涨跌幅、成交量、成交额、振幅、换手率），历史数据从2020年开始，所有参数可选，归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期、后端排序（pct_change/change/amount/vol/swing/turnover_rate 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数、默认加载最近有数据的交易日并回填日期选择器）**
+- 东财概念板块行情页面（`/boardgame/dc-daily`）**（✨ 新增于 2026-03-25，Tushare dc_daily接口，6000积分/次，单次最大2000条，获取东方财富概念/行业/地域板块OHLCV行情数据（收盘/开盘/最高/最低点位、涨跌点、涨跌幅、成交量、成交额、振幅、换手率），历史数据从2020年开始，所有参数可选，归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期、后端排序（pct_change/change/amount/vol/swing/turnover_rate 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数、默认加载最近有数据的交易日并回填日期选择器；板块列合并名称+代码（板块名称从 dc_index 最新一天缓存注入，dc_daily 表本身不存 name 字段））**
 - 交易日历页面（`/data/trade-cal`）**（✨ 新增于 2026-03-25，Tushare trade_cal接口，2000积分/次，支持7个交易所（SSE/SZSE/CFFEX/SHFE/CZCE/DCE/INE），含4张统计卡片（总天数/交易日/休市天数/交易日占比），支持按交易所/是否交易/日期范围筛选，分页查询（30条/页），归属基础数据菜单）**
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
+
+### 板块名称注入（DcIndexRepository.get_board_name_map）
+
+`dc_member`、`dc_daily` 等表只存 `ts_code`，不存板块名称。需要显示名称时，从 `dc_index` 最新一天的数据中查询映射，在 Service 层并发注入，**不做跨表 JOIN**。
+
+**方法位置**：`DcIndexRepository.get_board_name_map()` — `backend/app/repositories/dc_index_repository.py`
+
+**使用方式**（在 Service 层 `asyncio.gather` 中并发获取）：
+```python
+from app.repositories.dc_index_repository import DcIndexRepository
+
+class YourService:
+    def __init__(self):
+        self.dc_index_repo = DcIndexRepository()
+
+    async def get_data(self, ...):
+        items, total, board_name_map = await asyncio.gather(
+            asyncio.to_thread(self.repo.get_by_date_range, ...),
+            asyncio.to_thread(self.repo.get_total_count, ...),
+            asyncio.to_thread(self.dc_index_repo.get_board_name_map)
+        )
+        for item in items:
+            item['board_name'] = board_name_map.get(item['ts_code'], '')
+```
+
+**前端展示**：合并名称+代码，无名称时降级显示纯代码：
+```typescript
+accessor: (row) => row.board_name ? `${row.board_name}[${row.ts_code}]` : row.ts_code
+```
+
+**已接入的 Service**：`DcMemberService`、`DcDailyService`
+
+---
 
 ### 股票行情缓存（StockQuoteCache）
 

@@ -14,6 +14,7 @@ export interface DcDailyParams {
 
 export interface DcDailyData {
   ts_code: string
+  board_name: string | null
   trade_date: string
   close: number | null
   open: number | null

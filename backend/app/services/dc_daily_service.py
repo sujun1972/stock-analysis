@@ -11,6 +11,7 @@ from typing import Optional, Dict
 from loguru import logger
 
 from app.repositories.dc_daily_repository import DcDailyRepository
+from app.repositories.dc_index_repository import DcIndexRepository
 from core.src.providers import DataProviderFactory
 
 
@@ -19,6 +20,7 @@ class DcDailyService:
 
     def __init__(self):
         self.dc_daily_repo = DcDailyRepository()
+        self.dc_index_repo = DcIndexRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ DcDailyService initialized")
 
@@ -188,7 +190,7 @@ class DcDailyService:
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
             offset = (page - 1) * page_size
 
-            items, total = await asyncio.gather(
+            items, total, board_name_map = await asyncio.gather(
                 asyncio.to_thread(
                     self.dc_daily_repo.get_by_date_range,
                     start_date=start_date_fmt,
@@ -204,13 +206,15 @@ class DcDailyService:
                     start_date=start_date_fmt,
                     end_date=end_date_fmt,
                     ts_code=ts_code
-                )
+                ),
+                asyncio.to_thread(self.dc_index_repo.get_board_name_map)
             )
 
-            # 格式化日期字段
+            # 格式化日期字段并注入板块名称
             for item in items:
                 if item.get('trade_date'):
                     item['trade_date'] = self._format_date(item['trade_date'])
+                item['board_name'] = board_name_map.get(item['ts_code'], '')
 
             return {
                 "items": items,

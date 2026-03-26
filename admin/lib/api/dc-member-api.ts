@@ -4,9 +4,13 @@ import type { ApiResponse } from '@/types/api'
 export interface DcMemberParams {
   ts_code?: string
   con_code?: string
-  start_date?: string
-  end_date?: string
-  limit?: number
+  trade_date?: string       // 单日日期（优先于 start/end）
+  start_date?: string       // 向后兼容
+  end_date?: string         // 向后兼容
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 export interface DcMemberData {
@@ -14,6 +18,7 @@ export interface DcMemberData {
   ts_code: string
   con_code: string
   name: string | null
+  board_name: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -31,6 +36,7 @@ export class DcMemberApiClient extends BaseApiClient {
   async getData(params?: DcMemberParams): Promise<ApiResponse<{
     items: DcMemberData[]
     total: number
+    trade_date?: string
   }>> {
     return this.get('/api/dc-member', { params })
   }
@@ -39,6 +45,7 @@ export class DcMemberApiClient extends BaseApiClient {
     ts_code?: string
     start_date?: string
     end_date?: string
+    trade_date?: string
   }): Promise<ApiResponse<DcMemberStatistics>> {
     return this.get('/api/dc-member/statistics', { params })
   }

@@ -550,3 +550,28 @@ class DcIndexRepository(BaseRepository):
         except Exception as e:
             logger.error(f"获取记录数失败: {e}")
             return 0
+
+    def get_board_name_map(self) -> Dict[str, str]:
+        """
+        从最新一天的数据中获取板块代码→名称映射
+
+        Returns:
+            {ts_code: name} 字典
+
+        Examples:
+            >>> repo = DcIndexRepository()
+            >>> name_map = repo.get_board_name_map()
+            >>> name_map.get('BK1184.DC')
+        """
+        try:
+            query = f"""
+                SELECT ts_code, name
+                FROM {self.TABLE_NAME}
+                WHERE trade_date = (SELECT MAX(trade_date) FROM {self.TABLE_NAME})
+                  AND name IS NOT NULL
+            """
+            result = self.execute_query(query)
+            return {row[0]: row[1] for row in result} if result else {}
+        except Exception as e:
+            logger.error(f"获取板块名称映射失败: {e}")
+            return {}

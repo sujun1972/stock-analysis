@@ -17,6 +17,8 @@ class DcMemberRepository(BaseRepository):
 
     TABLE_NAME = "dc_member"
 
+    SORTABLE_COLUMNS = {'trade_date', 'ts_code', 'con_code', 'name'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ DcMemberRepository initialized")
@@ -27,45 +29,56 @@ class DcMemberRepository(BaseRepository):
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         con_code: Optional[str] = None,
-        limit: Optional[int] = None
+        trade_date: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> List[Dict]:
         """
-        按日期范围查询板块成分数据
+        按日期范围查询板块成分数据（支持分页和后端排序）
 
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 板块代码，如 'BK1184.DC'（可选）
             con_code: 成分股票代码，如 '002117.SZ'（可选）
-            limit: 返回记录数限制（可选）
+            trade_date: 单日查询，优先级高于 start/end，格式：YYYYMMDD
+            page: 页码，从 1 开始
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单校验）
+            sort_order: 排序方向，'asc' 或 'desc'
 
         Returns:
             数据列表
 
         Examples:
             >>> repo = DcMemberRepository()
-            >>> data = repo.get_by_date_range('20250101', '20250131')
+            >>> data = repo.get_by_date_range(trade_date='20250102')
             >>> data = repo.get_by_date_range('20250101', '20250131', ts_code='BK1184.DC')
-            >>> data = repo.get_by_date_range('20250101', '20250131', con_code='002117.SZ')
+            >>> data = repo.get_by_date_range(trade_date='20250102', page=2, page_size=100)
         """
         try:
-            # 构建查询条件
             conditions = []
             params = []
 
-            if start_date:
-                conditions.append("trade_date >= %s")
-                params.append(start_date)
+            if trade_date:
+                conditions.append("trade_date = %s")
+                params.append(trade_date)
             else:
-                conditions.append("trade_date >= %s")
-                params.append('19900101')
+                if start_date:
+                    conditions.append("trade_date >= %s")
+                    params.append(start_date)
+                else:
+                    conditions.append("trade_date >= %s")
+                    params.append('19900101')
 
-            if end_date:
-                conditions.append("trade_date <= %s")
-                params.append(end_date)
-            else:
-                conditions.append("trade_date <= %s")
-                params.append('29991231')
+                if end_date:
+                    conditions.append("trade_date <= %s")
+                    params.append(end_date)
+                else:
+                    conditions.append("trade_date <= %s")
+                    params.append('29991231')
 
             if ts_code:
                 conditions.append("ts_code = %s")
@@ -77,23 +90,27 @@ class DcMemberRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
-            # 构建查询
+            # 白名单校验排序字段
+            order_field = sort_by if sort_by and sort_by in self.SORTABLE_COLUMNS else 'trade_date'
+            order_dir = 'ASC' if sort_order and sort_order.lower() == 'asc' else 'DESC'
+            order_clause = f"ORDER BY {order_field} {order_dir} NULLS LAST"
+
+            offset = (page - 1) * page_size
+
             query = f"""
                 SELECT
                     trade_date, ts_code, con_code, name,
                     created_at, updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, ts_code, con_code
+                {order_clause}
+                LIMIT %s OFFSET %s
             """
-
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            params.append(page_size)
+            params.append(offset)
 
             result = self.execute_query(query, tuple(params))
 
-            # 转换为字典列表
             data = []
             for row in result:
                 data.append({
@@ -116,11 +133,81 @@ class DcMemberRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        con_code: Optional[str] = None,
+        trade_date: Optional[str] = None
+    ) -> int:
+        """
+        查询满足条件的记录总数（用于分页）
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 板块代码（可选）
+            con_code: 成分股票代码（可选）
+            trade_date: 单日查询，优先级高于 start/end，格式：YYYYMMDD
+
+        Returns:
+            记录总数
+
+        Examples:
+            >>> repo = DcMemberRepository()
+            >>> count = repo.get_total_count(trade_date='20250102')
+        """
+        try:
+            conditions = []
+            params = []
+
+            if trade_date:
+                conditions.append("trade_date = %s")
+                params.append(trade_date)
+            else:
+                if start_date:
+                    conditions.append("trade_date >= %s")
+                    params.append(start_date)
+                else:
+                    conditions.append("trade_date >= %s")
+                    params.append('19900101')
+
+                if end_date:
+                    conditions.append("trade_date <= %s")
+                    params.append(end_date)
+                else:
+                    conditions.append("trade_date <= %s")
+                    params.append('29991231')
+
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+
+            if con_code:
+                conditions.append("con_code = %s")
+                params.append(con_code)
+
+            where_clause = " AND ".join(conditions)
+
+            query = f"""
+                SELECT COUNT(*) FROM {self.TABLE_NAME}
+                WHERE {where_clause}
+            """
+
+            result = self.execute_query(query, tuple(params))
+            return result[0][0] if result else 0
+
+        except Exception as e:
+            logger.error(f"查询记录总数失败: {e}")
+            return 0
+
     def get_statistics(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        ts_code: Optional[str] = None
+        ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None
     ) -> Dict:
         """
         获取板块成分统计信息
@@ -129,33 +216,37 @@ class DcMemberRepository(BaseRepository):
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 板块代码（可选）
+            trade_date: 单日查询，优先级高于 start/end，格式：YYYYMMDD
 
         Returns:
             统计信息字典
 
         Examples:
             >>> repo = DcMemberRepository()
-            >>> stats = repo.get_statistics('20250101', '20250131')
+            >>> stats = repo.get_statistics(trade_date='20250102')
             >>> stats = repo.get_statistics('20250101', '20250131', ts_code='BK1184.DC')
         """
         try:
-            # 构建查询条件
             conditions = []
             params = []
 
-            if start_date:
-                conditions.append("trade_date >= %s")
-                params.append(start_date)
+            if trade_date:
+                conditions.append("trade_date = %s")
+                params.append(trade_date)
             else:
-                conditions.append("trade_date >= %s")
-                params.append('19900101')
+                if start_date:
+                    conditions.append("trade_date >= %s")
+                    params.append(start_date)
+                else:
+                    conditions.append("trade_date >= %s")
+                    params.append('19900101')
 
-            if end_date:
-                conditions.append("trade_date <= %s")
-                params.append(end_date)
-            else:
-                conditions.append("trade_date <= %s")
-                params.append('29991231')
+                if end_date:
+                    conditions.append("trade_date <= %s")
+                    params.append(end_date)
+                else:
+                    conditions.append("trade_date <= %s")
+                    params.append('29991231')
 
             if ts_code:
                 conditions.append("ts_code = %s")
@@ -253,24 +344,16 @@ class DcMemberRepository(BaseRepository):
             return 0
 
         try:
-            # 辅助函数：将pandas/numpy类型转换为Python原生类型
             def to_python_type(value):
-                """
-                将pandas/numpy类型转换为Python原生类型
-
-                ⚠️ 关键问题：psycopg2无法直接处理numpy类型
-                必须转换为Python原生类型（int, float, str, None）
-                """
+                """将pandas/numpy类型转换为Python原生类型"""
                 if pd.isna(value):
                     return None
                 if isinstance(value, (int, float, str)):
                     return value
-                # 转换numpy类型
                 if hasattr(value, 'item'):
                     return value.item()
                 return str(value)
 
-            # 准备插入数据
             values = []
             for _, row in df.iterrows():
                 values.append((
@@ -280,7 +363,6 @@ class DcMemberRepository(BaseRepository):
                     to_python_type(row.get('name'))
                 ))
 
-            # UPSERT 查询（PostgreSQL）
             query = f"""
                 INSERT INTO {self.TABLE_NAME}
                 (trade_date, ts_code, con_code, name)
@@ -380,47 +462,3 @@ class DcMemberRepository(BaseRepository):
             logger.error(f"检查数据是否存在失败: {e}")
             return False
 
-    def get_record_count(
-        self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ) -> int:
-        """
-        获取指定日期范围的记录数
-
-        Args:
-            start_date: 开始日期，格式：YYYYMMDD
-            end_date: 结束日期，格式：YYYYMMDD
-
-        Returns:
-            记录数
-
-        Examples:
-            >>> repo = DcMemberRepository()
-            >>> count = repo.get_record_count('20250101', '20250131')
-        """
-        try:
-            conditions = []
-            params = []
-
-            if start_date:
-                conditions.append("trade_date >= %s")
-                params.append(start_date)
-
-            if end_date:
-                conditions.append("trade_date <= %s")
-                params.append(end_date)
-
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-            query = f"""
-                SELECT COUNT(*) FROM {self.TABLE_NAME}
-                WHERE {where_clause}
-            """
-
-            result = self.execute_query(query, tuple(params))
-            return result[0][0] if result else 0
-
-        except Exception as e:
-            logger.error(f"获取记录数失败: {e}")
-            return 0

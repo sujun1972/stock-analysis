@@ -20,19 +20,27 @@ router = APIRouter()
 async def get_dc_member(
     ts_code: Optional[str] = Query(None, description="板块指数代码（如 BK1184.DC）"),
     con_code: Optional[str] = Query(None, description="成分股票代码（如 002117.SZ）"),
+    trade_date: Optional[str] = Query(None, description="单日交易日期，格式：YYYY-MM-DD（优先于 start/end）"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=5000)
+    page: int = Query(1, description="页码，从 1 开始", ge=1),
+    page_size: int = Query(100, description="每页记录数", ge=1, le=1000),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: str = Query('desc', description="排序方向：asc 或 desc")
 ):
     """
-    查询东方财富板块成分数据
+    查询东方财富板块成分数据（支持分页和后端排序）
 
     Args:
         ts_code: 板块指数代码（如 BK1184.DC）
         con_code: 成分股票代码（如 002117.SZ）
+        trade_date: 单日交易日期，格式：YYYY-MM-DD
         start_date: 开始日期，格式：YYYY-MM-DD
         end_date: 结束日期，格式：YYYY-MM-DD
-        limit: 返回记录数
+        page: 页码
+        page_size: 每页记录数
+        sort_by: 排序字段
+        sort_order: 排序方向
 
     Returns:
         东方财富板块成分数据列表
@@ -42,9 +50,13 @@ async def get_dc_member(
         result = await service.get_dc_member_data(
             ts_code=ts_code,
             con_code=con_code,
+            trade_date=trade_date,
             start_date=start_date,
             end_date=end_date,
-            limit=limit
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order
         )
 
         return ApiResponse.success(data=result)
@@ -58,6 +70,7 @@ async def get_dc_member(
 async def get_statistics(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    trade_date: Optional[str] = Query(None, description="单日交易日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="板块代码")
 ):
     """
@@ -66,6 +79,7 @@ async def get_statistics(
     Args:
         start_date: 开始日期，格式：YYYY-MM-DD
         end_date: 结束日期，格式：YYYY-MM-DD
+        trade_date: 单日交易日期，格式：YYYY-MM-DD
         ts_code: 板块代码
 
     Returns:
@@ -76,7 +90,8 @@ async def get_statistics(
         stats = await service.get_statistics(
             ts_code=ts_code,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            trade_date=trade_date
         )
 
         return ApiResponse.success(data=stats)
