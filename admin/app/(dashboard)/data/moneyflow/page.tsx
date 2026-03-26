@@ -292,19 +292,19 @@ export default function MoneyflowPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>平均净流入</CardDescription>
-              <CardTitle className="text-2xl">{statistics.avg_net.toFixed(2)}万</CardTitle>
+              <CardTitle className="text-2xl">{statistics.avg_net != null ? statistics.avg_net.toFixed(2) : '-'}万</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>累计净流入</CardDescription>
-              <CardTitle className="text-2xl">{statistics.total_net.toFixed(2)}万</CardTitle>
+              <CardTitle className="text-2xl">{statistics.total_net != null ? statistics.total_net.toFixed(2) : '-'}万</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>最大净流入</CardDescription>
-              <CardTitle className="text-2xl">{statistics.max_net.toFixed(2)}万</CardTitle>
+              <CardTitle className="text-2xl">{statistics.max_net != null ? statistics.max_net.toFixed(2) : '-'}万</CardTitle>
             </CardHeader>
           </Card>
           <Card>
