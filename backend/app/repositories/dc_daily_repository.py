@@ -17,6 +17,8 @@ class DcDailyRepository(BaseRepository):
 
     TABLE_NAME = "dc_daily"
 
+    SORTABLE_COLUMNS = {'pct_change', 'change', 'amount', 'vol', 'swing', 'turnover_rate', 'open', 'close', 'high', 'low', 'trade_date'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ DcDailyRepository initialized")
@@ -26,7 +28,10 @@ class DcDailyRepository(BaseRepository):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> List[Dict]:
         """
         按日期范围查询板块行情数据
@@ -36,6 +41,9 @@ class DcDailyRepository(BaseRepository):
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 板块代码（可选）
             limit: 返回记录数限制（可选）
+            offset: 偏移量（用于分页）
+            sort_by: 排序字段（白名单：pct_change/change/amount/vol/swing/turnover_rate/open/close/high/low/trade_date）
+            sort_order: 排序方向 asc/desc
 
         Returns:
             数据列表
@@ -69,6 +77,12 @@ class DcDailyRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
+            order = 'DESC' if sort_order.lower() != 'asc' else 'ASC'
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY trade_date DESC, pct_change DESC NULLS LAST"
+
             query = f"""
                 SELECT
                     ts_code, trade_date, close, open, high, low,
@@ -76,12 +90,16 @@ class DcDailyRepository(BaseRepository):
                     created_at, updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, pct_change DESC
+                {order_clause}
             """
 
             if limit:
                 query += " LIMIT %s"
                 params.append(limit)
+
+            if offset:
+                query += " OFFSET %s"
+                params.append(offset)
 
             result = self.execute_query(query, tuple(params))
 
@@ -393,7 +411,8 @@ class DcDailyRepository(BaseRepository):
     def get_record_count(
         self,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
     ) -> int:
         """
         获取指定日期范围的记录数
@@ -401,6 +420,7 @@ class DcDailyRepository(BaseRepository):
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 板块代码（可选）
 
         Returns:
             记录数
@@ -420,6 +440,10 @@ class DcDailyRepository(BaseRepository):
             if end_date:
                 conditions.append("trade_date <= %s")
                 params.append(end_date)
+
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
 
             where_clause = " AND ".join(conditions) if conditions else "1=1"
 

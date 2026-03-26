@@ -6,7 +6,8 @@
 
 import asyncio
 import traceback
-from typing import Optional, Dict, List
+from datetime import datetime
+from typing import Optional, Dict
 from loguru import logger
 
 from app.repositories.dc_daily_repository import DcDailyRepository
@@ -132,40 +133,88 @@ class DcDailyService:
             logger.error(f"数据验证失败: {e}")
             raise
 
+    @staticmethod
+    def _format_date(date_str: Optional[str]) -> Optional[str]:
+        """将 YYYYMMDD 格式转换为 YYYY-MM-DD"""
+        if date_str and len(date_str) == 8:
+            return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+        return date_str
+
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        未指定日期时解析默认交易日：先查今天是否有数据，无则回退到最近有数据的交易日。
+
+        Returns:
+            日期字符串，格式：YYYY-MM-DD；若无任何数据返回 None
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        count = await asyncio.to_thread(
+            self.dc_daily_repo.get_record_count,
+            start_date=today,
+            end_date=today
+        )
+        if count > 0:
+            return self._format_date(today)
+        latest = await asyncio.to_thread(self.dc_daily_repo.get_latest_trade_date)
+        return self._format_date(latest) if latest else None
+
     async def get_dc_daily_data(
         self,
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 30
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> Dict:
         """
         获取东方财富概念板块行情数据
 
         Args:
             ts_code: 板块代码
-            start_date: 开始日期（YYYY-MM-DD 或 YYYYMMDD）
-            end_date: 结束日期（YYYY-MM-DD 或 YYYYMMDD）
-            limit: 返回记录数限制
+            start_date: 开始日期（YYYY-MM-DD）
+            end_date: 结束日期（YYYY-MM-DD）
+            page: 页码
+            page_size: 每页记录数
+            sort_by: 排序字段
+            sort_order: 排序方向 asc/desc
 
         Returns:
-            包含数据列表的字典
+            包含数据列表和总数的字典
         """
         try:
-            start_date_fmt = start_date.replace('-', '') if start_date and '-' in start_date else start_date
-            end_date_fmt = end_date.replace('-', '') if end_date and '-' in end_date else end_date
+            start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
+            end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
+            offset = (page - 1) * page_size
 
-            items = await asyncio.to_thread(
-                self.dc_daily_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                limit=limit
+            items, total = await asyncio.gather(
+                asyncio.to_thread(
+                    self.dc_daily_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    limit=page_size,
+                    offset=offset,
+                    sort_by=sort_by,
+                    sort_order=sort_order
+                ),
+                asyncio.to_thread(
+                    self.dc_daily_repo.get_record_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                )
             )
+
+            # 格式化日期字段
+            for item in items:
+                if item.get('trade_date'):
+                    item['trade_date'] = self._format_date(item['trade_date'])
 
             return {
                 "items": items,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:
@@ -183,15 +232,15 @@ class DcDailyService:
 
         Args:
             ts_code: 板块代码
-            start_date: 开始日期（YYYY-MM-DD 或 YYYYMMDD）
-            end_date: 结束日期（YYYY-MM-DD 或 YYYYMMDD）
+            start_date: 开始日期（YYYY-MM-DD）
+            end_date: 结束日期（YYYY-MM-DD）
 
         Returns:
             统计信息字典
         """
         try:
-            start_date_fmt = start_date.replace('-', '') if start_date and '-' in start_date else start_date
-            end_date_fmt = end_date.replace('-', '') if end_date and '-' in end_date else end_date
+            start_date_fmt = start_date.replace('-', '') if start_date else None
+            end_date_fmt = end_date.replace('-', '') if end_date else None
 
             stats = await asyncio.to_thread(
                 self.dc_daily_repo.get_statistics,

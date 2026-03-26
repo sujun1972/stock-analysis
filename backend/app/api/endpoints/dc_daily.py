@@ -18,32 +18,55 @@ router = APIRouter()
 @router.get("")
 async def get_dc_daily(
     ts_code: Optional[str] = Query(None, description="板块代码"),
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
+    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD，不传则自动使用最近有数据的交易日"),
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD（与trade_date二选一）"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=2000),
-    page: int = Query(1, description="页码", ge=1)
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(100, description="每页记录数", ge=1, le=2000),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: str = Query('desc', description="排序方向：asc/desc")
 ):
     """
     查询东方财富概念板块行情数据
 
     Args:
         ts_code: 板块代码
+        trade_date: 单日交易日期（YYYY-MM-DD），优先于 start_date/end_date
         start_date: 开始日期，格式：YYYY-MM-DD
         end_date: 结束日期，格式：YYYY-MM-DD
-        limit: 返回记录数
         page: 页码
+        page_size: 每页记录数
+        sort_by: 排序字段
+        sort_order: 排序方向
 
     Returns:
-        东方财富概念板块行情数据列表
+        东方财富概念板块行情数据列表，含 trade_date 字段用于前端回填日期选择器
     """
     try:
         service = DcDailyService()
+
+        if trade_date:
+            start_date_str = trade_date
+            end_date_str = trade_date
+        elif start_date or end_date:
+            start_date_str = start_date
+            end_date_str = end_date
+        else:
+            # 未传日期：自动解析最近有数据的交易日
+            resolved = await service.resolve_default_trade_date()
+            start_date_str = resolved
+            end_date_str = resolved
+
         result = await service.get_dc_daily_data(
             ts_code=ts_code,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit
+            start_date=start_date_str,
+            end_date=end_date_str,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order
         )
+        result['trade_date'] = start_date_str
 
         return ApiResponse.success(data=result)
 
@@ -54,6 +77,7 @@ async def get_dc_daily(
 
 @router.get("/statistics")
 async def get_statistics(
+    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="板块代码")
@@ -66,10 +90,17 @@ async def get_statistics(
     """
     try:
         service = DcDailyService()
+        if trade_date:
+            start_date_str = trade_date
+            end_date_str = trade_date
+        else:
+            start_date_str = start_date
+            end_date_str = end_date
+
         stats = await service.get_statistics(
             ts_code=ts_code,
-            start_date=start_date,
-            end_date=end_date
+            start_date=start_date_str,
+            end_date=end_date_str
         )
 
         return ApiResponse.success(data=stats)

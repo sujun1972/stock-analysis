@@ -3,11 +3,13 @@ import type { ApiResponse } from '@/types/api'
 
 export interface DcDailyParams {
   ts_code?: string
+  trade_date?: string
   start_date?: string
   end_date?: string
-  idx_type?: string
-  limit?: number
   page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 export interface DcDailyData {
@@ -38,15 +40,16 @@ export class DcDailyApiClient extends BaseApiClient {
   async getData(params?: DcDailyParams): Promise<ApiResponse<{
     items: DcDailyData[]
     total: number
+    trade_date?: string
   }>> {
     return this.get('/api/dc-daily', { params })
   }
 
   async getStatistics(params?: {
     ts_code?: string
+    trade_date?: string
     start_date?: string
     end_date?: string
-    idx_type?: string
   }): Promise<ApiResponse<DcDailyStatistics>> {
     return this.get('/api/dc-daily/statistics', { params })
   }
