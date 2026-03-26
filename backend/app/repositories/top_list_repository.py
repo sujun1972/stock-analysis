@@ -15,13 +15,18 @@ class TopListRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ TopListRepository initialized")
 
+    # 允许排序的列白名单，防止 SQL 注入
+    SORTABLE_COLUMNS = {'pct_change', 'turnover_rate', 'amount', 'net_amount', 'l_amount'}
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         limit: Optional[int] = None,
-        offset: int = 0
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> List[Dict]:
         """
         按日期范围查询龙虎榜数据
@@ -58,6 +63,13 @@ class TopListRepository(BaseRepository):
             limit_clause = f"LIMIT {limit}" if limit else ""
             offset_clause = f"OFFSET {offset}" if offset else ""
 
+            # 排序：仅允许白名单列，防止 SQL 注入
+            order = 'DESC' if sort_order.lower() != 'asc' else 'ASC'
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY trade_date DESC, net_amount DESC"
+
             query = f"""
                 SELECT
                     trade_date, ts_code, name, close, pct_change,
@@ -65,7 +77,7 @@ class TopListRepository(BaseRepository):
                     net_amount, net_rate, amount_rate, float_values, reason
                 FROM {self.TABLE_NAME}
                 {where_clause}
-                ORDER BY trade_date DESC, net_amount DESC
+                {order_clause}
                 {limit_clause}
                 {offset_clause}
             """

@@ -16,6 +16,7 @@ export interface Column<T> {
   headerClassName?: string
   cellClassName?: string
   width?: string | number
+  minWidth?: string | number
   align?: 'left' | 'center' | 'right'
   sticky?: boolean
   hideOnMobile?: boolean

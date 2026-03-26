@@ -993,6 +993,80 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 - DataTable 组件使用 `accessor` 函数而非 `render` 来自定义列渲染
 - 新增任务时，优先在数据库中设置元数据，确保排序和分类正确
 
+### DataTable 列样式规范
+
+**`cellClassName` vs `className`**：
+- `cellClassName`：作用于 `<td>` 单元格（行数据），用于控制单元格文字对齐、换行等
+- `headerClassName`：作用于 `<th>` 表头，用于控制表头样式
+- `className` 字段在 DataTable 中无效，不要使用
+
+```typescript
+// ✅ 正确
+{
+  key: 'amount',
+  header: '总成交额',
+  width: 110,
+  cellClassName: 'text-right whitespace-nowrap'  // 作用于 <td>
+}
+
+// ❌ 错误：className 不生效
+{
+  key: 'amount',
+  className: 'text-right'  // 无效，DataTable 不读取此字段
+}
+```
+
+**固定宽度表格（防止列换行）**：
+
+在 `table-fixed` 模式下，设置 `width` 的列固定不变，无 `width` 的列自动占剩余空间：
+
+```tsx
+<DataTable
+  tableClassName="table-fixed w-full"
+  columns={[
+    { key: 'name', width: 160, cellClassName: 'whitespace-nowrap' },  // 固定 160px
+    { key: 'reason', /* 无 width */ }  // 自动占剩余宽度，内容会截断
+  ]}
+/>
+```
+
+**后端排序 SQL 注入防护**：
+
+排序字段必须使用白名单校验，禁止直接拼接用户传入的字段名：
+
+```python
+# Repository 层
+SORTABLE_COLUMNS = {'pct_change', 'turnover_rate', 'amount', 'net_amount'}
+
+if sort_by and sort_by in self.SORTABLE_COLUMNS:
+    order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+else:
+    order_clause = "ORDER BY trade_date DESC"  # 默认排序
+```
+
+前端 sort 状态的异步更新陷阱——`setState` 后立即调用 `loadData()` 时会读到旧值，必须通过参数传入新值绕过：
+
+```typescript
+onSort: (key, direction) => {
+  const newKey = direction ? key : null
+  setSortKey(newKey)          // 异步更新，此时 sortKey 仍是旧值
+  setSortDirection(direction)
+  loadData(1, newKey, direction)  // 直接传新值，不依赖 state
+}
+```
+
+**日期字符串构建（时区安全）**：
+
+`date.toISOString()` 会转为 UTC，在 UTC+8 时区会导致日期偏移 -1 天。应使用本地时间方法：
+
+```typescript
+// ✅ 正确：使用本地时间
+const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+// ❌ 错误：UTC 转换导致日期偏移
+const dateStr = date.toISOString().split('T')[0]
+```
+
 ### 前端页面模块化重构最佳实践
 
 当单个页面文件超过 **500 行**时，应考虑模块化重构，提升代码可维护性和复用性。

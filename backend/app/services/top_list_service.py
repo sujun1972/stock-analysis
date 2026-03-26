@@ -2,6 +2,7 @@
 龙虎榜每日明细 Service
 """
 import asyncio
+from datetime import datetime
 from typing import Dict, List, Optional
 import pandas as pd
 from loguru import logger
@@ -26,7 +27,9 @@ class TopListService:
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         page: int = 1,
-        page_size: int = 30
+        page_size: int = 30,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> Dict:
         """
         获取龙虎榜数据
@@ -55,7 +58,9 @@ class TopListService:
                 end_date=end_date_fmt,
                 ts_code=ts_code,
                 limit=page_size,
-                offset=offset
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order
             ),
             asyncio.to_thread(
                 self.top_list_repo.get_record_count,
@@ -291,6 +296,26 @@ class TopListService:
                 item['float_values'] = item['float_values'] / 10000
 
         return items
+
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        未指定日期时解析默认交易日：
+        先查今天是否有数据，无则回退到数据库中最近有数据的交易日。
+
+        Returns:
+            日期字符串，格式：YYYY-MM-DD；若无任何数据返回 None
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        count = await asyncio.to_thread(
+            self.top_list_repo.get_record_count,
+            start_date=today,
+            end_date=today
+        )
+        if count > 0:
+            return self._format_date(today)
+
+        latest = await asyncio.to_thread(self.top_list_repo.get_latest_trade_date)
+        return self._format_date(latest) if latest else None
 
     def _get_provider(self):
         """获取Tushare数据提供者"""

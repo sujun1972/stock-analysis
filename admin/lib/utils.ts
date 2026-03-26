@@ -34,6 +34,29 @@ export function formatNumber(num: number | null | undefined, decimals: number = 
 }
 
 /**
+ * 根据涨跌幅返回对应的文字颜色 class
+ * 涨（>0）→ 红色，跌（<0）→ 绿色，平（=0）→ 默认色
+ */
+export function pctChangeColor(pctChange: number | null | undefined): string {
+  if (pctChange === null || pctChange === undefined) return ''
+  if (pctChange > 0) return 'text-red-600'
+  if (pctChange < 0) return 'text-green-600'
+  return ''
+}
+
+/**
+ * 提取股票纯代码（去除交易所后缀）
+ * @example formatStockCode('002475.SZ') → '002475'
+ * @example formatStockCode('600666.SH') → '600666'
+ * @example formatStockCode('002475') → '002475'
+ */
+export function formatStockCode(tsCode: string | null | undefined): string {
+  if (!tsCode) return ''
+  const dotIndex = tsCode.indexOf('.')
+  return dotIndex !== -1 ? tsCode.slice(0, dotIndex) : tsCode
+}
+
+/**
  * 格式化日期
  * @param dateStr - 日期字符串
  * @param format - 格式类型

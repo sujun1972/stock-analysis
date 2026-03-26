@@ -102,10 +102,10 @@ export function DesktopView<T>({
                     column.sticky && 'sticky left-0 z-10 bg-background',
                     column.hideOnMobile && 'hidden md:table-cell'
                   )}
-                  style={{ width: column.width }}
+                  style={{ width: column.width, minWidth: column.minWidth }}
                   onClick={() => column.sortable && onSort(column)}
                 >
-                  <div className="flex items-center">
+                  <div className="flex items-center justify-center">
                     {column.header}
                     {column.sortable && (
                       <SortIcon
@@ -164,6 +164,7 @@ export function DesktopView<T>({
                         column.sticky && 'sticky left-0 z-10 bg-background',
                         column.hideOnMobile && 'hidden md:table-cell'
                       )}
+                      style={{ width: column.width, minWidth: column.minWidth }}
                     >
                       {column.accessor
                         ? column.accessor(item)

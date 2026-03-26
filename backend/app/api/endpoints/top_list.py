@@ -16,49 +16,63 @@ router = APIRouter()
 
 @router.get("")
 async def get_top_list(
+    trade_date: Optional[date] = Query(None, description="交易日期（单日查询）"),
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(30, ge=1, le=200, description="每页记录数")
+    page_size: int = Query(30, ge=1, le=200, description="每页记录数"),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: str = Query('desc', description="排序方向：asc/desc")
 ):
     """查询龙虎榜数据（支持分页）"""
     service = TopListService()
 
-    start_date_str = start_date.strftime('%Y-%m-%d') if start_date else None
-    end_date_str = end_date.strftime('%Y-%m-%d') if end_date else None
+    if trade_date:
+        start_date_str = trade_date.strftime('%Y-%m-%d')
+        end_date_str = trade_date.strftime('%Y-%m-%d')
+    elif start_date or end_date:
+        start_date_str = start_date.strftime('%Y-%m-%d') if start_date else None
+        end_date_str = end_date.strftime('%Y-%m-%d') if end_date else None
+    else:
+        # 未传日期：先查今天，无数据则回退到最近有数据的交易日
+        resolved = await service.resolve_default_trade_date()
+        start_date_str = resolved
+        end_date_str = resolved
 
     result = await service.get_top_list_data(
         start_date=start_date_str,
         end_date=end_date_str,
         ts_code=ts_code,
         page=page,
-        page_size=page_size
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
+    result['trade_date'] = start_date_str
 
     return ApiResponse.success(data=result)
 
 
 @router.get("/statistics")
 async def get_statistics(
+    trade_date: Optional[date] = Query(None, description="交易日期（单日查询）"),
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期")
 ):
-    """
-    获取龙虎榜统计信息
-
-    Args:
-        start_date: 开始日期
-        end_date: 结束日期
-
-    Returns:
-        统计信息
-    """
+    """获取龙虎榜统计信息"""
     service = TopListService()
 
-    # 日期格式转换
-    start_date_str = start_date.strftime('%Y-%m-%d') if start_date else None
-    end_date_str = end_date.strftime('%Y-%m-%d') if end_date else None
+    if trade_date:
+        start_date_str = trade_date.strftime('%Y-%m-%d')
+        end_date_str = trade_date.strftime('%Y-%m-%d')
+    elif start_date or end_date:
+        start_date_str = start_date.strftime('%Y-%m-%d') if start_date else None
+        end_date_str = end_date.strftime('%Y-%m-%d') if end_date else None
+    else:
+        resolved = await service.resolve_default_trade_date()
+        start_date_str = resolved
+        end_date_str = resolved
 
     result = await service.get_statistics(
         start_date=start_date_str,

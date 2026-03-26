@@ -5,11 +5,14 @@ import type { ApiResponse } from '@/types/api'
  * 龙虎榜查询参数
  */
 export interface TopListParams {
+  trade_date?: string
   start_date?: string
   end_date?: string
   ts_code?: string
   page?: number
   page_size?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
 }
 
 /**
@@ -57,6 +60,7 @@ export class TopListApiClient extends BaseApiClient {
   async getTopList(params?: TopListParams): Promise<ApiResponse<{
     items: TopListItem[]
     total: number
+    trade_date: string | null
   }>> {
     return this.get('/api/top-list', { params })
   }
@@ -65,6 +69,7 @@ export class TopListApiClient extends BaseApiClient {
    * 获取龙虎榜统计信息
    */
   async getStatistics(params?: {
+    trade_date?: string
     start_date?: string
     end_date?: string
   }): Promise<ApiResponse<TopListStatistics>> {
