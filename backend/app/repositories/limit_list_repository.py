@@ -16,6 +16,8 @@ class LimitListRepository(BaseRepository):
 
     TABLE_NAME = "limit_list_d"
 
+    SORTABLE_COLUMNS = {'pct_chg', 'limit_times', 'close', 'amount', 'turnover_ratio', 'float_mv', 'open_times'}
+
     def __init__(self, db=None):
         """
         初始化涨跌停列表仓储
@@ -32,17 +34,23 @@ class LimitListRepository(BaseRepository):
         end_date: str,
         ts_code: Optional[str] = None,
         limit_type: Optional[str] = None,
-        limit: int = 1000
+        page: int = 1,
+        page_size: int = 50,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> List[Dict]:
         """
-        按日期范围查询涨跌停列表数据
+        按日期范围查询涨跌停列表数据（支持分页和排序）
 
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 股票代码（可选）
             limit_type: 涨跌停类型（U涨停D跌停Z炸板）（可选）
-            limit: 返回记录数限制
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单：pct_chg/limit_times/close/amount/turnover_ratio/float_mv/open_times）
+            sort_order: 排序方向（asc/desc）
 
         Returns:
             涨跌停列表数据列表
@@ -52,6 +60,27 @@ class LimitListRepository(BaseRepository):
             >>> data = repo.get_by_date_range('20240101', '20240131')
             >>> data = repo.get_by_date_range('20240101', '20240131', limit_type='U')
         """
+        conditions = ["trade_date >= %s", "trade_date <= %s"]
+        params = [start_date, end_date]
+
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+
+        if limit_type:
+            conditions.append("limit_type = %s")
+            params.append(limit_type)
+
+        where_clause = " AND ".join(conditions)
+
+        # 排序白名单防 SQL 注入
+        order = 'DESC' if sort_order.lower() != 'asc' else 'ASC'
+        if sort_by and sort_by in self.SORTABLE_COLUMNS:
+            order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+        else:
+            order_clause = "ORDER BY trade_date DESC, limit_times DESC NULLS LAST, pct_chg DESC NULLS LAST"
+
+        offset = (page - 1) * page_size
         query = f"""
             SELECT
                 trade_date, ts_code, industry, name,
@@ -61,20 +90,11 @@ class LimitListRepository(BaseRepository):
                 up_stat, limit_times, limit_type,
                 created_at, updated_at
             FROM {self.TABLE_NAME}
-            WHERE trade_date >= %s AND trade_date <= %s
+            WHERE {where_clause}
+            {order_clause}
+            LIMIT %s OFFSET %s
         """
-        params = [start_date, end_date]
-
-        if ts_code:
-            query += " AND ts_code = %s"
-            params.append(ts_code)
-
-        if limit_type:
-            query += " AND limit_type = %s"
-            params.append(limit_type)
-
-        query += " ORDER BY trade_date DESC, pct_chg DESC LIMIT %s"
-        params.append(limit)
+        params.extend([page_size, offset])
 
         try:
             result = self.execute_query(query, tuple(params))
@@ -82,6 +102,46 @@ class LimitListRepository(BaseRepository):
             return [self._row_to_dict(row) for row in result]
         except Exception as e:
             logger.error(f"查询涨跌停列表数据失败: {e}")
+            raise
+
+    def get_count_by_date_range(
+        self,
+        start_date: str,
+        end_date: str,
+        ts_code: Optional[str] = None,
+        limit_type: Optional[str] = None
+    ) -> int:
+        """
+        获取指定条件下的总记录数（用于分页）
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+            limit_type: 涨跌停类型（可选）
+
+        Returns:
+            记录总数
+        """
+        conditions = ["trade_date >= %s", "trade_date <= %s"]
+        params = [start_date, end_date]
+
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+
+        if limit_type:
+            conditions.append("limit_type = %s")
+            params.append(limit_type)
+
+        where_clause = " AND ".join(conditions)
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+
+        try:
+            result = self.execute_query(query, tuple(params))
+            return result[0][0] if result else 0
+        except Exception as e:
+            logger.error(f"获取涨跌停列表总数失败: {e}")
             raise
 
     def _row_to_dict(self, row: tuple) -> Dict:

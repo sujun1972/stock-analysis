@@ -2,11 +2,15 @@ import { BaseApiClient } from './base'
 import type { ApiResponse } from '@/types/api'
 
 export interface LimitListParams {
+  trade_date?: string
   start_date?: string
   end_date?: string
   ts_code?: string
   limit_type?: string  // U涨停D跌停Z炸板
-  limit?: number
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
 }
 
 export interface LimitListData {
@@ -42,12 +46,13 @@ export interface LimitListStatistics {
 
 export class LimitListApiClient extends BaseApiClient {
   /**
-   * 查询涨跌停列表数据
+   * 查询涨跌停列表数据（支持分页和排序）
    */
   async getData(params?: LimitListParams): Promise<ApiResponse<{
     items: LimitListData[]
     statistics: LimitListStatistics
     total: number
+    trade_date: string | null
   }>> {
     return this.get('/api/limit-list', { params })
   }
@@ -55,7 +60,7 @@ export class LimitListApiClient extends BaseApiClient {
   /**
    * 获取统计信息
    */
-  async getStatistics(params?: Omit<LimitListParams, 'limit'>): Promise<ApiResponse<{
+  async getStatistics(params?: Pick<LimitListParams, 'trade_date' | 'start_date' | 'end_date' | 'limit_type'>): Promise<ApiResponse<{
     statistics: LimitListStatistics
   }>> {
     return this.get('/api/limit-list/statistics', { params })
