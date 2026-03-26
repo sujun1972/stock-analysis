@@ -318,7 +318,7 @@ triggerPoll()  // Header 图标即时更新
 - 龙虎榜每日明细页面（`/boardgame/top-list`）
 - 龙虎榜机构明细页面（`/boardgame/top-inst`）
 - 涨跌停列表页面（`/boardgame/limit-list`）
-- 连板天梯页面（`/boardgame/limit-step`）
+- 连板天梯页面（`/boardgame/limit-step`）**（2026-03-26 全面优化：筛选改为单日交易日期、股票列合并名称+代码可点击跳转、后端排序（连板次数白名单防注入）、分页查询、默认加载最近有数据的交易日并回填日期选择器）**
 - 最强板块统计页面（`/boardgame/limit-cpt`）
 - 卖方盈利预测数据页面（`/features/report-rc`）
 - 个股异常波动页面（`/reference-data/stk-shock`）
@@ -457,6 +457,37 @@ if not trade_date:
 **判断依据**：查看 `core/src/providers/tushare/provider.py` 中对应方法的参数签名，若 `trade_date` 标注为必需参数（无默认值），则使用方式 B。
 
 **已修复文件**：`top_list_service.py`、`top_inst_service.py`（已于 2026-03-25 修复，使用方式 B）
+
+#### 方式 C：查询端点默认日期解析（`resolve_default_trade_date`）
+
+**同步端点**使用方式 A/B 获取最新数据；**查询端点**（`GET /api/xxx`）在用户未传日期时，应自动查询最近有数据的交易日并**回传给前端**，让日期选择器自动回填。
+
+```python
+# Service 层：优先今天，否则回退到表中最新交易日，返回 YYYY-MM-DD 格式
+async def resolve_default_trade_date(self) -> Optional[str]:
+    today = datetime.now().strftime('%Y%m%d')
+    has_today = await asyncio.to_thread(self.repo.exists_by_date, today)
+    if has_today:
+        return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+    latest = await asyncio.to_thread(self.repo.get_latest_trade_date)
+    if latest:
+        return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+    return None
+
+# API 端点：未传日期时调用，解析后用于查询并回传
+resolved_date = await service.resolve_default_trade_date()
+result = await service.get_data(...)
+result['trade_date'] = resolved_date  # 前端读取后回填日期选择器
+```
+
+```typescript
+// 前端：回填日期选择器（避免 UTC 偏移，使用 T00:00:00 本地时间构造）
+if (!tradeDate && response.data.trade_date) {
+  setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
+}
+```
+
+**已实现**：`top_list_service.py`、`top_inst_service.py`、`limit_step_service.py`
 
 ### 新增数据同步功能开发流程
 

@@ -136,13 +136,34 @@ class LimitStepService:
         logger.debug(f"数据清洗完成，剩余 {len(df)} 条记录")
         return df
 
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        解析默认交易日期：今天有数据则返回今天，否则返回最近有数据的交易日（YYYY-MM-DD格式）
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(
+            self.limit_step_repo.exists_by_date, today
+        )
+        if has_today:
+            return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+
+        latest = await asyncio.to_thread(
+            self.limit_step_repo.get_latest_trade_date
+        )
+        if latest:
+            return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+        return None
+
     async def get_limit_step_data(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         nums: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> Dict:
         """
         获取连板天梯数据
@@ -152,33 +173,48 @@ class LimitStepService:
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 股票代码（可选）
             nums: 连板次数（可选，支持多个，如 "2,3"）
-            limit: 返回记录数限制
+            limit: 每页记录数
+            offset: 偏移量（分页）
+            sort_by: 排序字段
+            sort_order: 排序方向
 
         Returns:
             包含数据和统计信息的字典
         """
         try:
-            # 获取数据
-            items = await asyncio.to_thread(
+            # 并发获取数据和统计
+            items_coro = asyncio.to_thread(
                 self.limit_step_repo.get_by_date_range,
                 start_date=start_date,
                 end_date=end_date,
                 ts_code=ts_code,
                 nums=nums,
-                limit=limit
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order
             )
-
-            # 获取统计信息
-            statistics = await asyncio.to_thread(
+            total_coro = asyncio.to_thread(
+                self.limit_step_repo.get_total_count,
+                start_date=start_date,
+                end_date=end_date,
+                ts_code=ts_code,
+                nums=nums
+            )
+            statistics_coro = asyncio.to_thread(
                 self.limit_step_repo.get_statistics,
                 start_date=start_date,
                 end_date=end_date
             )
 
+            items, total, statistics = await asyncio.gather(
+                items_coro, total_coro, statistics_coro
+            )
+
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

@@ -12,6 +12,9 @@ class LimitStepRepository(BaseRepository):
 
     TABLE_NAME = "limit_step"
 
+    # 允许排序的列白名单，防止 SQL 注入
+    SORTABLE_COLUMNS = {'nums'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ LimitStepRepository initialized")
@@ -22,7 +25,10 @@ class LimitStepRepository(BaseRepository):
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         nums: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> List[Dict]:
         """
         按日期范围查询连板天梯数据
@@ -64,14 +70,23 @@ class LimitStepRepository(BaseRepository):
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
             limit_clause = f"LIMIT {limit}" if limit else ""
+            offset_clause = f"OFFSET {offset}" if offset else ""
+
+            # 排序：仅允许白名单列，防止 SQL 注入
+            order = 'DESC' if sort_order.lower() != 'asc' else 'ASC'
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order_clause = f"ORDER BY CAST({sort_by} AS INTEGER) {order} NULLS LAST, trade_date DESC, ts_code"
+            else:
+                order_clause = "ORDER BY trade_date DESC, CAST(nums AS INTEGER) DESC, ts_code"
 
             query = f"""
                 SELECT
                     trade_date, ts_code, name, nums
                 FROM {self.TABLE_NAME}
                 {where_clause}
-                ORDER BY trade_date DESC, CAST(nums AS INTEGER) DESC, ts_code
+                {order_clause}
                 {limit_clause}
+                {offset_clause}
             """
 
             result = self.execute_query(query, tuple(params) if params else None)
@@ -167,6 +182,53 @@ class LimitStepRepository(BaseRepository):
         except Exception as e:
             logger.error(f"获取连板天梯统计信息失败: {e}")
             raise
+
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        nums: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的总记录数（用于分页）
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+            nums: 连板次数（可选）
+
+        Returns:
+            总记录数
+        """
+        try:
+            conditions = []
+            params = []
+
+            if start_date:
+                conditions.append("trade_date >= %s")
+                params.append(start_date)
+            if end_date:
+                conditions.append("trade_date <= %s")
+                params.append(end_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+            if nums:
+                nums_list = [n.strip() for n in nums.split(',')]
+                placeholders = ','.join(['%s'] * len(nums_list))
+                conditions.append(f"nums IN ({placeholders})")
+                params.extend(nums_list)
+
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} {where_clause}"
+            result = self.execute_query(query, tuple(params) if params else None)
+            return result[0][0] if result else 0
+
+        except Exception as e:
+            logger.error(f"获取总记录数失败: {e}")
+            return 0
 
     def get_top_by_nums(
         self,

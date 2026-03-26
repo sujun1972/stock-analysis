@@ -129,6 +129,32 @@ const openStockAnalysis = (tsCode: string) => {
 
 ---
 
+### 无涨跌幅数据时（固定颜色）
+
+部分表格没有 `pct_change` 字段（如连板天梯），按业务含义使用固定颜色：
+
+```tsx
+// 连板天梯：连板次数固定红色（强势含义）
+accessor: (row) => (
+  <span className="text-red-600 font-semibold">
+    {parseInt(row.nums) || 0}板
+  </span>
+),
+
+// 股票列：固定红色 + 可点击
+accessor: (row) => (
+  <span
+    className="cursor-pointer hover:underline text-red-600 font-medium"
+    onClick={() => openStockAnalysis(row.ts_code)}
+  >
+    {row.name || '-'}[{formatStockCode(row.ts_code)}]
+  </span>
+),
+```
+
+---
+
 ## 参考实现
 
-`admin/app/(dashboard)/boardgame/top-list/page.tsx`
+- `admin/app/(dashboard)/boardgame/top-list/page.tsx` — 有 `pct_change`，跟随着色
+- `admin/app/(dashboard)/boardgame/limit-step/page.tsx` — 无 `pct_change`，固定红色

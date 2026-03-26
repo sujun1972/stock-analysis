@@ -16,38 +16,65 @@ router = APIRouter()
 
 @router.get("")
 async def get_limit_step(
+    trade_date: Optional[date] = Query(None, description="交易日期（单日查询）"),
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     nums: Optional[str] = Query(None, description="连板次数（支持多个，如 2,3）"),
-    limit: int = Query(100, ge=1, le=1000, description="返回记录数限制")
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(100, ge=1, le=500, description="每页记录数"),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: str = Query('desc', description="排序方向：asc/desc")
 ):
     """
-    查询连板天梯数据
+    查询连板天梯数据（支持分页）
 
     Args:
+        trade_date: 单日交易日期
         start_date: 开始日期
         end_date: 结束日期
         ts_code: 股票代码
         nums: 连板次数（支持多个，如 "2,3"）
-        limit: 返回记录数限制
+        page: 页码
+        page_size: 每页记录数
+        sort_by: 排序字段
+        sort_order: 排序方向
 
     Returns:
         连板天梯数据
     """
     service = LimitStepService()
 
-    # 日期格式转换（date -> YYYYMMDD）
-    start_date_str = start_date.strftime('%Y%m%d') if start_date else None
-    end_date_str = end_date.strftime('%Y%m%d') if end_date else None
+    if trade_date:
+        start_date_str = end_date_str = trade_date.strftime('%Y%m%d')
+        resolved_date = trade_date.strftime('%Y-%m-%d')
+    elif start_date or end_date:
+        start_date_str = start_date.strftime('%Y%m%d') if start_date else None
+        end_date_str = end_date.strftime('%Y%m%d') if end_date else None
+        # 回传给前端的展示日期，取区间起点（YYYY-MM-DD）
+        resolved_date = start_date.strftime('%Y-%m-%d') if start_date else None
+    else:
+        # 未传日期：自动解析最近有数据的交易日（YYYY-MM-DD格式）
+        resolved_date = await service.resolve_default_trade_date()
+        if resolved_date:
+            d = resolved_date.replace('-', '')
+            start_date_str = end_date_str = d
+        else:
+            start_date_str = end_date_str = None
+
+    offset = (page - 1) * page_size
 
     result = await service.get_limit_step_data(
         start_date=start_date_str,
         end_date=end_date_str,
         ts_code=ts_code,
         nums=nums,
-        limit=limit
+        limit=page_size,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
+    result['trade_date'] = resolved_date
 
     return ApiResponse.success(data=result)
 

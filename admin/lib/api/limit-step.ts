@@ -2,11 +2,15 @@ import { BaseApiClient } from './base'
 import type { ApiResponse } from '@/types/api'
 
 export interface LimitStepParams {
+  trade_date?: string
   start_date?: string
   end_date?: string
   ts_code?: string
   nums?: string
-  limit?: number
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
 }
 
 export interface LimitStepData {
@@ -33,6 +37,7 @@ export class LimitStepApiClient extends BaseApiClient {
     items: LimitStepData[]
     statistics: LimitStepStatistics
     total: number
+    trade_date: string | null
   }>> {
     return this.get('/api/limit-step', { params })
   }
@@ -40,7 +45,7 @@ export class LimitStepApiClient extends BaseApiClient {
   /**
    * 获取连板天梯统计信息
    */
-  async getStatistics(params?: Omit<LimitStepParams, 'limit'>): Promise<ApiResponse<{
+  async getStatistics(params?: Omit<LimitStepParams, 'page' | 'page_size' | 'sort_by' | 'sort_order'>): Promise<ApiResponse<{
     statistics: LimitStepStatistics
   }>> {
     return this.get('/api/limit-step/statistics', { params })
