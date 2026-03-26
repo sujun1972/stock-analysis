@@ -6,6 +6,7 @@
 
 import asyncio
 import traceback
+from datetime import datetime
 from typing import Optional, Dict, List
 from loguru import logger
 
@@ -139,47 +140,67 @@ class DcIndexService:
             logger.error(f"数据验证失败: {e}")
             raise
 
-    async def get_dc_index_data(
-        self,
-        ts_code: Optional[str] = None,
-        name: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        idx_type: Optional[str] = None,
-        limit: int = 30
-    ) -> Dict:
+    async def resolve_default_trade_date(self) -> Optional[str]:
         """
-        获取东方财富板块数据
-
-        Args:
-            ts_code: 板块代码
-            name: 板块名称（模糊匹配）
-            start_date: 开始日期（YYYY-MM-DD 或 YYYYMMDD）
-            end_date: 结束日期（YYYY-MM-DD 或 YYYYMMDD）
-            idx_type: 板块类型
-            limit: 返回记录数限制
+        解析默认交易日期：优先今天，否则回退到表中最新交易日
 
         Returns:
-            包含数据列表的字典
+            YYYY-MM-DD 格式的日期字符串，或 None
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(self.dc_index_repo.exists_by_date, today)
+        if has_today:
+            return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+        latest = await asyncio.to_thread(self.dc_index_repo.get_latest_trade_date)
+        if latest:
+            return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+        return None
+
+    async def get_dc_index_data(
+        self,
+        trade_date: Optional[str] = None,
+        idx_type: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Dict:
+        """
+        获取东方财富板块数据（单日分页模式）
+
+        trade_date 为空时自动解析最近有数据的交易日，并回传给前端用于回填日期选择器。
+
+        Args:
+            trade_date: 交易日期（YYYY-MM-DD）
+            idx_type: 板块类型（概念板块/行业板块/地域板块）
+            page: 页码
+            page_size: 每页记录数
+            sort_by: 排序字段（见 DcIndexRepository.SORTABLE_COLUMNS）
+            sort_order: 排序方向（asc/desc）
+
+        Returns:
+            包含 items、total、trade_date（YYYY-MM-DD）的字典
         """
         try:
-            start_date_fmt = start_date.replace('-', '') if start_date and '-' in start_date else start_date
-            end_date_fmt = end_date.replace('-', '') if end_date and '-' in end_date else end_date
+            resolved_date = trade_date or await self.resolve_default_trade_date()
 
-            items = await asyncio.to_thread(
-                self.dc_index_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                name=name,
+            if not resolved_date:
+                return {"items": [], "total": 0, "trade_date": None}
+
+            trade_date_yyyymmdd = resolved_date.replace('-', '')
+
+            result = await asyncio.to_thread(
+                self.dc_index_repo.get_by_trade_date,
+                trade_date=trade_date_yyyymmdd,
                 idx_type=idx_type,
-                limit=limit
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order
             )
 
-            return {
-                "items": items,
-                "total": len(items)
-            }
+            result['trade_date'] = resolved_date
+            return result
 
         except Exception as e:
             logger.error(f"获取东方财富板块数据失败: {e}")

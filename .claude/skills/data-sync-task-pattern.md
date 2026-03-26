@@ -1419,5 +1419,88 @@ SELECT * FROM pg_get_keywords() WHERE word = 'leading' AND catcode = 'R';
 
 ---
 
-**最后更新**: 2026-03-25
-**版本**: 1.2.0
+### 模式 7：同步对话框支持"全部"选项（依次提交多个任务）
+
+当数据接口的某个必填枚举参数（如 `idx_type`）需要分类同步时，可在对话框里加"全部"选项，让用户一键提交所有类别的任务。
+
+**前端实现**：
+
+```typescript
+// 枚举选项常量（和筛选器共用，避免重复定义）
+const TYPE_OPTIONS = [
+  { value: '概念板块', label: '概念板块' },
+  { value: '行业板块', label: '行业板块' },
+  { value: '地域板块', label: '地域板块' },
+]
+
+// 提取单次提交逻辑，供单选和"全部"复用
+const submitSingleSync = async (typeVal: string, baseParams: any) => {
+  const response = await api.syncAsync({ ...baseParams, idx_type: typeVal })
+  if (response.code === 200 && response.data) {
+    const taskId = response.data.celery_task_id
+    addTask({ taskId, ... })
+    const cb = (task: any) => {
+      if (task.status === 'success') { loadData(1); toast.success(`${typeVal}同步完成`) }
+      unregisterCompletionCallback(taskId, cb)
+      activeCallbacksRef.current.delete(taskId)
+    }
+    activeCallbacksRef.current.set(taskId, cb)
+    registerCompletionCallback(taskId, cb)
+    triggerPoll()
+  } else {
+    throw new Error(response.message || `${typeVal}提交失败`)
+  }
+}
+
+// 主提交函数：ALL 时循环，否则单次
+const handleSync = async () => {
+  setSyncDialogOpen(false)
+  try {
+    const baseParams = { /* 日期等公共参数 */ }
+    if (syncType === 'ALL') {
+      for (const t of TYPE_OPTIONS.map(o => o.value)) {
+        await submitSingleSync(t, baseParams)  // 依次提交，非并发
+      }
+      toast.success('已依次提交三个同步任务')
+    } else {
+      await submitSingleSync(syncType, baseParams)
+      toast.success('同步任务已提交')
+    }
+  } catch (err: any) {
+    toast.error(err.message || '提交失败')
+  }
+}
+```
+
+**Select 选项**（在 Dialog 里）：
+```tsx
+<Select value={syncType} onValueChange={setSyncType}>
+  <SelectContent>
+    <SelectItem value="ALL">全部（类型A + 类型B + 类型C）</SelectItem>
+    {TYPE_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+  </SelectContent>
+</Select>
+```
+
+**积分提示**：选"全部"时应明确显示总积分消耗（N × 单次积分）。
+
+**提交按钮样式**：选"全部"时可用 `bg-orange-600` 视觉提示高消耗：
+```tsx
+<Button
+  onClick={handleSync}
+  disabled={syncing || !syncType}
+  className={syncType === 'ALL' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+>
+  提交同步任务
+</Button>
+```
+
+**注意事项**：
+- 用 `for...of` + `await` 顺序提交，避免并发过载后端和 Celery broker
+- 每个任务独立注册完成回调，各自 toast 通知
+- `submitSingleSync` 抛出异常时 `handleSync` 的 `catch` 会捕获，后续任务不再提交（fail-fast）
+
+---
+
+**最后更新**: 2026-03-26
+**版本**: 1.3.0

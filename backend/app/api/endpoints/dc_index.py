@@ -17,25 +17,15 @@ router = APIRouter()
 
 @router.get("")
 async def get_dc_index(
-    ts_code: Optional[str] = Query(None, description="板块代码"),
-    name: Optional[str] = Query(None, description="板块名称（模糊匹配）"),
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD，为空时自动解析最近有数据的交易日"),
     idx_type: Optional[str] = Query(None, description="板块类型（概念板块/行业板块/地域板块）"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=5000),
-    page: int = Query(1, description="页码", ge=1)
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(100, description="每页记录数", ge=1, le=500),
+    sort_by: Optional[str] = Query(None, description="排序字段（pct_change/leading_pct/turnover_rate/total_mv/up_num/down_num）"),
+    sort_order: Optional[str] = Query(None, description="排序方向（asc/desc）"),
 ):
     """
-    查询东方财富板块数据
-
-    Args:
-        ts_code: 板块代码
-        name: 板块名称（模糊匹配）
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        idx_type: 板块类型（概念板块/行业板块/地域板块）
-        limit: 返回记录数
-        page: 页码
+    查询东方财富板块数据（单日分页模式）
 
     Returns:
         东方财富板块数据列表
@@ -43,12 +33,12 @@ async def get_dc_index(
     try:
         service = DcIndexService()
         result = await service.get_dc_index_data(
-            ts_code=ts_code,
-            name=name,
-            start_date=start_date,
-            end_date=end_date,
+            trade_date=trade_date,
             idx_type=idx_type,
-            limit=limit
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order
         )
 
         return ApiResponse.success(data=result)
@@ -60,23 +50,22 @@ async def get_dc_index(
 
 @router.get("/statistics")
 async def get_statistics(
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    ts_code: Optional[str] = Query(None, description="板块代码"),
-    idx_type: Optional[str] = Query(None, description="板块类型")
+    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
+    idx_type: Optional[str] = Query(None, description="板块类型（概念板块/行业板块/地域板块）"),
 ):
     """
-    获取东方财富板块数据统计信息
+    获取东方财富板块数据统计信息（按单日或全量汇总）
 
     Returns:
         统计信息
     """
     try:
         service = DcIndexService()
+        # trade_date 转为同一天的 start/end 范围查询
+        date_fmt = trade_date.replace('-', '') if trade_date else None
         stats = await service.get_statistics(
-            ts_code=ts_code,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=date_fmt,
+            end_date=date_fmt,
             idx_type=idx_type
         )
 

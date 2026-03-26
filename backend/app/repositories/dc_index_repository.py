@@ -21,6 +21,8 @@ class DcIndexRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ DcIndexRepository initialized")
 
+    SORTABLE_COLUMNS = {'pct_change', 'leading_pct', 'turnover_rate', 'total_mv', 'up_num', 'down_num'}
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
@@ -120,6 +122,97 @@ class DcIndexRepository(BaseRepository):
 
             logger.debug(f"查询到 {len(data)} 条板块数据")
             return data
+
+        except Exception as e:
+            logger.error(f"查询板块数据失败: {e}")
+            raise QueryError(
+                "板块数据查询失败",
+                error_code="DC_INDEX_QUERY_FAILED",
+                reason=str(e)
+            )
+
+    def get_by_trade_date(
+        self,
+        trade_date: str,
+        idx_type: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
+    ) -> Dict:
+        """
+        按单日交易日期分页查询板块数据（支持后端排序）
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD
+            idx_type: 板块类型（可选）
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单：pct_change/leading_pct/turnover_rate/total_mv/up_num/down_num）
+            sort_order: 排序方向（asc/desc）
+
+        Returns:
+            包含 items、total、trade_date 的字典
+
+        Examples:
+            >>> repo = DcIndexRepository()
+            >>> result = repo.get_by_trade_date('20250326', idx_type='概念板块', page=1)
+        """
+        try:
+            conditions = ["trade_date = %s"]
+            params: list = [trade_date]
+
+            if idx_type:
+                conditions.append("idx_type = %s")
+                params.append(idx_type)
+
+            where_clause = " AND ".join(conditions)
+
+            # 排序白名单防注入
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order and sort_order.lower() == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY pct_change DESC NULLS LAST"
+
+            count_query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            count_result = self.execute_query(count_query, tuple(params))
+            total = count_result[0][0] if count_result else 0
+
+            offset = (page - 1) * page_size
+            data_query = f"""
+                SELECT
+                    ts_code, trade_date, name, leading_stock, leading_code,
+                    pct_change, leading_pct, total_mv, turnover_rate,
+                    up_num, down_num, idx_type, level
+                FROM {self.TABLE_NAME}
+                WHERE {where_clause}
+                {order_clause}
+                LIMIT %s OFFSET %s
+            """
+            data_params = tuple(params) + (page_size, offset)
+            result = self.execute_query(data_query, data_params)
+
+            items = []
+            for row in result:
+                items.append({
+                    'ts_code': row[0],
+                    'trade_date': row[1],
+                    'name': row[2],
+                    'leading_stock': row[3],
+                    'leading_code': row[4],
+                    'pct_change': float(row[5]) if row[5] is not None else None,
+                    'leading_pct': float(row[6]) if row[6] is not None else None,
+                    'total_mv': float(row[7]) if row[7] is not None else None,
+                    'turnover_rate': float(row[8]) if row[8] is not None else None,
+                    'up_num': row[9],
+                    'down_num': row[10],
+                    'idx_type': row[11],
+                    'level': row[12],
+                })
+
+            logger.debug(f"查询到 {len(items)} 条板块数据（共 {total} 条）")
+            return {'items': items, 'total': total, 'trade_date': trade_date}
 
         except Exception as e:
             logger.error(f"查询板块数据失败: {e}")

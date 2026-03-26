@@ -2,13 +2,12 @@ import { BaseApiClient } from './base'
 import type { ApiResponse } from '@/types/api'
 
 export interface DcIndexParams {
-  ts_code?: string
-  name?: string
-  start_date?: string
-  end_date?: string
+  trade_date?: string
   idx_type?: string
-  limit?: number
   page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 export interface DcIndexData {
@@ -40,14 +39,13 @@ export class DcIndexApiClient extends BaseApiClient {
   async getData(params?: DcIndexParams): Promise<ApiResponse<{
     items: DcIndexData[]
     total: number
+    trade_date: string | null
   }>> {
     return this.get('/api/dc-index', { params })
   }
 
   async getStatistics(params?: {
-    ts_code?: string
-    start_date?: string
-    end_date?: string
+    trade_date?: string
     idx_type?: string
   }): Promise<ApiResponse<DcIndexStatistics>> {
     return this.get('/api/dc-index/statistics', { params })
