@@ -2,10 +2,12 @@ import { BaseApiClient } from './base'
 import type { ApiResponse } from '@/types/api'
 
 export interface LimitCptParams {
-  start_date?: string
-  end_date?: string
+  trade_date?: string
   ts_code?: string
-  limit?: number
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
 }
 
 export interface LimitCptData {
@@ -33,11 +35,13 @@ export interface LimitCptStatistics {
 
 export class LimitCptApiClient extends BaseApiClient {
   /**
-   * 获取最强板块统计数据
+   * 获取最强板块统计数据（支持分页，统计信息随数据一起返回）
    */
   async getData(params?: LimitCptParams): Promise<ApiResponse<{
     items: LimitCptData[]
     total: number
+    trade_date: string | null
+    statistics: LimitCptStatistics
   }>> {
     return this.get('/api/limit-cpt', { params })
   }
@@ -45,7 +49,7 @@ export class LimitCptApiClient extends BaseApiClient {
   /**
    * 获取最强板块统计信息
    */
-  async getStatistics(params?: Omit<LimitCptParams, 'limit' | 'ts_code'>): Promise<ApiResponse<LimitCptStatistics>> {
+  async getStatistics(params?: { start_date?: string; end_date?: string }): Promise<ApiResponse<LimitCptStatistics>> {
     return this.get('/api/limit-cpt/statistics', { params })
   }
 

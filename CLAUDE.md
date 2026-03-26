@@ -319,7 +319,7 @@ triggerPoll()  // Header 图标即时更新
 - 龙虎榜机构明细页面（`/boardgame/top-inst`）
 - 涨跌停列表页面（`/boardgame/limit-list`）
 - 连板天梯页面（`/boardgame/limit-step`）**（2026-03-26 全面优化：筛选改为单日交易日期、股票列合并名称+代码可点击跳转、后端排序（连板次数白名单防注入）、分页查询、默认加载最近有数据的交易日并回填日期选择器）**
-- 最强板块统计页面（`/boardgame/limit-cpt`）
+- 最强板块统计页面（`/boardgame/limit-cpt`）**（2026-03-26 全面优化：筛选改为单日交易日期、板块列合并名称+代码、后端排序（up_nums/cons_nums/pct_chg/days/rank 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+统计、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**
 - 卖方盈利预测数据页面（`/features/report-rc`）
 - 个股异常波动页面（`/reference-data/stk-shock`）
 - 个股严重异常波动页面（`/reference-data/stk-high-shock`）

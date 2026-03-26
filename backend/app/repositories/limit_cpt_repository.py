@@ -12,6 +12,9 @@ class LimitCptRepository(BaseRepository):
 
     TABLE_NAME = "limit_cpt_list"
 
+    # 允许排序的列白名单，防止 SQL 注入
+    SORTABLE_COLUMNS = {'up_nums', 'cons_nums', 'pct_chg', 'days', 'rank'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ LimitCptRepository initialized")
@@ -21,7 +24,10 @@ class LimitCptRepository(BaseRepository):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'asc'
     ) -> List[Dict]:
         """
         按日期范围查询最强板块统计数据
@@ -31,6 +37,9 @@ class LimitCptRepository(BaseRepository):
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 板块代码（可选）
             limit: 返回记录数限制
+            offset: 偏移量（分页）
+            sort_by: 排序字段（白名单：up_nums, cons_nums, pct_chg, days, rank）
+            sort_order: 排序方向（asc/desc）
 
         Returns:
             数据列表
@@ -56,6 +65,14 @@ class LimitCptRepository(BaseRepository):
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
             limit_clause = f"LIMIT {limit}" if limit else ""
+            offset_clause = f"OFFSET {offset}" if offset else ""
+
+            # 排序：仅允许白名单列，防止 SQL 注入
+            order = 'DESC' if sort_order.lower() != 'asc' else 'ASC'
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST, trade_date DESC, rank ASC"
+            else:
+                order_clause = "ORDER BY trade_date DESC, rank ASC"
 
             query = f"""
                 SELECT
@@ -63,8 +80,9 @@ class LimitCptRepository(BaseRepository):
                     cons_nums, up_nums, pct_chg, rank
                 FROM {self.TABLE_NAME}
                 {where_clause}
-                ORDER BY trade_date DESC, rank ASC
+                {order_clause}
                 {limit_clause}
+                {offset_clause}
             """
 
             result = self.execute_query(query, tuple(params) if params else None)
@@ -224,6 +242,74 @@ class LimitCptRepository(BaseRepository):
         except Exception as e:
             logger.error(f"获取涨停家数排名失败: {e}")
             raise
+
+    def get_count_by_date_range(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的总记录数（用于分页）
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 板块代码（可选）
+
+        Returns:
+            总记录数
+
+        Examples:
+            >>> repo = LimitCptRepository()
+            >>> total = repo.get_count_by_date_range('20240115', '20240115')
+        """
+        try:
+            conditions = []
+            params = []
+
+            if start_date:
+                conditions.append("trade_date >= %s")
+                params.append(start_date)
+            if end_date:
+                conditions.append("trade_date <= %s")
+                params.append(end_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} {where_clause}"
+            result = self.execute_query(query, tuple(params) if params else None)
+            return result[0][0] if result else 0
+
+        except Exception as e:
+            logger.error(f"获取总记录数失败: {e}")
+            return 0
+
+    def exists_by_date(self, trade_date: str) -> bool:
+        """
+        检查指定日期是否有数据
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD
+
+        Returns:
+            存在返回True，否则返回False
+
+        Examples:
+            >>> repo = LimitCptRepository()
+            >>> if repo.exists_by_date('20240115'):
+            >>>     print("数据已存在")
+        """
+        try:
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE trade_date = %s"
+            result = self.execute_query(query, (trade_date,))
+            return result[0][0] > 0 if result else False
+
+        except Exception as e:
+            logger.error(f"检查数据是否存在失败: {e}")
+            return False
 
     def bulk_upsert(self, df: pd.DataFrame) -> int:
         """

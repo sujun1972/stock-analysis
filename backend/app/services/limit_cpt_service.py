@@ -2,6 +2,7 @@
 最强板块统计 Service
 """
 import asyncio
+from datetime import datetime
 from typing import Dict, List, Optional
 import pandas as pd
 from loguru import logger
@@ -18,36 +19,74 @@ class LimitCptService:
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ LimitCptService initialized")
 
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        解析默认交易日期：今天有数据则返回今天，否则返回最近有数据的交易日（YYYY-MM-DD格式）
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(
+            self.limit_cpt_repo.exists_by_date, today
+        )
+        if has_today:
+            return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+
+        latest = await asyncio.to_thread(
+            self.limit_cpt_repo.get_latest_trade_date
+        )
+        if latest:
+            return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+        return None
+
     async def get_limit_cpt_data(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: int = 30
+        limit: int = 100,
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'asc'
     ) -> Dict:
         """
         获取最强板块统计数据
 
         Args:
-            start_date: 开始日期，格式：YYYY-MM-DD
-            end_date: 结束日期，格式：YYYY-MM-DD
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
             ts_code: 板块代码
-            limit: 返回记录数限制
+            limit: 每页记录数
+            offset: 偏移量（分页）
+            sort_by: 排序字段
+            sort_order: 排序方向
 
         Returns:
-            数据字典，包含 items 和 total
+            数据字典，包含 items、total、statistics
         """
-        # 日期格式转换（YYYY-MM-DD -> YYYYMMDD）
-        start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
-        end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
-
-        # 从数据库查询
-        items = await asyncio.to_thread(
+        # 并发获取数据、总数和统计
+        items_coro = asyncio.to_thread(
             self.limit_cpt_repo.get_by_date_range,
-            start_date=start_date_fmt,
-            end_date=end_date_fmt,
+            start_date=start_date,
+            end_date=end_date,
             ts_code=ts_code,
-            limit=limit
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        total_coro = asyncio.to_thread(
+            self.limit_cpt_repo.get_count_by_date_range,
+            start_date=start_date,
+            end_date=end_date,
+            ts_code=ts_code
+        )
+        statistics_coro = asyncio.to_thread(
+            self.limit_cpt_repo.get_statistics,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        items, total, statistics = await asyncio.gather(
+            items_coro, total_coro, statistics_coro
         )
 
         # 日期格式转换（YYYYMMDD -> YYYY-MM-DD）
@@ -57,7 +96,8 @@ class LimitCptService:
 
         return {
             "items": items,
-            "total": len(items)
+            "total": total,
+            "statistics": statistics
         }
 
     async def get_statistics(

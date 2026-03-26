@@ -16,35 +16,52 @@ router = APIRouter()
 
 @router.get("")
 async def get_limit_cpt(
-    start_date: Optional[date] = Query(None, description="开始日期"),
-    end_date: Optional[date] = Query(None, description="结束日期"),
+    trade_date: Optional[date] = Query(None, description="交易日期（单日查询）"),
     ts_code: Optional[str] = Query(None, description="板块代码"),
-    limit: int = Query(30, ge=1, le=1000, description="返回记录数限制")
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(100, ge=1, le=500, description="每页记录数"),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: str = Query('asc', description="排序方向：asc/desc")
 ):
     """
-    查询最强板块统计数据
+    查询最强板块统计数据（支持分页）
 
     Args:
-        start_date: 开始日期
-        end_date: 结束日期
+        trade_date: 交易日期（单日查询，不传则自动取最近有数据的交易日）
         ts_code: 板块代码
-        limit: 返回记录数限制
+        page: 页码
+        page_size: 每页记录数
+        sort_by: 排序字段（up_nums/cons_nums/pct_chg/days/rank）
+        sort_order: 排序方向（asc/desc）
 
     Returns:
         最强板块统计数据列表
     """
     service = LimitCptService()
 
-    # 日期格式转换
-    start_date_str = start_date.strftime('%Y-%m-%d') if start_date else None
-    end_date_str = end_date.strftime('%Y-%m-%d') if end_date else None
+    if trade_date:
+        date_str = trade_date.strftime('%Y%m%d')
+        resolved_date = trade_date.strftime('%Y-%m-%d')
+    else:
+        # 未传日期：自动解析最近有数据的交易日（YYYY-MM-DD格式）
+        resolved_date = await service.resolve_default_trade_date()
+        if resolved_date:
+            date_str = resolved_date.replace('-', '')
+        else:
+            date_str = None
+
+    offset = (page - 1) * page_size
 
     result = await service.get_limit_cpt_data(
-        start_date=start_date_str,
-        end_date=end_date_str,
+        start_date=date_str,
+        end_date=date_str,
         ts_code=ts_code,
-        limit=limit
+        limit=page_size,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
+    result['trade_date'] = resolved_date
 
     return ApiResponse.success(data=result)
 
@@ -142,10 +159,8 @@ async def sync_async(
         任务提交结果
     """
     from app.tasks.limit_cpt_tasks import sync_limit_cpt_task
-    from datetime import datetime
 
     # 日期格式转换（YYYY-MM-DD -> YYYYMMDD）
-    # 如果未提供日期，使用今天
     if trade_date:
         trade_date_formatted = trade_date.strftime('%Y%m%d')
     else:
