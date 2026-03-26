@@ -2,12 +2,14 @@
 龙虎榜机构明细 Service
 """
 import asyncio
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, Optional
 import pandas as pd
 from loguru import logger
 
 from app.repositories import TopInstRepository
 from app.repositories.trading_calendar_repository import TradingCalendarRepository
+from app.services.stock_quote_cache import stock_quote_cache
 from core.src.providers import DataProviderFactory
 
 
@@ -20,39 +22,77 @@ class TopInstService:
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ TopInstService initialized")
 
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        未指定日期时解析默认交易日：
+        先查今天是否有数据，无则回退到数据库中最近有数据的交易日。
+
+        Returns:
+            日期字符串，格式：YYYY-MM-DD；若无任何数据返回 None
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        count = await asyncio.to_thread(
+            self.top_inst_repo.get_record_count,
+            start_date=today,
+            end_date=today
+        )
+        if count > 0:
+            return self._format_date(today)
+
+        latest = await asyncio.to_thread(self.top_inst_repo.get_latest_trade_date)
+        return self._format_date(latest) if latest else None
+
     async def get_top_inst_data(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         side: Optional[str] = None,
-        limit: int = 30
+        page: int = 1,
+        page_size: int = 30,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> Dict:
         """
-        获取龙虎榜机构明细数据
+        获取龙虎榜机构明细数据（支持分页和排序）
 
         Args:
             start_date: 开始日期，格式：YYYY-MM-DD
             end_date: 结束日期，格式：YYYY-MM-DD
             ts_code: 股票代码
             side: 买卖类型（0：买入，1：卖出）
-            limit: 返回记录数限制
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段
+            sort_order: 排序方向（asc/desc）
 
         Returns:
-            数据字典，包含 items 和 total
+            数据字典，包含 items、total 和 trade_date
         """
         # 日期格式转换（YYYY-MM-DD -> YYYYMMDD）
         start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
         end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
-        # 从数据库查询
-        items = await asyncio.to_thread(
-            self.top_inst_repo.get_by_date_range,
-            start_date=start_date_fmt,
-            end_date=end_date_fmt,
-            ts_code=ts_code,
-            side=side,
-            limit=limit
+        # 并发查询数据和总数
+        items, total = await asyncio.gather(
+            asyncio.to_thread(
+                self.top_inst_repo.get_by_date_range,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt,
+                ts_code=ts_code,
+                side=side,
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order
+            ),
+            asyncio.to_thread(
+                self.top_inst_repo.get_count_by_date_range,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt,
+                ts_code=ts_code,
+                side=side
+            )
         )
 
         # 日期格式转换（YYYYMMDD -> YYYY-MM-DD）
@@ -60,18 +100,19 @@ class TopInstService:
             if item['trade_date']:
                 item['trade_date'] = self._format_date(item['trade_date'])
 
-        # 金额单位换算（元 -> 万元）
-        for item in items:
-            if item['buy'] is not None:
-                item['buy'] = item['buy'] / 10000
-            if item['sell'] is not None:
-                item['sell'] = item['sell'] / 10000
-            if item['net_buy'] is not None:
-                item['net_buy'] = item['net_buy'] / 10000
+        self._convert_amounts(items)
+
+        # 注入股票名称（仅 name，不传价格和涨跌幅至前端）
+        if items:
+            ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
+            quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
+            for item in items:
+                item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
 
         return {
             "items": items,
-            "total": len(items)
+            "total": total,
+            "trade_date": start_date
         }
 
     async def get_statistics(
@@ -103,12 +144,9 @@ class TopInstService:
             ts_code=ts_code
         )
 
-        # 金额单位换算（元 -> 万元）
-        statistics['avg_net_buy'] = statistics['avg_net_buy'] / 10000
-        statistics['max_net_buy'] = statistics['max_net_buy'] / 10000
-        statistics['min_net_buy'] = statistics['min_net_buy'] / 10000
-        statistics['total_net_buy'] = statistics['total_net_buy'] / 10000
-        statistics['total_net_sell'] = statistics['total_net_sell'] / 10000
+        # 金额字段统一换算为万元
+        for key in ('avg_net_buy', 'max_net_buy', 'min_net_buy', 'total_net_buy', 'total_net_sell'):
+            statistics[key] = statistics[key] / 10000
 
         return statistics
 
@@ -142,14 +180,7 @@ class TopInstService:
             if item['trade_date']:
                 item['trade_date'] = self._format_date(item['trade_date'])
 
-        # 金额单位换算（元 -> 万元）
-        for item in items:
-            if item['buy'] is not None:
-                item['buy'] = item['buy'] / 10000
-            if item['sell'] is not None:
-                item['sell'] = item['sell'] / 10000
-            if item['net_buy'] is not None:
-                item['net_buy'] = item['net_buy'] / 10000
+        self._convert_amounts(items)
 
         return {
             "latest_date": self._format_date(latest_date),
@@ -264,6 +295,16 @@ class TopInstService:
 
         logger.info(f"数据清洗完成，保留 {len(df)} 条有效记录")
         return df
+
+    def _convert_amounts(self, items: list) -> None:
+        """将 items 中的买卖金额从元就地换算为万元（原始数据单位：元）"""
+        for item in items:
+            if item['buy'] is not None:
+                item['buy'] = item['buy'] / 10000
+            if item['sell'] is not None:
+                item['sell'] = item['sell'] / 10000
+            if item['net_buy'] is not None:
+                item['net_buy'] = item['net_buy'] / 10000
 
     def _format_date(self, date_str: str) -> str:
         """

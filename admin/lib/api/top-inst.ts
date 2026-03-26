@@ -5,11 +5,15 @@ import type { ApiResponse } from '@/types/api'
  * 龙虎榜机构明细查询参数
  */
 export interface TopInstParams {
+  trade_date?: string
   start_date?: string
   end_date?: string
   ts_code?: string
   side?: string  // 0：买入，1：卖出
-  limit?: number
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 /**
@@ -26,6 +30,7 @@ export interface TopInstItem {
   sell_rate: number | null  // 卖出占总成交比例
   net_buy: number | null  // 净成交额（万元）
   reason: string | null  // 上榜理由
+  name: string | null  // 股票名称（行情缓存注入）
 }
 
 /**
@@ -48,11 +53,12 @@ export interface TopInstStatistics {
  */
 export class TopInstApiClient extends BaseApiClient {
   /**
-   * 查询龙虎榜机构明细数据
+   * 查询龙虎榜机构明细数据（支持分页和排序）
    */
   async getTopInst(params?: TopInstParams): Promise<ApiResponse<{
     items: TopInstItem[]
     total: number
+    trade_date: string | null
   }>> {
     return this.get('/api/top-inst', { params })
   }
@@ -61,6 +67,7 @@ export class TopInstApiClient extends BaseApiClient {
    * 获取龙虎榜机构明细统计信息
    */
   async getStatistics(params?: {
+    trade_date?: string
     start_date?: string
     end_date?: string
     ts_code?: string

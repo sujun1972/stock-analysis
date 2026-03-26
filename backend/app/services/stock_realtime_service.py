@@ -217,7 +217,7 @@ class StockRealtimeService:
             )
 
             # 检查响应
-            if not response or not response.data or response.data.empty:
+            if not response or response.data is None or response.data.empty:
                 error_msg = "未获取到实时行情数据"
 
                 # 如果没有保存任何数据，说明获取失败

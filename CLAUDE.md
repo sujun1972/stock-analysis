@@ -368,6 +368,53 @@ triggerPoll()  // Header 图标即时更新
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
+### 股票行情缓存（StockQuoteCache）
+
+**位置**：`backend/app/services/stock_quote_cache.py`
+
+当页面需要展示股票名称、价格、涨跌幅等行情信息，但数据表中只有 `ts_code` 时，使用 `StockQuoteCache` 注入行情数据，避免跨表 JOIN。
+
+**使用方式**：
+```python
+from app.services.stock_quote_cache import stock_quote_cache
+
+# 批量获取行情（在 Service 层调用）
+ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
+quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
+for item in items:
+    item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
+```
+
+**缓存策略**：
+- 数据来源：`stock_basic`（名称）LEFT JOIN `stock_realtime`（价格/涨跌幅）
+- Redis key：`stock:quote:{ts_code}`
+- TTL：交易时间（09:30-11:30 / 13:00-15:00 工作日）= 60s，非交易时间 = 3600s
+- 降级：Redis 不可用时直接查数据库
+
+**已接入的 Service**：
+- `TopInstService.get_top_inst_data()` — 龙虎榜机构明细
+
+### 股票代码自动补全（resolve_ts_code）
+
+用户输入纯数字代码（如 `000001`），后端自动补全为完整 ts_code（如 `000001.SZ`）。
+
+**使用方式**（在 API 端点中）：
+```python
+from app.services.stock_quote_cache import stock_quote_cache
+
+resolved_ts_code = await stock_quote_cache.resolve_ts_code(ts_code) if ts_code else None
+result = await service.get_data(ts_code=resolved_ts_code, ...)
+```
+
+**规则**：输入含 `.` → 直接返回（转大写）；纯数字 → 查 `stock_basic.code` 补全后缀；查不到 → 返回 `None`
+
+**缓存策略**：Redis key `stock:code_map:{pure_code}`，TTL 86400s（交易所后缀极少变化）
+
+**已接入的端点**：
+- `GET /api/top-inst` — 龙虎榜机构明细
+
+**前端规范**：只需将 Input placeholder 改为 `如 000001 或 000001.SZ`，无需其他改动。详见 `.claude/skills/stock-code-resolve.md`。
+
 ### 同步默认日期规范
 
 **Service 层 sync 方法不得硬编码 `yesterday`**。当 `trade_date=None` 时，根据 Tushare 接口特性选择以下两种正确方式之一：

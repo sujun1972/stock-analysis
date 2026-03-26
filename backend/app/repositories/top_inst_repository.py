@@ -13,6 +13,8 @@ class TopInstRepository(BaseRepository):
 
     TABLE_NAME = "top_inst"
 
+    SORTABLE_COLUMNS = {'buy', 'sell', 'net_buy', 'buy_rate', 'sell_rate'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ TopInstRepository initialized")
@@ -23,17 +25,23 @@ class TopInstRepository(BaseRepository):
         end_date: str,
         ts_code: Optional[str] = None,
         side: Optional[str] = None,
-        limit: Optional[int] = None
+        page: int = 1,
+        page_size: int = 30,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc'
     ) -> List[Dict]:
         """
-        按日期范围查询龙虎榜机构明细
+        按日期范围查询龙虎榜机构明细（支持分页和排序）
 
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 股票代码（可选）
             side: 买卖类型（可选，0：买入，1：卖出）
-            limit: 返回记录数限制（可选）
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单：buy/sell/net_buy/buy_rate/sell_rate）
+            sort_order: 排序方向（asc/desc）
 
         Returns:
             龙虎榜机构明细列表
@@ -55,16 +63,24 @@ class TopInstRepository(BaseRepository):
             params.append(side)
 
         where_clause = " AND ".join(conditions)
+
+        # 排序白名单防 SQL 注入
+        order = 'DESC' if sort_order.lower() != 'asc' else 'ASC'
+        if sort_by and sort_by in self.SORTABLE_COLUMNS:
+            order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+        else:
+            order_clause = "ORDER BY trade_date DESC, ABS(net_buy) DESC NULLS LAST"
+
+        offset = (page - 1) * page_size
         query = f"""
             SELECT trade_date, ts_code, exalter, side, buy, buy_rate,
                    sell, sell_rate, net_buy, reason
             FROM {self.TABLE_NAME}
             WHERE {where_clause}
-            ORDER BY trade_date DESC, ABS(net_buy) DESC
+            {order_clause}
+            LIMIT %s OFFSET %s
         """
-
-        if limit:
-            query += f" LIMIT {limit}"
+        params.extend([page_size, offset])
 
         try:
             result = self.execute_query(query, tuple(params))
@@ -76,6 +92,45 @@ class TopInstRepository(BaseRepository):
                 error_code="TOP_INST_QUERY_FAILED",
                 reason=str(e)
             )
+
+    def get_count_by_date_range(
+        self,
+        start_date: str,
+        end_date: str,
+        ts_code: Optional[str] = None,
+        side: Optional[str] = None
+    ) -> int:
+        """
+        获取指定条件下的总记录数（用于分页）
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+            side: 买卖类型（可选）
+
+        Returns:
+            记录总数
+        """
+        conditions = ["trade_date >= %s", "trade_date <= %s"]
+        params = [start_date, end_date]
+
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        if side is not None:
+            conditions.append("side = %s")
+            params.append(side)
+
+        where_clause = " AND ".join(conditions)
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+
+        try:
+            result = self.execute_query(query, tuple(params))
+            return int(result[0][0]) if result else 0
+        except Exception as e:
+            logger.error(f"查询龙虎榜机构明细记录数失败: {e}")
+            return 0
 
     def get_by_trade_date(self, trade_date: str, ts_code: Optional[str] = None) -> List[Dict]:
         """
