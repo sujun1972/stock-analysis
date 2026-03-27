@@ -510,7 +510,7 @@ export default function MoneyflowStockDcPage() {
                       tick={{ fontSize: 11 }}
                     />
                     <YAxis tickFormatter={(v) => v.toFixed(1)} />
-                    <Tooltip formatter={(v: number) => v.toFixed(2) + '亿'} />
+                    <Tooltip formatter={(v) => typeof v === 'number' ? v.toFixed(2) + '亿' : '-'} />
                     <Legend />
                     <Bar dataKey="主力净流入" fill="#8884d8" />
                     <Bar dataKey="超大单" fill="#82ca9d" />

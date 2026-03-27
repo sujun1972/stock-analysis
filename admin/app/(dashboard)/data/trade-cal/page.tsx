@@ -147,7 +147,7 @@ export default function TradeCalPage() {
   const columns: Column<TradeCalData>[] = [
     {
       key: 'exchange',
-      title: '交易所',
+      header: '交易所',
       width: '100px',
       accessor: (row) => (
         <Badge variant="outline">{row.exchange}</Badge>
@@ -155,12 +155,12 @@ export default function TradeCalPage() {
     },
     {
       key: 'cal_date',
-      title: '日期',
+      header: '日期',
       width: '130px',
     },
     {
       key: 'is_open',
-      title: '是否交易',
+      header: '是否交易',
       width: '100px',
       accessor: (row) => (
         <Badge variant={row.is_open === 1 ? 'default' : 'secondary'}>
@@ -170,7 +170,7 @@ export default function TradeCalPage() {
     },
     {
       key: 'pretrade_date',
-      title: '上一交易日',
+      header: '上一交易日',
       accessor: (row) => row.pretrade_date ?? '-'
     },
   ]
