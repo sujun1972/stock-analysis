@@ -98,6 +98,8 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 - `/monitoring` - 系统监控导航页
 - `/boardgame` - 打板专题导航页
 - `/reference-data` - 参考数据导航页（个股异常波动等）
+- `/moneyflow` - 资金流向导航页（个股/板块/大盘/沪深港通）
+- `/margin` - 两融数据导航页（融资融券汇总/明细/标的/转融资）
 
 这些页面以卡片形式展示子功能入口，解决了中间层级页面点击的问题。
 
@@ -105,9 +107,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 1. **路由与菜单归属一致**：页面的 URL 路径应与其所属菜单一致。例如打板专题下的页面应放在 `/boardgame/` 路径下，而非 `/data/`。
 
-2. **`parentOverrides` 机制**：当页面 URL 首段（如 `/data/moneyflow`）与菜单归属（资金流向）不一致时，在 `useBreadcrumbs.ts` 的 `parentOverrides` 中按完整路径覆盖父级显示名称和图标。目前需要 override 的情况：
-   - `/data/margin*`、`/data/slb-len` → 两融数据（`Wallet`）
-   - `/data/moneyflow*` → 资金流向（`DollarSign`）
+2. **`parentOverrides` 机制**：当页面 URL 首段与菜单归属不一致时，在 `useBreadcrumbs.ts` 的 `parentOverrides` 中按完整路径覆盖父级显示名称和图标。目前资金流向（`/moneyflow/*`）和两融数据（`/margin/*`）已迁移到独立路由，不再需要 override。
 
 3. **图标与菜单一致**：`routeIconMap` 中的图标必须与 `AdminLayout.tsx` 中对应菜单项的图标完全一致。
 
@@ -347,15 +347,15 @@ const handleSyncConfirm = async () => {
 
 **已实现的页面**：
 - 定时任务配置页面（`/settings/scheduler`）
-- 沪深港通资金流向页面（`/data/moneyflow-hsgt`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi（新增 getMoneyflowHsgt 方法）、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、趋势图改为 LineChart）**
-- 大盘资金流向页面（`/data/moneyflow-mkt-dc`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、移除无后端支持的前端伪排序）**
-- 板块资金流向页面（`/data/moneyflow-ind-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、page/page_size 分页（100条/页）、syncDialog 弹窗选日期+板块类型（全部时依次提交三任务）、isTaskRunning 实时派生 syncing、统计卡片左文字右图标、TOP 20 图表、模块化 API、时区安全日期构建、默认加载最近有数据的交易日并回填）**
-- 个股资金流向页面（Tushare）（`/data/moneyflow`）
-- 个股资金流向页面（DC）（`/data/moneyflow-stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
-- 融资融券交易汇总页面（`/data/margin`）
-- 融资融券交易明细页面（`/data/margin-detail`）
-- 融资融券标的页面（`/data/margin-secs`）
-- 转融资交易汇总页面（`/data/slb-len`）
+- 沪深港通资金流向页面（`/moneyflow/hsgt`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi（新增 getMoneyflowHsgt 方法）、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、趋势图改为 LineChart）**
+- 大盘资金流向页面（`/moneyflow/mkt-dc`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、移除无后端支持的前端伪排序）**
+- 板块资金流向页面（`/moneyflow/ind-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、page/page_size 分页（100条/页）、syncDialog 弹窗选日期+板块类型（全部时依次提交三任务）、isTaskRunning 实时派生 syncing、统计卡片左文字右图标、TOP 20 图表、模块化 API、时区安全日期构建、默认加载最近有数据的交易日并回填）**
+- 个股资金流向页面（Tushare）（`/moneyflow/stock`）
+- 个股资金流向页面（DC）（`/moneyflow/stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
+- 融资融券交易汇总页面（`/margin/summary`）
+- 融资融券交易明细页面（`/margin/detail`）
+- 融资融券标的页面（`/margin/secs`）
+- 转融资交易汇总页面（`/margin/slb-len`）
 - 龙虎榜每日明细页面（`/boardgame/top-list`）
 - 龙虎榜机构明细页面（`/boardgame/top-inst`）
 - 涨跌停列表页面（`/boardgame/limit-list`）
@@ -1514,7 +1514,7 @@ docker-compose down
 
 #### 沪深港通资金流向
 - **API端点**: `/api/moneyflow-hsgt`
-- **前端页面**: `/admin/app/(dashboard)/data/moneyflow-hsgt/page.tsx`
+- **前端页面**: `/admin/app/(dashboard)/moneyflow/hsgt/page.tsx`
 - **数据内容**: 沪股通、深股通、港股通(上海)、港股通(深圳)的每日资金流向
 - **特点**: 支持2026年及以后的最新数据，替代了仅支持到2025年的北向资金持股明细(hk_hold)
 - **积分消耗**: 2000积分/次（Tushare Pro接口）
@@ -1530,7 +1530,7 @@ docker-compose down
 
 #### 大盘资金流向（DC）
 - **API端点**: `/api/moneyflow-mkt-dc`
-- **前端页面**: `/admin/app/(dashboard)/data/moneyflow-mkt-dc/page.tsx`
+- **前端页面**: `/admin/app/(dashboard)/moneyflow/mkt-dc/page.tsx`
 - **数据内容**: 东方财富大盘资金流向，包含上证/深证指数及主力资金（超大单、大单、中单、小单）流入流出情况
 - **积分消耗**: 120积分/次（试用），6000积分/次（正式）
 - **页面功能**（2026-03-27 全面优化）:
@@ -1544,7 +1544,7 @@ docker-compose down
 
 #### 板块资金流向（DC）
 - **API端点**: `/api/moneyflow-ind-dc`
-- **前端页面**: `/admin/app/(dashboard)/data/moneyflow-ind-dc/page.tsx`
+- **前端页面**: `/admin/app/(dashboard)/moneyflow/ind-dc/page.tsx`
 - **数据内容**: 东方财富板块资金流向，包含行业、概念、地域板块的主力资金流入流出情况
 - **积分消耗**: 6000积分/次（Tushare Pro接口），"全部"同步消耗约 18000 积分（行业+概念+地域三个任务）
 - **页面功能**（2026-03-27 全面优化）:
@@ -1562,7 +1562,7 @@ docker-compose down
 
 #### 个股资金流向（Tushare）
 - **API端点**: `/api/moneyflow`
-- **前端页面**: `/admin/app/(dashboard)/data/moneyflow/page.tsx`
+- **前端页面**: `/admin/app/(dashboard)/moneyflow/stock/page.tsx`
 - **数据内容**: Tushare标准个股资金流向，基于主动买卖单统计，包含小单/中单/大单/特大单的买卖量和买卖额
 - **数据源**: Tushare `pro.moneyflow()` 接口
 - **积分消耗**: 2000积分/次（高消耗）
@@ -1583,7 +1583,7 @@ docker-compose down
 
 #### 个股资金流向（DC）
 - **API端点**: `/api/moneyflow-stock-dc`
-- **前端页面**: `/admin/app/(dashboard)/data/moneyflow-stock-dc/page.tsx`
+- **前端页面**: `/admin/app/(dashboard)/moneyflow/stock-dc/page.tsx`
 - **数据内容**: 东方财富个股资金流向，包含个股主力资金（超大单、大单、中单、小单）流入流出情况
 - **积分消耗**: 5000积分/次（Tushare Pro接口）
 - **页面功能**（2026-03-27 全面优化）:

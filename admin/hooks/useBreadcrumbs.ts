@@ -68,6 +68,8 @@ const routeLabelMap: Record<string, string> = {
   'monitoring': '系统监控',
   'profile': '个人中心',
   'boardgame': '打板专题',
+  'moneyflow': '资金流向',
+  'margin': '两融数据',
   'features': '特色数据',
   'market': '行情数据',
   'financial': '财务数据',
@@ -79,11 +81,13 @@ const routeLabelMap: Record<string, string> = {
   'limit-up': '涨停板池',
   'ai-analysis': 'AI分析',
   'premarket': '盘前预期',
-  'moneyflow-hsgt': '沪深港通资金流向',
-  'moneyflow': '个股资金流向（Tushare）',
-  'moneyflow-mkt-dc': '大盘资金流向（DC）',
-  'moneyflow-ind-dc': '板块资金流向（DC）',
-  'moneyflow-stock-dc': '个股资金流向（DC）',
+
+  // 资金流向子路由
+  'stock': '个股资金流向',
+  'stock-dc': '个股资金流向（DC）',
+  'ind-dc': '板块资金流向（DC）',
+  'mkt-dc': '大盘资金流向（DC）',
+  'hsgt': '沪深港通资金流向',
 
   // 系统设置子路由
   'system': '系统配置',
@@ -129,9 +133,11 @@ const routeLabelMap: Record<string, string> = {
   'dc-index': '东方财富概念板块',
   'dc-member': '东方财富板块成分',
   'dc-daily': '东财概念板块行情',
-  'margin': '融资融券交易汇总',
-  'margin-detail': '融资融券交易明细',
-  'margin-secs': '融资融券标的（盘前）',
+
+  // 两融数据子路由
+  'summary': '融资融券交易汇总',
+  'detail': '融资融券交易明细',
+  'secs': '融资融券标的（盘前）',
   'slb-len': '转融资交易汇总',
 
   // 行情数据子路由
@@ -197,6 +203,8 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   'monitoring': Activity,
   'profile': UserCog,
   'boardgame': ListOrdered,   // 打板专题
+  'moneyflow': DollarSign,    // 资金流向
+  'margin': Wallet,           // 两融数据
   'market': TrendingUpIcon,   // 行情数据
   'financial': FileText,      // 财务数据
   'reference-data': FileText, // 参考数据
@@ -296,18 +304,18 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   'stk-surv': Users,
   'broker-recommend': TrendingUpIcon,
 
-  // 两融数据子路由（对照菜单）
-  'margin': BarChart3,
-  'margin-detail': FileText,
-  'margin-secs': Activity,
+  // 两融数据子路由
+  'summary': BarChart3,
+  'detail': FileText,
+  'secs': Activity,
   'slb-len': TrendingUp,
 
-  // 资金流向子路由（对照菜单）
-  'moneyflow': Activity,
-  'moneyflow-stock-dc': TrendingUpIcon,
-  'moneyflow-ind-dc': BarChart3,
-  'moneyflow-mkt-dc': LineChart,
-  'moneyflow-hsgt': TrendingUp,
+  // 资金流向子路由
+  'stock': Activity,
+  'stock-dc': TrendingUpIcon,
+  'ind-dc': BarChart3,
+  'mkt-dc': LineChart,
+  'hsgt': TrendingUp,
 
   // 其他
   'dragon-tiger': Flame,
@@ -358,17 +366,6 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     // 某些页面的 URL 父级 segment 与菜单归属不一致，需要按完整 pathname 覆盖
     // 例如 /data/dc-daily 在打板专题菜单下，但 URL 首段是 data
     const parentOverrides: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
-      // 两融数据下的 /data/* 页面
-      '/data/margin':          { label: '两融数据', icon: Wallet },
-      '/data/margin-detail':   { label: '两融数据', icon: Wallet },
-      '/data/margin-secs':     { label: '两融数据', icon: Wallet },
-      '/data/slb-len':         { label: '两融数据', icon: Wallet },
-      // 资金流向下的 /data/* 页面
-      '/data/moneyflow':          { label: '资金流向', icon: DollarSign },
-      '/data/moneyflow-stock-dc': { label: '资金流向', icon: DollarSign },
-      '/data/moneyflow-ind-dc':   { label: '资金流向', icon: DollarSign },
-      '/data/moneyflow-mkt-dc':   { label: '资金流向', icon: DollarSign },
-      '/data/moneyflow-hsgt':     { label: '资金流向', icon: DollarSign },
     }
 
     segments.forEach((segment, index) => {

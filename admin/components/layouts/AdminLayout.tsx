@@ -339,25 +339,26 @@ const navItems: NavItem[] = [
   {
     name: '两融数据',
     icon: Wallet,
+    href: '/margin',
     children: [
       {
         name: '融资融券交易汇总',
-        href: '/data/margin',
+        href: '/margin/summary',
         icon: BarChart3
       },
       {
         name: '融资融券交易明细',
-        href: '/data/margin-detail',
+        href: '/margin/detail',
         icon: FileText
       },
       {
         name: '融资融券标的（盘前）',
-        href: '/data/margin-secs',
+        href: '/margin/secs',
         icon: Activity
       },
       {
         name: '转融资交易汇总',
-        href: '/data/slb-len',
+        href: '/margin/slb-len',
         icon: TrendingUp
       }
     ]
@@ -365,30 +366,31 @@ const navItems: NavItem[] = [
   {
     name: '资金流向',
     icon: DollarSign,
+    href: '/moneyflow',
     children: [
       {
         name: '个股资金流向',
-        href: '/data/moneyflow',
+        href: '/moneyflow/stock',
         icon: Activity
       },
       {
         name: '个股资金流向（DC）',
-        href: '/data/moneyflow-stock-dc',
+        href: '/moneyflow/stock-dc',
         icon: TrendingUpIcon
       },
       {
         name: '板块资金流向（DC）',
-        href: '/data/moneyflow-ind-dc',
+        href: '/moneyflow/ind-dc',
         icon: BarChart3
       },
       {
         name: '大盘资金流向（DC）',
-        href: '/data/moneyflow-mkt-dc',
+        href: '/moneyflow/mkt-dc',
         icon: LineChart
       },
       {
         name: '沪深港通资金流向',
-        href: '/data/moneyflow-hsgt',
+        href: '/moneyflow/hsgt',
         icon: TrendingUp
       }
     ]
