@@ -347,7 +347,7 @@ const handleSyncConfirm = async () => {
 
 **已实现的页面**：
 - 定时任务配置页面（`/settings/scheduler`）
-- 沪深港通资金流向页面（`/data/moneyflow-hsgt`）
+- 沪深港通资金流向页面（`/data/moneyflow-hsgt`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi（新增 getMoneyflowHsgt 方法）、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、趋势图改为 LineChart）**
 - 大盘资金流向页面（`/data/moneyflow-mkt-dc`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、移除无后端支持的前端伪排序）**
 - 板块资金流向页面（`/data/moneyflow-ind-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、page/page_size 分页（100条/页）、syncDialog 弹窗选日期+板块类型（全部时依次提交三任务）、isTaskRunning 实时派生 syncing、统计卡片左文字右图标、TOP 20 图表、模块化 API、时区安全日期构建、默认加载最近有数据的交易日并回填）**
 - 个股资金流向页面（Tushare）（`/data/moneyflow`）
@@ -1518,14 +1518,15 @@ docker-compose down
 - **数据内容**: 沪股通、深股通、港股通(上海)、港股通(深圳)的每日资金流向
 - **特点**: 支持2026年及以后的最新数据，替代了仅支持到2025年的北向资金持股明细(hk_hold)
 - **积分消耗**: 2000积分/次（Tushare Pro接口）
-- **页面功能**:
-  - 统计卡片：北向资金均值、累计净流入、北向最大流入、南向最大流出
-  - 趋势图表：北向和南向资金流向可视化
-  - 日期筛选：使用弹出式日历选择器（`@/components/ui/date-picker`）
+- **页面功能**（2026-03-27 全面优化）:
+  - 统计卡片：左文字右图标布局，北向资金均值、累计净流入、北向最大流入、南向最大流出（均带补充说明文字）
+  - 趋势图表：北向/南向资金流向折线图（LineChart，dot=false）
+  - 筛选器：日期范围查询，同步弹窗与查询日期解耦
   - 数据单位：统一使用亿元（原始数据为百万元）
-  - 响应式布局：
-    - 桌面端：表格视图，简化列头
-    - 移动端：卡片视图，垂直堆叠展示，斑马纹背景，淡蓝色交互反馈
+  - 同步弹窗：点击同步弹出 Dialog 选择日期范围（留空同步最新交易日）
+  - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_hsgt')` 派生，不用本地 boolean
+  - 模块化 API：使用 `moneyflowApi.getMoneyflowHsgt` / `syncMoneyflowHsgtAsync`
+  - 响应式布局：统一使用 DataTable `mobileCard` prop，移动端卡片含北向/南向双区块
 
 #### 大盘资金流向（DC）
 - **API端点**: `/api/moneyflow-mkt-dc`

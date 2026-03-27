@@ -84,6 +84,15 @@ export class MoneyflowApiClient extends BaseApiClient {
   // ========== 沪深港通资金流向 ==========
 
   /**
+   * 获取沪深港通资金流向数据
+   * @param params 查询参数
+   * @returns 沪深港通资金流向数据
+   */
+  async getMoneyflowHsgt(params?: MoneyflowHsgtParams): Promise<ApiResponse<any>> {
+    return this.get('/api/moneyflow-hsgt', { params })
+  }
+
+  /**
    * 异步同步沪深港通资金流向数据
    * 通过Celery任务异步执行，立即返回任务ID
    * @param params 同步参数
