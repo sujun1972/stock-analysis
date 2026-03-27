@@ -348,7 +348,7 @@ const handleSyncConfirm = async () => {
 **已实现的页面**：
 - 定时任务配置页面（`/settings/scheduler`）
 - 沪深港通资金流向页面（`/data/moneyflow-hsgt`）
-- 大盘资金流向页面（`/data/moneyflow-mkt-dc`）
+- 大盘资金流向页面（`/data/moneyflow-mkt-dc`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、移除无后端支持的前端伪排序）**
 - 板块资金流向页面（`/data/moneyflow-ind-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、page/page_size 分页（100条/页）、syncDialog 弹窗选日期+板块类型（全部时依次提交三任务）、isTaskRunning 实时派生 syncing、统计卡片左文字右图标、TOP 20 图表、模块化 API、时区安全日期构建、默认加载最近有数据的交易日并回填）**
 - 个股资金流向页面（Tushare）（`/data/moneyflow`）
 - 个股资金流向页面（DC）（`/data/moneyflow-stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
@@ -1532,15 +1532,14 @@ docker-compose down
 - **前端页面**: `/admin/app/(dashboard)/data/moneyflow-mkt-dc/page.tsx`
 - **数据内容**: 东方财富大盘资金流向，包含上证/深证指数及主力资金（超大单、大单、中单、小单）流入流出情况
 - **积分消耗**: 120积分/次（试用），6000积分/次（正式）
-- **页面功能**:
-  - 统计卡片：主力资金均值、累计净流入、最大净流入、超大单均值
-  - 趋势图表：主力资金净流入可视化
-  - 日期筛选：支持自定义日期范围查询
-  - 数据单位：统一使用亿元（原始数据为元）
-  - 异步同步：支持后台任务执行，实时显示进度
-  - 响应式布局：
-    - 桌面端：完整表格视图，显示所有资金流向指标
-    - 移动端：卡片视图，垂直堆叠展示核心指标
+- **页面功能**（2026-03-27 全面优化）:
+  - 统计卡片：左文字右图标布局，显示主力均值、最大净流入、超大单均值、累计净流入（带补充说明文字）
+  - 趋势图表：主力资金净流入折线图（正序时序，dot=false）
+  - 筛选器：日期范围查询，默认加载全部最新数据
+  - 数据单位：统一使用亿元（后端 Service 层已转换）
+  - 同步弹窗：点击同步弹出 Dialog 选择日期范围（不预填查询日期），让后端自动取最新交易日
+  - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_mkt_dc')` 派生，不用本地 boolean
+  - 响应式布局：统一使用 DataTable `mobileCard` prop，移动端卡片含上证/深证涨跌幅行
 
 #### 板块资金流向（DC）
 - **API端点**: `/api/moneyflow-ind-dc`
