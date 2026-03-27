@@ -5,8 +5,8 @@
 """
 
 import asyncio
-from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from typing import Dict, Optional
+from datetime import datetime
 from loguru import logger
 import pandas as pd
 
@@ -101,60 +101,88 @@ class MarginSecsService:
                 "records": 0
             }
 
-    async def get_margin_secs_data(
-        self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        ts_code: Optional[str] = None,
-        exchange: Optional[str] = None,
-        limit: int = 1000
-    ) -> Dict:
+    async def resolve_default_trade_date(self) -> Optional[str]:
         """
-        获取融资融券标的数据
-
-        Args:
-            start_date: 开始日期
-            end_date: 结束日期
-            ts_code: 标的代码
-            exchange: 交易所代码
-            limit: 返回记录数限制
+        解析默认交易日期：优先今天，否则回退到表中最新交易日
 
         Returns:
-            数据和统计信息
+            YYYY-MM-DD 格式的日期，或 None
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(self.margin_secs_repo.exists_by_date, today)
+        if has_today:
+            return self._format_date_for_display(today)
+        latest = await asyncio.to_thread(self.margin_secs_repo.get_latest_trade_date)
+        if latest:
+            return self._format_date_for_display(latest)
+        return None
+
+    async def get_margin_secs_data(
+        self,
+        trade_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        exchange: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100
+    ) -> Dict:
+        """
+        获取融资融券标的数据（单日筛选 + 分页）
+
+        Args:
+            trade_date: 交易日期（YYYY-MM-DD 或 YYYYMMDD），为空时自动解析最近有数据的交易日
+            ts_code: 标的代码
+            exchange: 交易所代码
+            page: 页码（从1开始）
+            page_size: 每页记录数
+
+        Returns:
+            数据、统计信息、总数、回填的交易日期
         """
         try:
             # 日期格式转换（YYYY-MM-DD -> YYYYMMDD）
-            start_date_fmt = start_date.replace('-', '') if start_date else None
-            end_date_fmt = end_date.replace('-', '') if end_date else None
+            trade_date_fmt = trade_date.replace('-', '') if trade_date else None
 
-            # 如果没有指定日期，默认查询最近30天
-            if not start_date_fmt:
-                latest_date = await asyncio.to_thread(
-                    self.margin_secs_repo.get_latest_trade_date
+            # 未指定日期时自动解析最近有数据的交易日
+            resolved_date: Optional[str] = None
+            if not trade_date_fmt:
+                resolved_date = await self.resolve_default_trade_date()
+                if resolved_date:
+                    trade_date_fmt = resolved_date.replace('-', '')
+            else:
+                resolved_date = self._format_date_for_display(trade_date_fmt)
+
+            if not trade_date_fmt:
+                return {
+                    "items": [],
+                    "statistics": {},
+                    "total": 0,
+                    "trade_date": None
+                }
+
+            offset = (page - 1) * page_size
+
+            # 并发获取数据、总数、统计
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.margin_secs_repo.get_by_trade_date_paged,
+                    trade_date=trade_date_fmt,
+                    ts_code=ts_code,
+                    exchange=exchange,
+                    limit=page_size,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.margin_secs_repo.get_total_count,
+                    trade_date=trade_date_fmt,
+                    ts_code=ts_code,
+                    exchange=exchange
+                ),
+                asyncio.to_thread(
+                    self.margin_secs_repo.get_statistics,
+                    start_date=trade_date_fmt,
+                    end_date=trade_date_fmt,
+                    exchange=exchange
                 )
-                if latest_date:
-                    end_date_fmt = latest_date
-                    # 计算30天前的日期
-                    date_obj = datetime.strptime(latest_date, '%Y%m%d')
-                    start_date_obj = date_obj - timedelta(days=30)
-                    start_date_fmt = start_date_obj.strftime('%Y%m%d')
-
-            # 获取数据
-            items = await asyncio.to_thread(
-                self.margin_secs_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                exchange=exchange,
-                limit=limit
-            )
-
-            # 获取统计信息
-            statistics = await asyncio.to_thread(
-                self.margin_secs_repo.get_statistics,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                exchange=exchange
             )
 
             # 日期格式转换用于显示（YYYYMMDD -> YYYY-MM-DD）
@@ -165,7 +193,8 @@ class MarginSecsService:
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total,
+                "trade_date": resolved_date
             }
 
         except Exception as e:

@@ -353,8 +353,8 @@ const handleSyncConfirm = async () => {
 - 个股资金流向页面（Tushare）（`/moneyflow/stock`）
 - 个股资金流向页面（DC）（`/moneyflow/stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
 - 融资融券交易汇总页面（`/margin/summary`）**（2026-03-27 全面优化：去掉独立统计请求改为 asyncio.gather 并发返回、后端排序白名单（rzrqye/rzye/rqye/rzmre/rzche/rqmcl/rqyl）、page_size 固定100、DataTable mobileCard 统一响应式、统计卡片左文字右图标、去掉 useCallback+多依赖 useEffect 改为空依赖+手动查询、去掉双套移动端/桌面端 JSX）**
-- 融资融券交易明细页面（`/margin/detail`）**（2026-03-27 全面优化：筛选改为单日 trade_date、后端排序白名单防注入、asyncio.gather 并发查数据+总数+统计、resolve_default_trade_date 自动回填最近交易日、标的名称注入：股票从 StockQuoteCache，ETF/基金从 margin_secs 回退、ETF 不可点击跳转分析页面（isStock 判断前缀5/1）、DataTable mobileCard 统一响应式）**
-- 融资融券标的页面（`/margin/secs`）
+- 融资融券交易明细页面（`/margin/detail`）**（2026-03-27 全面优化：筛选改为单日 trade_date、后端排序白名单防注入、asyncio.gather 并发查数据+总数+统计、resolve_default_trade_date 自动回填最近交易日、标的名称注入：股票从 StockQuoteCache，ETF/基金从 margin_secs 回退、ETF 不可点击跳转分析页面（isStock 判断前缀5/1/821）、DataTable mobileCard 统一响应式）**
+- 融资融券标的页面（`/margin/secs`）**（2026-03-27 全面优化：筛选改为单日 trade_date、resolve_default_trade_date 自动回填最近交易日、后端新增分页方法（get_by_trade_date_paged/get_total_count）、asyncio.gather 并发查数据+总数+统计、page_size 固定100、syncing 从 isTaskRunning 派生、同步按钮移至 PageHeader+弹窗模式、统计卡片左文字右图标、DataTable mobileCard 统一响应式、股票列可点击跳转分析页面（isStock 排除5/1/821前缀）、修复日期时区 bug（toISOString→本地时间））**
 - 转融资交易汇总页面（`/margin/slb-len`）
 - 龙虎榜每日明细页面（`/boardgame/top-list`）
 - 龙虎榜机构明细页面（`/boardgame/top-inst`）
@@ -505,12 +505,15 @@ for item in data:
     item['name'] = name
 ```
 
-**前端 ETF 不跳转规则**：代码前缀 `5`（上海 ETF）或 `1`（深圳 ETF/基金）不显示点击样式，不响应跳转：
+**前端非股票不跳转规则**：以下前缀不显示点击样式，不响应跳转：
+- `5xxxxx`：上海 ETF/基金
+- `1xxxxx`：深圳 ETF/基金
+- `821xxx`：北交所债券（如 `821001.BJ` 24京资01）
 
 ```typescript
 const isStock = (tsCode: string) => {
   const code = tsCode.split('.')[0]
-  return !code.startsWith('5') && !code.startsWith('1')
+  return !code.startsWith('5') && !code.startsWith('1') && !code.startsWith('821')
 }
 ```
 

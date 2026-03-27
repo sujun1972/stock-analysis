@@ -272,6 +272,100 @@ class MarginSecsRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def get_by_trade_date_paged(
+        self,
+        trade_date: str,
+        ts_code: Optional[str] = None,
+        exchange: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Dict]:
+        """
+        按单日交易日期分页查询融资融券标的
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD
+            ts_code: 标的代码（可选）
+            exchange: 交易所代码（可选，SSE/SZSE/BSE）
+            limit: 每页记录数
+            offset: 偏移量
+
+        Returns:
+            数据列表
+        """
+        try:
+            conditions = ["trade_date = %s"]
+            params: list = [trade_date]
+
+            if ts_code:
+                conditions.append("ts_code ILIKE %s")
+                params.append(f"%{ts_code}%")
+
+            if exchange:
+                conditions.append("exchange = %s")
+                params.append(exchange)
+
+            where_clause = " AND ".join(conditions)
+            query = f"""
+                SELECT
+                    trade_date, ts_code, name, exchange,
+                    created_at, updated_at
+                FROM {self.TABLE_NAME}
+                WHERE {where_clause}
+                ORDER BY exchange, ts_code
+                LIMIT %s OFFSET %s
+            """
+            params.extend([limit, offset])
+
+            result = self.execute_query(query, tuple(params))
+            return [self._row_to_dict(row) for row in result]
+
+        except Exception as e:
+            logger.error(f"分页查询融资融券标的失败: {e}")
+            raise QueryError(
+                "分页查询融资融券标的失败",
+                error_code="MARGIN_SECS_PAGED_QUERY_FAILED",
+                reason=str(e)
+            )
+
+    def get_total_count(
+        self,
+        trade_date: str,
+        ts_code: Optional[str] = None,
+        exchange: Optional[str] = None
+    ) -> int:
+        """
+        获取单日筛选条件下的总记录数
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD
+            ts_code: 标的代码（可选）
+            exchange: 交易所代码（可选）
+
+        Returns:
+            总记录数
+        """
+        try:
+            conditions = ["trade_date = %s"]
+            params: list = [trade_date]
+
+            if ts_code:
+                conditions.append("ts_code ILIKE %s")
+                params.append(f"%{ts_code}%")
+
+            if exchange:
+                conditions.append("exchange = %s")
+                params.append(exchange)
+
+            where_clause = " AND ".join(conditions)
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            result = self.execute_query(query, tuple(params))
+            return int(result[0][0]) if result else 0
+
+        except Exception as e:
+            logger.error(f"获取总记录数失败: {e}")
+            return 0
+
     def get_name_map(self, ts_codes: List[str]) -> Dict[str, str]:
         """
         批量获取标的名称映射（从最新交易日数据中查询）

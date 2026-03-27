@@ -6,7 +6,6 @@
 
 from fastapi import APIRouter, Depends
 from typing import Optional
-from datetime import date
 
 from app.models.api_response import ApiResponse
 from app.services.margin_secs_service import MarginSecsService
@@ -20,32 +19,32 @@ router = APIRouter()
 
 @router.get("")
 async def get_margin_secs(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    trade_date: Optional[str] = None,
     ts_code: Optional[str] = None,
     exchange: Optional[str] = None,
-    limit: int = 1000
+    page: int = 1,
+    page_size: int = 100
 ):
     """
-    获取融资融券标的数据
+    获取融资融券标的数据（单日筛选 + 分页）
 
     Args:
-        start_date: 开始日期
-        end_date: 结束日期
-        ts_code: 标的代码
+        trade_date: 交易日期（YYYY-MM-DD），为空时自动解析最近有数据的交易日
+        ts_code: 标的代码（模糊匹配）
         exchange: 交易所代码（SSE/SZSE/BSE）
-        limit: 返回记录数限制
+        page: 页码（从1开始）
+        page_size: 每页记录数
 
     Returns:
-        融资融券标的数据列表和统计信息
+        融资融券标的数据列表、统计信息、总数和回填日期
     """
     service = MarginSecsService()
     result = await service.get_margin_secs_data(
-        start_date=start_date.isoformat() if start_date else None,
-        end_date=end_date.isoformat() if end_date else None,
+        trade_date=trade_date,
         ts_code=ts_code,
         exchange=exchange,
-        limit=limit
+        page=page,
+        page_size=page_size
     )
     return ApiResponse.success(data=result)
 
@@ -122,32 +121,29 @@ async def sync_margin_secs_async(
 
 @router.get("/statistics")
 async def get_margin_secs_statistics(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    trade_date: Optional[str] = None,
     exchange: Optional[str] = None
 ):
     """
     获取融资融券标的统计信息
 
     Args:
-        start_date: 开始日期
-        end_date: 结束日期
+        trade_date: 交易日期（YYYY-MM-DD 或 YYYYMMDD）
         exchange: 交易所代码（SSE/SZSE/BSE）
 
     Returns:
         统计信息
     """
-    service = MarginSecsService()
-
-    # 日期格式转换
-    start_date_str = start_date.strftime('%Y%m%d') if start_date else None
-    end_date_str = end_date.strftime('%Y%m%d') if end_date else None
-
     import asyncio
+    from app.repositories import MarginSecsRepository
+
+    repo = MarginSecsRepository()
+    trade_date_fmt = trade_date.replace('-', '') if trade_date else None
+
     statistics = await asyncio.to_thread(
-        service.margin_secs_repo.get_statistics,
-        start_date=start_date_str,
-        end_date=end_date_str,
+        repo.get_statistics,
+        start_date=trade_date_fmt,
+        end_date=trade_date_fmt,
         exchange=exchange
     )
 

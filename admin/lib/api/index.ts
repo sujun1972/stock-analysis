@@ -510,7 +510,6 @@ export const apiClient = {
   getMarginSecs: marginSecsApiInst.getMarginSecs.bind(marginSecsApiInst),
   getLatestMarginSecs: marginSecsApiInst.getLatestMarginSecs.bind(marginSecsApiInst),
   syncMarginSecsAsync: marginSecsApiInst.syncMarginSecsAsync.bind(marginSecsApiInst),
-  getMarginSecsStatistics: marginSecsApiInst.getMarginSecsStatistics.bind(marginSecsApiInst),
 
   // 转融资交易汇总相关
   getSlbLen: slbLenApiInst.getSlbLen.bind(slbLenApiInst),
