@@ -15,23 +15,29 @@ router = APIRouter()
 
 @router.get("")
 async def get_moneyflow_stock_dc(
-    ts_code: Optional[str] = Query(None, description="股票代码"),
+    ts_code: Optional[str] = Query(None, description="股票代码，如 000001.SZ"),
+    trade_date: Optional[str] = Query(None, description="单日交易日期，格式：YYYY-MM-DD（优先于 start/end_date）"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, ge=1, le=1000, description="返回记录数"),
-    offset: int = Query(0, ge=0, description="偏移量"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(100, ge=1, le=1000, description="每页记录数"),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: Optional[str] = Query(None, description="排序方向：asc/desc"),
     current_user: User = Depends(get_current_user)
 ):
-    """获取个股资金流向数据"""
+    """获取个股资金流向数据（支持单日查询、分页、排序）"""
     try:
         service = MoneyflowStockDcService()
         result = await asyncio.to_thread(
             service.get_moneyflow_data,
             ts_code=ts_code,
+            trade_date=trade_date,
             start_date=start_date,
             end_date=end_date,
-            limit=limit,
-            offset=offset
+            limit=page_size,
+            page=page,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
         return ApiResponse.success(data=result, message="获取个股资金流向成功")
     except Exception as e:

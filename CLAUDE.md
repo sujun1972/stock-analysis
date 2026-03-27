@@ -304,13 +304,54 @@ triggerPoll()  // Header 图标即时更新
 - ✅ 任务历史持久化到数据库
 - ✅ 统一的用户体验
 
+**同步弹窗选日期模式**（当同步需要用户指定日期时）：
+
+同步按钮不直接调用 API，而是打开 Dialog 让用户选择日期（可留空），确认后再提交任务：
+
+```typescript
+const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+const [syncDate, setSyncDate] = useState<Date | undefined>(undefined)
+
+// 按钮只负责打开弹窗
+<Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>同步数据</Button>
+
+// 弹窗内确认后才提交
+const handleSyncConfirm = async () => {
+  setSyncDialogOpen(false)
+  const syncDateStr = syncDate
+    ? `${syncDate.getFullYear()}-${String(syncDate.getMonth() + 1).padStart(2, '0')}-${String(syncDate.getDate()).padStart(2, '0')}`
+    : undefined
+  const response = await api.syncAsync(syncDateStr ? { trade_date: syncDateStr } : {})
+  // ... 提交任务逻辑
+}
+
+<Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+  <DialogContent className="sm:max-w-[400px]">
+    <DialogHeader>
+      <DialogTitle>同步数据</DialogTitle>
+      <DialogDescription>选择同步日期（留空则同步最新交易日数据）。</DialogDescription>
+    </DialogHeader>
+    <div className="py-4">
+      <label className="text-sm font-medium mb-2 block">交易日期（可选）</label>
+      <DatePicker date={syncDate} onDateChange={setSyncDate} placeholder="留空同步最新交易日" />
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+      <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+**适用场景**：积分消耗较高、同步范围影响较大、用户需要精确控制同步日期的页面。
+
 **已实现的页面**：
 - 定时任务配置页面（`/settings/scheduler`）
 - 沪深港通资金流向页面（`/data/moneyflow-hsgt`）
 - 大盘资金流向页面（`/data/moneyflow-mkt-dc`）
 - 板块资金流向页面（`/data/moneyflow-ind-dc`）
 - 个股资金流向页面（Tushare）（`/data/moneyflow`）
-- 个股资金流向页面（DC）（`/data/moneyflow-stock-dc`）
+- 个股资金流向页面（DC）（`/data/moneyflow-stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
 - 融资融券交易汇总页面（`/data/margin`）
 - 融资融券交易明细页面（`/data/margin-detail`）
 - 融资融券标的页面（`/data/margin-secs`）
@@ -1542,15 +1583,17 @@ docker-compose down
 - **前端页面**: `/admin/app/(dashboard)/data/moneyflow-stock-dc/page.tsx`
 - **数据内容**: 东方财富个股资金流向，包含个股主力资金（超大单、大单、中单、小单）流入流出情况
 - **积分消耗**: 5000积分/次（Tushare Pro接口）
-- **页面功能**:
-  - 统计卡片：主力资金均值、累计净流入、最大净流入、统计股票数
+- **页面功能**（2026-03-27 全面优化）:
+  - 统计卡片：左文字右图标布局，显示统计股票数、主力均值、最大净流入、超大单均值
   - 趋势图表：TOP 20个股资金流向可视化（主力净流入、超大单、大单）
-  - 筛选器：支持股票代码和日期范围筛选
+  - 筛选器：单日交易日期 + 股票代码，默认自动加载最近有数据的交易日并回填日期选择器
+  - 后端排序：net_amount/pct_change/buy_elg_amount/buy_lg_amount/buy_md_amount/buy_sm_amount 白名单防注入
+  - 分页查询（100条/页），asyncio 分页偏移
+  - 同步弹窗：点击"同步数据"弹出 Dialog，用户可选择日期（可留空同步最新交易日）
+  - 股票列合并名称+纯代码可点击跳转分析页面
   - 数据单位：统一使用亿元（原始数据为万元）
-  - 异步同步：支持后台任务执行，实时显示进度
-  - 响应式布局：
-    - 桌面端：完整表格视图，显示所有资金流向指标
-    - 移动端：卡片视图，垂直堆叠展示核心指标
+  - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_stock_dc')` 派生，不用本地 boolean
+  - 响应式布局：桌面端表格视图，移动端卡片视图（hover/active 反馈）
 
 ### 性能优化
 1. **批量插入**: 使用PostgreSQL COPY协议，性能提升10倍

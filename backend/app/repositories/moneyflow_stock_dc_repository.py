@@ -17,6 +17,11 @@ from app.core.exceptions import DatabaseError, QueryError
 from app.repositories.base_repository import BaseRepository
 
 
+# 允许排序的字段白名单（与 Service 层保持一致，双重防护 SQL 注入）
+_SORTABLE_COLUMNS = frozenset({'net_amount', 'pct_change', 'buy_elg_amount', 'buy_lg_amount',
+                                'buy_md_amount', 'buy_sm_amount', 'close'})
+
+
 class MoneyflowStockDcRepository(BaseRepository):
     """
     个股资金流向数据访问层（DC版）
@@ -43,7 +48,9 @@ class MoneyflowStockDcRepository(BaseRepository):
         end_date: str,
         ts_code: Optional[str] = None,
         limit: Optional[int] = None,
-        offset: int = 0
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
     ) -> List[Dict]:
         """
         按日期范围查询个股资金流向数据
@@ -73,6 +80,13 @@ class MoneyflowStockDcRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
+            # 排序：Service 层已做白名单校验，Repository 层二次防护
+            if sort_by and sort_by in _SORTABLE_COLUMNS:
+                order_dir = 'ASC' if sort_order == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order_dir} NULLS LAST"
+            else:
+                order_clause = "ORDER BY trade_date DESC, net_amount DESC NULLS LAST"
+
             query = f"""
                 SELECT
                     trade_date,
@@ -94,7 +108,7 @@ class MoneyflowStockDcRepository(BaseRepository):
                     updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, net_amount DESC
+                {order_clause}
             """
 
             if limit:

@@ -49,10 +49,13 @@ export interface MoneyflowIndDcParams {
 
 export interface MoneyflowStockDcParams {
   ts_code?: string
+  trade_date?: string   // 单日查询（优先于 start/end_date，YYYY-MM-DD）
   start_date?: string
   end_date?: string
-  limit?: number
-  offset?: number
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 export interface MoneyflowParams {
