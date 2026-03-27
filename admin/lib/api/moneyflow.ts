@@ -39,10 +39,16 @@ export interface MoneyflowMktDcParams {
 }
 
 export interface MoneyflowIndDcParams {
+  trade_date?: string    // 单日查询（优先于 start/end_date，YYYY-MM-DD）
   start_date?: string
   end_date?: string
   content_type?: string  // 数据类型(行业、概念、地域)
   ts_code?: string       // 板块代码
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
+  // 旧参数保留向后兼容
   limit?: number
   offset?: number
 }

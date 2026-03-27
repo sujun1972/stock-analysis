@@ -37,13 +37,18 @@ class MoneyflowIndDcRepository(BaseRepository):
 
     # ==================== 查询操作 ====================
 
+    # 允许前端排序的字段白名单（防 SQL 注入）
+    SORTABLE_COLUMNS = {'net_amount', 'pct_change', 'buy_elg_amount', 'buy_lg_amount', 'buy_md_amount', 'buy_sm_amount', 'rank'}
+
     def get_by_date_range(
         self,
         start_date: str,
         end_date: str,
         content_type: Optional[str] = None,
         limit: Optional[int] = None,
-        offset: int = 0
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> List[Dict]:
         """
         按日期范围查询板块资金流向数据
@@ -54,6 +59,8 @@ class MoneyflowIndDcRepository(BaseRepository):
             content_type: 数据类型（行业/概念/地域）（可选）
             limit: 返回记录数（可选）
             offset: 偏移量
+            sort_by: 排序字段（白名单校验）
+            sort_order: 排序方向 asc/desc
 
         Returns:
             板块资金流向数据列表
@@ -71,6 +78,13 @@ class MoneyflowIndDcRepository(BaseRepository):
                 params.append(content_type)
 
             where_clause = " AND ".join(conditions)
+
+            # 排序白名单校验
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order and sort_order.lower() == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY trade_date DESC, net_amount DESC NULLS LAST"
 
             query = f"""
                 SELECT
@@ -96,7 +110,7 @@ class MoneyflowIndDcRepository(BaseRepository):
                     updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, net_amount DESC
+                {order_clause}
             """
 
             if limit:
@@ -106,26 +120,29 @@ class MoneyflowIndDcRepository(BaseRepository):
 
             results = self.execute_query(query, tuple(params))
 
+            def _to_float(v):
+                return float(v) if v is not None else None
+
             return [
                 {
                     "trade_date": row[0],
                     "content_type": row[1],
                     "ts_code": row[2],
                     "name": row[3],
-                    "pct_change": float(row[4]) if row[4] else 0,
-                    "close": float(row[5]) if row[5] else 0,
-                    "net_amount": float(row[6]) if row[6] else 0,
-                    "net_amount_rate": float(row[7]) if row[7] else 0,
-                    "buy_elg_amount": float(row[8]) if row[8] else 0,
-                    "buy_elg_amount_rate": float(row[9]) if row[9] else 0,
-                    "buy_lg_amount": float(row[10]) if row[10] else 0,
-                    "buy_lg_amount_rate": float(row[11]) if row[11] else 0,
-                    "buy_md_amount": float(row[12]) if row[12] else 0,
-                    "buy_md_amount_rate": float(row[13]) if row[13] else 0,
-                    "buy_sm_amount": float(row[14]) if row[14] else 0,
-                    "buy_sm_amount_rate": float(row[15]) if row[15] else 0,
+                    "pct_change": _to_float(row[4]),
+                    "close": _to_float(row[5]),
+                    "net_amount": _to_float(row[6]),
+                    "net_amount_rate": _to_float(row[7]),
+                    "buy_elg_amount": _to_float(row[8]),
+                    "buy_elg_amount_rate": _to_float(row[9]),
+                    "buy_lg_amount": _to_float(row[10]),
+                    "buy_lg_amount_rate": _to_float(row[11]),
+                    "buy_md_amount": _to_float(row[12]),
+                    "buy_md_amount_rate": _to_float(row[13]),
+                    "buy_sm_amount": _to_float(row[14]),
+                    "buy_sm_amount_rate": _to_float(row[15]),
                     "buy_sm_amount_stock": row[16],
-                    "rank": int(row[17]) if row[17] else 0,
+                    "rank": int(row[17]) if row[17] is not None else None,
                     "created_at": row[18].isoformat() if row[18] else None,
                     "updated_at": row[19].isoformat() if row[19] else None
                 }
@@ -574,3 +591,68 @@ class MoneyflowIndDcRepository(BaseRepository):
         except Exception as e:
             logger.error(f"获取记录数失败: {e}")
             return 0
+
+    def get_latest(self, content_type: Optional[str] = None, limit: int = 20) -> List[Dict]:
+        """
+        获取最新交易日的板块资金流向数据
+
+        Args:
+            content_type: 数据类型（行业/概念/地域）（可选）
+            limit: 返回记录数
+
+        Returns:
+            最新板块资金流向数据列表
+        """
+        try:
+            latest_date = self.get_latest_trade_date(content_type=content_type)
+            if not latest_date:
+                return []
+
+            conditions = ["trade_date = %s"]
+            params: list = [latest_date]
+
+            if content_type:
+                conditions.append("content_type = %s")
+                params.append(content_type)
+
+            where_clause = " AND ".join(conditions)
+            query = f"""
+                SELECT
+                    trade_date, content_type, ts_code, name,
+                    pct_change, close, net_amount, net_amount_rate,
+                    buy_elg_amount, buy_elg_amount_rate,
+                    buy_lg_amount, buy_lg_amount_rate,
+                    buy_md_amount, buy_md_amount_rate,
+                    buy_sm_amount, buy_sm_amount_rate,
+                    buy_sm_amount_stock, rank
+                FROM {self.TABLE_NAME}
+                WHERE {where_clause}
+                ORDER BY net_amount DESC NULLS LAST
+                LIMIT %s
+            """
+            params.append(limit)
+            results = self.execute_query(query, tuple(params))
+
+            return [
+                {
+                    "trade_date": row[0], "content_type": row[1], "ts_code": row[2], "name": row[3],
+                    "pct_change": float(row[4]) if row[4] is not None else None,
+                    "close": float(row[5]) if row[5] is not None else None,
+                    "net_amount": float(row[6]) if row[6] is not None else None,
+                    "net_amount_rate": float(row[7]) if row[7] is not None else None,
+                    "buy_elg_amount": float(row[8]) if row[8] is not None else None,
+                    "buy_elg_amount_rate": float(row[9]) if row[9] is not None else None,
+                    "buy_lg_amount": float(row[10]) if row[10] is not None else None,
+                    "buy_lg_amount_rate": float(row[11]) if row[11] is not None else None,
+                    "buy_md_amount": float(row[12]) if row[12] is not None else None,
+                    "buy_md_amount_rate": float(row[13]) if row[13] is not None else None,
+                    "buy_sm_amount": float(row[14]) if row[14] is not None else None,
+                    "buy_sm_amount_rate": float(row[15]) if row[15] is not None else None,
+                    "buy_sm_amount_stock": row[16],
+                    "rank": int(row[17]) if row[17] is not None else None,
+                }
+                for row in results
+            ]
+        except Exception as e:
+            logger.error(f"获取最新板块资金流向数据失败: {e}")
+            return []

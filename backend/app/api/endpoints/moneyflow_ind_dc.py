@@ -15,25 +15,42 @@ router = APIRouter()
 
 @router.get("")
 async def get_moneyflow_ind_dc(
+    trade_date: Optional[str] = Query(None, description="单日交易日期，格式：YYYY-MM-DD（优先于 start/end_date）"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     content_type: Optional[str] = Query(None, description="数据类型(行业、概念、地域)"),
     ts_code: Optional[str] = Query(None, description="板块代码"),
-    limit: int = Query(50, ge=1, le=500, description="返回记录数"),
-    offset: int = Query(0, ge=0, description="偏移量"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(100, ge=1, le=500, description="每页记录数"),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: Optional[str] = Query(None, description="排序方向 asc/desc"),
+    # 旧参数保留向后兼容
+    limit: Optional[int] = Query(None, ge=1, le=500, description="[已废弃] 返回记录数，请改用 page/page_size"),
+    offset: int = Query(0, ge=0, description="[已废弃] 偏移量，请改用 page/page_size"),
     current_user: User = Depends(get_current_user)
 ):
     """获取板块资金流向数据"""
     try:
         service = MoneyflowIndDcService()
+
+        # 未指定任何日期时，自动解析最近有数据的交易日
+        resolved_trade_date = trade_date
+        if not trade_date and not start_date and not end_date:
+            resolved_trade_date = await service.resolve_default_trade_date(content_type=content_type)
+
         result = await asyncio.to_thread(
             service.get_moneyflow_data,
+            trade_date=resolved_trade_date,
             start_date=start_date,
             end_date=end_date,
             content_type=content_type,
             ts_code=ts_code,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
             limit=limit,
-            offset=offset
+            offset=offset,
         )
         return ApiResponse.success(data=result, message="获取板块资金流向成功")
     except Exception as e:

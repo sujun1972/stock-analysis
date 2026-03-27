@@ -7,10 +7,18 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { apiClient } from '@/lib/api-client'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { moneyflowApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, TrendingDown, Activity, BarChart3 } from 'lucide-react'
+import { RefreshCw, TrendingUp, BarChart3, ListFilter, DollarSign, Activity } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // 数据类型定义
@@ -19,20 +27,20 @@ interface MoneyflowIndDcData {
   content_type: string
   ts_code: string
   name: string
-  pct_change: number
-  close: number
-  net_amount: number
-  net_amount_rate: number
-  buy_elg_amount: number
-  buy_elg_amount_rate: number
-  buy_lg_amount: number
-  buy_lg_amount_rate: number
-  buy_md_amount: number
-  buy_md_amount_rate: number
-  buy_sm_amount: number
-  buy_sm_amount_rate: number
+  pct_change: number | null
+  close: number | null
+  net_amount: number | null
+  net_amount_rate: number | null
+  buy_elg_amount: number | null
+  buy_elg_amount_rate: number | null
+  buy_lg_amount: number | null
+  buy_lg_amount_rate: number | null
+  buy_md_amount: number | null
+  buy_md_amount_rate: number | null
+  buy_sm_amount: number | null
+  buy_sm_amount_rate: number | null
   buy_sm_amount_stock: string
-  rank: number
+  rank: number | null
 }
 
 interface Statistics {
@@ -50,154 +58,145 @@ interface Statistics {
   sector_count: number
 }
 
+const PAGE_SIZE = 100
+
+const toYi = (val: number | null | undefined) => {
+  if (val === null || val === undefined) return '-'
+  return (val >= 0 ? '+' : '') + val.toFixed(2) + '亿'
+}
+
+const pctColor = (val: number | null | undefined) =>
+  (val ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'
+
 export default function MoneyflowIndDcPage() {
   const [data, setData] = useState<MoneyflowIndDcData[]>([])
+  const [topSectors, setTopSectors] = useState<MoneyflowIndDcData[]>([])
   const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [isLoading, setIsLoading] = useState(false)
+  const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [contentType, setContentType] = useState<string>('all')
-  const [syncing, setSyncing] = useState(false)
-
-  // 分页状态
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
   const [total, setTotal] = useState(0)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncDate, setSyncDate] = useState<Date | undefined>(undefined)
+  const [syncContentType, setSyncContentType] = useState<string>('all')
 
-  // 存储活跃的任务回调（用于组件卸载时清理）
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+  // 从 task store 实时派生——不用本地 useState
+  const syncing = isTaskRunning('tasks.sync_moneyflow_ind_dc')
 
-  // 任务存储Hook
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  useEffect(() => {
+    loadData(1).catch(() => {})
+    loadTopSectors().catch(() => {})
+  }, [])
 
-  // 加载数据
-  const loadData = useCallback(async () => {
+  const toDateStr = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+  const loadData = async (
+    targetPage: number = page,
+    overrideSortKey?: string | null,
+    overrideSortDir?: 'asc' | 'desc' | null
+  ) => {
+    setIsLoading(true)
     try {
-      setLoading(true)
-      setError(null)
+      const tradeDateStr = tradeDate ? toDateStr(tradeDate) : undefined
 
-      const params: {
-        start_date?: string
-        end_date?: string
-        content_type?: string
-        limit: number
-        offset: number
-      } = {
-        limit: pageSize,
-        offset: (page - 1) * pageSize
+      const params: any = {
+        trade_date: tradeDateStr,
+        page: targetPage,
+        page_size: PAGE_SIZE,
+        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
+        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined,
       }
+      if (contentType && contentType !== 'all') params.content_type = contentType
 
-      if (startDate) {
-        params.start_date = startDate.toISOString().split('T')[0]
-      }
-      if (endDate) {
-        params.end_date = endDate.toISOString().split('T')[0]
-      }
-      if (contentType && contentType !== 'all') {
-        params.content_type = contentType
-      }
-
-      const response = await apiClient.getMoneyflowIndDc(params)
+      const response = await moneyflowApi.getMoneyflowIndDc(params)
 
       if (response.code === 200 && response.data) {
         setData(response.data.items || [])
-        setStatistics(response.data.statistics)
         setTotal(response.data.total || 0)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      console.error('加载数据失败:', err)
-      setError(err.message || '加载数据失败')
-      toast.error('加载数据失败', {
-        description: err.message
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [page, pageSize, startDate, endDate, contentType])
-
-  // 初始加载和分页/筛选变化时重新加载
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  // 异步同步数据
-  const handleSync = async () => {
-    try {
-      setSyncing(true)
-
-      const params: {
-        start_date?: string
-        end_date?: string
-        content_type?: string
-      } = {}
-
-      if (startDate) {
-        params.start_date = startDate.toISOString().split('T')[0]
-      }
-      if (endDate) {
-        params.end_date = endDate.toISOString().split('T')[0]
-      }
-      if (contentType && contentType !== 'all') {
-        params.content_type = contentType
-      }
-
-      const response = await apiClient.syncMoneyflowIndDcAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        // 添加到任务存储
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        // 注册任务完成回调
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '板块资金流向数据已更新'
-            })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
+        setStatistics(response.data.statistics || null)
+        setPage(targetPage)
+        // 回填后端解析的实际日期
+        if (!tradeDate && response.data.trade_date) {
+          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
         }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        // 立即触发轮询
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
       }
-    } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
+    } catch (error: any) {
+      toast.error(error.message || '加载数据失败')
     } finally {
-      setSyncing(false)
+      setIsLoading(false)
     }
   }
 
-  // 组件卸载时清理回调
+  const loadTopSectors = async () => {
+    try {
+      const response = await moneyflowApi.getTopMoneyflowIndustries({ limit: 20 })
+      if (response.code === 200 && response.data) {
+        setTopSectors(Array.isArray(response.data) ? response.data : response.data.items || [])
+      }
+    } catch {
+      // 图表加载失败不阻断主流程
+    }
+  }
+
+  const handleQuery = () => {
+    loadData(1).catch(() => {})
+  }
+
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
+    try {
+      const syncDateStr = syncDate ? toDateStr(syncDate) : undefined
+      const ct = syncContentType !== 'all' ? syncContentType : undefined
+
+      // 若选了"全部"，依次提交三个任务（行业/概念/地域）
+      const types = ct ? [ct] : ['行业', '概念', '地域']
+
+      for (const type of types) {
+        const response = await moneyflowApi.syncMoneyflowIndDcAsync(
+          syncDateStr ? { trade_date: syncDateStr, content_type: type } : { content_type: type }
+        )
+
+        if (response.code === 200 && response.data) {
+          const taskId = response.data.celery_task_id
+          addTask({
+            taskId,
+            taskName: response.data.task_name,
+            displayName: response.data.display_name + `(${type})`,
+            taskType: 'data_sync',
+            status: 'running',
+            progress: 0,
+            startTime: Date.now()
+          })
+
+          const completionCallback = (task: any) => {
+            if (task.status === 'success') {
+              loadData(1).catch(() => {})
+              loadTopSectors().catch(() => {})
+              toast.success(`${type}数据同步完成`)
+            }
+            unregisterCompletionCallback(taskId, completionCallback)
+            activeCallbacksRef.current.delete(taskId)
+          }
+          activeCallbacksRef.current.set(taskId, completionCallback)
+          registerCompletionCallback(taskId, completionCallback)
+          triggerPoll()
+        } else {
+          toast.error(response.message || `提交${type}同步任务失败`)
+        }
+      }
+
+      toast.success(ct ? '同步任务已提交' : '已提交行业/概念/地域三个同步任务')
+    } catch (error: any) {
+      toast.error(error.message || '提交同步任务失败')
+    }
+  }
+
   useEffect(() => {
     return () => {
       const callbacks = activeCallbacksRef.current
@@ -206,233 +205,265 @@ export default function MoneyflowIndDcPage() {
       })
       callbacks.clear()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 格式化日期
-  const formatDate = (dateStr: string) => {
-    if (!dateStr || dateStr.length !== 8) return dateStr
-    return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-  }
-
-  // 格式化金额（元 -> 亿元）
-  const formatAmount = (amount: number | null | undefined) => {
-    if (amount === null || amount === undefined) return '0.00'
-    return (amount / 100000000).toFixed(2)
-  }
-
-  // 格式化百分比
-  const formatPercent = (value: number | null | undefined) => {
-    if (value === null || value === undefined) return '0.00%'
-    return `${value.toFixed(2)}%`
-  }
+  }, [unregisterCompletionCallback])
 
   // 表格列定义
-  // 注意：DataTable 组件使用 'header' 属性显示列标题（不是 'title'）
   const columns: Column<MoneyflowIndDcData>[] = useMemo(() => [
     {
-      key: 'trade_date',
-      header: '日期',
-      accessor: (row) => formatDate(row.trade_date),
-      width: 110
+      key: 'name',
+      header: '板块',
+      accessor: (row) => row.name ? `${row.name}[${row.ts_code}]` : row.ts_code,
+      width: 200,
+      cellClassName: 'whitespace-nowrap'
     },
     {
       key: 'content_type',
       header: '类型',
       accessor: (row) => row.content_type,
-      width: 80
-    },
-    {
-      key: 'name',
-      header: '板块名称',
-      accessor: (row) => row.name,
-      width: 150
+      width: 70,
+      cellClassName: 'text-center whitespace-nowrap'
     },
     {
       key: 'pct_change',
-      header: '涨跌幅',
-      accessor: (row) => (
-        <span className={(row.pct_change ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
-          {formatPercent(row.pct_change)}
-        </span>
-      ),
-      width: 100
+      header: '涨跌幅%',
+      accessor: (row) => {
+        if (row.pct_change === null || row.pct_change === undefined) return '-'
+        const v = row.pct_change
+        return <span className={pctColor(v)}>{v >= 0 ? '+' : ''}{v.toFixed(2)}%</span>
+      },
+      width: 100,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
     },
     {
       key: 'net_amount',
       header: '主力净流入',
-      accessor: (row) => (
-        <span className={(row.net_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
-          {formatAmount(row.net_amount)}亿
-        </span>
-      ),
-      width: 120
+      accessor: (row) => {
+        if (row.net_amount === null || row.net_amount === undefined) return '-'
+        return <span className={row.net_amount >= 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>{toYi(row.net_amount)}</span>
+      },
+      width: 120,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
     },
     {
       key: 'net_amount_rate',
-      header: '主力净占比',
-      accessor: (row) => formatPercent(row.net_amount_rate),
-      width: 110
+      header: '主力净占比%',
+      accessor: (row) => {
+        if (row.net_amount_rate === null || row.net_amount_rate === undefined) return '-'
+        const v = row.net_amount_rate
+        return <span className={pctColor(v)}>{v >= 0 ? '+' : ''}{v.toFixed(2)}%</span>
+      },
+      width: 115,
+      cellClassName: 'text-right whitespace-nowrap'
     },
     {
       key: 'buy_elg_amount',
-      header: '超大单',
-      accessor: (row) => (
-        <span className={(row.buy_elg_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
-          {formatAmount(row.buy_elg_amount)}亿
-        </span>
-      ),
-      width: 110
+      header: '超大单净流入',
+      accessor: (row) => {
+        if (row.buy_elg_amount === null || row.buy_elg_amount === undefined) return '-'
+        return <span className={row.buy_elg_amount >= 0 ? 'text-red-600' : 'text-green-600'}>{toYi(row.buy_elg_amount)}</span>
+      },
+      width: 120,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
     },
     {
       key: 'buy_lg_amount',
-      header: '大单',
-      accessor: (row) => (
-        <span className={(row.buy_lg_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
-          {formatAmount(row.buy_lg_amount)}亿
-        </span>
-      ),
-      width: 110
+      header: '大单净流入',
+      accessor: (row) => {
+        if (row.buy_lg_amount === null || row.buy_lg_amount === undefined) return '-'
+        return <span className={row.buy_lg_amount >= 0 ? 'text-red-600' : 'text-green-600'}>{toYi(row.buy_lg_amount)}</span>
+      },
+      width: 110,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+    {
+      key: 'buy_md_amount',
+      header: '中单净流入',
+      accessor: (row) => {
+        if (row.buy_md_amount === null || row.buy_md_amount === undefined) return '-'
+        return <span className={row.buy_md_amount >= 0 ? 'text-red-600' : 'text-green-600'}>{toYi(row.buy_md_amount)}</span>
+      },
+      width: 110,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+    {
+      key: 'buy_sm_amount',
+      header: '小单净流入',
+      accessor: (row) => {
+        if (row.buy_sm_amount === null || row.buy_sm_amount === undefined) return '-'
+        return <span className={row.buy_sm_amount >= 0 ? 'text-red-600' : 'text-green-600'}>{toYi(row.buy_sm_amount)}</span>
+      },
+      width: 110,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
     },
     {
       key: 'rank',
       header: '排名',
-      accessor: (row) => row.rank,
-      width: 70
-    }
+      accessor: (row) => row.rank !== null && row.rank !== undefined ? `#${row.rank}` : '-',
+      width: 70,
+      cellClassName: 'text-center whitespace-nowrap'
+    },
   ], [])
 
   // 移动端卡片视图
   const mobileCard = useCallback((item: MoneyflowIndDcData) => (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">板块</span>
-        <span className="font-medium">{item.name}</span>
+    <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <div className="font-semibold text-base">{item.name || item.ts_code}</div>
+          <div className="text-sm text-gray-500">{item.ts_code} · {item.content_type}</div>
+        </div>
+        <div className="text-right">
+          {item.pct_change !== null && (
+            <div className={pctColor(item.pct_change)}>
+              {item.pct_change >= 0 ? '+' : ''}{item.pct_change.toFixed(2)}%
+            </div>
+          )}
+          {item.rank !== null && <div className="text-xs text-gray-500">#{item.rank}</div>}
+        </div>
       </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">日期</span>
-        <span>{formatDate(item.trade_date)}</span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">类型</span>
-        <span>{item.content_type}</span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">涨跌幅</span>
-        <span className={(item.pct_change ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
-          {formatPercent(item.pct_change)}
-        </span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">主力净流入</span>
-        <span className={(item.net_amount ?? 0) >= 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-          {formatAmount(item.net_amount)}亿
-        </span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">排名</span>
-        <span className="font-medium">#{item.rank}</span>
+      <div className="space-y-1 text-sm">
+        <div className="flex justify-between">
+          <span className="text-gray-600">主力净流入:</span>
+          {item.net_amount !== null && (
+            <span className={item.net_amount >= 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+              {toYi(item.net_amount)}
+            </span>
+          )}
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">超大单净流入:</span>
+          <span className={pctColor(item.buy_elg_amount)}>{toYi(item.buy_elg_amount)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">大单净流入:</span>
+          <span className={pctColor(item.buy_lg_amount)}>{toYi(item.buy_lg_amount)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">主力净占比:</span>
+          <span>{item.net_amount_rate !== null ? `${item.net_amount_rate.toFixed(2)}%` : '-'}</span>
+        </div>
       </div>
     </div>
   ), [])
 
-  // 图表数据（前10名）
-  const chartData = useMemo(() => {
-    return data.slice(0, 10).map(item => ({
-      name: item.name.length > 6 ? item.name.slice(0, 6) + '...' : item.name,
-      主力净流入: parseFloat(formatAmount(item.net_amount)),
-      超大单: parseFloat(formatAmount(item.buy_elg_amount)),
-      大单: parseFloat(formatAmount(item.buy_lg_amount))
-    }))
-  }, [data])
+  // 图表数据（TOP 20）
+  const chartData = useMemo(() => topSectors.map(item => ({
+    name: item.name || item.ts_code,
+    主力净流入: item.net_amount ?? 0,
+    超大单: item.buy_elg_amount ?? 0,
+    大单: item.buy_lg_amount ?? 0,
+  })), [topSectors])
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="板块资金流向（DC）"
         description="东方财富板块资金流向数据，包含行业、概念、地域板块的主力资金流向情况"
+        details={<>
+          <div>接口：moneyflow_ind_dc</div>
+          <a href="https://tushare.pro/document/2?doc_id=348" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
-      {/* 统计卡片 */}
+      {/* 统计卡片 — 左文字右图标 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">主力资金均值</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${(statistics.avg_net_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatAmount(statistics.avg_net_amount)}亿
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">板块数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.sector_count ?? 0}个</p>
+                </div>
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                板块数: {statistics.sector_count ?? 0}
-              </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最大净流入</CardTitle>
-              <TrendingUp className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {formatAmount(statistics.max_net_amount)}亿
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">主力资金均值(亿)</p>
+                  <p className={`text-xl sm:text-2xl font-bold ${pctColor(statistics.avg_net_amount)}`}>
+                    {(statistics.avg_net_amount ?? 0) >= 0 ? '+' : ''}{(statistics.avg_net_amount ?? 0).toFixed(2)}
+                  </p>
+                </div>
+                <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                最早日期: {statistics.earliest_date || 'N/A'}
-              </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最小净流出</CardTitle>
-              <TrendingDown className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {formatAmount(statistics.min_net_amount)}亿
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">最大净流入(亿)</p>
+                  <p className="text-xl sm:text-2xl font-bold text-red-600">
+                    +{(statistics.max_net_amount ?? 0).toFixed(2)}
+                  </p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                最新日期: {statistics.latest_date || 'N/A'}
-              </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">超大单均值</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${(statistics.avg_buy_elg_amount ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatAmount(statistics.avg_buy_elg_amount)}亿
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">超大单均值(亿)</p>
+                  <p className={`text-xl sm:text-2xl font-bold ${pctColor(statistics.avg_buy_elg_amount)}`}>
+                    {(statistics.avg_buy_elg_amount ?? 0) >= 0 ? '+' : ''}{(statistics.avg_buy_elg_amount ?? 0).toFixed(2)}
+                  </p>
+                </div>
+                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                记录数: {statistics.count ?? 0}
-              </p>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* 趋势图表 */}
+      {/* TOP 20 图表 */}
       {chartData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>TOP 10 板块资金流向</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              主力资金流入 TOP 20 板块
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] overflow-x-auto">
+            <div className="overflow-x-auto">
               <div style={{ minWidth: '600px' }}>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
+                <ResponsiveContainer width="100%" height={360}>
+                  <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-                    <YAxis label={{ value: '金额（亿元）', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
+                    <XAxis
+                      dataKey="name"
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                      interval={0}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis tickFormatter={(v) => v.toFixed(1)} />
+                    <Tooltip formatter={(v) => typeof v === 'number' ? v.toFixed(2) + '亿' : '-'} />
                     <Legend />
                     <Bar dataKey="主力净流入" fill="#8884d8" />
                     <Bar dataKey="超大单" fill="#82ca9d" />
@@ -445,20 +476,22 @@ export default function MoneyflowIndDcPage() {
         </Card>
       )}
 
-      {/* 筛选和同步 */}
+      {/* 筛选区域（仅查询控件，同步按钮在 PageHeader） */}
       <Card>
-        <CardContent className="pt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ListFilter className="h-5 w-5" />
+            数据查询
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
-            <div className="flex-1 space-y-2">
-              <label className="text-sm font-medium">开始日期</label>
-              <DatePicker date={startDate} onDateChange={setStartDate} />
+            <div className="flex-1 w-full sm:w-auto">
+              <label className="text-sm font-medium mb-1 block">交易日期</label>
+              <DatePicker date={tradeDate} onDateChange={setTradeDate} />
             </div>
-            <div className="flex-1 space-y-2">
-              <label className="text-sm font-medium">结束日期</label>
-              <DatePicker date={endDate} onDateChange={setEndDate} />
-            </div>
-            <div className="flex-1 space-y-2">
-              <label className="text-sm font-medium">板块类型</label>
+            <div className="w-full sm:w-40">
+              <label className="text-sm font-medium mb-1 block">板块类型</label>
               <Select value={contentType} onValueChange={setContentType}>
                 <SelectTrigger>
                   <SelectValue placeholder="选择类型" />
@@ -471,56 +504,90 @@ export default function MoneyflowIndDcPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+                查询
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* 数据表格 */}
       <Card>
-        <CardHeader>
-          <CardTitle>板块资金流向数据</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
             data={data}
-            loading={loading}
-            error={error}
+            loading={isLoading}
+            mobileCard={mobileCard}
             emptyMessage="暂无板块资金流向数据"
-            pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1) // 重置到第一页
+            tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
+            sort={{
+              key: sortKey,
+              direction: sortDirection,
+              onSort: (key, direction) => {
+                const newKey = direction ? key : null
+                setSortKey(newKey)
+                setSortDirection(direction)
+                loadData(1, newKey, direction)
               }
             }}
-            mobileCard={mobileCard}
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total,
+              onPageChange: (newPage) => loadData(newPage)
+            }}
           />
         </CardContent>
       </Card>
+
+      {/* 同步日期选择弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步板块资金流向数据</DialogTitle>
+            <DialogDescription>
+              选择同步日期和板块类型（日期留空则同步最新交易日；"全部"将依次提交行业/概念/地域三个任务，共消耗约 18000 积分）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">交易日期（可选）</label>
+              <DatePicker
+                date={syncDate}
+                onDateChange={setSyncDate}
+                placeholder="留空同步最新交易日"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">板块类型</label>
+              <Select value={syncContentType} onValueChange={setSyncContentType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部（行业+概念+地域）</SelectItem>
+                  <SelectItem value="行业">行业</SelectItem>
+                  <SelectItem value="概念">概念</SelectItem>
+                  <SelectItem value="地域">地域</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : '确认同步'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

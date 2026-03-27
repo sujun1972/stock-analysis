@@ -349,7 +349,7 @@ const handleSyncConfirm = async () => {
 - 定时任务配置页面（`/settings/scheduler`）
 - 沪深港通资金流向页面（`/data/moneyflow-hsgt`）
 - 大盘资金流向页面（`/data/moneyflow-mkt-dc`）
-- 板块资金流向页面（`/data/moneyflow-ind-dc`）
+- 板块资金流向页面（`/data/moneyflow-ind-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、page/page_size 分页（100条/页）、syncDialog 弹窗选日期+板块类型（全部时依次提交三任务）、isTaskRunning 实时派生 syncing、统计卡片左文字右图标、TOP 20 图表、模块化 API、时区安全日期构建、默认加载最近有数据的交易日并回填）**
 - 个股资金流向页面（Tushare）（`/data/moneyflow`）
 - 个股资金流向页面（DC）（`/data/moneyflow-stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
 - 融资融券交易汇总页面（`/data/margin`）
@@ -1546,16 +1546,19 @@ docker-compose down
 - **API端点**: `/api/moneyflow-ind-dc`
 - **前端页面**: `/admin/app/(dashboard)/data/moneyflow-ind-dc/page.tsx`
 - **数据内容**: 东方财富板块资金流向，包含行业、概念、地域板块的主力资金流入流出情况
-- **积分消耗**: 6000积分/次（Tushare Pro接口）
-- **页面功能**:
-  - 统计卡片：主力资金均值、累计净流入、最大净流入、超大单均值
-  - 趋势图表：TOP 10板块资金流向可视化（主力净流入、超大单、大单）
-  - 筛选器：支持日期范围和板块类型（行业/概念/地域）筛选
+- **积分消耗**: 6000积分/次（Tushare Pro接口），"全部"同步消耗约 18000 积分（行业+概念+地域三个任务）
+- **页面功能**（2026-03-27 全面优化）:
+  - 统计卡片：左文字右图标布局，显示板块数、主力资金均值、最大净流入、超大单均值
+  - 趋势图表：TOP 20 板块资金流向（调用 `/latest` 接口，不依赖查询筛选）
+  - 筛选器：单日交易日期 + 板块类型，默认自动加载最近有数据的交易日并回填
+  - 后端排序：net_amount/pct_change/buy_elg_amount/buy_lg_amount/buy_md_amount/buy_sm_amount/rank 白名单防注入
+  - 分页查询（100条/页），page/page_size 参数，向后兼容旧 limit/offset
+  - 同步弹窗：点击"同步数据"弹出 Dialog，用户可选日期（留空同步最新交易日）和板块类型；选"全部"依次提交三个任务
+  - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_ind_dc')` 派生，不用本地 boolean
   - 数据单位：统一使用亿元（原始数据为元）
-  - 异步同步：支持后台任务执行，实时显示进度
   - 响应式布局：
     - 桌面端：完整表格视图，显示所有资金流向指标和排名
-    - 移动端：卡片视图，垂直堆叠展示核心指标
+    - 移动端：卡片视图，hover/active 反馈
 
 #### 个股资金流向（Tushare）
 - **API端点**: `/api/moneyflow`
