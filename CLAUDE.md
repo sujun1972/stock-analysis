@@ -352,8 +352,8 @@ const handleSyncConfirm = async () => {
 - 板块资金流向页面（`/moneyflow/ind-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、page/page_size 分页（100条/页）、syncDialog 弹窗选日期+板块类型（全部时依次提交三任务）、isTaskRunning 实时派生 syncing、统计卡片左文字右图标、TOP 20 图表、模块化 API、时区安全日期构建、默认加载最近有数据的交易日并回填）**
 - 个股资金流向页面（Tushare）（`/moneyflow/stock`）
 - 个股资金流向页面（DC）（`/moneyflow/stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
-- 融资融券交易汇总页面（`/margin/summary`）
-- 融资融券交易明细页面（`/margin/detail`）
+- 融资融券交易汇总页面（`/margin/summary`）**（2026-03-27 全面优化：去掉独立统计请求改为 asyncio.gather 并发返回、后端排序白名单（rzrqye/rzye/rqye/rzmre/rzche/rqmcl/rqyl）、page_size 固定100、DataTable mobileCard 统一响应式、统计卡片左文字右图标、去掉 useCallback+多依赖 useEffect 改为空依赖+手动查询、去掉双套移动端/桌面端 JSX）**
+- 融资融券交易明细页面（`/margin/detail`）**（2026-03-27 全面优化：筛选改为单日 trade_date、后端排序白名单防注入、asyncio.gather 并发查数据+总数+统计、resolve_default_trade_date 自动回填最近交易日、标的名称注入：股票从 StockQuoteCache，ETF/基金从 margin_secs 回退、ETF 不可点击跳转分析页面（isStock 判断前缀5/1）、DataTable mobileCard 统一响应式）**
 - 融资融券标的页面（`/margin/secs`）
 - 转融资交易汇总页面（`/margin/slb-len`）
 - 龙虎榜每日明细页面（`/boardgame/top-list`）
@@ -483,6 +483,36 @@ for item in items:
 
 **已接入的 Service**：
 - `TopInstService.get_top_inst_data()` — 龙虎榜机构明细
+- `MarginDetailService.get_margin_detail_data()` — 融资融券交易明细（含 ETF 名称回退）
+
+#### ETF/基金名称回退（margin_secs）
+
+`StockQuoteCache` 只查 `stock_basic`，不含 ETF/基金。当数据表（如 `margin_detail`）中存在 ETF 标的时，需两步注入名称：
+
+```python
+# Service 层（异步）
+from app.repositories.margin_secs_repository import MarginSecsRepository
+
+ts_codes = list(dict.fromkeys(item['ts_code'] for item in data))
+quotes = await asyncio.to_thread(stock_quote_cache._repo.get_quotes, ts_codes)
+# 找出无名称代码，从 margin_secs 补充
+missing_codes = [code for code in ts_codes if not quotes.get(code, {}).get('name')]
+etf_name_map = await asyncio.to_thread(self.margin_secs_repo.get_name_map, missing_codes) if missing_codes else {}
+for item in data:
+    name = quotes.get(item['ts_code'], {}).get('name', '')
+    if not name:
+        name = etf_name_map.get(item['ts_code'], '') or item.get('name', '')
+    item['name'] = name
+```
+
+**前端 ETF 不跳转规则**：代码前缀 `5`（上海 ETF）或 `1`（深圳 ETF/基金）不显示点击样式，不响应跳转：
+
+```typescript
+const isStock = (tsCode: string) => {
+  const code = tsCode.split('.')[0]
+  return !code.startsWith('5') && !code.startsWith('1')
+}
+```
 
 ### 股票代码自动补全（resolve_ts_code）
 

@@ -150,13 +150,32 @@ class MarginService:
         records = await asyncio.to_thread(self.margin_repo.bulk_upsert, df)
         return records
 
+    async def resolve_default_date_range(self) -> Dict[str, Optional[str]]:
+        """
+        解析默认日期范围：返回表中最新交易日（YYYY-MM-DD），用于前端回填
+
+        Returns:
+            {'latest_date': 'YYYY-MM-DD' or None}
+        """
+        try:
+            latest = await asyncio.to_thread(self.margin_repo.get_latest_trade_date)
+            if latest:
+                d = str(latest)
+                return {'latest_date': f"{d[:4]}-{d[4:6]}-{d[6:8]}"}
+            return {'latest_date': None}
+        except Exception as e:
+            logger.error(f"获取最新交易日期失败: {e}")
+            return {'latest_date': None}
+
     async def get_margin_data(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         exchange_id: Optional[str] = None,
         page: int = 1,
-        page_size: int = 30
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         查询融资融券交易汇总数据
@@ -167,42 +186,52 @@ class MarginService:
             exchange_id: 交易所代码
             page: 页码
             page_size: 每页数量
+            sort_by: 排序字段
+            sort_order: 排序方向 asc/desc
 
         Returns:
-            包含数据和统计信息的字典
+            包含数据、总数、统计信息的字典
         """
         try:
             # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
-            # 如果没有指定日期，使用默认的最小/最大日期
             start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
             # 计算分页参数
             offset = (page - 1) * page_size
 
-            # 使用 Repository 查询数据
-            data = await asyncio.to_thread(
-                self.margin_repo.get_by_date_range,
-                start_date_fmt,
-                end_date_fmt,
-                exchange_id=exchange_id,
-                limit=page_size,
-                offset=offset
-            )
-
-            # 获取总数
-            total = await asyncio.to_thread(
-                self.margin_repo.get_record_count,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                exchange_id=exchange_id
+            # 并发查数据、总数、统计
+            data, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.margin_repo.get_by_date_range,
+                    start_date_fmt,
+                    end_date_fmt,
+                    exchange_id=exchange_id,
+                    limit=page_size,
+                    offset=offset,
+                    sort_by=sort_by,
+                    sort_order=sort_order
+                ),
+                asyncio.to_thread(
+                    self.margin_repo.get_record_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    exchange_id=exchange_id
+                ),
+                asyncio.to_thread(
+                    self.margin_repo.get_statistics,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    exchange_id=exchange_id
+                )
             )
 
             return {
                 "data": data,
                 "total": total,
                 "page": page,
-                "page_size": page_size
+                "page_size": page_size,
+                "statistics": statistics
             }
 
         except Exception as e:

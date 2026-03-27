@@ -30,6 +30,8 @@ class MarginRepository(BaseRepository):
 
     TABLE_NAME = "margin"
 
+    SORTABLE_COLUMNS = {'rzrqye', 'rzye', 'rqye', 'rzmre', 'rzche', 'rqmcl', 'rqyl'}
+
     def __init__(self, db=None):
         """初始化Repository"""
         super().__init__(db)
@@ -43,7 +45,9 @@ class MarginRepository(BaseRepository):
         end_date: str,
         exchange_id: Optional[str] = None,
         limit: Optional[int] = None,
-        offset: int = 0
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> List[Dict]:
         """
         按日期范围查询融资融券交易汇总数据
@@ -73,6 +77,12 @@ class MarginRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order and sort_order.lower() == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY trade_date DESC, exchange_id"
+
             query = f"""
                 SELECT
                     trade_date,
@@ -88,7 +98,7 @@ class MarginRepository(BaseRepository):
                     updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, exchange_id
+                {order_clause}
             """
 
             if limit:

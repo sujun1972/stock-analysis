@@ -16,6 +16,8 @@ from loguru import logger
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 from app.repositories import MarginDetailRepository
+from app.repositories.margin_secs_repository import MarginSecsRepository
+from app.services.stock_quote_cache import stock_quote_cache
 
 
 class MarginDetailService:
@@ -23,6 +25,7 @@ class MarginDetailService:
 
     def __init__(self):
         self.margin_detail_repo = MarginDetailRepository()
+        self.margin_secs_repo = MarginSecsRepository()
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
@@ -175,58 +178,108 @@ class MarginDetailService:
         records = await asyncio.to_thread(self.margin_detail_repo.bulk_upsert, df)
         return records
 
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        解析默认交易日期：优先今天，否则回退到表中最新交易日
+
+        Returns:
+            YYYY-MM-DD 格式日期字符串，或 None
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(self.margin_detail_repo.exists_by_date, today)
+        if has_today:
+            return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+        latest = await asyncio.to_thread(self.margin_detail_repo.get_latest_trade_date)
+        if latest:
+            d = str(latest)
+            return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+        return None
+
     async def get_margin_detail_data(
         self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
+        trade_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         page: int = 1,
-        page_size: int = 30
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         查询融资融券交易明细数据
 
         Args:
-            start_date: 开始日期 YYYY-MM-DD
-            end_date: 结束日期 YYYY-MM-DD
+            trade_date: 交易日期 YYYY-MM-DD（单日筛选）
             ts_code: 股票代码
             page: 页码
             page_size: 每页数量
 
         Returns:
-            包含数据和统计信息的字典
+            包含数据、统计和 trade_date 的字典
         """
         try:
+            # 未传日期时解析最近有数据的交易日
+            resolved_date = trade_date
+            if not resolved_date:
+                resolved_date = await self.resolve_default_trade_date()
+
             # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
-            start_date_fmt = start_date.replace('-', '') if start_date else None
-            end_date_fmt = end_date.replace('-', '') if end_date else None
+            date_fmt = resolved_date.replace('-', '') if resolved_date else None
 
             # 计算分页参数
             offset = (page - 1) * page_size
 
-            # 使用 Repository 查询数据
-            data = await asyncio.to_thread(
-                self.margin_detail_repo.get_by_date_range,
-                start_date_fmt,
-                end_date_fmt,
-                ts_code=ts_code,
-                limit=page_size,
-                offset=offset
+            # 并发查数据、总数、统计
+            data, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.margin_detail_repo.get_by_date_range,
+                    date_fmt,
+                    date_fmt,
+                    ts_code=ts_code,
+                    limit=page_size,
+                    offset=offset,
+                    sort_by=sort_by,
+                    sort_order=sort_order
+                ),
+                asyncio.to_thread(
+                    self.margin_detail_repo.get_record_count,
+                    start_date=date_fmt,
+                    end_date=date_fmt,
+                    ts_code=ts_code
+                ),
+                asyncio.to_thread(
+                    self.margin_detail_repo.get_statistics,
+                    start_date=date_fmt,
+                    end_date=date_fmt
+                )
             )
 
-            # 获取总数
-            total = await asyncio.to_thread(
-                self.margin_detail_repo.get_record_count,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code
-            )
+            # 注入标的名称（股票从 StockQuoteCache，ETF/基金从 margin_secs 回退）
+            if data:
+                ts_codes = list(dict.fromkeys(item['ts_code'] for item in data))
+                quotes = await asyncio.to_thread(stock_quote_cache._repo.get_quotes, ts_codes)
+                # 找出无名称的代码，从 margin_secs 补充（ETF/基金）
+                missing_codes = [
+                    code for code in ts_codes
+                    if not quotes.get(code, {}).get('name')
+                ]
+                etf_name_map: dict = {}
+                if missing_codes:
+                    etf_name_map = await asyncio.to_thread(
+                        self.margin_secs_repo.get_name_map, missing_codes
+                    )
+                for item in data:
+                    name = quotes.get(item['ts_code'], {}).get('name', '')
+                    if not name:
+                        name = etf_name_map.get(item['ts_code'], '') or item.get('name', '')
+                    item['name'] = name
 
             return {
                 "data": data,
                 "total": total,
                 "page": page,
-                "page_size": page_size
+                "page_size": page_size,
+                "statistics": statistics,
+                "trade_date": resolved_date
             }
 
         except Exception as e:

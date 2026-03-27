@@ -1,17 +1,26 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { apiClient } from '@/lib/api-client'
+import { marginApi } from '@/lib/api'
+import { formatStockCode } from '@/lib/utils'
 import { useTaskStore } from '@/stores/task-store'
+import { useSystemConfig } from '@/contexts'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp } from 'lucide-react'
+import { RefreshCw, TrendingUp, BarChart3, DollarSign, ListFilter } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // 数据类型定义
@@ -19,14 +28,14 @@ interface MarginDetailData {
   trade_date: string
   ts_code: string
   name: string
-  rzye: number          // 融资余额(元)
-  rqye: number          // 融券余额(元)
-  rzmre: number         // 融资买入额(元)
-  rqyl: number          // 融券余量(股)
-  rzche: number         // 融资偿还额(元)
-  rqchl: number         // 融券偿还量(股)
-  rqmcl: number         // 融券卖出量(股)
-  rzrqye: number        // 融资融券余额(元)
+  rzye: number | null    // 融资余额(元)
+  rqye: number | null    // 融券余额(元)
+  rzmre: number | null   // 融资买入额(元)
+  rqyl: number | null    // 融券余量(股)
+  rzche: number | null   // 融资偿还额(元)
+  rqchl: number | null   // 融券偿还量(股)
+  rqmcl: number | null   // 融券卖出量(股)
+  rzrqye: number | null  // 融资融券余额(元)
 }
 
 interface Statistics {
@@ -36,106 +45,118 @@ interface Statistics {
   stock_count: number
 }
 
+const PAGE_SIZE = 100
+
 export default function MarginDetailPage() {
   const [data, setData] = useState<MarginDetailData[]>([])
   const [topStocks, setTopStocks] = useState<any[]>([])
   const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // 筛选状态
+  const [isLoading, setIsLoading] = useState(false)
+  const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [syncing, setSyncing] = useState(false)
-
-  // 分页状态
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
 
-  // 任务回调引用
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncDate, setSyncDate] = useState<Date | undefined>(undefined)
+
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const { config } = useSystemConfig()
 
-  // 加载数据
-  const loadData = useCallback(async () => {
+  // 从 task store 实时派生——不用本地 useState
+  const syncing = isTaskRunning('tasks.sync_margin_detail')
+
+  // 时区安全的日期字符串构建
+  const toDateStr = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+  // 判断是否为股票（可跳转分析页面），ETF/基金不跳转
+  const isStock = (tsCode: string) => {
+    const code = tsCode.split('.')[0]
+    // 上海ETF/基金：5xxxxx，深圳ETF/基金：1xxxxx
+    return !code.startsWith('5') && !code.startsWith('1')
+  }
+
+  const openStockAnalysis = (code: string) => {
+    if (!isStock(code)) return
+    const url = config?.stock_analysis_url
+    if (!url) return
+    window.open(url.replace('{code}', formatStockCode(code)), '_blank')
+  }
+
+  // 加载主数据（含统计）
+  const loadData = async (
+    targetPage: number = page,
+    overrideSortKey?: string | null,
+    overrideSortDir?: 'asc' | 'desc' | null
+  ) => {
+    setIsLoading(true)
     try {
-      setLoading(true)
-      setError(null)
-
+      const tradeDateStr = tradeDate ? toDateStr(tradeDate) : undefined
       const params: any = {
-        page,
-        page_size: pageSize
+        page: targetPage,
+        page_size: PAGE_SIZE,
+        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
+        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined,
       }
-
       if (tsCode) params.ts_code = tsCode
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (tradeDateStr) params.trade_date = tradeDateStr
 
-      const response = await apiClient.getMarginDetail(params)
+      const response = await marginApi.getMarginDetail(params)
 
       if (response.code === 200 && response.data) {
         setData(response.data.data || [])
         setTotal(response.data.total || 0)
+        setStatistics(response.data.statistics || null)
+        setPage(targetPage)
+        // 回填后端解析的实际日期
+        if (!tradeDate && response.data.trade_date) {
+          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
+        }
       } else {
-        throw new Error(response.message || '获取数据失败')
+        toast.error(response.message || '获取数据失败')
       }
     } catch (err: any) {
-      const errorMsg = err.message || '加载数据失败'
-      setError(errorMsg)
-      toast.error('加载失败', { description: errorMsg })
+      toast.error(err.message || '加载数据失败')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
-  }, [page, pageSize, tsCode, startDate, endDate])
+  }
 
-  // 加载统计数据
-  const loadStatistics = useCallback(async () => {
+  // 加载TOP股票（图表，独立不阻断主流程）
+  const loadTopStocks = async () => {
     try {
-      const params: any = {}
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-
-      const response = await apiClient.getMarginDetailStatistics(params)
-      if (response.code === 200 && response.data) {
-        setStatistics(response.data)
-      }
-    } catch (err) {
-      console.error('加载统计数据失败:', err)
-    }
-  }, [startDate, endDate])
-
-  // 加载TOP股票
-  const loadTopStocks = useCallback(async () => {
-    try {
-      const response = await apiClient.getMarginDetailTopStocks({ limit: 20 })
+      const response = await marginApi.getMarginDetailTopStocks({ limit: 20 })
       if (response.code === 200 && response.data) {
         setTopStocks(response.data)
       }
-    } catch (err) {
-      console.error('加载TOP股票失败:', err)
+    } catch {
+      // 图表加载失败不阻断主流程
     }
+  }
+
+  // 初始加载：只跑一次
+  useEffect(() => {
+    loadData(1).catch(() => {})
+    loadTopStocks().catch(() => {})
   }, [])
 
-  // 初始加载
-  useEffect(() => {
-    loadData()
-    loadStatistics()
-    loadTopStocks()
-  }, [loadData, loadStatistics, loadTopStocks])
+  const handleQuery = () => {
+    loadData(1).catch(() => {})
+  }
 
-  // 异步同步
-  const handleSync = async () => {
+  // 同步确认
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
-      const params: any = {}
-      if (tsCode) params.ts_code = tsCode
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-
-      const response = await apiClient.syncMarginDetailAsync(params)
+      const syncDateStr = syncDate ? toDateStr(syncDate) : undefined
+      const response = await marginApi.syncMarginDetailAsync(
+        syncDateStr ? { trade_date: syncDateStr } : {}
+      )
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -152,12 +173,9 @@ export default function MarginDetailPage() {
 
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
-            loadData().catch(() => {})
-            loadStatistics().catch(() => {})
+            loadData(1).catch(() => {})
             loadTopStocks().catch(() => {})
             toast.success('数据同步完成', { description: '融资融券交易明细数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -166,36 +184,31 @@ export default function MarginDetailPage() {
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
         triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
+        toast.success(response.message || '同步任务已提交')
       } else {
-        throw new Error(response.message || '同步失败')
+        toast.error(response.message || '提交同步任务失败')
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
   // 组件卸载清理
   useEffect(() => {
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       const callbacks = activeCallbacksRef.current
       callbacks.forEach((callback, taskId) => {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [unregisterCompletionCallback])
 
-  // 格式化金额（元转万元）
-  const formatAmount = (value: number | null | undefined) => {
+  // 格式化金额（元转亿元）
+  const toYi = (value: number | null | undefined) => {
     if (value === null || value === undefined) return '-'
-    return (value / 10000).toFixed(2)
+    return (value / 100000000).toFixed(2) + '亿'
   }
 
   // 格式化日期
@@ -205,252 +218,264 @@ export default function MarginDetailPage() {
   }
 
   // 表格列定义
-  const columns: Column<MarginDetailData>[] = useMemo(
-    () => [
-      {
-        key: 'trade_date',
-        header: '日期',
-        accessor: (row) => formatDate(row.trade_date),
-        width: 100
-      },
-      {
-        key: 'ts_code',
-        header: '代码',
-        accessor: (row) => row.ts_code,
-        width: 90
-      },
-      {
-        key: 'name',
-        header: '名称',
-        accessor: (row) => row.name || '-',
-        width: 100
-      },
-      {
-        key: 'rzrqye',
-        header: (
-          <>
-            <span className="sm:hidden">融券余额</span>
-            <span className="hidden sm:inline">融资融券余额</span>
-          </>
-        ),
-        accessor: (row) => `${formatAmount(row.rzrqye)} 万`,
-        align: 'right',
-        width: 120
-      },
-      {
-        key: 'rzye',
-        header: '融资余额',
-        accessor: (row) => `${formatAmount(row.rzye)} 万`,
-        align: 'right',
-        hideOnMobile: true,
-        width: 120
-      },
-      {
-        key: 'rqye',
-        header: '融券余额',
-        accessor: (row) => `${formatAmount(row.rqye)} 万`,
-        align: 'right',
-        hideOnMobile: true,
-        width: 120
-      },
-      {
-        key: 'rzmre',
-        header: '融资买入',
-        accessor: (row) => `${formatAmount(row.rzmre)} 万`,
-        align: 'right',
-        hideOnMobile: true,
-        width: 110
-      },
-      {
-        key: 'rzche',
-        header: '融资偿还',
-        accessor: (row) => `${formatAmount(row.rzche)} 万`,
-        align: 'right',
-        hideOnMobile: true,
-        width: 110
-      }
-    ],
-    []
-  )
+  const columns: Column<MarginDetailData>[] = useMemo(() => [
+    {
+      key: 'name',
+      header: '股票',
+      accessor: (row) => (
+        <span
+          className={`whitespace-nowrap${isStock(row.ts_code) ? ' cursor-pointer hover:underline' : ''}`}
+          onClick={() => isStock(row.ts_code) && openStockAnalysis(row.ts_code)}
+        >
+          {row.name || '-'}[{formatStockCode(row.ts_code)}]
+        </span>
+      ),
+      width: 160,
+      cellClassName: 'whitespace-nowrap'
+    },
+    {
+      key: 'rzrqye',
+      header: '融资融券余额',
+      accessor: (row) => toYi(row.rzrqye),
+      width: 130,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+    {
+      key: 'rzye',
+      header: '融资余额',
+      accessor: (row) => toYi(row.rzye),
+      hideOnMobile: true,
+      width: 120,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+    {
+      key: 'rqye',
+      header: '融券余额',
+      accessor: (row) => toYi(row.rqye),
+      hideOnMobile: true,
+      width: 120,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+    {
+      key: 'rzmre',
+      header: '融资买入',
+      accessor: (row) => toYi(row.rzmre),
+      hideOnMobile: true,
+      width: 110,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+    {
+      key: 'rzche',
+      header: '融资偿还',
+      accessor: (row) => toYi(row.rzche),
+      hideOnMobile: true,
+      width: 110,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+    {
+      key: 'rqmcl',
+      header: '融券卖出量',
+      accessor: (row) => row.rqmcl !== null && row.rqmcl !== undefined ? row.rqmcl.toFixed(0) + '股' : '-',
+      hideOnMobile: true,
+      width: 110,
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
+    },
+  ], [config])
 
   // 移动端卡片视图
-  const mobileCard = useCallback((item: MarginDetailData) => (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
+  const mobileCard = (item: MarginDetailData) => (
+    <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
+      <div className="flex justify-between items-start mb-2">
         <div>
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.ts_code}</span>
-          <span className="ml-2 text-xs text-gray-500">{item.name}</span>
+          <div
+            className={`font-semibold text-base${isStock(item.ts_code) ? ' cursor-pointer hover:underline' : ''}`}
+            onClick={() => isStock(item.ts_code) && openStockAnalysis(item.ts_code)}
+          >
+            {item.name || '-'}
+          </div>
+          <div className="text-sm text-gray-500">{item.ts_code}</div>
         </div>
         <span className="text-xs text-gray-500">{formatDate(item.trade_date)}</span>
       </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">融资融券余额</span>
-        <span className="font-medium">{formatAmount(item.rzrqye)} 万</span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">融资余额</span>
-        <span className="font-medium">{formatAmount(item.rzye)} 万</span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">融券余额</span>
-        <span className="font-medium">{formatAmount(item.rqye)} 万</span>
+      <div className="space-y-1 text-sm">
+        <div className="flex justify-between">
+          <span className="text-gray-600">融资融券余额</span>
+          <span className="font-medium">{toYi(item.rzrqye)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">融资余额</span>
+          <span className="font-medium">{toYi(item.rzye)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">融券余额</span>
+          <span className="font-medium">{toYi(item.rqye)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">融资买入</span>
+          <span className="font-medium">{toYi(item.rzmre)}</span>
+        </div>
       </div>
     </div>
-  ), [])
+  )
 
-  // 准备图表数据
-  const chartData = useMemo(() => {
-    return topStocks.slice(0, 20).map((stock) => ({
-      name: stock.name || stock.ts_code,
-      融资融券余额: (stock.rzrqye / 100000000).toFixed(2),
-      融资余额: (stock.rzye / 100000000).toFixed(2),
-      融券余额: (stock.rqye / 100000000).toFixed(2)
-    }))
-  }, [topStocks])
+  // 图表数据
+  const chartData = useMemo(() => topStocks.slice(0, 20).map((stock) => ({
+    name: stock.name || stock.ts_code,
+    融资融券余额: Number((stock.rzrqye / 100000000).toFixed(2)),
+    融资余额: Number((stock.rzye / 100000000).toFixed(2)),
+    融券余额: Number((stock.rqye / 100000000).toFixed(2)),
+  })), [topStocks])
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="融资融券交易明细"
         description="个股融资融券交易明细数据（Tushare接口，2000积分/次，单次最大6000行）"
+        details={<>
+          <div>接口：margin_detail</div>
+          <a href="https://tushare.pro/document/2?doc_id=58" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>平均融资融券余额</CardDescription>
-            <CardTitle className="text-2xl">
-              {statistics ? `${formatAmount(statistics.avg_rzrqye)} 万` : '-'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+      {/* 统计卡片 — 左文字右图标，统一亿元 */}
+      {statistics && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">统计股票数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.stock_count ?? 0} 只</p>
+                </div>
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>累计融资融券余额</CardDescription>
-            <CardTitle className="text-2xl">
-              {statistics ? `${(statistics.total_rzrqye / 100000000).toFixed(2)} 亿` : '-'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">平均融资融券余额</p>
+                  <p className="text-xl sm:text-2xl font-bold">
+                    {toYi(statistics.avg_rzrqye)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">当日各股均值</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>最大融资融券余额</CardDescription>
-            <CardTitle className="text-2xl">
-              {statistics ? `${(statistics.max_rzrqye / 100000000).toFixed(2)} 亿` : '-'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">最大融资融券余额</p>
+                  <p className="text-xl sm:text-2xl font-bold text-red-600">
+                    {toYi(statistics.max_rzrqye)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">单股最大值</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>统计股票数量</CardDescription>
-            <CardTitle className="text-2xl">
-              {statistics ? `${statistics.stock_count} 只` : '-'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">合计融资融券余额</p>
+                  <p className="text-xl sm:text-2xl font-bold">
+                    {toYi(statistics.total_rzrqye)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">当日全市场合计</p>
+                </div>
+                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      {/* 趋势图表 */}
+      {/* TOP 20 图表 */}
       {chartData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>TOP 20 股票融资融券余额</CardTitle>
-            <CardDescription>按融资融券余额排序（单位：亿元）</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              融资融券余额 TOP 20
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[400px] overflow-x-auto">
-              <ResponsiveContainer width="100%" height="100%" minWidth={chartData.length * 60}>
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="name"
-                    angle={-45}
-                    textAnchor="end"
-                    height={100}
-                    interval={0}
-                  />
-                  <YAxis label={{ value: '金额（亿元）', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="融资融券余额" fill="#8884d8" />
-                  <Bar dataKey="融资余额" fill="#82ca9d" />
-                  <Bar dataKey="融券余额" fill="#ffc658" />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="overflow-x-auto">
+              <div style={{ minWidth: '600px' }}>
+                <ResponsiveContainer width="100%" height={360}>
+                  <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="name"
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                      interval={0}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis tickFormatter={(v) => v.toFixed(1)} />
+                    <Tooltip formatter={(v) => typeof v === 'number' ? v.toFixed(2) + '亿' : '-'} />
+                    <Legend />
+                    <Bar dataKey="融资融券余额" fill="#8884d8" />
+                    <Bar dataKey="融资余额" fill="#82ca9d" />
+                    <Bar dataKey="融券余额" fill="#ffc658" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* 筛选和同步 */}
+      {/* 筛选区域 */}
       <Card>
         <CardHeader>
-          <CardTitle>数据筛选与同步</CardTitle>
-          <CardDescription>筛选条件和数据同步操作</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <ListFilter className="h-5 w-5" />
+            数据查询
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="flex flex-col gap-2">
-                <Label>股票代码</Label>
-                <Input
-                  placeholder="如：000001.SZ"
-                  value={tsCode}
-                  onChange={(e) => setTsCode(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label>开始日期</Label>
-                <DatePicker
-                  date={startDate}
-                  onDateChange={setStartDate}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label>结束日期</Label>
-                <DatePicker
-                  date={endDate}
-                  onDateChange={setEndDate}
-                />
-              </div>
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="w-full sm:w-48">
+              <label className="text-sm font-medium mb-1 block">股票代码</label>
+              <Input
+                placeholder="如 000001 或 000001.SZ"
+                value={tsCode}
+                onChange={(e) => setTsCode(e.target.value)}
+              />
             </div>
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  setPage(1)
-                  loadData()
-                  loadStatistics()
-                }}
-              >
-                <RefreshCw className="h-4 w-4 mr-1" />
+            <div className="flex-1 w-full sm:w-auto">
+              <label className="text-sm font-medium mb-1 block">交易日期</label>
+              <DatePicker date={tradeDate} onDateChange={setTradeDate} />
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
                 查询
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSync}
-                disabled={syncing}
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
               </Button>
             </div>
           </div>
@@ -458,99 +483,64 @@ export default function MarginDetailPage() {
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">融资融券交易明细</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={`${item.trade_date}-${item.ts_code}`}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {/* 移动端状态显示 */}
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-
-          {/* 移动端分页 */}
-          {!loading && !error && data.length > 0 && (
-            <div className="p-4 border-t bg-muted/30">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                >
-                  上一页
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  第 {page} / {Math.ceil(total / pageSize)} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格视图 */}
-        <div className="hidden sm:block">
+      <Card>
+        <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
             data={data}
-            loading={loading}
-            error={error}
+            loading={isLoading}
+            mobileCard={mobileCard}
             emptyMessage="暂无融资融券交易明细数据"
+            tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
+            sort={{
+              key: sortKey,
+              direction: sortDirection,
+              onSort: (key, direction) => {
+                const newKey = direction ? key : null
+                setSortKey(newKey)
+                setSortDirection(direction)
+                loadData(1, newKey, direction)
+              }
+            }}
             pagination={{
               page,
-              pageSize,
+              pageSize: PAGE_SIZE,
               total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
+              onPageChange: (newPage) => loadData(newPage)
             }}
           />
-        </div>
+        </CardContent>
       </Card>
+
+      {/* 同步日期选择弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步融资融券交易明细</DialogTitle>
+            <DialogDescription>
+              选择同步日期（留空则同步最新交易日数据）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">交易日期（可选）</label>
+            <DatePicker
+              date={syncDate}
+              onDateChange={setSyncDate}
+              placeholder="留空同步最新交易日"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : '确认同步'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

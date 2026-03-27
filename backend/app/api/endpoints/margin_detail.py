@@ -17,35 +17,38 @@ router = APIRouter()
 
 @router.get("")
 async def get_margin_detail(
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(30, ge=1, le=100, description="每页数量"),
+    page_size: int = Query(100, ge=1, le=500, description="每页数量"),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: Optional[str] = Query(None, description="排序方向：asc/desc"),
     current_user: User = Depends(require_admin)
 ):
     """
     获取融资融券交易明细数据
 
     Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
+        trade_date: 交易日期，格式：YYYY-MM-DD（留空则自动返回最近有数据的交易日）
         ts_code: 股票代码
         page: 页码
         page_size: 每页数量
+        sort_by: 排序字段（白名单：rzrqye/rzye/rqye/rzmre/rzche/rqmcl）
+        sort_order: 排序方向（asc/desc）
         current_user: 当前登录用户（管理员）
 
     Returns:
-        融资融券交易明细数据列表
+        融资融券交易明细数据列表，含 trade_date 供前端回填
     """
     try:
         service = MarginDetailService()
         result = await service.get_margin_detail_data(
-            start_date=start_date,
-            end_date=end_date,
+            trade_date=trade_date,
             ts_code=ts_code,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order
         )
         return ApiResponse.success(data=result)
 

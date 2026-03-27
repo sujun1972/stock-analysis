@@ -2,7 +2,6 @@
 融资融券交易汇总 API
 """
 
-import asyncio
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
@@ -21,20 +20,16 @@ async def get_margin_data(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     exchange_id: Optional[str] = Query(None, description="交易所代码（SSE/SZSE/BSE）"),
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(30, ge=1, le=100, description="每页数量")
+    page_size: int = Query(100, ge=1, le=500, description="每页数量"),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: Optional[str] = Query(None, description="排序方向：asc/desc"),
+    current_user: User = Depends(require_admin)
 ):
     """
-    获取融资融券交易汇总数据
-
-    Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        exchange_id: 交易所代码（SSE上交所/SZSE深交所/BSE北交所）
-        page: 页码（默认1）
-        page_size: 每页数量（默认30，最大100）
+    获取融资融券交易汇总数据（含统计，一次返回）
 
     Returns:
-        融资融券交易汇总数据列表
+        融资融券交易汇总数据列表，含 statistics
     """
     try:
         margin_service = MarginService()
@@ -43,7 +38,9 @@ async def get_margin_data(
             end_date=end_date,
             exchange_id=exchange_id,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order
         )
         return ApiResponse.success(data=result)
     except Exception as e:

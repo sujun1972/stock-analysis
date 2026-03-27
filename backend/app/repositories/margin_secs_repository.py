@@ -272,6 +272,39 @@ class MarginSecsRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def get_name_map(self, ts_codes: List[str]) -> Dict[str, str]:
+        """
+        批量获取标的名称映射（从最新交易日数据中查询）
+
+        适用于 ETF、基金等不在 stock_basic 表中的标的。
+
+        Args:
+            ts_codes: 标的代码列表
+
+        Returns:
+            {ts_code: name} 映射字典
+
+        Examples:
+            >>> repo = MarginSecsRepository()
+            >>> name_map = repo.get_name_map(['510050.SH', '159300.SZ'])
+            >>> print(name_map)  # {'510050.SH': '50ETF', '159300.SZ': '沪深300ETF'}
+        """
+        if not ts_codes:
+            return {}
+        try:
+            placeholders = ','.join(['%s'] * len(ts_codes))
+            query = f"""
+                SELECT DISTINCT ON (ts_code) ts_code, name
+                FROM {self.TABLE_NAME}
+                WHERE ts_code IN ({placeholders})
+                ORDER BY ts_code, trade_date DESC
+            """
+            result = self.execute_query(query, tuple(ts_codes))
+            return {row[0]: row[1] for row in result if row[1]}
+        except Exception as e:
+            logger.error(f"获取标的名称映射失败: {e}")
+            return {}
+
     def bulk_upsert(self, df) -> int:
         """
         批量插入/更新数据（UPSERT）

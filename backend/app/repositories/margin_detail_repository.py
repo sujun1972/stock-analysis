@@ -37,13 +37,17 @@ class MarginDetailRepository(BaseRepository):
 
     # ==================== 查询操作 ====================
 
+    SORTABLE_COLUMNS = {'rzrqye', 'rzye', 'rqye', 'rzmre', 'rzche', 'rqmcl'}
+
     def get_by_date_range(
         self,
         start_date: str,
         end_date: str,
         ts_code: Optional[str] = None,
         limit: Optional[int] = None,
-        offset: int = 0
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> List[Dict]:
         """
         按日期范围查询融资融券明细数据
@@ -54,6 +58,8 @@ class MarginDetailRepository(BaseRepository):
             ts_code: 股票代码（可选）
             limit: 返回记录数（可选）
             offset: 偏移量
+            sort_by: 排序字段（白名单：rzrqye/rzye/rqye/rzmre/rzche/rqmcl）
+            sort_order: 排序方向（asc/desc）
 
         Returns:
             融资融券明细数据列表
@@ -73,6 +79,13 @@ class MarginDetailRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
+            # 白名单校验排序字段，防止 SQL 注入
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order and sort_order.lower() == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY rzrqye DESC"
+
             query = f"""
                 SELECT
                     trade_date,
@@ -90,7 +103,7 @@ class MarginDetailRepository(BaseRepository):
                     updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, rzrqye DESC
+                {order_clause}
             """
 
             if limit:

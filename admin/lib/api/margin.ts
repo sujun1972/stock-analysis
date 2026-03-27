@@ -16,6 +16,8 @@ export interface MarginParams {
   exchange_id?: string  // 交易所代码（SSE/SZSE/BSE）
   page?: number
   page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 export interface MarginStatistics {
@@ -41,8 +43,7 @@ export interface SyncTaskResponse {
 }
 
 export interface MarginDetailParams {
-  start_date?: string  // YYYY-MM-DD
-  end_date?: string    // YYYY-MM-DD
+  trade_date?: string  // YYYY-MM-DD 单日筛选
   ts_code?: string     // 股票代码
   page?: number
   page_size?: number
@@ -75,6 +76,7 @@ export class MarginApiClient extends BaseApiClient {
     total: number
     page: number
     page_size: number
+    statistics: any
   }>> {
     return this.get('/api/margin', { params })
   }
