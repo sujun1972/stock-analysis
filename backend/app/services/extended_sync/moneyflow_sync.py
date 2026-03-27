@@ -22,7 +22,7 @@ from app.repositories import (
     MoneyflowIndDcRepository,
     MoneyflowStockDcRepository
 )
-from app.services.trading_calendar_service import trading_calendar_service
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from .base_sync_service import BaseSyncService
 from .common import DataType
 
@@ -38,6 +38,7 @@ class MoneyflowSyncService(BaseSyncService):
         self.moneyflow_mkt_dc_repo = MoneyflowMktDcRepository()
         self.moneyflow_ind_dc_repo = MoneyflowIndDcRepository()
         self.moneyflow_stock_dc_repo = MoneyflowStockDcRepository()
+        self.calendar_repo = TradingCalendarRepository()
 
     # ========== 公共同步方法 ==========
 
@@ -65,7 +66,7 @@ class MoneyflowSyncService(BaseSyncService):
         """
         # 资金流向支持当前日期
         if not trade_date and not start_date:
-            trade_date = trading_calendar_service.get_latest_data_date_sync()
+            trade_date = self.calendar_repo.get_latest_trading_day()
             logger.info(f"资金流向: 使用日期 {trade_date}")
 
         return await self._sync_data_template(
@@ -97,7 +98,7 @@ class MoneyflowSyncService(BaseSyncService):
         积分消耗: 2000
         """
         if not trade_date and not start_date:
-            trade_date = trading_calendar_service.get_latest_data_date_sync()
+            trade_date = self.calendar_repo.get_latest_trading_day()
             logger.info(f"沪深港通资金流向: 使用日期 {trade_date}")
 
         return await self._sync_data_template(
@@ -128,7 +129,7 @@ class MoneyflowSyncService(BaseSyncService):
         积分消耗: 120(试用) / 6000(正式)
         """
         if not trade_date and not start_date:
-            trade_date = trading_calendar_service.get_latest_data_date_sync()
+            trade_date = self.calendar_repo.get_latest_trading_day()
             logger.info(f"大盘资金流向: 使用日期 {trade_date}")
 
         return await self._sync_data_template(
@@ -162,7 +163,7 @@ class MoneyflowSyncService(BaseSyncService):
         单次最大: 5000条数据
         """
         if not trade_date and not start_date:
-            trade_date = trading_calendar_service.get_latest_data_date_sync()
+            trade_date = self.calendar_repo.get_latest_trading_day()
             logger.info(f"板块资金流向: 使用日期 {trade_date}")
 
         return await self._sync_data_template(
@@ -197,7 +198,7 @@ class MoneyflowSyncService(BaseSyncService):
         单次最大: 6000条数据
         """
         if not trade_date and not start_date:
-            trade_date = trading_calendar_service.get_latest_data_date_sync()
+            trade_date = self.calendar_repo.get_latest_trading_day()
             logger.info(f"个股资金流向: 使用日期 {trade_date}")
 
         return await self._sync_data_template(

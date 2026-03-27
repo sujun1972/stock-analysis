@@ -25,9 +25,10 @@ router = APIRouter()
 @router.get("")
 async def get_moneyflow(
     ts_code: Optional[str] = Query(None, description="股票代码"),
+    trade_date: Optional[str] = Query(None, description="单日交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, ge=1, le=1000, description="返回记录数"),
+    limit: int = Query(100, ge=1, le=1000, description="返回记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_user: User = Depends(get_current_user)
 ):
@@ -37,13 +38,14 @@ async def get_moneyflow(
     基于主动买卖单统计，包含小单/中单/大单/特大单的买卖量和买卖额
 
     Returns:
-        包含资金流向数据的响应
+        包含资金流向数据和回填交易日期的响应
     """
     try:
         service = MoneyflowService()
         result = await asyncio.to_thread(
             service.get_moneyflow_data,
             ts_code=ts_code,
+            trade_date=trade_date,
             start_date=start_date,
             end_date=end_date,
             limit=limit,

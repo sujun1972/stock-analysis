@@ -57,6 +57,7 @@ export interface MoneyflowStockDcParams {
 
 export interface MoneyflowParams {
   ts_code?: string
+  trade_date?: string  // YYYY-MM-DD，单日筛选（优先于 start/end_date）
   start_date?: string
   end_date?: string
   limit?: number

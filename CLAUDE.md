@@ -407,16 +407,32 @@ accessor: (row) => row.board_name ? `${row.board_name}[${row.ts_code}]` : row.ts
 
 当页面需要展示股票名称、价格、涨跌幅等行情信息，但数据表中只有 `ts_code` 时，使用 `StockQuoteCache` 注入行情数据，避免跨表 JOIN。
 
-**使用方式**：
+**使用方式（异步 Service）**：
 ```python
 from app.services.stock_quote_cache import stock_quote_cache
 
-# 批量获取行情（在 Service 层调用）
+# 批量获取行情（在异步 Service 方法中调用）
 ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
 quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
 for item in items:
     item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
 ```
+
+**使用方式（同步 Service，通过 `asyncio.to_thread` 调用）**：
+
+当 Service 方法是同步方法（被 `asyncio.to_thread` 调用），无法使用 `await`，改用 `_repo.get_quotes()` 同步接口：
+
+```python
+from app.services.stock_quote_cache import stock_quote_cache
+
+# 同步 Service 方法内（不能 await）
+ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
+quotes = stock_quote_cache._repo.get_quotes(ts_codes)  # 同步调用私有 _repo
+for item in items:
+    item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
+```
+
+**已接入的同步 Service**：`MoneyflowService`（`get_moneyflow_data`、`get_top_stocks`）
 
 **缓存策略**：
 - 数据来源：`stock_basic`（名称）LEFT JOIN `stock_realtime`（价格/涨跌幅）
@@ -520,7 +536,32 @@ if (!tradeDate && response.data.trade_date) {
 }
 ```
 
-**已实现**：`top_list_service.py`、`top_inst_service.py`、`limit_step_service.py`
+**已实现**：`top_list_service.py`、`top_inst_service.py`、`limit_step_service.py`、`moneyflow_service.py`
+
+#### 前端同步：不得将查询筛选日期传入同步接口
+
+同步按钮的 `handleSync` **不得**将当前查询筛选日期（如 `tradeDate`）传给 `syncXxxAsync`。
+
+**原因**：用户日期选择器通常停留在上次查询的日期（如 20260325），传入后会覆盖后端的"取最新交易日"逻辑，导致重复同步旧日期而非增量同步最新交易日。
+
+```typescript
+// ❌ 错误：把查询日期传给同步接口
+const handleSync = async () => {
+  const params: any = {}
+  if (tradeDate) params.trade_date = toDateStr(tradeDate)  // ❌
+  await moneyflowApi.syncMoneyflowAsync(params)
+}
+
+// ✅ 正确：不传日期，让后端从 trading_calendar 自动取最新交易日
+const handleSync = async () => {
+  const params: any = {}
+  // 不传 trade_date，后端会通过 calendar_repo.get_latest_trading_day() 自动确定日期
+  if (tsCode) params.ts_code = tsCode  // 可选：按股票筛选
+  await moneyflowApi.syncMoneyflowAsync(params)
+}
+```
+
+**例外**：若用户在页面上显式选择了"同步指定日期"的功能（区别于查询筛选），可以传入。但这需要单独的"指定日期同步"控件，不能复用查询日期选择器。
 
 ### 新增数据同步功能开发流程
 
