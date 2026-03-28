@@ -138,51 +138,80 @@ class CyqPerfService:
             logger.error(f"数据验证失败: {e}")
             raise
 
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """返回最近有数据的交易日期（YYYY-MM-DD），用于前端日期选择器回填。"""
+        latest = await asyncio.to_thread(self.cyq_perf_repo.get_latest_trade_date)
+        if latest and len(latest) == 8:
+            return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+        return None
+
     async def get_cyq_perf_data(
         self,
         ts_code: Optional[str] = None,
+        trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 30
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> Dict:
         """
-        获取筹码及胜率数据
+        查询筹码及胜率数据
 
         Args:
-            ts_code: 股票代码
-            start_date: 开始日期 YYYY-MM-DD
-            end_date: 结束日期 YYYY-MM-DD
-            limit: 返回记录数
+            ts_code: 股票代码（可选）
+            trade_date: 单日交易日期 YYYY-MM-DD（可选）
+            start_date: 开始日期 YYYY-MM-DD（可选）
+            end_date: 结束日期 YYYY-MM-DD（可选）
+            page: 页码
+            page_size: 每页记录数
+            sort_by: 排序字段
+            sort_order: 排序方向
 
         Returns:
-            数据和统计信息
+            查询结果字典（items, statistics, total）
         """
         try:
             # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
+            trade_date_fmt = trade_date.replace('-', '') if trade_date else None
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 获取数据
-            items = await asyncio.to_thread(
-                self.cyq_perf_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                limit=limit
-            )
+            # 单日查询：将 trade_date 映射为 start_date/end_date
+            if trade_date_fmt and not start_date_fmt and not end_date_fmt:
+                start_date_fmt = trade_date_fmt
+                end_date_fmt = trade_date_fmt
 
-            # 获取统计信息
-            statistics = await asyncio.to_thread(
-                self.cyq_perf_repo.get_statistics,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.cyq_perf_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    page=page,
+                    page_size=page_size,
+                    sort_by=sort_by,
+                    sort_order=sort_order
+                ),
+                asyncio.to_thread(
+                    self.cyq_perf_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                ),
+                asyncio.to_thread(
+                    self.cyq_perf_repo.get_statistics,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                )
             )
 
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:
@@ -213,7 +242,7 @@ class CyqPerfService:
                 self.cyq_perf_repo.get_by_date_range,
                 start_date=latest_date,
                 end_date=latest_date,
-                limit=100
+                page_size=100
             )
 
             return {

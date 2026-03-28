@@ -16,9 +16,113 @@ class CyqChipsRepository(BaseRepository):
 
     TABLE_NAME = "cyq_chips"
 
+    SORTABLE_COLUMNS = {'trade_date', 'price', 'percent', 'ts_code'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ CyqChipsRepository initialized")
+
+    def get_by_date_range(
+        self,
+        ts_code: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        按日期范围和股票代码查询筹码分布数据（支持分页和排序）
+
+        Args:
+            ts_code: 股票代码（可选）
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单校验）
+            sort_order: 排序方向 asc/desc
+
+        Returns:
+            筹码分布数据列表
+        """
+        conditions = []
+        params = []
+
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+
+        if start_date:
+            conditions.append("trade_date >= %s")
+            params.append(start_date)
+        else:
+            conditions.append("trade_date >= %s")
+            params.append('19900101')
+
+        if end_date:
+            conditions.append("trade_date <= %s")
+            params.append(end_date)
+        else:
+            conditions.append("trade_date <= %s")
+            params.append('29991231')
+
+        where_clause = " AND ".join(conditions)
+
+        # 排序（白名单防注入）
+        order = 'ASC' if sort_order == 'asc' else 'DESC'
+        if sort_by and sort_by in self.SORTABLE_COLUMNS:
+            order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+        else:
+            order_clause = "ORDER BY trade_date DESC, ts_code, price DESC"
+
+        offset = (page - 1) * page_size
+        query = f"""
+            SELECT ts_code, trade_date, price, percent,
+                   created_at, updated_at
+            FROM {self.TABLE_NAME}
+            WHERE {where_clause}
+            {order_clause}
+            LIMIT %s OFFSET %s
+        """
+        params.extend([page_size, offset])
+
+        result = self.execute_query(query, tuple(params))
+        return [self._row_to_dict(row) for row in result]
+
+    def get_total_count(
+        self,
+        ts_code: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> int:
+        """获取满足条件的记录总数（用于分页）"""
+        conditions = []
+        params = []
+
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+
+        if start_date:
+            conditions.append("trade_date >= %s")
+            params.append(start_date)
+        else:
+            conditions.append("trade_date >= %s")
+            params.append('19900101')
+
+        if end_date:
+            conditions.append("trade_date <= %s")
+            params.append(end_date)
+        else:
+            conditions.append("trade_date <= %s")
+            params.append('29991231')
+
+        where_clause = " AND ".join(conditions)
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+        result = self.execute_query(query, tuple(params))
+        return int(result[0][0]) if result else 0
 
     def get_by_code_and_date_range(
         self,

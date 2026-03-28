@@ -21,21 +21,29 @@ class CyqPerfRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ CyqPerfRepository initialized")
 
+    SORTABLE_COLUMNS = {'trade_date', 'winner_rate', 'weight_avg', 'cost_50pct', 'his_low', 'his_high'}
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> List[Dict]:
         """
-        按日期范围查询筹码及胜率数据
+        按日期范围查询筹码及胜率数据（支持分页和排序）
 
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 股票代码（可选）
-            limit: 返回记录数限制（可选）
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单校验）
+            sort_order: 排序方向 asc/desc
 
         Returns:
             数据列表
@@ -70,7 +78,14 @@ class CyqPerfRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
-            # 构建查询
+            # 排序（白名单防注入）
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY trade_date DESC, ts_code"
+
+            offset = (page - 1) * page_size
             query = f"""
                 SELECT
                     ts_code, trade_date, his_low, his_high,
@@ -79,12 +94,10 @@ class CyqPerfRepository(BaseRepository):
                     created_at, updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, ts_code
+                {order_clause}
+                LIMIT %s OFFSET %s
             """
-
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            params.extend([page_size, offset])
 
             result = self.execute_query(query, tuple(params))
 
@@ -198,6 +211,39 @@ class CyqPerfRepository(BaseRepository):
                 error_code="CYQ_PERF_STATS_FAILED",
                 reason=str(e)
             )
+
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
+    ) -> int:
+        """获取满足条件的记录总数（用于分页）"""
+        try:
+            conditions = []
+            params = []
+            if start_date:
+                conditions.append("trade_date >= %s")
+                params.append(start_date)
+            else:
+                conditions.append("trade_date >= %s")
+                params.append('19900101')
+            if end_date:
+                conditions.append("trade_date <= %s")
+                params.append(end_date)
+            else:
+                conditions.append("trade_date <= %s")
+                params.append('29991231')
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+            where_clause = " AND ".join(conditions)
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            result = self.execute_query(query, tuple(params))
+            return int(result[0][0]) if result else 0
+        except Exception as e:
+            logger.error(f"获取记录总数失败: {e}")
+            return 0
 
     def get_latest_trade_date(self) -> Optional[str]:
         """
@@ -328,25 +374,25 @@ class CyqPerfRepository(BaseRepository):
     def get_by_stock(
         self,
         ts_code: str,
-        limit: Optional[int] = 30
+        page_size: int = 30
     ) -> List[Dict]:
         """
-        获取指定股票的筹码及胜率数据
+        获取指定股票最近的筹码及胜率数据
 
         Args:
             ts_code: 股票代码
-            limit: 返回记录数限制
+            page_size: 返回记录数上限
 
         Returns:
             数据列表
 
         Examples:
             >>> repo = CyqPerfRepository()
-            >>> data = repo.get_by_stock('600000.SH', limit=50)
+            >>> data = repo.get_by_stock('600000.SH', page_size=50)
         """
         return self.get_by_date_range(
             ts_code=ts_code,
-            limit=limit
+            page_size=page_size
         )
 
     def get_top_winner_stocks(

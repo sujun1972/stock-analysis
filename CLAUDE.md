@@ -361,7 +361,7 @@ const handleSyncConfirm = async () => {
 - 涨跌停列表页面（`/boardgame/limit-list`）
 - 连板天梯页面（`/boardgame/limit-step`）**（2026-03-26 全面优化：筛选改为单日交易日期、股票列合并名称+代码可点击跳转、后端排序（连板次数白名单防注入）、分页查询、默认加载最近有数据的交易日并回填日期选择器）**
 - 最强板块统计页面（`/boardgame/limit-cpt`）**（2026-03-26 全面优化：筛选改为单日交易日期、板块列合并名称+代码、后端排序（up_nums/cons_nums/pct_chg/days/rank 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+统计、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**
-- 卖方盈利预测数据页面（`/features/report-rc`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader）**
+- 卖方盈利预测数据页面（`/features/report-rc`）**（2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_report_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader、同步弹窗与查询日期解耦）**
 - 个股异常波动页面（`/reference-data/stk-shock`）
 - 个股严重异常波动页面（`/reference-data/stk-high-shock`）
 - 交易所重点提示证券页面（`/reference-data/stk-alert`）
@@ -381,8 +381,10 @@ const handleSyncConfirm = async () => {
 - 财务审计意见页面（`/financial/fina-audit`）
 - 主营业务构成页面（`/financial/fina-mainbz`）
 - 财报披露计划页面（`/financial/disclosure-date`）
-- 中央结算系统持股汇总页面（`/features/ccass-hold`）**（2026-03-28 全面对齐最佳实践：同上）**
-- 中央结算系统持股明细页面（`/features/ccass-hold-detail`）**（✨ 新增于 2026-03-23，8000积分/次，参数验证对话框模式；2026-03-28 对齐最佳实践）**
+- 筹码分布页面（`/features/cyq-chips`）**（✨ 新增于 2026-03-28，2000积分/次，单次最大1000行，筹码价格-持仓比例分布；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、同步弹窗与查询日期解耦）**
+- 每日筹码及胜率页面（`/features/cyq-perf`）**（✨ 新增于 2026-03-28，2000积分/次，包含获利比例、成本分布、获利盘/亏损盘比例；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、同步弹窗与查询日期解耦）**
+- 中央结算系统持股汇总页面（`/features/ccass-hold`）**（2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader、同步弹窗与查询日期解耦）**
+- 中央结算系统持股明细页面（`/features/ccass-hold-detail`）**（✨ 新增于 2026-03-23，8000积分/次，参数验证对话框模式；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮保留参数验证（至少填写一个同步条件）、同步弹窗与查询日期解耦）**
 - 沪深港股通持股明细页面（`/features/hk-hold`）**（✨ 新增于 2026-03-23，2000积分/次，2024年8月20日起改为季度披露；2026-03-28 对齐最佳实践）**
 - 股票开盘集合竞价页面（`/features/stk-auction-o`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**
 - 股票收盘集合竞价页面（`/features/stk-auction-c`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**

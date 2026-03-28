@@ -4,9 +4,13 @@ import type { ApiResponse } from '@/types/api'
 export interface CcassHoldParams {
   ts_code?: string
   hk_code?: string
-  start_date?: string
-  end_date?: string
-  limit?: number
+  trade_date?: string   // YYYY-MM-DD 单日精确查询
+  start_date?: string   // YYYY-MM-DD
+  end_date?: string     // YYYY-MM-DD
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 export interface CcassHoldData {
@@ -36,6 +40,7 @@ export class CcassHoldApiClient extends BaseApiClient {
     items: CcassHoldData[]
     statistics: CcassHoldStatistics
     total: number
+    trade_date?: string  // 后端回传的默认日期，供前端回填
   }>> {
     return this.get('/api/ccass-hold', { params })
   }

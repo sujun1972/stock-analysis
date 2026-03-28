@@ -10,10 +10,14 @@ import type { ApiResponse } from '@/types/api'
  */
 export interface ReportRcParams {
   ts_code?: string
+  trade_date?: string  // YYYY-MM-DD 单日精确查询
   start_date?: string  // YYYY-MM-DD
   end_date?: string    // YYYY-MM-DD
   org_name?: string
-  limit?: number
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 /**
@@ -82,6 +86,7 @@ export class ReportRcApiClient extends BaseApiClient {
     items: ReportRcData[]
     statistics: ReportRcStatistics
     total: number
+    report_date?: string  // 后端回传的默认日期，供前端回填
   }>> {
     return this.get('/api/report-rc', { params })
   }

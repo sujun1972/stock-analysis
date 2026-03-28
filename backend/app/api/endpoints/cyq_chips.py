@@ -19,34 +19,44 @@ router = APIRouter()
 @router.get("")
 async def get_cyq_chips(
     ts_code: Optional[str] = Query(None, description="股票代码"),
+    trade_date: Optional[str] = Query(None, description="单日交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(1000, description="返回记录数", ge=1, le=2000)
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(100, description="每页记录数", ge=1, le=500),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: Optional[str] = Query(None, description="排序方向：asc/desc")
 ):
     """
     查询筹码分布数据
 
-    Args:
-        ts_code: 股票代码
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        limit: 返回记录数
-
     Returns:
-        筹码分布数据列表
+        筹码分布数据列表、统计信息、总数和默认日期
     """
     try:
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-        start_date_fmt = start_date.replace('-', '') if start_date else None
-        end_date_fmt = end_date.replace('-', '') if end_date else None
-
         service = CyqChipsService()
+
+        # 未传日期时，自动解析最近有数据的交易日期，回传给前端回填
+        resolved_date = None
+        if not trade_date and not start_date and not end_date:
+            resolved_date = await service.resolve_default_trade_date()
+            if resolved_date:
+                trade_date = resolved_date
+
         result = await service.get_cyq_chips_data(
             ts_code=ts_code,
-            start_date=start_date_fmt,
-            end_date=end_date_fmt,
-            limit=limit
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order
         )
+
+        # 回传解析出的日期，供前端回填日期选择器
+        if resolved_date:
+            result['trade_date'] = resolved_date
 
         return ApiResponse.success(data=result)
 

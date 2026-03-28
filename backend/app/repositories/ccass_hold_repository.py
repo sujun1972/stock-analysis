@@ -17,6 +17,8 @@ class CcassHoldRepository(BaseRepository):
 
     TABLE_NAME = "ccass_hold"
 
+    SORTABLE_COLUMNS = {'trade_date', 'shareholding', 'hold_nums', 'hold_ratio', 'ts_code'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ CcassHoldRepository initialized")
@@ -27,17 +29,23 @@ class CcassHoldRepository(BaseRepository):
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         hk_code: Optional[str] = None,
-        limit: Optional[int] = None
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> List[Dict]:
         """
-        按日期范围查询中央结算系统持股汇总数据
+        按日期范围查询中央结算系统持股汇总数据（分页+排序）
 
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 股票代码，如 '605009.SH'（可选）
             hk_code: 港交所代码，如 '95009'（可选）
-            limit: 返回记录数限制（可选）
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单校验）
+            sort_order: 排序方向 asc/desc
 
         Returns:
             数据列表
@@ -46,7 +54,6 @@ class CcassHoldRepository(BaseRepository):
             >>> repo = CcassHoldRepository()
             >>> data = repo.get_by_date_range('20240101', '20240131')
             >>> data = repo.get_by_date_range('20240101', '20240131', ts_code='605009.SH')
-            >>> data = repo.get_by_date_range('20240101', '20240131', hk_code='95009')
         """
         try:
             # 构建查询条件
@@ -77,7 +84,16 @@ class CcassHoldRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
-            # 构建查询
+            # 排序（白名单防注入）
+            order = 'DESC' if (sort_order or '').lower() != 'asc' else 'ASC'
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY trade_date DESC, ts_code"
+
+            # 分页
+            offset = (page - 1) * page_size
+
             query = f"""
                 SELECT
                     trade_date, ts_code, hk_code, name,
@@ -85,12 +101,10 @@ class CcassHoldRepository(BaseRepository):
                     created_at, updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, ts_code
+                {order_clause}
+                LIMIT %s OFFSET %s
             """
-
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            params.extend([page_size, offset])
 
             result = self.execute_query(query, tuple(params))
 
@@ -118,6 +132,49 @@ class CcassHoldRepository(BaseRepository):
                 error_code="CCASS_HOLD_QUERY_FAILED",
                 reason=str(e)
             )
+
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        hk_code: Optional[str] = None
+    ) -> int:
+        """获取满足条件的总记录数"""
+        try:
+            conditions = []
+            params = []
+
+            if start_date:
+                conditions.append("trade_date >= %s")
+                params.append(start_date)
+            else:
+                conditions.append("trade_date >= %s")
+                params.append('19900101')
+
+            if end_date:
+                conditions.append("trade_date <= %s")
+                params.append(end_date)
+            else:
+                conditions.append("trade_date <= %s")
+                params.append('29991231')
+
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+
+            if hk_code:
+                conditions.append("hk_code = %s")
+                params.append(hk_code)
+
+            where_clause = " AND ".join(conditions)
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            result = self.execute_query(query, tuple(params))
+            return result[0][0] if result else 0
+
+        except Exception as e:
+            logger.error(f"获取总记录数失败: {e}")
+            return 0
 
     def get_statistics(
         self,

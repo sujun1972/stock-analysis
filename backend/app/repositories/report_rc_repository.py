@@ -21,30 +21,40 @@ class ReportRcRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ ReportRcRepository initialized")
 
+    SORTABLE_COLUMNS = {'eps', 'pe', 'roe', 'max_price', 'min_price', 'report_date'}
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        trade_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         org_name: Optional[str] = None,
-        limit: Optional[int] = None
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> List[Dict]:
         """
-        按日期范围查询卖方盈利预测数据
+        按日期范围或单日查询卖方盈利预测数据（支持分页和排序）
 
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
+            trade_date: 单日精确查询，格式：YYYYMMDD（优先于 start_date/end_date）
             ts_code: 股票代码（可选）
             org_name: 机构名称（可选）
-            limit: 返回记录数限制（可选）
+            page: 页码（从1开始）
+            page_size: 每页记录数
+            sort_by: 排序字段（白名单：eps/pe/roe/max_price/min_price/report_date）
+            sort_order: 排序方向（asc/desc）
 
         Returns:
             数据列表
 
         Examples:
             >>> repo = ReportRcRepository()
-            >>> data = repo.get_by_date_range('20240101', '20240131')
+            >>> data = repo.get_by_date_range(trade_date='20240115')
             >>> data = repo.get_by_date_range('20240101', '20240131', ts_code='000001.SZ')
         """
         try:
@@ -52,19 +62,23 @@ class ReportRcRepository(BaseRepository):
             conditions = []
             params = []
 
-            if start_date:
-                conditions.append("report_date >= %s")
-                params.append(start_date)
+            if trade_date:
+                conditions.append("report_date = %s")
+                params.append(trade_date)
             else:
-                conditions.append("report_date >= %s")
-                params.append('19900101')
+                if start_date:
+                    conditions.append("report_date >= %s")
+                    params.append(start_date)
+                else:
+                    conditions.append("report_date >= %s")
+                    params.append('19900101')
 
-            if end_date:
-                conditions.append("report_date <= %s")
-                params.append(end_date)
-            else:
-                conditions.append("report_date <= %s")
-                params.append('29991231')
+                if end_date:
+                    conditions.append("report_date <= %s")
+                    params.append(end_date)
+                else:
+                    conditions.append("report_date <= %s")
+                    params.append('29991231')
 
             if ts_code:
                 conditions.append("ts_code = %s")
@@ -76,6 +90,13 @@ class ReportRcRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
+            # 排序（白名单防注入）
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY report_date DESC, ts_code"
+
             # 构建查询
             query = f"""
                 SELECT
@@ -86,12 +107,12 @@ class ReportRcRepository(BaseRepository):
                     create_time, created_at, updated_at
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY report_date DESC, ts_code
+                {order_clause}
             """
 
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            offset = (page - 1) * page_size
+            query += " LIMIT %s OFFSET %s"
+            params.extend([page_size, offset])
 
             result = self.execute_query(query, tuple(params))
 
@@ -371,26 +392,103 @@ class ReportRcRepository(BaseRepository):
     def get_by_stock(
         self,
         ts_code: str,
-        limit: Optional[int] = 30
+        page_size: int = 30
     ) -> List[Dict]:
         """
-        获取指定股票的卖方盈利预测数据
+        获取指定股票最近的卖方盈利预测数据
 
         Args:
             ts_code: 股票代码
-            limit: 返回记录数限制
+            page_size: 返回记录数上限
 
         Returns:
             数据列表
 
         Examples:
             >>> repo = ReportRcRepository()
-            >>> data = repo.get_by_stock('000001.SZ', limit=50)
+            >>> data = repo.get_by_stock('000001.SZ', page_size=50)
         """
         return self.get_by_date_range(
             ts_code=ts_code,
-            limit=limit
+            page_size=page_size
         )
+
+    def get_total_count(
+        self,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        org_name: Optional[str] = None
+    ) -> int:
+        """
+        获取满足条件的记录总数（用于分页）
+
+        Args:
+            trade_date: 单日精确查询，格式：YYYYMMDD
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+            org_name: 机构名称（可选）
+
+        Returns:
+            记录总数
+        """
+        try:
+            conditions = []
+            params = []
+
+            if trade_date:
+                conditions.append("report_date = %s")
+                params.append(trade_date)
+            else:
+                if start_date:
+                    conditions.append("report_date >= %s")
+                    params.append(start_date)
+                else:
+                    conditions.append("report_date >= %s")
+                    params.append('19900101')
+                if end_date:
+                    conditions.append("report_date <= %s")
+                    params.append(end_date)
+                else:
+                    conditions.append("report_date <= %s")
+                    params.append('29991231')
+
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+
+            if org_name:
+                conditions.append("org_name = %s")
+                params.append(org_name)
+
+            where_clause = " AND ".join(conditions)
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            result = self.execute_query(query, tuple(params))
+            return int(result[0][0]) if result else 0
+
+        except Exception as e:
+            logger.error(f"获取记录总数失败: {e}")
+            return 0
+
+    def exists_by_date(self, report_date: str) -> bool:
+        """
+        检查指定研报日期是否有数据
+
+        Args:
+            report_date: 研报日期，格式：YYYYMMDD
+
+        Returns:
+            是否存在数据
+        """
+        try:
+            query = f"SELECT 1 FROM {self.TABLE_NAME} WHERE report_date = %s LIMIT 1"
+            result = self.execute_query(query, (report_date,))
+            return bool(result)
+        except Exception as e:
+            logger.error(f"检查日期数据失败: {e}")
+            return False
 
     def get_top_rated_stocks(
         self,

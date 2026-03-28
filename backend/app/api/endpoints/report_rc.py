@@ -2,7 +2,6 @@
 卖方盈利预测数据 API 端点
 """
 
-import asyncio
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
@@ -19,33 +18,46 @@ router = APIRouter()
 @router.get("")
 async def get_report_rc(
     ts_code: Optional[str] = Query(None, description="股票代码"),
+    trade_date: Optional[str] = Query(None, description="单日研报日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     org_name: Optional[str] = Query(None, description="机构名称"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=1000)
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(100, description="每页记录数", ge=1, le=500),
+    sort_by: Optional[str] = Query(None, description="排序字段"),
+    sort_order: Optional[str] = Query(None, description="排序方向：asc/desc")
 ):
     """
     查询卖方盈利预测数据
 
-    Args:
-        ts_code: 股票代码
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        org_name: 机构名称
-        limit: 返回记录数
-
     Returns:
-        卖方盈利预测数据列表和统计信息
+        卖方盈利预测数据列表、统计信息、总数和默认日期
     """
     try:
         service = ReportRcService()
+
+        # 未传日期时，自动解析最近有数据的研报日期，回传给前端回填
+        resolved_date = None
+        if not trade_date and not start_date and not end_date:
+            resolved_date = await service.resolve_default_report_date()
+            if resolved_date:
+                trade_date = resolved_date
+
         result = await service.get_report_rc_data(
             ts_code=ts_code,
+            trade_date=trade_date,
             start_date=start_date,
             end_date=end_date,
             org_name=org_name,
-            limit=limit
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order
         )
+
+        # 回传解析出的日期，供前端回填日期选择器
+        if resolved_date:
+            result['report_date'] = resolved_date
 
         return ApiResponse.success(data=result)
 
@@ -77,7 +89,7 @@ async def get_statistics(
             ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
-            limit=1
+            page_size=1
         )
 
         return ApiResponse.success(data=result.get('statistics', {}))

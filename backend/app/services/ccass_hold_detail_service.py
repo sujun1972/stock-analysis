@@ -5,6 +5,7 @@
 """
 
 import asyncio
+from datetime import datetime
 from typing import Optional, Dict, List
 from loguru import logger
 import pandas as pd
@@ -140,50 +141,92 @@ class CcassHoldDetailService:
         logger.info(f"数据验证和清洗完成，保留 {len(df)} 条有效数据")
         return df
 
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        解析默认交易日期：优先今天，否则回退到表中最新交易日
+        Returns: YYYY-MM-DD 格式，无数据时返回 None
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(self.ccass_hold_detail_repo.exists_by_date, today)
+        if has_today:
+            return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+        latest = await asyncio.to_thread(self.ccass_hold_detail_repo.get_latest_trade_date)
+        if latest:
+            return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+        return None
+
     async def get_ccass_hold_detail_data(
         self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         col_participant_id: Optional[str] = None,
-        limit: int = 30
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> Dict:
         """
-        获取中央结算系统持股明细数据（从数据库）
+        获取中央结算系统持股明细数据（从数据库，支持分页+排序）
 
         Args:
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
             ts_code: 股票代码
             col_participant_id: 参与者编号
-            limit: 返回记录数限制
+            trade_date: 单日交易日期（YYYY-MM-DD格式）
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            page: 页码
+            page_size: 每页记录数
+            sort_by: 排序字段
+            sort_order: 排序方向
 
         Returns:
             数据和统计信息
         """
         try:
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.ccass_hold_detail_repo.get_by_date_range,
-                start_date=start_date,
-                end_date=end_date,
-                ts_code=ts_code,
-                col_participant_id=col_participant_id,
-                limit=limit
-            )
+            # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
+            trade_date_fmt = trade_date.replace('-', '') if trade_date else None
+            start_date_fmt = start_date.replace('-', '') if start_date else None
+            end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 查询统计信息
-            statistics = await asyncio.to_thread(
-                self.ccass_hold_detail_repo.get_statistics,
-                start_date=start_date,
-                end_date=end_date,
-                ts_code=ts_code
+            # 单日查询：将 trade_date 映射为 start_date/end_date
+            if trade_date_fmt and not start_date_fmt and not end_date_fmt:
+                start_date_fmt = trade_date_fmt
+                end_date_fmt = trade_date_fmt
+
+            # 并发获取数据、总数和统计
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.ccass_hold_detail_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    col_participant_id=col_participant_id,
+                    page=page,
+                    page_size=page_size,
+                    sort_by=sort_by,
+                    sort_order=sort_order
+                ),
+                asyncio.to_thread(
+                    self.ccass_hold_detail_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    col_participant_id=col_participant_id
+                ),
+                asyncio.to_thread(
+                    self.ccass_hold_detail_repo.get_statistics,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                )
             )
 
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

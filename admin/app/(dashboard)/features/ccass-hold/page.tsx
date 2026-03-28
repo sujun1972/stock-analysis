@@ -1,16 +1,13 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
-import { DataTable, Column } from '@/components/common/DataTable'
-import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ccassHoldApi, type CcassHoldData, type CcassHoldStatistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
-import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, Users, Percent, Database } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { DataTable, Column } from '@/components/common/DataTable'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Dialog,
   DialogContent,
@@ -19,208 +16,173 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { toast } from 'sonner'
+import { ccassHoldApi, type CcassHoldData, type CcassHoldStatistics } from '@/lib/api'
+import { useTaskStore } from '@/stores/task-store'
+import { RefreshCw, TrendingUp, Users, Percent, Database, ListFilter } from 'lucide-react'
+
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export default function CcassHoldPage() {
   const [data, setData] = useState<CcassHoldData[]>([])
   const [statistics, setStatistics] = useState<CcassHoldStatistics | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [tsCode, setTsCode] = useState<string>('')
-  const [hkCode, setHkCode] = useState<string>('')
-
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
 
-  // 同步弹窗状态
+  // 查询条件
+  const [tsCode, setTsCode] = useState('')
+  const [hkCode, setHkCode] = useState('')
+  const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
+
+  // 同步对话框
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
   const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  // 从 task store 实时派生——不用本地 useState
   const syncing = isTaskRunning('tasks.sync_ccass_hold')
 
-  // 时区安全的日期字符串构建
-  const toDateStr = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const PAGE_SIZE = 100
 
-  // 加载数据
-  const loadData = async (targetPage: number = page) => {
+  const loadData = useCallback(async (targetPage = 1, overrideSortKey = sortKey, overrideSortDir = sortDirection) => {
+    setIsLoading(true)
     try {
-      setIsLoading(true)
-
-      const params: any = { limit: pageSize }
-      if (startDate) params.start_date = toDateStr(startDate)
-      if (endDate) params.end_date = toDateStr(endDate)
-      if (tsCode.trim()) params.ts_code = tsCode.trim()
-      if (hkCode.trim()) params.hk_code = hkCode.trim()
+      const params: any = { page: targetPage, page_size: PAGE_SIZE }
+      if (tsCode) params.ts_code = tsCode
+      if (hkCode) params.hk_code = hkCode
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      if (overrideSortKey) {
+        params.sort_by = overrideSortKey
+        params.sort_order = overrideSortDir ?? 'desc'
+      }
 
       const response = await ccassHoldApi.getData(params)
-
       if (response.code === 200 && response.data) {
         setData(response.data.items || [])
-        setStatistics(response.data.statistics || null)
         setTotal(response.data.total || 0)
+        setStatistics(response.data.statistics || null)
         setPage(targetPage)
-      } else {
-        toast.error(response.message || '获取数据失败')
+
+        // 初次加载且未选日期时，回填后端解析的默认日期
+        if (!tradeDate && response.data.trade_date) {
+          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
+        }
       }
-    } catch (err: any) {
-      toast.error('加载失败', { description: err.message || '加载数据失败' })
+    } catch (error: any) {
+      toast.error(error.message || '加载数据失败')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [tsCode, hkCode, tradeDate, sortKey, sortDirection])
 
-  // 初始加载：只跑一次
   useEffect(() => {
-    loadData(1).catch(() => {})
+    loadData(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 同步确认
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
-    try {
-      const params: any = {}
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
-      const response = await ccassHoldApi.syncAsync(params)
+    const params: any = {}
+    if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+    if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
+    const response = await ccassHoldApi.syncAsync(params)
+    if (response.code === 200 && response.data) {
+      const taskId = response.data.celery_task_id
+      addTask({
+        taskId,
+        taskName: response.data.task_name,
+        displayName: response.data.display_name,
+        taskType: 'data_sync',
+        status: 'running',
+        progress: 0,
+        startTime: Date.now()
+      })
 
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            toast.success('数据同步完成', { description: '中央结算系统持股汇总数据已更新' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
+      const completionCallback = (task: any) => {
+        if (task.status === 'success') {
+          loadData(1).catch(() => {})
+          toast.success('数据同步完成')
         }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-        toast.success(response.message || '同步任务已提交')
-      } else {
-        toast.error(response.message || '提交同步任务失败')
+        unregisterCompletionCallback(taskId, completionCallback)
+        activeCallbacksRef.current.delete(taskId)
       }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
+      activeCallbacksRef.current.set(taskId, completionCallback)
+      registerCompletionCallback(taskId, completionCallback)
+      triggerPoll()
     }
   }
 
-  // 组件卸载清理
   useEffect(() => {
     return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
+      callbacks.forEach((cb, taskId) => unregisterCompletionCallback(taskId, cb))
       callbacks.clear()
     }
   }, [unregisterCompletionCallback])
 
-  // 格式化数字
-  const formatNumber = (value: number | null | undefined, decimals: number = 0): string => {
+  const formatNumber = (value: number | null | undefined, decimals = 0): string => {
     if (value === null || value === undefined) return '-'
     return value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
   }
 
-  // 移动端卡片
-  const mobileCard = (item: CcassHoldData) => (
-    <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
-      <div className="flex justify-between items-start mb-2">
-        <div>
-          <div className="font-semibold text-base">{item.name || item.ts_code}</div>
-          <div className="text-sm text-gray-500">{item.ts_code}</div>
-        </div>
-        <span className="text-xs text-gray-500">{item.trade_date}</span>
-      </div>
-      <div className="space-y-1 text-sm">
-        {item.hk_code && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">港交所代码</span>
-            <span className="font-medium">{item.hk_code}</span>
-          </div>
-        )}
-        <div className="flex justify-between">
-          <span className="text-gray-600">持股量(股)</span>
-          <span className="font-medium">{formatNumber(item.shareholding)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600">参与者数目</span>
-          <span className="font-medium">{formatNumber(item.hold_nums)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600">占比(%)</span>
-          <span className="font-medium">{formatNumber(item.hold_ratio, 2)}</span>
-        </div>
-      </div>
-    </div>
-  )
-
-  // 桌面端表格列定义
-  const columns: Column<CcassHoldData>[] = useMemo(() => [
+  const columns = useMemo((): Column<CcassHoldData>[] => [
     {
-      key: 'trade_date',
       header: '交易日期',
       accessor: (row) => row.trade_date,
-      width: 110
+      key: 'trade_date',
+      sortable: true,
+      width: 110,
+      cellClassName: 'whitespace-nowrap'
     },
     {
-      key: 'ts_code',
       header: '股票代码',
       accessor: (row) => row.ts_code,
-      width: 100
+      key: 'ts_code',
+      sortable: true,
+      width: 110,
+      cellClassName: 'whitespace-nowrap font-mono text-xs'
     },
     {
-      key: 'hk_code',
       header: '港交所代码',
       accessor: (row) => row.hk_code || '-',
-      width: 110
+      key: 'hk_code',
+      width: 100,
+      cellClassName: 'whitespace-nowrap font-mono text-xs'
     },
     {
-      key: 'name',
       header: '股票名称',
       accessor: (row) => row.name || '-',
-      width: 100
+      key: 'name',
     },
     {
-      key: 'shareholding',
       header: '持股量(股)',
       accessor: (row) => formatNumber(row.shareholding),
+      key: 'shareholding',
+      sortable: true,
       width: 130,
       cellClassName: 'text-right whitespace-nowrap'
     },
     {
-      key: 'hold_nums',
       header: '参与者数目',
       accessor: (row) => formatNumber(row.hold_nums),
+      key: 'hold_nums',
+      sortable: true,
       width: 110,
       cellClassName: 'text-right whitespace-nowrap'
     },
     {
-      key: 'hold_ratio',
       header: '占比(%)',
       accessor: (row) => formatNumber(row.hold_ratio, 2),
+      key: 'hold_ratio',
+      sortable: true,
       width: 90,
       cellClassName: 'text-right whitespace-nowrap'
     }
@@ -230,23 +192,22 @@ export default function CcassHoldPage() {
     <div className="space-y-6">
       <PageHeader
         title="中央结算系统持股汇总"
-        description="查询中央结算系统（CCASS）持股汇总数据（5000积分/次）"
+        description="查询中央结算系统（CCASS）持股汇总数据，数据每天更新"
         details={<>
           <div>接口：ccass_hold</div>
+          <div>积分消耗：5000积分/次</div>
           <a href="https://tushare.pro/document/2?doc_id=204" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
+            {syncing
+              ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              : <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>}
           </Button>
         }
       />
 
-      {/* 统计卡片 — 左文字右图标 */}
+      {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -261,7 +222,6 @@ export default function CcassHoldPage() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -274,7 +234,6 @@ export default function CcassHoldPage() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -287,7 +246,6 @@ export default function CcassHoldPage() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -303,40 +261,41 @@ export default function CcassHoldPage() {
         </div>
       )}
 
-      {/* 筛选区域 */}
+      {/* 查询筛选 */}
       <Card>
         <CardHeader>
-          <CardTitle>数据查询</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <ListFilter className="h-4 w-4" />
+            数据查询
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">股票代码</label>
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="space-y-1 w-full sm:w-auto">
+              <Label htmlFor="ts_code">股票代码</Label>
               <Input
+                id="ts_code"
                 placeholder="如 000001 或 000001.SZ"
                 value={tsCode}
-                onChange={(e) => setTsCode(e.target.value)}
+                onChange={(e) => setTsCode(e.target.value.toUpperCase())}
+                className="w-full sm:w-40"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">港交所代码</label>
+            <div className="space-y-1 w-full sm:w-auto">
+              <Label htmlFor="hk_code">港交所代码</Label>
               <Input
-                placeholder="如：95009"
+                id="hk_code"
+                placeholder="如 95009"
                 value={hkCode}
                 onChange={(e) => setHkCode(e.target.value)}
+                className="w-full sm:w-32"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">开始日期</label>
-              <DatePicker date={startDate} onDateChange={setStartDate} />
+            <div className="space-y-1">
+              <Label>交易日期</Label>
+              <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="留空加载最新" />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">结束日期</label>
-              <DatePicker date={endDate} onDateChange={setEndDate} />
-            </div>
-          </div>
-          <div className="mt-4">
-            <Button onClick={() => loadData(1).catch(() => {})} disabled={isLoading}>
+            <Button onClick={() => loadData(1)} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
             </Button>
           </div>
@@ -345,52 +304,74 @@ export default function CcassHoldPage() {
 
       {/* 数据表格 */}
       <Card>
-        <CardContent className="p-0 sm:p-6">
+        <CardContent className="pt-4">
           <DataTable
             columns={columns}
             data={data}
             loading={isLoading}
-            mobileCard={mobileCard}
-            emptyMessage="暂无持股汇总数据"
+            emptyMessage="暂无数据"
+            tableClassName="table-fixed w-full [&_th]:border-r [&_th]:border-gray-200 [&_td]:border-r [&_td]:border-gray-100 [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0"
+            sort={{
+              key: sortKey,
+              direction: sortDirection,
+              onSort: (key: string, direction: 'asc' | 'desc' | null) => {
+                const newKey = direction ? key : null
+                setSortKey(newKey)
+                setSortDirection(direction)
+                loadData(1, newKey, direction)
+              }
+            }}
             pagination={{
               page,
-              pageSize,
+              pageSize: PAGE_SIZE,
               total,
-              onPageChange: (newPage) => loadData(newPage),
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                loadData(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
+              onPageChange: (p) => loadData(p)
             }}
+            mobileCard={(row) => (
+              <div className="p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-sm">{row.name || row.ts_code}</span>
+                  <span className="text-xs text-muted-foreground">{row.trade_date}</span>
+                </div>
+                <div className="text-xs text-muted-foreground font-mono">{row.ts_code}{row.hk_code ? ` · ${row.hk_code}` : ''}</div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">持股量</span>
+                  <span className="font-medium">{formatNumber(row.shareholding)} 股</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">参与者数目</span>
+                  <span className="font-medium">{formatNumber(row.hold_nums)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">占比</span>
+                  <span className="font-medium">{formatNumber(row.hold_ratio, 2)}%</span>
+                </div>
+              </div>
+            )}
           />
         </CardContent>
       </Card>
 
-      {/* 同步弹窗 */}
+      {/* 同步对话框 */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>同步中央结算系统持股汇总</DialogTitle>
-            <DialogDescription>
-              选择同步日期范围（留空则同步最新数据）。
-            </DialogDescription>
+            <DialogDescription>从Tushare接口同步数据（5000积分/次）。留空则同步最新数据。</DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+          <div className="space-y-4 py-4">
+            <div className="space-y-1">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空从最早日期开始" />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            <div className="space-y-1">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步到最新日期" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>
-              {syncing ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</> : '确认同步'}
-            </Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

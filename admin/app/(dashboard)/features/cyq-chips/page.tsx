@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,212 +17,178 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { cyqChipsApi, type CyqChipsData } from '@/lib/api'
+import { cyqChipsApi, type CyqChipsData, type CyqChipsStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
-import { BarChart3, TrendingUp, TrendingDown, Download } from 'lucide-react'
+import { RefreshCw, BarChart3, TrendingUp, TrendingDown, DollarSign, ListFilter } from 'lucide-react'
+
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export default function CyqChipsPage() {
   const [data, setData] = useState<CyqChipsData[]>([])
-  const [allData, setAllData] = useState<CyqChipsData[]>([])
-  const [statistics, setStatistics] = useState<any>(null)
+  const [statistics, setStatistics] = useState<CyqChipsStatistics | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
-
-  // 分页状态
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
 
   // 查询条件
-  const [queryTsCode, setQueryTsCode] = useState('')
-  const [queryStartDate, setQueryStartDate] = useState<Date | undefined>(undefined)
-  const [queryEndDate, setQueryEndDate] = useState<Date | undefined>(undefined)
+  const [tsCode, setTsCode] = useState('')
+  const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
 
   // 同步对话框
-  const [showSyncDialog, setShowSyncDialog] = useState(false)
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [syncTsCode, setSyncTsCode] = useState('')
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
   const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const { addTask, triggerPoll } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  // 更新分页数据
-  const updatePaginatedData = useCallback(() => {
-    const startIndex = (currentPage - 1) * pageSize
-    const endIndex = startIndex + pageSize
-    setData(allData.slice(startIndex, endIndex))
-  }, [allData, currentPage, pageSize])
+  const syncing = isTaskRunning('tasks.sync_cyq_chips')
 
-  useEffect(() => {
-    updatePaginatedData()
-  }, [updatePaginatedData])
+  const PAGE_SIZE = 100
 
-  const loadData = useCallback(async () => {
-    if (!queryTsCode) {
-      toast.error('请输入股票代码')
-      return
-    }
-
+  const loadData = useCallback(async (targetPage = 1, overrideSortKey = sortKey, overrideSortDir = sortDirection) => {
     setIsLoading(true)
     try {
-      const params = {
-        ts_code: queryTsCode,
-        start_date: queryStartDate ? queryStartDate.toISOString().split('T')[0] : undefined,
-        end_date: queryEndDate ? queryEndDate.toISOString().split('T')[0] : undefined,
-        limit: 1000  // 增加限制，一次获取更多数据用于分页
+      const params: any = { page: targetPage, page_size: PAGE_SIZE }
+      if (tsCode) params.ts_code = tsCode
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      if (overrideSortKey) {
+        params.sort_by = overrideSortKey
+        params.sort_order = overrideSortDir ?? 'desc'
       }
 
       const response = await cyqChipsApi.getData(params)
-
       if (response.code === 200 && response.data) {
-        const items = response.data.items || []
-        setAllData(items)
-        setTotal(items.length)
-        setCurrentPage(1)  // 重置到第一页
+        setData(response.data.items || [])
+        setTotal(response.data.total || 0)
+        setStatistics(response.data.statistics || null)
+        setPage(targetPage)
 
-        // 获取统计数据
-        const statsParams = {
-          ts_code: queryTsCode,
-          start_date: queryStartDate ? queryStartDate.toISOString().split('T')[0] : undefined,
-          end_date: queryEndDate ? queryEndDate.toISOString().split('T')[0] : undefined,
+        // 初次加载且未选日期时，回填后端解析的默认日期
+        if (!tradeDate && response.data.trade_date) {
+          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
         }
-        const statsResponse = await cyqChipsApi.getStatistics(statsParams)
-        if (statsResponse.code === 200 && statsResponse.data) {
-          setStatistics(statsResponse.data)
-        }
-
-        toast.success(`成功加载 ${items.length} 条数据`)
-      } else {
-        toast.error(response.message || '加载数据失败')
       }
     } catch (error: any) {
-      console.error('加载数据失败:', error)
       toast.error(error.message || '加载数据失败')
     } finally {
       setIsLoading(false)
     }
-  }, [queryTsCode, queryStartDate, queryEndDate])
+  }, [tsCode, tradeDate, sortKey, sortDirection])
 
-  const handleOpenSyncDialog = () => {
-    // 打开对话框时，如果查询条件有值，自动填充到同步参数
-    if (queryTsCode) {
-      setSyncTsCode(queryTsCode)
-    }
-    if (queryStartDate) {
-      setSyncStartDate(queryStartDate)
-    }
-    if (queryEndDate) {
-      setSyncEndDate(queryEndDate)
-    }
-    setShowSyncDialog(true)
-  }
+  useEffect(() => {
+    loadData(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
     if (!syncTsCode) {
       toast.error('请输入股票代码')
       return
     }
+    setSyncDialogOpen(false)
 
-    setIsSyncing(true)
+    const params: any = { ts_code: syncTsCode }
+    if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+    if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
-    try {
-      const params = {
-        ts_code: syncTsCode,
-        start_date: syncStartDate ? syncStartDate.toISOString().split('T')[0] : undefined,
-        end_date: syncEndDate ? syncEndDate.toISOString().split('T')[0] : undefined
+    const response = await cyqChipsApi.syncAsync(params)
+    if (response.code === 200 && response.data) {
+      const taskId = response.data.celery_task_id
+      addTask({
+        taskId,
+        taskName: response.data.task_name,
+        displayName: response.data.display_name,
+        taskType: 'data_sync',
+        status: 'running',
+        progress: 0,
+        startTime: Date.now()
+      })
+
+      const completionCallback = (task: any) => {
+        if (task.status === 'success') {
+          loadData(1).catch(() => {})
+          toast.success('数据同步完成')
+        }
+        unregisterCompletionCallback(taskId, completionCallback)
+        activeCallbacksRef.current.delete(taskId)
       }
-
-      const response = await cyqChipsApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        addTask({
-          taskId: response.data.celery_task_id,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        triggerPoll()
-        setShowSyncDialog(false)
-        toast.success(response.message || '同步任务已提交')
-      } else {
-        toast.error(response.message || '提交同步任务失败')
-      }
-    } catch (error: any) {
-      console.error('同步失败:', error)
-      toast.error(error.message || '同步失败')
-    } finally {
-      setIsSyncing(false)
+      activeCallbacksRef.current.set(taskId, completionCallback)
+      registerCompletionCallback(taskId, completionCallback)
+      triggerPoll()
     }
   }
 
-  // 移动端卡片视图
-  const renderMobileCard = (item: CyqChipsData) => (
-    <div key={`${item.ts_code}-${item.trade_date}`} className="bg-white p-4 border-b divide-y hover:bg-blue-50 active:bg-blue-100 transition-colors">
-      <div className="flex justify-between py-2">
-        <span className="text-xs font-medium text-muted-foreground">股票代码</span>
-        <span className="text-sm font-semibold">{item.ts_code}</span>
-      </div>
-      <div className="flex justify-between py-2">
-        <span className="text-xs font-medium text-muted-foreground">交易日期</span>
-        <span className="text-sm">
-          {item.trade_date && item.trade_date.length === 8
-            ? `${item.trade_date.slice(0, 4)}-${item.trade_date.slice(4, 6)}-${item.trade_date.slice(6, 8)}`
-            : item.trade_date}
-        </span>
-      </div>
-      <div className="flex justify-between py-2">
-        <span className="text-xs font-medium text-muted-foreground">价格</span>
-        <span className="text-sm">{item.price !== null ? item.price.toFixed(2) : '-'}</span>
-      </div>
-      <div className="flex justify-between py-2">
-        <span className="text-xs font-medium text-muted-foreground">占比(%)</span>
-        <span className="text-sm">{item.percent !== null ? item.percent.toFixed(2) : '-'}</span>
-      </div>
-    </div>
-  )
+  useEffect(() => {
+    return () => {
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((cb, taskId) => unregisterCompletionCallback(taskId, cb))
+      callbacks.clear()
+    }
+  }, [unregisterCompletionCallback])
 
-  const columns: Column<CyqChipsData>[] = [
+  const columns = useMemo((): Column<CyqChipsData>[] => [
     {
       header: '股票代码',
       accessor: (row) => row.ts_code,
       key: 'ts_code',
-      sortable: true
+      sortable: true,
+      width: 110,
+      cellClassName: 'whitespace-nowrap font-mono text-xs'
     },
     {
       header: '交易日期',
       accessor: (row) => {
-        const date = row.trade_date
-        if (!date || date.length !== 8) return date
-        return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+        const d = row.trade_date
+        if (!d || d.length !== 8) return d
+        return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
       },
       key: 'trade_date',
-      sortable: true
+      sortable: true,
+      width: 100,
+      cellClassName: 'whitespace-nowrap'
     },
     {
       header: '价格',
       accessor: (row) => row.price !== null ? row.price.toFixed(2) : '-',
-      key: 'price'
+      key: 'price',
+      sortable: true,
+      width: 80,
+      cellClassName: 'text-right whitespace-nowrap'
     },
     {
-      header: '占比(%)',
-      accessor: (row) => row.percent !== null ? row.percent.toFixed(2) : '-',
+      header: '筹码占比(%)',
+      accessor: (row) => {
+        const p = row.percent
+        if (p === null || p === undefined) return <span>-</span>
+        const cls = p >= 5 ? 'text-red-600 font-semibold' : p >= 2 ? 'font-semibold' : ''
+        return <span className={cls}>{p.toFixed(2)}%</span>
+      },
       key: 'percent',
-      className: 'font-semibold'
+      sortable: true,
+      cellClassName: 'text-right whitespace-nowrap'
     }
-  ]
+  ], [])
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="每日筹码分布"
         description="A股每日筹码分布数据，包含各价格区间的筹码占比，数据每天18-19点更新"
+        details={<>
+          <div>接口：cyq_chips</div>
+          <div>积分消耗：5000积分/次</div>
+          <div>必填参数：股票代码（ts_code）</div>
+        </>}
         actions={
-          <Button onClick={handleOpenSyncDialog}>
-            同步数据
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing
+              ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              : <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>}
           </Button>
         }
       />
@@ -236,293 +202,159 @@ export default function CyqChipsPage() {
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {statistics.total_records || 0}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                筹码分布数据条数
-              </p>
+              <div className="text-2xl font-bold">{statistics.total_records?.toLocaleString() ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">筹码分布数据条数</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">股票数</CardTitle>
+              <CardTitle className="text-sm font-medium">覆盖股票数</CardTitle>
               <TrendingUp className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {statistics.stock_count || 0}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                覆盖股票数量
-              </p>
+              <div className="text-2xl font-bold text-blue-600">{statistics.stock_count ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">筛选范围内股票数</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">日期数</CardTitle>
+              <CardTitle className="text-sm font-medium">覆盖日期数</CardTitle>
               <TrendingDown className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">
-                {statistics.date_count || 0}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                覆盖交易日期数
-              </p>
+              <div className="text-2xl font-bold text-purple-600">{statistics.date_count ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">覆盖交易日期数</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">平均价格</CardTitle>
-              <Download className="h-4 w-4 text-muted-foreground" />
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ¥{statistics.avg_price !== null ? statistics.avg_price.toFixed(2) : '0.00'}
+                ¥{statistics.avg_price !== null && statistics.avg_price !== undefined ? statistics.avg_price.toFixed(2) : '0.00'}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {statistics.min_price !== null && statistics.max_price !== null
-                  ? `${statistics.min_price.toFixed(2)} - ${statistics.max_price.toFixed(2)}`
-                  : ''}
+                {statistics.min_price !== null && statistics.min_price !== undefined && statistics.max_price !== null && statistics.max_price !== undefined
+                  ? `区间 ${statistics.min_price.toFixed(2)} ~ ${statistics.max_price.toFixed(2)}`
+                  : '价格范围'}
               </p>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* 筛选和操作区域 */}
+      {/* 查询筛选 */}
       <Card>
         <CardHeader>
-          <CardTitle>数据查询</CardTitle>
-          <CardDescription>
-            输入股票代码查询筹码分布数据
-          </CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <ListFilter className="h-4 w-4" />
+            数据查询
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-            <div className="space-y-2">
-              <Label htmlFor="ts_code">股票代码 *</Label>
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="space-y-1 w-full sm:w-auto">
+              <Label htmlFor="ts_code">股票代码</Label>
               <Input
                 id="ts_code"
-                placeholder="例如: 000001.SZ"
-                value={queryTsCode}
-                onChange={(e) => setQueryTsCode(e.target.value.toUpperCase())}
+                placeholder="如 000001 或 000001.SZ"
+                value={tsCode}
+                onChange={(e) => setTsCode(e.target.value.toUpperCase())}
+                className="w-full sm:w-40"
               />
             </div>
-
-            <div className="space-y-2">
-              <Label>开始日期</Label>
-              <DatePicker
-                date={queryStartDate}
-                onDateChange={setQueryStartDate}
-                placeholder="选择开始日期"
-              />
+            <div className="space-y-1">
+              <Label>交易日期</Label>
+              <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="留空加载最新" />
             </div>
-
-            <div className="space-y-2">
-              <Label>结束日期</Label>
-              <DatePicker
-                date={queryEndDate}
-                onDateChange={setQueryEndDate}
-                placeholder="选择结束日期"
-              />
-            </div>
-
-            <Button onClick={loadData} disabled={isLoading || !queryTsCode}>
+            <Button onClick={() => loadData(1)} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* 数据表格（桌面端） */}
-      <Card className="hidden sm:block">
-        <CardHeader>
-          <CardTitle>筹码分布数据</CardTitle>
-          <CardDescription>
-            共 {total} 条记录，当前显示第 {total > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, total)} 条
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      {/* 数据表格 */}
+      <Card>
+        <CardContent className="pt-4">
           <DataTable
             columns={columns}
             data={data}
             loading={isLoading}
-            emptyMessage={queryTsCode ? '暂无数据' : '请输入股票代码并点击查询'}
-            page={currentPage}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setCurrentPage}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize)
-              setCurrentPage(1)  // 切换每页数量时重置到第一页
+            emptyMessage="暂无数据"
+            tableClassName="table-fixed w-full [&_th]:border-r [&_th]:border-gray-200 [&_td]:border-r [&_td]:border-gray-100 [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0"
+            sort={{
+              key: sortKey,
+              direction: sortDirection,
+              onSort: (key: string, direction: 'asc' | 'desc' | null) => {
+                const newKey = direction ? key : null
+                setSortKey(newKey)
+                setSortDirection(direction)
+                loadData(1, newKey, direction)
+              }
             }}
-            pageSizeOptions={[10, 20, 50, 100, 500, 1000]}
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total,
+              onPageChange: (p) => loadData(p)
+            }}
+            mobileCard={(row) => (
+              <div className="p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-sm">{row.ts_code}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {row.trade_date?.length === 8
+                      ? `${row.trade_date.slice(0,4)}-${row.trade_date.slice(4,6)}-${row.trade_date.slice(6,8)}`
+                      : row.trade_date}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">价格</span>
+                  <span className="font-medium">{row.price !== null ? `¥${row.price.toFixed(2)}` : '-'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">筹码占比</span>
+                  <span className={`font-semibold ${(row.percent ?? 0) >= 5 ? 'text-red-600' : ''}`}>
+                    {row.percent !== null ? `${row.percent.toFixed(2)}%` : '-'}
+                  </span>
+                </div>
+              </div>
+            )}
           />
         </CardContent>
       </Card>
 
-      {/* 数据卡片（移动端） */}
-      <Card className="sm:hidden">
-        <CardHeader>
-          <CardTitle>筹码分布数据</CardTitle>
-          <CardDescription>
-            共 {total} 条记录，当前显示第 {total > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, total)} 条
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center items-center h-32">
-              <p className="text-muted-foreground">加载中...</p>
-            </div>
-          ) : data.length > 0 ? (
-            <>
-              <div className="space-y-0">
-                {data.map((item, index) => (
-                  <div
-                    key={`${item.ts_code}-${item.trade_date}-${index}`}
-                    className={`${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                    } p-4 border-b last:border-b-0 hover:bg-blue-50 active:bg-blue-100 transition-colors`}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="font-semibold text-base">{item.ts_code}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {item.trade_date && item.trade_date.length === 8
-                          ? `${item.trade_date.slice(0, 4)}-${item.trade_date.slice(4, 6)}-${item.trade_date.slice(6, 8)}`
-                          : item.trade_date}
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">价格</span>
-                        <span className="font-medium">
-                          {item.price !== null ? `¥${item.price.toFixed(2)}` : '-'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">占比</span>
-                        <span className="font-medium">
-                          {item.percent !== null ? `${item.percent.toFixed(2)}%` : '-'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* 移动端分页控制 */}
-              <div className="mt-6 space-y-3">
-                <div className="flex justify-between items-center text-sm text-muted-foreground">
-                  <span>第 {total > 0 ? currentPage : 0} / {Math.ceil(total / pageSize)} 页</span>
-                  <span>{pageSize} 条/页</span>
-                </div>
-                <div className="flex gap-2 justify-between">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage <= 1}
-                  >
-                    上一页
-                  </Button>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value))
-                      setCurrentPage(1)
-                    }}
-                    className="px-2 py-1 border rounded text-sm"
-                  >
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.min(Math.ceil(total / pageSize), currentPage + 1))}
-                    disabled={currentPage >= Math.ceil(total / pageSize)}
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="flex justify-center items-center h-32">
-              <p className="text-muted-foreground">
-                {queryTsCode ? '暂无数据' : '请输入股票代码并点击查询'}
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* 同步数据对话框 */}
-      <Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+      {/* 同步对话框 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>同步筹码分布数据</DialogTitle>
-            <DialogDescription>
-              从Tushare接口同步每日筹码分布数据（5000积分/次）
-            </DialogDescription>
+            <DialogDescription>从Tushare接口同步数据（5000积分/次）。股票代码必填。</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="sync_ts_code">股票代码 *</Label>
+            <div className="space-y-1">
+              <Label>股票代码 *</Label>
               <Input
-                id="sync_ts_code"
-                placeholder="例如: 000001.SZ"
+                placeholder="如 000001.SZ"
                 value={syncTsCode}
                 onChange={(e) => setSyncTsCode(e.target.value.toUpperCase())}
               />
-              <p className="text-xs text-muted-foreground">
-                必填项，指定要同步的股票代码
-              </p>
             </div>
-
-            <div className="space-y-2">
-              <Label>开始日期</Label>
-              <DatePicker
-                date={syncStartDate}
-                onDateChange={setSyncStartDate}
-                placeholder="选择开始日期"
-              />
-              <p className="text-xs text-muted-foreground">
-                可选，不填则从数据起始日期开始
-              </p>
+            <div className="space-y-1">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空从最早日期开始" />
             </div>
-
-            <div className="space-y-2">
-              <Label>结束日期</Label>
-              <DatePicker
-                date={syncEndDate}
-                onDateChange={setSyncEndDate}
-                placeholder="选择结束日期"
-              />
-              <p className="text-xs text-muted-foreground">
-                可选，不填则同步到最新日期
-              </p>
+            <div className="space-y-1">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步到最新日期" />
             </div>
           </div>
-
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowSyncDialog(false)}
-              disabled={isSyncing}
-            >
-              取消
-            </Button>
-            <Button onClick={handleSync} disabled={isSyncing || !syncTsCode}>
-              {isSyncing ? '同步中...' : '开始同步'}
-            </Button>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing || !syncTsCode}>确认同步</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
