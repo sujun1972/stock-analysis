@@ -410,7 +410,7 @@ class HkHoldRepository(BaseRepository):
         按筛选条件获取统计数据
 
         Returns:
-            统计信息字典：total_count, stock_count, avg_vol, avg_amount, max_ratio
+            统计信息字典：total_count, stock_count, avg_vol, max_ratio
         """
         try:
             conditions = []
@@ -436,7 +436,6 @@ class HkHoldRepository(BaseRepository):
                     COUNT(*) as total_count,
                     COUNT(DISTINCT COALESCE(ts_code, code)) as stock_count,
                     AVG(vol) as avg_vol,
-                    AVG(amount) as avg_amount,
                     MAX(ratio) as max_ratio
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
@@ -450,11 +449,10 @@ class HkHoldRepository(BaseRepository):
                     "total_count": int(row[0]) if row[0] else 0,
                     "stock_count": int(row[1]) if row[1] else 0,
                     "avg_vol": float(row[2]) if row[2] is not None else 0,
-                    "avg_amount": float(row[3]) if row[3] is not None else 0,
-                    "max_ratio": float(row[4]) if row[4] is not None else 0,
+                    "max_ratio": float(row[3]) if row[3] is not None else 0,
                 }
 
-            return {"total_count": 0, "stock_count": 0, "avg_vol": 0, "avg_amount": 0, "max_ratio": 0}
+            return {"total_count": 0, "stock_count": 0, "avg_vol": 0, "max_ratio": 0}
 
         except PsycopgDatabaseError as e:
             logger.error(f"获取统计数据失败: {e}")
