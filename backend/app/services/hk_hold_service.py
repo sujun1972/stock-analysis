@@ -89,8 +89,8 @@ class HkHoldService:
             # 数据验证和清洗
             df = self._validate_and_clean_data(df)
 
-            # 插入数据库
-            records = await self._insert_hk_hold_data(df)
+            # 批量插入数据库
+            records = await asyncio.to_thread(self.hk_hold_repo.bulk_upsert, df)
 
             logger.info(f"成功同步北向资金持股数据 {records} 条")
             return {
@@ -126,8 +126,8 @@ class HkHoldService:
             if col not in df.columns:
                 raise ValueError(f"缺少必需字段: {col}")
 
-        # 数值字段转换
-        numeric_columns = ['vol', 'ratio', 'exchange']
+        # 数值字段转换（exchange 是字符串字段，不做转换）
+        numeric_columns = ['vol', 'ratio', 'amount']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -135,55 +135,86 @@ class HkHoldService:
         logger.info(f"数据清洗完成，有效数据 {len(df)} 条")
         return df
 
-    async def _insert_hk_hold_data(self, df: pd.DataFrame) -> int:
+    async def resolve_default_trade_date(self) -> Optional[str]:
         """
-        插入北向资金持股数据到数据库
-
-        Args:
-            df: 数据DataFrame
+        解析默认查询日期：优先今天，否则回退到表中最新交易日
 
         Returns:
-            插入的记录数
+            日期字符串 YYYY-MM-DD 格式，无数据则返回 None
         """
-        if len(df) == 0:
-            return 0
-
-        # 使用 Repository 批量插入
-        records = await asyncio.to_thread(self.hk_hold_repo.bulk_upsert, df)
-        return records
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(self.hk_hold_repo.exists_by_date, today)
+        if has_today:
+            return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+        latest = await asyncio.to_thread(self.hk_hold_repo.get_latest_trade_date)
+        if latest:
+            return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+        return None
 
     async def get_hk_hold_data(
         self,
         trade_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        code: Optional[str] = None,
         exchange: Optional[str] = None,
-        limit: int = 200
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc',
+        page: int = 1,
+        page_size: int = 100
     ) -> Dict[str, Any]:
         """
-        查询北向资金持股数据
+        查询北向资金持股数据（支持分页和排序）
 
         Args:
             trade_date: 交易日期 YYYY-MM-DD
+            ts_code: A股代码
+            code: 港股代码
             exchange: 交易所代码（SH/SZ）
-            limit: 返回记录数
+            sort_by: 排序字段
+            sort_order: 排序方向（asc/desc）
+            page: 页码（从1开始）
+            page_size: 每页记录数
 
         Returns:
-            包含数据的字典
+            包含数据、分页信息、统计信息的字典
         """
         try:
             # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
             trade_date_fmt = trade_date.replace('-', '') if trade_date else None
 
-            # 使用 Repository 查询数据
-            items = await asyncio.to_thread(
-                self.hk_hold_repo.get_by_date,
-                trade_date=trade_date_fmt,
-                exchange=exchange,
-                limit=limit
+            # 并发查询数据、总数和统计
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.hk_hold_repo.get_paged,
+                    trade_date=trade_date_fmt,
+                    ts_code=ts_code,
+                    code=code,
+                    exchange=exchange,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                    page=page,
+                    page_size=page_size
+                ),
+                asyncio.to_thread(
+                    self.hk_hold_repo.get_total_count,
+                    trade_date=trade_date_fmt,
+                    ts_code=ts_code,
+                    code=code,
+                    exchange=exchange
+                ),
+                asyncio.to_thread(
+                    self.hk_hold_repo.get_statistics_by_date,
+                    trade_date=trade_date_fmt,
+                    ts_code=ts_code,
+                    code=code,
+                    exchange=exchange
+                )
             )
 
             return {
                 "items": items,
-                "count": len(items)
+                "total": total,
+                "statistics": statistics
             }
 
         except Exception as e:

@@ -18,43 +18,45 @@ router = APIRouter()
 
 @router.get("")
 async def get_hk_hold(
-    code: Optional[str] = Query(None, description="原始代码（如 90000）"),
-    ts_code: Optional[str] = Query(None, description="股票代码（如 600000.SH）"),
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    ts_code: Optional[str] = Query(None, description="A股代码（如 600000.SH）"),
+    code: Optional[str] = Query(None, description="港股代码（如 00700.HK）"),
     exchange: Optional[str] = Query(None, description="交易所类型（SH/SZ/HK）"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=1000)
+    sort_by: Optional[str] = Query(None, description="排序字段（ratio/vol/amount/trade_date）"),
+    sort_order: str = Query('desc', description="排序方向（asc/desc）"),
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(100, description="每页记录数", ge=1, le=500)
 ):
     """
-    查询沪深港股通持股明细数据
+    查询沪深港股通持股明细数据（支持分页和排序）
 
     说明：交易所于从2024年8月20开始停止发布日度北向资金数据，改为季度披露
 
-    Args:
-        code: 原始代码（如 90000）
-        ts_code: 股票代码（如 600000.SH）
-        trade_date: 交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        exchange: 交易所类型
-        limit: 返回记录数
-
     Returns:
-        沪深港股通持股明细数据列表和统计信息
+        沪深港股通持股明细数据列表、分页信息、统计信息和默认日期
     """
     try:
         service = HkHoldService()
 
-        # 转换日期格式
-        trade_date_fmt = trade_date.replace('-', '') if trade_date else None
+        # 若未传日期，解析最近有数据的交易日并回传给前端（用于日期选择器自动回填）
+        resolved_date = None
+        if not trade_date:
+            resolved_date = await service.resolve_default_trade_date()
+            trade_date = resolved_date
 
-        # 调用服务
         result = await service.get_hk_hold_data(
-            trade_date=trade_date_fmt,
+            trade_date=trade_date,
+            ts_code=ts_code,
+            code=code,
             exchange=exchange,
-            limit=limit
+            sort_by=sort_by,
+            sort_order=sort_order,
+            page=page,
+            page_size=page_size
         )
+
+        # 回传解析出的日期，供前端回填日期选择器
+        result['trade_date'] = trade_date
 
         return ApiResponse.success(data=result)
 
@@ -70,13 +72,6 @@ async def get_statistics(
 ):
     """
     获取沪深港股通持股明细数据统计信息
-
-    Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-
-    Returns:
-        统计信息
     """
     try:
         service = HkHoldService()
@@ -94,30 +89,16 @@ async def get_statistics(
 
 @router.post("/sync-async")
 async def sync_async(
-    code: Optional[str] = Query(None, description="原始代码（如 90000）"),
-    ts_code: Optional[str] = Query(None, description="股票代码（如 600000.SH）"),
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    exchange: Optional[str] = Query(None, description="交易所类型（SH/SZ/HK）"),
     current_user: User = Depends(require_admin)
 ):
     """
     异步同步沪深港股通持股明细数据（通过Celery任务）
 
     该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    注意：所有参数均为可选，不传参数时将同步所有可用数据
-
-    Args:
-        code: 原始代码
-        ts_code: 股票代码
-        trade_date: 单个交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        exchange: 交易所类型
-        current_user: 当前登录用户（管理员）
+    不传日期时，Service 层自动使用最近30天范围。
 
     Returns:
         包含Celery任务ID和任务信息的响应
@@ -133,12 +114,9 @@ async def sync_async(
         # 提交Celery任务（异步执行）
         celery_task = sync_hk_hold_task.apply_async(
             kwargs={
-                'code': code,
-                'ts_code': ts_code,
                 'trade_date': trade_date_formatted,
                 'start_date': start_date_formatted,
                 'end_date': end_date_formatted,
-                'exchange': exchange
             }
         )
 
@@ -151,12 +129,9 @@ async def sync_async(
             task_type='data_sync',
             user_id=current_user.id,
             task_params={
-                'code': code,
-                'ts_code': ts_code,
                 'trade_date': trade_date_formatted,
                 'start_date': start_date_formatted,
                 'end_date': end_date_formatted,
-                'exchange': exchange
             },
             source='hk_hold_page'
         )

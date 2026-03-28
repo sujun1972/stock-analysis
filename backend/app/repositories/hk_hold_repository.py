@@ -265,6 +265,205 @@ class HkHoldRepository(BaseRepository):
             logger.error(f"获取最新交易日期失败: {e}")
             return None
 
+    def get_paged(
+        self,
+        trade_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        code: Optional[str] = None,
+        exchange: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: str = 'desc',
+        page: int = 1,
+        page_size: int = 100
+    ) -> List[Dict]:
+        """
+        分页查询持股数据（支持排序）
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD（可选）
+            ts_code: A股代码（可选）
+            code: 港股代码（可选）
+            exchange: 交易所（SH/SZ）（可选）
+            sort_by: 排序字段（白名单：ratio/vol/amount/trade_date）
+            sort_order: 排序方向（asc/desc）
+            page: 页码（从1开始）
+            page_size: 每页记录数
+
+        Returns:
+            持股数据列表
+        """
+        SORTABLE_COLUMNS = {'ratio', 'vol', 'amount', 'trade_date'}
+        try:
+            conditions = []
+            params = []
+
+            if trade_date:
+                conditions.append("trade_date = %s")
+                params.append(trade_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+            if code:
+                conditions.append("code = %s")
+                params.append(code)
+            if exchange:
+                conditions.append("exchange = %s")
+                params.append(exchange)
+
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+            if sort_by and sort_by in SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST"
+            else:
+                order_clause = "ORDER BY ratio DESC NULLS LAST"
+
+            offset = (page - 1) * page_size
+            query = f"""
+                SELECT
+                    code, trade_date, ts_code, name, vol, ratio, exchange,
+                    created_at, updated_at
+                FROM {self.TABLE_NAME}
+                WHERE {where_clause}
+                {order_clause}
+                LIMIT %s OFFSET %s
+            """
+            params.extend([page_size, offset])
+            results = self.execute_query(query, tuple(params))
+
+            return [
+                {
+                    "code": row[0],
+                    "trade_date": row[1],
+                    "ts_code": row[2],
+                    "name": row[3],
+                    "vol": float(row[4]) if row[4] is not None else None,
+                    "ratio": float(row[5]) if row[5] is not None else None,
+                    "exchange": row[6],
+                    "created_at": row[7].isoformat() if row[7] else None,
+                    "updated_at": row[8].isoformat() if row[8] else None
+                }
+                for row in results
+            ]
+
+        except PsycopgDatabaseError as e:
+            logger.error(f"分页查询北向资金持股数据失败: {e}")
+            raise QueryError(
+                "北向资金持股数据分页查询失败",
+                error_code="HK_HOLD_PAGED_QUERY_FAILED",
+                reason=str(e)
+            )
+
+    def get_total_count(
+        self,
+        trade_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        code: Optional[str] = None,
+        exchange: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的总记录数（用于分页）
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD（可选）
+            ts_code: A股代码（可选）
+            code: 港股代码（可选）
+            exchange: 交易所（可选）
+
+        Returns:
+            总记录数
+        """
+        try:
+            conditions = []
+            params = []
+
+            if trade_date:
+                conditions.append("trade_date = %s")
+                params.append(trade_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+            if code:
+                conditions.append("code = %s")
+                params.append(code)
+            if exchange:
+                conditions.append("exchange = %s")
+                params.append(exchange)
+
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            result = self.execute_query(query, tuple(params) if params else None)
+            return result[0][0] if result else 0
+
+        except Exception as e:
+            logger.error(f"获取总记录数失败: {e}")
+            return 0
+
+    def get_statistics_by_date(
+        self,
+        trade_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        code: Optional[str] = None,
+        exchange: Optional[str] = None
+    ) -> Dict:
+        """
+        按筛选条件获取统计数据
+
+        Returns:
+            统计信息字典：total_count, stock_count, avg_vol, avg_amount, max_ratio
+        """
+        try:
+            conditions = []
+            params = []
+
+            if trade_date:
+                conditions.append("trade_date = %s")
+                params.append(trade_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+            if code:
+                conditions.append("code = %s")
+                params.append(code)
+            if exchange:
+                conditions.append("exchange = %s")
+                params.append(exchange)
+
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+            query = f"""
+                SELECT
+                    COUNT(*) as total_count,
+                    COUNT(DISTINCT COALESCE(ts_code, code)) as stock_count,
+                    AVG(vol) as avg_vol,
+                    AVG(amount) as avg_amount,
+                    MAX(ratio) as max_ratio
+                FROM {self.TABLE_NAME}
+                WHERE {where_clause}
+            """
+
+            result = self.execute_query(query, tuple(params) if params else None)
+
+            if result and result[0]:
+                row = result[0]
+                return {
+                    "total_count": int(row[0]) if row[0] else 0,
+                    "stock_count": int(row[1]) if row[1] else 0,
+                    "avg_vol": float(row[2]) if row[2] is not None else 0,
+                    "avg_amount": float(row[3]) if row[3] is not None else 0,
+                    "max_ratio": float(row[4]) if row[4] is not None else 0,
+                }
+
+            return {"total_count": 0, "stock_count": 0, "avg_vol": 0, "avg_amount": 0, "max_ratio": 0}
+
+        except PsycopgDatabaseError as e:
+            logger.error(f"获取统计数据失败: {e}")
+            raise QueryError(
+                "持股统计查询失败",
+                error_code="HK_HOLD_STATS_FAILED",
+                reason=str(e)
+            )
+
     # ==================== 写入操作 ====================
 
     def bulk_upsert(self, df: pd.DataFrame) -> int:

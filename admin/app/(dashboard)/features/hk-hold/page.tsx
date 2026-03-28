@@ -8,34 +8,33 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { hkHoldApi, type HkHoldQueryParams, type HkHoldData, type HkHoldStatistics } from '@/lib/api'
+import { hkHoldApi, type HkHoldData, type HkHoldStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, Users, Calendar, Database } from 'lucide-react'
+import { RefreshCw, BarChart3, Users, TrendingUp, Percent } from 'lucide-react'
+
+const PAGE_SIZE = 100
 
 export default function HkHoldPage() {
   const [data, setData] = useState<HkHoldData[]>([])
   const [statistics, setStatistics] = useState<HkHoldStatistics | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState<string>('')
   const [code, setCode] = useState<string>('')
-
-  // 同步弹窗状态
-  const [showSyncDialog, setShowSyncDialog] = useState(false)
-  const [syncCode, setSyncCode] = useState<string>('')
-  const [syncTsCode, setSyncTsCode] = useState<string>('')
-  const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
-  const [syncExchange, setSyncExchange] = useState<string>('')
+  const [exchange, setExchange] = useState<string>('')
 
   // 分页状态
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
+
+  // 排序状态
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
+
+  // 同步弹窗
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncDate, setSyncDate] = useState<Date | undefined>(undefined)
 
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
@@ -47,16 +46,29 @@ export default function HkHoldPage() {
   const toDateStr = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-  // 加载数据
-  const loadData = async (targetPage: number = page) => {
+  const loadData = async (
+    targetPage: number = page,
+    overrideSortKey?: string | null,
+    overrideSortDir?: 'asc' | 'desc' | null
+  ) => {
     try {
       setIsLoading(true)
 
-      const params: HkHoldQueryParams = { limit: pageSize }
-      if (startDate) params.start_date = toDateStr(startDate)
-      if (endDate) params.end_date = toDateStr(endDate)
+      const activeSortKey = overrideSortKey !== undefined ? overrideSortKey : sortKey
+      const activeSortDir = overrideSortDir !== undefined ? overrideSortDir : sortDirection
+
+      const params: any = {
+        page: targetPage,
+        page_size: PAGE_SIZE,
+      }
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (code.trim()) params.code = code.trim()
+      if (exchange.trim()) params.exchange = exchange.trim()
+      if (activeSortKey) {
+        params.sort_by = activeSortKey
+        params.sort_order = activeSortDir || 'desc'
+      }
 
       const response = await hkHoldApi.getData(params)
 
@@ -65,6 +77,11 @@ export default function HkHoldPage() {
         setStatistics(response.data.statistics || null)
         setTotal(response.data.total || 0)
         setPage(targetPage)
+
+        // 自动回填最近有数据的交易日
+        if (!tradeDate && response.data.trade_date) {
+          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
+        }
       } else {
         toast.error(response.message || '获取数据失败')
       }
@@ -75,33 +92,17 @@ export default function HkHoldPage() {
     }
   }
 
-  // 初始加载：只跑一次
+  // 初始加载
   useEffect(() => {
     loadData(1).catch(() => {})
   }, [])
 
-  // 关闭同步弹窗并重置
-  const closeSyncDialog = () => {
-    setShowSyncDialog(false)
-    setSyncCode('')
-    setSyncTsCode('')
-    setSyncTradeDate(undefined)
-    setSyncStartDate(undefined)
-    setSyncEndDate(undefined)
-    setSyncExchange('')
-  }
-
   // 同步确认
   const handleSyncConfirm = async () => {
-    closeSyncDialog()
+    setSyncDialogOpen(false)
     try {
       const params: any = {}
-      if (syncCode.trim()) params.code = syncCode.trim()
-      if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
-      if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-      if (syncExchange.trim()) params.exchange = syncExchange.trim()
+      if (syncDate) params.trade_date = toDateStr(syncDate)
 
       const response = await hkHoldApi.syncAsync(params)
 
@@ -151,7 +152,6 @@ export default function HkHoldPage() {
     }
   }, [unregisterCompletionCallback])
 
-  // 格式化数字
   const formatNumber = (value: number | null | undefined, decimals: number = 0): string => {
     if (value === null || value === undefined) return '-'
     return value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
@@ -176,20 +176,14 @@ export default function HkHoldPage() {
         )}
         {item.vol !== null && item.vol !== undefined && (
           <div className="flex justify-between">
-            <span className="text-gray-600">持股数(万股)</span>
-            <span className="font-medium">{formatNumber(item.vol)}</span>
-          </div>
-        )}
-        {item.amount !== null && item.amount !== undefined && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">持股额(百万元)</span>
-            <span className="font-medium">{formatNumber(item.amount, 2)}</span>
+            <span className="text-gray-600">持股数</span>
+            <span className="font-medium">{formatNumber(item.vol)}万股</span>
           </div>
         )}
         {item.ratio !== null && item.ratio !== undefined && (
           <div className="flex justify-between">
-            <span className="text-gray-600">持股比例(%)</span>
-            <span className="font-medium">{formatNumber(item.ratio, 2)}</span>
+            <span className="text-gray-600">持股比例</span>
+            <span className="font-medium text-blue-600">{formatNumber(item.ratio, 2)}%</span>
           </div>
         )}
       </div>
@@ -202,7 +196,8 @@ export default function HkHoldPage() {
       key: 'trade_date',
       header: '交易日期',
       accessor: (row) => row.trade_date,
-      width: 110
+      width: 110,
+      sortable: true
     },
     {
       key: 'ts_code',
@@ -235,7 +230,8 @@ export default function HkHoldPage() {
       accessor: (row) => formatNumber(row.vol),
       width: 120,
       cellClassName: 'text-right whitespace-nowrap',
-      hideOnMobile: true
+      hideOnMobile: true,
+      sortable: true
     },
     {
       key: 'amount',
@@ -243,14 +239,16 @@ export default function HkHoldPage() {
       accessor: (row) => formatNumber(row.amount, 2),
       width: 130,
       cellClassName: 'text-right whitespace-nowrap',
-      hideOnMobile: true
+      hideOnMobile: true,
+      sortable: true
     },
     {
       key: 'ratio',
       header: '持股比例(%)',
       accessor: (row) => formatNumber(row.ratio, 2),
       width: 110,
-      cellClassName: 'text-right whitespace-nowrap'
+      cellClassName: 'text-right whitespace-nowrap',
+      sortable: true
     }
   ], [])
 
@@ -264,7 +262,7 @@ export default function HkHoldPage() {
           <a href="https://tushare.pro/document/2?doc_id=201" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setShowSyncDialog(true)} disabled={syncing}>
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (
               <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
             ) : (
@@ -274,7 +272,7 @@ export default function HkHoldPage() {
         }
       />
 
-      {/* 统计卡片 — 左文字右图标 */}
+      {/* 统计卡片 — 左文字右图标，单位内联 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -282,10 +280,10 @@ export default function HkHoldPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm text-gray-600">总记录数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.total_count)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">条</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.total_count)}条</p>
+                  <p className="text-xs text-gray-400 mt-0.5">当前筛选结果</p>
                 </div>
-                <Database className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
               </div>
             </CardContent>
           </Card>
@@ -295,10 +293,10 @@ export default function HkHoldPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm text-gray-600">股票数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.stock_count)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">只</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.stock_count)}只</p>
+                  <p className="text-xs text-gray-400 mt-0.5">持仓标的数量</p>
                 </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
+                <Users className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
               </div>
             </CardContent>
           </Card>
@@ -308,10 +306,10 @@ export default function HkHoldPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm text-gray-600">平均持股数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_vol)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">万股</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_vol)}万股</p>
+                  <p className="text-xs text-gray-400 mt-0.5">平均持仓规模</p>
                 </div>
-                <Users className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
               </div>
             </CardContent>
           </Card>
@@ -321,10 +319,10 @@ export default function HkHoldPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm text-gray-600">最高持股比例</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.max_ratio, 2)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">%</p>
+                  <p className="text-xl sm:text-2xl font-bold text-blue-600">{formatNumber(statistics.max_ratio, 2)}%</p>
+                  <p className="text-xs text-gray-400 mt-0.5">单只股票最高占比</p>
                 </div>
-                <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
+                <Percent className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
               </div>
             </CardContent>
           </Card>
@@ -337,33 +335,35 @@ export default function HkHoldPage() {
           <CardTitle>数据查询</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
+          <div className="flex flex-col sm:flex-row gap-4 items-end flex-wrap">
+            <div className="w-full sm:w-40">
+              <label className="text-sm font-medium mb-2 block">交易日期</label>
+              <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="选择日期" />
+            </div>
+            <div className="w-full sm:w-40">
               <label className="text-sm font-medium mb-2 block">A股代码</label>
               <Input
-                placeholder="如 000001 或 000001.SZ"
+                placeholder="如 000001.SZ"
                 value={tsCode}
                 onChange={(e) => setTsCode(e.target.value)}
               />
             </div>
-            <div>
+            <div className="w-full sm:w-40">
               <label className="text-sm font-medium mb-2 block">港股代码</label>
               <Input
-                placeholder="如：00700.HK"
+                placeholder="如 00700.HK"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">开始日期</label>
-              <DatePicker date={startDate} onDateChange={setStartDate} />
+            <div className="w-full sm:w-28">
+              <label className="text-sm font-medium mb-2 block">交易所</label>
+              <Input
+                placeholder="SH / SZ"
+                value={exchange}
+                onChange={(e) => setExchange(e.target.value)}
+              />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">结束日期</label>
-              <DatePicker date={endDate} onDateChange={setEndDate} />
-            </div>
-          </div>
-          <div className="mt-4">
             <Button onClick={() => loadData(1).catch(() => {})} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
             </Button>
@@ -380,90 +380,46 @@ export default function HkHoldPage() {
             loading={isLoading}
             mobileCard={mobileCard}
             emptyMessage="暂无持股数据"
+            sort={{
+              key: sortKey,
+              direction: sortDirection,
+              onSort: (key, direction) => {
+                const newKey = direction ? key : null
+                setSortKey(newKey)
+                setSortDirection(direction)
+                loadData(1, newKey, direction)
+              }
+            }}
             pagination={{
               page,
-              pageSize,
+              pageSize: PAGE_SIZE,
               total,
-              onPageChange: (newPage) => loadData(newPage),
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                loadData(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
+              onPageChange: (newPage) => loadData(newPage)
             }}
           />
         </CardContent>
       </Card>
 
-      {/* 同步参数弹窗 */}
-      <Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+      {/* 同步弹窗 — 仅选日期，与查询筛选解耦 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>同步沪深港股通持股明细</DialogTitle>
             <DialogDescription>
-              所有参数均为可选，不填写参数将同步最新数据
+              选择同步日期（留空则同步最近30天数据）。消耗 2000 积分/次，2024年8月20日起改为季度披露。
             </DialogDescription>
           </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="sync-code">港股代码</Label>
-              <Input
-                id="sync-code"
-                placeholder="如：00700.HK"
-                value={syncCode}
-                onChange={(e) => setSyncCode(e.target.value)}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="sync-ts-code">A股代码</Label>
-              <Input
-                id="sync-ts-code"
-                placeholder="如：000001.SZ"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>交易日期</Label>
-              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择交易日期（可选）" />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>日期范围（可选）</Label>
-              <div className="flex gap-2 items-center">
-                <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="开始日期" />
-                <span className="text-muted-foreground">至</span>
-                <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="结束日期" />
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="sync-exchange">交易所</Label>
-              <Input
-                id="sync-exchange"
-                placeholder="如：HK"
-                value={syncExchange}
-                onChange={(e) => setSyncExchange(e.target.value)}
-              />
-            </div>
-
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 border border-amber-200 dark:border-amber-800">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>注意：</strong>此接口消耗 2000 积分/次，2024年8月20日起改为季度披露
-              </p>
-            </div>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">交易日期（可选）</label>
+            <DatePicker date={syncDate} onDateChange={setSyncDate} placeholder="留空同步最近30天" />
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={closeSyncDialog} disabled={syncing}>取消</Button>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>
               {syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <><RefreshCw className="h-4 w-4 mr-1" />开始同步</>
+                <><RefreshCw className="h-4 w-4 mr-1" />确认同步</>
               )}
             </Button>
           </DialogFooter>
