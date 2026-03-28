@@ -6,11 +6,15 @@ export interface StkNineturnParams {
   start_date?: string
   end_date?: string
   freq?: string
-  limit?: number
+  page?: number
+  page_size?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
 }
 
 export interface StkNineturnData {
   ts_code: string
+  name: string
   trade_date: string
   freq: string
   open: number | null
@@ -51,6 +55,8 @@ export class StkNineturnApiClient extends BaseApiClient {
     items: StkNineturnData[]
     statistics: StkNineturnStatistics
     total: number
+    start_date: string | null
+    end_date: string | null
   }>> {
     return this.get('/api/stk-nineturn', { params })
   }

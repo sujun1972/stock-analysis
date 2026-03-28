@@ -100,6 +100,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 - `/reference-data` - 参考数据导航页（个股异常波动等）
 - `/moneyflow` - 资金流向导航页（个股/板块/大盘/沪深港通）
 - `/margin` - 两融数据导航页（融资融券汇总/明细/标的/转融资）
+- `/features` - 特色数据导航页（筹码分布/北向持股/集合竞价/技术指标/机构调研等）
 
 这些页面以卡片形式展示子功能入口，解决了中间层级页面点击的问题。
 
@@ -388,7 +389,7 @@ const handleSyncConfirm = async () => {
 - 沪深港股通持股明细页面（`/features/hk-hold`）**（✨ 新增于 2026-03-23，2000积分/次，2024年8月20日起改为季度披露；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单（ratio/vol/amount/trade_date）、单日 trade_date 筛选、resolve_default_trade_date 自动回填、asyncio.gather 并发查数据+总数+统计、isTaskRunning 派生 syncing、DataTable mobileCard、单位内联统计卡片+补充说明文字、同步弹窗与查询日期解耦（仅保留可选日期）、固定100条/页）**
 - 股票开盘集合竞价页面（`/features/stk-auction-o`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**
 - 股票收盘集合竞价页面（`/features/stk-auction-c`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**
-- 神奇九转指标页面（`/features/stk-nineturn`）**（✨ 新增于 2026-03-23，6000积分/次，数据从2023年开始，每次最大10000行，支持九转信号筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、isTaskRunning 派生 syncing、保留日期范围筛选）**
+- 神奇九转指标页面（`/features/stk-nineturn`）**（✨ 新增于 2026-03-23，6000积分/次，数据从2023年开始，每次最大10000行，支持九转信号筛选；2026-03-28 全面对齐最佳实践：后端排序白名单（up_count/down_count/close/trade_date/ts_code）、修复 OFFSET 未生效 bug、股票列合并名称+代码可点击跳转分析页面（stock_quote_cache 同步注入）、resolve_default_date_range 自动回填30天日期范围、固定100条/页、去掉无用频率 Select、DataTable 列分割线、isTaskRunning 派生 syncing、asyncio.gather 并发查数据+总数+统计）**
 - AH股比价页面（`/features/stk-ah-comparison`）**（✨ 新增于 2026-03-23，5000积分/次，数据从2025-08-12开始，每次最大1000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，后端 GET 端点新增 trade_date 参数，resolve_default_trade_date 自动回填）**
 - 机构调研表页面（`/features/stk-surv`）**（✨ 新增于 2026-03-23，5000积分/次，单次最大100行，支持按接待方式和机构类型筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、statistics 合并到主响应、同步弹窗解耦查询日期）**
 - 券商每月荐股页面（`/features/broker-recommend`）**（✨ 新增于 2026-03-23，6000积分/次，单次最大1000行，每月1-3日更新当月数据；2026-03-28 全面重构：迁移至模块化 brokerRecommendApi、isTaskRunning 派生 syncing、DataTable mobileCard、同步弹窗选月度）**

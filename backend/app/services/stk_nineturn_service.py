@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories import StkNineturnRepository
+from app.services.stock_quote_cache import stock_quote_cache
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -145,14 +146,35 @@ class StkNineturnService:
             logger.error(f"数据验证失败: {e}")
             raise
 
+    async def resolve_default_date_range(self):
+        """
+        解析默认日期范围：返回表中最新日期（作为 end_date），往前30天作为 start_date。
+        用于查询端点在用户未传日期时自动回填。
+
+        Returns:
+            (start_date_str, end_date_str) YYYY-MM-DD 格式，或 (None, None)
+        """
+        try:
+            latest = await asyncio.to_thread(self.stk_nineturn_repo.get_latest_trade_date)
+            if latest:
+                end_dt = datetime.strptime(latest, '%Y-%m-%d')
+                start_dt = end_dt - timedelta(days=30)
+                return start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d')
+            return None, None
+        except Exception as e:
+            logger.error(f"解析默认日期范围失败: {e}")
+            return None, None
+
     async def get_stk_nineturn_data(
         self,
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         freq: str = 'daily',
-        limit: int = 30,
-        offset: int = 0
+        limit: int = 100,
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> Dict:
         """
         获取神奇九转数据
@@ -164,42 +186,61 @@ class StkNineturnService:
             freq: 频率，默认daily
             limit: 返回记录数限制
             offset: 偏移量
+            sort_by: 排序字段
+            sort_order: 排序方向 asc/desc
 
         Returns:
             包含数据列表和统计信息的字典
         """
         try:
+            # 未传日期时自动回填默认日期范围
+            resolved_start = start_date
+            resolved_end = end_date
+            if not start_date and not end_date and not ts_code:
+                resolved_start, resolved_end = await self.resolve_default_date_range()
+
             # 并发查询数据、总数、统计
             items, total, statistics = await asyncio.gather(
                 asyncio.to_thread(
                     self.stk_nineturn_repo.get_by_date_range,
-                    start_date=start_date,
-                    end_date=end_date,
+                    start_date=resolved_start,
+                    end_date=resolved_end,
                     ts_code=ts_code,
                     freq=freq,
                     limit=limit,
-                    offset=offset
+                    offset=offset,
+                    sort_by=sort_by,
+                    sort_order=sort_order
                 ),
                 asyncio.to_thread(
                     self.stk_nineturn_repo.get_record_count,
-                    start_date=start_date,
-                    end_date=end_date,
+                    start_date=resolved_start,
+                    end_date=resolved_end,
                     ts_code=ts_code,
                     freq=freq
                 ),
                 asyncio.to_thread(
                     self.stk_nineturn_repo.get_statistics,
-                    start_date=start_date,
-                    end_date=end_date,
+                    start_date=resolved_start,
+                    end_date=resolved_end,
                     ts_code=ts_code,
                     freq=freq
                 )
             )
 
+            # 注入股票名称
+            if items:
+                ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
+                quotes = await asyncio.to_thread(stock_quote_cache._repo.get_quotes, ts_codes)
+                for item in items:
+                    item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
+
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": total
+                "total": total,
+                "start_date": resolved_start,
+                "end_date": resolved_end
             }
 
         except Exception as e:

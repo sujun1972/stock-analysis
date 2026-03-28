@@ -272,6 +272,7 @@ const navItems: NavItem[] = [
   },
   {
     name: '特色数据',
+    href: '/features',
     icon: Star,
     children: [
       {

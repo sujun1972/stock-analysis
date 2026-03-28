@@ -14,6 +14,8 @@ class StkNineturnRepository(BaseRepository):
 
     TABLE_NAME = "stk_nineturn"
 
+    SORTABLE_COLUMNS = {'up_count', 'down_count', 'close', 'trade_date', 'ts_code'}
+
     def __init__(self, db=None):
         super().__init__(db)
         logger.debug("✓ StkNineturnRepository initialized")
@@ -25,7 +27,9 @@ class StkNineturnRepository(BaseRepository):
         ts_code: Optional[str] = None,
         freq: str = 'daily',
         limit: Optional[int] = None,
-        offset: int = 0
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> List[Dict]:
         """
         按日期范围查询神奇九转数据
@@ -61,6 +65,13 @@ class StkNineturnRepository(BaseRepository):
 
             where_clause = " AND ".join(conditions)
 
+            # 排序白名单防注入
+            if sort_by and sort_by in self.SORTABLE_COLUMNS:
+                order = 'ASC' if sort_order == 'asc' else 'DESC'
+                order_clause = f"ORDER BY {sort_by} {order} NULLS LAST, ts_code"
+            else:
+                order_clause = "ORDER BY trade_date DESC, ts_code"
+
             # 构建查询语句
             query = f"""
                 SELECT
@@ -79,9 +90,11 @@ class StkNineturnRepository(BaseRepository):
                     nine_down_turn
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
-                ORDER BY trade_date DESC, ts_code
+                {order_clause}
             """
 
+            if offset:
+                query += f" OFFSET {int(offset)}"
             if limit:
                 query += f" LIMIT {int(limit)}"
 

@@ -1,17 +1,18 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { stkNineturnApi, type StkNineturnData, type StkNineturnStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
+import { useSystemConfig } from '@/contexts'
+import { formatStockCode } from '@/lib/utils'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, TrendingDown, BarChart3, Activity } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, BarChart3, Activity, ListFilter } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
+const PAGE_SIZE = 100
+
 export default function StkNineturnPage() {
   const [data, setData] = useState<StkNineturnData[]>([])
   const [statistics, setStatistics] = useState<StkNineturnStatistics | null>(null)
@@ -28,12 +31,14 @@ export default function StkNineturnPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
-  const [freq, setFreq] = useState('daily')
 
   // 分页状态
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
+
+  // 排序状态
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
 
   // 同步弹窗状态
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
@@ -43,6 +48,7 @@ export default function StkNineturnPage() {
 
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+  const { config } = useSystemConfig()
 
   // 从 task store 实时派生——不用本地 useState
   const syncing = isTaskRunning('tasks.sync_stk_nineturn')
@@ -51,15 +57,26 @@ export default function StkNineturnPage() {
   const toDateStr = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
+  const openStockAnalysis = useCallback((tsCode: string) => {
+    const url = config?.stock_analysis_url
+    if (!url) return
+    window.open(url.replace('{code}', formatStockCode(tsCode)), '_blank')
+  }, [config])
+
   // 加载数据
-  const loadData = async (targetPage: number = page) => {
+  const loadData = async (
+    targetPage: number = page,
+    overrideSortKey?: string | null,
+    overrideSortDir?: 'asc' | 'desc' | null
+  ) => {
     try {
       setIsLoading(true)
 
       const params: any = {
-        freq,
         page: targetPage,
-        page_size: pageSize
+        page_size: PAGE_SIZE,
+        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
+        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined,
       }
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (startDate) params.start_date = toDateStr(startDate)
@@ -72,6 +89,13 @@ export default function StkNineturnPage() {
         setStatistics(response.data.statistics || null)
         setTotal(response.data.total || 0)
         setPage(targetPage)
+        // 回填后端解析的默认日期范围（仅在用户未选日期时）
+        if (!startDate && response.data.start_date) {
+          setStartDate(new Date(response.data.start_date + 'T00:00:00'))
+        }
+        if (!endDate && response.data.end_date) {
+          setEndDate(new Date(response.data.end_date + 'T00:00:00'))
+        }
       } else {
         toast.error(response.message || '获取数据失败')
       }
@@ -91,7 +115,7 @@ export default function StkNineturnPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = { freq }
+      const params: any = {}
       if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
       if (syncStartDate) params.start_date = toDateStr(syncStartDate)
       if (syncEndDate) params.end_date = toDateStr(syncEndDate)
@@ -149,7 +173,12 @@ export default function StkNineturnPage() {
     <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
       <div className="flex justify-between items-start mb-2">
         <div>
-          <div className="font-semibold text-base">{item.ts_code}</div>
+          <div
+            className="font-semibold text-base cursor-pointer hover:underline"
+            onClick={() => openStockAnalysis(item.ts_code)}
+          >
+            {item.name ? `${item.name}[${formatStockCode(item.ts_code)}]` : item.ts_code}
+          </div>
           <div className="text-sm text-gray-500">{item.trade_date ? item.trade_date.split(' ')[0] : '-'}</div>
         </div>
         <div className="flex gap-1">
@@ -164,14 +193,20 @@ export default function StkNineturnPage() {
         </div>
         <div className="flex justify-between">
           <span className="text-gray-600">上九转计数</span>
-          <span className={item.up_count && item.up_count >= 9 ? 'font-semibold text-red-600' : 'font-medium'}>
+          <span className={item.up_count !== null && item.up_count >= 9 ? 'font-semibold text-red-600' : 'font-medium'}>
             {item.up_count !== null ? item.up_count.toFixed(1) : '-'}
+            {item.up_count !== null && item.up_count < 9 && (
+              <span className="text-gray-400 ml-1">({(9 - item.up_count).toFixed(1)}格)</span>
+            )}
           </span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-600">下九转计数</span>
-          <span className={item.down_count && item.down_count >= 9 ? 'font-semibold text-green-600' : 'font-medium'}>
+          <span className={item.down_count !== null && item.down_count >= 9 ? 'font-semibold text-green-600' : 'font-medium'}>
             {item.down_count !== null ? item.down_count.toFixed(1) : '-'}
+            {item.down_count !== null && item.down_count < 9 && (
+              <span className="text-gray-400 ml-1">({(9 - item.down_count).toFixed(1)}格)</span>
+            )}
           </span>
         </div>
       </div>
@@ -182,21 +217,31 @@ export default function StkNineturnPage() {
   const columns: Column<StkNineturnData>[] = useMemo(() => [
     {
       key: 'ts_code',
-      header: '股票代码',
-      accessor: (row) => row.ts_code,
-      width: 110
+      header: '股票',
+      accessor: (row) => (
+        <span
+          className="cursor-pointer hover:underline whitespace-nowrap"
+          onClick={() => openStockAnalysis(row.ts_code)}
+        >
+          {row.name ? `${row.name}[${formatStockCode(row.ts_code)}]` : row.ts_code}
+        </span>
+      ),
+      width: 150,
+      cellClassName: 'whitespace-nowrap'
     },
     {
       key: 'trade_date',
       header: '交易日期',
       accessor: (row) => row.trade_date ? row.trade_date.split(' ')[0] : '-',
-      width: 110
+      width: 110,
+      sortable: true,
     },
     {
       key: 'close',
       header: '收盘价',
       accessor: (row) => row.close !== null ? row.close.toFixed(2) : '-',
       width: 90,
+      sortable: true,
       cellClassName: 'text-right whitespace-nowrap'
     },
     {
@@ -212,6 +257,7 @@ export default function StkNineturnPage() {
         )
       },
       width: 110,
+      sortable: true,
       cellClassName: 'text-right whitespace-nowrap'
     },
     {
@@ -227,6 +273,7 @@ export default function StkNineturnPage() {
         )
       },
       width: 110,
+      sortable: true,
       cellClassName: 'text-right whitespace-nowrap'
     },
     {
@@ -251,7 +298,7 @@ export default function StkNineturnPage() {
       },
       width: 80
     }
-  ], [])
+  ], [openStockAnalysis])
 
   return (
     <div className="space-y-6">
@@ -330,45 +377,37 @@ export default function StkNineturnPage() {
         </div>
       )}
 
-      {/* 筛选区域 */}
+      {/* 筛选区域（仅查询控件，同步按钮在 PageHeader） */}
       <Card>
         <CardHeader>
-          <CardTitle>数据查询</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <ListFilter className="h-5 w-5" />
+            数据查询
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">股票代码</label>
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="w-full sm:w-48">
+              <label className="text-sm font-medium mb-1 block">股票代码</label>
               <Input
                 placeholder="如 000001 或 000001.SZ"
                 value={tsCode}
                 onChange={(e) => setTsCode(e.target.value)}
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">频率</label>
-              <Select value={freq} onValueChange={setFreq}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">日线</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">开始日期</label>
+            <div className="w-full sm:w-44">
+              <label className="text-sm font-medium mb-1 block">开始日期</label>
               <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">结束日期</label>
+            <div className="w-full sm:w-44">
+              <label className="text-sm font-medium mb-1 block">结束日期</label>
               <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
-          </div>
-          <div className="mt-4">
-            <Button onClick={() => loadData(1).catch(() => {})} disabled={isLoading}>
-              {isLoading ? '查询中...' : '查询'}
-            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button onClick={() => loadData(1).catch(() => {})} disabled={isLoading} className="flex-1 sm:flex-none">
+                {isLoading ? '查询中...' : '查询'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -382,16 +421,22 @@ export default function StkNineturnPage() {
             loading={isLoading}
             mobileCard={mobileCard}
             emptyMessage="暂无神奇九转指标数据"
+            tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
+            sort={{
+              key: sortKey,
+              direction: sortDirection,
+              onSort: (key, direction) => {
+                const newKey = direction ? key : null
+                setSortKey(newKey)
+                setSortDirection(direction)
+                loadData(1, newKey, direction)
+              }
+            }}
             pagination={{
               page,
-              pageSize,
+              pageSize: PAGE_SIZE,
               total,
-              onPageChange: (newPage) => loadData(newPage),
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                loadData(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
+              onPageChange: (newPage) => loadData(newPage)
             }}
           />
         </CardContent>
