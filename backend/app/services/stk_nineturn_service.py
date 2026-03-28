@@ -2,6 +2,7 @@
 神奇九转指标数据服务
 """
 
+import traceback
 from typing import Optional, Dict, List
 import asyncio
 from datetime import datetime, timedelta
@@ -98,9 +99,7 @@ class StkNineturnService:
             }
 
         except Exception as e:
-            logger.error(f"同步神奇九转数据失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"同步神奇九转数据失败: {e}\n{traceback.format_exc()}")
             return {
                 "status": "error",
                 "records": 0,
@@ -152,7 +151,8 @@ class StkNineturnService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         freq: str = 'daily',
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         获取神奇九转数据
@@ -163,34 +163,43 @@ class StkNineturnService:
             end_date: 结束日期，格式：YYYY-MM-DD
             freq: 频率，默认daily
             limit: 返回记录数限制
+            offset: 偏移量
 
         Returns:
             包含数据列表和统计信息的字典
         """
         try:
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.stk_nineturn_repo.get_by_date_range,
-                start_date=start_date,
-                end_date=end_date,
-                ts_code=ts_code,
-                freq=freq,
-                limit=limit
-            )
-
-            # 查询统计信息
-            statistics = await asyncio.to_thread(
-                self.stk_nineturn_repo.get_statistics,
-                start_date=start_date,
-                end_date=end_date,
-                ts_code=ts_code,
-                freq=freq
+            # 并发查询数据、总数、统计
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.stk_nineturn_repo.get_by_date_range,
+                    start_date=start_date,
+                    end_date=end_date,
+                    ts_code=ts_code,
+                    freq=freq,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.stk_nineturn_repo.get_record_count,
+                    start_date=start_date,
+                    end_date=end_date,
+                    ts_code=ts_code,
+                    freq=freq
+                ),
+                asyncio.to_thread(
+                    self.stk_nineturn_repo.get_statistics,
+                    start_date=start_date,
+                    end_date=end_date,
+                    ts_code=ts_code,
+                    freq=freq
+                )
             )
 
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

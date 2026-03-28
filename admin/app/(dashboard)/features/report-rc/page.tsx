@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,30 +11,47 @@ import { reportRcApi, type ReportRcData, type ReportRcStatistics } from '@/lib/a
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Building2, FileText, BarChart3 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function ReportRcPage() {
   const [data, setData] = useState<ReportRcData[]>([])
   const [statistics, setStatistics] = useState<ReportRcStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [orgName, setOrgName] = useState('')
-  const [syncing, setSyncing] = useState(false)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+
+  // 从 task store 实时派生——不用本地 useState
+  const syncing = isTaskRunning('tasks.sync_report_rc')
+
+  // 时区安全的日期字符串构建
+  const toDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = async () => {
     try {
       setLoading(true)
-      setError(null)
 
       const params: any = { limit: 100 }
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (orgName.trim()) params.org_name = orgName.trim()
 
@@ -44,32 +61,27 @@ export default function ReportRcPage() {
         setData(response.data.items || [])
         setStatistics(response.data.statistics || null)
       } else {
-        throw new Error(response.message || '获取数据失败')
+        toast.error(response.message || '获取数据失败')
       }
     } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载数据失败', {
-        description: err.message || '无法获取卖方盈利预测数据'
-      })
+      toast.error('加载数据失败', { description: err.message || '无法获取卖方盈利预测数据' })
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, tsCode, orgName])
+  }
 
-  // 初始加载
+  // 初始加载：只跑一次
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    loadData().catch(() => {})
+  }, [])
 
-  // 异步同步处理
-  const handleSync = async () => {
+  // 同步确认
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (tsCode.trim()) params.ts_code = tsCode.trim()
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await reportRcApi.syncAsync(params)
 
@@ -89,13 +101,7 @@ export default function ReportRcPage() {
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '卖方盈利预测数据已更新'
-            })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.success('数据同步完成', { description: '卖方盈利预测数据已更新' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -104,25 +110,19 @@ export default function ReportRcPage() {
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
         triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
+        toast.success(response.message || '同步任务已提交')
       } else {
-        throw new Error(response.message || '同步失败')
+        toast.error(response.message || '提交同步任务失败')
       }
     } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    } finally {
-      setSyncing(false)
+      toast.error('同步失败', { description: err.message || '无法同步数据' })
     }
   }
 
   // 组件卸载清理
   useEffect(() => {
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       const callbacks = activeCallbacksRef.current
       callbacks.forEach((callback, taskId) => {
         unregisterCompletionCallback(taskId, callback)
@@ -161,34 +161,39 @@ export default function ReportRcPage() {
       key: 'org_name',
       header: '机构',
       accessor: (row) => row.org_name,
-      width: 120
+      width: 120,
+      hideOnMobile: true
     },
     {
       key: 'quarter',
       header: '预测期',
       accessor: (row) => row.quarter,
-      width: 80
+      width: 80,
+      hideOnMobile: true
     },
     {
       key: 'eps',
       header: 'EPS(元)',
       accessor: (row) => row.eps !== null ? row.eps.toFixed(2) : '-',
       width: 80,
-      align: 'right'
+      cellClassName: 'text-right whitespace-nowrap',
+      hideOnMobile: true
     },
     {
       key: 'pe',
       header: 'PE',
       accessor: (row) => row.pe !== null ? row.pe.toFixed(2) : '-',
       width: 70,
-      align: 'right'
+      cellClassName: 'text-right whitespace-nowrap',
+      hideOnMobile: true
     },
     {
       key: 'roe',
       header: 'ROE(%)',
       accessor: (row) => row.roe !== null ? (row.roe * 100).toFixed(2) : '-',
       width: 80,
-      align: 'right'
+      cellClassName: 'text-right whitespace-nowrap',
+      hideOnMobile: true
     },
     {
       key: 'rating',
@@ -201,114 +206,126 @@ export default function ReportRcPage() {
       header: '目标价(元)',
       accessor: (row) => row.max_price !== null ? row.max_price.toFixed(2) : '-',
       width: 100,
-      align: 'right'
+      cellClassName: 'text-right whitespace-nowrap',
+      hideOnMobile: true
     }
   ], [])
 
-  // 移动端卡片视图
-  const mobileCard = useCallback((item: ReportRcData) => (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
+  // 移动端卡片
+  const mobileCard = (item: ReportRcData) => (
+    <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
+      <div className="flex justify-between items-start mb-2">
         <div>
-          <span className="font-medium text-base">{item.name}</span>
-          <span className="text-sm text-gray-500 ml-2">{item.ts_code}</span>
+          <div className="font-semibold text-base">{item.name}</div>
+          <div className="text-sm text-gray-500">{item.ts_code}</div>
         </div>
-        <span className="text-sm text-gray-600 dark:text-gray-400">{formatDate(item.report_date)}</span>
+        <span className="text-xs text-gray-500">{formatDate(item.report_date)}</span>
       </div>
-
-      <div className="grid grid-cols-2 gap-2 text-sm">
+      <div className="space-y-1 text-sm">
         <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">机构:</span>
+          <span className="text-gray-600">机构</span>
           <span className="font-medium">{item.org_name}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">预测期:</span>
+          <span className="text-gray-600">预测期</span>
           <span className="font-medium">{item.quarter}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">EPS:</span>
+          <span className="text-gray-600">EPS</span>
           <span className="font-medium">{item.eps !== null ? `${item.eps.toFixed(2)}元` : '-'}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">PE:</span>
-          <span className="font-medium">{item.pe !== null ? item.pe.toFixed(2) : '-'}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">ROE:</span>
-          <span className="font-medium">{item.roe !== null ? `${(item.roe * 100).toFixed(2)}%` : '-'}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">评级:</span>
+          <span className="text-gray-600">评级</span>
           <span className="font-medium text-blue-600">{item.rating || '-'}</span>
         </div>
+        {item.max_price !== null && (
+          <div className="flex justify-between">
+            <span className="text-gray-600">目标价</span>
+            <span className="font-medium text-green-600">{item.max_price.toFixed(2)} 元</span>
+          </div>
+        )}
       </div>
-
-      {item.max_price !== null && (
-        <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800">
-          <span className="text-sm text-gray-600 dark:text-gray-400">目标价:</span>
-          <span className="font-medium text-green-600">{item.max_price.toFixed(2)} 元</span>
-        </div>
-      )}
     </div>
-  ), [])
+  )
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="卖方盈利预测数据"
-        description="券商研报盈利预测数据，包含EPS、PE、ROE等关键指标和评级信息"
+        description="券商研报盈利预测数据，包含EPS、PE、ROE等关键指标和评级信息（5000积分/次）"
+        details={<>
+          <div>接口：report_rc</div>
+          <a href="https://tushare.pro/document/2?doc_id=285" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
-      {/* 统计卡片 */}
+      {/* 统计卡片 — 左文字右图标 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">研报数量</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">条研报记录</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">研报数量</p>
+                  <p className="text-xl sm:text-2xl font-bold">{(statistics.total_count ?? 0).toLocaleString()}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">条研报记录</p>
+                </div>
+                <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">覆盖股票</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.stock_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">只股票</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">覆盖股票</p>
+                  <p className="text-xl sm:text-2xl font-bold">{(statistics.stock_count ?? 0).toLocaleString()}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">只股票</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">参与机构</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.org_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">家券商</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">参与机构</p>
+                  <p className="text-xl sm:text-2xl font-bold">{(statistics.org_count ?? 0).toLocaleString()}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">家券商</p>
+                </div>
+                <Building2 className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均EPS</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.avg_eps.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">元/股</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">平均EPS</p>
+                  <p className="text-xl sm:text-2xl font-bold">{(statistics.avg_eps ?? 0).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">元/股</p>
+                </div>
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
+              </div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* 筛选和操作区域 */}
+      {/* 筛选区域 */}
       <Card>
         <CardHeader>
           <CardTitle>数据查询</CardTitle>
@@ -318,7 +335,7 @@ export default function ReportRcPage() {
             <div>
               <label className="text-sm font-medium mb-2 block">股票代码</label>
               <Input
-                placeholder="如: 000001.SZ"
+                placeholder="如 000001 或 000001.SZ"
                 value={tsCode}
                 onChange={(e) => setTsCode(e.target.value)}
               />
@@ -340,82 +357,55 @@ export default function ReportRcPage() {
               <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
           </div>
-
-          <div className="flex gap-2 mt-4">
-            <Button onClick={loadData} disabled={loading}>
+          <div className="mt-4">
+            <Button onClick={() => loadData().catch(() => {})} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
               查询
-            </Button>
-            <Button onClick={handleSync} disabled={syncing} variant="outline">
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
-              )}
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">研报数据</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={index}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格视图 */}
-        <div className="hidden sm:block">
+      <Card>
+        <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
             data={data}
             loading={loading}
-            error={error}
-            emptyMessage="暂无数据"
+            mobileCard={mobileCard}
+            emptyMessage="暂无卖方盈利预测数据"
           />
-        </div>
+        </CardContent>
       </Card>
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步卖方盈利预测数据</DialogTitle>
+            <DialogDescription>
+              选择同步日期范围（留空则同步最新数据）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>
+              {syncing ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</> : '确认同步'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

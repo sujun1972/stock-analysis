@@ -26,7 +26,8 @@ class StkAhComparisonRepository(BaseRepository):
         end_date: Optional[str] = None,
         hk_code: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询AH股比价数据
@@ -70,8 +71,9 @@ class StkAhComparisonRepository(BaseRepository):
             query += " AND ts_code = %s"
             params.append(ts_code)
 
-        query += " ORDER BY trade_date DESC, ah_premium DESC LIMIT %s"
+        query += " ORDER BY trade_date DESC, ah_premium DESC LIMIT %s OFFSET %s"
         params.append(limit)
+        params.append(offset)
 
         result = self.execute_query(query, tuple(params))
 

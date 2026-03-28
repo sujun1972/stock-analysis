@@ -5,6 +5,7 @@ AH股比价数据同步服务
 """
 
 import asyncio
+import traceback
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from loguru import logger
@@ -12,6 +13,7 @@ from loguru import logger
 from app.repositories import StkAhComparisonRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 
 
 class StkAhComparisonService:
@@ -20,6 +22,7 @@ class StkAhComparisonService:
     def __init__(self):
         self.stk_ah_comparison_repo = StkAhComparisonRepository()
         self.provider_factory = DataProviderFactory()
+        self.calendar_repo = TradingCalendarRepository()
 
     def _get_provider(self):
         """获取 Tushare Provider"""
@@ -104,10 +107,7 @@ class StkAhComparisonService:
             }
 
         except Exception as e:
-            error_msg = f"同步AH股比价数据失败: {str(e)}"
-            logger.error(error_msg)
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"同步AH股比价数据失败: {e}\n{traceback.format_exc()}")
             return {
                 "status": "error",
                 "records": 0,
@@ -145,13 +145,34 @@ class StkAhComparisonService:
         logger.info(f"数据验证和清洗完成，剩余 {len(df)} 条记录")
         return df
 
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """
+        获取最近有数据的交易日期，返回 YYYY-MM-DD 格式
+
+        Returns:
+            最近有数据的交易日期，格式：YYYY-MM-DD
+        """
+        today = datetime.now().strftime('%Y%m%d')
+        has_today = await asyncio.to_thread(
+            self.stk_ah_comparison_repo.exists_by_date, today
+        )
+        if has_today:
+            return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
+        latest = await asyncio.to_thread(
+            self.stk_ah_comparison_repo.get_latest_trade_date
+        )
+        if latest:
+            return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+        return None
+
     async def get_stk_ah_comparison_data(
         self,
         hk_code: Optional[str] = None,
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         查询AH股比价数据
@@ -162,6 +183,7 @@ class StkAhComparisonService:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             limit: 返回记录数
+            offset: 偏移量
 
         Returns:
             包含数据列表和统计信息的字典
@@ -170,27 +192,33 @@ class StkAhComparisonService:
             >>> service = StkAhComparisonService()
             >>> result = await service.get_stk_ah_comparison_data(limit=50)
         """
-        # 查询数据
-        items = await asyncio.to_thread(
-            self.stk_ah_comparison_repo.get_by_date_range,
-            start_date=start_date,
-            end_date=end_date,
-            hk_code=hk_code,
-            ts_code=ts_code,
-            limit=limit
-        )
-
-        # 查询统计信息
-        statistics = await asyncio.to_thread(
-            self.stk_ah_comparison_repo.get_statistics,
-            start_date=start_date,
-            end_date=end_date
+        # 并发查询数据、总数、统计
+        items, total, statistics = await asyncio.gather(
+            asyncio.to_thread(
+                self.stk_ah_comparison_repo.get_by_date_range,
+                start_date=start_date,
+                end_date=end_date,
+                hk_code=hk_code,
+                ts_code=ts_code,
+                limit=limit,
+                offset=offset
+            ),
+            asyncio.to_thread(
+                self.stk_ah_comparison_repo.get_record_count,
+                start_date=start_date,
+                end_date=end_date
+            ),
+            asyncio.to_thread(
+                self.stk_ah_comparison_repo.get_statistics,
+                start_date=start_date,
+                end_date=end_date
+            )
         )
 
         return {
             "items": items,
             "statistics": statistics,
-            "total": len(items)
+            "total": total
         }
 
     async def get_top_premium(self, trade_date: Optional[str] = None, limit: int = 20) -> Dict:

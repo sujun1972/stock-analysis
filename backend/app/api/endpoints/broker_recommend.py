@@ -24,7 +24,9 @@ async def get_broker_recommend(
     end_month: Optional[str] = Query(None, description="结束月度,格式:YYYY-MM"),
     broker: Optional[str] = Query(None, description="券商名称"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
-    limit: int = Query(100, description="限制返回数量")
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(100, description="每页记录数", ge=1, le=1000),
+    limit: Optional[int] = Query(None, description="返回记录数（兼容旧参数）", ge=1, le=1000)
 ):
     """
     查询券商荐股数据
@@ -35,12 +37,17 @@ async def get_broker_recommend(
         end_month: 结束月度,格式：YYYY-MM
         broker: 券商名称（可选）
         ts_code: 股票代码（可选）
-        limit: 限制返回数量
+        page: 页码
+        page_size: 每页记录数
+        limit: 返回记录数（兼容旧参数）
 
     Returns:
         券商荐股数据列表
     """
     try:
+        actual_limit = limit if limit is not None else page_size
+        actual_offset = (page - 1) * page_size if limit is None else 0
+
         service = BrokerRecommendService()
 
         # 转换日期格式：YYYY-MM -> YYYYMM
@@ -54,7 +61,8 @@ async def get_broker_recommend(
             end_month=end_month_fmt,
             broker=broker,
             ts_code=ts_code,
-            limit=limit
+            limit=actual_limit,
+            offset=actual_offset
         )
 
         # 格式化返回数据（YYYYMM -> YYYY-MM）

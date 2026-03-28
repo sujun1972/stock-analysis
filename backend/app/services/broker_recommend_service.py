@@ -139,7 +139,8 @@ class BrokerRecommendService:
         end_month: Optional[str] = None,
         broker: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0
     ) -> Dict:
         """
         查询券商荐股数据
@@ -151,48 +152,51 @@ class BrokerRecommendService:
             broker: 券商名称（可选）
             ts_code: 股票代码（可选）
             limit: 限制返回数量
+            offset: 偏移量
 
         Returns:
-            数据字典
+            数据字典，包含items、statistics和total
 
         Examples:
             >>> service = BrokerRecommendService()
             >>> result = await service.get_broker_recommend_data(month='202106')
         """
         try:
+            # 确定月度范围
+            effective_start = start_month
+            effective_end = end_month
+            if not month and not start_month and not end_month:
+                effective_end = datetime.now().strftime('%Y%m')
+                effective_start = (datetime.now() - timedelta(days=90)).strftime('%Y%m')
+                logger.info(f"未指定日期,默认查询最近3个月: {effective_start} ~ {effective_end}")
+            elif not start_month:
+                effective_start = '190001'
+            elif not end_month:
+                effective_end = '299912'
+
+            # 并发查询数据和统计
             if month:
-                # 查询单个月度
-                items = await asyncio.to_thread(
-                    self.broker_repo.get_by_month,
-                    month,
-                    broker,
-                    limit
+                items_coro = asyncio.to_thread(
+                    self.broker_repo.get_by_month, month, broker, limit
+                )
+                stats_coro = asyncio.to_thread(
+                    self.broker_repo.get_statistics, month, month
                 )
             else:
-                # 查询月度范围
-                # 如果没有指定任何日期,默认查询最近3个月
-                if not start_month and not end_month:
-                    end_month = datetime.now().strftime('%Y%m')
-                    start_date = datetime.now() - timedelta(days=90)
-                    start_month = start_date.strftime('%Y%m')
-                    logger.info(f"未指定日期,默认查询最近3个月: {start_month} ~ {end_month}")
-                elif not start_month:
-                    start_month = '190001'  # 默认起始
-                elif not end_month:
-                    end_month = '299912'  # 默认结束
-
-                items = await asyncio.to_thread(
+                items_coro = asyncio.to_thread(
                     self.broker_repo.get_by_month_range,
-                    start_month,
-                    end_month,
-                    broker,
-                    ts_code,
-                    limit
+                    effective_start, effective_end, broker, ts_code, limit, offset
                 )
+                stats_coro = asyncio.to_thread(
+                    self.broker_repo.get_statistics, effective_start, effective_end
+                )
+
+            items, statistics = await asyncio.gather(items_coro, stats_coro)
 
             return {
                 "items": items,
-                "total": len(items)
+                "statistics": statistics,
+                "total": statistics.get('total_records', len(items))
             }
 
         except Exception as e:

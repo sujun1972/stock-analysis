@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import traceback
 from datetime import datetime
 from typing import Optional, Dict, List
 from loguru import logger
@@ -81,9 +82,7 @@ class StkSurvService:
             }
 
         except Exception as e:
-            logger.error(f"同步机构调研数据失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"同步机构调研数据失败: {e}\n{traceback.format_exc()}")
             return {
                 "status": "error",
                 "error": str(e),
@@ -97,7 +96,8 @@ class StkSurvService:
         ts_code: Optional[str] = None,
         org_type: Optional[str] = None,
         rece_mode: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         获取机构调研数据
@@ -109,24 +109,33 @@ class StkSurvService:
             org_type: 接待公司类型（可选）
             rece_mode: 接待方式（可选）
             limit: 返回记录数限制
+            offset: 偏移量
 
         Returns:
-            数据字典，包含items和total
+            数据字典，包含items、total和statistics
         """
         try:
             # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
             start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
-            # 获取数据
-            items = await asyncio.to_thread(
-                self.stk_surv_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                org_type=org_type,
-                rece_mode=rece_mode,
-                limit=limit
+            # 并发查询数据和统计
+            items, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.stk_surv_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    org_type=org_type,
+                    rece_mode=rece_mode,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.stk_surv_repo.get_statistics,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD（用于前端显示）
@@ -136,7 +145,8 @@ class StkSurvService:
 
             return {
                 "items": items,
-                "total": len(items)
+                "statistics": statistics,
+                "total": statistics.get('total_records', len(items))
             }
 
         except Exception as e:

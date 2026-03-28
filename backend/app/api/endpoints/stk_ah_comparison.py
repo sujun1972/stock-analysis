@@ -19,9 +19,12 @@ router = APIRouter()
 async def get_stk_ah_comparison(
     hk_code: Optional[str] = Query(None, description="港股代码，如：02068.HK"),
     ts_code: Optional[str] = Query(None, description="A股代码，如：601068.SH"),
+    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=1000)
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(30, description="每页记录数", ge=1, le=1000),
+    limit: Optional[int] = Query(None, description="返回记录数（兼容旧参数）", ge=1, le=1000)
 ):
     """
     查询AH股比价数据
@@ -29,26 +32,52 @@ async def get_stk_ah_comparison(
     Args:
         hk_code: 港股代码（可选）
         ts_code: A股代码（可选）
+        trade_date: 单日交易日期，格式：YYYY-MM-DD
         start_date: 开始日期，格式：YYYY-MM-DD
         end_date: 结束日期，格式：YYYY-MM-DD
-        limit: 返回记录数
+        page: 页码
+        page_size: 每页记录数
+        limit: 返回记录数（兼容旧参数）
 
     Returns:
-        AH股比价数据列表和统计信息
+        AH股比价数据列表和统计信息，含 resolved_date 用于前端回填
     """
     try:
         # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
+        trade_date_formatted = trade_date.replace('-', '') if trade_date else None
         start_date_formatted = start_date.replace('-', '') if start_date else None
         end_date_formatted = end_date.replace('-', '') if end_date else None
 
+        # trade_date 作为单日筛选时，转为 start/end 范围
+        if trade_date_formatted and not start_date_formatted and not end_date_formatted:
+            start_date_formatted = trade_date_formatted
+            end_date_formatted = trade_date_formatted
+
+        actual_limit = limit if limit is not None else page_size
+        actual_offset = (page - 1) * page_size if limit is None else 0
+
         service = StkAhComparisonService()
+
+        # 未传任何日期时，解析最近有数据的交易日并回传给前端
+        resolved_date = None
+        if not trade_date and not start_date and not end_date:
+            resolved_date = await service.resolve_default_trade_date()
+            if resolved_date:
+                d = resolved_date.replace('-', '')
+                start_date_formatted = d
+                end_date_formatted = d
+
         result = await service.get_stk_ah_comparison_data(
             hk_code=hk_code,
             ts_code=ts_code,
             start_date=start_date_formatted,
             end_date=end_date_formatted,
-            limit=limit
+            limit=actual_limit,
+            offset=actual_offset
         )
+
+        if resolved_date:
+            result['resolved_date'] = resolved_date
 
         return ApiResponse.success(data=result)
 

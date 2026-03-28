@@ -24,7 +24,9 @@ async def get_stk_surv(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     org_type: Optional[str] = Query(None, description="接待公司类型"),
     rece_mode: Optional[str] = Query(None, description="接待方式"),
-    limit: int = Query(30, description="返回记录数限制")
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(30, description="每页记录数", ge=1, le=1000),
+    limit: Optional[int] = Query(None, description="返回记录数（兼容旧参数）", ge=1, le=1000)
 ):
     """
     查询机构调研数据
@@ -35,12 +37,17 @@ async def get_stk_surv(
         ts_code: 股票代码（可选）
         org_type: 接待公司类型（可选）
         rece_mode: 接待方式（可选）
-        limit: 返回记录数限制
+        page: 页码
+        page_size: 每页记录数
+        limit: 返回记录数（兼容旧参数）
 
     Returns:
         机构调研数据列表
     """
     try:
+        actual_limit = limit if limit is not None else page_size
+        actual_offset = (page - 1) * page_size if limit is None else 0
+
         service = StkSurvService()
         result = await service.get_stk_surv_data(
             start_date=start_date,
@@ -48,7 +55,8 @@ async def get_stk_surv(
             ts_code=ts_code,
             org_type=org_type,
             rece_mode=rece_mode,
-            limit=limit
+            limit=actual_limit,
+            offset=actual_offset
         )
         return ApiResponse.success(data=result)
     except Exception as e:

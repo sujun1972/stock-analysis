@@ -12,52 +12,46 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { stkAhComparisonApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, TrendingDown, BarChart3, Calendar } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, BarChart3, Activity } from 'lucide-react'
 import type { StkAhComparisonData, StkAhComparisonStatistics } from '@/lib/api/stk-ah-comparison'
+
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export default function StkAhComparisonPage() {
   const [data, setData] = useState<StkAhComparisonData[]>([])
   const [statistics, setStatistics] = useState<StkAhComparisonStatistics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [syncing, setSyncing] = useState(false)
+  const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
 
   // 分页状态
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
+  const [pageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
   // 同步对话框状态
   const [showSyncDialog, setShowSyncDialog] = useState(false)
-  const [syncHkCode, setSyncHkCode] = useState<string>('')
-  const [syncTsCode, setSyncTsCode] = useState<string>('')
+  const [syncHkCode, setSyncHkCode] = useState('')
+  const [syncTsCode, setSyncTsCode] = useState('')
   const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
   const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  // 存储活跃的任务回调
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  // 从 task store 实时派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_stk_ah_comparison')
 
-  // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (targetPage: number = 1) => {
     try {
       setLoading(true)
-      setError(null)
 
       const params: any = {
-        limit: pageSize
+        page: targetPage,
+        page_size: pageSize
       }
-
-      if (startDate) {
-        params.start_date = startDate.toISOString().split('T')[0]
-      }
-      if (endDate) {
-        params.end_date = endDate.toISOString().split('T')[0]
-      }
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
 
       const response = await stkAhComparisonApi.getData(params)
 
@@ -65,50 +59,48 @@ export default function StkAhComparisonPage() {
         setData(response.data.items || [])
         setStatistics(response.data.statistics || null)
         setTotal(response.data.total || 0)
+        setPage(targetPage)
+
+        // 未传日期时，用返回的最近有数据日期回填
+        if (!tradeDate && response.data.resolved_date) {
+          setTradeDate(new Date(response.data.resolved_date + 'T00:00:00'))
+        }
       } else {
         throw new Error(response.message || '获取数据失败')
       }
     } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载失败', {
-        description: err.message || '无法加载AH股比价数据'
-      })
+      toast.error('加载失败', { description: err.message || '无法加载AH股比价数据' })
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, pageSize])
+  }, [tradeDate, pageSize])
 
-  // 初始加载
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    loadData(1).catch(() => {})
+  }, [])
 
-  // 打开同步对话框
-  const openSyncDialog = () => {
-    setShowSyncDialog(true)
-  }
+  // 组件卸载时清理回调
+  useEffect(() => {
+    return () => {
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((callback, taskId) => {
+        unregisterCompletionCallback(taskId, callback)
+      })
+      callbacks.clear()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // 关闭同步对话框
-  const closeSyncDialog = () => {
+  const handleSyncConfirm = async () => {
     setShowSyncDialog(false)
-    setSyncHkCode('')
-    setSyncTsCode('')
-    setSyncTradeDate(undefined)
-    setSyncStartDate(undefined)
-    setSyncEndDate(undefined)
-  }
 
-  // 异步同步数据
-  const handleSync = async () => {
     try {
-      setSyncing(true)
-
       const params: any = {}
       if (syncHkCode.trim()) params.hk_code = syncHkCode.trim()
       if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
-      if (syncTradeDate) params.trade_date = syncTradeDate.toISOString().split('T')[0]
-      if (syncStartDate) params.start_date = syncStartDate.toISOString().split('T')[0]
-      if (syncEndDate) params.end_date = syncEndDate.toISOString().split('T')[0]
+      if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await stkAhComparisonApi.syncAsync(params)
 
@@ -127,14 +119,10 @@ export default function StkAhComparisonPage() {
 
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: 'AH股比价数据已更新'
-            })
+            loadData(1).catch(() => {})
+            toast.success('数据同步完成', { description: 'AH股比价数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -142,10 +130,7 @@ export default function StkAhComparisonPage() {
 
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
-
         triggerPoll()
-
-        closeSyncDialog()
 
         toast.success('任务已提交', {
           description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
@@ -154,46 +139,26 @@ export default function StkAhComparisonPage() {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    } finally {
-      setSyncing(false)
+      toast.error('同步失败', { description: err.message || '无法同步数据' })
     }
   }
 
-  // 组件卸载时清理回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 格式化日期
   const formatDate = (dateStr: string) => {
     if (!dateStr || dateStr.length !== 8) return dateStr
     return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`
   }
 
-  // 格式化数值
   const formatNumber = (num: number | null | undefined, decimals: number = 2) => {
     if (num === null || num === undefined) return '-'
     return num.toFixed(decimals)
   }
 
-  // 格式化百分比
   const formatPercent = (num: number | null | undefined) => {
     if (num === null || num === undefined) return '-'
     const sign = num >= 0 ? '+' : ''
     return `${sign}${num.toFixed(2)}%`
   }
 
-  // 表格列定义
   const columns: Column<StkAhComparisonData>[] = useMemo(() => [
     {
       key: 'trade_date',
@@ -223,65 +188,59 @@ export default function StkAhComparisonPage() {
     {
       key: 'hk_close',
       header: '港股收盘价',
-      accessor: (row) => formatNumber(row.hk_close)
+      accessor: (row) => formatNumber(row.hk_close),
+      cellClassName: 'text-right'
     },
     {
       key: 'close',
       header: 'A股收盘价',
-      accessor: (row) => formatNumber(row.close)
+      accessor: (row) => formatNumber(row.close),
+      cellClassName: 'text-right'
     },
     {
       key: 'ah_comparison',
       header: 'AH比价',
-      accessor: (row) => formatNumber(row.ah_comparison)
+      accessor: (row) => formatNumber(row.ah_comparison),
+      cellClassName: 'text-right'
     },
     {
       key: 'ah_premium',
-      header: (
-        <>
-          <span className="sm:hidden">溢价</span>
-          <span className="hidden sm:inline">AH溢价率</span>
-        </>
-      ),
+      header: 'AH溢价率',
       accessor: (row) => (
-        <span className={`font-medium ${
-          (row.ah_premium ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'
-        }`}>
+        <span className={`font-medium ${(row.ah_premium ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
           {formatPercent(row.ah_premium)}
         </span>
-      )
+      ),
+      cellClassName: 'text-right'
     },
     {
       key: 'hk_pct_chg',
       header: '港股涨跌幅',
       accessor: (row) => (
-        <span className={`font-medium ${
-          (row.hk_pct_chg ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'
-        }`}>
+        <span className={`font-medium ${(row.hk_pct_chg ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
           {formatPercent(row.hk_pct_chg)}
         </span>
-      )
+      ),
+      cellClassName: 'text-right'
     },
     {
       key: 'pct_chg',
       header: 'A股涨跌幅',
       accessor: (row) => (
-        <span className={`font-medium ${
-          (row.pct_chg ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'
-        }`}>
+        <span className={`font-medium ${(row.pct_chg ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
           {formatPercent(row.pct_chg)}
         </span>
-      )
+      ),
+      cellClassName: 'text-right'
     }
   ], [])
 
-  // 移动端卡片视图
   const mobileCard = useCallback((item: StkAhComparisonData) => (
     <div className="space-y-2">
       <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
         <div>
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {item.hk_name} / {item.name}
+            {item.hk_name || item.hk_code} / {item.name || item.ts_code}
           </span>
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {item.hk_code} / {item.ts_code}
@@ -289,7 +248,6 @@ export default function StkAhComparisonPage() {
         </div>
         <span className="text-xs text-gray-600 dark:text-gray-400">{formatDate(item.trade_date)}</span>
       </div>
-
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div className="flex justify-between">
           <span className="text-gray-600 dark:text-gray-400">港股价格:</span>
@@ -305,9 +263,7 @@ export default function StkAhComparisonPage() {
         </div>
         <div className="flex justify-between">
           <span className="text-gray-600 dark:text-gray-400">溢价率:</span>
-          <span className={`font-medium ${
-            (item.ah_premium ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'
-          }`}>
+          <span className={`font-medium ${(item.ah_premium ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
             {formatPercent(item.ah_premium)}
           </span>
         </div>
@@ -320,62 +276,84 @@ export default function StkAhComparisonPage() {
       <PageHeader
         title="AH股比价"
         description="同时在A股和港股上市的股票价格比价数据，用于分析估值差异和溢价情况"
+        details={
+          <>
+            <div>接口：stk_ah_comparison</div>
+            <div>积分：5000积分/次，单次最大1000行</div>
+            <div>数据起始：2025-08-12，每日盘后17:00更新</div>
+          </>
+        }
+        actions={
+          <Button onClick={() => setShowSyncDialog(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">股票数量</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.stock_count}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均溢价率</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${
-                statistics.avg_premium >= 0 ? 'text-red-600' : 'text-green-600'
-              }`}>
-                {formatPercent(statistics.avg_premium)}
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">股票数量</p>
+                  <p className="text-2xl font-bold mt-1">{statistics.stock_count}</p>
+                  <p className="text-xs text-muted-foreground mt-1">AH同时上市</p>
+                </div>
+                <BarChart3 className="h-8 w-8 text-muted-foreground shrink-0" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最高溢价率</CardTitle>
-              <TrendingUp className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {formatPercent(statistics.max_premium)}
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">平均溢价率</p>
+                  <p className={`text-2xl font-bold mt-1 ${(statistics.avg_premium ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {formatPercent(statistics.avg_premium)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">A股相对港股溢价</p>
+                </div>
+                <Activity className="h-8 w-8 text-muted-foreground shrink-0" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最低溢价率</CardTitle>
-              <TrendingDown className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {formatPercent(statistics.min_premium)}
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">最高溢价率</p>
+                  <p className="text-2xl font-bold mt-1 text-red-600">{formatPercent(statistics.max_premium)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">溢价最大的股票</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-red-400 shrink-0" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">最低溢价率</p>
+                  <p className="text-2xl font-bold mt-1 text-green-600">{formatPercent(statistics.min_premium)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">溢价最小的股票</p>
+                </div>
+                <TrendingDown className="h-8 w-8 text-green-400 shrink-0" />
               </div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* 筛选和操作区域 */}
+      {/* 筛选区域 */}
       <Card>
         <CardHeader>
           <CardTitle>数据查询</CardTitle>
@@ -383,126 +361,36 @@ export default function StkAhComparisonPage() {
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="w-full sm:w-auto">
-              <Label>开始日期</Label>
-              <DatePicker
-                date={startDate}
-                onDateChange={setStartDate}
-                placeholder="选择开始日期"
-              />
+              <Label>交易日期</Label>
+              <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="留空默认最近有数据日期" />
             </div>
-            <div className="w-full sm:w-auto">
-              <Label>结束日期</Label>
-              <DatePicker
-                date={endDate}
-                onDateChange={setEndDate}
-                placeholder="选择结束日期"
-              />
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={loadData} disabled={loading} className="flex-1 sm:flex-none">
-                <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-                查询
-              </Button>
-              <Button onClick={openSyncDialog} disabled={syncing} variant="default" className="flex-1 sm:flex-none">
-                <Calendar className="h-4 w-4 mr-1" />
-                同步数据
-              </Button>
-            </div>
+            <Button onClick={() => loadData(1)} disabled={loading} className="w-full sm:w-auto">
+              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+              查询
+            </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">AH股比价数据</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={`${item.hk_code}-${item.ts_code}-${item.trade_date}`}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-
-          {!loading && !error && data.length > 0 && (
-            <div className="p-4 border-t bg-muted/30">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                >
-                  上一页
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  第 {page} / {Math.ceil(total / pageSize)} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格视图 */}
-        <div className="hidden sm:block">
+      <Card>
+        <CardContent className="p-0">
           <DataTable
             columns={columns}
             data={data}
             loading={loading}
-            error={error}
             emptyMessage="暂无数据"
+            mobileCard={mobileCard}
             pagination={{
               page,
               pageSize,
               total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
+              onPageChange: (newPage) => loadData(newPage),
+              onPageSizeChange: () => {},
+              pageSizeOptions: [30]
             }}
           />
-        </div>
+        </CardContent>
       </Card>
 
       {/* 同步对话框 */}
@@ -538,27 +426,15 @@ export default function StkAhComparisonPage() {
 
             <div className="grid gap-2">
               <Label>交易日期</Label>
-              <DatePicker
-                date={syncTradeDate}
-                onDateChange={setSyncTradeDate}
-                placeholder="选择交易日期"
-              />
+              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择交易日期" />
             </div>
 
             <div className="grid gap-2">
               <Label>日期范围（可选）</Label>
               <div className="flex gap-2 items-center">
-                <DatePicker
-                  date={syncStartDate}
-                  onDateChange={setSyncStartDate}
-                  placeholder="开始日期"
-                />
+                <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="开始日期" />
                 <span className="text-muted-foreground">至</span>
-                <DatePicker
-                  date={syncEndDate}
-                  onDateChange={setSyncEndDate}
-                  placeholder="结束日期"
-                />
+                <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="结束日期" />
               </div>
             </div>
 
@@ -570,20 +446,12 @@ export default function StkAhComparisonPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeSyncDialog} disabled={syncing}>
-              取消
-            </Button>
-            <Button onClick={handleSync} disabled={syncing}>
+            <Button variant="outline" onClick={() => setShowSyncDialog(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>
               {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  开始同步
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1" />开始同步</>
               )}
             </Button>
           </DialogFooter>

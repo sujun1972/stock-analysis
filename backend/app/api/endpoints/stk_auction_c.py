@@ -22,40 +22,51 @@ async def get_stk_auction_c(
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=1000),
-    offset: int = Query(0, description="偏移量", ge=0)
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(30, description="每页记录数", ge=1, le=1000),
+    limit: int = Query(None, description="返回记录数（兼容旧参数）", ge=1, le=1000),
+    offset: int = Query(None, description="偏移量（兼容旧参数）", ge=0)
 ):
     """
     查询股票收盘集合竞价数据
 
     说明：每天盘后更新，单次请求最大返回10000行数据
 
-    Args:
-        ts_code: 股票代码
-        trade_date: 交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        limit: 返回记录数
-        offset: 偏移量
-
     Returns:
-        收盘集合竞价数据列表和统计信息
+        收盘集合竞价数据列表和统计信息，含 trade_date 用于前端回填
     """
     try:
         service = StkAuctionCService()
 
         # 转换日期格式
+        trade_date_fmt = trade_date.replace('-', '') if trade_date else None
         start_date_fmt = start_date.replace('-', '') if start_date else None
         end_date_fmt = end_date.replace('-', '') if end_date else None
+
+        # 分页参数（兼容旧 limit/offset）
+        actual_limit = limit if limit is not None else page_size
+        actual_offset = offset if offset is not None else (page - 1) * page_size
+
+        # 未传日期时自动解析最近有数据的交易日
+        resolved_date = None
+        if not trade_date_fmt and not start_date_fmt and not end_date_fmt:
+            resolved_date = await service.resolve_default_trade_date()
+            if resolved_date:
+                trade_date_fmt = resolved_date.replace('-', '')
 
         # 调用服务
         result = await service.get_stk_auction_c_data(
             ts_code=ts_code,
+            trade_date=trade_date_fmt,
             start_date=start_date_fmt,
             end_date=end_date_fmt,
-            limit=limit,
-            offset=offset
+            limit=actual_limit,
+            offset=actual_offset
         )
+
+        # 回传 trade_date 供前端回填日期选择器
+        if resolved_date:
+            result['trade_date'] = resolved_date
 
         return ApiResponse.success(data=result)
 

@@ -24,7 +24,8 @@ class StkNineturnRepository(BaseRepository):
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         freq: str = 'daily',
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询神奇九转数据
@@ -400,4 +401,46 @@ class StkNineturnRepository(BaseRepository):
 
         except Exception as e:
             logger.error(f"获取九转信号失败: {e}")
+            raise
+
+    def get_record_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        freq: str = 'daily'
+    ) -> int:
+        """
+        获取记录总数
+
+        Args:
+            start_date: 开始日期，格式：YYYY-MM-DD
+            end_date: 结束日期，格式：YYYY-MM-DD
+            ts_code: 股票代码（可选）
+            freq: 频率，默认daily
+
+        Returns:
+            记录总数
+        """
+        try:
+            conditions = ["freq = %s"]
+            params = [freq]
+
+            if start_date:
+                conditions.append("trade_date >= %s::timestamp")
+                params.append(start_date)
+            if end_date:
+                conditions.append("trade_date <= %s::timestamp")
+                params.append(end_date)
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+
+            where_clause = " AND ".join(conditions)
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            result = self.execute_query(query, tuple(params))
+            return int(result[0][0]) if result else 0
+
+        except Exception as e:
+            logger.error(f"获取记录总数失败: {e}")
             raise

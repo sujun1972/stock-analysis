@@ -6,6 +6,8 @@ export interface StkAhComparisonParams {
   ts_code?: string
   start_date?: string
   end_date?: string
+  page?: number
+  page_size?: number
   limit?: number
 }
 
@@ -52,6 +54,7 @@ export class StkAhComparisonApiClient extends BaseApiClient {
     items: StkAhComparisonData[]
     statistics: StkAhComparisonStatistics
     total: number
+    resolved_date?: string
   }>> {
     return this.get('/api/stk-ah-comparison', { params })
   }

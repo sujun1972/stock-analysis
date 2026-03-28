@@ -22,29 +22,28 @@ async def get_stk_nineturn(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     freq: str = Query('daily', description="频率（daily）"),
-    limit: int = Query(30, description="返回记录数", ge=1, le=10000)
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(30, description="每页记录数", ge=1, le=10000),
+    limit: int = Query(None, description="返回记录数（兼容旧参数）", ge=1, le=10000)
 ):
     """
     查询神奇九转指标数据
-
-    Args:
-        ts_code: 股票代码
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        freq: 频率，默认daily
-        limit: 返回记录数
 
     Returns:
         神奇九转指标数据列表和统计信息
     """
     try:
         service = StkNineturnService()
+        actual_limit = limit if limit is not None else page_size
+        actual_offset = (page - 1) * page_size if limit is None else 0
+
         result = await service.get_stk_nineturn_data(
             ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
             freq=freq,
-            limit=limit
+            limit=actual_limit,
+            offset=actual_offset
         )
 
         return ApiResponse.success(data=result)

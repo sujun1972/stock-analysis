@@ -7,6 +7,8 @@ export interface StkSurvParams {
   end_date?: string
   org_type?: string
   rece_mode?: string
+  page?: number
+  page_size?: number
   limit?: number
 }
 
@@ -36,6 +38,7 @@ export interface StkSurvStatistics {
 export class StkSurvApiClient extends BaseApiClient {
   async getData(params?: StkSurvParams): Promise<ApiResponse<{
     items: StkSurvData[]
+    statistics: StkSurvStatistics
     total: number
   }>> {
     return this.get('/api/stk-surv', { params })

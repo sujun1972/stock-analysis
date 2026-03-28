@@ -26,7 +26,8 @@ class BrokerRecommendRepository(BaseRepository):
         end_month: str,
         broker: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按月度范围查询数据
@@ -65,8 +66,9 @@ class BrokerRecommendRepository(BaseRepository):
             query += " ORDER BY month DESC, broker, ts_code"
 
             if limit:
-                query += " LIMIT %s"
+                query += " LIMIT %s OFFSET %s"
                 params.append(limit)
+                params.append(offset)
 
             result = self.execute_query(query, tuple(params))
             return [self._row_to_dict(row) for row in result]

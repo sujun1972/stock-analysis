@@ -361,7 +361,7 @@ const handleSyncConfirm = async () => {
 - 涨跌停列表页面（`/boardgame/limit-list`）
 - 连板天梯页面（`/boardgame/limit-step`）**（2026-03-26 全面优化：筛选改为单日交易日期、股票列合并名称+代码可点击跳转、后端排序（连板次数白名单防注入）、分页查询、默认加载最近有数据的交易日并回填日期选择器）**
 - 最强板块统计页面（`/boardgame/limit-cpt`）**（2026-03-26 全面优化：筛选改为单日交易日期、板块列合并名称+代码、后端排序（up_nums/cons_nums/pct_chg/days/rank 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+统计、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**
-- 卖方盈利预测数据页面（`/features/report-rc`）
+- 卖方盈利预测数据页面（`/features/report-rc`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader）**
 - 个股异常波动页面（`/reference-data/stk-shock`）
 - 个股严重异常波动页面（`/reference-data/stk-high-shock`）
 - 交易所重点提示证券页面（`/reference-data/stk-alert`）
@@ -381,15 +381,15 @@ const handleSyncConfirm = async () => {
 - 财务审计意见页面（`/financial/fina-audit`）
 - 主营业务构成页面（`/financial/fina-mainbz`）
 - 财报披露计划页面（`/financial/disclosure-date`）
-- 中央结算系统持股汇总页面（`/features/ccass-hold`）
-- 中央结算系统持股明细页面（`/features/ccass-hold-detail`）**（✨ 新增于 2026-03-23，8000积分/次，参数验证对话框模式）**
-- 沪深港股通持股明细页面（`/features/hk-hold`）**（✨ 新增于 2026-03-23，2000积分/次，所有参数可选，2024年8月20日起改为季度披露）**
-- 股票开盘集合竞价页面（`/features/stk-auction-o`）**（✨ 新增于 2026-03-23，需要股票分钟权限，所有参数可选，每次最大10000行，支持分页）**
-- 股票收盘集合竞价页面（`/features/stk-auction-c`）**（✨ 新增于 2026-03-23，需要股票分钟权限，所有参数可选，每次最大10000行，支持分页）**
-- 神奇九转指标页面（`/features/stk-nineturn`）**（✨ 新增于 2026-03-23，6000积分/次，数据从2023年开始，每次最大10000行，支持九转信号筛选）**
-- AH股比价页面（`/features/stk-ah-comparison`）**（✨ 新增于 2026-03-23，5000积分/次，数据从2025-08-12开始，每次最大1000行，所有参数可选）**
-- 机构调研表页面（`/features/stk-surv`）**（✨ 新增于 2026-03-23，5000积分/次，单次最大100行，所有参数可选，支持按接待方式和机构类型筛选）**
-- 券商每月荐股页面（`/features/broker-recommend`）**（✨ 新增于 2026-03-23，6000积分/次，单次最大1000行，所有参数可选，每月1-3日更新当月数据）**
+- 中央结算系统持股汇总页面（`/features/ccass-hold`）**（2026-03-28 全面对齐最佳实践：同上）**
+- 中央结算系统持股明细页面（`/features/ccass-hold-detail`）**（✨ 新增于 2026-03-23，8000积分/次，参数验证对话框模式；2026-03-28 对齐最佳实践）**
+- 沪深港股通持股明细页面（`/features/hk-hold`）**（✨ 新增于 2026-03-23，2000积分/次，2024年8月20日起改为季度披露；2026-03-28 对齐最佳实践）**
+- 股票开盘集合竞价页面（`/features/stk-auction-o`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**
+- 股票收盘集合竞价页面（`/features/stk-auction-c`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**
+- 神奇九转指标页面（`/features/stk-nineturn`）**（✨ 新增于 2026-03-23，6000积分/次，数据从2023年开始，每次最大10000行，支持九转信号筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、isTaskRunning 派生 syncing、保留日期范围筛选）**
+- AH股比价页面（`/features/stk-ah-comparison`）**（✨ 新增于 2026-03-23，5000积分/次，数据从2025-08-12开始，每次最大1000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，后端 GET 端点新增 trade_date 参数，resolve_default_trade_date 自动回填）**
+- 机构调研表页面（`/features/stk-surv`）**（✨ 新增于 2026-03-23，5000积分/次，单次最大100行，支持按接待方式和机构类型筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、statistics 合并到主响应、同步弹窗解耦查询日期）**
+- 券商每月荐股页面（`/features/broker-recommend`）**（✨ 新增于 2026-03-23，6000积分/次，单次最大1000行，每月1-3日更新当月数据；2026-03-28 全面重构：迁移至模块化 brokerRecommendApi、isTaskRunning 派生 syncing、DataTable mobileCard、同步弹窗选月度）**
 - 实时行情同步页面（`/market/realtime`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次）或AkShare获取实时行情快照，支持涨跌幅榜、统计卡片、分页查询（30条/页）和异步同步功能，支持数据源切换）**
 - 股票日线数据页面（`/market/daily`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次），支持单只股票和全市场两种同步模式，分页查询（30条/页），统计卡片，异步同步功能，已从数据初始化页面迁移至行情数据菜单）**
 - 每日停复牌信息页面（`/market/suspend`）**（✨ 新增于 2026-03-24，不定期更新，支持分页查询，行情数据分类）**

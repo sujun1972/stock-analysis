@@ -408,6 +408,16 @@ export type {
   StkSurvStatistics
 } from './stk-surv-api'
 
+// 重新导出券商每月荐股 API
+import { BrokerRecommendApiClient, brokerRecommendApi as brokerRecommendApiInst } from './broker-recommend-api'
+export { BrokerRecommendApiClient }
+export const brokerRecommendApi = brokerRecommendApiInst
+export type {
+  BrokerRecommendParams,
+  BrokerRecommendData,
+  BrokerRecommendStatistics
+} from './broker-recommend-api'
+
 // 重新导出交易日历 API
 export { TradeCalApiClient }
 export const tradeCalApi = tradeCalApiInst

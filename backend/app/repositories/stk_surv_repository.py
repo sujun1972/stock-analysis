@@ -27,7 +27,8 @@ class StkSurvRepository(BaseRepository):
         ts_code: Optional[str] = None,
         org_type: Optional[str] = None,
         rece_mode: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询机构调研数据
@@ -82,7 +83,7 @@ class StkSurvRepository(BaseRepository):
             """
 
             if limit:
-                query += f" LIMIT {limit}"
+                query += f" LIMIT {int(limit)} OFFSET {int(offset)}"
 
             result = self.execute_query(query, tuple(params))
             return [self._row_to_dict(row) for row in result]
