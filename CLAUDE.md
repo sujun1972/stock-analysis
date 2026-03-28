@@ -363,15 +363,15 @@ const handleSyncConfirm = async () => {
 - 连板天梯页面（`/boardgame/limit-step`）**（2026-03-26 全面优化：筛选改为单日交易日期、股票列合并名称+代码可点击跳转、后端排序（连板次数白名单防注入）、分页查询、默认加载最近有数据的交易日并回填日期选择器）**
 - 最强板块统计页面（`/boardgame/limit-cpt`）**（2026-03-26 全面优化：筛选改为单日交易日期、板块列合并名称+代码、后端排序（up_nums/cons_nums/pct_chg/days/rank 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+统计、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**
 - 卖方盈利预测数据页面（`/features/report-rc`）**（2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_report_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader、同步弹窗与查询日期解耦）**
-- 个股异常波动页面（`/reference-data/stk-shock`）
-- 个股严重异常波动页面（`/reference-data/stk-high-shock`）
-- 交易所重点提示证券页面（`/reference-data/stk-alert`）
-- 股权质押统计页面（`/reference-data/pledge-stat`）
-- 股票回购页面（`/reference-data/repurchase`）
-- 限售股解禁页面（`/reference-data/share-float`）
-- 股东人数页面（`/reference-data/stk-holdernumber`）
-- 大宗交易页面（`/reference-data/block-trade`）
-- 股东增减持页面（`/reference-data/stk-holdertrade`）
+- 个股异常波动页面（`/reference-data/stk-shock`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
+- 个股严重异常波动页面（`/reference-data/stk-high-shock`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
+- 交易所重点提示证券页面（`/reference-data/stk-alert`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
+- 股权质押统计页面（`/reference-data/pledge-stat`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
+- 股票回购页面（`/reference-data/repurchase`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
+- 限售股解禁页面（`/reference-data/share-float`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片（CardContent 取代 CardHeader 小图标）、固定100条/页、toDateStr 本地时间安全）**
+- 股东人数页面（`/reference-data/stk-holdernumber`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
+- 大宗交易页面（`/reference-data/block-trade`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
+- 股东增减持页面（`/reference-data/stk-holdertrade`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、新增分页（100条/页）、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
 - 利润表页面（`/financial/income`）
 - 资产负债表页面（`/financial/balancesheet`）
 - 现金流量表页面（`/financial/cashflow`）

@@ -7,10 +7,11 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { blockTradeApi, BlockTradeData, BlockTradeStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, Briefcase, DollarSign, BarChart3, Users } from 'lucide-react'
+import { RefreshCw, TrendingUp, Briefcase, DollarSign, BarChart3 } from 'lucide-react'
 
 export default function BlockTradePage() {
   const [data, setData] = useState<BlockTradeData[]>([])
@@ -20,32 +21,42 @@ export default function BlockTradePage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
-  const [syncing, setSyncing] = useState(false)
+
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 分页状态
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
+  const [pageSize] = useState(100)
   const [total, setTotal] = useState(0)
 
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
 
-  // 加载数据
+  // 从 task store 实时派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_block_trade')
+
+  // 构建本地时间日期字符串
+  const toDateStr = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
       const params: any = { limit: pageSize }
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode) params.ts_code = tsCode.trim()
 
       const [dataResponse, statsResponse] = await Promise.all([
         blockTradeApi.getData(params),
         blockTradeApi.getStatistics({
-          start_date: params.start_date,
-          end_date: params.end_date
+          start_date: startDate ? toDateStr(startDate) : undefined,
+          end_date: endDate ? toDateStr(endDate) : undefined
         })
       ])
 
@@ -69,15 +80,12 @@ export default function BlockTradePage() {
     loadData()
   }, [loadData])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (tsCode) params.ts_code = tsCode.trim()
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await blockTradeApi.syncAsync(params)
 
@@ -112,15 +120,14 @@ export default function BlockTradePage() {
         toast.success('任务已提交', {
           description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
         })
+      } else {
+        throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
-  // 组件卸载清理
   useEffect(() => {
     return () => {
       const callbacks = activeCallbacksRef.current
@@ -129,56 +136,29 @@ export default function BlockTradePage() {
       })
       callbacks.clear()
     }
-  }, [unregisterCompletionCallback])
+  }, [])
 
-  // 格式化金额
   const formatAmount = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) return '-'
     return `${amount.toLocaleString()} 万元`
   }
 
-  // 格式化数量
   const formatVolume = (vol: number | null | undefined) => {
     if (vol === null || vol === undefined) return '-'
     return `${vol.toLocaleString()} 万股`
   }
 
-  // 格式化价格
   const formatPrice = (price: number | null | undefined) => {
     if (price === null || price === undefined) return '-'
     return `${price.toFixed(2)} 元`
   }
 
-  // 表格列定义
   const columns: Column<BlockTradeData>[] = useMemo(() => [
-    {
-      key: 'ts_code',
-      header: '股票代码',
-      accessor: (row) => row.ts_code
-    },
-    {
-      key: 'trade_date',
-      header: '交易日期',
-      accessor: (row) => row.trade_date
-    },
-    {
-      key: 'price',
-      header: '成交价',
-      accessor: (row) => formatPrice(row.price),
-      align: 'right'
-    },
-    {
-      key: 'vol',
-      header: '成交量',
-      accessor: (row) => formatVolume(row.vol),
-      align: 'right'
-    },
-    {
-      key: 'amount',
-      header: '成交金额',
-      accessor: (row) => formatAmount(row.amount),
-      align: 'right'
-    },
+    { key: 'ts_code', header: '股票代码', accessor: (row) => row.ts_code },
+    { key: 'trade_date', header: '交易日期', accessor: (row) => row.trade_date },
+    { key: 'price', header: '成交价', accessor: (row) => formatPrice(row.price), cellClassName: 'text-right' },
+    { key: 'vol', header: '成交量', accessor: (row) => formatVolume(row.vol), cellClassName: 'text-right whitespace-nowrap' },
+    { key: 'amount', header: '成交金额', accessor: (row) => formatAmount(row.amount), cellClassName: 'text-right whitespace-nowrap' },
     {
       key: 'buyer',
       header: '买方营业部',
@@ -199,16 +179,11 @@ export default function BlockTradePage() {
     }
   ], [])
 
-  // 移动端卡片视图
   const mobileCard = useCallback((item: BlockTradeData) => (
     <div className="space-y-2">
       <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">股票代码</span>
-        <span className="font-medium">{item.ts_code}</span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">交易日期</span>
-        <span className="font-medium">{item.trade_date}</span>
+        <span className="text-sm font-medium">{item.ts_code}</span>
+        <span className="text-xs text-gray-500">{item.trade_date}</span>
       </div>
       <div className="flex justify-between items-center">
         <span className="text-sm text-gray-600 dark:text-gray-400">成交金额</span>
@@ -220,7 +195,7 @@ export default function BlockTradePage() {
       </div>
       <div className="flex justify-between items-center">
         <span className="text-sm text-gray-600 dark:text-gray-400">成交量</span>
-        <span className="font-medium">{formatVolume(item.vol)}</span>
+        <span>{formatVolume(item.vol)}</span>
       </div>
       <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">买方营业部</div>
@@ -238,111 +213,116 @@ export default function BlockTradePage() {
       <PageHeader
         title="大宗交易"
         description="股票大宗交易数据，包含成交价、成交量、买卖方营业部等信息（300积分/次）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步数据</DialogTitle>
+            <DialogDescription>选择同步日期范围（留空则同步最新数据）。</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">不同股票数</CardTitle>
-              <Briefcase className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.stock_count || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                参与大宗交易的股票数量
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总记录数</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_records?.toLocaleString() || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                最新日期：{statistics.latest_date || '-'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总成交金额</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {((statistics.total_amount || 0) / 10000).toFixed(2)} 亿
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">不同股票数</p>
+                  <p className="text-2xl font-bold">{statistics.stock_count || 0}</p>
+                  <p className="text-xs text-muted-foreground">参与大宗交易的股票数量</p>
+                </div>
+                <Briefcase className="h-8 w-8 text-blue-500" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                平均：{((statistics.avg_amount || 0)).toFixed(2)} 万元
-              </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最大成交金额</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {(statistics.max_amount || 0).toLocaleString()} 万元
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">总记录数</p>
+                  <p className="text-2xl font-bold">{statistics.total_records?.toLocaleString() || 0}</p>
+                  <p className="text-xs text-muted-foreground">最新日期：{statistics.latest_date || '-'}</p>
+                </div>
+                <BarChart3 className="h-8 w-8 text-green-500" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                单笔最大交易金额
-              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">总成交金额</p>
+                  <p className="text-2xl font-bold">{((statistics.total_amount || 0) / 10000).toFixed(2)} 亿</p>
+                  <p className="text-xs text-muted-foreground">平均：{((statistics.avg_amount || 0)).toFixed(2)} 万元</p>
+                </div>
+                <DollarSign className="h-8 w-8 text-yellow-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">最大成交金额</p>
+                  <p className="text-2xl font-bold">{(statistics.max_amount || 0).toLocaleString()} 万元</p>
+                  <p className="text-xs text-muted-foreground">单笔最大交易金额</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-purple-500" />
+              </div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* 筛选和操作区域 */}
+      {/* 筛选区域 */}
       <Card>
-        <CardHeader>
-          <CardTitle>数据查询</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>数据查询</CardTitle></CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">股票代码</label>
-              <Input
-                placeholder="如：000001.SZ"
-                value={tsCode}
-                onChange={(e) => setTsCode(e.target.value)}
-              />
+              <label className="text-sm font-medium mb-2 block">股票代码（可选）</label>
+              <Input placeholder="如：000001.SZ" value={tsCode} onChange={(e) => setTsCode(e.target.value)} />
             </div>
             <div className="flex-1">
               <label className="text-sm font-medium mb-2 block">开始日期</label>
-              <DatePicker
-                date={startDate}
-                onDateChange={setStartDate}
-              />
+              <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
             <div className="flex-1">
               <label className="text-sm font-medium mb-2 block">结束日期</label>
-              <DatePicker
-                date={endDate}
-                onDateChange={setEndDate}
-              />
+              <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
-            <div className="flex items-end gap-2">
-              <Button onClick={loadData} disabled={loading}>
-                查询
-              </Button>
-              <Button
-                onClick={handleSync}
-                disabled={syncing}
-                variant="outline"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                同步数据
-              </Button>
-            </div>
+            <Button onClick={loadData} disabled={loading}>查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -354,6 +334,7 @@ export default function BlockTradePage() {
             columns={columns}
             data={data}
             loading={loading}
+            error={error}
             emptyMessage="暂无大宗交易数据"
             mobileCard={mobileCard}
             pagination={{
@@ -361,7 +342,8 @@ export default function BlockTradePage() {
               pageSize,
               total,
               onPageChange: setPage,
-              onPageSizeChange: setPageSize
+              onPageSizeChange: () => {},
+              pageSizeOptions: [100]
             }}
           />
         </CardContent>
