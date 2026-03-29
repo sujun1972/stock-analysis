@@ -3,35 +3,50 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { expressApi, type ExpressData, type ExpressStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Building2 } from 'lucide-react'
+
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const toDateStrYYYYMMDD = (d: Date) =>
+  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 
 export default function ExpressPage() {
   const [data, setData] = useState<ExpressData[]>([])
   const [statistics, setStatistics] = useState<ExpressStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
 
   // 查询参数
   const [tsCode, setTsCode] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [period, setPeriod] = useState('')
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [period, setPeriod] = useState<Date | undefined>(undefined)
 
   // 分页
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncTsCode, setSyncTsCode] = useState('')
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  const syncing = isTaskRunning('tasks.sync_express')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -41,9 +56,9 @@ export default function ExpressPage() {
 
       const response = await expressApi.getData({
         ts_code: tsCode || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        period: period || undefined,
+        start_date: startDate ? toDateStr(startDate) : undefined,
+        end_date: endDate ? toDateStr(endDate) : undefined,
+        period: period ? toDateStr(period) : undefined,
         limit: pageSize
       })
 
@@ -66,15 +81,15 @@ export default function ExpressPage() {
     try {
       const response = await expressApi.getStatistics({
         ts_code: tsCode || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined
+        start_date: startDate ? toDateStr(startDate) : undefined,
+        end_date: endDate ? toDateStr(endDate) : undefined
       })
 
       if (response.code === 200 && response.data) {
         setStatistics(response.data)
       }
-    } catch (err: any) {
-      console.error('加载统计信息失败:', err)
+    } catch {
+      // 统计信息加载失败不影响主要数据展示
     }
   }, [tsCode, startDate, endDate])
 
@@ -84,16 +99,14 @@ export default function ExpressPage() {
     loadStatistics()
   }, [loadData, loadStatistics])
 
-  // 异步同步
-  const handleSync = async () => {
+  // 同步确认
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (tsCode) params.ts_code = tsCode
-      if (startDate) params.start_date = startDate
-      if (endDate) params.end_date = endDate
-      if (period) params.period = period
+      if (syncTsCode) params.ts_code = syncTsCode
+      if (syncStartDate) params.start_date = toDateStrYYYYMMDD(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
 
       const response = await expressApi.syncAsync(params)
 
@@ -125,17 +138,12 @@ export default function ExpressPage() {
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
         triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
+        toast.success('同步任务已提交', { description: '可在任务面板查看进度' })
       } else {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -225,52 +233,101 @@ export default function ExpressPage() {
       <PageHeader
         title="业绩快报"
         description="上市公司业绩快报数据，包括营业收入、利润、资产、每股收益等关键财务指标"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>同步业绩快报数据</DialogTitle>
+            <DialogDescription>选择同步条件（均可留空，留空则同步最新数据）。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>股票代码（可选）</Label>
+              <Input
+                placeholder="如：600000.SH"
+                value={syncTsCode}
+                onChange={(e) => setSyncTsCode(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总记录数</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_count}</div>
-              <p className="text-xs text-muted-foreground">涵盖 {statistics.stock_count} 只股票</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">总记录数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_count}</p>
+                  <p className="text-xs text-muted-foreground mt-1">涵盖 {statistics.stock_count} 只股票</p>
+                </div>
+                <Building2 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均营收</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatNumber(statistics.avg_revenue)} 亿</div>
-              <p className="text-xs text-muted-foreground">平均营业收入</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均营收</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_revenue)} 亿</p>
+                  <p className="text-xs text-muted-foreground mt-1">平均营业收入</p>
+                </div>
+                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均净利润</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatNumber(statistics.avg_n_income)} 亿</div>
-              <p className="text-xs text-muted-foreground">平均净利润</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均净利润</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_n_income)} 亿</p>
+                  <p className="text-xs text-muted-foreground mt-1">平均净利润</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-purple-500" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均ROE</CardTitle>
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatNumber(statistics.avg_roe)}%</div>
-              <p className="text-xs text-muted-foreground">平均净资产收益率</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均ROE</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_roe)}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">平均净资产收益率</p>
+                </div>
+                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-orange-500" />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -293,42 +350,22 @@ export default function ExpressPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="start_date">开始日期</Label>
-              <Input
-                id="start_date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
+              <Label>开始日期</Label>
+              <DatePicker date={startDate} onDateChange={setStartDate} placeholder="选择开始日期" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_date">结束日期</Label>
-              <Input
-                id="end_date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
+              <Label>结束日期</Label>
+              <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="period">报告期</Label>
-              <Input
-                id="period"
-                type="date"
-                placeholder="报告期"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-              />
+              <Label>报告期</Label>
+              <DatePicker date={period} onDateChange={setPeriod} placeholder="选择报告期" />
             </div>
           </div>
           <div className="flex gap-2 mt-4">
             <Button onClick={loadData} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
               查询
-            </Button>
-            <Button onClick={handleSync} disabled={syncing} variant="outline">
-              <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? 'animate-spin' : ''}`} />
-              同步数据
             </Button>
           </div>
         </CardContent>

@@ -6,31 +6,47 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { DatePicker } from '@/components/ui/date-picker'
 import { toast } from 'sonner'
 import { RefreshCw, FileText, Calendar, TrendingUp, CheckCircle, Clock } from 'lucide-react'
 import { financialDataApi, type DisclosureDateData, type DisclosureDateStatistics } from '@/lib/api/financial-data'
 import { useTaskStore } from '@/stores/task-store'
 
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const toDateStrYYYYMMDD = (d: Date) =>
+  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+
 export default function DisclosureDatePage() {
   const [data, setData] = useState<DisclosureDateData[]>([])
   const [statistics, setStatistics] = useState<DisclosureDateStatistics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // 筛选条件
   const [tsCode, setTsCode] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
 
   // 分页
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
+  // 同步弹窗
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncTsCode, setSyncTsCode] = useState('')
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
   // 任务回调存储
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_disclosure_date')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -40,8 +56,8 @@ export default function DisclosureDatePage() {
 
       const response = await financialDataApi.getDisclosureDate({
         ts_code: tsCode || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
+        start_date: startDate ? toDateStr(startDate) : undefined,
+        end_date: endDate ? toDateStr(endDate) : undefined,
         limit: pageSize
       })
 
@@ -77,21 +93,19 @@ export default function DisclosureDatePage() {
     }
   }, [unregisterCompletionCallback])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  // 同步确认
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (tsCode) params.ts_code = tsCode
-      if (endDate) params.end_date = endDate
+      if (syncTsCode) params.ts_code = syncTsCode
+      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
 
       const response = await financialDataApi.syncDisclosureDateAsync(params)
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
 
-        // 添加到任务存储
         addTask({
           taskId,
           taskName: response.data.task_name,
@@ -102,17 +116,12 @@ export default function DisclosureDatePage() {
           startTime: Date.now()
         })
 
-        // 注册完成回调
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '财报披露计划数据已更新'
-            })
+            toast.success('数据同步完成', { description: '财报披露计划数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -120,21 +129,14 @@ export default function DisclosureDatePage() {
 
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
-
         triggerPoll()
 
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
+        toast.success('同步任务已提交', { description: '可在任务面板查看进度' })
       } else {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    } finally {
-      setSyncing(false)
+      toast.error('同步失败', { description: err.message || '无法同步数据' })
     }
   }
 
@@ -225,6 +227,15 @@ export default function DisclosureDatePage() {
       <PageHeader
         title="财报披露计划"
         description="查看上市公司财报披露计划日期，包括预计披露日期和实际披露日期"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -296,7 +307,7 @@ export default function DisclosureDatePage() {
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1 w-full sm:w-auto">
-              <label className="text-sm font-medium mb-2 block">股票代码</label>
+              <Label className="mb-2 block">股票代码</Label>
               <Input
                 placeholder="如: 600000.SH"
                 value={tsCode}
@@ -304,37 +315,16 @@ export default function DisclosureDatePage() {
               />
             </div>
             <div className="flex-1 w-full sm:w-auto">
-              <label className="text-sm font-medium mb-2 block">开始日期（报告期）</label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
+              <Label className="mb-2 block">开始日期（报告期）</Label>
+              <DatePicker date={startDate} onDateChange={setStartDate} placeholder="选择开始日期" />
             </div>
             <div className="flex-1 w-full sm:w-auto">
-              <label className="text-sm font-medium mb-2 block">结束日期（报告期）</label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
+              <Label className="mb-2 block">结束日期（报告期）</Label>
+              <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
             </div>
             <div className="flex gap-2">
               <Button onClick={loadData} disabled={loading}>
                 查询
-              </Button>
-              <Button variant="outline" onClick={handleSync} disabled={syncing}>
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
               </Button>
             </div>
           </div>
@@ -434,6 +424,36 @@ export default function DisclosureDatePage() {
           />
         </div>
       </Card>
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>同步财报披露计划数据</DialogTitle>
+            <DialogDescription>
+              选择同步范围（留空则同步最新数据）。500积分/次。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="mb-2 block">股票代码（可选）</Label>
+              <Input
+                placeholder="如: 600000.SH，留空同步全量"
+                value={syncTsCode}
+                onChange={(e) => setSyncTsCode(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="mb-2 block">结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

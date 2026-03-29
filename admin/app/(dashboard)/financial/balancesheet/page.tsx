@@ -8,11 +8,12 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { balancesheetApi } from '@/lib/api/balancesheet-api'
 import type { BalancesheetData, BalancesheetStatistics } from '@/lib/api/balancesheet-api'
 import { useTaskStore } from '@/stores/task-store'
-import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, PieChart, RefreshCw } from 'lucide-react'
 
 export default function BalancesheetPage() {
   const [data, setData] = useState<BalancesheetData[]>([])
@@ -29,8 +30,16 @@ export default function BalancesheetPage() {
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+  const [syncTsCode, setSyncTsCode] = useState('')
+
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  const syncing = isTaskRunning('tasks.sync_balancesheet')
 
   useEffect(() => {
     loadData().catch(() => {})
@@ -83,20 +92,20 @@ export default function BalancesheetPage() {
       }
     } catch (error) {
       toast.error('加载数据失败')
-      console.error(error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      const response = await balancesheetApi.syncAsync({
-        ts_code: tsCode || undefined,
-        start_date: startDate ? formatDateToYYYYMMDD(startDate) : undefined,
-        end_date: endDate ? formatDateToYYYYMMDD(endDate) : undefined,
-        report_type: reportType !== 'all' ? reportType : undefined
-      })
+      const params: any = {}
+      if (syncTsCode) params.ts_code = syncTsCode
+      if (syncStartDate) params.start_date = toDateStrYYYYMMDD(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
+
+      const response = await balancesheetApi.syncAsync(params)
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -139,10 +148,10 @@ export default function BalancesheetPage() {
       }
     } catch (error) {
       toast.error('同步任务提交失败')
-      console.error(error)
     }
   }
 
+  // 本地时间构建 YYYY-MM-DD，避免 toISOString() UTC 偏移问题
   const formatDate = (date: Date): string => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -150,12 +159,9 @@ export default function BalancesheetPage() {
     return `${year}-${month}-${day}`
   }
 
-  const formatDateToYYYYMMDD = (date: Date): string => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}${month}${day}`
-  }
+  // 同步接口需要 YYYYMMDD 格式
+  const toDateStrYYYYMMDD = (d: Date): string =>
+    `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 
   const formatAmount = (amount: number | null | undefined): string => {
     if (amount === null || amount === undefined) return '-'
@@ -233,66 +239,69 @@ export default function BalancesheetPage() {
       <PageHeader
         title="资产负债表数据"
         description="上市公司资产负债表数据查询与同步（Tushare balancesheet_vip接口，2000积分/次）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                记录数
-              </CardTitle>
-              <PieChart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{(statistics.total_records || 0).toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                股票数: {statistics.total_stocks || 0}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                平均总资产
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatAmount(statistics.avg_total_assets)}</div>
-              <p className="text-xs text-muted-foreground mt-1">万元</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                平均总负债
-              </CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {formatAmount(statistics.avg_total_liab)}
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">记录数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{(statistics.total_records || 0).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">股票数: {statistics.total_stocks || 0}</p>
+                </div>
+                <PieChart className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">万元</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                平均股东权益
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {formatAmount(statistics.avg_equity)}
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均总资产</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatAmount(statistics.avg_total_assets)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">万元</p>
+                </div>
+                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">万元</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均总负债</p>
+                  <p className="text-xl sm:text-2xl font-bold text-red-600">{formatAmount(statistics.avg_total_liab)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">万元</p>
+                </div>
+                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-red-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均股东权益</p>
+                  <p className="text-xl sm:text-2xl font-bold text-green-600">{formatAmount(statistics.avg_equity)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">万元</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -363,9 +372,6 @@ export default function BalancesheetPage() {
             <Button onClick={loadData} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
             </Button>
-            <Button onClick={handleSync} variant="outline">
-              同步数据
-            </Button>
             <Button
               onClick={() => {
                 setTsCode('')
@@ -431,6 +437,38 @@ export default function BalancesheetPage() {
           />
         </CardContent>
       </Card>
+
+      {/* 同步数据弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步资产负债表数据</DialogTitle>
+            <DialogDescription>选择同步参数（均为可选，留空则同步最新数据）。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">股票代码（可选）</label>
+              <Input
+                placeholder="如：600000.SH，留空同步全部"
+                value={syncTsCode}
+                onChange={(e) => setSyncTsCode(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">开始日期（可选）</label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">结束日期（可选）</label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

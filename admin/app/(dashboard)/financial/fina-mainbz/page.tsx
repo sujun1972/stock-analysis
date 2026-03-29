@@ -8,23 +8,30 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { DatePicker } from '@/components/ui/date-picker'
 import { financialDataApi, type FinaMainbzData, type FinaMainbzStatistics } from '@/lib/api/financial-data'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, PieChart, TrendingUp, DollarSign, Package } from 'lucide-react'
+
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const toDateStrYYYYMMDD = (d: Date) =>
+  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 
 export default function FinaMainbzPage() {
   const [data, setData] = useState<FinaMainbzData[]>([])
   const [statistics, setStatistics] = useState<FinaMainbzStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
 
   // 查询参数
   const [tsCode, setTsCode] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [period, setPeriod] = useState('')
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [period, setPeriod] = useState<Date | undefined>(undefined)
   const [type, setType] = useState<string>('ALL')
 
   // 分页
@@ -32,8 +39,17 @@ export default function FinaMainbzPage() {
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  // 同步弹窗
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncTsCode, setSyncTsCode] = useState('')
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_fina_mainbz')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -43,9 +59,9 @@ export default function FinaMainbzPage() {
 
       const response = await financialDataApi.getFinaMainbz({
         ts_code: tsCode || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        period: period || undefined,
+        start_date: startDate ? toDateStr(startDate) : undefined,
+        end_date: endDate ? toDateStr(endDate) : undefined,
+        period: period ? toDateStr(period) : undefined,
         type: type === 'ALL' ? undefined : type,
         limit: pageSize
       })
@@ -69,15 +85,15 @@ export default function FinaMainbzPage() {
     try {
       const response = await financialDataApi.getFinaMainbzStatistics({
         ts_code: tsCode || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined
+        start_date: startDate ? toDateStr(startDate) : undefined,
+        end_date: endDate ? toDateStr(endDate) : undefined
       })
 
       if (response.code === 200 && response.data) {
         setStatistics(response.data)
       }
-    } catch (err: any) {
-      console.error('加载统计信息失败:', err)
+    } catch {
+      // 统计信息加载失败不影响主要数据展示
     }
   }, [tsCode, startDate, endDate])
 
@@ -87,17 +103,14 @@ export default function FinaMainbzPage() {
     loadStatistics()
   }, [loadData, loadStatistics])
 
-  // 异步同步
-  const handleSync = async () => {
+  // 同步确认
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (tsCode) params.ts_code = tsCode
-      if (startDate) params.start_date = startDate
-      if (endDate) params.end_date = endDate
-      if (period) params.period = period
-      if (type !== 'ALL') params.type = type
+      if (syncTsCode) params.ts_code = syncTsCode
+      if (syncStartDate) params.start_date = toDateStrYYYYMMDD(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
 
       const response = await financialDataApi.syncFinaMainbzAsync(params)
 
@@ -130,16 +143,12 @@ export default function FinaMainbzPage() {
         registerCompletionCallback(taskId, completionCallback)
         triggerPoll()
 
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
+        toast.success('同步任务已提交', { description: '可在任务面板查看进度' })
       } else {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -207,66 +216,75 @@ export default function FinaMainbzPage() {
       <PageHeader
         title="主营业务构成"
         description="上市公司主营业务构成数据，按产品/地区/行业分类"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总记录数</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                股票数: {statistics.stock_count}
-              </p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">总记录数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_count.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">股票数: {statistics.stock_count}</p>
+                </div>
+                <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">业务类型数</CardTitle>
-              <PieChart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.bz_item_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                报告期数: {statistics.period_count}
-              </p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">业务类型数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.bz_item_count.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">报告期数: {statistics.period_count}</p>
+                </div>
+                <PieChart className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均收入</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatAmount(statistics.avg_bz_sales)}万</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                总收入: {formatAmount(statistics.total_bz_sales)}万
-              </p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均收入</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatAmount(statistics.avg_bz_sales)}万</p>
+                  <p className="text-xs text-muted-foreground mt-1">总收入: {formatAmount(statistics.total_bz_sales)}万</p>
+                </div>
+                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">收入范围</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatAmount(statistics.max_bz_sales)}万</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                最小: {formatAmount(statistics.min_bz_sales)}万
-              </p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">收入范围</p>
+                  <p className="text-xl sm:text-2xl font-bold">{formatAmount(statistics.max_bz_sales)}万</p>
+                  <p className="text-xs text-muted-foreground mt-1">最小: {formatAmount(statistics.min_bz_sales)}万</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* 筛选和操作区域 */}
+      {/* 筛选区域 */}
       <Card>
         <CardHeader>
           <CardTitle>数据查询</CardTitle>
@@ -283,32 +301,16 @@ export default function FinaMainbzPage() {
               />
             </div>
             <div>
-              <Label htmlFor="startDate">开始日期</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
+              <Label className="mb-2 block">开始日期</Label>
+              <DatePicker date={startDate} onDateChange={setStartDate} placeholder="选择开始日期" />
             </div>
             <div>
-              <Label htmlFor="endDate">结束日期</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
+              <Label className="mb-2 block">结束日期</Label>
+              <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
             </div>
             <div>
-              <Label htmlFor="period">报告期</Label>
-              <Input
-                id="period"
-                type="date"
-                placeholder="如: 2023-12-31"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-              />
+              <Label className="mb-2 block">报告期</Label>
+              <DatePicker date={period} onDateChange={setPeriod} placeholder="选择报告期" />
             </div>
             <div>
               <Label htmlFor="type">分类类型</Label>
@@ -326,22 +328,7 @@ export default function FinaMainbzPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <Button onClick={loadData} variant="default">
-              查询
-            </Button>
-            <Button onClick={handleSync} disabled={syncing} variant="outline">
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
-              )}
-            </Button>
+            <Button onClick={loadData} variant="default">查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -367,6 +354,40 @@ export default function FinaMainbzPage() {
           }}
         />
       </Card>
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>同步主营业务构成数据</DialogTitle>
+            <DialogDescription>
+              选择同步范围（留空则同步最新数据）。2000积分/次。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="mb-2 block">股票代码（可选）</Label>
+              <Input
+                placeholder="如: 000001.SZ，留空同步全量"
+                value={syncTsCode}
+                onChange={(e) => setSyncTsCode(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="mb-2 block">开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+            </div>
+            <div>
+              <Label className="mb-2 block">结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

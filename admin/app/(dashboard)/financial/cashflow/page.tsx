@@ -5,33 +5,48 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, Column } from '@/components/common/DataTable'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react'
 import { cashflowApi } from '@/lib/api'
 import type { CashflowData, CashflowStatistics } from '@/lib/api/cashflow-api'
 import { useTaskStore } from '@/stores/task-store'
 
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const toDateStrYYYYMMDD = (d: Date) =>
+  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+
 export default function CashflowPage() {
   const [data, setData] = useState<CashflowData[]>([])
   const [statistics, setStatistics] = useState<CashflowStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
 
   // 查询参数
   const [tsCode, setTsCode] = useState('')
-  const [period, setPeriod] = useState('')
+  const [period, setPeriod] = useState<Date | undefined>(undefined)
 
   // 分页
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncTsCode, setSyncTsCode] = useState('')
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
   // 任务存储
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  const syncing = isTaskRunning('tasks.sync_cashflow')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -41,7 +56,7 @@ export default function CashflowPage() {
 
       const response = await cashflowApi.getCashflowData({
         ts_code: tsCode || undefined,
-        period: period || undefined,
+        period: period ? toDateStr(period) : undefined,
         limit: pageSize
       })
 
@@ -69,8 +84,8 @@ export default function CashflowPage() {
       if (response.code === 200 && response.data) {
         setStatistics(response.data)
       }
-    } catch (err: any) {
-      console.error('加载统计信息失败:', err)
+    } catch {
+      // 统计信息加载失败不影响主要数据展示
     }
   }, [tsCode])
 
@@ -79,14 +94,14 @@ export default function CashflowPage() {
     loadStatistics()
   }, [loadData, loadStatistics])
 
-  // 异步同步
-  const handleSync = async () => {
+  // 同步确认
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (tsCode) params.ts_code = tsCode
-      if (period) params.period = period
+      if (syncTsCode) params.ts_code = syncTsCode
+      if (syncStartDate) params.start_date = toDateStrYYYYMMDD(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
 
       const response = await cashflowApi.syncAsync(params)
 
@@ -103,18 +118,13 @@ export default function CashflowPage() {
           startTime: Date.now()
         })
 
-        // 注册完成回调
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
             loadStatistics().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '现金流量表数据已更新'
-            })
+            toast.success('数据同步完成', { description: '现金流量表数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -122,21 +132,13 @@ export default function CashflowPage() {
 
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
-
         triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
+        toast.success('同步任务已提交', { description: '可在任务面板查看进度' })
       } else {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    } finally {
-      setSyncing(false)
+      toast.error('同步失败', { description: err.message || '无法同步数据' })
     }
   }
 
@@ -212,54 +214,101 @@ export default function CashflowPage() {
       <PageHeader
         title="现金流量表"
         description="上市公司现金流量表数据查询（经营、投资、筹资活动现金流）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>同步现金流量表数据</DialogTitle>
+            <DialogDescription>选择同步条件（均可留空，留空则同步最新数据）。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>股票代码（可选）</Label>
+              <Input
+                placeholder="如：600000.SH"
+                value={syncTsCode}
+                onChange={(e) => setSyncTsCode(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">记录总数</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total?.toLocaleString() || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                覆盖 {statistics.stock_count || 0} 只股票
-              </p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">记录总数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.total?.toLocaleString() || 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1">覆盖 {statistics.stock_count || 0} 只股票</p>
+                </div>
+                <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均经营现金流</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.avg_operating_cf?.toFixed(2) || '0.00'}</div>
-              <p className="text-xs text-muted-foreground mt-1">万元</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均经营现金流</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.avg_operating_cf?.toFixed(2) || '0.00'}</p>
+                  <p className="text-xs text-muted-foreground mt-1">万元</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均自由现金流</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.avg_free_cf?.toFixed(2) || '0.00'}</div>
-              <p className="text-xs text-muted-foreground mt-1">万元</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均自由现金流</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.avg_free_cf?.toFixed(2) || '0.00'}</p>
+                  <p className="text-xs text-muted-foreground mt-1">万元</p>
+                </div>
+                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-purple-500" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最大经营现金流</CardTitle>
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.max_operating_cf?.toFixed(2) || '0.00'}</div>
-              <p className="text-xs text-muted-foreground mt-1">万元</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">最大经营现金流</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.max_operating_cf?.toFixed(2) || '0.00'}</p>
+                  <p className="text-xs text-muted-foreground mt-1">万元</p>
+                </div>
+                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-orange-500" />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -282,34 +331,12 @@ export default function CashflowPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="period">报告期</Label>
-              <Input
-                id="period"
-                type="date"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-              />
+              <Label>报告期</Label>
+              <DatePicker date={period} onDateChange={setPeriod} placeholder="选择报告期" />
             </div>
-            <div className="flex items-end space-x-2">
-              <Button onClick={loadData} disabled={loading}>
+            <div className="flex items-end">
+              <Button onClick={loadData} disabled={loading} className="w-full">
                 {loading ? '查询中...' : '查询'}
-              </Button>
-              <Button
-                variant="default"
-                onClick={handleSync}
-                disabled={syncing}
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
               </Button>
             </div>
           </div>

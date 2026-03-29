@@ -7,11 +7,19 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { forecastApi, ForecastData, ForecastStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Briefcase, TrendingDown, BarChart3 } from 'lucide-react'
+
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const toDateStrYYYYMMDD = (d: Date) =>
+  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 
 export default function ForecastPage() {
   const [data, setData] = useState<ForecastData[]>([])
@@ -23,15 +31,23 @@ export default function ForecastPage() {
   const [tsCode, setTsCode] = useState('')
   const [forecastType, setForecastType] = useState<string>('')
   const [period, setPeriod] = useState('')
-  const [syncing, setSyncing] = useState(false)
 
   // 分页状态
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncTsCode, setSyncTsCode] = useState('')
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+  const [syncForecastType, setSyncForecastType] = useState<string>('')
+
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+
+  const syncing = isTaskRunning('tasks.sync_forecast')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -40,8 +56,8 @@ export default function ForecastPage() {
       setError(null)
 
       const params: any = { limit: pageSize }
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode) params.ts_code = tsCode.trim()
       if (forecastType) params.type = forecastType
       if (period) params.period = period
@@ -76,16 +92,15 @@ export default function ForecastPage() {
     loadData()
   }, [loadData])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  // 同步确认
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (period) params.period = period
-      if (forecastType) params.type = forecastType
+      if (syncTsCode) params.ts_code = syncTsCode
+      if (syncStartDate) params.start_date = toDateStrYYYYMMDD(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
+      if (syncForecastType) params.type = syncForecastType
 
       const response = await forecastApi.syncAsync(params)
 
@@ -116,15 +131,12 @@ export default function ForecastPage() {
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
         triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
+        toast.success('同步任务已提交', { description: '可在任务面板查看进度' })
+      } else {
+        throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -137,7 +149,8 @@ export default function ForecastPage() {
       })
       callbacks.clear()
     }
-  }, [unregisterCompletionCallback])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 格式化金额
   const formatAmount = (amount: number | null | undefined) => {
@@ -295,57 +308,117 @@ export default function ForecastPage() {
       <PageHeader
         title="业绩预告"
         description="上市公司业绩预告数据，包括预告类型、净利润变动幅度等信息"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>同步业绩预告数据</DialogTitle>
+            <DialogDescription>选择同步条件（均可留空，留空则同步最新数据）。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>股票代码（可选）</Label>
+              <Input
+                placeholder="如：600000.SH"
+                value={syncTsCode}
+                onChange={(e) => setSyncTsCode(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
+            </div>
+            <div className="space-y-2">
+              <Label>预告类型（可选）</Label>
+              <Select value={syncForecastType || 'ALL'} onValueChange={(v) => setSyncForecastType(v === 'ALL' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="全部" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">全部</SelectItem>
+                  <SelectItem value="预增">预增</SelectItem>
+                  <SelectItem value="预减">预减</SelectItem>
+                  <SelectItem value="扭亏">扭亏</SelectItem>
+                  <SelectItem value="首亏">首亏</SelectItem>
+                  <SelectItem value="续亏">续亏</SelectItem>
+                  <SelectItem value="续盈">续盈</SelectItem>
+                  <SelectItem value="略增">略增</SelectItem>
+                  <SelectItem value="略减">略减</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">总记录数</p>
-                  <p className="text-2xl font-bold">{statistics.total_count}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">总记录数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_count}</p>
                 </div>
-                <BarChart3 className="h-8 w-8 text-blue-500" />
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">涉及股票数</p>
-                  <p className="text-2xl font-bold">{statistics.stock_count}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">涉及股票数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.stock_count}</p>
                 </div>
-                <Briefcase className="h-8 w-8 text-green-500" />
+                <Briefcase className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">正面预告比例</p>
-                  <p className="text-2xl font-bold">{statistics.positive_ratio.toFixed(1)}%</p>
-                  <p className="text-xs text-muted-foreground">{statistics.positive_count} 条</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">正面预告比例</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.positive_ratio.toFixed(1)}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">{statistics.positive_count} 条</p>
                 </div>
-                <TrendingUp className="h-8 w-8 text-red-500" />
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-red-500" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">负面预告比例</p>
-                  <p className="text-2xl font-bold">{statistics.negative_ratio.toFixed(1)}%</p>
-                  <p className="text-xs text-muted-foreground">{statistics.negative_count} 条</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">负面预告比例</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.negative_ratio.toFixed(1)}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">{statistics.negative_count} 条</p>
                 </div>
-                <TrendingDown className="h-8 w-8 text-green-500" />
+                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
               </div>
             </CardContent>
           </Card>
@@ -402,22 +475,9 @@ export default function ForecastPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end gap-2">
-              <Button variant="default" onClick={loadData} disabled={loading} className="flex-1">
+            <div className="flex items-end">
+              <Button variant="default" onClick={loadData} disabled={loading} className="w-full">
                 查询
-              </Button>
-              <Button variant="outline" onClick={handleSync} disabled={syncing} className="flex-1">
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步
-                  </>
-                )}
               </Button>
             </div>
           </div>

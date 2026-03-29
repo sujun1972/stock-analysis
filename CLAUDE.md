@@ -372,16 +372,16 @@ const handleSyncConfirm = async () => {
 - 股东人数页面（`/reference-data/stk-holdernumber`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
 - 大宗交易页面（`/reference-data/block-trade`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
 - 股东增减持页面（`/reference-data/stk-holdertrade`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、新增分页（100条/页）、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
-- 利润表页面（`/financial/income`）
-- 资产负债表页面（`/financial/balancesheet`）
-- 现金流量表页面（`/financial/cashflow`）
-- 业绩预告页面（`/financial/forecast`）
-- 业绩快报页面（`/financial/express`）
-- 分红送股页面（`/financial/dividend`）
-- 财务指标页面（`/financial/fina-indicator`）
-- 财务审计意见页面（`/financial/fina-audit`）
-- 主营业务构成页面（`/financial/fina-mainbz`）
-- 财报披露计划页面（`/financial/disclosure-date`）
+- 利润表页面（`/financial/income`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncTsCode/syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、左文字右图标统计卡片、toDateStr 本地时间安全、注意：同步接口需 YYYYMMDD 格式、查询接口需 YYYY-MM-DD 格式）**
+- 资产负债表页面（`/financial/balancesheet`）**（2026-03-29 全面对齐最佳实践：同利润表页面，同步接口需 YYYYMMDD 格式）**
+- 现金流量表页面（`/financial/cashflow`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、左文字右图标统计卡片、period 改为 DatePicker、toDateStr 本地时间安全）**
+- 业绩预告页面（`/financial/forecast`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（含 syncForecastType）、同步按钮移至 PageHeader、toDateStr 本地时间安全，修复 toISOString UTC 偏移 bug）**
+- 业绩快报页面（`/financial/express`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、左文字右图标统计卡片、所有日期字段从字符串改为 Date | undefined + DatePicker）**
+- 分红送股页面（`/financial/dividend`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、修复 toISOString UTC 偏移 bug）**
+- 财务指标页面（`/financial/fina-indicator`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（含 syncPeriod）、同步按钮移至 PageHeader、左文字右图标统计卡片、所有日期改为 DatePicker）**
+- 财务审计意见页面（`/financial/fina-audit`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、修复多处 toISOString UTC 偏移 bug、ts_code 为同步必填项（按钮在 syncTsCode 为空时禁用））**
+- 主营业务构成页面（`/financial/fina-mainbz`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（含 type 选项）、同步按钮移至 PageHeader、左文字右图标统计卡片、所有日期改为 DatePicker）**
+- 财报披露计划页面（`/financial/disclosure-date`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、统计卡片已是正确格式保持不变、所有日期改为 DatePicker）**
 - 筹码分布页面（`/features/cyq-chips`）**（✨ 新增于 2026-03-28，2000积分/次，单次最大1000行，筹码价格-持仓比例分布；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、同步弹窗与查询日期解耦）**
 - 每日筹码及胜率页面（`/features/cyq-perf`）**（✨ 新增于 2026-03-28，2000积分/次，包含获利比例、成本分布、获利盘/亏损盘比例；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、同步弹窗与查询日期解耦）**
 - 中央结算系统持股汇总页面（`/features/ccass-hold`）**（2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader、同步弹窗与查询日期解耦）**

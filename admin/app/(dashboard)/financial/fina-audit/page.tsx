@@ -8,10 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { financialDataApi, FinaAuditData, FinaAuditStatistics } from '@/lib/api/financial-data'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Building2, Users, DollarSign } from 'lucide-react'
+
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export default function FinaAuditPage() {
   const [data, setData] = useState<FinaAuditData[]>([])
@@ -25,18 +29,25 @@ export default function FinaAuditPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [period, setPeriod] = useState<Date | undefined>(undefined)
-  const [syncing, setSyncing] = useState(false)
 
   // 分页状态
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
+  // 同步弹窗状态
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncTsCode, setSyncTsCode] = useState('')
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
   // 存储活跃的任务回调
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
   // 任务存储Hook
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
+
+  const syncing = isTaskRunning('tasks.sync_fina_audit')
 
   /**
    * 加载数据
@@ -51,10 +62,10 @@ export default function FinaAuditPage() {
       }
 
       if (tsCode) params.ts_code = tsCode
-      if (annDate) params.ann_date = annDate.toISOString().split('T')[0]
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (period) params.period = period.toISOString().split('T')[0]
+      if (annDate) params.ann_date = toDateStr(annDate)
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
+      if (period) params.period = toDateStr(period)
 
       const response = await financialDataApi.getFinaAudit(params)
 
@@ -77,20 +88,17 @@ export default function FinaAuditPage() {
   /**
    * 异步同步数据
    */
-  const handleSync = async () => {
-    if (!tsCode) {
+  const handleSyncConfirm = async () => {
+    if (!syncTsCode) {
       toast.error('同步失败', { description: '请输入股票代码' })
       return
     }
+    setSyncDialogOpen(false)
 
     try {
-      setSyncing(true)
-
-      const params: any = { ts_code: tsCode }
-      if (annDate) params.ann_date = annDate.toISOString().split('T')[0]
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (period) params.period = period.toISOString().split('T')[0]
+      const params: any = { ts_code: syncTsCode }
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await financialDataApi.syncFinaAuditAsync(params)
 
@@ -131,8 +139,6 @@ export default function FinaAuditPage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -258,56 +264,66 @@ export default function FinaAuditPage() {
       <PageHeader
         title="财务审计意见"
         description="查看上市公司定期财务审计意见数据，包括审计结果、审计费用、会计事务所等信息"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总记录数</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">统计期内审计记录</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">公司数量</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.stock_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">不同公司数量</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">事务所数量</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.agency_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">会计事务所数量</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均审计费用</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {(statistics.avg_fees / 10000).toFixed(2)}万
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">总记录数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_count.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">统计期内审计记录</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                最高: {(statistics.max_fees / 10000).toFixed(2)}万
-              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">公司数量</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.stock_count.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">不同公司数量</p>
+                </div>
+                <Building2 className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">事务所数量</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.agency_count.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">会计事务所数量</p>
+                </div>
+                <Users className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">平均审计费用</p>
+                  <p className="text-xl sm:text-2xl font-bold">{(statistics.avg_fees / 10000).toFixed(2)}万</p>
+                  <p className="text-xs text-muted-foreground mt-1">最高: {(statistics.max_fees / 10000).toFixed(2)}万</p>
+                </div>
+                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -317,7 +333,7 @@ export default function FinaAuditPage() {
       <Card>
         <CardHeader>
           <CardTitle>数据查询</CardTitle>
-          <CardDescription>输入股票代码（必填）和日期范围进行查询或同步</CardDescription>
+          <CardDescription>输入股票代码（必填）和日期范围进行查询</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -390,24 +406,6 @@ export default function FinaAuditPage() {
                 <>
                   <RefreshCw className="h-4 w-4 mr-1" />
                   查询数据
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSync}
-              disabled={syncing || !tsCode}
-            >
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
                 </>
               )}
             </Button>
@@ -507,6 +505,50 @@ export default function FinaAuditPage() {
           />
         </div>
       </Card>
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>同步财务审计意见数据</DialogTitle>
+            <DialogDescription>
+              请输入股票代码（必填），日期范围可选。每次500积分。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                股票代码 <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder="如 600000.SH（必填）"
+                value={syncTsCode}
+                onChange={(e) => setSyncTsCode(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">开始日期（可选）</label>
+              <DatePicker
+                date={syncStartDate}
+                onDateChange={setSyncStartDate}
+                placeholder="留空不限制"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">结束日期（可选）</label>
+              <DatePicker
+                date={syncEndDate}
+                onDateChange={setSyncEndDate}
+                placeholder="留空不限制"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing || !syncTsCode}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
