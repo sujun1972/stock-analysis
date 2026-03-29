@@ -8,11 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { suspendApi } from '@/lib/api'
 import type { SuspendData, SuspendStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, Calendar, BarChart3 } from 'lucide-react'
+
+const toDateStr = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 export default function SuspendPage() {
   const [data, setData] = useState<SuspendData[]>([])
@@ -23,16 +28,22 @@ export default function SuspendPage() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState<string>('')
   const [suspendType, setSuspendType] = useState<string>('ALL')
-  const [syncing, setSyncing] = useState(false)
+
+  // 同步弹窗状态（与查询日期解耦）
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [totalRecords, setTotalRecords] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_suspend')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -41,8 +52,8 @@ export default function SuspendPage() {
       setError(null)
 
       const params: any = {}
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (suspendType !== 'ALL') params.suspend_type = suspendType
       params.page = currentPage
@@ -59,7 +70,6 @@ export default function SuspendPage() {
       if (dataResp.code === 200) {
         setData(dataResp.data?.items || [])
         setTotalRecords(dataResp.data?.total || 0)
-        setTotalPages(dataResp.data?.total_pages || 0)
       }
 
       if (statsResp.code === 200) {
@@ -82,16 +92,12 @@ export default function SuspendPage() {
     setCurrentPage(1)
   }, [startDate, endDate, tsCode, suspendType])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (tsCode.trim()) params.ts_code = tsCode.trim()
-      if (suspendType !== 'ALL') params.suspend_type = suspendType
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await suspendApi.syncAsync(params)
 
@@ -131,8 +137,6 @@ export default function SuspendPage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -206,7 +210,48 @@ export default function SuspendPage() {
       <PageHeader
         title="每日停复牌信息"
         description="查询股票每日停复牌情况，包括停牌时间段和复牌信息"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步数据</DialogTitle>
+            <DialogDescription>
+              选择同步日期范围（留空则同步最新交易日数据）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
@@ -296,86 +341,31 @@ export default function SuspendPage() {
                 <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
                 查询
               </Button>
-              <Button onClick={handleSync} disabled={syncing} variant="default">
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">停复牌数据</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={index}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格 */}
-        <div className="hidden sm:block">
-          <DataTable
-            columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
-            emptyMessage="暂无停复牌数据"
-            pagination={{
-              page: currentPage,
-              pageSize: pageSize,
-              total: totalRecords,
-              onPageChange: setCurrentPage,
-              onPageSizeChange: (newSize) => {
-                setPageSize(newSize)
-                setCurrentPage(1) // 重置到第一页
-              }
-            }}
-          />
-        </div>
+      <Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          loading={loading}
+          error={error}
+          emptyMessage="暂无停复牌数据"
+          mobileCard={mobileCard}
+          pagination={{
+            page: currentPage,
+            pageSize: pageSize,
+            total: totalRecords,
+            onPageChange: setCurrentPage,
+            onPageSizeChange: (newSize) => {
+              setPageSize(newSize)
+              setCurrentPage(1)
+            }
+          }}
+        />
       </Card>
     </div>
   )

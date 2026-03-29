@@ -393,16 +393,16 @@ const handleSyncConfirm = async () => {
 - AH股比价页面（`/features/stk-ah-comparison`）**（✨ 新增于 2026-03-23，5000积分/次，数据从2025-08-12开始，每次最大1000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，后端 GET 端点新增 trade_date 参数，resolve_default_trade_date 自动回填）**
 - 机构调研表页面（`/features/stk-surv`）**（✨ 新增于 2026-03-23，5000积分/次，单次最大100行，支持按接待方式和机构类型筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、statistics 合并到主响应、同步弹窗解耦查询日期）**
 - 券商每月荐股页面（`/features/broker-recommend`）**（✨ 新增于 2026-03-23，6000积分/次，单次最大1000行，每月1-3日更新当月数据；2026-03-28 全面重构：迁移至模块化 brokerRecommendApi、isTaskRunning 派生 syncing、DataTable mobileCard、同步弹窗选月度）**
-- 实时行情同步页面（`/market/realtime`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次）或AkShare获取实时行情快照，支持涨跌幅榜、统计卡片、分页查询（30条/页）和异步同步功能，支持数据源切换）**
-- 股票日线数据页面（`/market/daily`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次），支持单只股票和全市场两种同步模式，分页查询（30条/页），统计卡片，异步同步功能，已从数据初始化页面迁移至行情数据菜单）**
-- 每日停复牌信息页面（`/market/suspend`）**（✨ 新增于 2026-03-24，不定期更新，支持分页查询，行情数据分类）**
-- 每日涨跌停价格页面（`/market/stk-limit-d`）**（✨ 新增于 2026-03-24，2000积分/次，每交易日8:40更新，单次最大5800条，行情数据分类）**
-- 沪深股通十大成交股页面（`/market/hsgt-top10`）**（✨ 新增于 2026-03-24，每天18~20点更新，包含沪股通、深股通前十大成交详细数据，支持按市场类型筛选）**
-- 港股通十大成交股页面（`/market/ggt-top10`）**（✨ 新增于 2026-03-24，Tushare ggt_top10接口，每天18~20点更新，包含港股通(沪)、港股通(深)前十大成交详细数据，17个字段含沪深市详细成交金额）**
-- 港股通每日成交统计页面（`/market/ggt-daily`）**（✨ 新增于 2026-03-24，Tushare ggt_daily接口，2000积分/次，数据从2014年开始，包含买入/卖出成交金额和笔数统计，带统计卡片、趋势图表和分页功能）**
-- 港股通每月成交统计页面（`/market/ggt-monthly`）**（✨ 新增于 2026-03-24，Tushare ggt_monthly接口，5000积分/次，数据从2014年开始，单次最大1000条，包含日均和总买入/卖出成交金额和笔数统计，带统计卡片、趋势图表和月度筛选功能）**
-- 复权因子页面（`/market/adj-factor`）**（✨ 新增于 2026-03-24，Tushare adj_factor接口，2000积分/次，盘前9:15~20分更新，支持单只股票历史查询或单日全市场查询，包含统计卡片、筛选功能和响应式布局）**
-- 每日指标页面（`/market/daily-basic`）**（✨ 新增于 2026-03-24，Tushare daily_basic接口，2000积分/次，每交易日15:00-17:00更新，单次最大6000条，包含换手率、市盈率、市净率等17个核心指标，带统计卡片、分页查询和异步同步功能）**
+- 实时行情同步页面（`/market/realtime`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次）或AkShare获取实时行情快照，支持涨跌幅榜、统计卡片、分页查询（30条/页）和异步同步功能，支持数据源切换；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader、"数据同步" Card 改为 "同步配置" 保留参数选择）**
+- 股票日线数据页面（`/market/daily`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次），支持单只股票和全市场两种同步模式，分页查询（30条/页），统计卡片，异步同步功能，已从数据初始化页面迁移至行情数据菜单；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader）**
+- 每日停复牌信息页面（`/market/suspend`）**（✨ 新增于 2026-03-24，不定期更新，支持分页查询，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
+- 每日涨跌停价格页面（`/market/stk-limit-d`）**（✨ 新增于 2026-03-24，2000积分/次，每交易日8:40更新，单次最大5800条，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
+- 沪深股通十大成交股页面（`/market/hsgt-top10`）**（✨ 新增于 2026-03-24，每天18~20点更新，包含沪股通、深股通前十大成交详细数据，支持按市场类型筛选；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（不传 tsCode/marketType）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
+- 港股通十大成交股页面（`/market/ggt-top10`）**（✨ 新增于 2026-03-24，Tushare ggt_top10接口，每天18~20点更新，包含港股通(沪)、港股通(深)前十大成交详细数据，17个字段含沪深市详细成交金额；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
+- 港股通每日成交统计页面（`/market/ggt-daily`）**（✨ 新增于 2026-03-24，Tushare ggt_daily接口，2000积分/次，数据从2014年开始，包含买入/卖出成交金额和笔数统计，带统计卡片、趋势图表和分页功能；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、toDateStr 本地时间安全）**
+- 港股通每月成交统计页面（`/market/ggt-monthly`）**（✨ 新增于 2026-03-24，Tushare ggt_monthly接口，5000积分/次，数据从2014年开始，单次最大1000条，包含日均和总买入/卖出成交金额和笔数统计，带统计卡片、趋势图表和月度筛选功能；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询月份解耦（syncStartMonth/syncEndMonth 独立）、同步按钮移至 PageHeader、DataTable mobileCard）**
+- 复权因子页面（`/market/adj-factor`）**（✨ 新增于 2026-03-24，Tushare adj_factor接口，2000积分/次，盘前9:15~20分更新，支持单只股票历史查询或单日全市场查询，包含统计卡片、筛选功能和响应式布局；2026-03-29 全面对齐最佳实践：已符合最佳实践——同步弹窗与查询日期解耦、isTaskRunning 派生 syncing、toDateStr 本地时间安全、DataTable mobileCard）**
+- 每日指标页面（`/market/daily-basic`）**（✨ 新增于 2026-03-24，Tushare daily_basic接口，2000积分/次，每交易日15:00-17:00更新，单次最大6000条，包含换手率、市盈率、市净率等17个核心指标，带统计卡片、分页查询和异步同步功能；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncTradeDate/syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
 - 新股列表页面（`/sync/new-stocks`）**（✨ 新增于 2026-03-24，使用stock_basic表list_date字段查询新上市股票，支持按天数/日期范围/市场类型筛选，包含统计卡片、分页查询和异步同步功能）**
 - 股票列表页面（`/data/stock-list`）**（✨ 新增于 2026-03-25，完整支持Tushare stock_basic接口17个输出字段，按上市状态/市场/交易所/沪深港通4个维度筛选，5张统计卡片展示全市场概况，支持分页查询和异步同步，已从数据初始化页面迁移至基础数据菜单）**
 - 东方财富板块成分页面（`/boardgame/dc-member`）**（✨ 新增于 2026-03-25，Tushare dc_member接口，6000积分/次，单次最大5000条，获取东方财富板块每日成分数据，支持按板块代码/成分股代码/日期范围筛选，4张统计卡片，异步同步功能，归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期、成分股列合并名称+纯代码可点击跳转分析页面、板块列合并名称+代码（板块名称从 dc_index 最新一天缓存注入）、后端排序（白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+板块名称映射、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**

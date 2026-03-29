@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
@@ -45,12 +46,14 @@ interface DailyBasicStatistics {
   stock_count: number
 }
 
+const toDateStr = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
 export default function DailyBasicPage() {
   const [data, setData] = useState<DailyBasicData[]>([])
   const [statistics, setStatistics] = useState<DailyBasicStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
 
   // 筛选条件
   const [tsCode, setTsCode] = useState('')
@@ -58,14 +61,23 @@ export default function DailyBasicPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
 
+  // 同步弹窗状态（与查询日期解耦）
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+
   // 分页状态
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
   // 任务管理
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_daily_basic')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -75,25 +87,26 @@ export default function DailyBasicPage() {
 
       const params: any = { page, page_size: pageSize }
       if (tsCode.trim()) params.ts_code = tsCode.trim()
-      if (tradeDate) params.trade_date = tradeDate.toISOString().split('T')[0]
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
 
-      const response = await apiClient.get('/api/daily-basic', { params })
+      const statsParams: any = {}
+      if (startDate) statsParams.start_date = toDateStr(startDate)
+      if (endDate) statsParams.end_date = toDateStr(endDate)
 
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setTotal(response.data.total || 0)
+      const [dataResponse, statsResponse] = await Promise.all([
+        apiClient.get('/api/daily-basic', { params }),
+        apiClient.get('/api/daily-basic/statistics', { params: statsParams })
+      ])
+
+      if (dataResponse.code === 200 && dataResponse.data) {
+        setData(dataResponse.data.items || [])
+        setTotal(dataResponse.data.total || 0)
       } else {
-        throw new Error(response.message || '获取数据失败')
+        throw new Error(dataResponse.message || '获取数据失败')
       }
 
-      // 加载统计信息
-      const statsParams: any = {}
-      if (startDate) statsParams.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) statsParams.end_date = endDate.toISOString().split('T')[0]
-
-      const statsResponse = await apiClient.get('/api/daily-basic/statistics', { params: statsParams })
       if (statsResponse.code === 200 && statsResponse.data) {
         setStatistics(statsResponse.data)
       }
@@ -122,16 +135,13 @@ export default function DailyBasicPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 异步同步
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (tsCode.trim()) params.ts_code = tsCode.trim()
-      if (tradeDate) params.trade_date = tradeDate.toISOString().split('T')[0]
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await apiClient.post('/api/daily-basic/sync-async', null, { params })
 
@@ -148,17 +158,12 @@ export default function DailyBasicPage() {
           startTime: Date.now()
         })
 
-        // 注册任务完成回调
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '每日指标数据已更新'
-            })
+            toast.success('数据同步完成', { description: '每日指标数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -176,11 +181,7 @@ export default function DailyBasicPage() {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    } finally {
-      setSyncing(false)
+      toast.error('同步失败', { description: err.message || '无法同步数据' })
     }
   }
 
@@ -287,7 +288,52 @@ export default function DailyBasicPage() {
       <PageHeader
         title="每日指标"
         description="获取全部股票每日重要的基本面指标，可用于选股分析、报表展示等（2000积分/次，单次最大6000条）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>同步数据</DialogTitle>
+            <DialogDescription>
+              选择同步日期范围（留空则同步最新交易日数据）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>交易日期（可选）</Label>
+              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="留空同步最新交易日" />
+            </div>
+            <div className="space-y-2">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
@@ -370,123 +416,36 @@ export default function DailyBasicPage() {
               <Label>结束日期</Label>
               <DatePicker date={endDate} onDateChange={setEndDate} placeholder="结束日期" />
             </div>
-            <div className="flex items-end gap-2">
-              <Button onClick={loadData} className="flex-1">查询</Button>
-              <Button
-                variant="default"
-                onClick={handleSync}
-                disabled={syncing}
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
-              </Button>
+            <div className="flex items-end">
+              <Button onClick={loadData} className="w-full">查询</Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">每日指标数据</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={index}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {/* 移动端状态显示 */}
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-
-          {/* 移动端分页 */}
-          {!loading && !error && data.length > 0 && (
-            <div className="p-4 border-t bg-muted/30">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                >
-                  上一页
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  第 {page} / {Math.ceil(total / pageSize)} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格视图 */}
-        <div className="hidden sm:block">
-          <DataTable
-            columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
-            emptyMessage="暂无数据"
-            pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
-            }}
-          />
-        </div>
+      <Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          loading={loading}
+          error={error}
+          emptyMessage="暂无数据"
+          mobileCard={mobileCard}
+          pagination={{
+            page,
+            pageSize,
+            total,
+            onPageChange: (newPage) => {
+              setPage(newPage)
+            },
+            onPageSizeChange: (newPageSize) => {
+              setPageSize(newPageSize)
+              setPage(1)
+            },
+            pageSizeOptions: [10, 20, 30, 50, 100]
+          }}
+        />
       </Card>
     </div>
   )

@@ -5,12 +5,13 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, Column } from '@/components/common/DataTable'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { ggtMonthlyApi, type GgtMonthlyData, type GgtMonthlyStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   LineChart,
   Line,
@@ -27,19 +28,27 @@ export default function GgtMonthlyPage() {
   const [statistics, setStatistics] = useState<GgtMonthlyStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // 筛选条件
   const [startMonth, setStartMonth] = useState('')
   const [endMonth, setEndMonth] = useState('')
-  const [syncing, setSyncing] = useState(false)
+
+  // 同步弹窗状态（与查询月度解耦）
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncStartMonth, setSyncStartMonth] = useState('')
+  const [syncEndMonth, setSyncEndMonth] = useState('')
 
   // 分页状态
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
-  // 存储活跃的任务回调
+  // 任务存储
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_ggt_monthly')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -70,7 +79,7 @@ export default function GgtMonthlyPage() {
     }
   }, [startMonth, endMonth, pageSize])
 
-  // 初始加载
+  // 初始加载和分页/筛选变化时重新加载
   useEffect(() => {
     loadData()
   }, [loadData])
@@ -87,18 +96,12 @@ export default function GgtMonthlyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
-      const params: {
-        start_month?: string
-        end_month?: string
-      } = {}
-
-      if (startMonth) params.start_month = startMonth
-      if (endMonth) params.end_month = endMonth
+      const params: { start_month?: string; end_month?: string } = {}
+      if (syncStartMonth) params.start_month = syncStartMonth
+      if (syncEndMonth) params.end_month = syncEndMonth
 
       const response = await ggtMonthlyApi.syncAsync(params)
 
@@ -115,7 +118,6 @@ export default function GgtMonthlyPage() {
           startTime: Date.now()
         })
 
-        // 注册任务完成回调
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
@@ -146,8 +148,6 @@ export default function GgtMonthlyPage() {
       toast.error('同步失败', {
         description: err.message || '无法同步数据'
       })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -250,7 +250,60 @@ export default function GgtMonthlyPage() {
       <PageHeader
         title="港股通每月成交统计"
         description="港股通每月成交信息，数据从2014年开始（Tushare ggt_monthly接口，5000积分/次）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步数据</DialogTitle>
+            <DialogDescription>
+              选择同步月度范围（留空则同步最新月度数据）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="sync-start-month">开始月度（可选）</Label>
+              <Input
+                id="sync-start-month"
+                type="month"
+                value={syncStartMonth}
+                onChange={(e) => setSyncStartMonth(e.target.value)}
+                placeholder="YYYY-MM"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sync-end-month">结束月度（可选）</Label>
+              <Input
+                id="sync-end-month"
+                type="month"
+                value={syncEndMonth}
+                onChange={(e) => setSyncEndMonth(e.target.value)}
+                placeholder="YYYY-MM"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
@@ -326,10 +379,10 @@ export default function GgtMonthlyPage() {
                     <YAxis label={{ value: '金额(亿元)', angle: -90, position: 'insideLeft' }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="日均买入" stroke="#3b82f6" strokeWidth={2} />
-                    <Line type="monotone" dataKey="日均卖出" stroke="#ef4444" strokeWidth={2} />
-                    <Line type="monotone" dataKey="总买入" stroke="#10b981" strokeWidth={2} />
-                    <Line type="monotone" dataKey="总卖出" stroke="#f59e0b" strokeWidth={2} />
+                    <Line type="monotone" dataKey="日均买入" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="日均卖出" stroke="#ef4444" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="总买入" stroke="#10b981" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="总卖出" stroke="#f59e0b" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -370,32 +423,15 @@ export default function GgtMonthlyPage() {
             <div className="flex gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
-                size="sm"
-                onClick={loadData}
+                onClick={() => {
+                  setPage(1)
+                  loadData()
+                }}
                 disabled={loading}
                 className="flex-1 sm:flex-initial"
               >
-                <RefreshCw className="h-4 w-4 mr-1" />
+                <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
                 查询
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleSync}
-                disabled={syncing}
-                className="flex-1 sm:flex-initial"
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
               </Button>
             </div>
           </div>
@@ -403,83 +439,15 @@ export default function GgtMonthlyPage() {
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">港股通每月成交数据</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={index}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {/* 移动端状态显示 */}
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-
-          {/* 移动端分页 */}
-          {!loading && !error && data.length > 0 && (
-            <div className="p-4 border-t bg-muted/30">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                >
-                  上一页
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  第 {page} / {Math.ceil(total / pageSize)} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格视图 */}
-        <div className="hidden sm:block">
+      <Card>
+        <CardContent className="p-0">
           <DataTable
             columns={columns}
             data={data}
             loading={loading}
             error={error}
             emptyMessage="暂无数据"
+            mobileCard={mobileCard}
             pagination={{
               page,
               pageSize,
@@ -494,7 +462,7 @@ export default function GgtMonthlyPage() {
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
           />
-        </div>
+        </CardContent>
       </Card>
     </div>
   )

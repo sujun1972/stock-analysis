@@ -6,6 +6,8 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ggtDailyApi, type GgtDailyData, type GgtDailyStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
@@ -21,6 +23,9 @@ import {
   ResponsiveContainer
 } from 'recharts'
 
+const toDateStr = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
 export default function GgtDailyPage() {
   // 数据状态
   const [data, setData] = useState<GgtDailyData[]>([])
@@ -31,7 +36,11 @@ export default function GgtDailyPage() {
   // 筛选条件
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [syncing, setSyncing] = useState(false)
+
+  // 同步弹窗状态（与查询日期解耦）
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -39,8 +48,11 @@ export default function GgtDailyPage() {
   const [total, setTotal] = useState(0)
 
   // 任务存储
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_ggt_daily')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -48,16 +60,10 @@ export default function GgtDailyPage() {
       setLoading(true)
       setError(null)
 
-      const params: any = {
-        limit: pageSize
-      }
+      const params: any = { limit: pageSize }
 
-      if (startDate) {
-        params.start_date = startDate.toISOString().split('T')[0]
-      }
-      if (endDate) {
-        params.end_date = endDate.toISOString().split('T')[0]
-      }
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
 
       const response = await ggtDailyApi.getGgtDaily(params)
 
@@ -70,9 +76,7 @@ export default function GgtDailyPage() {
       }
     } catch (err: any) {
       setError(err.message || '加载数据失败')
-      toast.error('加载失败', {
-        description: err.message || '无法加载数据'
-      })
+      toast.error('加载失败', { description: err.message || '无法加载数据' })
     } finally {
       setLoading(false)
     }
@@ -95,25 +99,18 @@ export default function GgtDailyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (startDate) {
-        params.start_date = startDate.toISOString().split('T')[0]
-      }
-      if (endDate) {
-        params.end_date = endDate.toISOString().split('T')[0]
-      }
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await ggtDailyApi.syncAsync(params)
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
 
-        // 添加到任务存储
         addTask({
           taskId,
           taskName: response.data.task_name,
@@ -124,17 +121,12 @@ export default function GgtDailyPage() {
           startTime: Date.now()
         })
 
-        // 注册任务完成回调
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '港股通每日成交统计数据已更新'
-            })
+            toast.success('数据同步完成', { description: '港股通每日成交统计数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -143,7 +135,6 @@ export default function GgtDailyPage() {
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
 
-        // 立即触发轮询
         triggerPoll()
 
         toast.success('任务已提交', {
@@ -153,11 +144,7 @@ export default function GgtDailyPage() {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    } finally {
-      setSyncing(false)
+      toast.error('同步失败', { description: err.message || '无法同步数据' })
     }
   }
 
@@ -229,7 +216,48 @@ export default function GgtDailyPage() {
       <PageHeader
         title="港股通每日成交统计"
         description="查看港股通每日买卖成交金额和笔数统计，数据从2014年开始（Tushare ggt_daily接口，2000积分/次）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步数据</DialogTitle>
+            <DialogDescription>
+              选择同步日期范围（留空则同步最新交易日数据）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
@@ -374,14 +402,6 @@ export default function GgtDailyPage() {
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 查询
-              </Button>
-
-              <Button
-                onClick={handleSync}
-                disabled={syncing}
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                同步数据
               </Button>
             </div>
           </div>

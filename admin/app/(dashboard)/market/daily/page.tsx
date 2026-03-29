@@ -17,14 +17,13 @@ export default function StockDailyPage() {
   const [statistics, setStatistics] = useState<StockDailyStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
 
   // 筛选参数
   const [code, setCode] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
-  // 同步参数
+  // 同步参数（独立于查询筛选，留在"数据同步"卡片中）
   const [syncCode, setSyncCode] = useState('')
   const [syncStartDate, setSyncStartDate] = useState('')
   const [syncEndDate, setSyncEndDate] = useState('')
@@ -34,10 +33,12 @@ export default function StockDailyPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [totalRecords, setTotalRecords] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_daily_single')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -61,7 +62,6 @@ export default function StockDailyPage() {
       if (dataResp.code === 200) {
         setData(dataResp.data?.items || [])
         setTotalRecords(dataResp.data?.total || 0)
-        setTotalPages(Math.ceil((dataResp.data?.total || 0) / pageSize))
       }
 
       if (statsResp.code === 200) {
@@ -79,11 +79,20 @@ export default function StockDailyPage() {
     loadData()
   }, [loadData])
 
-  // 异步同步数据
+  // 组件卸载清理
+  useEffect(() => {
+    return () => {
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((callback, taskId) => {
+        unregisterCompletionCallback(taskId, callback)
+      })
+      callbacks.clear()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleSync = async () => {
     try {
-      setSyncing(true)
-
       const params = {
         code: syncCode || undefined,
         start_date: syncStartDate || undefined,
@@ -129,21 +138,8 @@ export default function StockDailyPage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
-
-  // 组件卸载清理
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-    }
-  }, [unregisterCompletionCallback])
 
   // 表格列定义
   const columns: Column<StockDailyData>[] = useMemo(() => [
@@ -258,6 +254,21 @@ export default function StockDailyPage() {
       <PageHeader
         title="股票日线数据"
         description="查询和同步股票日线行情数据，使用Tushare daily接口"
+        actions={
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -407,21 +418,6 @@ export default function StockDailyPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={handleSync} disabled={syncing} variant="default">
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
-              </Button>
-            </div>
             <div className="text-sm text-gray-500">
               提示：留空股票代码将同步全市场数据（使用最近交易日）。指定股票代码可同步该股票的历史数据（默认{syncYears}年）
             </div>
@@ -430,7 +426,7 @@ export default function StockDailyPage() {
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
+      <Card>
         <DataTable
           columns={columns}
           data={data}

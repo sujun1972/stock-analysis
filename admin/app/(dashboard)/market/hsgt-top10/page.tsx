@@ -15,10 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { hsgtTop10Api, type HsgtTop10Data, type HsgtTop10Statistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, DollarSign } from 'lucide-react'
+
+const toDateStr = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 export default function HsgtTop10Page() {
   // 数据状态
@@ -32,7 +36,11 @@ export default function HsgtTop10Page() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [marketType, setMarketType] = useState<string>('ALL')
-  const [syncing, setSyncing] = useState(false)
+
+  // 同步弹窗状态（与查询日期解耦）
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -40,8 +48,11 @@ export default function HsgtTop10Page() {
   const [total, setTotal] = useState(0)
 
   // 任务存储
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_hsgt_top10')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -49,22 +60,12 @@ export default function HsgtTop10Page() {
       setLoading(true)
       setError(null)
 
-      const params: any = {
-        limit: pageSize
-      }
+      const params: any = { limit: pageSize }
 
-      if (startDate) {
-        params.start_date = startDate.toISOString().split('T')[0]
-      }
-      if (endDate) {
-        params.end_date = endDate.toISOString().split('T')[0]
-      }
-      if (tsCode.trim()) {
-        params.ts_code = tsCode.trim()
-      }
-      if (marketType && marketType !== 'ALL') {
-        params.market_type = marketType
-      }
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
+      if (tsCode.trim()) params.ts_code = tsCode.trim()
+      if (marketType && marketType !== 'ALL') params.market_type = marketType
 
       const [dataResponse, statsResponse] = await Promise.all([
         hsgtTop10Api.getHsgtTop10(params),
@@ -87,9 +88,7 @@ export default function HsgtTop10Page() {
       }
     } catch (err: any) {
       setError(err.message || '加载数据失败')
-      toast.error('加载失败', {
-        description: err.message || '无法加载数据'
-      })
+      toast.error('加载失败', { description: err.message || '无法加载数据' })
     } finally {
       setLoading(false)
     }
@@ -112,31 +111,18 @@ export default function HsgtTop10Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
       const params: any = {}
-      if (startDate) {
-        params.start_date = startDate.toISOString().split('T')[0]
-      }
-      if (endDate) {
-        params.end_date = endDate.toISOString().split('T')[0]
-      }
-      if (tsCode.trim()) {
-        params.ts_code = tsCode.trim()
-      }
-      if (marketType && marketType !== 'ALL') {
-        params.market_type = marketType
-      }
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await hsgtTop10Api.syncAsync(params)
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
 
-        // 添加到任务存储
         addTask({
           taskId,
           taskName: response.data.task_name,
@@ -147,17 +133,12 @@ export default function HsgtTop10Page() {
           startTime: Date.now()
         })
 
-        // 注册任务完成回调
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '沪深股通十大成交股数据已更新'
-            })
+            toast.success('数据同步完成', { description: '沪深股通十大成交股数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -166,7 +147,6 @@ export default function HsgtTop10Page() {
         activeCallbacksRef.current.set(taskId, completionCallback)
         registerCompletionCallback(taskId, completionCallback)
 
-        // 立即触发轮询
         triggerPoll()
 
         toast.success('任务已提交', {
@@ -176,11 +156,7 @@ export default function HsgtTop10Page() {
         throw new Error(response.message || '同步失败')
       }
     } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    } finally {
-      setSyncing(false)
+      toast.error('同步失败', { description: err.message || '无法同步数据' })
     }
   }
 
@@ -338,7 +314,48 @@ export default function HsgtTop10Page() {
       <PageHeader
         title="沪深股通十大成交股"
         description="查看沪股通、深股通每日前十大成交详细数据，每天18~20点之间完成当日更新"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步数据</DialogTitle>
+            <DialogDescription>
+              选择同步日期范围（留空则同步最新交易日数据）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>开始日期（可选）</Label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期（可选）</Label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
@@ -440,120 +457,34 @@ export default function HsgtTop10Page() {
               <Button onClick={loadData} disabled={loading} className="flex-1">
                 查询
               </Button>
-              <Button
-                variant="default"
-                onClick={handleSync}
-                disabled={syncing}
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    <span className="hidden sm:inline">同步中...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    <span className="hidden sm:inline">同步数据</span>
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">十大成交股数据</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={index}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-
-          {/* 移动端分页 */}
-          {!loading && !error && data.length > 0 && (
-            <div className="p-4 border-t bg-muted/30">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                >
-                  上一页
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  第 {page} / {Math.ceil(total / pageSize)} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格视图 */}
-        <div className="hidden sm:block">
-          <DataTable
-            columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
-            emptyMessage="暂无数据"
-            pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
-            }}
-          />
-        </div>
+      <Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          loading={loading}
+          error={error}
+          emptyMessage="暂无数据"
+          mobileCard={mobileCard}
+          pagination={{
+            page,
+            pageSize,
+            total,
+            onPageChange: (newPage) => {
+              setPage(newPage)
+            },
+            onPageSizeChange: (newPageSize) => {
+              setPageSize(newPageSize)
+              setPage(1)
+            },
+            pageSizeOptions: [10, 20, 30, 50, 100]
+          }}
+        />
       </Card>
     </div>
   )

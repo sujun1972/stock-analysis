@@ -17,7 +17,6 @@ export default function StockRealtimePage() {
   const [statistics, setStatistics] = useState<StockRealtimeStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
   const [batchSize, setBatchSize] = useState(100)
   const [updateMode, setUpdateMode] = useState<'full' | 'incremental'>('incremental')
   const [dataSource, setDataSource] = useState<string>('tushare')
@@ -26,10 +25,12 @@ export default function StockRealtimePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [totalRecords, setTotalRecords] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 派生 syncing 状态
+  const syncing = isTaskRunning('tasks.sync_realtime_quotes')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -45,7 +46,6 @@ export default function StockRealtimePage() {
       if (dataResp.code === 200) {
         setData(dataResp.data?.items || [])
         setTotalRecords(dataResp.data?.total || 0)
-        setTotalPages(dataResp.data?.total_pages || 0)
       }
 
       if (statsResp.code === 200) {
@@ -63,11 +63,20 @@ export default function StockRealtimePage() {
     loadData()
   }, [loadData])
 
-  // 异步同步数据
+  // 组件卸载清理
+  useEffect(() => {
+    return () => {
+      const callbacks = activeCallbacksRef.current
+      callbacks.forEach((callback, taskId) => {
+        unregisterCompletionCallback(taskId, callback)
+      })
+      callbacks.clear()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleSync = async () => {
     try {
-      setSyncing(true)
-
       const params = {
         batch_size: batchSize,
         update_oldest: updateMode === 'incremental',
@@ -112,21 +121,8 @@ export default function StockRealtimePage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
-
-  // 组件卸载清理
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-    }
-  }, [unregisterCompletionCallback])
 
   // 表格列定义
   const columns: Column<StockRealtimeData>[] = useMemo(() => [
@@ -217,6 +213,21 @@ export default function StockRealtimePage() {
       <PageHeader
         title="实时行情同步"
         description="获取最新的实时行情快照，使用Tushare daily接口（120积分/次）"
+        actions={
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                同步中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                同步数据
+              </>
+            )}
+          </Button>
+        }
       />
 
       {/* 统计卡片 */}
@@ -270,10 +281,10 @@ export default function StockRealtimePage() {
         </div>
       )}
 
-      {/* 筛选和操作 */}
+      {/* 同步配置 */}
       <Card>
         <CardHeader>
-          <CardTitle>数据同步</CardTitle>
+          <CardTitle>同步配置</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
@@ -318,22 +329,9 @@ export default function StockRealtimePage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={loadData} disabled={loading}>
+              <Button onClick={loadData} disabled={loading} variant="outline">
                 <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
                 刷新
-              </Button>
-              <Button onClick={handleSync} disabled={syncing} variant="default">
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
               </Button>
             </div>
           </div>
@@ -341,7 +339,7 @@ export default function StockRealtimePage() {
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
+      <Card>
         <DataTable
           columns={columns}
           data={data}
