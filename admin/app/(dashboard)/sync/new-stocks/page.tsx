@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { RefreshCw } from 'lucide-react'
 import { newStockApi } from '@/lib/api'
 import type { NewStockData, NewStockStatistics } from '@/lib/api/new-stock-api'
 import { useTaskStore } from '@/stores/task-store'
@@ -28,8 +30,14 @@ export default function NewStocksPage() {
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncDays, setSyncDays] = useState<number>(90)
+
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 实时派生——不要用本地 useState(false)
+  const syncing = isTaskRunning('tasks.sync_new_stocks')
 
   useEffect(() => {
     loadData().catch(() => {})
@@ -95,10 +103,11 @@ export default function NewStocksPage() {
     }
   }
 
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
       const response = await newStockApi.syncAsync({
-        days: days || 30
+        days: syncDays || 90
       })
 
       if (response.code === 200 && response.data) {
@@ -119,17 +128,12 @@ export default function NewStocksPage() {
           startTime: Date.now()
         })
 
-        // 注册任务完成回调：自动刷新数据
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '新股列表数据已更新'
-            })
+            toast.success('数据同步完成', { description: '新股列表数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -139,9 +143,7 @@ export default function NewStocksPage() {
         registerCompletionCallback(taskId, completionCallback)
 
         triggerPoll()
-        toast.success('同步任务已提交', {
-          description: '可在任务面板查看进度'
-        })
+        toast.success('同步任务已提交', { description: '可在任务面板查看进度' })
       } else {
         toast.error(response.message || '同步任务提交失败')
       }
@@ -206,7 +208,41 @@ export default function NewStocksPage() {
       <PageHeader
         title="新股列表"
         description="查询和管理最近上市的新股信息（Tushare new_share接口）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步新股列表</DialogTitle>
+            <DialogDescription>选择同步天数范围（默认最近90天）。</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">同步最近天数</label>
+            <Input
+              type="number"
+              min="1"
+              max="365"
+              value={syncDays}
+              onChange={(e) => setSyncDays(parseInt(e.target.value) || 90)}
+              placeholder="如：90"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
@@ -316,9 +352,6 @@ export default function NewStocksPage() {
           <div className="flex flex-wrap gap-2">
             <Button onClick={loadData} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
-            </Button>
-            <Button onClick={handleSync} variant="outline">
-              同步数据
             </Button>
             <Button
               onClick={() => {

@@ -5,8 +5,10 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { toast } from 'sonner'
+import { RefreshCw } from 'lucide-react'
 import { stockListApi } from '@/lib/api'
 import type { StockListData, StockListStatistics } from '@/lib/api/stock-list-api'
 import { useTaskStore } from '@/stores/task-store'
@@ -26,8 +28,13 @@ export default function StockListPage() {
   const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 实时派生——不要用本地 useState(false)
+  const syncing = isTaskRunning('tasks.sync_stock_list')
 
   useEffect(() => {
     loadData().catch(() => {})
@@ -97,9 +104,10 @@ export default function StockListPage() {
     }
   }
 
-  const handleSync = async () => {
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      // 同步全部数据，不过滤 list_status
+      // 不传任何查询筛选参数，让后端同步全部状态股票
       const response = await stockListApi.syncAsync()
 
       if (response.code === 200 && response.data) {
@@ -120,17 +128,12 @@ export default function StockListPage() {
           startTime: Date.now()
         })
 
-        // 注册任务完成回调：自动刷新数据
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '股票列表数据已更新'
-            })
+            toast.success('数据同步完成', { description: '股票列表数据已更新' })
           } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
+            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
           }
           unregisterCompletionCallback(taskId, completionCallback)
           activeCallbacksRef.current.delete(taskId)
@@ -140,9 +143,7 @@ export default function StockListPage() {
         registerCompletionCallback(taskId, completionCallback)
 
         triggerPoll()
-        toast.success('同步任务已提交', {
-          description: '同步全部股票数据（含上市/退市/停牌等状态）'
-        })
+        toast.success('同步任务已提交', { description: '同步全部股票数据（含上市/退市/停牌等状态）' })
       } else {
         toast.error(response.message || '同步任务提交失败')
       }
@@ -227,7 +228,32 @@ export default function StockListPage() {
       <PageHeader
         title="股票列表"
         description="查询和管理所有股票信息（Tushare stock_basic接口，包含上市、退市、停牌等全部状态）"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步确认弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步股票列表</DialogTitle>
+            <DialogDescription>
+              将从 Tushare 同步全部股票数据（含上市、退市、停牌等状态），无需选择日期。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
@@ -374,9 +400,6 @@ export default function StockListPage() {
           <div className="flex flex-wrap gap-2">
             <Button onClick={loadData} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
-            </Button>
-            <Button onClick={handleSync} variant="outline">
-              同步数据
             </Button>
             <Button
               onClick={() => {

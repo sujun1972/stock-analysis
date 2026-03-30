@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { stockStApi } from '@/lib/api'
 import type { StockStData, StockStStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
@@ -23,16 +24,18 @@ export default function StockStPage() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState<string>('')
   const [stType, setStType] = useState<string>('ALL')
-  const [syncing, setSyncing] = useState(false)
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
 
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const [totalRecords, setTotalRecords] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+
+  // 从 task store 实时派生——不要用本地 useState(false)
+  const syncing = isTaskRunning('tasks.sync_stock_st')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -59,7 +62,6 @@ export default function StockStPage() {
       if (dataResp.code === 200) {
         setData(dataResp.data?.items || [])
         setTotalRecords(dataResp.data?.total || 0)
-        setTotalPages(Math.ceil((dataResp.data?.total || 0) / (dataResp.data?.page_size || 30)))
       }
 
       if (statsResp.code === 200) {
@@ -82,18 +84,11 @@ export default function StockStPage() {
     setCurrentPage(1)
   }, [startDate, endDate, tsCode, stType])
 
-  // 异步同步数据
-  const handleSync = async () => {
+  // 异步同步数据（不传查询筛选参数，让后端自动同步最新数据）
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncing(true)
-
-      const params: any = {}
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (tsCode.trim()) params.ts_code = tsCode.trim()
-      if (stType !== 'ALL') params.st_type = stType
-
-      const response = await stockStApi.syncAsync(params)
+      const response = await stockStApi.syncAsync({})
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -131,8 +126,6 @@ export default function StockStPage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -209,48 +202,85 @@ export default function StockStPage() {
       <PageHeader
         title="ST股票列表"
         description="获取ST股票列表，可根据交易日期获取历史上每天的ST列表"
+        actions={
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            {syncing ? (
+              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+            )}
+          </Button>
+        }
       />
+
+      {/* 同步确认弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>同步ST股票列表</DialogTitle>
+            <DialogDescription>
+              将从 Tushare 同步最新ST股票数据，无需选择日期。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总记录数</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_records.toLocaleString()}</div>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">总记录数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_records.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">历史全部记录</p>
+                </div>
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">唯一股票数</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.unique_stocks.toLocaleString()}</div>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">唯一股票数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.unique_stocks.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">曾被ST的股票</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">交易天数</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.trading_days.toLocaleString()}</div>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">交易天数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.trading_days.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">有数据的交易日</p>
+                </div>
+                <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">ST类型数</CardTitle>
-              <Tag className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.st_types.toLocaleString()}</div>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">ST类型数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.st_types.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">ST/＊ST 等类型</p>
+                </div>
+                <Tag className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -298,19 +328,6 @@ export default function StockStPage() {
               <Button onClick={loadData} disabled={loading}>
                 <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
                 查询
-              </Button>
-              <Button onClick={handleSync} disabled={syncing} variant="default">
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    同步中...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    同步数据
-                  </>
-                )}
               </Button>
             </div>
           </div>

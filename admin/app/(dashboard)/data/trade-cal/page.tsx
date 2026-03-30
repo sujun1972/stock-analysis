@@ -10,6 +10,7 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { toast } from 'sonner'
 import { RefreshCw, Calendar, TrendingUp, BarChart2, CheckCircle } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { tradeCalApi } from '@/lib/api'
 import type { TradeCalData, TradeCalStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
@@ -36,6 +37,12 @@ export default function TradeCalPage() {
   const [isOpen, setIsOpen] = useState<string>('all')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+
+  // 同步弹窗独立参数（与查询筛选解耦）
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncExchange, setSyncExchange] = useState<string>('SSE')
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
+  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
@@ -93,12 +100,21 @@ export default function TradeCalPage() {
     loadData(newPage)
   }
 
-  const handleSync = async () => {
+  const toDateStr = (date: Date) => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  const handleSyncConfirm = async () => {
+    setSyncDialogOpen(false)
     try {
+      // 使用同步弹窗独立参数，不传查询筛选日期
       const params: any = {}
-      if (exchange) params.exchange = exchange
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
+      if (syncExchange) params.exchange = syncExchange
+      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
       const response = await tradeCalApi.syncAsync(params)
       if (response.code === 200 && response.data) {
@@ -194,7 +210,7 @@ export default function TradeCalPage() {
           </>
         }
         actions={
-          <Button onClick={handleSync} disabled={syncing}>
+          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (
               <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
             ) : (
@@ -204,47 +220,92 @@ export default function TradeCalPage() {
         }
       />
 
+      {/* 同步弹窗 */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>同步交易日历</DialogTitle>
+            <DialogDescription>选择要同步的交易所和日期范围（日期留空则同步当年数据）。</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">交易所</label>
+              <Select value={syncExchange} onValueChange={setSyncExchange}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EXCHANGE_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
+              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步当年数据" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
+              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步当年数据" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 统计卡片 */}
       {statistics && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">总天数</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">总天数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_days ?? 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{statistics.year} 年</p>
+                </div>
+                <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
               </div>
-              <p className="text-2xl font-bold mt-1">{statistics.total_days ?? 0}</p>
-              <p className="text-xs text-muted-foreground">{statistics.year} 年</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <p className="text-sm text-muted-foreground">交易日</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">交易日</p>
+                  <p className="text-xl sm:text-2xl font-bold text-green-600">{statistics.trading_days ?? 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1">开市天数</p>
+                </div>
+                <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
               </div>
-              <p className="text-2xl font-bold mt-1 text-green-600">{statistics.trading_days ?? 0}</p>
-              <p className="text-xs text-muted-foreground">开市天数</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">休市天数</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">休市天数</p>
+                  <p className="text-xl sm:text-2xl font-bold">{statistics.non_trading_days ?? 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1">含周末节假日</p>
+                </div>
+                <BarChart2 className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
               </div>
-              <p className="text-2xl font-bold mt-1">{statistics.non_trading_days ?? 0}</p>
-              <p className="text-xs text-muted-foreground">含周末节假日</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-blue-500" />
-                <p className="text-sm text-muted-foreground">交易日占比</p>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">交易日占比</p>
+                  <p className="text-xl sm:text-2xl font-bold text-blue-600">{statistics.trading_day_ratio ?? 0}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">全年交易占比</p>
+                </div>
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
               </div>
-              <p className="text-2xl font-bold mt-1 text-blue-600">{statistics.trading_day_ratio ?? 0}%</p>
-              <p className="text-xs text-muted-foreground">全年交易占比</p>
             </CardContent>
           </Card>
         </div>
@@ -307,6 +368,21 @@ export default function TradeCalPage() {
               total,
               onPageChange: handlePageChange
             }}
+            mobileCard={(item) => (
+              <div className="p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">{item.cal_date}</span>
+                  <span>{item.is_open === 1
+                    ? <span className="text-green-600 text-sm font-medium">交易日</span>
+                    : <span className="text-muted-foreground text-sm">休市</span>
+                  }</span>
+                </div>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>交易所：{item.exchange}</span>
+                  <span>上一交易日：{item.pretrade_date ?? '-'}</span>
+                </div>
+              </div>
+            )}
           />
         </CardContent>
       </Card>
