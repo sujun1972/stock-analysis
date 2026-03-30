@@ -6,7 +6,6 @@
 """
 
 import pandas as pd
-import numpy as np
 from psycopg2 import extras
 import psycopg2
 import logging
@@ -93,10 +92,7 @@ class DataInsertManager:
             act_name_col = 'act_name' if 'act_name' in df.columns else None
             act_ent_type_col = 'act_ent_type' if 'act_ent_type' in df.columns else None
 
-            # 向量化构建记录
-            # 使用 where() 替代 fillna(None) 以兼容 pandas 2.x
-            import numpy as np
-
+            # 向量化构建记录（日期列用 apply+pd.notna 确保 NaT → None，避免 psycopg2 类型错误）
             records = list(zip(
                 # 基础字段
                 df[code_col].fillna('').values,
@@ -104,8 +100,8 @@ class DataInsertManager:
                 df[market_col].fillna('').values if market_col in df.columns else [''] * len(df),
                 df[industry_col].fillna('').values if industry_col in df.columns else [''] * len(df),
                 df[area_col].fillna('').values if area_col in df.columns else [''] * len(df),
-                df[list_date_col].apply(lambda x: x.date() if pd.notna(x) and hasattr(x, 'date') else x).values if list_date_col in df.columns else [None] * len(df),
-                df[delist_date_col].apply(lambda x: x.date() if pd.notna(x) and hasattr(x, 'date') else x).values if delist_date_col in df.columns else [None] * len(df),
+                df[list_date_col].apply(lambda x: x.date() if pd.notna(x) and hasattr(x, 'date') else None).values if list_date_col in df.columns else [None] * len(df),
+                df[delist_date_col].apply(lambda x: x.date() if pd.notna(x) and hasattr(x, 'date') else None).values if delist_date_col in df.columns else [None] * len(df),
                 df[status_col].fillna('正常').values if status_col in df.columns else ['正常'] * len(df),
                 [data_source] * len(df),
                 # Tushare 扩展字段
