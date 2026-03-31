@@ -226,6 +226,31 @@ class StockRealtimeRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def get_last_updated(self, codes: Optional[List[str]] = None) -> Optional[object]:
+        """
+        获取实时行情最后更新时间
+
+        Args:
+            codes: 股票代码列表（可选，不指定则查全表）
+
+        Returns:
+            最后更新时间（datetime 对象），无数据时返回 None
+        """
+        try:
+            if codes:
+                placeholders = ','.join(['%s'] * len(codes))
+                query = f"SELECT MAX(updated_at) FROM {self.TABLE_NAME} WHERE code IN ({placeholders})"
+                result = self.execute_query(query, tuple(codes))
+            else:
+                query = f"SELECT MAX(updated_at) FROM {self.TABLE_NAME}"
+                result = self.execute_query(query)
+            if result and result[0][0] is not None:
+                return result[0][0]
+            return None
+        except Exception as e:
+            logger.warning(f"获取实时行情最后更新时间失败: {e}")
+            return None
+
     def delete_all(self) -> int:
         """
         清空实时行情表（用于重新同步）

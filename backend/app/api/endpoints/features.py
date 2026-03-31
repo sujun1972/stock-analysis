@@ -14,15 +14,17 @@
 from datetime import datetime
 from typing import List, Optional
 
+import asyncio
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
+from loguru import logger
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.core_adapters.feature_adapter import FeatureAdapter
-from app.core.dependencies import get_current_active_user
 from app.models.api_response import ApiResponse
-from app.models.user import User
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
+from app.services.daily_sync_service import DailySyncService
 
 router = APIRouter()
 
@@ -38,7 +40,6 @@ async def get_features(
     end_date: Optional[str] = None,
     feature_type: Optional[str] = None,
     limit: int = 500,
-    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票特征数据（支持懒加载）
@@ -81,6 +82,50 @@ async def get_features(
 
     # 2. 调用 Core Adapter 获取日线数据
     df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+
+    # 2.1 自动同步逻辑
+    today = datetime.now().date()
+    is_requesting_latest = end_dt is None or (today - end_dt).days <= 30
+
+    should_sync = False
+    sync_years = 5
+
+    if df.empty:
+        if is_requesting_latest:
+            # 首次加载或最新数据为空：同步5年
+            logger.info(f"股票 {code} 无日线数据，触发自动同步（5年）")
+            should_sync = True
+            sync_years = 5
+        else:
+            # 懒加载历史数据为空（数据库里没有该时间段）：扩展同步到10年
+            years_back = (today - end_dt).days // 365 + 2
+            sync_years = max(years_back, 10)
+            logger.info(f"股票 {code} 历史数据（end_date={end_dt}）为空，触发扩展同步（{sync_years}年）")
+            should_sync = True
+    elif is_requesting_latest:
+        # 有数据但可能过期，检查新鲜度
+        try:
+            calendar_repo = TradingCalendarRepository()
+            latest_trade_date_str = await asyncio.to_thread(calendar_repo.get_latest_trading_day)
+            if latest_trade_date_str:
+                latest_trade_date = datetime.strptime(latest_trade_date_str, "%Y%m%d").date()
+                df_dates = df.index if hasattr(df.index, 'date') else pd.to_datetime(df.index)
+                latest_data_date = pd.Timestamp(df_dates.max()).date()
+                days_behind = (latest_trade_date - latest_data_date).days
+                if days_behind > 5:
+                    logger.info(f"股票 {code} 数据落后 {days_behind} 天（最新: {latest_data_date}，交易日: {latest_trade_date}），触发自动同步（5年）")
+                    should_sync = True
+                    sync_years = 5
+        except Exception as e:
+            logger.warning(f"检查数据新鲜度失败: {e}")
+
+    if should_sync:
+        try:
+            sync_service = DailySyncService()
+            await sync_service.sync_single_stock(code=code, years=sync_years)
+            df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+        except Exception as e:
+            logger.error(f"自动同步失败: {e}")
 
     if df.empty:
         return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()
@@ -138,7 +183,6 @@ async def calculate_features(
     end_date: Optional[str] = None,
     feature_types: List[str] = ["technical", "alpha"],
     include_transforms: bool = False,
-    current_user: User = Depends(get_current_active_user)
 ):
     """
     计算股票特征（支持批量计算）
@@ -258,7 +302,6 @@ async def select_features(
     target_column: str = "close",
     n_features: int = 50,
     method: str = "correlation",
-    current_user: User = Depends(get_current_active_user)
 ):
     """
     特征选择（基于重要性）

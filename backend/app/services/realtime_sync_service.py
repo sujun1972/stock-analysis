@@ -3,13 +3,12 @@
 负责实时行情数据的同步
 """
 
-import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from loguru import logger
 
-from app.core.exceptions import DatabaseError, ExternalAPIError
+from app.core.exceptions import DatabaseError
 from app.services.base_sync_service import BaseSyncService
 
 
@@ -34,7 +33,7 @@ class RealtimeSyncService(BaseSyncService):
             days: 同步天数
 
         Returns:
-            同步结果字典
+            同步结果字典（含 data 字段，为 records 列表）
         """
         # 获取数据源配置
         config = await self.get_config()
@@ -45,10 +44,10 @@ class RealtimeSyncService(BaseSyncService):
             token=config.get("tushare_token", "")
         )
 
-        # 计算日期范围
+        # 计算日期范围（Tushare stk_mins 接口要求 YYYYMMDD 格式）
         date_range = self.calculate_date_range(days=days)
-        end_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        start_date = datetime.strptime(date_range["start"], "%Y%m%d").strftime("%Y-%m-%d 09:30:00")
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = date_range["start"]  # 已经是 YYYYMMDD 格式
 
         self.log_info(f"同步 {code} {period}分钟数据")
 
@@ -65,18 +64,12 @@ class RealtimeSyncService(BaseSyncService):
         df = self.check_and_extract_data(response, f"{code}: 获取分时数据")
 
         if df.empty:
-            raise ValueError(f"{code}: 无分时数据")
-
-        # TODO: 保存分时数据到数据库
-        # count = await self.run_in_thread(
-        #     self.data_service.db.save_minute_data,
-        #     df,
-        #     code
-        # )
+            return {"code": code, "period": period, "records": 0, "data": []}
 
         self.log_success(f"{code}: {len(df)} 条分时记录")
 
-        return {"code": code, "period": period, "records": len(df)}
+        records = df.to_dict("records")
+        return {"code": code, "period": period, "records": len(records), "data": records}
 
     async def sync_realtime_quotes(
         self,

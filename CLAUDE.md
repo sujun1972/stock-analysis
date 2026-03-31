@@ -3478,6 +3478,52 @@ async def get_moneyflow(ts_code: Optional[str] = None):
       date_str = date_value.strftime('%Y%m%d')
   ```
 
+**问题：API 返回 401（无认证 Token 时）**
+
+FastAPI 使用 `HTTPBearer(auto_error=True)`（默认值），只要请求头没有 `Authorization: Bearer <token>`，在进入 endpoint 之前就直接返回 401。即使将 `require_admin` 改为 `get_current_active_user` 也无济于事——只要依赖链里有 `HTTPBearer()`，无 token 请求一律 401。
+
+**对于需要公开访问的 endpoint（前端无需登录即可调用）**：
+```python
+# ❌ 错误：无 token 请求会收到 401
+@router.get("/public-data")
+async def get_data(current_user: User = Depends(get_current_active_user)):
+    ...
+
+# ✅ 正确：完全去掉 auth 依赖
+@router.get("/public-data")
+async def get_data():
+    ...
+```
+
+已公开的 endpoint（`frontend` 项目调用，无需登录）：
+- `POST /api/sync/realtime` — 实时行情同步
+- `GET /api/features/{code}` — 特征数据（含自动同步）
+- `GET /api/stocks/{code}/minute` — 分时数据（含数据源回退）
+- `GET /api/stocks/{code}/daily` — 日线数据
+
+**问题：前端无限循环调用 POST /api/sync/realtime**
+
+`GET /api/market/refresh-check` 若 `last_update=None`，`should_refresh_realtime_data()` 永远返回 `True, '首次加载'`，导致 `useSmartRefresh` hook 在页面每次加载时无限触发同步。
+
+**根本原因**：`last_update` 没有从数据库读取真实的最后更新时间。
+
+**修复方式**：在 `refresh-check` endpoint 中通过 `StockRealtimeRepository.get_last_updated(codes)` 获取真实更新时间后再传入判断函数。
+
+**问题：Tushare 分时数据报 "Invalid date format"**
+
+`core/src/providers/base_provider.py` 的 `normalize_date()` 仅接受 `YYYYMMDD`（8位纯数字）格式。传入带时分秒的字符串（如 `"2026-03-29 09:30:00"`）去掉分隔符后变成 17 位，会直接抛出 `ValueError`。
+
+```python
+# ❌ 错误：带时间的字符串
+start_date = datetime.now().strftime("%Y-%m-%d 09:30:00")  # → "20260329 09:30:00" → ValueError
+
+# ✅ 正确：纯日期 YYYYMMDD
+start_date = date_range["start"]  # 已经是 "20260329" 格式
+end_date = datetime.now().strftime("%Y%m%d")
+```
+
+涉及文件：`backend/app/services/realtime_sync_service.py` 的 `sync_minute_data()`。
+
 **问题：性能较慢**
 - [ ] 检查是否使用批量操作（而非循环单条插入）
 - [ ] 检查查询是否添加了适当的索引

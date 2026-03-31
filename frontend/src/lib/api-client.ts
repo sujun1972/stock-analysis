@@ -317,13 +317,15 @@ class ApiClient {
 
   // 获取单只股票信息
   async getStock(code: string): Promise<StockInfo> {
-    // 通过搜索API获取单个股票信息
+    // 通过搜索API获取单个股票信息，精确匹配股票代码
     const response = await axiosInstance.get(`/api/stocks/list`, {
-      params: { search: code, limit: 1 }
+      params: { search: code, limit: 20 }
     })
     const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
     if (result.data?.items && result.data.items.length > 0) {
-      return result.data.items[0]
+      // 优先精确匹配 code 字段，避免模糊搜索返回错误股票
+      const exact = result.data.items.find(s => s.code === code)
+      return exact ?? result.data.items[0]
     }
     throw new Error(`Stock ${code} not found`)
   }

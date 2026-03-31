@@ -17,11 +17,13 @@ import sys
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Depends
+from loguru import logger
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.models.api_response import ApiResponse
-from app.core.dependencies import get_current_active_user, require_admin
+from app.core.dependencies import require_admin
 from app.models.user import User
+from app.services.realtime_sync_service import RealtimeSyncService
 
 router = APIRouter()
 
@@ -404,7 +406,6 @@ async def get_stock_daily_data(
     start_date: Optional[str] = Query(None, description="开始日期，格式: YYYY-MM-DD，默认为最近100个交易日"),
     end_date: Optional[str] = Query(None, description="结束日期，格式: YYYY-MM-DD，默认为今天"),
     limit: int = Query(100, ge=1, le=1000, description="最大记录数，范围: 1-1000，默认100"),
-    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票日线数据
@@ -549,7 +550,6 @@ async def get_minute_data(
     code: str,
     trade_date: Optional[str] = Query(None, description="交易日期，格式: YYYY-MM-DD，默认为今天"),
     period: str = Query("1min", description="分钟周期，可选值: 1min, 5min, 15min, 30min, 60min"),
-    current_user: User = Depends(get_current_active_user)
 ):
     """
     获取股票分时数据
@@ -602,13 +602,28 @@ async def get_minute_data(
             message="非交易日",
         ).to_dict()
 
-    # 3. 调用 Core Adapter 获取分时数据
-    df = await data_adapter.get_minute_data(code=code, period=period, trade_date=trade_date_dt)
+    # 3. 调用 Core Adapter 获取分时数据（先查数据库）
+    # period 端点格式为 "1min"/"5min"，provider 格式为 "1"/"5"，转换一下
+    period_num = period.replace("min", "")  # "1min" -> "1", "5min" -> "5"
+    df = await data_adapter.get_minute_data(code=code, period=period_num, trade_date=trade_date_dt)
 
-    # 4. 转换为响应格式
-    # 即使无数据也返回200状态码和空列表，而不是404
-    # 这样前端可以统一处理，区分"接口调用成功但无数据"和"接口调用失败"
-    records = df.to_dict("records") if not df.empty else []
+    # 4. 数据库为空时，从数据源实时拉取（不持久化，直接返回给前端）
+    if df.empty:
+        try:
+            sync_service = RealtimeSyncService()
+            sync_result = await sync_service.sync_minute_data(code=code, period=period_num, days=1)
+            raw_records = sync_result.get("data", [])
+            # 过滤只保留请求日期的数据
+            date_str = trade_date_dt.strftime("%Y-%m-%d")
+            records = [
+                r for r in raw_records
+                if str(r.get("trade_time", "")).startswith(date_str)
+            ]
+        except Exception as e:
+            logger.warning(f"从数据源拉取分时数据失败: {e}")
+            records = []
+    else:
+        records = df.to_dict("records")
 
     return ApiResponse.success(
         data={

@@ -192,7 +192,8 @@ export default function EChartsStockChart({
    * @returns 只包含日期的字符串（如 "2025-01-23"）
    */
   const removeDateTimePart = useCallback((dateStr: string): string => {
-    return dateStr.includes(' ') ? dateStr.split(' ')[0] : dateStr
+    // 兼容 "2026-03-13 00:00:00" 和 "2026-03-13T00:00:00" 两种格式
+    return dateStr.split('T')[0].split(' ')[0]
   }, [])
 
   /**
@@ -258,7 +259,7 @@ export default function EChartsStockChart({
   useEffect(() => {
     if (data.length > 0) {
       const sortedInitial = [...data].sort((a, b) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime()
+        new Date(removeDateTimePart(a.date)).getTime() - new Date(removeDateTimePart(b.date)).getTime()
       )
       setAllData(sortedInitial)
       hasLoadedAllDataRef.current = false  // 重置加载标记
@@ -300,9 +301,11 @@ export default function EChartsStockChart({
         const earliestDate = allData[0]?.date
         if (!earliestDate) return
 
-        const endDate = new Date(earliestDate)
+        // 解析最早日期（兼容 "2026-03-13 00:00:00" 和 "2026-03-13T00:00:00" 格式）
+        const earliestDateOnly = earliestDate.split('T')[0].split(' ')[0]
+        const endDate = new Date(earliestDateOnly + 'T00:00:00')
         endDate.setDate(endDate.getDate() - 1)
-        const endDateStr = endDate.toISOString().split('T')[0]
+        const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
 
         // 请求更早的500条数据
         const response = await apiClient.getFeatures(stockCode, {
@@ -315,7 +318,7 @@ export default function EChartsStockChart({
           const newChartData = response.data as unknown as ChartData[]
           const mergedData = [...newChartData, ...allData]
           const sortedData = mergedData.sort((a, b) =>
-            new Date(a.date).getTime() - new Date(b.date).getTime()
+            new Date(removeDateTimePart(a.date)).getTime() - new Date(removeDateTimePart(b.date)).getTime()
           )
           setAllData(sortedData)
         }
@@ -348,17 +351,14 @@ export default function EChartsStockChart({
 
     // 准备数据（ECharts需要升序排列）
     const sortedData = [...allData].sort((a, b) =>
-      new Date(a.date).getTime() - new Date(b.date).getTime()
+      new Date(removeDateTimePart(a.date)).getTime() - new Date(removeDateTimePart(b.date)).getTime()
     )
 
     // 提取日期和数据（格式化日期为 YYYY-MM-DD）
     const dates = sortedData.map(d => {
       const dateStr = d.date
-      // 如果是 ISO 格式（包含 T），只取日期部分
-      if (dateStr.includes('T')) {
-        return dateStr.split('T')[0]
-      }
-      return dateStr
+      // 处理 ISO 格式（2026-03-13T00:00:00）或带时间的格式（2026-03-13 00:00:00）
+      return dateStr.split('T')[0].split(' ')[0]
     })
     const ohlcData = sortedData.map(d => [d.open, d.close, d.low, d.high])
     const volumeData = sortedData.map((d, idx) => ({

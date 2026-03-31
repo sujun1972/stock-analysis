@@ -299,7 +299,6 @@ async def sync_minute_data(
 @handle_api_errors
 async def sync_realtime_quotes(
     request: SyncRealtimeRequest,
-    current_user: User = Depends(require_admin)
 ):
     """
     更新实时行情

@@ -11,6 +11,7 @@
 版本: 2.0.0 (架构修正版)
 """
 
+import asyncio
 from datetime import datetime
 from typing import List, Optional
 
@@ -19,6 +20,7 @@ from fastapi import APIRouter, Query
 from app.core_adapters.data_adapter import DataAdapter
 from app.core_adapters.market_adapter import MarketAdapter
 from app.models.api_response import ApiResponse
+from app.repositories.stock_realtime_repository import StockRealtimeRepository
 
 router = APIRouter()
 
@@ -189,11 +191,9 @@ async def check_refresh_needed(
     # 1. 获取市场状态
     status, description = await market_adapter.get_market_status()
 
-    # 2. 获取最后更新时间
-    # 这里简化处理，实际应该查询数据库
-    # 由于原始实现依赖 DatabaseService.get_realtime_oldest_update()
-    # 而这个功能在 Core 中可能没有对应实现，我们这里模拟一下
-    last_update = None  # 如果需要，可以通过 DataAdapter 查询
+    # 2. 从数据库获取实时行情最后更新时间，用于判断数据新鲜度
+    realtime_repo = StockRealtimeRepository()
+    last_update = await asyncio.to_thread(realtime_repo.get_last_updated, codes)
 
     # 3. 调用 Core Adapter 判断是否需要刷新
     should_refresh, reason = await market_adapter.should_refresh_realtime_data(
