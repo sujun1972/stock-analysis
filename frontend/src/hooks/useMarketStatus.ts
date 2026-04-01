@@ -97,32 +97,40 @@ export function useSmartRefresh(
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const isRefreshingRef = useRef(false)
 
-  // 执行刷新
+  // 用 ref 持有最新值，避免 doRefresh 因外部引用变化而频繁重建
+  const refreshCallbackRef = useRef(refreshCallback)
+  const codesRef = useRef(codes)
+  useEffect(() => { refreshCallbackRef.current = refreshCallback }, [refreshCallback])
+  useEffect(() => { codesRef.current = codes }, [codes])
+
+  // 执行刷新 - 依赖项只保留稳定值，通过 ref 读取最新的 codes 和 callback
   const doRefresh = useCallback(async (force: boolean = false) => {
-    if (isRefreshing) return
+    if (isRefreshingRef.current) return
 
     try {
+      isRefreshingRef.current = true
       setIsRefreshing(true)
 
       // 检查是否需要刷新
       if (!force) {
-        const freshness = await checkFreshness(codes)
+        const freshness = await checkFreshness(codesRef.current)
         if (freshness && !freshness.should_refresh) {
-          console.log(`跳过刷新: ${freshness.reason}`)
           return
         }
       }
 
       // 执行刷新
-      await refreshCallback()
+      await refreshCallbackRef.current()
       setLastRefresh(new Date())
     } catch (error) {
       console.error('刷新失败:', error)
     } finally {
+      isRefreshingRef.current = false
       setIsRefreshing(false)
     }
-  }, [isRefreshing, checkFreshness, codes, refreshCallback])
+  }, [checkFreshness])
 
   // 首次加载时检查是否需要刷新（即使非交易时段）
   const [hasCheckedInitial, setHasCheckedInitial] = useState(false)
@@ -135,7 +143,6 @@ export function useSmartRefresh(
     const checkInitialFreshness = async () => {
       const freshness = await checkFreshness(codes, false)
       if (freshness?.should_refresh) {
-        console.log(`首次加载检查: ${freshness.reason}`)
         await doRefresh(true)
       }
       setHasCheckedInitial(true)

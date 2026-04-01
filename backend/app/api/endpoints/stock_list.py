@@ -2,21 +2,103 @@
 股票列表API端点
 
 功能:
-- 查询股票列表（支持按list_status、market、exchange、is_hs筛选）
+- 查询股票列表（支持按list_status、market、exchange、is_hs、industry、concept_code筛选）
+- 获取行业分类列表（动态，来自数据库实际数据）
+- 获取概念板块列表（来自 dc_index，只返回 dc_member 中有成分股的板块）
 - 获取统计信息
 - 异步同步股票列表数据
 """
 
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
+from src.database.db_manager import DatabaseManager
 from app.core.dependencies import require_admin
 from app.models.user import User
 from app.models.api_response import ApiResponse
 from app.api.error_handler import handle_api_errors
 from app.services import TaskHistoryHelper
-from loguru import logger
 
 router = APIRouter()
+
+
+@router.get("/industries")
+@handle_api_errors
+async def get_industries():
+    """
+    获取所有行业分类列表（用于前端筛选器）
+
+    Returns:
+        行业列表，按股票数量降序排列
+    """
+    db = DatabaseManager()
+
+    result = db._execute_query("""
+        SELECT industry, COUNT(*) as cnt
+        FROM stock_basic
+        WHERE industry IS NOT NULL AND industry != ''
+        GROUP BY industry
+        ORDER BY cnt DESC
+    """)
+
+    industries = [{'value': row[0], 'label': row[0], 'count': row[1]} for row in result]
+
+    return ApiResponse.success(data={'industries': industries}).to_dict()
+
+
+@router.get("/concepts")
+@handle_api_errors
+async def get_concepts(
+    search: Optional[str] = Query(None, description="搜索关键词，模糊匹配概念名称"),
+    limit: int = Query(50, ge=1, le=200, description="每页记录数"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+):
+    """
+    获取概念板块列表（来自 dc_index，用于前端懒加载筛选器）
+
+    只返回 dc_member 中有成分股数据的概念板块，避免用户选到空数据。
+    成员数量通过子查询统计，不做跨表 JOIN。
+    """
+    db = DatabaseManager()
+
+    params: list = []
+
+    search_clause = ""
+    if search:
+        search_clause = "AND di.name ILIKE %s"
+        params.append(f"%{search}%")
+
+    # 只返回在 dc_member 中实际有成分股记录的概念板块
+    base_sql = f"""
+        FROM dc_index di
+        WHERE di.idx_type = '概念板块'
+          AND di.trade_date = (
+              SELECT MAX(trade_date) FROM dc_index WHERE idx_type = '概念板块'
+          )
+          AND EXISTS (SELECT 1 FROM dc_member dm WHERE dm.ts_code = di.ts_code)
+          {search_clause}
+    """
+
+    count_result = db._execute_query(
+        f"SELECT COUNT(DISTINCT di.ts_code) {base_sql}",
+        tuple(params),
+    )
+    total = count_result[0][0] if count_result else 0
+
+    params.extend([limit, offset])
+    rows = db._execute_query(
+        f"""
+        SELECT di.ts_code, di.name,
+               (SELECT COUNT(DISTINCT dm.con_code) FROM dc_member dm WHERE dm.ts_code = di.ts_code) AS member_count
+        {base_sql}
+        ORDER BY di.name
+        LIMIT %s OFFSET %s
+        """,
+        tuple(params),
+    )
+
+    items = [{'ts_code': row[0], 'name': row[1], 'member_count': row[2]} for row in rows]
+
+    return ApiResponse.success(data={'items': items, 'total': total}).to_dict()
 
 
 @router.get("")
@@ -26,6 +108,8 @@ async def get_stock_list(
     market: Optional[str] = Query(None, description="市场类型"),
     exchange: Optional[str] = Query(None, description="交易所: SSE-上交所, SZSE-深交所, BSE-北交所"),
     is_hs: Optional[str] = Query(None, description="沪深港通: S-沪股通, H-深股通, N-非港股通"),
+    industry: Optional[str] = Query(None, description="行业筛选，如: 电气设备、软件服务、化工原料"),
+    concept_code: Optional[str] = Query(None, description="概念板块代码，如: BK0714.DC"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量")
@@ -33,101 +117,108 @@ async def get_stock_list(
     """
     查询股票列表
 
-    Args:
-        list_status: 上市状态筛选
-        market: 市场类型筛选
-        exchange: 交易所筛选
-        is_hs: 沪深港通筛选
-        limit: 每页记录数
-        offset: 偏移量
-
-    Returns:
-        股票列表和总数
+    概念板块筛选通过 JOIN dc_member 最新一天的成分股实现。
+    当 concept_code 存在时，FROM 子句改为 stock_basic JOIN dc_member 子查询，
+    所有 WHERE 条件需带 sb. 别名。
     """
-    from src.database.db_manager import DatabaseManager
-
     db = DatabaseManager()
 
-    try:
-        # 构建查询条件
-        conditions = []
-        params = []
+    conditions = []
+    params = []
 
-        if list_status:
-            conditions.append("list_status = %s")
-            params.append(list_status)
-
-        if market:
-            conditions.append("market = %s")
-            params.append(market)
-
-        if exchange:
-            conditions.append("exchange = %s")
-            params.append(exchange)
-
-        if is_hs:
-            conditions.append("is_hs = %s")
-            params.append(is_hs)
-
-        if search:
-            conditions.append("(code ILIKE %s OR name ILIKE %s)")
-            params.append(f"%{search}%")
-            params.append(f"%{search}%")
-
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-        # 查询总数
-        count_query = f"SELECT COUNT(*) FROM stock_basic WHERE {where_clause}"
-        count_result = db._execute_query(count_query, tuple(params))
-        total = count_result[0][0] if count_result else 0
-
-        # 查询数据
-        query = f"""
-            SELECT code, name, ts_code, fullname, enname, cnspell,
-                   market, exchange, area, industry, curr_type,
-                   list_status, list_date, delist_date, is_hs,
-                   act_name, act_ent_type, status
-            FROM stock_basic
-            WHERE {where_clause}
-            ORDER BY code
-            LIMIT %s OFFSET %s
+    # 概念板块筛选：JOIN dc_member 取最新一天成分股
+    if concept_code:
+        from_clause = """
+            FROM stock_basic sb
+            JOIN (
+                SELECT DISTINCT con_code
+                FROM dc_member
+                WHERE ts_code = %s
+                  AND trade_date = (SELECT MAX(trade_date) FROM dc_member WHERE ts_code = %s)
+            ) dm ON sb.ts_code = dm.con_code
         """
-        params.extend([limit, offset])
+        params.append(concept_code)
+        params.append(concept_code)
+        # concept_code JOIN 时所有列需要带 sb. 表别名
+        def col(c): return f"sb.{c}"
+    else:
+        from_clause = "FROM stock_basic sb"
+        def col(c): return f"sb.{c}"
 
-        result = db._execute_query(query, tuple(params))
+    if list_status:
+        conditions.append(f"{col('list_status')} = %s")
+        params.append(list_status)
 
-        # 转换为字典列表
-        items = []
-        for row in result:
-            items.append({
-                'code': row[0],
-                'name': row[1],
-                'ts_code': row[2],
-                'fullname': row[3],
-                'enname': row[4],
-                'cnspell': row[5],
-                'market': row[6],
-                'exchange': row[7],
-                'area': row[8],
-                'industry': row[9],
-                'curr_type': row[10],
-                'list_status': row[11],
-                'list_date': str(row[12]) if row[12] else None,
-                'delist_date': str(row[13]) if row[13] else None,
-                'is_hs': row[14],
-                'act_name': row[15],
-                'act_ent_type': row[16],
-                'status': row[17]
-            })
+    if market:
+        conditions.append(f"{col('market')} = %s")
+        params.append(market)
 
-        return ApiResponse.success(data={
-            'items': items,
-            'total': total
-        }).to_dict()
+    if exchange:
+        conditions.append(f"{col('exchange')} = %s")
+        params.append(exchange)
 
-    except Exception as e:
-        logger.error(f"查询股票列表失败: {e}")
-        raise
+    if is_hs:
+        conditions.append(f"{col('is_hs')} = %s")
+        params.append(is_hs)
+
+    if industry:
+        conditions.append(f"{col('industry')} = %s")
+        params.append(industry)
+
+    if search:
+        conditions.append(f"({col('code')} ILIKE %s OR {col('name')} ILIKE %s)")
+        params.append(f"%{search}%")
+        params.append(f"%{search}%")
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    # 查询总数
+    count_result = db._execute_query(
+        f"SELECT COUNT(*) {from_clause} {where_clause}",
+        tuple(params),
+    )
+    total = count_result[0][0] if count_result else 0
+
+    # 查询数据
+    params.extend([limit, offset])
+    result = db._execute_query(
+        f"""
+        SELECT sb.code, sb.name, sb.ts_code, sb.fullname, sb.enname, sb.cnspell,
+               sb.market, sb.exchange, sb.area, sb.industry, sb.curr_type,
+               sb.list_status, sb.list_date, sb.delist_date, sb.is_hs,
+               sb.act_name, sb.act_ent_type, sb.status
+        {from_clause}
+        {where_clause}
+        ORDER BY sb.code
+        LIMIT %s OFFSET %s
+        """,
+        tuple(params),
+    )
+
+    items = []
+    for row in result:
+        items.append({
+            'code': row[0],
+            'name': row[1],
+            'ts_code': row[2],
+            'fullname': row[3],
+            'enname': row[4],
+            'cnspell': row[5],
+            'market': row[6],
+            'exchange': row[7],
+            'area': row[8],
+            'industry': row[9],
+            'curr_type': row[10],
+            'list_status': row[11],
+            'list_date': str(row[12]) if row[12] else None,
+            'delist_date': str(row[13]) if row[13] else None,
+            'is_hs': row[14],
+            'act_name': row[15],
+            'act_ent_type': row[16],
+            'status': row[17]
+        })
+
+    return ApiResponse.success(data={'items': items, 'total': total}).to_dict()
 
 
 @router.get("/statistics")
@@ -139,62 +230,43 @@ async def get_statistics():
     Returns:
         统计数据（总数、上市数、退市数、停牌数、沪深港通数、市场分布、交易所分布）
     """
-    from src.database.db_manager import DatabaseManager
-
     db = DatabaseManager()
 
-    try:
-        # 总数
-        total_result = db._execute_query("SELECT COUNT(*) FROM stock_basic")
-        total_count = total_result[0][0] if total_result else 0
+    total_count = db._execute_query("SELECT COUNT(*) FROM stock_basic")[0][0]
+    listed_count = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'L'")[0][0]
+    delisted_count = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'D'")[0][0]
+    suspended_count = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'P'")[0][0]
+    hs_count = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE is_hs IN ('S', 'H')")[0][0]
 
-        # 上市数（L）
-        listed_result = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'L'")
-        listed_count = listed_result[0][0] if listed_result else 0
-
-        # 退市数（D）
-        delisted_result = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'D'")
-        delisted_count = delisted_result[0][0] if delisted_result else 0
-
-        # 停牌数（P）
-        suspended_result = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'P'")
-        suspended_count = suspended_result[0][0] if suspended_result else 0
-
-        # 沪深港通数（S或H）
-        hs_result = db._execute_query("SELECT COUNT(*) FROM stock_basic WHERE is_hs IN ('S', 'H')")
-        hs_count = hs_result[0][0] if hs_result else 0
-
-        # 市场分布
-        market_dist_result = db._execute_query("""
+    market_distribution = {
+        row[0]: row[1]
+        for row in db._execute_query("""
             SELECT market, COUNT(*)
             FROM stock_basic
             WHERE market IS NOT NULL AND market != ''
             GROUP BY market
         """)
-        market_distribution = {row[0]: row[1] for row in market_dist_result}
+    }
 
-        # 交易所分布
-        exchange_dist_result = db._execute_query("""
+    exchange_distribution = {
+        row[0]: row[1]
+        for row in db._execute_query("""
             SELECT exchange, COUNT(*)
             FROM stock_basic
             WHERE exchange IS NOT NULL AND exchange != ''
             GROUP BY exchange
         """)
-        exchange_distribution = {row[0]: row[1] for row in exchange_dist_result}
+    }
 
-        return ApiResponse.success(data={
-            'total_count': total_count,
-            'listed_count': listed_count,
-            'delisted_count': delisted_count,
-            'suspended_count': suspended_count,
-            'hs_count': hs_count,
-            'market_distribution': market_distribution,
-            'exchange_distribution': exchange_distribution
-        }).to_dict()
-
-    except Exception as e:
-        logger.error(f"获取统计信息失败: {e}")
-        raise
+    return ApiResponse.success(data={
+        'total_count': total_count,
+        'listed_count': listed_count,
+        'delisted_count': delisted_count,
+        'suspended_count': suspended_count,
+        'hs_count': hs_count,
+        'market_distribution': market_distribution,
+        'exchange_distribution': exchange_distribution
+    }).to_dict()
 
 
 @router.post("/sync-async")
@@ -206,19 +278,12 @@ async def sync_stock_list_async(
     """
     异步同步股票列表数据（使用Celery）
 
-    Args:
-        list_status: 上市状态筛选（为空则同步全部状态的股票）
-        current_user: 当前用户
-
-    Returns:
-        Celery任务信息
+    不传 list_status 参数，同步全部状态的股票。
     """
     from app.tasks.sync_tasks import sync_stock_list_task
 
-    # 提交 Celery 任务（不传 list_status 参数，同步全部数据）
     celery_task = sync_stock_list_task.delay()
 
-    # 使用 TaskHistoryHelper 创建任务历史记录
     helper = TaskHistoryHelper()
     task_data = await helper.create_task_record(
         celery_task_id=celery_task.id,

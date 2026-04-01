@@ -306,7 +306,8 @@ class ApiClient {
     skip?: number
     limit?: number
     search?: string
-    concepts?: string
+    concept_code?: string
+    industry?: string
     sort_by?: string
     sort_order?: string
   }): Promise<PaginatedResponse<StockInfo>> {
@@ -314,6 +315,24 @@ class ApiClient {
     const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
     // 返回嵌套在 data 字段中的分页数据
     return result.data || { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }
+  }
+
+  // 获取行业列表（用于筛选器）
+  async getStockIndustries(): Promise<{ value: string; label: string; count: number }[]> {
+    const response = await axiosInstance.get('/api/stocks/list/industries')
+    const result = response.data as ApiResponse<{ industries: { value: string; label: string; count: number }[] }>
+    return result.data?.industries || []
+  }
+
+  // 获取概念板块列表（懒加载+后端搜索，来自 dc_index，仅返回有成分股数据的板块）
+  async getConceptBoards(params?: {
+    search?: string
+    limit?: number
+    offset?: number
+  }): Promise<{ items: { ts_code: string; name: string; member_count: number }[]; total: number }> {
+    const response = await axiosInstance.get('/api/stocks/list/concepts', { params })
+    const result = response.data as ApiResponse<{ items: { ts_code: string; name: string; member_count: number }[]; total: number }>
+    return result.data || { items: [], total: 0 }
   }
 
   // 获取单只股票信息

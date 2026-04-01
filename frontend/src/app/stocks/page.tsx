@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { useStockStore } from '@/store/stock-store'
 import { Card, CardContent } from '@/components/ui/card'
@@ -31,16 +31,15 @@ export default function StocksPage() {
   const [pageSize, setPageSize] = useState(20)
   const [sortBy, setSortBy] = useState('pct_change')
   const [sortOrder, setSortOrder] = useState('desc')
-
+  const [industries, setIndustries] = useState<{ value: string; label: string; count: number }[]>([])
 
   useEffect(() => {
-    loadStocks()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, marketFilter, industryFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder])
+    apiClient.getStockIndustries().then(setIndustries).catch(() => {})
+  }, [])
 
-  const loadStocks = async () => {
+  const fetchStocks = useCallback(async (silent: boolean = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       setError(null)
 
       const params: any = {
@@ -58,9 +57,9 @@ export default function StocksPage() {
         params.industry = industryFilter
       }
 
-      // 概念筛选：传递概念代码（不是名称）
+      // 概念筛选：传递东财概念板块代码（如 BK0714.DC）
       if (conceptFilter !== 'all') {
-        params.concepts = conceptFilter
+        params.concept_code = conceptFilter
       }
 
       if (searchTerm && searchTerm.trim()) {
@@ -72,13 +71,21 @@ export default function StocksPage() {
       setTotalStocks(response.total ?? 0)
     } catch (err: any) {
       setError(err.message || '加载股票列表失败')
-      setStocks([])
-      setTotalStocks(0)
+      if (!silent) {
+        setStocks([])
+        setTotalStocks(0)
+      }
       console.error('Failed to load stocks:', err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }
+  }, [currentPage, marketFilter, industryFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder, setStocks, setLoading, setError])
+
+  const loadStocks = useCallback(() => fetchStocks(false), [fetchStocks])
+
+  useEffect(() => {
+    loadStocks()
+  }, [loadStocks])
 
   // 获取当前页面显示的股票代码列表
   const currentPageCodes = useMemo(() => {
@@ -89,21 +96,29 @@ export default function StocksPage() {
     return stocks.map(stock => stock.code)
   }, [stocks])
 
-  // 使用智能刷新Hook - 只刷新当前页面的股票（自动后台刷新）
-  useSmartRefresh(
-    async () => {
-      // 只同步当前页面股票的实时数据
-      if (currentPageCodes.length > 0) {
-        await apiClient.syncRealtimeQuotes({
-          codes: currentPageCodes,
-          batch_size: currentPageCodes.length
-        })
-      }
+  // 用 ref 持有最新的 codes，避免 useCallback 因 codes 引用变化而频繁重建
+  const currentPageCodesRef = useRef<string[]>(currentPageCodes)
+  useEffect(() => {
+    currentPageCodesRef.current = currentPageCodes
+  }, [currentPageCodes])
 
-      // 然后重新加载股票列表
-      await loadStocks()
-    },
-    currentPageCodes,  // 监控当前页面的股票
+  // 使用智能刷新Hook - 只刷新当前页面的股票（自动后台静默刷新，不触发 loading）
+  const refreshCallback = useCallback(async () => {
+    const codes = currentPageCodesRef.current
+    // 只同步当前页面股票的实时数据
+    if (codes.length > 0) {
+      await apiClient.syncRealtimeQuotes({
+        codes,
+        batch_size: codes.length
+      })
+    }
+    // 静默刷新，不显示 loading 动画
+    await fetchStocks(true)
+  }, [fetchStocks])
+
+  useSmartRefresh(
+    refreshCallback,
+    currentPageCodes,  // 监控当前页面的股票（用于 freshness check）
     true               // 启用自动刷新
   )
 
@@ -170,16 +185,11 @@ export default function StocksPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部行业</SelectItem>
-                  <SelectItem value="银行">银行</SelectItem>
-                  <SelectItem value="医药">医药</SelectItem>
-                  <SelectItem value="计算机">计算机</SelectItem>
-                  <SelectItem value="电子">电子</SelectItem>
-                  <SelectItem value="汽车">汽车</SelectItem>
-                  <SelectItem value="房地产">房地产</SelectItem>
-                  <SelectItem value="建筑">建筑</SelectItem>
-                  <SelectItem value="钢铁">钢铁</SelectItem>
-                  <SelectItem value="化工">化工</SelectItem>
-                  <SelectItem value="食品饮料">食品饮料</SelectItem>
+                  {industries.map((ind) => (
+                    <SelectItem key={ind.value} value={ind.value}>
+                      {ind.label}（{ind.count}）
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

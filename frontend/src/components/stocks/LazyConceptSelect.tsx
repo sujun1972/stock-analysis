@@ -1,14 +1,11 @@
 'use client'
 
 /**
- * 概念选择器组件（不使用 Command 组件，避免点击问题）
- *
- * 特性：
- * - 懒加载：打开下拉框时才加载数据
- * - 后端搜索：搜索时从后端API获取结果
- * - 分页加载：支持滚动加载更多
- * - 防抖搜索：避免频繁请求
- * - 使用 Popover 提供下拉功能
+ * 概念板块选择器
+ * - 懒加载：打开时才请求数据
+ * - 后端搜索：防抖 300ms 后向后端发搜索请求
+ * - 滚动加载更多
+ * - 数据来自 dc_index（概念板块）
  */
 
 import * as React from 'react'
@@ -22,22 +19,24 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { apiClient } from '@/lib/api-client'
-import type { Concept } from '@/types/stock'
+
+interface ConceptItem {
+  ts_code: string
+  name: string
+  member_count: number
+}
 
 interface LazyConceptSelectProps {
-  /** 当前选中的值（ID 或 Code，取决于 valueType） */
   value: string
-  /** 选择回调 */
   onSelect: (value: string) => void
-  /** 占位符文本 */
   placeholder?: string
-  /** 是否禁用 */
   disabled?: boolean
-  /** 是否包含"全部"选项 */
   includeAllOption?: boolean
-  /** 值类型：'id' 使用概念 ID，'code' 使用概念代码 */
+  /** 保留兼容旧调用，无实际用途 */
   valueType?: 'id' | 'code'
 }
+
+const PAGE_SIZE = 50
 
 export function LazyConceptSelect({
   value,
@@ -45,129 +44,94 @@ export function LazyConceptSelect({
   placeholder = '选择概念...',
   disabled = false,
   includeAllOption = false,
-  valueType = 'id',
 }: LazyConceptSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
-  const [concepts, setConcepts] = React.useState<Concept[]>([])
+  const [concepts, setConcepts] = React.useState<ConceptItem[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [selectedConcept, setSelectedConcept] = React.useState<Concept | null>(null)
-  const [page, setPage] = React.useState(1)
-  const [hasMore, setHasMore] = React.useState(true)
+  const [total, setTotal] = React.useState(0)
+  const [offset, setOffset] = React.useState(0)
+  const [selectedName, setSelectedName] = React.useState<string>('')
 
-  const searchTimeoutRef = React.useRef<NodeJS.Timeout>()
-  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const searchRef = React.useRef(search)
+  const searchTimerRef = React.useRef<NodeJS.Timeout>()
+  const isComposing = React.useRef(false)
 
-  // 加载已选中的概念信息
+  // 当外部 value 切换回 'all' 或清空时，重置显示名称
   React.useEffect(() => {
-    if (value && value !== 'all' && !selectedConcept) {
-      loadSelectedConcept()
-    }
+    if (!value || value === 'all') setSelectedName('')
   }, [value])
 
-  const loadSelectedConcept = async () => {
-    if (value === 'all') return
-
-    try {
-      if (valueType === 'code') {
-        const response = await apiClient.getConceptsList({ limit: 1000 })
-        const concept = response.items.find(c => c.code === value)
-        if (concept) {
-          setSelectedConcept(concept)
-        }
-      } else {
-        const concept = await apiClient.getConcept(parseInt(value))
-        setSelectedConcept(concept)
-      }
-    } catch (error) {
-      console.error('加载选中概念失败:', error)
-    }
-  }
-
-  // 加载概念列表
-  const loadConcepts = async (searchQuery: string = '', pageNum: number = 1, append: boolean = false) => {
+  const load = React.useCallback(async (q: string, off: number, append: boolean) => {
     setLoading(true)
     try {
-      const response = await apiClient.getConceptsList({
-        skip: (pageNum - 1) * 50,
-        limit: 50,
-        search: searchQuery || undefined,
-      })
-
+      const res = await apiClient.getConceptBoards({ search: q || undefined, limit: PAGE_SIZE, offset: off })
       if (append) {
-        // 去重：只添加不存在的概念
         setConcepts(prev => {
-          const existingIds = new Set(prev.map(c => c.id))
-          const newConcepts = response.items.filter(c => !existingIds.has(c.id))
-          return [...prev, ...newConcepts]
+          const existing = new Set(prev.map(c => c.ts_code))
+          return [...prev, ...res.items.filter(c => !existing.has(c.ts_code))]
         })
       } else {
-        setConcepts(response.items)
+        setConcepts(res.items)
       }
+      setTotal(res.total)
+      setOffset(off)
 
-      const totalPages = Math.ceil(response.total / 50)
-      setHasMore(pageNum < totalPages)
-      setPage(pageNum)
-    } catch (error) {
-      console.error('加载概念列表失败:', error)
+      // 若当前选中值在结果中，更新显示名称
+      if (value && value !== 'all') {
+        const found = res.items.find(c => c.ts_code === value)
+        if (found) setSelectedName(found.name)
+      }
+    } catch {
+      // ignore
     } finally {
       setLoading(false)
     }
-  }
+  }, [value])
 
-  // 打开下拉框时加载初始数据
+  // 打开时首次加载
   React.useEffect(() => {
     if (open && concepts.length === 0) {
-      loadConcepts()
+      load('', 0, false)
     }
-  }, [open])
+  }, [open, concepts.length, load])
 
-  // 搜索防抖
+  // 搜索防抖（处理中文输入法）
   React.useEffect(() => {
+    searchRef.current = search
     if (!open) return
-
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
-    }
-
-    searchTimeoutRef.current = setTimeout(() => {
-      loadConcepts(search, 1, false)
-    }, 300)
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      if (!isComposing.current) {
+        load(search, 0, false)
       }
-    }
-  }, [search, open])
+    }, 300)
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
+  }, [search, open, load])
 
   // 滚动加载更多
   const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget
-    if (loading || !hasMore) return
-
-    const { scrollTop, scrollHeight, clientHeight } = target
+    if (loading || concepts.length >= total) return
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
     if (scrollHeight - scrollTop <= clientHeight * 1.5) {
-      loadConcepts(search, page + 1, true)
+      load(searchRef.current, offset + PAGE_SIZE, true)
     }
-  }, [loading, hasMore, search, page])
+  }, [loading, concepts.length, total, offset, load])
 
-  // 处理选择
-  const handleSelect = (selectedValue: string) => {
-    if (selectedValue === 'all') {
-      setSelectedConcept(null)
-    } else {
-      const concept = concepts.find(c =>
-        valueType === 'id' ? c.id.toString() === selectedValue : c.code === selectedValue
-      )
-      if (concept) {
-        setSelectedConcept(concept)
-      }
+  const handleSelect = (val: string, name?: string) => {
+    if (val === 'all') {
+      setSelectedName('')
+    } else if (name) {
+      setSelectedName(name)
     }
-    onSelect(selectedValue)
+    onSelect(val)
     setOpen(false)
     setSearch('')
   }
+
+  const displayLabel = value === 'all' || !value
+    ? (includeAllOption ? '全部概念' : placeholder)
+    : (selectedName || value)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -177,26 +141,12 @@ export function LazyConceptSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between"
+          className="w-full justify-between font-normal"
           disabled={disabled}
         >
-          {selectedConcept ? (
-            <span className="flex items-center gap-2">
-              <span className="font-mono text-xs text-muted-foreground">
-                {selectedConcept.code}
-              </span>
-              <span>{selectedConcept.name}</span>
-              {selectedConcept.stock_count !== undefined && (
-                <span className="text-xs text-muted-foreground">
-                  ({selectedConcept.stock_count})
-                </span>
-              )}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">
-              {includeAllOption && value === 'all' ? '全部概念' : placeholder}
-            </span>
-          )}
+          <span className={cn(value && value !== 'all' ? '' : 'text-muted-foreground')}>
+            {displayLabel}
+          </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -205,75 +155,58 @@ export function LazyConceptSelect({
         align="start"
         side="bottom"
       >
-        {/* 搜索输入框 */}
+        {/* 搜索框 */}
         <div className="flex items-center border-b px-3 py-2">
           <Input
             placeholder="搜索概念..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onCompositionStart={() => { isComposing.current = true }}
+            onCompositionEnd={(e) => {
+              isComposing.current = false
+              const q = (e.target as HTMLInputElement).value
+              if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+              load(q, 0, false)
+            }}
             className="h-9 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
           />
         </div>
 
-        {/* 选项列表 */}
+        {/* 列表 */}
         <div
-          ref={scrollRef}
           className="max-h-[300px] overflow-y-auto overflow-x-hidden"
           onScroll={handleScroll}
         >
           {concepts.length === 0 && !loading ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
-              {search ? '没有找到匹配的概念' : '暂无概念数据'}
+              {search ? '没有找到匹配的概念' : '暂无概念成分股数据，请先同步板块成分'}
             </div>
           ) : (
             <div className="p-1">
-              {/* 全部选项 */}
               {includeAllOption && (
                 <div
                   className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
                   onClick={() => handleSelect('all')}
                 >
-                  <Check
-                    className={cn(
-                      'mr-2 h-4 w-4',
-                      value === 'all' ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
+                  <Check className={cn('mr-2 h-4 w-4', value === 'all' ? 'opacity-100' : 'opacity-0')} />
                   <span className="font-medium">全部概念</span>
                 </div>
               )}
 
-              {/* 概念列表 */}
-              {concepts.map((concept) => {
-                const itemValue = valueType === 'id' ? concept.id.toString() : concept.code
-                return (
-                  <div
-                    key={concept.id}
-                    className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => handleSelect(itemValue)}
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        value === itemValue ? 'opacity-100' : 'opacity-0'
-                      )}
-                    />
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {concept.code}
-                      </span>
-                      <span className="flex-1">{concept.name}</span>
-                      {concept.stock_count !== undefined && (
-                        <span className="text-xs text-muted-foreground">
-                          {concept.stock_count}
-                        </span>
-                      )}
-                    </div>
+              {concepts.map((concept) => (
+                <div
+                  key={concept.ts_code}
+                  className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => handleSelect(concept.ts_code, concept.name)}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === concept.ts_code ? 'opacity-100' : 'opacity-0')} />
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="flex-1 truncate">{concept.name}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{concept.member_count} 只</span>
                   </div>
-                )
-              })}
+                </div>
+              ))}
 
-              {/* 加载指示器 */}
               {loading && (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -285,6 +218,13 @@ export function LazyConceptSelect({
             </div>
           )}
         </div>
+
+        {/* 底部统计 */}
+        {total > 0 && (
+          <div className="border-t px-3 py-2 text-xs text-muted-foreground">
+            共 {total} 个概念，已加载 {concepts.length} 个
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   )
