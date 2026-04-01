@@ -479,8 +479,19 @@ for item in items:
 
 **已接入的同步 Service**：`MoneyflowService`（`get_moneyflow_data`、`get_top_stocks`）
 
+**缓存字段**（`get_quotes_batch` 返回）：
+```
+name, latest_price, pct_change, change_amount, open, high, low, pre_close,
+volume, amount, turnover, amplitude, trade_time, price（latest_price 的旧名兼容别名）
+```
+
+⚠️ **缓存扩容后需手动刷新 Redis**：若修改了 `_QuoteRepository.get_quotes()` 查询字段，旧缓存条目（字段不全）仍会被返回，需手动清空：
+```bash
+docker-compose exec redis redis-cli KEYS "stock:quote:*" | xargs docker-compose exec -T redis redis-cli DEL
+```
+
 **缓存策略**：
-- 数据来源：`stock_basic`（名称）LEFT JOIN `stock_realtime`（价格/涨跌幅）
+- 数据来源：`stock_basic`（名称）LEFT JOIN `stock_realtime`（实时行情全量字段）
 - Redis key：`stock:quote:{ts_code}`
 - TTL：交易时间（09:30-11:30 / 13:00-15:00 工作日）= 60s，非交易时间 = 3600s
 - 降级：Redis 不可用时直接查数据库
@@ -1157,6 +1168,45 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
   - X轴标签旋转45度避免重叠（`angle={-45}`）
   - 调整 margin 为标签预留空间（`bottom: 40`）
   - 使用 `overflow-x-auto` 允许横向滚动
+- **ECharts 初始化时序问题**（"Can't get DOM width or height"）：
+  ECharts 在 `init()` 时读取容器 `clientHeight`，若容器尚未布局（高度为 0）会导致图表空白。
+  解决方案：**两步 useEffect + requestAnimationFrame**
+  ```tsx
+  const chartRef = useRef<HTMLDivElement>(null)
+  const chartInstance = useRef<echarts.ECharts | null>(null)
+  const [data, setData] = useState<Item[] | null>(null)
+
+  // Step 1：获取数据 → 触发 data state 更新
+  useEffect(() => {
+    fetchData().then(setData)
+  }, [key])
+
+  // Step 2：data 变化后渲染图表（此时 React 已更新 DOM 高度）
+  // 再用 requestAnimationFrame 延一帧确保浏览器完成布局
+  useEffect(() => {
+    if (!data || !chartRef.current) return
+    if (!chartInstance.current) {
+      chartInstance.current = echarts.init(chartRef.current)
+    }
+    requestAnimationFrame(() => {
+      chartInstance.current!.setOption({ ... })
+      chartInstance.current!.resize()
+    })
+  }, [data])
+
+  // 窗口 resize + 组件卸载清理（合并为一个 useEffect）
+  useEffect(() => {
+    const onResize = () => chartInstance.current?.resize()
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      chartInstance.current?.dispose()
+      chartInstance.current = null
+    }
+  }, [])
+  ```
+  **关键**：容器始终存在于 DOM，通过 `height: 0 / 420` 切换显隐（而非条件渲染），避免 `clientHeight=0`。
+  参见 `frontend/src/app/analysis/page.tsx` 中的 `ChipsDistributionCard` 组件。
 - 日期选择器：
   - 优先使用 `@/components/ui/date-picker`（弹出式日历）
   - 避免使用HTML5原生 `<input type="date">`
@@ -3500,6 +3550,9 @@ async def get_data():
 - `GET /api/features/{code}` — 特征数据（含自动同步）
 - `GET /api/stocks/{code}/minute` — 分时数据（含数据源回退）
 - `GET /api/stocks/{code}/daily` — 日线数据
+- `GET /api/stocks/{code}/quote-panel` — 行情面板（实时行情 + 每日指标，分析页使用）
+- `GET /api/stocks/{code}/basic-info` — 股票完整基础信息（含 Tushare 扩展字段，分析页使用）
+- `GET /api/cyq-chips/distribution?ts_code=xxx` — 筹码分布（含自动同步，分析页使用）
 
 **问题：前端无限循环调用 POST /api/sync/realtime**
 

@@ -11,6 +11,7 @@ from loguru import logger
 import pandas as pd
 
 from app.repositories.cyq_chips_repository import CyqChipsRepository
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -20,6 +21,7 @@ class CyqChipsService:
 
     def __init__(self):
         self.cyq_chips_repo = CyqChipsRepository()
+        self.calendar_repo = TradingCalendarRepository()
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
@@ -132,6 +134,50 @@ class CyqChipsService:
         if latest and len(latest) == 8:
             return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
         return None
+
+    def _is_data_stale(self, ts_code: str) -> bool:
+        """
+        判断指定股票的筹码数据是否过时：
+        - 无数据：视为过时
+        - 最新数据日期早于最近交易日：视为过时
+        """
+        latest_in_db = self.cyq_chips_repo.get_latest_trade_date(ts_code)
+        if not latest_in_db:
+            return True
+        latest_trading_day = self.calendar_repo.get_latest_trading_day()
+        if not latest_trading_day:
+            return False
+        # latest_trading_day 可能是 date 对象或 YYYYMMDD 字符串
+        if hasattr(latest_trading_day, 'strftime'):
+            latest_trading_day = latest_trading_day.strftime('%Y%m%d')
+        return latest_in_db < latest_trading_day
+
+    async def get_cyq_chips_with_auto_sync(self, ts_code: str) -> list:
+        """
+        获取指定股票的最新筹码分布数据，若数据过时则先同步再返回。
+
+        Returns:
+            筹码分布数据列表 [{price, percent}, ...]
+        """
+        stale = await asyncio.to_thread(self._is_data_stale, ts_code)
+        if stale:
+            logger.info(f"筹码数据不存在或过时，自动同步: {ts_code}")
+            await self.sync_cyq_chips(ts_code=ts_code)
+
+        latest_date = await asyncio.to_thread(
+            self.cyq_chips_repo.get_latest_trade_date, ts_code
+        )
+        if not latest_date:
+            return []
+
+        items = await asyncio.to_thread(
+            self.cyq_chips_repo.get_by_code_and_date_range,
+            ts_code=ts_code,
+            start_date=latest_date,
+            end_date=latest_date,
+            limit=2000
+        )
+        return items
 
     async def get_cyq_chips_data(
         self,

@@ -582,6 +582,97 @@ class StockBasicRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def get_full_by_ts_code(self, ts_code: str) -> Optional[Dict]:
+        """
+        按 ts_code 查询股票完整信息（含 Tushare 扩展字段）
+
+        Args:
+            ts_code: Tushare 标准代码（如 '000001.SZ'）
+
+        Returns:
+            含全部字段的股票信息字典，不存在则返回 None
+
+        Examples:
+            >>> repo = StockBasicRepository()
+            >>> stock = repo.get_full_by_ts_code('000001.SZ')
+            >>> print(stock['fullname'])
+            '平安银行股份有限公司'
+        """
+        try:
+            query = f"""
+                SELECT id, code, name, market, industry, area,
+                       list_date, delist_date, status, data_source,
+                       ts_code, symbol, fullname, enname, cnspell,
+                       exchange, curr_type, list_status, is_hs,
+                       act_name, act_ent_type,
+                       updated_at, created_at
+                FROM {self.TABLE_NAME}
+                WHERE ts_code = %s
+            """
+            result = self.execute_query(query, (ts_code,))
+            if result:
+                return self._row_to_full_dict(result[0])
+            # 尝试用 code 字段匹配（兼容纯数字格式）
+            pure_code = ts_code.split('.')[0] if '.' in ts_code else ts_code
+            query2 = f"""
+                SELECT id, code, name, market, industry, area,
+                       list_date, delist_date, status, data_source,
+                       ts_code, symbol, fullname, enname, cnspell,
+                       exchange, curr_type, list_status, is_hs,
+                       act_name, act_ent_type,
+                       updated_at, created_at
+                FROM {self.TABLE_NAME}
+                WHERE code = %s
+            """
+            result2 = self.execute_query(query2, (pure_code,))
+            if result2:
+                return self._row_to_full_dict(result2[0])
+            logger.debug(f"未找到股票: {ts_code}")
+            return None
+
+        except Exception as e:
+            logger.error(f"查询股票完整信息失败: ts_code={ts_code}, error={e}")
+            raise QueryError(
+                "查询股票完整信息失败",
+                error_code="STOCK_FULL_INFO_QUERY_FAILED",
+                reason=str(e)
+            )
+
+    def _row_to_full_dict(self, row: tuple) -> Dict:
+        """将查询结果行转换为含完整字段的字典"""
+        def fmt_date(v):
+            if v is None:
+                return None
+            if hasattr(v, 'strftime'):
+                return v.strftime('%Y-%m-%d')
+            return str(v)
+
+        return {
+            'id': row[0],
+            'code': row[1],
+            'name': row[2],
+            'market': row[3],
+            'industry': row[4],
+            'area': row[5],
+            'list_date': fmt_date(row[6]),
+            'delist_date': fmt_date(row[7]),
+            'status': row[8],
+            'data_source': row[9],
+            'ts_code': row[10],
+            'symbol': row[11],
+            'fullname': row[12],
+            'enname': row[13],
+            'cnspell': row[14],
+            'exchange': row[15],
+            'curr_type': row[16],
+            'list_status': row[17],
+            'is_hs': row[18],
+            'act_name': row[19],
+            'act_ent_type': row[20],
+            'updated_at': str(row[21]) if row[21] else None,
+            'created_at': str(row[22]) if row[22] else None,
+        }
+
     # ==================== 检查操作 ====================
 
     def exists(self, code: str) -> bool:

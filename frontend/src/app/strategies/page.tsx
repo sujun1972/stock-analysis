@@ -111,8 +111,8 @@ export default function StrategiesPage() {
         ])
 
         // 合并并去重（我的策略优先）
-        const myStrategies = myStrategiesResponse.data || []
-        const publishedStrategies = publishedResponse.data || []
+        const myStrategies: Strategy[] = (myStrategiesResponse.data as any)?.items ?? myStrategiesResponse.data ?? []
+        const publishedStrategies: Strategy[] = (publishedResponse.data as any)?.items ?? publishedResponse.data ?? []
 
         const strategyMap = new Map<number, Strategy>()
         myStrategies.forEach(s => strategyMap.set(s.id, s))
@@ -136,7 +136,7 @@ export default function StrategiesPage() {
         }
 
         const response = await apiClient.getStrategies(params)
-        allStrategies = response.data || []
+        allStrategies = (response.data as any)?.items ?? response.data ?? []
       }
 
       setStrategies(allStrategies)

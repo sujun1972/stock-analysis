@@ -54,7 +54,8 @@ class _QuoteRepository(BaseRepository):
             ts_codes: ts_code 列表
 
         Returns:
-            { ts_code: { name, price, pct_change } }
+            { ts_code: { name, latest_price, pct_change, change_amount, open, high, low,
+                         pre_close, volume, amount, turnover, amplitude, trade_time, price } }
         """
         if not ts_codes:
             return {}
@@ -66,8 +67,18 @@ class _QuoteRepository(BaseRepository):
             SELECT
                 sb.ts_code,
                 sb.name,
-                sr.latest_price  AS price,
-                sr.pct_change
+                sr.latest_price,
+                sr.pct_change,
+                sr.change_amount,
+                sr.open,
+                sr.high,
+                sr.low,
+                sr.pre_close,
+                sr.volume,
+                sr.amount,
+                sr.turnover,
+                sr.amplitude,
+                sr.trade_time
             FROM stock_basic sb
             LEFT JOIN stock_realtime sr
                 ON sr.code = split_part(sb.ts_code, '.', 1)
@@ -80,9 +91,21 @@ class _QuoteRepository(BaseRepository):
             for row in rows:
                 ts_code = row[0]
                 result[ts_code] = {
-                    "name": row[1] or "",
-                    "price": float(row[2]) if row[2] is not None else None,
-                    "pct_change": float(row[3]) if row[3] is not None else None,
+                    "name":          row[1] or "",
+                    "latest_price":  float(row[2])  if row[2]  is not None else None,
+                    "pct_change":    float(row[3])  if row[3]  is not None else None,
+                    "change_amount": float(row[4])  if row[4]  is not None else None,
+                    "open":          float(row[5])  if row[5]  is not None else None,
+                    "high":          float(row[6])  if row[6]  is not None else None,
+                    "low":           float(row[7])  if row[7]  is not None else None,
+                    "pre_close":     float(row[8])  if row[8]  is not None else None,
+                    "volume":        int(row[9])     if row[9]  is not None else None,
+                    "amount":        float(row[10]) if row[10] is not None else None,
+                    "turnover":      float(row[11]) if row[11] is not None else None,
+                    "amplitude":     float(row[12]) if row[12] is not None else None,
+                    "trade_time":    str(row[13])   if row[13] is not None else None,
+                    # 兼容旧字段名
+                    "price":         float(row[2])  if row[2]  is not None else None,
                 }
             return result
         except Exception as e:

@@ -16,6 +16,25 @@ from app.models.user import User
 router = APIRouter()
 
 
+@router.get("/distribution")
+async def get_chips_distribution(
+    ts_code: str = Query(..., description="股票代码，如 000001.SZ"),
+):
+    """
+    获取指定股票的最新筹码分布（自动同步）。
+
+    若数据库中无数据或数据早于最近交易日，会先从 Tushare 同步再返回。
+    专供分析页面使用，无需认证。
+    """
+    try:
+        service = CyqChipsService()
+        items = await service.get_cyq_chips_with_auto_sync(ts_code)
+        return ApiResponse.success(data={"items": items, "total": len(items)})
+    except Exception as e:
+        logger.error(f"获取筹码分布数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("")
 async def get_cyq_chips(
     ts_code: Optional[str] = Query(None, description="股票代码"),

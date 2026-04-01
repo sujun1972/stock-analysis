@@ -16,9 +16,21 @@ export interface StockInfo {
   name: string
   market: string
   list_date?: string
+  delist_date?: string
   industry?: string
   area?: string
   status?: string
+  // Tushare 扩展字段
+  ts_code?: string
+  fullname?: string
+  enname?: string
+  cnspell?: string
+  exchange?: string
+  curr_type?: string
+  list_status?: string
+  is_hs?: string
+  act_name?: string
+  act_ent_type?: string
   // 实时行情信息
   latest_price?: number
   pct_change?: number
@@ -29,6 +41,40 @@ export interface StockInfo {
   trade_time?: string
   // 概念标签
   concepts?: Concept[]
+}
+
+// 行情面板数据类型（stock_realtime + daily_basic 合并）
+export interface StockQuotePanel {
+  // 实时行情
+  latest_price?: number
+  open?: number
+  high?: number
+  low?: number
+  pre_close?: number
+  pct_change?: number
+  change_amount?: number
+  volume?: number
+  amount?: number
+  amplitude?: number
+  turnover?: number
+  trade_time?: string
+  // 每日估值（daily_basic，收盘后更新）
+  daily_date?: string
+  pe?: number
+  pe_ttm?: number
+  pb?: number
+  ps?: number
+  ps_ttm?: number
+  volume_ratio?: number
+  turnover_rate?: number
+  turnover_rate_f?: number
+  dv_ratio?: number
+  dv_ttm?: number
+  total_share?: number   // 万股
+  float_share?: number   // 万股
+  free_share?: number    // 万股
+  total_mv?: number      // 亿元
+  circ_mv?: number       // 亿元
 }
 
 // 股票日线数据类型

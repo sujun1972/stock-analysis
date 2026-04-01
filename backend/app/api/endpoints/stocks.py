@@ -257,6 +257,54 @@ async def get_stock_codes(
 
 
 @router.get(
+    "/{code}/quote-panel",
+    summary="获取股票行情面板数据",
+    description="合并 stock_realtime（实时价格）与 daily_basic（估值指标），返回行情卡片所需全部字段",
+    tags=["股票管理"],
+)
+async def get_stock_quote_panel(code: str):
+    """
+    行情面板数据（无需认证）
+
+    包含：最新价、开高低收、涨跌幅、成交量/额、振幅、换手率（实时）
+          PE/PE_TTM、PB、PS、量比、换手率（日频）、股息率
+          总市值、流通市值、总股本、流通股本（亿元/万股）
+    """
+    from app.services.stock_basic_service import StockBasicService
+    service = StockBasicService()
+    data = await service.get_stock_quote_panel(code)
+    if data is None:
+        return ApiResponse.not_found(message=f"股票 {code} 暂无行情数据").to_dict()
+    return ApiResponse.success(data=data, message="获取行情面板数据成功").to_dict()
+
+
+@router.get(
+    "/{code}/basic-info",
+    summary="获取股票完整基础信息",
+    description="从 stock_basic 表返回含 Tushare 扩展字段的完整基础信息；若 fullname 为空则先触发同步再返回",
+    tags=["股票管理"],
+)
+async def get_stock_basic_info(code: str):
+    """
+    获取股票完整基础信息（含 Tushare 扩展字段）
+
+    字段说明：
+    - 基础字段：code, name, market, industry, area, list_date, delist_date, status
+    - Tushare 扩展字段：ts_code, fullname, enname, cnspell, exchange, curr_type,
+                        list_status, is_hs, act_name, act_ent_type
+    - 实时行情：latest_price, pct_change, change_amount, volume, amount, turnover, trade_time
+
+    无需认证，前端可直接调用。
+    """
+    from app.services.stock_basic_service import StockBasicService
+    service = StockBasicService()
+    info = await service.get_stock_basic_info(code)
+    if info is None:
+        return ApiResponse.not_found(message=f"股票 {code} 不存在").to_dict()
+    return ApiResponse.success(data=info, message="获取股票基础信息成功").to_dict()
+
+
+@router.get(
     "/{code}",
     summary="获取单只股票详情",
     description="根据股票代码获取该股票的详细信息，包括基本信息、行业分类、上市日期等",

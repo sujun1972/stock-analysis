@@ -2,6 +2,7 @@ import axios, { AxiosInstance } from 'axios'
 import { isTokenExpiringSoon } from '@/lib/jwt-utils'
 import type {
   StockInfo,
+  StockQuotePanel,
   StockDaily,
   FeatureData,
   Prediction,
@@ -328,6 +329,46 @@ class ApiClient {
       return exact ?? result.data.items[0]
     }
     throw new Error(`Stock ${code} not found`)
+  }
+
+  // 获取行情面板数据（stock_realtime + daily_basic 合并）
+  async getStockQuotePanel(code: string): Promise<StockQuotePanel | null> {
+    try {
+      const response = await axiosInstance.get(`/api/stocks/${code}/quote-panel`)
+      const result = response.data as ApiResponse<StockQuotePanel>
+      return result.data ?? null
+    } catch {
+      return null
+    }
+  }
+
+  // 获取股票完整基础信息（含 Tushare 扩展字段）
+  async getStockBasicInfo(code: string): Promise<StockInfo | null> {
+    try {
+      const response = await axiosInstance.get(`/api/stocks/${code}/basic-info`)
+      const result = response.data as ApiResponse<StockInfo>
+      return result.data ?? null
+    } catch {
+      return null
+    }
+  }
+
+  // 获取筹码分布数据（含自动同步，专供分析页面）
+  async getChipsDistribution(tsCode: string): Promise<{ price: number; percent: number; trade_date?: string }[]> {
+    try {
+      const response = await axiosInstance.get('/api/cyq-chips/distribution', { params: { ts_code: tsCode } })
+      const result = response.data
+      if (result.code === 200 && result.data?.items) {
+        return result.data.items.map((item: { price: number; percent: number; trade_date?: string }) => ({
+          price: item.price,
+          percent: item.percent,
+          trade_date: item.trade_date,
+        }))
+      }
+      return []
+    } catch {
+      return []
+    }
   }
 
   /**
