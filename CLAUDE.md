@@ -1269,6 +1269,16 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 - **数据库**: 迁移脚本初始化元数据，作为单一数据源
 - **前端**: 直接从API响应中读取元数据，无需硬编码映射
 
+**关键约束：`scheduled_tasks.module` 必须与 `task_metadata.py` 的 key 完全一致**
+
+调度器通过 `module` 字段在 `task_metadata.py` 中查找对应的 Celery 任务名。`module` 与 key 不一致会导致手动执行时报 "未找到模块" 错误，或定时触发时执行旧的/废弃任务逻辑。
+
+新增任务时，数据库的 `module` 值必须与 `task_metadata.py` 新增的 key 完全相同：
+```sql
+-- module 必须与 task_metadata.py 中的 key 完全一致
+INSERT INTO scheduled_tasks (task_name, module, ...) VALUES ('tasks.sync_your_task', 'tasks.sync_your_task', ...);
+```
+
 注意：
 - DataTable 组件使用 `accessor` 函数而非 `render` 来自定义列渲染
 - 新增任务时，优先在数据库中设置元数据，确保排序和分类正确
