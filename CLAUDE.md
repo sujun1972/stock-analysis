@@ -1233,6 +1233,33 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
     ```typescript
     板块数: {statistics.sector_count ?? 0}
     ```
+- **中文输入法（IME）处理**：带搜索功能的输入框必须处理 IME 合成状态，否则每个拼音字母都会触发请求：
+  ```typescript
+  const isComposing = useRef(false)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const triggerSearch = useCallback((query: string) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    if (query.length < 1) { /* 清空结果 */ return }
+    searchTimerRef.current = setTimeout(() => { /* 发请求 */ }, 300)
+  }, [])
+
+  // onChange 正常更新 state（保证输入框显示拼音），但 useEffect 里跳过合成中状态
+  useEffect(() => {
+    if (!isComposing.current) triggerSearch(searchQuery)
+  }, [searchQuery, triggerSearch])
+
+  // compositionend 时直接用最终值触发搜索（state 可能未变化，不能依赖 useEffect）
+  <Input
+    onChange={(e) => setSearchQuery(e.target.value)}
+    onCompositionStart={() => { isComposing.current = true }}
+    onCompositionEnd={(e) => {
+      isComposing.current = false
+      triggerSearch((e.target as HTMLInputElement).value)
+    }}
+  />
+  ```
+  **关键点**：`compositionend` 后必须直接调用搜索函数，不能依赖 `useEffect` — 因为选字后 `onChange` 触发时 state 值可能与之前相同，`useEffect` 不会重新执行。
 
 ### 定时任务页面架构
 定时任务配置页面（`/settings/scheduler`）采用数据库驱动的元数据管理：

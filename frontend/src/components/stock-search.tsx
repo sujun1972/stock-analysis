@@ -54,6 +54,7 @@ export function StockSearch({
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
+  const isComposing = useRef(false)
 
   /**
    * 获取价格/涨跌幅的颜色样式
@@ -72,24 +73,27 @@ export function StockSearch({
     return 'text-gray-600 dark:text-gray-400'
   }, [])
 
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   /**
-   * 搜索股票（带防抖）
-   * 当输入内容变化时，延迟 300ms 后调用 API 搜索
+   * 带防抖的搜索触发函数（300ms）
+   * 直接接收查询字符串，绕过 React state 异步更新问题。
+   * 在 IME 合成结束时需直接调用此函数，而不能依赖 useEffect，
+   * 因为 compositionend 后 state 值可能未变化导致 useEffect 不触发。
    */
-  useEffect(() => {
-    if (searchQuery.length < 1) {
+  const triggerSearch = useCallback((query: string) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+
+    if (query.length < 1) {
       setSearchResults([])
       setShowResults(false)
       return
     }
 
-    const timer = setTimeout(async () => {
+    searchTimerRef.current = setTimeout(async () => {
       setIsSearching(true)
       try {
-        const result = await apiClient.getStockList({
-          search: searchQuery,
-          limit: maxResults
-        })
+        const result = await apiClient.getStockList({ search: query, limit: maxResults })
         setSearchResults(result.items || [])
         setShowResults(true)
         setSelectedIndex(-1)
@@ -100,9 +104,14 @@ export function StockSearch({
         setIsSearching(false)
       }
     }, 300)
+  }, [maxResults])
 
-    return () => clearTimeout(timer)
-  }, [searchQuery, maxResults])
+  // 英文/数字输入时通过 state 变化触发搜索；IME 合成中跳过，由 compositionend 直接触发
+  useEffect(() => {
+    if (!isComposing.current) {
+      triggerSearch(searchQuery)
+    }
+  }, [searchQuery, triggerSearch])
 
   /**
    * 点击外部区域时关闭下拉框
@@ -182,6 +191,12 @@ export function StockSearch({
           placeholder={placeholder}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          // IME 合成期间标记状态，避免每个拼音字母触发搜索请求
+          onCompositionStart={() => { isComposing.current = true }}
+          onCompositionEnd={(e) => {
+            isComposing.current = false
+            triggerSearch((e.target as HTMLInputElement).value)
+          }}
           onKeyDown={handleKeyDown}
           onFocus={() => {
             if (searchResults.length > 0) {

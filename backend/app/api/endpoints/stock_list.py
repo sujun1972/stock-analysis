@@ -26,6 +26,7 @@ async def get_stock_list(
     market: Optional[str] = Query(None, description="市场类型"),
     exchange: Optional[str] = Query(None, description="交易所: SSE-上交所, SZSE-深交所, BSE-北交所"),
     is_hs: Optional[str] = Query(None, description="沪深港通: S-沪股通, H-深股通, N-非港股通"),
+    search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量")
 ):
@@ -67,6 +68,11 @@ async def get_stock_list(
         if is_hs:
             conditions.append("is_hs = %s")
             params.append(is_hs)
+
+        if search:
+            conditions.append("(code ILIKE %s OR name ILIKE %s)")
+            params.append(f"%{search}%")
+            params.append(f"%{search}%")
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
