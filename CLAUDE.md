@@ -1695,6 +1695,24 @@ docker-compose down
   - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_stock_dc')` 派生，不用本地 boolean
   - 响应式布局：桌面端表格视图，移动端卡片视图（hover/active 反馈）
 
+### 数据库连接池规划
+
+系统有三套独立的连接池，**总上限必须低于 PostgreSQL `max_connections`**：
+
+| 连接池 | 配置文件 | 默认上限 |
+|--------|----------|---------|
+| SQLAlchemy 同步引擎 | `backend/app/core/database.py` | pool_size=5, max_overflow=10 → **15** |
+| SQLAlchemy 异步引擎 | `backend/app/core/database.py` | pool_size=5, max_overflow=10 → **15** |
+| psycopg2（Core 模块）| `core/src/database/connection_pool_manager.py` | min=2, max=20 → **20** |
+| **三套合计** | | **≈50** |
+| PostgreSQL max_connections | `ALTER SYSTEM SET max_connections=200` | **200** |
+
+**⚠️ 注意**：不要随意调大连接池（尤其是 psycopg2 的 max_conn），三套合计若超过 `max_connections` 会触发 `FATAL: sorry, too many clients already`，health check 进入死循环。
+
+`max_connections=200` 已通过 `ALTER SYSTEM` 持久化到 PostgreSQL，重启后自动生效（无需修改 docker-compose.yml）。
+
+如需调整连接池大小，修改 `backend/app/core/database.py` 中的 `_POOL_SIZE` / `_MAX_OVERFLOW` 常量即可同时更新三处引擎。
+
 ### 性能优化
 1. **批量插入**: 使用PostgreSQL COPY协议，性能提升10倍
 2. **数据压缩**: TimescaleDB自动压缩，节省60%存储

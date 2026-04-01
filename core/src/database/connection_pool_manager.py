@@ -24,18 +24,17 @@ class ConnectionPoolManager:
     - 管理连接池的生命周期
     """
 
-    def __init__(self, config: Dict[str, Any], min_conn: int = 5, max_conn: int = 50):
+    def __init__(self, config: Dict[str, Any], min_conn: int = 2, max_conn: int = 20):
         """
-        初始化连接池管理器
+        初始化连接池管理器。
 
-        ✅ 任务 2.3: 并发性能优化
-        - 优化连接池配置：min_conn=5, max_conn=50
-        - 提升并发处理能力
+        max_conn 默认 20，与 backend SQLAlchemy 两套引擎（各最多 15 个）合计
+        不超过 PostgreSQL max_connections=200，避免 "too many clients" 错误。
 
         Args:
-            config: 数据库配置字典
-            min_conn: 最小连接数（默认 5）
-            max_conn: 最大连接数（默认 50）
+            config: 数据库配置字典（host/port/database/user/password）
+            min_conn: 最小连接数（默认 2）
+            max_conn: 最大连接数（默认 20）
         """
         self.config = config
         self.min_conn = min_conn
