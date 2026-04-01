@@ -21,6 +21,55 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 - `/core` - 核心业务逻辑
 - `/db_init` - 数据库初始化脚本
 
+## Frontend 自选股功能（用户股票列表）
+
+已登录用户可在 `/stocks` 页面管理自选股列表。未登录用户不可见任何列表相关 UI。
+
+### 数据库表
+- `user_stock_lists`：列表元数据（`id, user_id, name, description, timestamps`），UNIQUE(user_id, name)
+- `user_stock_list_items`：成分股（`id, list_id, ts_code, added_at`），UNIQUE(list_id, ts_code)，CASCADE 删除
+- 迁移脚本：`db_init/migrations/095_create_user_stock_lists.sql`
+
+### 后端文件
+- Repository：`backend/app/repositories/user_stock_list_repository.py`
+- Service：`backend/app/services/user_stock_list_service.py`
+- API：`backend/app/api/endpoints/user_stock_lists.py`（路由前缀 `/user-stock-lists`）
+- 限制：每用户最多 20 个列表，每列表最多 500 只股票
+
+### API 端点（需登录 Token）
+```
+GET    /api/user-stock-lists              获取我的所有列表
+POST   /api/user-stock-lists              创建列表
+PUT    /api/user-stock-lists/{id}         重命名/修改描述
+DELETE /api/user-stock-lists/{id}         删除列表（级联删除成分股）
+GET    /api/user-stock-lists/{id}/items   获取列表股票（含行情）
+GET    /api/user-stock-lists/{id}/ts-codes  仅返回 ts_code 列表（轻量）
+POST   /api/user-stock-lists/{id}/items   批量添加股票
+DELETE /api/user-stock-lists/{id}/items   批量移除股票（body: {ts_codes:[...]}）
+```
+
+### 前端文件
+- Zustand Store：`frontend/src/stores/stock-list-store.ts`（无持久化，服务端存储）
+- 主页面：`frontend/src/app/stocks/page.tsx`（`AddToListDialog`, `RenameListDialog`）
+- API 方法：`frontend/src/lib/api-client.ts`（`getUserStockLists`, `createStockList`, `renameStockList`, `deleteStockList`, `getStockListItems`, `addStocksToList`, `removeStocksFromList`）
+- 类型定义：`frontend/src/types/stock.ts`（`StockList`, `StockListItem`）
+
+### ⚠️ stock_realtime 表的 JOIN 注意事项
+`stock_realtime` 表的主键是 `code`（纯数字代码，如 `000001`），**不是** `ts_code`。
+在需要关联行情数据时，必须先通过 `stock_basic` 桥接：
+
+```sql
+LEFT JOIN stock_basic sb ON sb.ts_code = {your_table}.ts_code
+LEFT JOIN stock_realtime sr ON sr.code = sb.code   -- ✅ 正确
+-- LEFT JOIN stock_realtime sr ON sr.ts_code = ... -- ❌ 错误，该列不存在
+```
+
+### 前端 ts_code 转换
+`stocks/page.tsx` 中的 `toTsCode()` 将纯数字代码转换为带交易所后缀的格式：
+- `6xxxxx` → `.SH`（上交所）
+- `4xxxxx` / `8xxxxx` → `.BJ`（北交所）
+- 其他 → `.SZ`（深交所）
+
 ## 已移除功能
 
 以下功能已从系统中移除（2026-03-25）：

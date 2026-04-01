@@ -98,6 +98,7 @@ from .endpoints import (
     dc_index,  # 东方财富板块数据
     dc_daily,  # 东方财富概念板块行情
     trade_cal,  # 交易日历
+    user_stock_lists,  # 用户股票列表（自选股）
     users,
 )
 
@@ -108,6 +109,7 @@ router = APIRouter()
 router.include_router(auth.router)
 router.include_router(users.router)
 router.include_router(profile.router)
+router.include_router(user_stock_lists.router, tags=["用户股票列表"])
 
 # 注册子路由
 router.include_router(stock_list.router, prefix="/stocks/list", tags=["股票列表管理"])  # 股票列表管理API

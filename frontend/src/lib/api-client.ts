@@ -33,6 +33,8 @@ import type {
   DynamicStrategyValidationResponse,
   DynamicStrategyTestResponse,
   DynamicStrategyStatistics,
+  StockList,
+  StockListItem,
 } from '@/types'
 
 /**
@@ -1407,6 +1409,58 @@ class ApiClient {
     offset?: number
   }): Promise<ApiResponse<any[]>> {
     const response = await axiosInstance.get('/api/notifications/logs', { params })
+    return response.data
+  }
+
+  // ========== 用户股票列表（自选股）API ==========
+
+  /** 获取我的所有股票列表 */
+  async getUserStockLists(): Promise<ApiResponse<{ items: StockList[]; total: number }>> {
+    const response = await axiosInstance.get('/api/user-stock-lists')
+    return response.data
+  }
+
+  /** 创建新列表 */
+  async createStockList(name: string, description?: string): Promise<ApiResponse<StockList>> {
+    const response = await axiosInstance.post('/api/user-stock-lists', { name, description })
+    return response.data
+  }
+
+  /** 重命名 / 修改列表描述 */
+  async renameStockList(listId: number, name: string, description?: string): Promise<ApiResponse<StockList>> {
+    const response = await axiosInstance.put(`/api/user-stock-lists/${listId}`, { name, description })
+    return response.data
+  }
+
+  /** 删除列表 */
+  async deleteStockList(listId: number): Promise<ApiResponse<null>> {
+    const response = await axiosInstance.delete(`/api/user-stock-lists/${listId}`)
+    return response.data
+  }
+
+  /** 获取列表中的所有股票（含行情） */
+  async getStockListItems(listId: number): Promise<ApiResponse<{ items: StockListItem[]; total: number }>> {
+    const response = await axiosInstance.get(`/api/user-stock-lists/${listId}/items`)
+    return response.data
+  }
+
+  /** 获取列表中所有股票的 ts_code（轻量） */
+  async getStockListTsCodes(listId: number): Promise<ApiResponse<{ ts_codes: string[] }>> {
+    const response = await axiosInstance.get(`/api/user-stock-lists/${listId}/ts-codes`)
+    return response.data
+  }
+
+  /** 批量添加股票到列表 */
+  async addStocksToList(listId: number, tsCodes: string[]): Promise<ApiResponse<{ added: number; skipped: number }>> {
+    const response = await axiosInstance.post(`/api/user-stock-lists/${listId}/items`, { ts_codes: tsCodes })
+    return response.data
+  }
+
+  /** 批量从列表移除股票 */
+  async removeStocksFromList(listId: number, tsCodes: string[]): Promise<ApiResponse<{ removed: number }>> {
+    const response = await axiosInstance.delete(`/api/user-stock-lists/${listId}/items`, {
+      data: { ts_codes: tsCodes },
+    })
     return response.data
   }
 }

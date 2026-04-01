@@ -28,6 +28,7 @@ from .trading_calendar_repository import TradingCalendarRepository
 from .sentiment_ai_analysis_repository import SentimentAiAnalysisRepository
 from .stock_daily_repository import StockDailyRepository
 from .user_quota_repository import UserQuotaRepository
+from .user_stock_list_repository import UserStockListRepository
 from .stock_basic_repository import StockBasicRepository
 from .task_execution_history_repository import TaskExecutionHistoryRepository
 from .top_list_repository import TopListRepository
@@ -171,4 +172,6 @@ __all__ = [
     "DcMemberRepository",
     "DcIndexRepository",
     "DcDailyRepository",
+    # 用户功能
+    "UserStockListRepository",
 ]

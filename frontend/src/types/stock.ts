@@ -166,6 +166,28 @@ export interface BacktestResult {
   }>
 }
 
+// 用户股票列表（自选股）
+export interface StockList {
+  id: number
+  name: string
+  description?: string | null
+  stock_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface StockListItem {
+  ts_code: string
+  code: string
+  name: string
+  market: string
+  industry: string
+  latest_price: number | null
+  pct_change: number | null
+  change_amount: number | null
+  added_at: string
+}
+
 // API响应类型
 export interface ApiResponse<T> {
   success: boolean
