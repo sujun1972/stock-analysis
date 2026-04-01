@@ -79,7 +79,9 @@ export default function EChartsStockChart({
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
   const [allData, setAllData] = useState<ChartData[]>(data)
+  const allDataRef = useRef<ChartData[]>(data)  // ref 版本，供事件回调读取最新值
   const [isLoading, setIsLoading] = useState(false)
+  const isLoadingRef = useRef(false)  // ref 版本，供事件回调读取最新值
   const hasLoadedAllDataRef = useRef(false)  // 标记是否已加载全部数据
   const currentDataZoomRef = useRef<{ start: number; end: number } | null>(null)  // 保存当前缩放位置
 
@@ -261,79 +263,99 @@ export default function EChartsStockChart({
       const sortedInitial = [...data].sort((a, b) =>
         new Date(removeDateTimePart(a.date)).getTime() - new Date(removeDateTimePart(b.date)).getTime()
       )
+      allDataRef.current = sortedInitial
       setAllData(sortedInitial)
+      currentDataZoomRef.current = null  // 重置缩放位置，新股票从默认视图开始
       hasLoadedAllDataRef.current = false  // 重置加载标记
     }
   }, [data, stockCode])
 
   /**
    * 懒加载更多历史数据
-   * 使用日期分页策略：当用户缩放到数据最早位置时，自动加载更早的数据
    *
-   * @param startValue - 当前可见区域的起始索引
-   * @param endValue - 当前可见区域的结束索引
+   * 触发条件：dataZoom 左端滑到数据总量的 20% 以内
+   * 策略：以当前最早日期的前一天为 end_date，向后端请求 500 条更早数据
+   * 视图锁定：用锚点日期重算 dataZoom 百分比，防止加载后视图跳位
+   * 自动续载：若 has_more=true 且视图仍在左端，自动触发下一批（无需用户再次滑动）
    */
-  const loadMoreData = useCallback(async (startValue: number, endValue: number) => {
-    // 防止重复加载：已加载全部数据或正在加载中
-    if (hasLoadedAllDataRef.current || isLoading) return
+  const loadMoreData = useCallback(async () => {
+    // 用 ref 读取最新值，避免闭包捕获旧 state
+    if (hasLoadedAllDataRef.current || isLoadingRef.current) return
 
-    const totalLength = allData.length
-    if (totalLength === 0) return
+    const currentData = allDataRef.current
+    if (currentData.length === 0) return
 
-    // 当用户缩放到数据的前20%位置时触发懒加载
-    const threshold = Math.floor(totalLength * 0.2)
-    if (startValue < threshold) {
-      setIsLoading(true)
+    // 读取图表当前 dataZoom 位置
+    if (!chartInstanceRef.current) return
+    const option = chartInstanceRef.current.getOption() as any
+    if (!option.dataZoom?.[0]) return
+    const zoomStart: number = option.dataZoom[0].start  // 百分比 0~100
 
-      // 保存当前视图位置，避免加载后图表跳转
-      if (chartInstanceRef.current) {
-        const option = chartInstanceRef.current.getOption() as any
-        if (option.dataZoom && option.dataZoom[0]) {
-          currentDataZoomRef.current = {
-            start: option.dataZoom[0].start,
-            end: option.dataZoom[0].end
-          }
+    // 当视图滑到最左端 20% 时才触发
+    const startValue = Math.floor((zoomStart / 100) * currentData.length)
+    const threshold = Math.floor(currentData.length * 0.2)
+    if (startValue >= threshold) return
+
+    isLoadingRef.current = true
+    setIsLoading(true)
+
+    try {
+      // 计算要请求的 end_date：当前最早日期的前一天
+      const earliestDate = currentData[0]?.date
+      if (!earliestDate) return
+      const earliestDateOnly = earliestDate.split('T')[0].split(' ')[0]
+      const endDate = new Date(earliestDateOnly + 'T00:00:00')
+      endDate.setDate(endDate.getDate() - 1)
+      const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+
+      // 记录锚点日期：视图最左端可见的那条数据，用于加载后精确恢复视图位置
+      const anchorIdx = Math.floor((zoomStart / 100) * currentData.length)
+      const anchorDate = removeDateTimePart(currentData[Math.max(0, anchorIdx)]?.date ?? '')
+      const zoomRange = (option.dataZoom[0].end as number) - zoomStart  // 视图宽度（百分比）
+
+      // 请求更早的 500 条数据
+      const response = await apiClient.getFeatures(stockCode, { end_date: endDateStr, limit: 500 })
+
+      if (response.data && response.data.length > 0) {
+        const newChartData = response.data as unknown as ChartData[]
+        // 去重合并（key 为日期字符串）
+        const dateSet = new Set(currentData.map(d => removeDateTimePart(d.date)))
+        const dedupedNew = newChartData.filter(d => !dateSet.has(removeDateTimePart(d.date)))
+        const sortedData = [...dedupedNew, ...currentData].sort((a, b) =>
+          new Date(removeDateTimePart(a.date)).getTime() - new Date(removeDateTimePart(b.date)).getTime()
+        )
+
+        // 用锚点日期在新数组中找对应位置，重算百分比，保持视图不跳转
+        const newAnchorIdx = sortedData.findIndex(d => removeDateTimePart(d.date) >= anchorDate)
+        const newStart = newAnchorIdx >= 0 ? (newAnchorIdx / sortedData.length) * 100 : 0
+        currentDataZoomRef.current = {
+          start: Math.max(0, newStart),
+          end: Math.min(100, newStart + zoomRange)
         }
+
+        allDataRef.current = sortedData
+        setAllData(sortedData)
       }
 
-      try {
-        // 计算请求参数：获取当前最早日期之前的数据
-        const earliestDate = allData[0]?.date
-        if (!earliestDate) return
+      if (!response.has_more) {
+        hasLoadedAllDataRef.current = true
+      }
+    } catch (error) {
+      console.error('Failed to load more historical data:', error)
+    } finally {
+      isLoadingRef.current = false
+      setIsLoading(false)
+    }
 
-        // 解析最早日期（兼容 "2026-03-13 00:00:00" 和 "2026-03-13T00:00:00" 格式）
-        const earliestDateOnly = earliestDate.split('T')[0].split(' ')[0]
-        const endDate = new Date(earliestDateOnly + 'T00:00:00')
-        endDate.setDate(endDate.getDate() - 1)
-        const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
-
-        // 请求更早的500条数据
-        const response = await apiClient.getFeatures(stockCode, {
-          end_date: endDateStr,
-          limit: 500
-        })
-
-        // 合并新旧数据并按日期排序
-        if (response.data && response.data.length > 0) {
-          const newChartData = response.data as unknown as ChartData[]
-          const mergedData = [...newChartData, ...allData]
-          const sortedData = mergedData.sort((a, b) =>
-            new Date(removeDateTimePart(a.date)).getTime() - new Date(removeDateTimePart(b.date)).getTime()
-          )
-          setAllData(sortedData)
-        }
-
-        // 更新加载状态标记
-        if (!response.has_more) {
-          hasLoadedAllDataRef.current = true
-        }
-      } catch (error) {
-        console.error('Failed to load more historical data:', error)
-      } finally {
-        setIsLoading(false)
+    // 如果还有更多数据，且当前视图仍在左端（start < 20%），自动继续加载下一批
+    // 不依赖 dataZoom 事件重触发，直接调度下一次加载
+    if (!hasLoadedAllDataRef.current) {
+      const latestStart = currentDataZoomRef.current?.start ?? 0
+      if (latestStart < 20) {
+        setTimeout(() => loadMoreData(), 200)
       }
     }
-  }, [stockCode, allData, isLoading])
+  }, [stockCode])
 
   useEffect(() => {
     if (!chartRef.current || allData.length === 0) return
@@ -1081,14 +1103,10 @@ export default function EChartsStockChart({
     // 确保布局正确
     chart.resize()
 
-    // 监听dataZoom事件以触发懒加载
-    chart.on('dataZoom', (params: any) => {
-      const dataZoom = chart.getOption().dataZoom as any[]
-      if (dataZoom && dataZoom[0]) {
-        const startValue = Math.floor((dataZoom[0].start / 100) * dates.length)
-        const endValue = Math.floor((dataZoom[0].end / 100) * dates.length)
-        loadMoreData(startValue, endValue)
-      }
+    // 监听dataZoom事件以触发懒加载（直接调用最新版本，无需重绑定）
+    chart.off('dataZoom')
+    chart.on('dataZoom', () => {
+      loadMoreData()
     })
 
     // 响应式调整

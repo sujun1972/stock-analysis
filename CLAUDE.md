@@ -3602,12 +3602,36 @@ async def get_data():
 
 已公开的 endpoint（`frontend` 项目调用，无需登录）：
 - `POST /api/sync/realtime` — 实时行情同步
-- `GET /api/features/{code}` — 特征数据（含自动同步）
+- `GET /api/features/{code}` — 特征数据（含自动同步，见下方说明）
 - `GET /api/stocks/{code}/minute` — 分时数据（含数据源回退）
 - `GET /api/stocks/{code}/daily` — 日线数据
 - `GET /api/stocks/{code}/quote-panel` — 行情面板（实时行情 + 每日指标，分析页使用）
 - `GET /api/stocks/{code}/basic-info` — 股票完整基础信息（含 Tushare 扩展字段，分析页使用）
 - `GET /api/cyq-chips/distribution?ts_code=xxx` — 筹码分布（含自动同步，分析页使用）
+
+#### `GET /api/features/{code}` 自动同步机制（2026-04-01）
+
+K 线图数据来自该接口，后端在返回前自动检测数据完整性并按需触发同步：
+
+| 场景 | 判断条件 | 动作 |
+|------|----------|------|
+| 首次加载（无数据） | `df.empty` 且 `end_dt` 为空或 ≤ 30天前 | 全量同步 5 年 |
+| 懒加载历史为空 | `df.empty` 且 `end_dt` 超过 30 天前 | 扩展同步（max(years_back, 10) 年）|
+| 最新数据不完整 | 库中最新日期 < `trade_cal` 最新交易日 | 增量同步（仅补缺失区间） |
+
+**缓存失效**：每次同步后必须调用 `cache.delete_pattern(f"daily_data:*{code}*")` 清除 Redis，否则 `DataAdapter` 返回的仍是旧数据（`sync_single_stock` 绕过了 `DataAdapter`，不自动失效缓存）。
+
+**增量同步**：`DailySyncService.sync_incremental(code, from_date)` 只拉取从 `from_date` 到今天的缺口，避免重复同步全量数据。
+
+#### EChartsStockChart 懒加载机制（2026-04-01）
+
+K 线图支持向左滑动时自动加载更早历史数据（`frontend/src/components/EChartsStockChart.tsx`）：
+
+- **触发条件**：`dataZoom.start < 20%`（视图左端在数据总量 20% 以内）
+- **请求参数**：以当前最早日期的前一天为 `end_date`，每批 500 条
+- **视图锁定**：记录锚点日期，新数据合并后重算 `dataZoom` 百分比，防止视图跳位
+- **自动续载**：加载完成后若 `has_more=true` 且视图仍在左端，自动调度下一批（200ms 延迟），无需用户再次滑动
+- **关键 Ref**：`allDataRef`/`isLoadingRef` 避免 `useCallback` 闭包读取到过期 state；`currentDataZoomRef` 传递锚点位置给自动续载逻辑
 
 **问题：前端无限循环调用 POST /api/sync/realtime**
 

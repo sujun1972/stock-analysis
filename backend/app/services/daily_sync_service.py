@@ -25,6 +25,51 @@ class DailySyncService(BaseSyncService):
     - 中止控制
     """
 
+    async def sync_incremental(self, code: str, from_date: str) -> Dict:
+        """
+        增量同步单只股票日线数据（只同步缺失区间）
+
+        Args:
+            code: 股票代码（如 '300829' 或 '300829.SZ'）
+            from_date: 起始日期（格式 YYYYMMDD），通常为数据库中最新日期的下一天
+
+        Returns:
+            同步结果字典，包含 records 字段（新增记录数）
+        """
+        config = await self.get_config()
+        provider = self.create_data_provider(
+            source=config["data_source"],
+            token=config.get("tushare_token", "")
+        )
+
+        end_date = datetime.now().strftime("%Y%m%d")
+
+        self.log_info(f"增量同步 {code} 日线数据 ({from_date} - {end_date})")
+
+        response = await self.run_in_thread(
+            provider.get_daily_data,
+            code=code,
+            start_date=from_date,
+            end_date=end_date,
+            adjust="qfq",
+            timeout=30.0
+        )
+
+        df = self.check_and_extract_data(response, f"{code}: 获取增量日线数据")
+
+        if df.empty:
+            self.log_info(f"{code}: 无新增数据（已是最新）")
+            return {"code": code, "records": 0}
+
+        count = await self.run_in_thread(
+            self.data_service.db.save_daily_data,
+            df,
+            code
+        )
+
+        self.log_success(f"{code}: 增量同步 {count} 条新记录")
+        return {"code": code, "records": count}
+
     async def sync_single_stock(self, code: str, years: int = 5) -> Dict:
         """
         同步单只股票日线数据
