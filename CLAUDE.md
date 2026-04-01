@@ -1634,6 +1634,20 @@ docker-compose down
 3. 避免代码重复和维护成本
 4. `stock_basic` 表统一管理所有股票的状态变更
 
+#### frontend 股票列表查询规范
+
+**所有 frontend 项目的股票列表请求必须传 `list_status: 'L'`，过滤退市股票。**
+
+`stock_basic` 表同步时保留了所有状态的股票（L/D/P），backend API 默认不过滤，需由调用方显式指定。
+
+涉及文件：
+- `frontend/src/components/stock-search.tsx` — 搜索框
+- `frontend/src/hooks/useStockFilter.ts` — 股票筛选 hook
+- `frontend/src/app/stocks/page.tsx` — 股票列表页
+- `frontend/src/lib/api-client.ts` 中的 `getStock()` — 单股精确查询
+
+**注意**：admin 项目的 `/data/stock-list` 页面有独立的上市状态筛选器，允许用户主动查看退市股票，不受此规范约束。
+
 ### 资金流向数据
 
 #### 沪深港通资金流向

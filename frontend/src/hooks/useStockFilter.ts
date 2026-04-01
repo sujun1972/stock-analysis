@@ -92,6 +92,7 @@ export function useStockFilter(
         limit: filters.pageSize || 20,
         sort_by: filters.sortBy || 'pct_change',
         sort_order: filters.sortOrder || 'desc',
+        list_status: 'L',  // 只显示上市股票，过滤退市股票
       }
 
       if (filters.market && filters.market !== 'all') {

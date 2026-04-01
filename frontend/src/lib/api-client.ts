@@ -302,7 +302,7 @@ class ApiClient {
   // 获取股票列表
   async getStockList(params?: {
     market?: string
-    status?: string
+    list_status?: string  // L-上市, D-退市, P-暂停上市；frontend 调用应传 'L' 过滤退市股票
     skip?: number
     limit?: number
     search?: string
@@ -337,9 +337,9 @@ class ApiClient {
 
   // 获取单只股票信息
   async getStock(code: string): Promise<StockInfo> {
-    // 通过搜索API获取单个股票信息，精确匹配股票代码
+    // 通过搜索API获取单个股票信息，精确匹配股票代码，只查上市股票
     const response = await axiosInstance.get(`/api/stocks/list`, {
-      params: { search: code, limit: 20 }
+      params: { search: code, limit: 20, list_status: 'L' }
     })
     const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
     if (result.data?.items && result.data.items.length > 0) {

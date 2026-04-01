@@ -36,6 +36,7 @@ async def get_industries():
         SELECT industry, COUNT(*) as cnt
         FROM stock_basic
         WHERE industry IS NOT NULL AND industry != ''
+          AND list_status = 'L'
         GROUP BY industry
         ORDER BY cnt DESC
     """)

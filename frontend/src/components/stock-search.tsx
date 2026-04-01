@@ -93,7 +93,7 @@ export function StockSearch({
     searchTimerRef.current = setTimeout(async () => {
       setIsSearching(true)
       try {
-        const result = await apiClient.getStockList({ search: query, limit: maxResults })
+        const result = await apiClient.getStockList({ search: query, limit: maxResults, list_status: 'L' })
         setSearchResults(result.items || [])
         setShowResults(true)
         setSelectedIndex(-1)

@@ -47,6 +47,7 @@ export default function StocksPage() {
         limit: pageSize,
         sort_by: sortBy,
         sort_order: sortOrder,
+        list_status: 'L',  // 只显示上市股票，过滤退市股票
       }
 
       if (marketFilter !== 'all') {
