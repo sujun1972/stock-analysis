@@ -38,7 +38,6 @@ import {
   Brain,
   Bell,
   Flame,
-  RefreshCw,
   PackagePlus,
   TrendingUp as TrendingUpIcon,
   Wrench,
@@ -113,11 +112,6 @@ const navItems: NavItem[] = [
         name: '股票日线数据',
         href: '/market/daily',
         icon: LineChart
-      },
-      {
-        name: '实时行情同步',
-        href: '/market/realtime',
-        icon: RefreshCw
       },
       {
         name: '复权因子',

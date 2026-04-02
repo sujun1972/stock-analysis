@@ -443,7 +443,6 @@ const handleSyncConfirm = async () => {
 - AH股比价页面（`/features/stk-ah-comparison`）**（✨ 新增于 2026-03-23，5000积分/次，数据从2025-08-12开始，每次最大1000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，后端 GET 端点新增 trade_date 参数，resolve_default_trade_date 自动回填）**
 - 机构调研表页面（`/features/stk-surv`）**（✨ 新增于 2026-03-23，5000积分/次，单次最大100行，支持按接待方式和机构类型筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、statistics 合并到主响应、同步弹窗解耦查询日期）**
 - 券商每月荐股页面（`/features/broker-recommend`）**（✨ 新增于 2026-03-23，6000积分/次，单次最大1000行，每月1-3日更新当月数据；2026-03-28 全面重构：迁移至模块化 brokerRecommendApi、isTaskRunning 派生 syncing、DataTable mobileCard、同步弹窗选月度）**
-- 实时行情同步页面（`/market/realtime`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次）或AkShare获取实时行情快照，支持涨跌幅榜、统计卡片、分页查询（30条/页）和异步同步功能，支持数据源切换；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader、"数据同步" Card 改为 "同步配置" 保留参数选择）**
 - 股票日线数据页面（`/market/daily`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次），支持单只股票和全市场两种同步模式，分页查询（30条/页），3张统计卡片（股票数/记录总数/最新交易日），异步同步功能，已从数据初始化页面迁移至行情数据菜单；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader；2026-04-02 性能优化：通过 trading_calendar 定位最近交易日再精确查 stock_daily（< 10ms，原 10+ 秒），统计接口仅在页面初始化时调用一次，修复单只股票查询 500 错误及日期格式问题）**
 - 每日停复牌信息页面（`/market/suspend`）**（✨ 新增于 2026-03-24，不定期更新，支持分页查询，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
 - 每日涨跌停价格页面（`/market/stk-limit-d`）**（✨ 新增于 2026-03-24，2000积分/次，每交易日8:40更新，单次最大5800条，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
@@ -1351,7 +1350,7 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 #### 任务分类和排序
 任务按以下类别排序：
 1. **基础数据** (100-199) - 股票列表、新股等（注：退市股票通过股票列表同步自动更新，无需单独任务）
-2. **行情数据** (200-299) - 日K、分钟K、实时行情
+2. **行情数据** (200-299) - 日K、分钟K、涨跌停价格等
 3. **扩展数据** (300-399) - 每日指标、资金流向、融资融券等
 4. **资金流向** (400-499) - 各类资金流向专项任务
 5. **两融及转融通** (500-599) - 融资融券相关任务
@@ -2028,7 +2027,6 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 10. **股票数据**
    - `StockDailyRepository` - 股票日线数据（支持回测数据加载）
    - `StockBasicRepository` - 股票基础信息（代码、名称、市场、行业等）
-   - `StockRealtimeRepository` - 实时行情数据（支持分页查询、涨跌幅榜、统计信息）**（✨ 新增于 2026-03-25）**
 
 11. **用户管理**
    - `UserQuotaRepository` - 用户配额管理（配额重置、配额查询、使用量统计）
@@ -3725,7 +3723,6 @@ async def get_data():
 ```
 
 已公开的 endpoint（`frontend` 项目调用，无需登录）：
-- `POST /api/sync/realtime` — 实时行情同步
 - `GET /api/features/{code}` — 特征数据（含自动同步，见下方说明）
 - `GET /api/stocks/{code}/minute` — 分时数据（含数据源回退）
 - `GET /api/stocks/{code}/daily` — 日线数据
@@ -3758,14 +3755,6 @@ K 线图支持向左滑动时自动加载更早历史数据（`frontend/src/comp
 - **视图锁定**：记录锚点日期，新数据合并后重算 `dataZoom` 百分比，防止视图跳位
 - **自动续载**：加载完成后若 `has_more=true` 且视图仍在左端，自动调度下一批（200ms 延迟），无需用户再次滑动
 - **关键 Ref**：`allDataRef`/`isLoadingRef` 避免 `useCallback` 闭包读取到过期 state；`currentDataZoomRef` 传递锚点位置给自动续载逻辑
-
-**问题：前端无限循环调用 POST /api/sync/realtime**
-
-`GET /api/market/refresh-check` 若 `last_update=None`，`should_refresh_realtime_data()` 永远返回 `True, '首次加载'`，导致 `useSmartRefresh` hook 在页面每次加载时无限触发同步。
-
-**根本原因**：`last_update` 没有从数据库读取真实的最后更新时间。
-
-**修复方式**：在 `refresh-check` endpoint 中通过 `StockRealtimeRepository.get_last_updated(codes)` 获取真实更新时间后再传入判断函数。
 
 **问题：Tushare 分时数据报 "Invalid date format"**
 
