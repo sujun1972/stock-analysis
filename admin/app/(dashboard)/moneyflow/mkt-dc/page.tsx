@@ -330,10 +330,10 @@ export default function MoneyflowMktDcPage() {
     <div className="space-y-6">
       <PageHeader
         title="大盘资金流向（DC）"
-        description="东方财富大盘资金流向数据，包含上证/深证指数及主力资金流向情况"
+        description="获取东方财富大盘资金流向数据，每日盘后更新"
         details={<>
           <div>接口：moneyflow_mkt_dc</div>
-          <a href="https://tushare.pro/document/2?doc_id=347" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=345" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

@@ -250,11 +250,11 @@ export default function StkSurvPage() {
     <div className="space-y-6">
       <PageHeader
         title="机构调研表"
-        description="上市公司机构调研记录数据"
+        description="获取上市公司机构调研记录数据"
         details={
           <>
             <div>接口：stk_surv</div>
-            <div>积分：5000积分/次，单次最大100行</div>
+            <a href="https://tushare.pro/document/2?doc_id=275" target="_blank" rel="noopener noreferrer">查看文档</a>
           </>
         }
         actions={

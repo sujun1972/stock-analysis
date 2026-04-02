@@ -257,10 +257,10 @@ export default function MarginSecsPage() {
     <div className="space-y-6">
       <PageHeader
         title="融资融券标的"
-        description="查询融资融券标的证券名单（盘前更新，Tushare接口）"
+        description="获取沪深京三大交易所融资融券标的（包括ETF），每天盘前更新"
         details={<>
           <div>接口：margin_secs</div>
-          <a href="https://tushare.pro/document/2?doc_id=214" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=326" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

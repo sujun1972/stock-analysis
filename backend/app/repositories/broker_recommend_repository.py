@@ -308,15 +308,22 @@ class BrokerRecommendRepository(BaseRepository):
             logger.warning("DataFrame为空,跳过插入")
             return 0
 
+        def to_python_type(value):
+            if pd.isna(value):
+                return None
+            if hasattr(value, 'item'):
+                return value.item()
+            return value
+
         try:
             # 准备插入数据
             values = []
             for _, row in df.iterrows():
                 values.append((
-                    self._to_python_type(row.get('month')),
-                    self._to_python_type(row.get('broker')),
-                    self._to_python_type(row.get('ts_code')),
-                    self._to_python_type(row.get('name'))
+                    to_python_type(row.get('month')),
+                    to_python_type(row.get('broker')),
+                    to_python_type(row.get('ts_code')),
+                    to_python_type(row.get('name'))
                 ))
 
             # UPSERT SQL

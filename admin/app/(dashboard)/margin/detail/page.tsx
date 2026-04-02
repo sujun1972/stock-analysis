@@ -336,10 +336,10 @@ export default function MarginDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title="融资融券交易明细"
-        description="个股融资融券交易明细数据（Tushare接口，2000积分/次，单次最大6000行）"
+        description="获取沪深两市每日融资融券明细"
         details={<>
           <div>接口：margin_detail</div>
-          <a href="https://tushare.pro/document/2?doc_id=58" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=59" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

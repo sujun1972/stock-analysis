@@ -275,14 +275,11 @@ export default function StkAhComparisonPage() {
     <div className="space-y-6">
       <PageHeader
         title="AH股比价"
-        description="同时在A股和港股上市的股票价格比价数据，用于分析估值差异和溢价情况"
-        details={
-          <>
-            <div>接口：stk_ah_comparison</div>
-            <div>积分：5000积分/次，单次最大1000行</div>
-            <div>数据起始：2025-08-12，每日盘后17:00更新</div>
-          </>
-        }
+        description="AH股比价数据，可根据交易日期获取历史"
+        details={<>
+          <div>接口：stk_ah_comparison</div>
+          <a href="https://tushare.pro/document/2?doc_id=399" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setShowSyncDialog(true)} disabled={syncing}>
             {syncing ? (

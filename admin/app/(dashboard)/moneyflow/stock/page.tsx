@@ -349,8 +349,8 @@ export default function MoneyflowPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="个股资金流向（Tushare）"
-        description="基于主动买卖单统计的资金流向数据（小单/中单/大单/特大单）"
+        title="个股资金流向"
+        description="获取沪深A股票资金流向数据，分析大单小单成交情况，用于判别资金动向，数据开始于2010年。"
         details={<>
           <div>接口：moneyflow</div>
           <a href="https://tushare.pro/document/2?doc_id=170" target="_blank" rel="noopener noreferrer">查看文档</a>

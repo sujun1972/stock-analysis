@@ -264,10 +264,10 @@ export default function StkAuctionCPage() {
     <div className="space-y-6">
       <PageHeader
         title="股票收盘集合竞价"
-        description="股票收盘15:00集合竞价数据，每天盘后更新（需股票分钟权限）"
+        description="股票收盘15:00集合竞价数据，每天盘后更新"
         details={<>
           <div>接口：stk_auction_c</div>
-          <a href="https://tushare.pro/document/2?doc_id=299" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=354" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

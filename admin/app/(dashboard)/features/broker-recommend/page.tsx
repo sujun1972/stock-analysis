@@ -182,9 +182,7 @@ export default function BrokerRecommendPage() {
         description="查看券商月度金股推荐数据，一般在每月1-3日内更新当月数据"
         details={<>
           <div>接口：broker_recommend</div>
-          <div>积分消耗：6000积分/次</div>
-          <div>单次最大：1000行</div>
-          <a href="https://tushare.pro/document/2?doc_id=364" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=267" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setShowSyncDialog(true)} disabled={syncing}>

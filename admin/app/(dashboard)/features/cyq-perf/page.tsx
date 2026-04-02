@@ -228,11 +228,10 @@ export default function CyqPerfPage() {
     <div className="space-y-6">
       <PageHeader
         title="每日筹码及胜率"
-        description="A股每日筹码平均成本和胜率情况，数据从2018年开始，每天18-19点更新"
+        description="获取A股每日筹码平均成本和胜率情况，每天18~19点左右更新，数据从2018年开始"
         details={<>
           <div>接口：cyq_perf</div>
-          <div>积分消耗：5000积分/次</div>
-          <div>必填参数：股票代码（ts_code）</div>
+          <a href="https://tushare.pro/document/2?doc_id=293" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

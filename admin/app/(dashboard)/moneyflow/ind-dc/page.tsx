@@ -364,10 +364,10 @@ export default function MoneyflowIndDcPage() {
     <div className="space-y-6">
       <PageHeader
         title="板块资金流向（DC）"
-        description="东方财富板块资金流向数据，包含行业、概念、地域板块的主力资金流向情况"
+        description="获取东方财富板块资金流向，每天盘后更新"
         details={<>
           <div>接口：moneyflow_ind_dc</div>
-          <a href="https://tushare.pro/document/2?doc_id=348" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=344" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

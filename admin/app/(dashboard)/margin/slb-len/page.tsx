@@ -234,10 +234,10 @@ export default function SlbLenPage() {
     <div className="space-y-6">
       <PageHeader
         title="转融资交易汇总"
-        description="转融通融资汇总数据（期初余额、竞价成交、再借成交、偿还、期末余额）"
+        description="转融通融资汇总"
         details={<>
           <div>接口：slb_len</div>
-          <a href="https://tushare.pro/document/2?doc_id=289" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=331" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

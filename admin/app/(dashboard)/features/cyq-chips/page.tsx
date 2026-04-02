@@ -181,8 +181,7 @@ export default function CyqChipsPage() {
         description="A股每日筹码分布数据，包含各价格区间的筹码占比，数据每天18-19点更新"
         details={<>
           <div>接口：cyq_chips</div>
-          <div>积分消耗：5000积分/次</div>
-          <div>必填参数：股票代码（ts_code）</div>
+          <a href="https://tushare.pro/document/2?doc_id=294" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

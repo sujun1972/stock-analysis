@@ -304,10 +304,10 @@ export default function StkNineturnPage() {
     <div className="space-y-6">
       <PageHeader
         title="神奇九转指标"
-        description="基于技术分析的趋势反转指标，识别连续9天特定走势（6000积分/次）"
+        description="日线级别配合60min的九转效果，数据从20230101开始。"
         details={<>
           <div>接口：stk_nineturn</div>
-          <a href="https://tushare.pro/document/2?doc_id=295" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=364" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

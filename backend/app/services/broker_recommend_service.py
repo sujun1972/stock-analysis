@@ -18,12 +18,12 @@ class BrokerRecommendService:
 
     def __init__(self):
         self.broker_repo = BrokerRecommendRepository()
-        self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
         """获取Tushare数据提供者"""
         try:
-            provider = self.provider_factory.get_provider('tushare')
+            from app.core.config import settings
+            provider = DataProviderFactory.create_provider('tushare', token=settings.TUSHARE_TOKEN)
             logger.debug("✓ 已获取Tushare数据提供者")
             return provider
         except Exception as e:
@@ -58,7 +58,7 @@ class BrokerRecommendService:
             # 获取Tushare数据
             provider = self._get_provider()
             df = await asyncio.to_thread(
-                provider.pro.broker_recommend,
+                provider.get_broker_recommend,
                 month=month
             )
 

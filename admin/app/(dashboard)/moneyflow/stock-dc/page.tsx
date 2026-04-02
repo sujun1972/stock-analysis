@@ -405,7 +405,7 @@ export default function MoneyflowStockDcPage() {
     <div className="space-y-6">
       <PageHeader
         title="个股资金流向(DC)"
-        description="东方财富个股资金流向数据，包含主力资金、超大单、大单、中单、小单流入流出情况"
+        description="获取东方财富个股资金流向数据，每日盘后更新，数据开始于20230911"
         details={<>
           <div>接口：moneyflow_dc</div>
           <a href="https://tushare.pro/document/2?doc_id=349" target="_blank" rel="noopener noreferrer">查看文档</a>

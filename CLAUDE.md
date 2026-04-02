@@ -765,10 +765,15 @@ from core.src.providers import DataProviderFactory
 class YourService:
     def __init__(self):
         self.your_repo = YourRepository()
-        self.provider_factory = DataProviderFactory()
+
+    def _get_provider(self):
+        """获取 Tushare 数据提供者"""
+        from app.core.config import settings
+        # ⚠️ DataProviderFactory 是纯静态类，使用类方法 create_provider，不要实例化后调用 get_provider
+        return DataProviderFactory.create_provider('tushare', token=settings.TUSHARE_TOKEN)
 
     async def sync_data(self, trade_date=None, start_date=None, end_date=None):
-        # 1. 获取 Tushare 数据
+        # 1. 获取 Tushare 数据（使用 provider 封装方法，不要直接调用 provider.pro.xxx）
         provider = self._get_provider()
         df = await asyncio.to_thread(provider.get_your_data, ...)
 
@@ -779,6 +784,20 @@ class YourService:
         records = await asyncio.to_thread(self.your_repo.bulk_upsert, df)
 
         return {"status": "success", "records": records}
+```
+
+**⚠️ DataProviderFactory 常见错误**：
+```python
+# ❌ 错误：DataProviderFactory 没有实例方法 get_provider()
+self.provider_factory = DataProviderFactory()
+provider = self.provider_factory.get_provider('tushare')  # AttributeError
+
+# ❌ 错误：不传 token，Tushare 会报 "Token 未配置"
+DataProviderFactory.create_provider('tushare')
+
+# ✅ 正确：使用类方法，传入 token
+from app.core.config import settings
+DataProviderFactory.create_provider('tushare', token=settings.TUSHARE_TOKEN)
 ```
 
 #### 4. Celery 任务

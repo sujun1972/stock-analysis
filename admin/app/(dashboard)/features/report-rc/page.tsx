@@ -304,10 +304,10 @@ export default function ReportRcPage() {
     <div className="space-y-6">
       <PageHeader
         title="卖方盈利预测数据"
-        description="券商研报盈利预测数据，包含EPS、PE、ROE等关键指标和评级信息（5000积分/次）"
+        description="获取券商（卖方）每天研报的盈利预测数据，数据从2010年开始，每晚19~22点更新当日数据"
         details={<>
           <div>接口：report_rc</div>
-          <a href="https://tushare.pro/document/2?doc_id=285" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=292" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

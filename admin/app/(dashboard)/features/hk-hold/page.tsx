@@ -256,10 +256,10 @@ export default function HkHoldPage() {
     <div className="space-y-6">
       <PageHeader
         title="沪深港股通持股明细"
-        description="查询沪深港股通持股数据（2000积分/次，2024年8月20日起改为季度披露）"
+        description="获取沪深港股通持股明细，数据来源港交所。"
         details={<>
           <div>接口：hk_hold</div>
-          <a href="https://tushare.pro/document/2?doc_id=201" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=188" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

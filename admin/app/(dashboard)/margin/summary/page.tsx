@@ -288,7 +288,7 @@ export default function MarginSummaryPage() {
     <div className="space-y-6">
       <PageHeader
         title="融资融券交易汇总"
-        description="按交易所统计的融资融券交易汇总数据"
+        description="获取融资融券每日交易汇总数据"
         details={<>
           <div>接口：margin</div>
           <a href="https://tushare.pro/document/2?doc_id=58" target="_blank" rel="noopener noreferrer">查看文档</a>

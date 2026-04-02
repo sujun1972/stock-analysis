@@ -192,11 +192,10 @@ export default function CcassHoldPage() {
     <div className="space-y-6">
       <PageHeader
         title="中央结算系统持股汇总"
-        description="查询中央结算系统（CCASS）持股汇总数据，数据每天更新"
+        description="描述：获取中央结算系统持股汇总数据，覆盖全部历史数据，根据交易所披露时间，当日数据在下一交易日早上9点前完成入库"
         details={<>
           <div>接口：ccass_hold</div>
-          <div>积分消耗：5000积分/次</div>
-          <a href="https://tushare.pro/document/2?doc_id=204" target="_blank" rel="noopener noreferrer">查看文档</a>
+          <a href="https://tushare.pro/document/2?doc_id=295" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>

@@ -316,7 +316,7 @@ export default function MoneyflowHsgtPage() {
     <div className="space-y-6">
       <PageHeader
         title="沪深港通资金流向"
-        description="查看沪深港通每日资金流向数据，包含北向（沪股通+深股通）和南向（港股通）资金"
+        description="获取沪股通、深股通、港股通每日资金流向数据，每次最多返回300条记录，总量不限制。"
         details={<>
           <div>接口：moneyflow_hsgt</div>
           <a href="https://tushare.pro/document/2?doc_id=47" target="_blank" rel="noopener noreferrer">查看文档</a>
