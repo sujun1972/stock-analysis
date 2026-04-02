@@ -10,7 +10,7 @@ import { stockDailyApi } from '@/lib/api'
 import type { StockDailyData, StockDailyStatistics, FullHistoryProgressData } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, Database, Calendar, BarChart3, History } from 'lucide-react'
+import { RefreshCw, Database, Calendar, BarChart3, History } from 'lucide-react'
 
 export default function StockDailyPage() {
   const [data, setData] = useState<StockDailyData[]>([])
@@ -44,7 +44,19 @@ export default function StockDailyPage() {
   const syncing = isTaskRunning('tasks.sync_daily_single')
   const fullHistorySyncing = isTaskRunning('tasks.sync_daily_full_history')
 
-  // 加载数据
+  // 加载统计信息（只在页面初始化时调用一次）
+  const loadStatistics = useCallback(async () => {
+    try {
+      const statsResp = await stockDailyApi.getStatistics()
+      if (statsResp.code === 200) {
+        setStatistics(statsResp.data || null)
+      }
+    } catch {
+      // 静默失败
+    }
+  }, [])
+
+  // 加载数据（查询参数变化时调用，不重复调 statistics）
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
@@ -58,18 +70,11 @@ export default function StockDailyPage() {
         page_size: pageSize
       }
 
-      const [dataResp, statsResp] = await Promise.all([
-        stockDailyApi.getData(params),
-        stockDailyApi.getStatistics(code || undefined, startDate || undefined, endDate || undefined)
-      ])
+      const dataResp = await stockDailyApi.getData(params)
 
       if (dataResp.code === 200) {
         setData(dataResp.data?.items || [])
         setTotalRecords(dataResp.data?.total || 0)
-      }
-
-      if (statsResp.code === 200) {
-        setStatistics(statsResp.data || null)
       }
     } catch (err: any) {
       setError(err.message || '加载数据失败')
@@ -94,6 +99,11 @@ export default function StockDailyPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  // 统计信息只在初始化时加载一次
+  useEffect(() => {
+    loadStatistics()
+  }, [loadStatistics])
 
   useEffect(() => {
     loadFullHistoryProgress()
@@ -138,6 +148,7 @@ export default function StockDailyPage() {
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
+            loadStatistics().catch(() => {})
             toast.success('数据同步完成', { description: '日线数据已更新' })
           } else if (task.status === 'failure') {
             toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
@@ -220,7 +231,7 @@ export default function StockDailyPage() {
     {
       key: 'date',
       header: '日期',
-      accessor: (row) => row.date
+      accessor: (row) => typeof row.date === 'string' ? row.date.split('T')[0] : row.date
     },
     {
       key: 'close',
@@ -352,50 +363,43 @@ export default function StockDailyPage() {
 
       {/* 统计卡片 */}
       {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">股票数量</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.stock_count.toLocaleString()}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">记录总数</CardTitle>
-              <Database className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.record_count.toLocaleString()}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均涨跌幅</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${
-                statistics.avg_pct_change > 0 ? 'text-red-600' :
-                statistics.avg_pct_change < 0 ? 'text-green-600' :
-                'text-gray-600'
-              }`}>
-                {statistics.avg_pct_change > 0 ? '+' : ''}{statistics.avg_pct_change.toFixed(2)}%
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">股票数量</p>
+                  <p className="text-2xl font-bold">{statistics.stock_count.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">上市股票总数</p>
+                </div>
+                <BarChart3 className="h-8 w-8 text-muted-foreground" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最新日期</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.latest_date || '-'}</div>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">记录总数</p>
+                  <p className="text-2xl font-bold">{statistics.record_count.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">日线数据条数（近似值）</p>
+                </div>
+                <Database className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">最新交易日</p>
+                  <p className="text-2xl font-bold">{statistics.latest_date || '-'}</p>
+                  <p className="text-xs text-muted-foreground mt-1">数据起始 {statistics.earliest_date}</p>
+                </div>
+                <Calendar className="h-8 w-8 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
         </div>

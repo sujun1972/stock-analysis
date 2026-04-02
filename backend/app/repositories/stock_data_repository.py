@@ -338,36 +338,31 @@ class StockDataRepository(BaseRepository):
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None  # 保留参数签名兼容性，实际由调用方做客户端分页
     ) -> pd.DataFrame:
         """
-        获取日线数据
+        获取单只股票日线数据
 
         Args:
-            code: 股票代码
-            start_date: 起始日期（格式：YYYY-MM-DD，可选）
-            end_date: 结束日期（格式：YYYY-MM-DD，可选）
-            limit: 最大记录数（可选）
+            code: 股票代码（完整 ts_code，如 000001.SZ）
+            start_date: 起始日期（YYYY-MM-DD，可选）
+            end_date: 结束日期（YYYY-MM-DD，可选）
+            limit: 保留参数，当前不传给底层（由 Service 层做客户端分页）
 
         Returns:
-            日线数据 DataFrame
+            日线数据 DataFrame，以 date 为 index，升序排列
 
         Examples:
-            >>> # 获取最近100条数据
-            >>> df = repo.get_daily_data('000001', limit=100)
-            >>>
-            >>> # 获取指定日期范围数据
-            >>> df = repo.get_daily_data('000001', '2024-01-01', '2024-12-31')
+            >>> df = repo.get_daily_data('000001.SZ', '2024-01-01', '2024-12-31')
         """
         try:
-            return self.db.get_daily_data(
-                code=code,
+            return self.db.load_daily_data(
+                stock_code=code,
                 start_date=start_date,
-                end_date=end_date,
-                limit=limit
+                end_date=end_date
             )
         except PsycopgDatabaseError as e:
-            logger.error(f"获取日线数据失��� (code={code}): {e}")
+            logger.error(f"获取日线数据失败 (code={code}): {e}")
             raise DatabaseError(
                 f"股票 {code} 日线数据查询失败",
                 error_code="DAILY_DATA_QUERY_FAILED",

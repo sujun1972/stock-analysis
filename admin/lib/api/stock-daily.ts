@@ -28,7 +28,6 @@ export interface StockDailyData {
 export interface StockDailyStatistics {
   stock_count: number
   record_count: number
-  avg_pct_change: number
   latest_date: string | null
   earliest_date: string | null
 }
@@ -80,10 +79,8 @@ export class StockDailyApiClient extends BaseApiClient {
    * @param end_date 结束日期
    * @returns 统计信息
    */
-  async getStatistics(code?: string, start_date?: string, end_date?: string): Promise<ApiResponse<StockDailyStatistics>> {
-    return this.get('/api/stock-daily/statistics', {
-      params: { code, start_date, end_date }
-    })
+  async getStatistics(): Promise<ApiResponse<StockDailyStatistics>> {
+    return this.get('/api/stock-daily/statistics')
   }
 
   /**

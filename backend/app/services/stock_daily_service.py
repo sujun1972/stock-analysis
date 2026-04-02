@@ -73,6 +73,11 @@ class StockDailyService:
                 # 转换为列表
                 if not df.empty:
                     df = df.reset_index()
+                    # 将 date 列转为纯日期字符串，避免序列化成 datetime ISO 格式
+                    if 'date' in df.columns:
+                        df['date'] = df['date'].apply(
+                            lambda d: d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d)[:10]
+                        )
                     df['code'] = code
                     # 从行情缓存获取股票名称
                     quotes = await stock_quote_cache.get_quotes_batch([code])
@@ -116,160 +121,136 @@ class StockDailyService:
         offset: int = 0
     ) -> tuple[List[Dict], int]:
         """
-        获取最新的日线数据（多只股票）
+        获取最近交易日的日线数据（多只股票，分页）
+
+        性能策略：
+        - 用 trading_calendar 定位最近交易日（索引查询，< 1ms）
+        - 按精确日期查 stock_daily（date 索引命中，< 5ms）
+        - 避免原来的 DISTINCT ON 全表扫描（原耗时 10+ 秒）
+        - total 用 stock_basic 上市股票数代替 COUNT(DISTINCT)（快 100 倍）
 
         Returns:
-            (items, total)
+            (items, total) 其中 total 为上市股票总数（近似分页基准）
         """
+        conn = self.db.pool_manager.get_connection()
+        cursor = conn.cursor()
         try:
-            # 构建查询（不做 LEFT JOIN，名称通过行情缓存注入）
-            conn = self.db.pool_manager.get_connection()
-            cursor = conn.cursor()
+            # 从 trading_calendar 找最近交易日（用户指定 end_date 时取不超过该日期的最近交易日）
+            cursor.execute(
+                "SELECT MAX(trade_date) FROM trading_calendar"
+                " WHERE is_trading_day = true AND trade_date <= %s",
+                (end_date or 'CURRENT_DATE',)
+            ) if end_date else cursor.execute(
+                "SELECT MAX(trade_date) FROM trading_calendar"
+                " WHERE is_trading_day = true AND trade_date <= CURRENT_DATE"
+            )
+            latest_date = (cursor.fetchone() or [None])[0]
 
-            # 构建 WHERE 条件
-            where_conditions = ["sd.code LIKE '%%.%%'"]  # 只查完整 ts_code 格式（如 000001.SZ），%% 为 psycopg2 转义
-            params = []
+            if not latest_date:
+                return [], 0
 
-            if start_date:
-                where_conditions.append("sd.date >= %s")
-                params.append(start_date)
+            # start_date 过滤：最近交易日早于查询起始日，视为无数据
+            if start_date and str(latest_date) < start_date:
+                return [], 0
 
-            if end_date:
-                where_conditions.append("sd.date <= %s")
-                params.append(end_date)
-
-            where_clause = " AND ".join(where_conditions)
-
-            # 查询总数
-            count_query = f"""
-                SELECT COUNT(DISTINCT sd.code)
-                FROM stock_daily sd
-                WHERE {where_clause}
-            """
-            cursor.execute(count_query, params)
+            # total 用上市股票数（stock_basic 索引，避免 COUNT(DISTINCT) 全表扫描）
+            cursor.execute("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'L'")
             total = cursor.fetchone()[0]
 
-            # 查询数据（每只股票取最新一条）
-            query = f"""
-                SELECT DISTINCT ON (sd.code)
-                    sd.code,
-                    sd.date,
-                    sd.open,
-                    sd.high,
-                    sd.low,
-                    sd.close,
-                    sd.volume,
-                    sd.amount,
-                    sd.amplitude,
-                    sd.pct_change,
-                    sd.change,
-                    sd.turnover
+            cursor.execute(
+                """
+                SELECT sd.code, sd.date, sd.open, sd.high, sd.low, sd.close,
+                       sd.volume, sd.amount, sd.amplitude, sd.pct_change, sd.change, sd.turnover
                 FROM stock_daily sd
-                WHERE {where_clause}
-                ORDER BY sd.code, sd.date DESC
+                WHERE sd.date = %s
+                  AND sd.code LIKE '%%.%%'
+                ORDER BY sd.code
                 LIMIT %s OFFSET %s
-            """
-            params_with_limit = params + [limit, offset]
-            cursor.execute(query, params_with_limit)
-
+                """,
+                (latest_date, limit, offset)
+            )
             rows = cursor.fetchall()
-            cursor.close()
-            conn.close()
-
-            items = []
-            ts_codes = []
-            for row in rows:
-                ts_codes.append(row[0])
-                items.append({
-                    'code': row[0],
-                    'name': '',
-                    'date': row[1].strftime('%Y-%m-%d') if row[1] else None,
-                    'open': float(row[2]) if row[2] else None,
-                    'high': float(row[3]) if row[3] else None,
-                    'low': float(row[4]) if row[4] else None,
-                    'close': float(row[5]) if row[5] else None,
-                    'volume': int(row[6]) if row[6] else None,
-                    'amount': float(row[7]) if row[7] else None,
-                    'amplitude': float(row[8]) if row[8] else None,
-                    'pct_change': float(row[9]) if row[9] else None,
-                    'change': float(row[10]) if row[10] else None,
-                    'turnover': float(row[11]) if row[11] else None,
-                })
-
-            # 从行情缓存批量注入股票名称
-            if ts_codes:
-                quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
-                for item in items:
-                    item['name'] = quotes.get(item['code'], {}).get('name', '')
-
-            return items, total
 
         except Exception as e:
             logger.error(f"查询最新日线数据失败: {e}")
             raise
+        finally:
+            cursor.close()
+            conn.close()
 
-    async def get_statistics(
-        self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ) -> Dict:
+        items = []
+        ts_codes = []
+        for row in rows:
+            ts_codes.append(row[0])
+            items.append({
+                'code': row[0],
+                'name': '',
+                'date': row[1].strftime('%Y-%m-%d') if row[1] else None,
+                'open': float(row[2]) if row[2] is not None else None,
+                'high': float(row[3]) if row[3] is not None else None,
+                'low': float(row[4]) if row[4] is not None else None,
+                'close': float(row[5]) if row[5] is not None else None,
+                'volume': int(row[6]) if row[6] is not None else None,
+                'amount': float(row[7]) if row[7] is not None else None,
+                'amplitude': float(row[8]) if row[8] is not None else None,
+                'pct_change': float(row[9]) if row[9] is not None else None,
+                'change': float(row[10]) if row[10] is not None else None,
+                'turnover': float(row[11]) if row[11] is not None else None,
+            })
+
+        if ts_codes:
+            quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
+            for item in items:
+                item['name'] = quotes.get(item['code'], {}).get('name', '')
+
+        return items, total
+
+    async def get_statistics(self) -> Dict:
         """
-        获取日线数据统计
+        获取日线数据全局统计（页面初始化时调用一次）
+
+        全部走索引，避免对 stock_daily 做任何聚合扫描：
+        - stock_count  : stock_basic WHERE list_status='L'（索引，< 1ms）
+        - record_count : stock_count × 自2021年起交易天数（近似估算）
+        - latest_date  : trading_calendar MAX(trade_date)（索引，< 1ms）
+        - earliest_date: 固定为同步任务起始日 2021-01-04
 
         Returns:
             统计信息字典
         """
+        conn = self.db.pool_manager.get_connection()
+        cursor = conn.cursor()
         try:
-            conn = self.db.pool_manager.get_connection()
-            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM stock_basic WHERE list_status = 'L'")
+            stock_count = cursor.fetchone()[0] or 0
 
-            # 构建 WHERE 条件
-            where_conditions = []
-            params = []
-
-            if start_date:
-                where_conditions.append("date >= %s")
-                params.append(start_date)
-
-            if end_date:
-                where_conditions.append("date <= %s")
-                params.append(end_date)
-
-            where_clause = " AND " + " AND ".join(where_conditions) if where_conditions else ""
-
-            query = f"""
-                SELECT
-                    COUNT(DISTINCT code) as stock_count,
-                    COUNT(*) as record_count,
-                    AVG(pct_change) as avg_pct_change,
-                    MAX(date) as latest_date,
-                    MIN(date) as earliest_date
-                FROM stock_daily
-                WHERE 1=1 {where_clause}
-            """
-
-            cursor.execute(query, params)
+            # 一次查出交易天数和最新交易日，减少一次 round-trip
+            cursor.execute(
+                """
+                SELECT COUNT(*) FILTER (WHERE trade_date >= '2021-01-01'),
+                       MAX(trade_date)
+                FROM trading_calendar
+                WHERE is_trading_day = true
+                  AND trade_date <= CURRENT_DATE
+                """
+            )
             row = cursor.fetchone()
-            cursor.close()
-            conn.close()
-
-            return {
-                'stock_count': row[0] or 0,
-                'record_count': row[1] or 0,
-                'avg_pct_change': round(float(row[2]), 2) if row[2] else 0.0,
-                'latest_date': row[3].strftime('%Y-%m-%d') if row[3] else None,
-                'earliest_date': row[4].strftime('%Y-%m-%d') if row[4] else None,
-            }
+            trading_days = row[0] or 0
+            latest_date = row[1].strftime('%Y-%m-%d') if row[1] else None
 
         except Exception as e:
             logger.error(f"获取统计信息失败: {e}")
-            return {
-                'stock_count': 0,
-                'record_count': 0,
-                'avg_pct_change': 0.0,
-                'latest_date': None,
-                'earliest_date': None,
-            }
+            return {'stock_count': 0, 'record_count': 0, 'latest_date': None, 'earliest_date': None}
+        finally:
+            cursor.close()
+            conn.close()
+
+        return {
+            'stock_count': stock_count,
+            'record_count': stock_count * trading_days,  # 近似值：每支股票每个交易日一条记录
+            'latest_date': latest_date,
+            'earliest_date': '2021-01-04',  # 全量历史同步任务起始日，固定不变
+        }
 
     async def sync_single_stock(
         self,

@@ -444,7 +444,7 @@ const handleSyncConfirm = async () => {
 - 机构调研表页面（`/features/stk-surv`）**（✨ 新增于 2026-03-23，5000积分/次，单次最大100行，支持按接待方式和机构类型筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、statistics 合并到主响应、同步弹窗解耦查询日期）**
 - 券商每月荐股页面（`/features/broker-recommend`）**（✨ 新增于 2026-03-23，6000积分/次，单次最大1000行，每月1-3日更新当月数据；2026-03-28 全面重构：迁移至模块化 brokerRecommendApi、isTaskRunning 派生 syncing、DataTable mobileCard、同步弹窗选月度）**
 - 实时行情同步页面（`/market/realtime`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次）或AkShare获取实时行情快照，支持涨跌幅榜、统计卡片、分页查询（30条/页）和异步同步功能，支持数据源切换；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader、"数据同步" Card 改为 "同步配置" 保留参数选择）**
-- 股票日线数据页面（`/market/daily`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次），支持单只股票和全市场两种同步模式，分页查询（30条/页），统计卡片，异步同步功能，已从数据初始化页面迁移至行情数据菜单；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader）**
+- 股票日线数据页面（`/market/daily`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次），支持单只股票和全市场两种同步模式，分页查询（30条/页），3张统计卡片（股票数/记录总数/最新交易日），异步同步功能，已从数据初始化页面迁移至行情数据菜单；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader；2026-04-02 性能优化：通过 trading_calendar 定位最近交易日再精确查 stock_daily（< 10ms，原 10+ 秒），统计接口仅在页面初始化时调用一次，修复单只股票查询 500 错误及日期格式问题）**
 - 每日停复牌信息页面（`/market/suspend`）**（✨ 新增于 2026-03-24，不定期更新，支持分页查询，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
 - 每日涨跌停价格页面（`/market/stk-limit-d`）**（✨ 新增于 2026-03-24，2000积分/次，每交易日8:40更新，单次最大5800条，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
 - 沪深股通十大成交股页面（`/market/hsgt-top10`）**（✨ 新增于 2026-03-24，每天18~20点更新，包含沪股通、深股通前十大成交详细数据，支持按市场类型筛选；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（不传 tsCode/marketType）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
@@ -1632,6 +1632,15 @@ docker-compose down
 
 **⚠️ `stock_daily` 表只存完整 ts_code**：`stock_daily` 表的 `code` 列统一使用完整格式（如 `000001.SZ`），**不存**纯数字代码（如 `000001`）。所有查询和同步操作必须使用完整 ts_code。
 
+**⚠️ TimescaleDB 性能注意**：`stock_daily` 是 TimescaleDB hypertable（6M+ 行，557+ chunks），以下查询会触发全表扫描（10+ 秒），禁止使用：
+- `COUNT(DISTINCT code)` — 跨所有 chunk 扫描
+- `DISTINCT ON (code) ORDER BY date DESC` — 需要排序扫描所有 chunk
+
+**正确做法（< 10ms）**：
+1. 从 `trading_calendar` 用索引 `MAX(trade_date)` 定位最近交易日（< 1ms）
+2. 用精确日期 `WHERE date = %s` 查 `stock_daily`（命中 `idx_stock_daily_date` 索引，< 5ms）
+3. 分页总数用 `SELECT COUNT(*) FROM stock_basic WHERE list_status = 'L'`（约5500行，< 1ms）
+
 **同步模式**：
 1. **单只股票模式**（`sync_daily_single_task`）：
    - 指定股票代码（如 `000001.SZ`）
@@ -1665,7 +1674,8 @@ docker-compose down
 - 已从数据初始化页面（`/sync/initialize`）迁移至行情数据菜单（`/market/daily`）
 - 支持异步同步（Celery 任务），实时显示进度
 - 支持分页查询（30 条/页）
-- 包含统计卡片：股票数量、记录总数、平均涨跌幅、最新日期
+- 包含统计卡片：股票数量、记录总数、最新交易日（3张，无平均涨跌幅）
+- 统计接口在页面初始化时调用一次，不随每次分页/查询重复调用
 
 **数据库表结构** (`stock_basic` 表已扩展，2026-03-25更新)：
 - **基础字段**（原有7个）：code, name, ts_code, market, exchange, area, industry

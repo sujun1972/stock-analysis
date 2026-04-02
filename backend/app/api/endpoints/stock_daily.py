@@ -64,20 +64,13 @@ async def get_daily_data(
 @router.get("/statistics")
 @handle_api_errors
 async def get_statistics(
-    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     current_user: User = Depends(get_current_user)
 ):
     """
-    获取日线数据统计信息
-
-    返回数据覆盖范围、股票数量、记录数量等统计
+    获取日线数据全局统计信息（股票数、记录数、最新交易日）
     """
     service = StockDailyService()
-    result = await service.get_statistics(
-        start_date=start_date,
-        end_date=end_date
-    )
+    result = await service.get_statistics()
 
     return ApiResponse.success(data=result)
 
