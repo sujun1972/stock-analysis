@@ -4,6 +4,7 @@
 提供日线数据查询和同步功能
 """
 
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -168,3 +169,65 @@ async def sync_async(
         data=task_data,
         message="同步任务已提交"
     )
+
+
+@router.get("/full-history-progress")
+@handle_api_errors
+async def get_full_history_progress(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    查询全量历史同步进度
+
+    返回已完成/总数/百分比，用于前端进度条显示
+    """
+    from app.core.redis_lock import redis_client
+    from app.repositories.stock_basic_repository import StockBasicRepository
+    from app.tasks.sync_tasks import FULL_HISTORY_PROGRESS_KEY, FULL_HISTORY_LOCK_KEY
+
+    completed = 0
+    total = 0
+    is_in_progress = False
+
+    if redis_client:
+        completed = redis_client.scard(FULL_HISTORY_PROGRESS_KEY) or 0
+        is_in_progress = bool(redis_client.exists(FULL_HISTORY_LOCK_KEY))
+
+    repo = StockBasicRepository()
+    total = await asyncio.to_thread(repo.count_by_status, 'L')
+
+    return ApiResponse.success(data={
+        "completed": completed,
+        "total": total,
+        "is_in_progress": is_in_progress,
+        "percent": round(completed / total * 100, 1) if total > 0 else 0
+    })
+
+
+@router.post("/sync-full-history")
+@handle_api_errors
+async def sync_full_history(
+    current_user: User = Depends(require_admin)
+):
+    """
+    触发全量历史日线同步（可中断续继）
+
+    从2021年1月1日起，逐只同步全部上市股票的日线数据。
+    中断后再次触发会自动从断点继续，跳过已同步完成的股票。
+    """
+    from app.tasks.sync_tasks import sync_daily_full_history_task
+
+    celery_task = sync_daily_full_history_task.apply_async()
+
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_daily_full_history',
+        display_name='日线数据全量历史同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'start_date': '20210101', 'scope': 'all_listed'},
+        source='stock_daily_page'
+    )
+
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

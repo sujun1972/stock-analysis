@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { stockDailyApi } from '@/lib/api'
-import type { StockDailyData, StockDailyStatistics } from '@/lib/api'
+import type { StockDailyData, StockDailyStatistics, FullHistoryProgressData } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, Database, Calendar, BarChart3 } from 'lucide-react'
+import { RefreshCw, TrendingUp, Database, Calendar, BarChart3, History } from 'lucide-react'
 
 export default function StockDailyPage() {
   const [data, setData] = useState<StockDailyData[]>([])
@@ -34,11 +34,15 @@ export default function StockDailyPage() {
   const [pageSize, setPageSize] = useState(30)
   const [totalRecords, setTotalRecords] = useState(0)
 
+  // 全量历史同步进度
+  const [fullHistoryProgress, setFullHistoryProgress] = useState<FullHistoryProgressData | null>(null)
+
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
   // 从 task store 派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_daily_single')
+  const fullHistorySyncing = isTaskRunning('tasks.sync_daily_full_history')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -75,9 +79,25 @@ export default function StockDailyPage() {
     }
   }, [code, startDate, endDate, currentPage, pageSize])
 
+  // 加载全量同步进度
+  const loadFullHistoryProgress = useCallback(async () => {
+    try {
+      const resp = await stockDailyApi.getFullHistoryProgress()
+      if (resp.code === 200 && resp.data) {
+        setFullHistoryProgress(resp.data)
+      }
+    } catch {
+      // 静默失败，不影响主页面
+    }
+  }, [])
+
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    loadFullHistoryProgress()
+  }, [loadFullHistoryProgress])
 
   // 组件卸载清理
   useEffect(() => {
@@ -138,6 +158,50 @@ export default function StockDailyPage() {
       }
     } catch (err: any) {
       toast.error('同步失败', { description: err.message || '无法同步数据' })
+    }
+  }
+
+  const handleFullHistorySync = async () => {
+    try {
+      const response = await stockDailyApi.syncFullHistory()
+
+      if (response.code === 200 && response.data) {
+        const taskId = response.data.celery_task_id
+
+        addTask({
+          taskId,
+          taskName: response.data.task_name,
+          displayName: response.data.display_name,
+          taskType: 'data_sync',
+          status: 'running',
+          progress: 0,
+          startTime: Date.now()
+        })
+
+        const completionCallback = (task: any) => {
+          if (task.status === 'success') {
+            loadData().catch(() => {})
+            loadFullHistoryProgress().catch(() => {})
+            toast.success('全量历史同步完成')
+          } else if (task.status === 'failure') {
+            toast.error('全量历史同步失败', { description: task.error || '同步过程中发生错误' })
+          }
+          unregisterCompletionCallback(taskId, completionCallback)
+          activeCallbacksRef.current.delete(taskId)
+        }
+
+        activeCallbacksRef.current.set(taskId, completionCallback)
+        registerCompletionCallback(taskId, completionCallback)
+        triggerPoll()
+
+        toast.success('全量同步任务已提交', {
+          description: '将逐只同步全部上市股票自2021年起的日线数据，中断后可续继'
+        })
+      } else {
+        throw new Error(response.message || '提交失败')
+      }
+    } catch (err: any) {
+      toast.error('提交失败', { description: err.message || '无法提交全量同步任务' })
     }
   }
 
@@ -255,19 +319,34 @@ export default function StockDailyPage() {
         title="股票日线数据"
         description="查询和同步股票日线行情数据，使用Tushare daily接口"
         actions={
-          <Button onClick={handleSync} disabled={syncing}>
-            {syncing ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                同步中...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                同步数据
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleSync} disabled={syncing}>
+              {syncing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  同步中...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  同步数据
+                </>
+              )}
+            </Button>
+            <Button onClick={handleFullHistorySync} disabled={fullHistorySyncing} variant="outline">
+              {fullHistorySyncing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  全量同步中...
+                </>
+              ) : (
+                <>
+                  <History className="h-4 w-4 mr-1" />
+                  历史全量同步
+                </>
+              )}
+            </Button>
+          </div>
         }
       />
 
@@ -320,6 +399,39 @@ export default function StockDailyPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* 全量历史同步进度 */}
+      {fullHistoryProgress && (fullHistoryProgress.is_in_progress || fullHistoryProgress.completed > 0) && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">历史全量同步进度</CardTitle>
+            <History className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                已完成 <span className="font-medium text-gray-900 dark:text-gray-100">{fullHistoryProgress.completed.toLocaleString()}</span> /
+                共 <span className="font-medium text-gray-900 dark:text-gray-100">{fullHistoryProgress.total.toLocaleString()}</span> 只股票
+              </span>
+              <span className="text-sm font-bold">{fullHistoryProgress.percent}%</span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${fullHistoryProgress.percent}%` }}
+              />
+            </div>
+            {!fullHistoryProgress.is_in_progress && fullHistoryProgress.completed > 0 && fullHistoryProgress.completed < fullHistoryProgress.total && (
+              <p className="text-xs text-amber-600 mt-2">
+                任务已中断，点击「历史全量同步」可从断点续继（自动跳过已同步的 {fullHistoryProgress.completed.toLocaleString()} 只股票）
+              </p>
+            )}
+            {fullHistoryProgress.is_in_progress && (
+              <p className="text-xs text-blue-600 mt-2">同步任务正在进行中...</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* 数据查询 */}

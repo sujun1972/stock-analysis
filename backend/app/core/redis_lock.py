@@ -121,4 +121,5 @@ try:
     logger.info("✅ Redis 分布式锁初始化成功")
 except Exception as e:
     logger.error(f"❌ Redis 分布式锁初始化失败: {e}")
+    redis_client = None
     redis_lock = None

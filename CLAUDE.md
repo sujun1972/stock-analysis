@@ -221,8 +221,9 @@ Admin项目采用统一的任务管理面板，位于Header右侧：
 
 **注意事项**:
 - 使用 `started_at` 而非 `created_at` 计算任务耗时
-- 每个信号处理器创建独立的数据库连接（避免 fork pool worker 共享连接）
+- 每个信号处理器使用**独立的 psycopg2 直连**（`_get_direct_conn()`），不使用 `DatabaseManager` 单例 — 因为 fork pool worker 继承了父进程的连接池，该池在 fork 后已损坏，使用单例会导致 UPDATE 静默失败（任务状态卡在 `pending`）
 - Celery 5.x 中从 `sender.request.id` 获取 task_id
+- `celery_signals.py` 中每次信号触发时新建 psycopg2 直连，用完立即关闭，不影响业务连接池
 
 #### 轮询机制
 
@@ -1626,22 +1627,34 @@ docker-compose down
 - **前端页面**：`/admin/app/(dashboard)/market/daily/page.tsx`
 - **前端 API**：`/admin/lib/api/stock-daily.ts`
 - **后端 API**：`/backend/app/api/endpoints/stock_daily.py`
-- **后端 Service**：`/backend/app/services/stock_daily_service.py`
-- **Celery 任务**：`/backend/app/tasks/sync_tasks.py` (`sync_daily_single_task`)
+- **后端 Service**：`/backend/app/services/stock_daily_service.py`（唯一同步入口）
+- **Celery 任务**：`/backend/app/tasks/sync_tasks.py`
+
+**⚠️ `stock_daily` 表只存完整 ts_code**：`stock_daily` 表的 `code` 列统一使用完整格式（如 `000001.SZ`），**不存**纯数字代码（如 `000001`）。所有查询和同步操作必须使用完整 ts_code。
 
 **同步模式**：
-1. **单只股票模式**：
+1. **单只股票模式**（`sync_daily_single_task`）：
    - 指定股票代码（如 `000001.SZ`）
    - 支持自定义日期范围或年数（默认 5 年）
    - 使用 Tushare `daily` 接口按日期范围查询
    - 积分消耗：120 积分/次
 
-2. **全市场模式**：
+2. **全市场单日模式**（`sync_daily_single_task`，不传 code）：
    - 不指定股票代码（留空）
    - 自动获取最近交易日（从 `trading_calendar` 表）
    - 同步所有股票的最新交易日数据
    - 积分消耗：120 积分/次（单个交易日）
-   - 数据量：约 5000+ 只股票
+
+3. **全市场近N日增量模式**（`sync_daily_recent_all_task`）：
+   - 对所有上市股票同步最近 N 个交易日（默认7日）
+   - 适合每日定时增量更新
+   - 使用 `TradingCalendarRepository` 确定日期范围
+
+4. **全量历史模式**（`sync_daily_full_history_task`，可中断续继）：
+   - 对所有上市股票同步自 2021-01-01 起的完整历史
+   - 进度通过 Redis Set 记录（key: `sync:daily:full_history:progress`）
+   - 中断后再次触发自动跳过已完成股票
+   - 8 并发，批量 50 只，约 11 分钟完成 ~5500 只
 
 **数据接口**：
 - 使用 Tushare `pro.daily()` 接口
@@ -2121,6 +2134,17 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 
    # ❌ 错误：字符串拼接（SQL 注入风险）
    query = f"SELECT * FROM table WHERE trade_date >= '{start_date}'"
+   ```
+
+   **⚠️ psycopg2 中 LIKE 模式的 `%` 转义**：psycopg2 在解析查询字符串时将 `%` 视为参数占位符的前缀，即使是硬编码在查询字符串中的 `%` 也会被处理。在查询字符串（非参数元组）中使用 `LIKE` 模式时，必须将 `%` 写成 `%%`：
+   ```python
+   # ✅ 正确：%% 被 psycopg2 转义为 %，最终 SQL 为 LIKE '%.%'
+   query = "SELECT code FROM stock_daily WHERE code LIKE '%%.%%'"
+   cursor.execute(query, params)
+
+   # ❌ 错误：% 会被 psycopg2 解释为参数占位符，导致格式错误
+   query = "SELECT code FROM stock_daily WHERE code LIKE '%.%'"
+   cursor.execute(query, params)
    ```
 
 5. **实现 UPSERT 语义**
@@ -3682,9 +3706,11 @@ K 线图数据来自该接口，后端在返回前自动检测数据完整性并
 | 懒加载历史为空 | `df.empty` 且 `end_dt` 超过 30 天前 | 扩展同步（max(years_back, 10) 年）|
 | 最新数据不完整 | 库中最新日期 < `trade_cal` 最新交易日 | 增量同步（仅补缺失区间） |
 
-**缓存失效**：每次同步后必须调用 `cache.delete_pattern(f"daily_data:*{code}*")` 清除 Redis，否则 `DataAdapter` 返回的仍是旧数据（`sync_single_stock` 绕过了 `DataAdapter`，不自动失效缓存）。
+**短代码解析**：frontend 可能传入纯数字代码（如 `000001`），接口内部调用 `stock_quote_cache.resolve_ts_code(code)` 解析为完整 ts_code（如 `000001.SZ`）再查询 `stock_daily`（该表只存完整 ts_code）。
 
-**增量同步**：`DailySyncService.sync_incremental(code, from_date)` 只拉取从 `from_date` 到今天的缺口，避免重复同步全量数据。
+**同步实现**：所有三种同步均使用 `StockDailyService.sync_single_stock(code=ts_code, ...)` — 不再使用 `DailySyncService`。增量同步通过传入 `start_date`/`end_date` 日期范围实现，无需单独的 `sync_incremental` 方法。
+
+**缓存失效**：每次同步后必须调用 `cache.delete_pattern(f"daily_data:*{ts_code}*")` 清除 Redis，否则 `DataAdapter` 返回的仍是旧数据（`sync_single_stock` 绕过了 `DataAdapter`，不自动失效缓存）。注意缓存键需使用完整 `ts_code`，而非原始 `code`。
 
 #### EChartsStockChart 懒加载机制（2026-04-01）
 
@@ -3718,6 +3744,11 @@ end_date = datetime.now().strftime("%Y%m%d")
 ```
 
 涉及文件：`backend/app/services/realtime_sync_service.py` 的 `sync_minute_data()`。
+
+**问题：Celery 任务状态卡在 `pending`（`started_at` 为 NULL，状态不变 `running`）**
+- **原因**：Celery 信号处理器（`task_prerun_handler` 等）使用了 `DatabaseManager` 单例，而 fork pool worker 继承了父进程已损坏的连接池，导致 UPDATE 静默失败
+- **解决**：`celery_signals.py` 中的所有信号处理器必须使用 `_get_direct_conn()` 创建独立 psycopg2 直连，避免依赖单例连接池
+- **手动修复卡住的记录**：`UPDATE celery_task_history SET status='failure', error='stuck' WHERE status='pending' AND created_at < NOW() - INTERVAL '1 hour'`
 
 **问题：性能较慢**
 - [ ] 检查是否使用批量操作（而非循环单条插入）

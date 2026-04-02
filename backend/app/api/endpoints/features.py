@@ -25,7 +25,8 @@ from app.core_adapters.feature_adapter import FeatureAdapter
 from app.core.cache import cache
 from app.models.api_response import ApiResponse
 from app.repositories.trading_calendar_repository import TradingCalendarRepository
-from app.services.daily_sync_service import DailySyncService
+from app.services.stock_daily_service import StockDailyService
+from app.services.stock_quote_cache import stock_quote_cache
 
 router = APIRouter()
 
@@ -81,35 +82,39 @@ async def get_features(
     except ValueError as e:
         return ApiResponse.bad_request(message=f"日期格式错误: {str(e)}").to_dict()
 
-    # 2. 调用 Core Adapter 获取日线数据
-    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+    # 2. 解析完整 ts_code（000001 → 000001.SZ）
+    ts_code = await stock_quote_cache.resolve_ts_code(code)
+    if not ts_code:
+        ts_code = code  # 降级：原样使用（含 '.' 的完整代码直接使用）
 
-    # 2.1 自动同步逻辑
+    # 2.1 调用 Core Adapter 获取日线数据（使用完整 ts_code 查询）
+    df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
+
+    # 2.2 自动同步逻辑
     today = datetime.now().date()
     is_requesting_latest = end_dt is None or (today - end_dt).days <= 30
 
     if df.empty:
         if is_requesting_latest:
             # 首次加载：全量同步5年
-            logger.info(f"股票 {code} 无日线数据，触发全量同步（5年）")
+            logger.info(f"股票 {ts_code} 无日线数据，触发全量同步（5年）")
             try:
-                sync_service = DailySyncService()
-                await sync_service.sync_single_stock(code=code, years=5)
-                await cache.delete_pattern(f"daily_data:*{code}*")
-                df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+                sync_service = StockDailyService()
+                await sync_service.sync_single_stock(code=ts_code, years=5)
+                await cache.delete_pattern(f"daily_data:*{ts_code}*")
+                df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
             except Exception as e:
                 logger.error(f"全量同步失败: {e}")
         else:
             # 懒加载历史数据为空：扩展同步
             years_back = (today - end_dt).days // 365 + 2
             sync_years = max(years_back, 10)
-            logger.info(f"股票 {code} 历史数据（end_date={end_dt}）为空，触发扩展同步（{sync_years}年）")
+            logger.info(f"股票 {ts_code} 历史数据（end_date={end_dt}）为空，触发扩展同步（{sync_years}年）")
             try:
-                sync_service = DailySyncService()
-                await sync_service.sync_single_stock(code=code, years=sync_years)
-                # 清除缓存（同步前可能已缓存了空结果），确保重查到新数据
-                await cache.delete_pattern(f"daily_data:*{code}*")
-                df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+                sync_service = StockDailyService()
+                await sync_service.sync_single_stock(code=ts_code, years=sync_years)
+                await cache.delete_pattern(f"daily_data:*{ts_code}*")
+                df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
             except Exception as e:
                 logger.error(f"扩展同步失败: {e}")
     elif is_requesting_latest:
@@ -130,16 +135,19 @@ async def get_features(
                     # 增量同步：只补从最新数据日期+1天到今天的缺失区间
                     next_date = (latest_data_date + timedelta(days=1)).strftime("%Y%m%d")
                     logger.info(
-                        f"股票 {code} 数据不完整（库中最新: {latest_data_date}，"
+                        f"股票 {ts_code} 数据不完整（库中最新: {latest_data_date}，"
                         f"最新交易日: {latest_trade_date}），触发增量同步（从 {next_date}）"
                     )
-                    sync_service = DailySyncService()
-                    await sync_service.sync_incremental(code=code, from_date=next_date)
-                    # 清除 Redis 缓存，确保下次查询到最新数据
-                    await cache.delete_pattern(f"daily_data:*{code}*")
-                    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+                    sync_service = StockDailyService()
+                    await sync_service.sync_single_stock(
+                        code=ts_code,
+                        start_date=next_date,
+                        end_date=datetime.now().strftime("%Y%m%d")
+                    )
+                    await cache.delete_pattern(f"daily_data:*{ts_code}*")
+                    df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
                 else:
-                    logger.debug(f"股票 {code} 数据已是最新（{latest_data_date}）")
+                    logger.debug(f"股票 {ts_code} 数据已是最新（{latest_data_date}）")
         except Exception as e:
             logger.warning(f"检查数据新鲜度失败: {e}")
 
@@ -233,8 +241,9 @@ async def calculate_features(
     except ValueError as e:
         return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
-    # 2. 调用 Core Adapter 获取日线数据
-    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+    # 2. 解析完整 ts_code 后调用 Core Adapter 获取日线数据
+    ts_code = await stock_quote_cache.resolve_ts_code(code) or code
+    df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
 
     if df.empty:
         return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()
@@ -352,8 +361,9 @@ async def select_features(
     except ValueError as e:
         return ApiResponse.bad_request(message=f"参数错误: {str(e)}").to_dict()
 
-    # 2. 调用 Core Adapter 获取日线数据
-    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+    # 2. 解析完整 ts_code 后调用 Core Adapter 获取日线数据
+    ts_code = await stock_quote_cache.resolve_ts_code(code) or code
+    df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
 
     if df.empty:
         return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()

@@ -108,12 +108,32 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
 
     'tasks.sync_daily_single': {
         'task': 'tasks.sync_daily_single',
-        'name': '股票日线数据同步',
-        'description': '同步股票日线数据（支持单只股票或全市场）。单只股票模式：指定code同步历史数据；全市场模式：留空code同步最近交易日全市场数据',
+        'name': '股票日线数据同步（单只）',
+        'description': '同步单只股票日线数据。指定code同步历史数据，支持按年数或日期范围',
         'category': '行情数据',
         'display_order': 205,
         'points_consumption': 120,  # Tushare daily 接口
         'default_params': {'code': None, 'start_date': None, 'end_date': None, 'years': 5}
+    },
+
+    'tasks.sync_daily_recent_all': {
+        'task': 'tasks.sync_daily_recent_all',
+        'name': '全市场日线数据（近7日）',
+        'description': '逐只同步全部上市股票最近7个交易日的日线数据，适合每日定时增量更新。替代原全市场模式（原全市场仅同步最近1个交易日）',
+        'category': '行情数据',
+        'display_order': 206,
+        'points_consumption': 120,
+        'default_params': {'n_days': 7}
+    },
+
+    'tasks.sync_daily_full_history': {
+        'task': 'tasks.sync_daily_full_history',
+        'name': '日线数据全量历史同步',
+        'description': '逐只同步全部上市股票自2021年1月1日起的全量日线数据，支持中断续继（跳过已同步股票）。首次执行或大规模补数据时使用',
+        'category': '行情数据',
+        'display_order': 207,
+        'points_consumption': 120,
+        'default_params': {}
     },
 
     'tasks.sync_suspend': {

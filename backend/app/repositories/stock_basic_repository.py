@@ -299,6 +299,41 @@ class StockBasicRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def get_listed_ts_codes(self, status: str = 'L') -> List[str]:
+        """
+        获取所有指定状态股票的 ts_code 列表
+
+        Args:
+            status: 股票状态（L=上市, D=退市, P=暂停），默认上市
+
+        Returns:
+            ts_code 列表，如 ['000001.SZ', '600000.SH', ...]
+
+        Examples:
+            >>> repo = StockBasicRepository()
+            >>> codes = repo.get_listed_ts_codes(status='L')
+            >>> print(f"上市股票数: {len(codes)}")
+        """
+        try:
+            query = f"""
+                SELECT ts_code
+                FROM {self.TABLE_NAME}
+                WHERE list_status = %s AND ts_code IS NOT NULL
+                ORDER BY ts_code
+            """
+            result = self.execute_query(query, (status,))
+            codes = [row[0] for row in result if row[0]]
+            logger.debug(f"查询到 {len(codes)} 只 list_status={status} 的股票 ts_code")
+            return codes
+
+        except Exception as e:
+            logger.error(f"查询股票 ts_code 列表失败: {e}")
+            raise QueryError(
+                "查询股票 ts_code 列表失败",
+                error_code="STOCK_TS_CODES_QUERY_FAILED",
+                reason=str(e)
+            )
+
     # ==================== 统计操作 ====================
 
     def count_by_status(self, status: str = 'L') -> int:

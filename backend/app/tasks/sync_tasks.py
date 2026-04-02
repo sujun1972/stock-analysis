@@ -2,11 +2,12 @@
 数据同步 Celery 任务
 
 包含：
-- 股票列表同步
-- 批量日线数据同步
+- 股票列表同步（sync.stock_list）
+- 日线数据同步：
+  - sync_daily_single_task：单只股票或全市场单日
+  - sync_daily_recent_all_task：全市场近 N 日增量
+  - sync_daily_full_history_task：全量历史（可中断续继）
 - 新股列表同步
-- 退市股票同步
-- 概念数据同步
 """
 
 import asyncio
@@ -435,3 +436,302 @@ def sync_daily_single_task(
     except Exception as e:
         logger.error("[Celery] {} 日线数据同步失败: {}", code if code else '全市场', repr(e), exc_info=True)
         raise
+
+
+# ==================== 全量历史同步（续继） ====================
+
+FULL_HISTORY_PROGRESS_KEY = "sync:daily:full_history:progress"
+FULL_HISTORY_LOCK_KEY = "sync:daily:full_history:lock"
+FULL_HISTORY_START_DATE = "20210101"
+
+
+@celery_app.task(
+    base=SyncTask,
+    name="tasks.sync_daily_full_history",
+    bind=True,
+    max_retries=0,          # 不自动重试（可手动续继）
+    soft_time_limit=28800,  # 8小时软超时
+    time_limit=32400        # 9小时硬超时
+)
+def sync_daily_full_history_task(self: Task):
+    """
+    逐只同步全部上市股票自2021年1月1日起的全量日线数据
+
+    支持中断续继：任务被中断后再次触发，自动跳过已同步完成的股票，
+    从断点继续同步，直到所有股票同步完毕后清除进度记录。
+
+    进度存储：Redis Set key = sync:daily:full_history:progress
+    """
+    from app.core.redis_lock import redis_client
+    from app.repositories.stock_basic_repository import StockBasicRepository
+    from app.services.stock_daily_service import StockDailyService
+    from src.database.db_manager import DatabaseManager
+
+    # 重置 DatabaseManager 单例，确保 fork 后使用新的连接池
+    DatabaseManager.reset_instance()
+
+    logger.info("========== [Celery] 开始全量历史日线数据同步任务 ==========")
+
+    if redis_client is None:
+        logger.error("Redis 不可用，无法执行全量同步任务")
+        return {"status": "error", "message": "Redis 不可用"}
+
+    with redis_lock.acquire(FULL_HISTORY_LOCK_KEY, timeout=28800, blocking=False) if redis_lock else _DummyContext() as acquired:
+        if not acquired and redis_lock:
+            logger.warning("⚠️  全量历史同步任务已在执行中，跳过本次执行")
+            return {"status": "locked", "message": "已有全量同步任务正在进行"}
+
+        # 获取全部上市股票 ts_code 列表
+        repo = StockBasicRepository()
+        all_ts_codes = repo.get_listed_ts_codes(status='L')
+        total = len(all_ts_codes)
+        logger.info(f"共 {total} 只上市股票需要同步")
+
+        if total == 0:
+            return {"status": "success", "message": "无上市股票", "count": 0}
+
+        # 读取已完成的进度（Redis Set）
+        completed_set = redis_client.smembers(FULL_HISTORY_PROGRESS_KEY)
+        logger.info(f"已完成 {len(completed_set)} 只，剩余 {total - len(completed_set)} 只")
+
+        # 过滤出待同步的股票
+        pending_codes = [c for c in all_ts_codes if c not in completed_set]
+
+        today = datetime.now().strftime("%Y%m%d")
+        service = StockDailyService()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        success_count = 0
+        skip_count = len(completed_set)
+        error_count = 0
+
+        # 并发控制：每分钟 500 次限制，保守取 8 并发（~480次/分）
+        CONCURRENCY = 8
+        BATCH_SIZE = 50   # 每批处理 50 只，批间打印进度
+
+        async def sync_one(ts_code: str, sem: asyncio.Semaphore):
+            async with sem:
+                try:
+                    result = await service.sync_single_stock(
+                        code=ts_code,
+                        start_date=FULL_HISTORY_START_DATE,
+                        end_date=today
+                    )
+                    return ts_code, result.get("status") == "success", None
+                except Exception as e:
+                    return ts_code, False, str(e)
+
+        async def run_concurrent():
+            nonlocal success_count, error_count
+            sem = asyncio.Semaphore(CONCURRENCY)
+            processed = 0
+
+            for batch_start in range(0, len(pending_codes), BATCH_SIZE):
+                batch = pending_codes[batch_start:batch_start + BATCH_SIZE]
+                results = await asyncio.gather(*[sync_one(c, sem) for c in batch])
+
+                for ts_code, ok, err in results:
+                    if ok:
+                        redis_client.sadd(FULL_HISTORY_PROGRESS_KEY, ts_code)
+                        success_count += 1
+                    else:
+                        error_count += 1
+                        if err:
+                            logger.error(f"同步 {ts_code} 失败（下次续继）: {err}")
+                        else:
+                            logger.warning(f"同步 {ts_code} 返回非成功状态")
+
+                processed += len(batch)
+                done = skip_count + success_count
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'current': done,
+                        'total': total,
+                        'percent': round(done / total * 100, 1),
+                        'success': success_count,
+                        'errors': error_count
+                    }
+                )
+                logger.info(f"进度: {done}/{total} ({round(done/total*100,1)}%) "
+                            f"| 本次成功={success_count} 失败={error_count}")
+
+        try:
+            loop.run_until_complete(run_concurrent())
+        finally:
+            loop.close()
+
+        final_done = len(redis_client.smembers(FULL_HISTORY_PROGRESS_KEY))
+        # 全部完成时清除进度（下次重新全量同步）
+        if final_done >= total:
+            redis_client.delete(FULL_HISTORY_PROGRESS_KEY)
+            logger.info("✅ 全量历史同步完成，进度已清除")
+
+        logger.info(f"========== [Celery] 全量历史同步结束: 本次成功={success_count}, 跳过={skip_count}, 失败={error_count} ==========")
+        return {
+            "status": "success",
+            "total": total,
+            "success": success_count,
+            "skipped": skip_count,
+            "errors": error_count,
+            "completed": final_done,
+            "message": f"同步完成 {success_count} 只，跳过 {skip_count} 只，失败 {error_count} 只"
+        }
+
+
+# ==================== 全市场近N日增量同步 ====================
+
+@celery_app.task(
+    base=SyncTask,
+    name="tasks.sync_daily_recent_all",
+    bind=True,
+    max_retries=1,
+    soft_time_limit=7200,   # 2小时软超时
+    time_limit=10800        # 3小时硬超时
+)
+def sync_daily_recent_all_task(self: Task, n_days: int = 7):
+    """
+    逐只同步全部上市股票最近 N 个交易日的日线数据
+
+    适合每日定时增量更新。使用 trading_calendar 确定日期范围，
+    对每只上市股票调用 sync_single_stock。
+
+    Args:
+        n_days: 向前同步的交易日数量，默认7
+    """
+    from app.repositories.trading_calendar_repository import TradingCalendarRepository
+    from app.repositories.stock_basic_repository import StockBasicRepository
+    from app.services.stock_daily_service import StockDailyService
+    from src.database.db_manager import DatabaseManager
+
+    # 重置 DatabaseManager 单例，确保 fork 后使用新的连接池
+    DatabaseManager.reset_instance()
+
+    logger.info(f"========== [Celery] 开始全市场近{n_days}日日线数据同步任务 ==========")
+
+    lock_key = f"sync:daily:recent_all:{n_days}"
+
+    with redis_lock.acquire(lock_key, timeout=7200, blocking=False) if redis_lock else _DummyContext() as acquired:
+        if not acquired and redis_lock:
+            logger.warning(f"⚠️  全市场近{n_days}日同步任务已在执行中，跳过本次执行")
+            return {"status": "locked", "message": "已有同步任务正在进行"}
+
+        # 获取最近 n_days 个交易日的日期范围
+        calendar_repo = TradingCalendarRepository()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # 初始化变量（防止 finally 后引用时 UnboundLocalError）
+        total = 0
+        success_count = 0
+        error_count = 0
+        start_date = datetime.now().strftime("%Y%m%d")
+        end_date = start_date
+
+        try:
+            end_date = loop.run_until_complete(
+                asyncio.to_thread(calendar_repo.get_latest_trading_day)
+            )
+            if not end_date:
+                end_date = datetime.now().strftime("%Y%m%d")
+
+            # 查询最近 n_days 个交易日
+            start_date = loop.run_until_complete(
+                asyncio.to_thread(
+                    _get_nth_trading_day_before, calendar_repo, end_date, n_days
+                )
+            )
+            if not start_date:
+                start_date = end_date
+
+            logger.info(f"同步日期范围: {start_date} ~ {end_date}")
+
+            # 获取全部上市股票
+            repo = StockBasicRepository()
+            all_ts_codes = loop.run_until_complete(
+                asyncio.to_thread(repo.get_listed_ts_codes, 'L')
+            )
+            total = len(all_ts_codes)
+            logger.info(f"共 {total} 只上市股票")
+
+            service = StockDailyService()
+            success_count = 0
+            error_count = 0
+
+            # 并发控制：每分钟 500 次限制，保守取 8 并发（~480次/分）
+            CONCURRENCY = 8
+            BATCH_SIZE = 50
+
+            async def sync_one_recent(ts_code: str, sem: asyncio.Semaphore):
+                async with sem:
+                    try:
+                        result = await service.sync_single_stock(
+                            code=ts_code,
+                            start_date=start_date,
+                            end_date=end_date
+                        )
+                        return result.get("status") == "success"
+                    except Exception as e:
+                        logger.error(f"同步 {ts_code} 失败: {e}")
+                        return False
+
+            async def run_concurrent_recent():
+                nonlocal success_count, error_count
+                sem = asyncio.Semaphore(CONCURRENCY)
+
+                for batch_start in range(0, total, BATCH_SIZE):
+                    batch = all_ts_codes[batch_start:batch_start + BATCH_SIZE]
+                    results = await asyncio.gather(*[sync_one_recent(c, sem) for c in batch])
+
+                    for ok in results:
+                        if ok:
+                            success_count += 1
+                        else:
+                            error_count += 1
+
+                    done = batch_start + len(batch)
+                    self.update_state(
+                        state='PROGRESS',
+                        meta={
+                            'current': done,
+                            'total': total,
+                            'percent': round(done / total * 100, 1)
+                        }
+                    )
+                    logger.info(f"进度: {done}/{total} ({round(done/total*100,1)}%) "
+                                f"| 成功={success_count} 失败={error_count}")
+
+            loop.run_until_complete(run_concurrent_recent())
+
+        finally:
+            loop.close()
+
+    logger.info(f"========== [Celery] 全市场近{n_days}日同步结束: 成功={success_count}, 失败={error_count} ==========")
+    return {
+        "status": "success",
+        "total": total,
+        "success": success_count,
+        "errors": error_count,
+        "date_range": f"{start_date} ~ {end_date}",
+        "message": f"同步完成 {success_count}/{total} 只股票，日期范围 {start_date}~{end_date}"
+    }
+
+
+def _get_nth_trading_day_before(calendar_repo, reference_date: str, n: int) -> Optional[str]:
+    """获取 reference_date 往前第 n 个交易日"""
+    query = """
+        SELECT cal_date
+        FROM trade_cal
+        WHERE is_open = 1
+          AND exchange = 'SSE'
+          AND cal_date <= %s
+        ORDER BY cal_date DESC
+        LIMIT %s
+    """
+    try:
+        result = calendar_repo.execute_query(query, (reference_date, n))
+        return result[-1][0] if result else None  # 返回最早的一个交易日
+    except Exception as e:
+        logger.error(f"查询第{n}个交易日失败: {e}")
+        return None

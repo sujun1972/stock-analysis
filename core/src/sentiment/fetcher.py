@@ -682,7 +682,7 @@ class SentimentDataFetcher:
                 return result
 
             # 2. 抓取大盘数据
-            logger.info("步骤1/3: 抓取大盘数据...")
+            logger.info("步骤1/2: 抓取大盘数据...")
             market_data = self.fetch_market_indices(date_str)
             if self.save_market_indices(market_data):
                 result.synced_tables.append('market_sentiment_daily')
@@ -702,10 +702,6 @@ class SentimentDataFetcher:
                 'market_indices': {
                     'sh_close': market_data.sh_index_close,
                     'sh_change': market_data.sh_index_change
-                },
-                'limit_up': {
-                    'count': limit_up_data.limit_up_count,
-                    'blast_rate': limit_up_data.blast_rate
                 },
                 'dragon_tiger': {
                     'count': saved_count

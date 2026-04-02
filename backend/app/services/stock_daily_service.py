@@ -16,6 +16,7 @@ from loguru import logger
 
 from app.repositories.stock_data_repository import StockDataRepository
 from app.services.data_provider_service import DataProviderService
+from app.services.stock_quote_cache import stock_quote_cache
 from src.database.db_manager import DatabaseManager
 
 
@@ -72,14 +73,10 @@ class StockDailyService:
                 # 转换为列表
                 if not df.empty:
                     df = df.reset_index()
-                    # 添加股票名称
-                    stock_info = await asyncio.to_thread(
-                        self.stock_repo.get_stock_by_code,
-                        code
-                    )
-                    if stock_info:
-                        df['code'] = code
-                        df['name'] = stock_info['name']
+                    df['code'] = code
+                    # 从行情缓存获取股票名称
+                    quotes = await stock_quote_cache.get_quotes_batch([code])
+                    df['name'] = quotes.get(code, {}).get('name', '')
 
                 items = df.to_dict('records') if not df.empty else []
                 total = len(items)
@@ -125,12 +122,12 @@ class StockDailyService:
             (items, total)
         """
         try:
-            # 构建查询
+            # 构建查询（不做 LEFT JOIN，名称通过行情缓存注入）
             conn = self.db.pool_manager.get_connection()
             cursor = conn.cursor()
 
             # 构建 WHERE 条件
-            where_conditions = []
+            where_conditions = ["sd.code LIKE '%%.%%'"]  # 只查完整 ts_code 格式（如 000001.SZ），%% 为 psycopg2 转义
             params = []
 
             if start_date:
@@ -141,13 +138,13 @@ class StockDailyService:
                 where_conditions.append("sd.date <= %s")
                 params.append(end_date)
 
-            where_clause = " AND " + " AND ".join(where_conditions) if where_conditions else ""
+            where_clause = " AND ".join(where_conditions)
 
             # 查询总数
             count_query = f"""
                 SELECT COUNT(DISTINCT sd.code)
                 FROM stock_daily sd
-                WHERE 1=1 {where_clause}
+                WHERE {where_clause}
             """
             cursor.execute(count_query, params)
             total = cursor.fetchone()[0]
@@ -156,7 +153,6 @@ class StockDailyService:
             query = f"""
                 SELECT DISTINCT ON (sd.code)
                     sd.code,
-                    sb.name,
                     sd.date,
                     sd.open,
                     sd.high,
@@ -169,8 +165,7 @@ class StockDailyService:
                     sd.change,
                     sd.turnover
                 FROM stock_daily sd
-                LEFT JOIN stock_basic sb ON sd.code = sb.code
-                WHERE 1=1 {where_clause}
+                WHERE {where_clause}
                 ORDER BY sd.code, sd.date DESC
                 LIMIT %s OFFSET %s
             """
@@ -182,22 +177,30 @@ class StockDailyService:
             conn.close()
 
             items = []
+            ts_codes = []
             for row in rows:
+                ts_codes.append(row[0])
                 items.append({
                     'code': row[0],
-                    'name': row[1],
-                    'date': row[2].strftime('%Y-%m-%d') if row[2] else None,
-                    'open': float(row[3]) if row[3] else None,
-                    'high': float(row[4]) if row[4] else None,
-                    'low': float(row[5]) if row[5] else None,
-                    'close': float(row[6]) if row[6] else None,
-                    'volume': int(row[7]) if row[7] else None,
-                    'amount': float(row[8]) if row[8] else None,
-                    'amplitude': float(row[9]) if row[9] else None,
-                    'pct_change': float(row[10]) if row[10] else None,
-                    'change': float(row[11]) if row[11] else None,
-                    'turnover': float(row[12]) if row[12] else None,
+                    'name': '',
+                    'date': row[1].strftime('%Y-%m-%d') if row[1] else None,
+                    'open': float(row[2]) if row[2] else None,
+                    'high': float(row[3]) if row[3] else None,
+                    'low': float(row[4]) if row[4] else None,
+                    'close': float(row[5]) if row[5] else None,
+                    'volume': int(row[6]) if row[6] else None,
+                    'amount': float(row[7]) if row[7] else None,
+                    'amplitude': float(row[8]) if row[8] else None,
+                    'pct_change': float(row[9]) if row[9] else None,
+                    'change': float(row[10]) if row[10] else None,
+                    'turnover': float(row[11]) if row[11] else None,
                 })
+
+            # 从行情缓存批量注入股票名称
+            if ts_codes:
+                quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
+                for item in items:
+                    item['name'] = quotes.get(item['code'], {}).get('name', '')
 
             return items, total
 

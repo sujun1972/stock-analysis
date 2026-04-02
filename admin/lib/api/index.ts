@@ -736,6 +736,8 @@ export const apiClient = {
   getStockDailyData: stockDailyApiInst.getData.bind(stockDailyApiInst),
   getStockDailyStatistics: stockDailyApiInst.getStatistics.bind(stockDailyApiInst),
   syncStockDailyAsync: stockDailyApiInst.syncAsync.bind(stockDailyApiInst),
+  syncStockDailyFullHistory: stockDailyApiInst.syncFullHistory.bind(stockDailyApiInst),
+  getStockDailyFullHistoryProgress: stockDailyApiInst.getFullHistoryProgress.bind(stockDailyApiInst),
 
   // 保留原有的通用方法
   get: axiosInst.get.bind(axiosInst),
@@ -940,7 +942,8 @@ export type {
   StockDailyData,
   StockDailyStatistics,
   StockDailyParams,
-  SyncDailyParams
+  SyncDailyParams,
+  FullHistoryProgressData
 } from './stock-daily'
 
 // 重新导出ST股票列表 API

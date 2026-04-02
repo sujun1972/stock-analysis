@@ -48,6 +48,13 @@ export interface SyncDailyParams {
   years?: number
 }
 
+export interface FullHistoryProgressData {
+  completed: number
+  total: number
+  is_in_progress: boolean
+  percent: number
+}
+
 // ============== API 类 ==============
 
 export class StockDailyApiClient extends BaseApiClient {
@@ -104,6 +111,24 @@ export class StockDailyApiClient extends BaseApiClient {
     display_name: string
   }>> {
     return this.post('/api/stock-daily/sync-async', params)
+  }
+
+  /**
+   * 触发全量历史日线同步（2021年起，可中断续继）
+   */
+  async syncFullHistory(): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+  }>> {
+    return this.post('/api/stock-daily/sync-full-history', {})
+  }
+
+  /**
+   * 查询全量历史同步进度
+   */
+  async getFullHistoryProgress(): Promise<ApiResponse<FullHistoryProgressData>> {
+    return this.get('/api/stock-daily/full-history-progress')
   }
 }
 

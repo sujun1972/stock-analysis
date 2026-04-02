@@ -24,6 +24,7 @@ from app.models.api_response import ApiResponse
 from app.core.dependencies import require_admin
 from app.models.user import User
 from app.services.realtime_sync_service import RealtimeSyncService
+from app.services.stock_quote_cache import stock_quote_cache
 
 router = APIRouter()
 
@@ -490,8 +491,9 @@ async def get_stock_daily_data(
     except ValueError as e:
         return ApiResponse.bad_request(message=f"日期格式错误: {str(e)}").to_dict()
 
-    # 2. 调用 Core Adapter
-    df = await data_adapter.get_daily_data(code=code, start_date=start_dt, end_date=end_dt)
+    # 2. 解析完整 ts_code 后调用 Core Adapter
+    ts_code = await stock_quote_cache.resolve_ts_code(code) or code
+    df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
 
     if df.empty:
         return ApiResponse.not_found(message=f"股票 {code} 无日线数据").to_dict()

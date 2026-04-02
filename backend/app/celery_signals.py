@@ -18,17 +18,63 @@ from celery import signals
 from datetime import datetime
 from loguru import logger
 import json
+import psycopg2
 
-from src.database.db_manager import DatabaseManager
+from app.core.config import settings
 
 
-def get_db():
+def _get_direct_conn():
     """
-    获取数据库管理器实例
+    创建独立的 psycopg2 直连，供信号处理器专用。
 
-    每次信号处理时创建新实例，避免 fork 子进程共享数据库连接
+    信号处理器（task_prerun / task_success / task_failure）与任务函数
+    在同一 ForkPoolWorker 进程中执行，但执行时机不同：
+    - task_prerun  在任务函数体之前触发，此时单例连接池可能是 fork 前的旧连接（已损坏）
+    - task_success 在任务函数之后触发，此时任务函数内部可能已调用 reset_instance() 重建了池
+
+    使用独立直连，完全不依赖单例池，无论池处于何种状态都能正常写入。
+    每次信号触发时新建连接，用完立即关闭，不影响业务连接池。
     """
-    return DatabaseManager()
+    return psycopg2.connect(
+        host=settings.DATABASE_HOST,
+        port=settings.DATABASE_PORT,
+        dbname=settings.DATABASE_NAME,
+        user=settings.DATABASE_USER,
+        password=settings.DATABASE_PASSWORD,
+        connect_timeout=5
+    )
+
+
+def _execute_direct(sql: str, params: tuple) -> None:
+    """执行一条 SQL，使用独立直连，用后关闭。"""
+    conn = None
+    try:
+        conn = _get_direct_conn()
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+        conn.commit()
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _query_direct(sql: str, params: tuple) -> list:
+    """查询并返回结果行列表，使用独立直连，用后关闭。"""
+    conn = None
+    try:
+        conn = _get_direct_conn()
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @signals.task_prerun.connect
@@ -37,23 +83,19 @@ def task_prerun_handler(sender=None, task_id=None, **kwargs):
     任务开始执行时的回调
     更新任务的started_at时间和状态为running
     """
-    db = None
     try:
         if not task_id:
             return
 
-        db = get_db()
         started_at = datetime.now()
-
-        # 更新任务状态为 running 并设置 started_at
-        update_sql = """
+        _execute_direct(
+            """
             UPDATE celery_task_history
-            SET status = 'running',
-                started_at = %s
+            SET status = 'running', started_at = %s
             WHERE celery_task_id = %s
-        """
-        db._execute_update(update_sql, (started_at, task_id))
-
+            """,
+            (started_at, task_id)
+        )
         logger.info(f"任务 {task_id[:8]}... 开始执行")
 
     except Exception as e:
@@ -89,44 +131,32 @@ def task_success_handler(sender=None, result=None, **kwargs):
             logger.warning(f"task_success 信号未获取到 task_id，跳过处理")
             return
 
-        db = get_db()
-
-        # 查询任务记录
-        query_sql = """
-            SELECT id, started_at FROM celery_task_history
-            WHERE celery_task_id = %s
-        """
-        records = db._execute_query(query_sql, (task_id,))
+        records = _query_direct(
+            "SELECT id, started_at FROM celery_task_history WHERE celery_task_id = %s",
+            (task_id,)
+        )
 
         if not records:
             logger.warning(f"任务 {task_id[:8]}... 在数据库中未找到记录")
             return
 
         record_id, started_at = records[0]
-        completed_at = datetime.now()  # 使用本地时间
+        completed_at = datetime.now()
 
-        # 计算耗时（毫秒）
         duration_ms = None
         if started_at:
             duration_ms = int((completed_at - started_at).total_seconds() * 1000)
 
-        # 处理结果
         result_json = result if isinstance(result, dict) else {'value': str(result)}
 
-        # 更新任务状态为成功
-        update_sql = """
+        _execute_direct(
+            """
             UPDATE celery_task_history
-            SET status = 'success',
-                completed_at = %s,
-                result = %s,
-                duration_ms = %s
+            SET status = 'success', completed_at = %s, result = %s, duration_ms = %s
             WHERE celery_task_id = %s
-        """
-        db._execute_update(
-            update_sql,
+            """,
             (completed_at, json.dumps(result_json), duration_ms, task_id)
         )
-
         logger.info(f"任务 {task_id[:8]}... 执行成功，耗时 {duration_ms}ms")
 
     except Exception as e:
@@ -147,14 +177,10 @@ def task_failure_handler(sender=None, exception=None, traceback=None, **kwargs):
         if not task_id:
             return
 
-        db = get_db()
-
-        # 先查询任务记录
-        query_sql = """
-            SELECT id, started_at FROM celery_task_history
-            WHERE celery_task_id = %s
-        """
-        records = db._execute_query(query_sql, (task_id,))
+        records = _query_direct(
+            "SELECT id, started_at FROM celery_task_history WHERE celery_task_id = %s",
+            (task_id,)
+        )
 
         if not records:
             return
@@ -162,12 +188,10 @@ def task_failure_handler(sender=None, exception=None, traceback=None, **kwargs):
         record_id, started_at = records[0]
         completed_at = datetime.now()
 
-        # 计算耗时（毫秒）
         duration_ms = None
         if started_at:
             duration_ms = int((completed_at - started_at).total_seconds() * 1000)
 
-        # 获取错误信息
         error_msg = "Unknown error"
         if exception:
             try:
@@ -175,7 +199,6 @@ def task_failure_handler(sender=None, exception=None, traceback=None, **kwargs):
             except Exception:
                 error_msg = f"Error type: {type(exception).__name__}"
 
-        # 如果没有exception参数，尝试从einfo获取
         if not exception and 'einfo' in kwargs:
             try:
                 einfo = kwargs.get('einfo')
@@ -184,20 +207,14 @@ def task_failure_handler(sender=None, exception=None, traceback=None, **kwargs):
             except Exception:
                 pass
 
-        # 更新任务状态
-        update_sql = """
+        _execute_direct(
+            """
             UPDATE celery_task_history
-            SET status = 'failure',
-                completed_at = %s,
-                error = %s,
-                duration_ms = %s
+            SET status = 'failure', completed_at = %s, error = %s, duration_ms = %s
             WHERE celery_task_id = %s
-        """
-        db._execute_update(
-            update_sql,
+            """,
             (completed_at, error_msg, duration_ms, task_id)
         )
-
         logger.error(f"任务 {task_id[:8]}... 执行失败: {error_msg}")
 
     except Exception as e:
@@ -215,14 +232,10 @@ def task_revoked_handler(sender=None, **kwargs):
         if not task_id:
             return
 
-        db = get_db()
-
-        # 先查询任务记录
-        query_sql = """
-            SELECT id, started_at FROM celery_task_history
-            WHERE celery_task_id = %s
-        """
-        records = db._execute_query(query_sql, (task_id,))
+        records = _query_direct(
+            "SELECT id, started_at FROM celery_task_history WHERE celery_task_id = %s",
+            (task_id,)
+        )
 
         if not records:
             return
@@ -230,25 +243,18 @@ def task_revoked_handler(sender=None, **kwargs):
         record_id, started_at = records[0]
         completed_at = datetime.now()
 
-        # 计算耗时（毫秒）
         duration_ms = None
         if started_at:
             duration_ms = int((completed_at - started_at).total_seconds() * 1000)
 
-        # 更新任务状态
-        update_sql = """
+        _execute_direct(
+            """
             UPDATE celery_task_history
-            SET status = 'failure',
-                completed_at = %s,
-                error = 'Task revoked',
-                duration_ms = %s
+            SET status = 'failure', completed_at = %s, error = 'Task revoked', duration_ms = %s
             WHERE celery_task_id = %s
-        """
-        db._execute_update(
-            update_sql,
+            """,
             (completed_at, duration_ms, task_id)
         )
-
         logger.warning(f"任务 {task_id[:8]}... 已被撤销")
 
     except Exception as e:
