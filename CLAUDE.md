@@ -3760,6 +3760,11 @@ end_date = datetime.now().strftime("%Y%m%d")
 - **解决**：`celery_signals.py` 中的所有信号处理器必须使用 `_get_direct_conn()` 创建独立 psycopg2 直连，避免依赖单例连接池
 - **手动修复卡住的记录**：`UPDATE celery_task_history SET status='failure', error='stuck' WHERE status='pending' AND created_at < NOW() - INTERVAL '1 hour'`
 
+**问题：执行日线批量同步后后端大量接口返回 500，日志报 `connection pool exhausted`**
+- **原因**：`sync_daily_full_history_task` / `sync_daily_recent_all_task` 在任务体内调用了 `DatabaseManager.reset_instance()`，该方法会调用 `closeall()` 关闭 psycopg2 连接池的**所有连接**（包括 FastAPI 主进程正在使用的）。关闭后 Repository 再取连接时连接池已耗尽。
+- **解决**：**禁止在 Celery 任务体内调用 `DatabaseManager.reset_instance()`**。该方法仅用于测试环境。psycopg2 同步连接池在 Celery worker 中可直接复用，不需要重置；SQLAlchemy 异步引擎的重置由 `run_async_in_celery()` 负责（仅针对 async 任务）。
+- **涉及文件**：`backend/app/tasks/sync_tasks.py`
+
 **问题：性能较慢**
 - [ ] 检查是否使用批量操作（而非循环单条插入）
 - [ ] 检查查询是否添加了适当的索引

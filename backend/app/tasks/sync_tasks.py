@@ -465,10 +465,6 @@ def sync_daily_full_history_task(self: Task):
     from app.core.redis_lock import redis_client
     from app.repositories.stock_basic_repository import StockBasicRepository
     from app.services.stock_daily_service import StockDailyService
-    from src.database.db_manager import DatabaseManager
-
-    # 重置 DatabaseManager 单例，确保 fork 后使用新的连接池
-    DatabaseManager.reset_instance()
 
     logger.info("========== [Celery] 开始全量历史日线数据同步任务 ==========")
 
@@ -603,10 +599,6 @@ def sync_daily_recent_all_task(self: Task, n_days: int = 7):
     from app.repositories.trading_calendar_repository import TradingCalendarRepository
     from app.repositories.stock_basic_repository import StockBasicRepository
     from app.services.stock_daily_service import StockDailyService
-    from src.database.db_manager import DatabaseManager
-
-    # 重置 DatabaseManager 单例，确保 fork 后使用新的连接池
-    DatabaseManager.reset_instance()
 
     logger.info(f"========== [Celery] 开始全市场近{n_days}日日线数据同步任务 ==========")
 

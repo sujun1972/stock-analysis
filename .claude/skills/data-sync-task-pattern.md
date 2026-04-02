@@ -115,10 +115,11 @@ def sync_{resource}_task(
 ```
 
 **关键点**：
-- ✅ 必须使用 `run_async_in_celery` 包装异步服务方法
+- ✅ 必须使用 `run_async_in_celery` 包装异步服务方法（它负责重置 SQLAlchemy 异步引擎）
 - ✅ 任务名称格式：`tasks.sync_{resource}`
 - ✅ 使用 `bind=True` 允许访问 `self`（用于重试等操作）
 - ✅ 捕获异常并记录详细日志
+- ❌ **禁止在任务体内调用 `DatabaseManager.reset_instance()`** — 该方法仅用于测试，在生产任务中调用会关闭 FastAPI 主进程正在使用的 psycopg2 连接池，导致后续所有数据库请求报 `connection pool exhausted`
 
 ---
 
@@ -222,9 +223,26 @@ async def sync_{resource}_async(
 - ✅ 端点路径：`/sync-async`（与 `/sync` 同步端点区分）
 - ✅ 管理员权限：`Depends(require_admin)`
 - ✅ 日期格式转换：`YYYY-MM-DD` → `YYYYMMDD`
-- ✅ 必须记录到 `celery_task_history` 表
+- ✅ 必须记录到 `celery_task_history` 表 — **使用 `TaskHistoryHelper`，禁止直接调用 `DatabaseManager._execute_update`**
 - ✅ `task_type` 应为 `'data_sync'`
 - ✅ 立即返回任务ID，不等待完成
+
+> ⚠️ **模板代码已过时**：上方端点模板中直接使用 `DatabaseManager` 插入任务历史的写法已被废弃。
+> 请改用 `TaskHistoryHelper`（详见 CLAUDE.md「任务历史记录统一管理」章节）：
+> ```python
+> from app.services import TaskHistoryHelper
+> helper = TaskHistoryHelper()
+> task_data = await helper.create_task_record(
+>     celery_task_id=celery_task.id,
+>     task_name='tasks.sync_{resource}',
+>     display_name='{资源中文名称}',
+>     task_type='data_sync',
+>     user_id=current_user.id,
+>     task_params={...},
+>     source='{resource}_page'
+> )
+> return ApiResponse.success(data=task_data)
+> ```
 
 ---
 
