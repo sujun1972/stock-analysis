@@ -232,7 +232,11 @@ export default function PledgeStatPage() {
     <div className="space-y-6">
       <PageHeader
         title="股权质押统计"
-        description="上市公司股票质押统计数据，包含质押次数、质押股本、质押比例等信息"
+        description="获取股票质押统计数据"
+        details={<>
+          <div>接口：pledge_stat</div>
+          <a href="https://tushare.pro/document/2?doc_id=110" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

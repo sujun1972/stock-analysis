@@ -312,7 +312,11 @@ export default function FinaIndicatorPage() {
     <div className="space-y-6">
       <PageHeader
         title="财务指标"
-        description="上市公司财务指标数据，包括EPS、ROE、资产负债率、毛利率、净利率等核心财务指标"
+        description="获取上市公司财务指标数据，为避免服务器压力，现阶段每次请求最多返回100条记录，可通过设置日期多次请求获取更多数据。"
+        details={<>
+          <div>接口：fina_indicator</div>
+          <a href="https://tushare.pro/document/2?doc_id=79" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

@@ -238,8 +238,12 @@ export default function IncomePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="利润表数据"
-        description="上市公司利润表数据查询与同步（Tushare income_vip接口，2000积分/次）"
+        title="利润表"
+        description="获取上市公司财务利润表数据"
+        details={<>
+          <div>接口：income</div>
+          <a href="https://tushare.pro/document/2?doc_id=33" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

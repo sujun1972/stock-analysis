@@ -232,7 +232,11 @@ export default function ExpressPage() {
     <div className="space-y-6">
       <PageHeader
         title="业绩快报"
-        description="上市公司业绩快报数据，包括营业收入、利润、资产、每股收益等关键财务指标"
+        description="获取上市公司业绩快报"
+        details={<>
+          <div>接口：express</div>
+          <a href="https://tushare.pro/document/2?doc_id=46" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

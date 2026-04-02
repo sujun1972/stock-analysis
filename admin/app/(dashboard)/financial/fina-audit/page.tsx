@@ -263,7 +263,11 @@ export default function FinaAuditPage() {
     <div className="space-y-6">
       <PageHeader
         title="财务审计意见"
-        description="查看上市公司定期财务审计意见数据，包括审计结果、审计费用、会计事务所等信息"
+        description="获取上市公司定期财务审计意见数据"
+        details={<>
+          <div>接口：fina_audit</div>
+          <a href="https://tushare.pro/document/2?doc_id=80" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

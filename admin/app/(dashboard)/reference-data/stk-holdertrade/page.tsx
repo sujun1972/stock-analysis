@@ -208,7 +208,11 @@ export default function StkHoldertradePage() {
     <div className="space-y-6">
       <PageHeader
         title="股东增减持"
-        description="获取上市公司股东增减持数据，了解重要股东近期及历史上的股份增减变化"
+        description="获取上市公司增减持数据，了解重要股东近期及历史上的股份增减变化"
+        details={<>
+          <div>接口：stk_holdertrade</div>
+          <a href="https://tushare.pro/document/2?doc_id=175" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

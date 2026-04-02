@@ -327,8 +327,12 @@ export default function StockDailyPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="股票日线数据"
-        description="查询和同步股票日线行情数据，使用Tushare daily接口"
+        title="A股日线行情"
+        description="交易日每天15点～16点之间入库。本接口是未复权行情，停牌期间不提供数据"
+        details={<>
+          <div>接口：daily</div>
+          <a href="https://tushare.pro/document/2?doc_id=27" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <div className="flex gap-2">
             <Button onClick={handleSync} disabled={syncing}>

@@ -215,7 +215,11 @@ export default function RepurchasePage() {
     <div className="space-y-6">
       <PageHeader
         title="股票回购"
-        description="上市公司回购股票数据，包括回购公告、进度、金额等信息"
+        description="获取上市公司回购股票数据"
+        details={<>
+          <div>接口：repurchase</div>
+          <a href="https://tushare.pro/document/2?doc_id=124" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

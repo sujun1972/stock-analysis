@@ -190,8 +190,12 @@ export default function DividendPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="分红送股数据"
-        description="上市公司分红送股详细信息，包括现金分红、送股、转增等"
+        title="分红送股"
+        description="获取上市公司分红送股数据"
+        details={<>
+          <div>接口：dividend</div>
+          <a href="https://tushare.pro/document/2?doc_id=103" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

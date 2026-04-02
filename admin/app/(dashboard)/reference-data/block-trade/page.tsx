@@ -212,7 +212,11 @@ export default function BlockTradePage() {
     <div className="space-y-6">
       <PageHeader
         title="大宗交易"
-        description="股票大宗交易数据，包含成交价、成交量、买卖方营业部等信息（300积分/次）"
+        description="获取大宗交易数据"
+        details={<>
+          <div>接口：block_trade</div>
+          <a href="https://tushare.pro/document/2?doc_id=161" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

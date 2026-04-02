@@ -215,7 +215,11 @@ export default function FinaMainbzPage() {
     <div className="space-y-6">
       <PageHeader
         title="主营业务构成"
-        description="上市公司主营业务构成数据，按产品/地区/行业分类"
+        description="获得上市公司主营业务构成，分地区和产品两种方式"
+        details={<>
+          <div>接口：fina_mainbz</div>
+          <a href="https://tushare.pro/document/2?doc_id=81" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

@@ -172,6 +172,10 @@ export default function StkHighShockPage() {
       <PageHeader
         title="个股严重异常波动"
         description="根据证券交易所交易规则的有关规定，交易所每日发布股票交易严重异常波动情况"
+        details={<>
+          <div>接口：stk_high_shock</div>
+          <a href="https://tushare.pro/document/2?doc_id=452" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

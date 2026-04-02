@@ -184,7 +184,11 @@ export default function StkShockPage() {
     <div className="space-y-6">
       <PageHeader
         title="个股异常波动"
-        description="根据证券交易所交易规则，查看每日股票交易异常波动情况"
+        description="根据证券交易所交易规则的有关规定，交易所每日发布股票交易异常波动情况"
+        details={<>
+          <div>接口：stk_shock</div>
+          <a href="https://tushare.pro/document/2?doc_id=451" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

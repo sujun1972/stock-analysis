@@ -307,7 +307,11 @@ export default function ForecastPage() {
     <div className="space-y-6">
       <PageHeader
         title="业绩预告"
-        description="上市公司业绩预告数据，包括预告类型、净利润变动幅度等信息"
+        description="获取业绩预告数据"
+        details={<>
+          <div>接口：forecast</div>
+          <a href="https://tushare.pro/document/2?doc_id=45" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

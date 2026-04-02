@@ -179,7 +179,11 @@ export default function StkHolderNumberPage() {
     <div className="space-y-6">
       <PageHeader
         title="股东人数"
-        description="上市公司股东户数数据（数据不定期公布）"
+        description="获取上市公司股东户数数据，数据不定期公布"
+        details={<>
+          <div>接口：stk_holdernumber</div>
+          <a href="https://tushare.pro/document/2?doc_id=166" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

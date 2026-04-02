@@ -199,7 +199,11 @@ export default function ShareFloatPage() {
     <div className="space-y-6">
       <PageHeader
         title="限售股解禁"
-        description="查看限售股解禁数据，包括公告日期、解禁日期、流通股份、流通比率、股东名称等"
+        description="获取限售股解禁"
+        details={<>
+          <div>接口：share_float</div>
+          <a href="https://tushare.pro/document/2?doc_id=160" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

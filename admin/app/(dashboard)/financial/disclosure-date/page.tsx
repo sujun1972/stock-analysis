@@ -226,7 +226,11 @@ export default function DisclosureDatePage() {
     <div className="space-y-6">
       <PageHeader
         title="财报披露计划"
-        description="查看上市公司财报披露计划日期，包括预计披露日期和实际披露日期"
+        description="获取财报披露计划日期"
+        details={<>
+          <div>接口：disclosure_date</div>
+          <a href="https://tushare.pro/document/2?doc_id=162" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

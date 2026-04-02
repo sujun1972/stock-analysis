@@ -237,8 +237,12 @@ export default function BalancesheetPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="资产负债表数据"
-        description="上市公司资产负债表数据查询与同步（Tushare balancesheet_vip接口，2000积分/次）"
+        title="资产负债表"
+        description="获取上市公司资产负债表"
+        details={<>
+          <div>接口：balancesheet</div>
+          <a href="https://tushare.pro/document/2?doc_id=36" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

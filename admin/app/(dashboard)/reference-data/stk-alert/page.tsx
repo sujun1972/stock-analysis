@@ -171,6 +171,10 @@ export default function StkAlertPage() {
       <PageHeader
         title="交易所重点提示证券"
         description="根据证券交易所交易规则的有关规定，交易所每日发布重点提示证券"
+        details={<>
+          <div>接口：stk_alert</div>
+          <a href="https://tushare.pro/document/2?doc_id=453" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

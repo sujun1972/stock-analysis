@@ -213,7 +213,11 @@ export default function CashflowPage() {
     <div className="space-y-6">
       <PageHeader
         title="现金流量表"
-        description="上市公司现金流量表数据查询（经营、投资、筹资活动现金流）"
+        description="获取上市公司现金流量表"
+        details={<>
+          <div>接口：cashflow</div>
+          <a href="https://tushare.pro/document/2?doc_id=44" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (
