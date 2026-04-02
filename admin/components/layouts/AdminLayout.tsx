@@ -87,9 +87,9 @@ const navItems: NavItem[] = [
         icon: Database
       },
       {
-        name: '新股列表同步',
-        href: '/sync/new-stocks',
-        icon: PackagePlus
+        name: '交易日历',
+        href: '/data/trade-cal',
+        icon: CalendarDays
       },
       {
         name: 'ST股票列表',
@@ -97,9 +97,9 @@ const navItems: NavItem[] = [
         icon: AlertTriangle
       },
       {
-        name: '交易日历',
-        href: '/data/trade-cal',
-        icon: CalendarDays
+        name: 'IPO新股列表',
+        href: '/sync/new-stocks',
+        icon: PackagePlus
       }
     ]
   },

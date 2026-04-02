@@ -55,17 +55,35 @@ const getTaskInfo = (task: ScheduledTask) => {
   }
 }
 
+// 所有合法任务分类，筛选下拉和编辑弹窗共用同一份列表
+const TASK_CATEGORIES = [
+  '基础数据',
+  '行情数据',
+  '财务数据',
+  '参考数据',
+  '特色数据',
+  '两融及转融通',
+  '资金流向',
+  '打板专题',
+  '市场情绪',
+  '盘前分析',
+  '质量监控',
+  '报告通知',
+  '系统维护',
+  '其他',
+]
+
+// 筛选下拉选项（在分类列表前插入"全部"）
+const FILTER_CATEGORIES = ['全部', ...TASK_CATEGORIES]
+
 export default function SchedulerSettingsPage() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(true)
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string>('全部')
 
-  useEffect(() => {
-    loadTasks()
-  }, [])
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     try {
       setLoading(true)
       const response = await apiClient.getScheduledTasks()
@@ -79,9 +97,13 @@ export default function SchedulerSettingsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const handleToggle = async (taskId: number) => {
+  useEffect(() => {
+    loadTasks()
+  }, [loadTasks])
+
+  const handleToggle = useCallback(async (taskId: number) => {
     try {
       // 乐观更新UI，立即切换状态
       setTasks(prevTasks =>
@@ -107,7 +129,7 @@ export default function SchedulerSettingsPage() {
         description: err.message || '切换任务状态失败'
       })
     }
-  }
+  }, [loadTasks])
 
   const handleEdit = (task: ScheduledTask) => {
     setEditingTask(task)
@@ -117,22 +139,19 @@ export default function SchedulerSettingsPage() {
   const [executingTasks, setExecutingTasks] = useState<Set<number>>(new Set())
   const { addTask, triggerPoll } = useTaskStore()
 
-  const handleExecute = async (task: ScheduledTask) => {
+  const handleExecute = useCallback(async (task: ScheduledTask) => {
     const taskInfo = getTaskInfo(task)
 
     try {
-      // 添加到执行中列表（按钮变为 disabled 状态）
       setExecutingTasks(prev => new Set(prev).add(task.id))
 
-      // 调用执行API
       const response = await apiClient.executeScheduledTask(task.id)
 
-      // 检查响应是否成功（兼容两种响应格式）
+      // 兼容 success/code 两种响应格式
       const isSuccess = response.success || response.code === 200
       const responseData = response.data
 
       if (isSuccess && responseData) {
-        // 添加到任务存储
         addTask({
           taskId: responseData.celery_task_id,
           taskName: responseData.task_name,
@@ -142,44 +161,30 @@ export default function SchedulerSettingsPage() {
           progress: 0,
           startTime: Date.now()
         })
-
-        // 立即触发一次轮询，让 Header 图标即时更新
         triggerPoll()
-
-        // 显示 toast 通知
         toast.success('任务已提交', {
           description: `"${taskInfo.name}" 已开始执行，可在任务面板查看进度`
         })
-
-        // 静默刷新任务列表（不触发 loading 状态，避免页面跳动）
+        // 静默刷新任务列表（延迟1s等待后端写入）
         setTimeout(async () => {
-          try {
-            const response = await apiClient.getScheduledTasks()
-            if (response.data) {
-              setTasks(response.data)
-            }
-          } catch (err) {
-            // 静默失败，不打断用户
-            console.error('静默刷新任务列表失败:', err)
-          }
+          const refreshed = await apiClient.getScheduledTasks().catch(() => null)
+          if (refreshed?.data) setTasks(refreshed.data)
         }, 1000)
       } else {
         throw new Error(response.message || '执行失败')
       }
     } catch (err: any) {
-      // 显示错误 toast
       toast.error('执行失败', {
         description: err.message || '未知错误'
       })
     } finally {
-      // 从执行中列表移除（按钮恢复正常状态）
       setExecutingTasks(prev => {
         const next = new Set(prev)
         next.delete(task.id)
         return next
       })
     }
-  }
+  }, [addTask, triggerPoll])
 
   const handleSaveEdit = async () => {
     if (!editingTask) return
@@ -244,6 +249,22 @@ export default function SchedulerSettingsPage() {
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
     }
   }
+
+  // 各分类任务计数，避免下拉渲染时重复 filter
+  const categoryCounts = useMemo(() => {
+    const map: Record<string, number> = { '全部': tasks.length }
+    for (const t of tasks) {
+      const cat = t.category || '其他'
+      map[cat] = (map[cat] ?? 0) + 1
+    }
+    return map
+  }, [tasks])
+
+  // 按分类过滤后的任务列表
+  const filteredTasks = useMemo(() => {
+    if (selectedCategory === '全部') return tasks
+    return tasks.filter(t => (t.category || '其他') === selectedCategory)
+  }, [tasks, selectedCategory])
 
   // 定义表格列配置
   const columns: Column<ScheduledTask>[] = useMemo(() => [
@@ -586,12 +607,26 @@ export default function SchedulerSettingsPage() {
 
       {/* 任务列表 */}
       <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          定时任务列表
-        </h2>
+        <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            定时任务列表
+          </h2>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="选择分类" />
+            </SelectTrigger>
+            <SelectContent>
+              {FILTER_CATEGORIES.map(cat => (
+                <SelectItem key={cat} value={cat}>
+                  {`${cat}（${categoryCounts[cat] ?? 0}）`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <DataTable
-          data={tasks}
+          data={filteredTasks}
           columns={columns}
           loading={loading}
           mobileCard={mobileCard}
@@ -686,21 +721,9 @@ export default function SchedulerSettingsPage() {
                       <SelectValue placeholder="选择任务分类" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="基础数据">基础数据</SelectItem>
-                      <SelectItem value="行情数据">行情数据</SelectItem>
-                      <SelectItem value="扩展数据">扩展数据</SelectItem>
-                      <SelectItem value="资金流向">资金流向</SelectItem>
-                      <SelectItem value="两融及转融通">两融及转融通</SelectItem>
-                      <SelectItem value="财务数据">财务数据</SelectItem>
-                      <SelectItem value="市场情绪">市场情绪</SelectItem>
-                      <SelectItem value="盘前分析">盘前分析</SelectItem>
-                      <SelectItem value="质量监控">质量监控</SelectItem>
-                      <SelectItem value="报告通知">报告通知</SelectItem>
-                      <SelectItem value="系统维护">系统维护</SelectItem>
-                      <SelectItem value="参考数据">参考数据</SelectItem>
-                      <SelectItem value="特色数据">特色数据</SelectItem>
-                      <SelectItem value="打板专题">打板专题</SelectItem>
-                      <SelectItem value="其他">其他</SelectItem>
+                      {TASK_CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
