@@ -227,7 +227,11 @@ export default function StockListPage() {
     <div className="space-y-6">
       <PageHeader
         title="股票列表"
-        description="查询和管理所有股票信息（Tushare stock_basic接口，包含上市、退市、停牌等全部状态）"
+        description="获取基础信息数据，包括股票代码、名称、上市日期、退市日期等"
+        details={<>
+          <div>接口：stock_basic</div>
+          <a href="https://tushare.pro/document/2?doc_id=25" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

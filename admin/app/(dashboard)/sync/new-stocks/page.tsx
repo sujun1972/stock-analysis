@@ -206,8 +206,12 @@ export default function NewStocksPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="新股列表"
-        description="查询和管理最近上市的新股信息（Tushare new_share接口）"
+        title="IPO新股列表"
+        description="获取新股上市列表数据"
+        details={<>
+          <div>接口：new_share</div>
+          <a href="https://tushare.pro/document/2?doc_id=123" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

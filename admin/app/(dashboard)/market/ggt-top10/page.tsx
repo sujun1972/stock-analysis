@@ -313,7 +313,11 @@ export default function GgtTop10Page() {
     <div className="space-y-6">
       <PageHeader
         title="港股通十大成交股"
-        description="查看港股通(沪)、港股通(深)每日前十大成交详细数据，每天18~20点之间完成当日更新"
+        description="获取港股通每日成交数据，其中包括沪市、深市详细数据，每天18~20点之间完成当日更新"
+        details={<>
+          <div>接口：ggt_top10</div>
+          <a href="https://tushare.pro/document/2?doc_id=49" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

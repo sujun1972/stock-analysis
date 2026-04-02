@@ -215,7 +215,11 @@ export default function GgtDailyPage() {
     <div className="space-y-6">
       <PageHeader
         title="港股通每日成交统计"
-        description="查看港股通每日买卖成交金额和笔数统计，数据从2014年开始（Tushare ggt_daily接口，2000积分/次）"
+        description="获取港股通每日成交信息，数据从2014年开始"
+        details={<>
+          <div>接口：ggt_daily</div>
+          <a href="https://tushare.pro/document/2?doc_id=196" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

@@ -190,7 +190,11 @@ export default function AdjFactorPage() {
     <div className="space-y-6">
       <PageHeader
         title="复权因子"
-        description="获取股票复权因子，可提取单只股票全部历史复权因子，也可以提取单日全部股票的复权因子（盘前9:15~20分更新，2000积分起）"
+        description="盘前9点15~20分完成当日复权因子入库"
+        details={<>
+          <div>接口：adj_factor</div>
+          <a href="https://tushare.pro/document/2?doc_id=28" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

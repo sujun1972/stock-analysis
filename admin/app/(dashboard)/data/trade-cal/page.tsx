@@ -195,7 +195,7 @@ export default function TradeCalPage() {
     <div className="space-y-6">
       <PageHeader
         title="交易日历"
-        description="获取各大交易所交易日历数据，默认上交所（SSE），2000积分/次"
+        description="获取各大交易所交易日历数据，默认提取的是上交所"
         details={
           <>
             <div>接口：trade_cal</div>

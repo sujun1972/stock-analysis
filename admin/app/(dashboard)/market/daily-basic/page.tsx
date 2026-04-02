@@ -287,7 +287,11 @@ export default function DailyBasicPage() {
     <div className="space-y-6">
       <PageHeader
         title="每日指标"
-        description="获取全部股票每日重要的基本面指标，可用于选股分析、报表展示等（2000积分/次，单次最大6000条）"
+        description="交易日每日15点～17点之间"
+        details={<>
+          <div>接口：daily_basic</div>
+          <a href="https://tushare.pro/document/2?doc_id=32" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

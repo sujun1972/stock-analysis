@@ -249,7 +249,11 @@ export default function GgtMonthlyPage() {
     <div className="space-y-6">
       <PageHeader
         title="港股通每月成交统计"
-        description="港股通每月成交信息，数据从2014年开始（Tushare ggt_monthly接口，5000积分/次）"
+        description="港股通每月成交信息，数据从2014年开始"
+        details={<>
+          <div>接口：ggt_monthly</div>
+          <a href="https://tushare.pro/document/2?doc_id=197" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

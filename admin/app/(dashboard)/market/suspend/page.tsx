@@ -209,7 +209,11 @@ export default function SuspendPage() {
     <div className="space-y-6">
       <PageHeader
         title="每日停复牌信息"
-        description="查询股票每日停复牌情况，包括停牌时间段和复牌信息"
+        description="按日期方式获取股票每日停复牌信息"
+        details={<>
+          <div>接口：suspend_d</div>
+          <a href="https://tushare.pro/document/2?doc_id=214" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

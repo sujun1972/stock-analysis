@@ -313,7 +313,11 @@ export default function HsgtTop10Page() {
     <div className="space-y-6">
       <PageHeader
         title="沪深股通十大成交股"
-        description="查看沪股通、深股通每日前十大成交详细数据，每天18~20点之间完成当日更新"
+        description="获取沪股通、深股通每日前十大成交详细数据，每天18~20点之间完成当日更新"
+        details={<>
+          <div>接口：hsgt_top10</div>
+          <a href="https://tushare.pro/document/2?doc_id=48" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

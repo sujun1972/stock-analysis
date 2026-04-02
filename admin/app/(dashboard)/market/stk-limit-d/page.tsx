@@ -223,7 +223,11 @@ export default function StkLimitDPage() {
     <div className="space-y-6">
       <PageHeader
         title="每日涨跌停价格"
-        description="查看全市场每日涨跌停价格数据，每交易日8:40更新"
+        description="获取全市场（包含A/B股和基金）每日涨跌停价格，包括涨停价格，跌停价格等，每个交易日8点40左右更新当日股票涨跌停价格。"
+        details={<>
+          <div>接口：stk_limit</div>
+          <a href="https://tushare.pro/document/2?doc_id=183" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (

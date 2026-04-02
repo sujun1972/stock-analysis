@@ -202,6 +202,10 @@ export default function StockStPage() {
       <PageHeader
         title="ST股票列表"
         description="获取ST股票列表，可根据交易日期获取历史上每天的ST列表"
+        details={<>
+          <div>接口：stock_st</div>
+          <a href="https://tushare.pro/document/2?doc_id=397" target="_blank" rel="noopener noreferrer">查看文档</a>
+        </>}
         actions={
           <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
             {syncing ? (
