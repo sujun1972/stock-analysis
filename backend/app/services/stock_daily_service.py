@@ -176,7 +176,7 @@ class StockDailyService:
             raise
         finally:
             cursor.close()
-            conn.close()
+            self.db.pool_manager.release_connection(conn)
 
         items = []
         ts_codes = []
@@ -243,7 +243,7 @@ class StockDailyService:
             return {'stock_count': 0, 'record_count': 0, 'latest_date': None, 'earliest_date': None}
         finally:
             cursor.close()
-            conn.close()
+            self.db.pool_manager.release_connection(conn)
 
         return {
             'stock_count': stock_count,
