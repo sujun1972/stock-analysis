@@ -50,6 +50,7 @@ export class StkAlertApiClient extends BaseApiClient {
   async getData(params?: StkAlertParams): Promise<ApiResponse<{
     items: StkAlertData[]
     total: number
+    trade_date?: string
   }>> {
     return this.get('/api/stk-alert', { params })
   }
@@ -60,6 +61,7 @@ export class StkAlertApiClient extends BaseApiClient {
   async getStatistics(params?: {
     start_date?: string
     end_date?: string
+    trade_date?: string
   }): Promise<ApiResponse<StkAlertStatistics>> {
     return this.get('/api/stk-alert/statistics', { params })
   }

@@ -53,6 +53,7 @@ export class StkShockApiClient extends BaseApiClient {
   async getData(params?: StkShockParams): Promise<ApiResponse<{
     items: StkShockData[]
     total: number
+    trade_date?: string
   }>> {
     return this.get('/api/stk-shock', { params })
   }
@@ -63,6 +64,7 @@ export class StkShockApiClient extends BaseApiClient {
   async getStatistics(params?: {
     start_date?: string
     end_date?: string
+    trade_date?: string
   }): Promise<ApiResponse<StkShockStatistics>> {
     return this.get('/api/stk-shock/statistics', { params })
   }

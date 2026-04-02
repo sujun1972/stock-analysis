@@ -52,6 +52,7 @@ export class StkHighShockApiClient extends BaseApiClient {
   async getData(params?: StkHighShockParams): Promise<ApiResponse<{
     items: StkHighShockData[]
     total: number
+    trade_date?: string
   }>> {
     return this.get('/api/stk-high-shock', { params })
   }
@@ -62,6 +63,7 @@ export class StkHighShockApiClient extends BaseApiClient {
   async getStatistics(params?: {
     start_date?: string
     end_date?: string
+    trade_date?: string
   }): Promise<ApiResponse<StkHighShockStatistics>> {
     return this.get('/api/stk-high-shock/statistics', { params })
   }

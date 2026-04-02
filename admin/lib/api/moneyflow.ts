@@ -11,10 +11,11 @@ import type { ApiResponse } from '@/types/api'
 // ============== 类型定义 ==============
 
 export interface SyncMoneyflowParams {
-  trade_date?: string  // YYYY-MM-DD
-  start_date?: string  // YYYY-MM-DD
-  end_date?: string    // YYYY-MM-DD
-  ts_code?: string     // 股票代码（个股资金流向）
+  trade_date?: string    // YYYY-MM-DD
+  start_date?: string    // YYYY-MM-DD
+  end_date?: string      // YYYY-MM-DD
+  ts_code?: string       // 股票代码（个股资金流向）
+  content_type?: string  // 数据类型(行业、概念、地域)
 }
 
 export interface SyncTaskResponse {

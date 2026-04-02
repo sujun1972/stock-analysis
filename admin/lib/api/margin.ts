@@ -115,6 +115,8 @@ export class MarginApiClient extends BaseApiClient {
     total: number
     page: number
     page_size: number
+    statistics?: any
+    trade_date?: string
   }>> {
     return this.get('/api/margin-detail', { params })
   }

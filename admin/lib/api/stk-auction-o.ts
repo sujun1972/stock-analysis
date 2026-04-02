@@ -45,6 +45,7 @@ export class StkAuctionOApiClient extends BaseApiClient {
     items: StkAuctionOData[]
     statistics: StkAuctionOStatistics
     total: number
+    trade_date?: string
   }>> {
     return this.get('/api/stk-auction-o', { params })
   }

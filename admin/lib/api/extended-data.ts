@@ -206,6 +206,7 @@ export class ExtendedDataApiClient extends BaseApiClient {
   async getPledgeStatStatistics(params?: {
     start_date?: string
     end_date?: string
+    trade_date?: string
   }): Promise<ApiResponse<any>> {
     return this.get('/api/pledge-stat/statistics', { params })
   }

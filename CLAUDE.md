@@ -941,11 +941,19 @@ export interface YourData {
 }
 
 export class YourApiClient extends BaseApiClient {
-  async getData(params?: YourDataParams): Promise<ApiResponse<{items: YourData[], total: number}>> {
+  async getData(params?: YourDataParams): Promise<ApiResponse<{
+    items: YourData[]
+    total: number
+    trade_date?: string  // 后端 resolve_default_trade_date 回填的默认日期，前端用于初始化日期选择器
+  }>> {
     return this.get('/api/your-endpoint', { params })
   }
 
-  async getStatistics(params): Promise<ApiResponse<any>> {
+  async getStatistics(params?: {
+    start_date?: string
+    end_date?: string
+    trade_date?: string  // 支持单日筛选
+  }): Promise<ApiResponse<any>> {
     return this.get('/api/your-endpoint/statistics', { params })
   }
 
@@ -1114,7 +1122,7 @@ docker-compose logs celery_worker | grep "tasks.sync_your_data"
 - [ ] API 端点包含查询、统计、最新、异步同步4个接口
 - [ ] API 异步同步端点使用 `TaskHistoryHelper` 创建任务历史
 - [ ] Tushare Provider 添加了数据获取方法
-- [ ] 前端 API 客户端已创建并导出
+- [ ] 前端 API 客户端已创建并导出，`getData` 返回类型包含 `trade_date?`（用于日期回填）
 - [ ] 前端页面实现了数据展示、筛选、同步功能
 - [ ] 菜单项已添加到 AdminLayout
 - [ ] Celery Worker 已重启并验证任务注册成功
