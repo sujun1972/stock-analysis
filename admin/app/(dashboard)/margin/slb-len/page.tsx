@@ -17,7 +17,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { slbLenApi } from '@/lib/api'
+import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import type { SlbLenData, SlbLenStatistics } from '@/lib/api/slb-len'
 
 export default function SlbLenPage() {
@@ -120,6 +123,22 @@ export default function SlbLenPage() {
     }
   }
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'slb_len',
+    syncFn: (params) => apiClient.post('/api/slb-len/sync-async', null, { params }),
+    taskName: 'tasks.sync_slb_len',
+    onSuccess: loadData,
+  })
+
   // 初始加载
   useEffect(() => {
     loadData()
@@ -134,6 +153,7 @@ export default function SlbLenPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [unregisterCompletionCallback])
 
@@ -240,13 +260,25 @@ export default function SlbLenPage() {
           <a href="https://tushare.pro/document/2?doc_id=331" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="转融资交易汇总"
+            />
+          </div>
         }
       />
 

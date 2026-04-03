@@ -12,6 +12,9 @@ import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, BarChart3, Users, Percent } from 'lucide-react'
 import { extendedDataApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 
 interface PledgeStatData {
   ts_code: string
@@ -54,6 +57,22 @@ export default function PledgeStatPage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_pledge_stat')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'pledge_stat',
+    syncFn: (params) => apiClient.post('/api/pledge-stat/sync-async', null, { params }),
+    taskName: 'tasks.sync_pledge_stat',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>

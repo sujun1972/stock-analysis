@@ -18,6 +18,8 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ggtTop10Api, type GgtTop10Data, type GgtTop10Statistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, DollarSign } from 'lucide-react'
 
@@ -94,6 +96,22 @@ export default function GgtTop10Page() {
     }
   }, [startDate, endDate, tsCode, marketType, pageSize])
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'ggt_top10',
+    syncFn: (params) => ggtTop10Api.syncAsync(params),
+    taskName: 'tasks.sync_ggt_top10',
+    onSuccess: loadData,
+  })
+
   // 初始加载
   useEffect(() => {
     loadData()
@@ -107,6 +125,7 @@ export default function GgtTop10Page() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -319,19 +338,31 @@ export default function GgtTop10Page() {
           <a href="https://tushare.pro/document/2?doc_id=49" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                同步中...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                同步数据
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  同步中...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  同步数据
+                </>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="港股通十大成交股"
+            />
+          </div>
         }
       />
 

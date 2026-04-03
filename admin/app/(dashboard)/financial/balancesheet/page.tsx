@@ -14,6 +14,9 @@ import { balancesheetApi } from '@/lib/api/balancesheet-api'
 import type { BalancesheetData, BalancesheetStatistics } from '@/lib/api/balancesheet-api'
 import { useTaskStore } from '@/stores/task-store'
 import { TrendingUp, TrendingDown, DollarSign, PieChart, RefreshCw } from 'lucide-react'
+import { apiClient } from '@/lib/api-client'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 
 export default function BalancesheetPage() {
   const [data, setData] = useState<BalancesheetData[]>([])
@@ -59,6 +62,7 @@ export default function BalancesheetPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -96,6 +100,22 @@ export default function BalancesheetPage() {
       setIsLoading(false)
     }
   }
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'balancesheet',
+    syncFn: (params) => apiClient.post('/api/balancesheet/sync-async', null, { params }),
+    taskName: 'tasks.sync_balancesheet',
+    onSuccess: loadData,
+  })
 
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
@@ -244,13 +264,25 @@ export default function BalancesheetPage() {
           <a href="https://tushare.pro/document/2?doc_id=36" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="资产负债表"
+            />
+          </div>
         }
       />
 

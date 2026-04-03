@@ -14,6 +14,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { tradeCalApi } from '@/lib/api'
 import type { TradeCalData, TradeCalStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 
 const EXCHANGE_OPTIONS = [
   { value: 'SSE', label: 'SSE 上交所' },
@@ -83,6 +86,23 @@ export default function TradeCalPage() {
       // ignore
     }
   }
+
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'trade_cal',
+    syncFn: (params) => apiClient.post('/api/trade-cal/sync-async', null, { params }),
+    taskName: 'tasks.sync_trade_cal',
+    onSuccess: () => loadData(1),
+  })
 
   useEffect(() => {
     loadData(1)
@@ -157,6 +177,7 @@ export default function TradeCalPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
 
@@ -210,13 +231,25 @@ export default function TradeCalPage() {
           </>
         }
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="交易日历"
+            />
+          </div>
         }
       />
 

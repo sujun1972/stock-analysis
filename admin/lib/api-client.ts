@@ -640,8 +640,22 @@ class ApiClient {
     concept_data_source?: string
     sentiment_data_source?: string
     tushare_token?: string
+    earliest_history_date?: string
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/config/source', params)
+    return response.data
+  }
+
+  /**
+   * 清空指定数据表（全表 TRUNCATE 或按日期范围删除）
+   */
+  async clearTableData(params: {
+    table_key: string
+    start_date?: string
+    end_date?: string
+  }): Promise<ApiResponse<{ table: string; deleted: number; mode: string }>> {
+    const { table_key, ...query } = params
+    const response = await axiosInstance.post(`/api/data-ops/clear/${table_key}`, {}, { params: query })
     return response.data
   }
 

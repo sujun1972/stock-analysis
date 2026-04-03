@@ -11,6 +11,9 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react'
+import { apiClient } from '@/lib/api-client'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { cashflowApi } from '@/lib/api'
 import type { CashflowData, CashflowStatistics } from '@/lib/api/cashflow-api'
 import { useTaskStore } from '@/stores/task-store'
@@ -94,6 +97,22 @@ export default function CashflowPage() {
     loadStatistics()
   }, [loadData, loadStatistics])
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'cashflow',
+    syncFn: (params) => apiClient.post('/api/cashflow/sync-async', null, { params }),
+    taskName: 'tasks.sync_cashflow',
+    onSuccess: loadData,
+  })
+
   // 同步确认
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
@@ -150,6 +169,7 @@ export default function CashflowPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -219,13 +239,25 @@ export default function CashflowPage() {
           <a href="https://tushare.pro/document/2?doc_id=44" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="现金流量表"
+            />
+          </div>
         }
       />
 

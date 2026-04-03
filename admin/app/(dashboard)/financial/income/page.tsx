@@ -13,6 +13,9 @@ import { toast } from 'sonner'
 import { incomeApi } from '@/lib/api'
 import type { IncomeData, IncomeStatistics } from '@/lib/api/income-api'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 import { TrendingUp, TrendingDown, DollarSign, PieChart, RefreshCw } from 'lucide-react'
 
 export default function IncomePage() {
@@ -60,6 +63,7 @@ export default function IncomePage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -97,6 +101,22 @@ export default function IncomePage() {
       setIsLoading(false)
     }
   }
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'income',
+    syncFn: (params) => apiClient.post('/api/income/sync-async', null, { params }),
+    taskName: 'tasks.sync_income',
+    onSuccess: loadData,
+  })
 
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)

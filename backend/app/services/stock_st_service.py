@@ -6,13 +6,17 @@ ST股票列表服务
 
 import asyncio
 from typing import Optional, Dict, List
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 from loguru import logger
 
 from app.repositories.stock_st_repository import StockStRepository
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
+
+CHUNK_DAYS = 2       # 每次请求覆盖的交易日数量
+CONCURRENCY = 10     # 并发请求数
 
 
 class StockStService:
@@ -20,6 +24,7 @@ class StockStService:
 
     def __init__(self):
         self.stock_st_repo = StockStRepository()
+        self.calendar_repo = TradingCalendarRepository()
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
@@ -58,43 +63,79 @@ class StockStService:
                 f"start_date={start_date}, end_date={end_date}"
             )
 
-            # 获取 Tushare Provider
             provider = self._get_provider()
 
-            # 调用 Provider 获取数据
-            df = await asyncio.to_thread(
-                provider.get_stock_st,
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
+            # 单只股票或单日查询：直接拉取，无需分批
+            if ts_code or trade_date:
+                df = await asyncio.to_thread(
+                    provider.get_stock_st,
+                    ts_code=ts_code,
+                    trade_date=trade_date,
+                    start_date=start_date,
+                    end_date=end_date
+                )
+                if df is None or df.empty:
+                    logger.warning("未获取到ST股票数据")
+                    return {"status": "success", "records": 0, "message": "未获取到数据"}
+                df = self._validate_and_clean_data(df)
+                records = await asyncio.to_thread(self.stock_st_repo.bulk_upsert, df)
+                logger.info(f"ST股票数据同步成功: {records} 条")
+                return {"status": "success", "records": records, "message": f"成功同步 {records} 条ST股票数据"}
+
+            # 全量/范围同步：按 CHUNK_DAYS 个交易日为一批，10并发，每批完成后立即写库
+            seg_start = start_date or '20160101'
+            seg_end = end_date or datetime.now().strftime('%Y%m%d')
+
+            trading_days = await asyncio.to_thread(
+                self.calendar_repo.get_trading_days_between,
+                seg_start,
+                seg_end
             )
+            logger.info(f"共 {len(trading_days)} 个交易日需要同步 ({seg_start}~{seg_end})")
 
-            if df is None or df.empty:
-                logger.warning("未获取到ST股票数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "未获取到数据"
-                }
+            # 将交易日按 CHUNK_DAYS 分组，每组取 start/end
+            day_chunks = []
+            for i in range(0, len(trading_days), CHUNK_DAYS):
+                chunk = trading_days[i:i + CHUNK_DAYS]
+                day_chunks.append((chunk[0], chunk[-1]))
 
-            logger.info(f"获取到 {len(df)} 条ST股票数据")
+            total_records = 0
+            semaphore = asyncio.Semaphore(CONCURRENCY)
 
-            # 数据验证和清洗
-            df = self._validate_and_clean_data(df)
+            async def fetch_and_save(chunk_start: str, chunk_end: str) -> int:
+                """拉取一个时间片的数据并立即写库，通过信号量控制并发数。"""
+                async with semaphore:
+                    chunk_df = await asyncio.to_thread(
+                        provider.get_stock_st,
+                        start_date=chunk_start,
+                        end_date=chunk_end
+                    )
+                    if chunk_df is None or chunk_df.empty:
+                        return 0
+                    chunk_df = self._validate_and_clean_data(chunk_df)
+                    return await asyncio.to_thread(self.stock_st_repo.bulk_upsert, chunk_df)
 
-            # 批量插入数据库
-            records = await asyncio.to_thread(
-                self.stock_st_repo.bulk_upsert,
-                df
-            )
+            # 全部 chunk 同时提交，信号量自动限流为 CONCURRENCY 个并发；
+            # 每个 chunk 完成后立即写库，不等待其他 chunk 结束
+            for batch_start in range(0, len(day_chunks), CONCURRENCY):
+                batch = day_chunks[batch_start:batch_start + CONCURRENCY]
+                results = await asyncio.gather(
+                    *[fetch_and_save(s, e) for s, e in batch],
+                    return_exceptions=True
+                )
+                for r in results:
+                    if isinstance(r, Exception):
+                        logger.error(f"批次同步出错: {r}")
+                    else:
+                        total_records += r
+                done = min(batch_start + CONCURRENCY, len(day_chunks))
+                logger.info(f"进度: {done}/{len(day_chunks)} 批，已写入 {total_records} 条")
 
-            logger.info(f"ST股票数据同步成功: {records} 条")
-
+            logger.info(f"ST股票数据全量同步完成: 共写入 {total_records} 条")
             return {
                 "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条ST股票数据"
+                "records": total_records,
+                "message": f"成功同步 {total_records} 条ST股票数据"
             }
 
         except Exception as e:
@@ -171,37 +212,41 @@ class StockStService:
             start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
-            # 计算分页
             offset = (page - 1) * page_size
 
-            # 获取数据
-            items = await asyncio.to_thread(
-                self.stock_st_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                st_type=st_type,
-                limit=page_size + offset
-            )
-
-            # 分页处理
-            paginated_items = items[offset:offset + page_size]
-
-            # 获取统计信息
-            statistics = await asyncio.to_thread(
-                self.stock_st_repo.get_statistics,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt
+            # 并发获取数据、总数、统计信息
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.stock_st_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    st_type=st_type,
+                    limit=page_size,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.stock_st_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    st_type=st_type,
+                ),
+                asyncio.to_thread(
+                    self.stock_st_repo.get_statistics,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt
+                ),
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD
-            for item in paginated_items:
+            for item in items:
                 if item.get('trade_date'):
                     item['trade_date'] = self._format_date(item['trade_date'])
 
             return {
-                "items": paginated_items,
-                "total": len(items),
+                "items": items,
+                "total": total,
                 "page": page,
                 "page_size": page_size,
                 "statistics": statistics

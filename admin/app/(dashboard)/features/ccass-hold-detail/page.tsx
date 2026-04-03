@@ -18,7 +18,10 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { ccassHoldDetailApi, type CcassHoldDetailData, type CcassHoldDetailStatistics } from '@/lib/api'
+import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, TrendingUp, Users, Calendar, Database, ListFilter } from 'lucide-react'
 
 const toDateStr = (d: Date) =>
@@ -83,6 +86,22 @@ export default function CcassHoldDetailPage() {
       setIsLoading(false)
     }
   }, [tsCode, participantId, tradeDate, sortKey, sortDirection])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'ccass_hold_detail',
+    syncFn: (params) => apiClient.post('/api/ccass-hold-detail/sync-async', null, { params }),
+    taskName: 'tasks.sync_ccass_hold_detail',
+    onSuccess: loadData,
+  })
 
   useEffect(() => {
     loadData(1)
@@ -150,6 +169,7 @@ export default function CcassHoldDetailPage() {
       const callbacks = activeCallbacksRef.current
       callbacks.forEach((cb, taskId) => unregisterCompletionCallback(taskId, cb))
       callbacks.clear()
+      cleanup()
     }
   }, [unregisterCompletionCallback])
 
@@ -222,11 +242,23 @@ export default function CcassHoldDetailPage() {
           <a href="https://tushare.pro/document/2?doc_id=274" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing
-              ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-              : <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing
+                ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+                : <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="CCASS持股明细"
+            />
+          </div>
         }
       />
 

@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { suspendApi } from '@/lib/api'
 import type { SuspendData, SuspendStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, Calendar, BarChart3 } from 'lucide-react'
 
@@ -83,6 +85,22 @@ export default function SuspendPage() {
     }
   }, [startDate, endDate, tsCode, suspendType, currentPage, pageSize])
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'suspend',
+    syncFn: (params) => suspendApi.syncAsync(params),
+    taskName: 'tasks.sync_suspend',
+    onSuccess: loadData,
+  })
+
   useEffect(() => {
     loadData()
   }, [loadData])
@@ -148,8 +166,10 @@ export default function SuspendPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
-  }, [unregisterCompletionCallback])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 表格列定义
   const columns: Column<SuspendData>[] = useMemo(() => [
@@ -215,19 +235,31 @@ export default function SuspendPage() {
           <a href="https://tushare.pro/document/2?doc_id=214" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                同步中...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                同步数据
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  同步中...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  同步数据
+                </>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="每日停复牌"
+            />
+          </div>
         }
       />
 

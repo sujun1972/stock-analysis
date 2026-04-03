@@ -7,7 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { limitCptApi, type LimitCptData, type LimitCptStatistics } from '@/lib/api'
+import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp } from 'lucide-react'
 
@@ -70,6 +73,22 @@ export default function LimitCptPage() {
     }
   }
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'limit_cpt',
+    syncFn: (params) => apiClient.post('/api/limit-cpt/sync-async', null, { params }),
+    taskName: 'tasks.sync_limit_cpt',
+    onSuccess: loadData,
+  })
+
   const handleQuery = () => {
     loadData(1).catch(() => {})
   }
@@ -126,6 +145,7 @@ export default function LimitCptPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [unregisterCompletionCallback])
 
@@ -287,19 +307,31 @@ export default function LimitCptPage() {
           <a href="https://tushare.pro/document/2?doc_id=357" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={handleSync} disabled={syncing}>
-            {syncing ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                同步中...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                同步数据
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleSync} disabled={syncing}>
+              {syncing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  同步中...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  同步数据
+                </>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="最强板块统计"
+            />
+          </div>
         }
       />
 

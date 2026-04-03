@@ -18,7 +18,10 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { cyqChipsApi, type CyqChipsData, type CyqChipsStatistics } from '@/lib/api'
+import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, BarChart3, TrendingUp, TrendingDown, DollarSign, ListFilter } from 'lucide-react'
 
 const toDateStr = (d: Date) =>
@@ -80,6 +83,22 @@ export default function CyqChipsPage() {
     }
   }, [tsCode, tradeDate, sortKey, sortDirection])
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'cyq_chips',
+    syncFn: (params) => apiClient.post('/api/cyq-chips/sync-async', null, { params }),
+    taskName: 'tasks.sync_cyq_chips',
+    onSuccess: loadData,
+  })
+
   useEffect(() => {
     loadData(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,6 +147,7 @@ export default function CyqChipsPage() {
       const callbacks = activeCallbacksRef.current
       callbacks.forEach((cb, taskId) => unregisterCompletionCallback(taskId, cb))
       callbacks.clear()
+      cleanup()
     }
   }, [unregisterCompletionCallback])
 
@@ -184,11 +204,23 @@ export default function CyqChipsPage() {
           <a href="https://tushare.pro/document/2?doc_id=294" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing
-              ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-              : <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing
+                ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+                : <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="筹码分布"
+            />
+          </div>
         }
       />
 

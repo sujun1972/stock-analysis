@@ -14,6 +14,9 @@ import { useSystemConfig } from '@/contexts'
 import { formatStockCode } from '@/lib/utils'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Building2, FileText, BarChart3, ListFilter } from 'lucide-react'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 import {
   Dialog,
   DialogContent,
@@ -104,6 +107,22 @@ export default function ReportRcPage() {
     }
   }
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'report_rc',
+    syncFn: (params) => apiClient.post('/api/report-rc/sync-async', null, { params }),
+    taskName: 'tasks.sync_report_rc',
+    onSuccess: loadData,
+  })
+
   // 初始加载
   useEffect(() => {
     loadData(1).catch(() => {})
@@ -166,6 +185,7 @@ export default function ReportRcPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [unregisterCompletionCallback])
 
@@ -310,13 +330,25 @@ export default function ReportRcPage() {
           <a href="https://tushare.pro/document/2?doc_id=292" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="卖方盈利预测"
+            />
+          </div>
         }
       />
 

@@ -11,6 +11,9 @@ import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Building2, AlertCircle } from 'lucide-react'
 import { stkHighShockApi, type StkHighShockData, type StkHighShockStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 
 export default function StkHighShockPage() {
   const [data, setData] = useState<StkHighShockData[]>([])
@@ -33,6 +36,22 @@ export default function StkHighShockPage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_stk_high_shock')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'stk_high_shock',
+    syncFn: (params) => apiClient.post('/api/stk-high-shock/sync-async', null, { params }),
+    taskName: 'tasks.sync_stk_high_shock',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>

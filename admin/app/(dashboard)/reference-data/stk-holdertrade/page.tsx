@@ -12,6 +12,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { stkHoldertradeApi, type StkHoldertradeData, type StkHoldertradeStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 import { RefreshCw, TrendingUp, TrendingDown, Users, FileText } from 'lucide-react'
 
 export default function StkHoldertradePage() {
@@ -40,6 +43,22 @@ export default function StkHoldertradePage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_stk_holdertrade')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'stk_holdertrade',
+    syncFn: (params) => apiClient.post('/api/stk-holdertrade/sync-async', null, { params }),
+    taskName: 'tasks.sync_stk_holdertrade',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>

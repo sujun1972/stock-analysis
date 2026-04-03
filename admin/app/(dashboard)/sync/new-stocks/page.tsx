@@ -10,11 +10,13 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, History } from 'lucide-react'
 import { newStockApi } from '@/lib/api'
 import type { NewStockData, NewStockStatistics } from '@/lib/api/new-stock-api'
 import { useTaskStore } from '@/stores/task-store'
 import { TrendingUp, Calendar, BarChart3, PieChart } from 'lucide-react'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { apiClient } from '@/lib/api-client'
 
 export default function NewStocksPage() {
   const [data, setData] = useState<NewStockData[]>([])
@@ -57,6 +59,7 @@ export default function NewStocksPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

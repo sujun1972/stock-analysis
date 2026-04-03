@@ -12,6 +12,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { repurchaseApi, RepurchaseData, RepurchaseStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 import { RefreshCw, TrendingUp, Briefcase, DollarSign, BarChart3 } from 'lucide-react'
 
 export default function RepurchasePage() {
@@ -39,6 +42,22 @@ export default function RepurchasePage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_repurchase')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'repurchase',
+    syncFn: (params) => apiClient.post('/api/repurchase/sync-async', null, { params }),
+    taskName: 'tasks.sync_repurchase',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>

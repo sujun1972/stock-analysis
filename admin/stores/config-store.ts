@@ -17,6 +17,7 @@ export interface DataSourceConfig {
   concept_data_source?: string;
   sentiment_data_source?: string;
   tushare_token: string;
+  earliest_history_date?: string;
 }
 
 interface ConfigState {

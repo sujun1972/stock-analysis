@@ -11,6 +11,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { blockTradeApi, BlockTradeData, BlockTradeStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 import { RefreshCw, TrendingUp, Briefcase, DollarSign, BarChart3 } from 'lucide-react'
 
 export default function BlockTradePage() {
@@ -37,6 +40,22 @@ export default function BlockTradePage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_block_trade')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'block_trade',
+    syncFn: (params) => apiClient.post('/api/block-trade/sync-async', null, { params }),
+    taskName: 'tasks.sync_block_trade',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>

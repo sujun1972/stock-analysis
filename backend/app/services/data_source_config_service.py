@@ -92,7 +92,8 @@ class DataSourceConfigService:
                 "premarket_data_source",
                 "concept_data_source",
                 "sentiment_data_source",
-                "tushare_token"
+                "tushare_token",
+                "earliest_history_date",
             ]
 
             configs = await asyncio.to_thread(self.config_repo.get_configs_by_keys, keys)
@@ -110,6 +111,7 @@ class DataSourceConfigService:
                 "concept_data_source": configs.get("concept_data_source") or "akshare",  # 默认akshare（免费且数据丰富）
                 "sentiment_data_source": configs.get("sentiment_data_source") or "akshare",  # 默认akshare（免费，推荐切换为tushare避免反爬）
                 "tushare_token": self._mask_token(raw_token) if mask_token else raw_token,
+                "earliest_history_date": configs.get("earliest_history_date") or "2021-01-04",
             }
 
         except DatabaseError:
@@ -227,6 +229,7 @@ class DataSourceConfigService:
         concept_data_source: Optional[str] = None,
         sentiment_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
+        earliest_history_date: Optional[str] = None,
     ) -> Dict:
         """
         更新数据源配置
@@ -323,6 +326,9 @@ class DataSourceConfigService:
 
             if tushare_token:
                 updates["tushare_token"] = tushare_token
+
+            if earliest_history_date:
+                updates["earliest_history_date"] = earliest_history_date
 
             # 批量更新
             await asyncio.to_thread(self.config_repo.set_configs_batch, updates)

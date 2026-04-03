@@ -29,6 +29,7 @@ class DataSourceConfigRequest(BaseModel):
     concept_data_source: Optional[str] = None
     sentiment_data_source: Optional[str] = None
     tushare_token: Optional[str] = None
+    earliest_history_date: Optional[str] = None
 
 
 @router.get("/source")
@@ -80,6 +81,7 @@ async def update_data_source_config(
         concept_data_source=request.concept_data_source,
         sentiment_data_source=request.sentiment_data_source,
         tushare_token=request.tushare_token,
+        earliest_history_date=request.earliest_history_date,
     )
 
     return ApiResponse.success(

@@ -10,6 +10,9 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react'
+import { apiClient } from '@/lib/api-client'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { financialDataApi } from '@/lib/api'
 import type { DividendData, DividendStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
@@ -75,6 +78,22 @@ export default function DividendPage() {
     loadData()
   }, [loadData])
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'dividend',
+    syncFn: (params) => apiClient.post('/api/dividend/sync-async', null, { params }),
+    taskName: 'tasks.sync_dividend',
+    onSuccess: loadData,
+  })
+
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
@@ -126,6 +145,7 @@ export default function DividendPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
 
@@ -197,13 +217,25 @@ export default function DividendPage() {
           <a href="https://tushare.pro/document/2?doc_id=103" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="分红送股"
+            />
+          </div>
         }
       />
 

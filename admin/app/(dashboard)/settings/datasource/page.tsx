@@ -54,6 +54,7 @@ export default function SettingsPage() {
   const [conceptDataSource, setConceptDataSource] = useState<'akshare' | 'tushare'>('akshare')
   const [sentimentDataSource, setSentimentDataSource] = useState<'akshare' | 'tushare'>('akshare')
   const [tushareToken, setTushareToken] = useState('')
+  const [earliestHistoryDate, setEarliestHistoryDate] = useState('2021-01-04')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -93,6 +94,7 @@ export default function SettingsPage() {
       // 安全性：Token从后端返回时已被掩码（如 d038****...****f3ad）
       // 前端始终显示为空，避免暴露真实Token
       setTushareToken('')
+      setEarliestHistoryDate((configData as any).earliest_history_date || '2021-01-04')
     }
   }, [configData])
 
@@ -135,7 +137,8 @@ export default function SettingsPage() {
         premarket_data_source: premarketDataSource,
         concept_data_source: conceptDataSource,
         sentiment_data_source: sentimentDataSource,
-        tushare_token: tokenToSave
+        tushare_token: tokenToSave,
+        earliest_history_date: earliestHistoryDate || undefined,
       })
 
       // 更新Store中的缓存
@@ -563,6 +566,21 @@ export default function SettingsPage() {
                   </p>
                 </div>
               )}
+
+              {/* 历史数据最早日期 */}
+              <div className="space-y-2">
+                <Label htmlFor="earliest-history-date">全量同步最早日期</Label>
+                <Input
+                  id="earliest-history-date"
+                  type="date"
+                  value={earliestHistoryDate}
+                  onChange={(e) => setEarliestHistoryDate(e.target.value)}
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  各数据页面点击「全量同步」时以此日期为起始日，默认 2021-01-04（与日线行情一致）
+                </p>
+              </div>
 
               {/* 操作按钮 */}
               <div className="flex justify-end gap-3 pt-4">

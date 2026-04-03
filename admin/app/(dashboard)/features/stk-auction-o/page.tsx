@@ -9,7 +9,10 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { stkAuctionOApi } from '@/lib/api'
 import type { StkAuctionOData, StkAuctionOStatistics } from '@/lib/api/stk-auction-o'
+import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, BarChart3, DollarSign, Activity } from 'lucide-react'
 import {
@@ -83,6 +86,22 @@ export default function StkAuctionOPage() {
     }
   }
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'stk_auction_o',
+    syncFn: (params) => apiClient.post('/api/stk-auction-o/sync-async', null, { params }),
+    taskName: 'tasks.sync_stk_auction_o',
+    onSuccess: loadData,
+  })
+
   // 初始加载：只跑一次
   useEffect(() => {
     loadData(1).catch(() => {})
@@ -143,6 +162,7 @@ export default function StkAuctionOPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [unregisterCompletionCallback])
 
@@ -270,13 +290,25 @@ export default function StkAuctionOPage() {
           <a href="https://tushare.pro/document/2?doc_id=353" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="开盘集合竞价"
+            />
+          </div>
         }
       />
 

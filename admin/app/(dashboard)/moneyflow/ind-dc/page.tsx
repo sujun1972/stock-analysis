@@ -16,7 +16,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { moneyflowApi } from '@/lib/api'
+import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, BarChart3, ListFilter, DollarSign, Activity } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -87,6 +90,22 @@ export default function MoneyflowIndDcPage() {
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
   // 从 task store 实时派生——不用本地 useState
   const syncing = isTaskRunning('tasks.sync_moneyflow_ind_dc')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'moneyflow_ind_dc',
+    syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-async', null, { params }),
+    taskName: 'tasks.sync_moneyflow_ind_dc',
+    onSuccess: loadData,
+  })
 
   useEffect(() => {
     loadData(1).catch(() => {})
@@ -204,6 +223,7 @@ export default function MoneyflowIndDcPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [unregisterCompletionCallback])
 
@@ -370,13 +390,25 @@ export default function MoneyflowIndDcPage() {
           <a href="https://tushare.pro/document/2?doc_id=344" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="板块资金流向(DC)"
+            />
+          </div>
         }
       />
 

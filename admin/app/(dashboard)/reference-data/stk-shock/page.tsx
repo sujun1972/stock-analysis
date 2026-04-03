@@ -12,6 +12,9 @@ import { toast } from 'sonner'
 import { stkShockApi, type StkShockData, type StkShockStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { RefreshCw, FileBarChart, TrendingUp, Calendar } from 'lucide-react'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 
 export default function StkShockPage() {
   const [data, setData] = useState<StkShockData[]>([])
@@ -35,6 +38,22 @@ export default function StkShockPage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_stk_shock')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'stk_shock',
+    syncFn: (params) => apiClient.post('/api/stk-shock/sync-async', null, { params }),
+    taskName: 'tasks.sync_stk_shock',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串（避免 UTC 偏移）
   const toDateStr = (date: Date) =>

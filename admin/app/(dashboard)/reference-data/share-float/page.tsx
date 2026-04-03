@@ -12,6 +12,9 @@ import { shareFloatApi } from '@/lib/api'
 import type { ShareFloatData, ShareFloatStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 import { RefreshCw, TrendingUp, Users, Calendar, Package } from 'lucide-react'
 
 export default function ShareFloatPage() {
@@ -40,6 +43,22 @@ export default function ShareFloatPage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_share_float')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'share_float',
+    syncFn: (params) => apiClient.post('/api/share-float/sync-async', null, { params }),
+    taskName: 'tasks.sync_share_float',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>

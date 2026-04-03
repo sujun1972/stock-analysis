@@ -26,25 +26,26 @@ class StockStRepository(BaseRepository):
         end_date: str,
         ts_code: Optional[str] = None,
         st_type: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: int = 100,
+        offset: int = 0
     ) -> List[Dict]:
         """
-        按日期范围查询ST股票数据
+        按日期范围查询ST股票数据（真分页）
 
         Args:
             start_date: 开始日期，格式：YYYYMMDD
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 股票代码（可选）
             st_type: ST类型（可选）
-            limit: 限制返回数量
+            limit: 每页行数
+            offset: 偏移量
 
         Returns:
             ST股票数据列表
 
         Examples:
             >>> repo = StockStRepository()
-            >>> data = repo.get_by_date_range('20240101', '20240131')
-            >>> data = repo.get_by_date_range('20240101', '20240131', ts_code='000001.SZ')
+            >>> data = repo.get_by_date_range('20240101', '20240131', limit=100, offset=0)
         """
         try:
             conditions = ["trade_date >= %s", "trade_date <= %s"]
@@ -59,7 +60,6 @@ class StockStRepository(BaseRepository):
                 params.append(st_type)
 
             where_clause = " AND ".join(conditions)
-            limit_clause = f"LIMIT {limit}" if limit else ""
 
             query = f"""
                 SELECT ts_code, trade_date, name, type, type_name,
@@ -67,14 +67,59 @@ class StockStRepository(BaseRepository):
                 FROM {self.TABLE_NAME}
                 WHERE {where_clause}
                 ORDER BY trade_date DESC, ts_code
-                {limit_clause}
+                LIMIT %s OFFSET %s
             """
 
-            result = self.execute_query(query, tuple(params))
+            result = self.execute_query(query, tuple(params) + (limit, offset))
             return [self._row_to_dict(row) for row in result]
 
         except Exception as e:
             logger.error(f"查询ST股票数据失败: {e}")
+            raise
+
+    def get_total_count(
+        self,
+        start_date: str,
+        end_date: str,
+        ts_code: Optional[str] = None,
+        st_type: Optional[str] = None,
+    ) -> int:
+        """
+        获取符合条件的记录总数（用于分页）
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+            st_type: ST类型（可选）
+
+        Returns:
+            记录总数
+        """
+        try:
+            conditions = ["trade_date >= %s", "trade_date <= %s"]
+            params = [start_date, end_date]
+
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+
+            if st_type:
+                conditions.append("type = %s")
+                params.append(st_type)
+
+            where_clause = " AND ".join(conditions)
+
+            query = f"""
+                SELECT COUNT(*) FROM {self.TABLE_NAME}
+                WHERE {where_clause}
+            """
+
+            result = self.execute_query(query, tuple(params))
+            return result[0][0] if result else 0
+
+        except Exception as e:
+            logger.error(f"获取记录总数失败: {e}")
             raise
 
     def get_by_trade_date(self, trade_date: str) -> List[Dict]:

@@ -12,6 +12,9 @@ import { toast } from 'sonner'
 import { RefreshCw, AlertCircle, FileBarChart, Tag } from 'lucide-react'
 import { stkAlertApi, type StkAlertData, type StkAlertStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 
 export default function StkAlertPage() {
   const [data, setData] = useState<StkAlertData[]>([])
@@ -35,6 +38,22 @@ export default function StkAlertPage() {
 
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_stk_alert')
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'stk_alert',
+    syncFn: (params) => apiClient.post('/api/stk-alert/sync-async', null, { params }),
+    taskName: 'tasks.sync_stk_alert',
+    onSuccess: loadData,
+  })
 
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>

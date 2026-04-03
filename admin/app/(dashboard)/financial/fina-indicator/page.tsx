@@ -13,6 +13,9 @@ import { financialDataApi, type FinaIndicatorData, type FinaIndicatorStatistics 
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Percent, PieChart, Activity } from 'lucide-react'
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
 
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -91,6 +94,22 @@ export default function FinaIndicatorPage() {
     }
   }, [tsCode, startDate, endDate])
 
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'fina_indicator',
+    syncFn: (params) => apiClient.post('/api/fina-indicator/sync-async', null, { params }),
+    taskName: 'tasks.sync_fina_indicator',
+    onSuccess: loadData,
+  })
+
   // 初始化加载
   useEffect(() => {
     loadData()
@@ -157,6 +176,7 @@ export default function FinaIndicatorPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -318,13 +338,25 @@ export default function FinaIndicatorPage() {
           <a href="https://tushare.pro/document/2?doc_id=79" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="财务指标"
+            />
+          </div>
         }
       />
 

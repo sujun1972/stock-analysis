@@ -462,6 +462,72 @@ const handleSyncConfirm = async () => {
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
+### 全量同步 + 清空数据按钮（BulkOpsButtons）
+
+所有数据页面统一提供"全量同步"和"清空数据"两个辅助按钮，使用通用组件和 Hook 实现。
+
+#### 组件与 Hook
+
+- `admin/components/common/BulkOpsButtons.tsx` — 按钮组 UI（全量同步 + 清空确认弹窗）
+- `admin/hooks/useDataBulkOps.ts` — 业务逻辑 Hook（读取系统配置、提交任务、清空表）
+- `backend/app/api/endpoints/data_ops.py` — 后端清空接口（白名单机制，`POST /api/data-ops/clear/{table_key}`）
+
+#### 页面使用示例
+
+```tsx
+import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { apiClient } from '@/lib/api-client'
+
+const {
+  handleFullSync,
+  handleClear,
+  fullSyncing,
+  isClearing,
+  isClearDialogOpen,
+  setIsClearDialogOpen,
+  cleanup,
+  earliestHistoryDate,
+} = useDataBulkOps({
+  tableKey: 'daily_basic',                                     // data_ops 白名单中的 key
+  syncFn: (params) => apiClient.post('/api/daily-basic/sync-async', null, { params }),
+  taskName: 'tasks.sync_daily_basic',                          // 用于 isTaskRunning 派生状态
+  onSuccess: () => loadData(1),
+})
+
+// 在 useEffect cleanup 中调用
+useEffect(() => { return () => cleanup() }, [])
+
+// 放在 PageHeader actions 中
+<BulkOpsButtons
+  onFullSync={handleFullSync}
+  onClearConfirm={handleClear}
+  isClearDialogOpen={isClearDialogOpen}
+  setIsClearDialogOpen={setIsClearDialogOpen}
+  fullSyncing={fullSyncing}
+  isClearing={isClearing}
+  earliestHistoryDate={earliestHistoryDate}
+  tableName="每日指标"
+/>
+```
+
+#### 设计要点
+
+- **全量同步日期**：Hook 从 `useConfigStore().dataSource.earliest_history_date` 读取，格式 `YYYY-MM-DD`，转为 `YYYYMMDD` 后以 `start_date` 参数传给 `syncFn`（不传 `end_date`，由后端同步到今天）
+- **不传查询日期**：`handleFullSync` 内部只传 `start_date`，绝不传页面筛选器当前的日期，防止全量同步变为重复同步旧日期
+- **清空接口**：后端统一用白名单 `CLEARABLE_TABLES` 映射 `table_key → 实际表名`，防止任意表注入；新增数据表时需同步更新 `data_ops.py` 中的白名单
+- **哪些页面不需要全量同步按钮**：若每次普通同步本身就是全量拉取（如 `stock_basic`/`stock_list`，Tushare 接口无增量模式），则不加全量同步按钮，避免语义重复
+- **哪些页面需要全量同步按钮**：有历史数据积累需求、且 Tushare 支持按日期范围查询的接口（如 ST 股票、每日指标、交易日历等）
+
+#### `stock_st` 全量同步的特殊处理
+
+Tushare `stock_st` 接口单次最多返回 1000 条，且不支持 offset 分页，只能按日期范围查询。全量同步时采用：
+
+- **2 交易日为一批**：每次请求覆盖 2 个交易日，约 200-400 条，远低于 1000 上限
+- **10 并发**：`asyncio.Semaphore(CONCURRENCY)` 控制并发，每批完成后立即 `bulk_upsert` 写库
+- **跳过非交易日**：通过 `TradingCalendarRepository.get_trading_days_between()` 获取交易日列表，避免空请求
+- 参数常量 `CHUNK_DAYS = 2`、`CONCURRENCY = 10` 定义在 `stock_st_service.py` 顶部，便于调整
+
 ### 板块名称注入（DcIndexRepository.get_board_name_map）
 
 `dc_member`、`dc_daily` 等表只存 `ts_code`，不存板块名称。需要显示名称时，从 `dc_index` 最新一天的数据中查询映射，在 Service 层并发注入，**不做跨表 JOIN**。

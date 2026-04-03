@@ -3945,7 +3945,13 @@ class TushareProvider(BaseDataProvider):
             if end_date:
                 params['end_date'] = end_date
 
+            # stock_st 不支持 offset 分页，直接按调用方传入的时间段拉取
+            # 若时间段较大，调用方（Service）负责按月切片后分批调用本方法
             df = self.api_client.query('stock_st', **params)
+            if df is None or df.empty:
+                logger.info("未获取到ST股票记录")
+                return pd.DataFrame()
+
             logger.info(f"获取到 {len(df)} 条ST股票记录")
             return df
         except Exception as e:
