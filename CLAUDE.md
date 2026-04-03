@@ -396,69 +396,72 @@ const handleSyncConfirm = async () => {
 
 **适用场景**：积分消耗较高、同步范围影响较大、用户需要精确控制同步日期的页面。
 
-**已实现的页面**：
-- 定时任务配置页面（`/settings/scheduler`）
-- 沪深港通资金流向页面（`/moneyflow/hsgt`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi（新增 getMoneyflowHsgt 方法）、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、趋势图改为 LineChart）**
-- 大盘资金流向页面（`/moneyflow/mkt-dc`）**（2026-03-27 全面优化：同步改为弹窗模式且不传查询日期、迁移至模块化 moneyflowApi、syncing 从 isTaskRunning 派生、修复日期时区 bug（toISOString→本地时间）、统计卡片改为左文字右图标+补充说明文字、移动端统一用 DataTable mobileCard、移除无后端支持的前端伪排序）**
-- 板块资金流向页面（`/moneyflow/ind-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、page/page_size 分页（100条/页）、syncDialog 弹窗选日期+板块类型（全部时依次提交三任务）、isTaskRunning 实时派生 syncing、统计卡片左文字右图标、TOP 20 图表、模块化 API、时区安全日期构建、默认加载最近有数据的交易日并回填）**
-- 个股资金流向页面（Tushare）（`/moneyflow/stock`）
-- 个股资金流向页面（DC）（`/moneyflow/stock-dc`）**（2026-03-27 全面优化：单日日期筛选、后端排序白名单、分页、股票列可点击、同步弹窗选日期、移动端卡片视图、统计卡片左文字右图标）**
-- 融资融券交易汇总页面（`/margin/summary`）**（2026-03-27 全面优化：去掉独立统计请求改为 asyncio.gather 并发返回、后端排序白名单（rzrqye/rzye/rqye/rzmre/rzche/rqmcl/rqyl）、page_size 固定100、DataTable mobileCard 统一响应式、统计卡片左文字右图标、去掉 useCallback+多依赖 useEffect 改为空依赖+手动查询、去掉双套移动端/桌面端 JSX）**
-- 融资融券交易明细页面（`/margin/detail`）**（2026-03-27 全面优化：筛选改为单日 trade_date、后端排序白名单防注入、asyncio.gather 并发查数据+总数+统计、resolve_default_trade_date 自动回填最近交易日、标的名称注入：股票从 StockQuoteCache，ETF/基金从 margin_secs 回退、ETF 不可点击跳转分析页面（isStock 判断前缀5/1/821）、DataTable mobileCard 统一响应式）**
-- 融资融券标的页面（`/margin/secs`）**（2026-03-27 全面优化：筛选改为单日 trade_date、resolve_default_trade_date 自动回填最近交易日、后端新增分页方法（get_by_trade_date_paged/get_total_count）、asyncio.gather 并发查数据+总数+统计、page_size 固定100、syncing 从 isTaskRunning 派生、同步按钮移至 PageHeader+弹窗模式、统计卡片左文字右图标、DataTable mobileCard 统一响应式、股票列可点击跳转分析页面（isStock 排除5/1/821前缀）、修复日期时区 bug（toISOString→本地时间））**
-- 转融资交易汇总页面（`/margin/slb-len`）**（2026-03-27 全面优化：修复日期时区 bug（toISOString→本地时间）、syncing 从 isTaskRunning 派生、移除 setTimeout 伪回调改为 registerCompletionCallback+卸载清理、同步按钮移至 PageHeader+弹窗模式（同步日期与查询日期解耦）、统计卡片改为左文字右图标布局+补充说明文字、DataTable mobileCard 统一响应式、列隔线与其他 margin 页面对齐）**
-- 龙虎榜每日明细页面（`/boardgame/top-list`）
-- 龙虎榜机构明细页面（`/boardgame/top-inst`）
-- 涨跌停列表页面（`/boardgame/limit-list`）
-- 连板天梯页面（`/boardgame/limit-step`）**（2026-03-26 全面优化：筛选改为单日交易日期、股票列合并名称+代码可点击跳转、后端排序（连板次数白名单防注入）、分页查询、默认加载最近有数据的交易日并回填日期选择器）**
-- 最强板块统计页面（`/boardgame/limit-cpt`）**（2026-03-26 全面优化：筛选改为单日交易日期、板块列合并名称+代码、后端排序（up_nums/cons_nums/pct_chg/days/rank 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+统计、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**
-- 卖方盈利预测数据页面（`/features/report-rc`）**（2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_report_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader、同步弹窗与查询日期解耦）**
-- 个股异常波动页面（`/reference-data/stk-shock`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
-- 个股严重异常波动页面（`/reference-data/stk-high-shock`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
-- 交易所重点提示证券页面（`/reference-data/stk-alert`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
-- 股权质押统计页面（`/reference-data/pledge-stat`）**（2026-03-28 全面对齐最佳实践：单日 trade_date 筛选、isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
-- 股票回购页面（`/reference-data/repurchase`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
-- 限售股解禁页面（`/reference-data/share-float`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片（CardContent 取代 CardHeader 小图标）、固定100条/页、toDateStr 本地时间安全）**
-- 股东人数页面（`/reference-data/stk-holdernumber`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全）**
-- 大宗交易页面（`/reference-data/block-trade`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、左文字右图标统计卡片、固定100条/页、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
-- 股东增减持页面（`/reference-data/stk-holdertrade`）**（2026-03-28 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、左文字右图标统计卡片、新增分页（100条/页）、toDateStr 本地时间安全、registerCompletionCallback+卸载清理）**
-- 利润表页面（`/financial/income`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncTsCode/syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、左文字右图标统计卡片、toDateStr 本地时间安全、注意：同步接口需 YYYYMMDD 格式、查询接口需 YYYY-MM-DD 格式）**
-- 资产负债表页面（`/financial/balancesheet`）**（2026-03-29 全面对齐最佳实践：同利润表页面，同步接口需 YYYYMMDD 格式）**
-- 现金流量表页面（`/financial/cashflow`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、左文字右图标统计卡片、period 改为 DatePicker、toDateStr 本地时间安全）**
-- 业绩预告页面（`/financial/forecast`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（含 syncForecastType）、同步按钮移至 PageHeader、toDateStr 本地时间安全，修复 toISOString UTC 偏移 bug）**
-- 业绩快报页面（`/financial/express`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、左文字右图标统计卡片、所有日期字段从字符串改为 Date | undefined + DatePicker）**
-- 分红送股页面（`/financial/dividend`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、修复 toISOString UTC 偏移 bug）**
-- 财务指标页面（`/financial/fina-indicator`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（含 syncPeriod）、同步按钮移至 PageHeader、左文字右图标统计卡片、所有日期改为 DatePicker）**
-- 财务审计意见页面（`/financial/fina-audit`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、修复多处 toISOString UTC 偏移 bug、ts_code 为同步必填项（按钮在 syncTsCode 为空时禁用））**
-- 主营业务构成页面（`/financial/fina-mainbz`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（含 type 选项）、同步按钮移至 PageHeader、左文字右图标统计卡片、所有日期改为 DatePicker）**
-- 财报披露计划页面（`/financial/disclosure-date`）**（2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、统计卡片已是正确格式保持不变、所有日期改为 DatePicker）**
-- 筹码分布页面（`/features/cyq-chips`）**（✨ 新增于 2026-03-28，2000积分/次，单次最大1000行，筹码价格-持仓比例分布；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、同步弹窗与查询日期解耦）**
-- 每日筹码及胜率页面（`/features/cyq-perf`）**（✨ 新增于 2026-03-28，2000积分/次，包含获利比例、成本分布、获利盘/亏损盘比例；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、同步弹窗与查询日期解耦）**
-- 中央结算系统持股汇总页面（`/features/ccass-hold`）**（2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮移至 PageHeader、同步弹窗与查询日期解耦）**
-- 中央结算系统持股明细页面（`/features/ccass-hold-detail`）**（✨ 新增于 2026-03-23，8000积分/次，参数验证对话框模式；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单、单日 trade_date 筛选、resolve_default_trade_date 自动回填、isTaskRunning 派生 syncing、asyncio.gather 并发、DataTable mobileCard、左文字右图标统计卡片、同步按钮保留参数验证（至少填写一个同步条件）、同步弹窗与查询日期解耦）**
-- 沪深港股通持股明细页面（`/features/hk-hold`）**（✨ 新增于 2026-03-23，2000积分/次，2024年8月20日起改为季度披露；2026-03-28 全面对齐最佳实践：后端真分页+排序白名单（ratio/vol/amount/trade_date）、单日 trade_date 筛选、resolve_default_trade_date 自动回填、asyncio.gather 并发查数据+总数+统计、isTaskRunning 派生 syncing、DataTable mobileCard、单位内联统计卡片+补充说明文字、同步弹窗与查询日期解耦（仅保留可选日期）、固定100条/页）**
-- 股票开盘集合竞价页面（`/features/stk-auction-o`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**
-- 股票收盘集合竞价页面（`/features/stk-auction-c`）**（✨ 新增于 2026-03-23，需要股票分钟权限，每次最大10000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，resolve_default_trade_date 自动回填）**
-- 神奇九转指标页面（`/features/stk-nineturn`）**（✨ 新增于 2026-03-23，6000积分/次，数据从2023年开始，每次最大10000行，支持九转信号筛选；2026-03-28 全面对齐最佳实践：后端排序白名单（up_count/down_count/close/trade_date/ts_code）、修复 OFFSET 未生效 bug、股票列合并名称+代码可点击跳转分析页面（stock_quote_cache 同步注入）、resolve_default_date_range 自动回填30天日期范围、固定100条/页、去掉无用频率 Select、DataTable 列分割线、isTaskRunning 派生 syncing、asyncio.gather 并发查数据+总数+统计）**
-- AH股比价页面（`/features/stk-ah-comparison`）**（✨ 新增于 2026-03-23，5000积分/次，数据从2025-08-12开始，每次最大1000行；2026-03-28 对齐最佳实践：查询筛选改为单日 trade_date，后端 GET 端点新增 trade_date 参数，resolve_default_trade_date 自动回填）**
-- 机构调研表页面（`/features/stk-surv`）**（✨ 新增于 2026-03-23，5000积分/次，单次最大100行，支持按接待方式和机构类型筛选；2026-03-28 对齐最佳实践：asyncio.gather 并发、statistics 合并到主响应、同步弹窗解耦查询日期）**
-- 券商每月荐股页面（`/features/broker-recommend`）**（✨ 新增于 2026-03-23，6000积分/次，单次最大1000行，每月1-3日更新当月数据；2026-03-28 全面重构：迁移至模块化 brokerRecommendApi、isTaskRunning 派生 syncing、DataTable mobileCard、同步弹窗选月度）**
-- 股票日线数据页面（`/market/daily`）**（✨ 新增于 2026-03-25，使用Tushare daily接口（120积分/次），支持单只股票和全市场两种同步模式，分页查询（30条/页），3张统计卡片（股票数/记录总数/最新交易日），异步同步功能，已从数据初始化页面迁移至行情数据菜单；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader；2026-04-02 性能优化：通过 trading_calendar 定位最近交易日再精确查 stock_daily（< 10ms，原 10+ 秒），统计接口仅在页面初始化时调用一次，修复单只股票查询 500 错误及日期格式问题）**
-- 每日停复牌信息页面（`/market/suspend`）**（✨ 新增于 2026-03-24，不定期更新，支持分页查询，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
-- 每日涨跌停价格页面（`/market/stk-limit-d`）**（✨ 新增于 2026-03-24，2000积分/次，每交易日8:40更新，单次最大5800条，行情数据分类；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
-- 沪深股通十大成交股页面（`/market/hsgt-top10`）**（✨ 新增于 2026-03-24，每天18~20点更新，包含沪股通、深股通前十大成交详细数据，支持按市场类型筛选；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（不传 tsCode/marketType）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
-- 港股通十大成交股页面（`/market/ggt-top10`）**（✨ 新增于 2026-03-24，Tushare ggt_top10接口，每天18~20点更新，包含港股通(沪)、港股通(深)前十大成交详细数据，17个字段含沪深市详细成交金额；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
-- 港股通每日成交统计页面（`/market/ggt-daily`）**（✨ 新增于 2026-03-24，Tushare ggt_daily接口，2000积分/次，数据从2014年开始，包含买入/卖出成交金额和笔数统计，带统计卡片、趋势图表和分页功能；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、toDateStr 本地时间安全）**
-- 港股通每月成交统计页面（`/market/ggt-monthly`）**（✨ 新增于 2026-03-24，Tushare ggt_monthly接口，5000积分/次，数据从2014年开始，单次最大1000条，包含日均和总买入/卖出成交金额和笔数统计，带统计卡片、趋势图表和月度筛选功能；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询月份解耦（syncStartMonth/syncEndMonth 独立）、同步按钮移至 PageHeader、DataTable mobileCard）**
-- 复权因子页面（`/market/adj-factor`）**（✨ 新增于 2026-03-24，Tushare adj_factor接口，2000积分/次，盘前9:15~20分更新，支持单只股票历史查询或单日全市场查询，包含统计卡片、筛选功能和响应式布局；2026-03-29 全面对齐最佳实践：已符合最佳实践——同步弹窗与查询日期解耦、isTaskRunning 派生 syncing、toDateStr 本地时间安全、DataTable mobileCard）**
-- 每日指标页面（`/market/daily-basic`）**（✨ 新增于 2026-03-24，Tushare daily_basic接口，2000积分/次，每交易日15:00-17:00更新，单次最大6000条，包含换手率、市盈率、市净率等17个核心指标，带统计卡片、分页查询和异步同步功能；2026-03-29 全面对齐最佳实践：isTaskRunning 派生 syncing、同步弹窗与查询日期解耦（syncTradeDate/syncStartDate/syncEndDate 独立）、同步按钮移至 PageHeader、DataTable mobileCard、toDateStr 本地时间安全）**
-- 新股列表页面（`/sync/new-stocks`）**（✨ 新增于 2026-03-24，使用stock_basic表list_date字段查询新上市股票，支持按天数/日期范围/市场类型筛选，包含统计卡片、分页查询和异步同步功能；2026-03-30 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader、同步弹窗与查询天数解耦（syncDays 独立默认90天））**
-- ST股票列表页面（`/data/stock-st`）**（✨ 新增，获取每日ST股票列表，支持按日期范围/股票代码/ST类型筛选，含4张统计卡片（总记录数/唯一股票数/交易天数/ST类型数），分页查询，DataTable mobileCard；2026-03-30 全面对齐最佳实践：isTaskRunning 派生 syncing（移除 local useState）、同步按钮移至 PageHeader、同步确认弹窗（不传查询筛选参数）、统计卡片改为左文字右图标布局、清理未使用的 totalPages 状态）**
-- 股票列表页面（`/data/stock-list`）**（✨ 新增于 2026-03-25，完整支持Tushare stock_basic接口17个输出字段，按上市状态/市场/交易所/沪深港通4个维度筛选，5张统计卡片展示全市场概况，支持分页查询和异步同步，已从数据初始化页面迁移至基础数据菜单；2026-03-30 全面对齐最佳实践：isTaskRunning 派生 syncing、同步按钮移至 PageHeader、同步确认弹窗（不传查询筛选参数，由后端同步全状态股票））**
-- 东方财富板块成分页面（`/boardgame/dc-member`）**（✨ 新增于 2026-03-25，Tushare dc_member接口，6000积分/次，单次最大5000条，获取东方财富板块每日成分数据，支持按板块代码/成分股代码/日期范围筛选，4张统计卡片，异步同步功能，归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期、成分股列合并名称+纯代码可点击跳转分析页面、板块列合并名称+代码（板块名称从 dc_index 最新一天缓存注入）、后端排序（白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数+板块名称映射、默认加载最近有数据的交易日并回填日期选择器、统计卡片改为左文字右图标布局）**
-- 东方财富板块数据页面（`/boardgame/dc-index`）**（✨ 新增于 2026-03-25，Tushare dc_index接口，6000积分/次，单次最大5000条，获取东方财富每个交易日的概念/行业/地域板块行情数据，idx_type为必填参数，含领涨股、涨跌幅、换手率、总市值、上涨/下跌家数等字段，注意数据库列名leading_stock（规避PostgreSQL保留字leading），归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期+板块类型，后端排序（pct_change/leading_pct/turnover_rate/total_mv/up_num/down_num 白名单），分页查询（100条/页），默认加载最近有数据的交易日并回填日期选择器，板块列合并名称+代码，领涨股列合并名称+纯代码可点击跳转分析页面，同步支持"全部"选项依次提交概念/行业/地域三个任务（共18000积分）**
-- 东财概念板块行情页面（`/boardgame/dc-daily`）**（✨ 新增于 2026-03-25，Tushare dc_daily接口，6000积分/次，单次最大2000条，获取东方财富概念/行业/地域板块OHLCV行情数据（收盘/开盘/最高/最低点位、涨跌点、涨跌幅、成交量、成交额、振幅、换手率），历史数据从2020年开始，所有参数可选，归属打板专题菜单）**（2026-03-26 全面优化：筛选改为单日交易日期、后端排序（pct_change/change/amount/vol/swing/turnover_rate 白名单防注入）、分页查询（100条/页）、asyncio.gather 并发查数据+总数、默认加载最近有数据的交易日并回填日期选择器；板块列合并名称+代码（板块名称从 dc_index 最新一天缓存注入，dc_daily 表本身不存 name 字段））**
-- 交易日历页面（`/data/trade-cal`）**（✨ 新增于 2026-03-25，Tushare trade_cal接口，2000积分/次，支持7个交易所（SSE/SZSE/CFFEX/SHFE/CZCE/DCE/INE），含4张统计卡片（总天数/交易日/休市天数/交易日占比），支持按交易所/是否交易/日期范围筛选，分页查询（30条/页），归属基础数据菜单；2026-03-30 全面对齐最佳实践：同步弹窗与查询日期解耦（syncExchange/syncStartDate/syncEndDate 独立）、修复 toISOString UTC 偏移 bug（改为 toDateStr 本地时间）、统计卡片改为左文字右图标布局、DataTable mobileCard）**
+**已实现的页面**（所有页面均遵循上述异步模式标准实践：同步弹窗与查询日期解耦、`isTaskRunning` 派生 `syncing`、`DataTable mobileCard`、左文字右图标统计卡片、`toDateStr` 本地时间安全）：
+
+| 页面 | 路由 | 特殊说明 |
+|------|------|---------|
+| 定时任务配置 | `/settings/scheduler` | |
+| 沪深港通资金流向 | `/moneyflow/hsgt` | 趋势图用 LineChart |
+| 大盘资金流向 | `/moneyflow/mkt-dc` | 数据单位亿元 |
+| 板块资金流向 | `/moneyflow/ind-dc` | "全部"同步依次提交行业/概念/地域三任务；TOP 20 图表 |
+| 个股资金流向（Tushare） | `/moneyflow/stock` | 数据单位万元 |
+| 个股资金流向（DC） | `/moneyflow/stock-dc` | 数据单位亿元 |
+| 融资融券交易汇总 | `/margin/summary` | |
+| 融资融券交易明细 | `/margin/detail` | ETF名称从 margin_secs 回退；ETF不可点击跳转 |
+| 融资融券标的 | `/margin/secs` | isStock 排除5/1/821前缀 |
+| 转融资交易汇总 | `/margin/slb-len` | |
+| 龙虎榜每日明细 | `/boardgame/top-list` | |
+| 龙虎榜机构明细 | `/boardgame/top-inst` | |
+| 涨跌停列表 | `/boardgame/limit-list` | |
+| 连板天梯 | `/boardgame/limit-step` | |
+| 最强板块统计 | `/boardgame/limit-cpt` | |
+| 卖方盈利预测 | `/features/report-rc` | |
+| 个股异常波动 | `/reference-data/stk-shock` | |
+| 个股严重异常波动 | `/reference-data/stk-high-shock` | |
+| 交易所重点提示证券 | `/reference-data/stk-alert` | |
+| 股权质押统计 | `/reference-data/pledge-stat` | |
+| 股票回购 | `/reference-data/repurchase` | syncStartDate/syncEndDate 独立 |
+| 限售股解禁 | `/reference-data/share-float` | |
+| 股东人数 | `/reference-data/stk-holdernumber` | |
+| 大宗交易 | `/reference-data/block-trade` | |
+| 股东增减持 | `/reference-data/stk-holdertrade` | syncStartDate/syncEndDate 独立 |
+| 利润表 | `/financial/income` | 同步接口需 YYYYMMDD 格式，查询需 YYYY-MM-DD |
+| 资产负债表 | `/financial/balancesheet` | 同上 |
+| 现金流量表 | `/financial/cashflow` | period 用 DatePicker |
+| 业绩预告 | `/financial/forecast` | 含 syncForecastType 选项 |
+| 业绩快报 | `/financial/express` | 所有日期字段用 Date \| undefined + DatePicker |
+| 分红送股 | `/financial/dividend` | |
+| 财务指标 | `/financial/fina-indicator` | 含 syncPeriod 选项 |
+| 财务审计意见 | `/financial/fina-audit` | ts_code 为同步必填项 |
+| 主营业务构成 | `/financial/fina-mainbz` | 含 type 选项 |
+| 财报披露计划 | `/financial/disclosure-date` | |
+| 筹码分布 | `/features/cyq-chips` | 2000积分/次，单次最大1000行 |
+| 每日筹码及胜率 | `/features/cyq-perf` | 2000积分/次，含获利比例/成本分布 |
+| CCASS持股汇总 | `/features/ccass-hold` | 5000积分/次 |
+| CCASS持股明细 | `/features/ccass-hold-detail` | 8000积分/次；同步需至少填写一个条件 |
+| 沪深港股通持股明细 | `/features/hk-hold` | 2000积分/次；2024-08-20起季度披露 |
+| 股票开盘集合竞价 | `/features/stk-auction-o` | 需股票分钟权限，单次最大10000行 |
+| 股票收盘集合竞价 | `/features/stk-auction-c` | 需股票分钟权限，单次最大10000行 |
+| 神奇九转指标 | `/features/stk-nineturn` | 6000积分/次；数据从2023年起；30天默认日期范围 |
+| AH股比价 | `/features/stk-ah-comparison` | 5000积分/次；数据从2025-08-12起 |
+| 机构调研表 | `/features/stk-surv` | 5000积分/次；单次最大100行；支持接待方式/机构类型筛选 |
+| 券商每月荐股 | `/features/broker-recommend` | 6000积分/次；每月1-3日更新；同步弹窗选月度 |
+| 股票日线数据 | `/market/daily` | 120积分/次；两种同步模式；统计接口仅初始化时调用一次；性能优化：通过 trading_calendar 定位最近交易日（< 10ms） |
+| 每日停复牌信息 | `/market/suspend` | |
+| 每日涨跌停价格 | `/market/stk-limit-d` | 2000积分/次；每交易日8:40更新 |
+| 沪深股通十大成交股 | `/market/hsgt-top10` | 同步不传 tsCode/marketType |
+| 港股通十大成交股 | `/market/ggt-top10` | 17个字段 |
+| 港股通每日成交统计 | `/market/ggt-daily` | 2000积分/次；数据从2014年起 |
+| 港股通每月成交统计 | `/market/ggt-monthly` | 5000积分/次；同步弹窗选月份 |
+| 复权因子 | `/market/adj-factor` | 2000积分/次；支持单只历史或单日全市场查询 |
+| 每日指标 | `/market/daily-basic` | 2000积分/次；17个核心指标 |
+| 新股列表 | `/sync/new-stocks` | syncDays 独立（默认90天） |
+| ST股票列表 | `/data/stock-st` | 全量同步特殊处理（2交易日/批，10并发） |
+| 股票列表 | `/data/stock-list` | 17个字段；同步全状态 |
+| 东方财富板块成分 | `/boardgame/dc-member` | 6000积分/次；板块名称从 dc_index 注入 |
+| 东方财富板块数据 | `/boardgame/dc-index` | 6000积分/次；leading_stock 规避 PG 保留字；"全部"同步消耗18000积分 |
+| 东财概念板块行情 | `/boardgame/dc-daily` | 6000积分/次；名称从 dc_index 注入 |
+| 交易日历 | `/data/trade-cal` | 2000积分/次；支持7个交易所 |
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
 
@@ -2647,11 +2650,6 @@ class ExperimentService:
   - 移除直接 SQL 查询（22行 → 3行，↓ 86%）
   - 使用 StockBasicRepository.get_stock_names() 批量查询
   - 消除 SQL 注入风险
-
-**待创建的 Repository**（优先级较低）：
-- `AdjFactorRepository` - 复权因子数据
-- `SuspendRepository` - 停复牌信息
-- `PremarketRepository` - 盘前数据
 
 ### Repository 层扩展 - StockBasic 和 TaskExecutionHistory（✨ 2026-03-20）
 
