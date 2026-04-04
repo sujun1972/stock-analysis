@@ -515,7 +515,10 @@ def sync_daily_full_history_task(self: Task):
                         start_date=FULL_HISTORY_START_DATE,
                         end_date=today
                     )
-                    return ts_code, result.get("status") == "success", None
+                    # status="failed" 才计为错误；无数据（count=0）仍算成功
+                    if result.get("status") == "failed":
+                        return ts_code, False, result.get("error", "未知错误")
+                    return ts_code, True, None
                 except Exception as e:
                     return ts_code, False, str(e)
 

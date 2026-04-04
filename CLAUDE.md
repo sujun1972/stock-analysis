@@ -446,7 +446,7 @@ const handleSyncConfirm = async () => {
 | AH股比价 | `/features/stk-ah-comparison` | 5000积分/次；数据从2025-08-12起 |
 | 机构调研表 | `/features/stk-surv` | 5000积分/次；单次最大100行；支持接待方式/机构类型筛选 |
 | 券商每月荐股 | `/features/broker-recommend` | 6000积分/次；每月1-3日更新；同步弹窗选月度 |
-| 股票日线数据 | `/market/daily` | 120积分/次；两种同步模式；统计接口仅初始化时调用一次；性能优化：通过 trading_calendar 定位最近交易日（< 10ms） |
+| 股票日线数据 | `/market/daily` | 120积分/次；未复权数据（daily接口不支持adj参数）；全市场同步自动推算下一待补交易日；统计接口仅初始化时调用一次 |
 | 每日停复牌信息 | `/market/suspend` | |
 | 每日涨跌停价格 | `/market/stk-limit-d` | 2000积分/次；每交易日8:40更新 |
 | 沪深股通十大成交股 | `/market/hsgt-top10` | 同步不传 tsCode/marketType |
@@ -1754,8 +1754,8 @@ docker-compose down
 
 2. **全市场单日模式**（`sync_daily_single_task`，不传 code）：
    - 不指定股票代码（留空）
-   - 自动获取最近交易日（从 `trading_calendar` 表）
-   - 同步所有股票的最新交易日数据
+   - 自动推算目标交易日：先从本地 `stock_daily` 找已有数据最新日期（至少100条），再从 `trade_cal` 找下一个交易日，避免重复同步
+   - 无本地数据时回退到 `trade_cal` 最新交易日
    - 积分消耗：120 积分/次（单个交易日）
 
 3. **全市场近N日增量模式**（`sync_daily_recent_all_task`）：
@@ -1770,9 +1770,9 @@ docker-compose down
    - 8 并发，批量 50 只，约 11 分钟完成 ~5500 只
 
 **数据接口**：
-- 使用 Tushare `pro.daily()` 接口
-- 复权方式：前复权 (`adjust='qfq'`)
-- 数据字段：开、高、低、收、成交量、成交额、涨跌幅、换手率等 12 个字段
+- 使用 Tushare `pro.daily()` 接口，返回**未复权**数据
+- ⚠️ **`daily` 接口不支持 `adj` 复权参数**（复权需用 `pro_bar` 接口）；传入 `adj` 会被静默忽略
+- 数据字段：ts_code、开、高、低、收、成交量、成交额、涨跌幅、换手率等
 
 **注意事项**：
 - 已从数据初始化页面（`/sync/initialize`）迁移至行情数据菜单（`/market/daily`）

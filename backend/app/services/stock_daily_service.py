@@ -272,25 +272,31 @@ class StockDailyService:
             同步结果
         """
         try:
-            # 如果未指定 code，则同步全市场最近交易日数据
+            # 如果未指定 code，则同步全市场下一个待补充的交易日数据
             if not code:
-                # 获取最近交易日
                 from app.repositories import TradingCalendarRepository
                 calendar_repo = TradingCalendarRepository()
-                latest_trade_date = await asyncio.to_thread(
-                    calendar_repo.get_latest_trading_day
-                )
 
-                if not latest_trade_date:
-                    # 如果交易日历表为空，使用今天
-                    latest_trade_date = datetime.now().strftime("%Y%m%d")
+                # 先查本地最新已有交易日，再从 trade_cal 找下一个交易日
+                # 这样可以避免重复同步已有数据
+                local_latest = await asyncio.to_thread(self._get_local_latest_date)
+                if local_latest:
+                    next_trade_date = await asyncio.to_thread(
+                        calendar_repo.get_next_trading_day, local_latest
+                    )
+                    # 若已是最新交易日（今天数据还未出来），回退到当前最新交易日
+                    trade_date = next_trade_date or await asyncio.to_thread(
+                        calendar_repo.get_latest_trading_day
+                    )
+                else:
+                    trade_date = await asyncio.to_thread(
+                        calendar_repo.get_latest_trading_day
+                    )
 
-                logger.info(f"同步全市场日线数据，交易日期: {latest_trade_date}")
+                if not trade_date:
+                    trade_date = datetime.now().strftime("%Y%m%d")
 
-                # 使用 trade_date 参数而不是 start_date/end_date
-                start_date = None
-                end_date = None
-                trade_date = latest_trade_date
+                logger.info(f"同步全市场日线数据，本地最新: {local_latest or '无'}，目标交易日: {trade_date}")
             else:
                 # 单只股票同步：计算日期范围
                 trade_date = None
@@ -310,23 +316,24 @@ class StockDailyService:
             # 使用 Tushare Provider
             provider = await self.provider_service.get_provider("main")
 
-            # 构建参数
-            params = {'adjust': 'qfq'}  # 前复权
+            # 构建参数（全市场模式传 trade_date，单股模式传 code + 日期范围）
+            # 注意：Tushare daily 接口返回未复权数据，不支持 adj 参数
+            kwargs = {}
             if code:
-                params['code'] = code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
+                kwargs['code'] = code
+                if start_date:
+                    kwargs['start_date'] = start_date
+                if end_date:
+                    kwargs['end_date'] = end_date
+            else:
+                kwargs['trade_date'] = trade_date
 
             response = await asyncio.to_thread(
                 provider.get_daily_data,
-                **params
+                **kwargs
             )
 
-            if not response.is_success():
+            if not response.is_success() and not response.is_warning():
                 raise ValueError(response.error_message or "获取日线数据失败")
 
             df = response.data
@@ -406,3 +413,34 @@ class StockDailyService:
                 "count": 0,
                 "error": str(e)
             }
+
+    def _get_local_latest_date(self) -> Optional[str]:
+        """
+        从本地 stock_daily 查最新已有交易日（排除脏数据，只看有大量记录的交易日）
+
+        Returns:
+            最新交易日，格式：YYYYMMDD；无数据时返回 None
+        """
+        conn = self.db.pool_manager.get_connection()
+        cursor = conn.cursor()
+        try:
+            # 只取有大量股票数据的交易日（至少100条），排除测试数据和单条脏数据
+            cursor.execute(
+                """
+                SELECT TO_CHAR(date, 'YYYYMMDD')
+                FROM stock_daily
+                WHERE code LIKE '%%.%%'
+                GROUP BY date
+                HAVING COUNT(*) >= 100
+                ORDER BY date DESC
+                LIMIT 1
+                """
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception as e:
+            logger.error(f"查询本地最新交易日失败: {e}")
+            return None
+        finally:
+            cursor.close()
+            self.db.pool_manager.release_connection(conn)

@@ -58,7 +58,9 @@ class TushareConfig:
         """
         if code.startswith(('6', '68', '688')):
             return 'SH'  # 上海
-        elif code.startswith(('0', '2', '3', '8', '4')):
+        elif code.startswith(('8', '4')):
+            return 'BJ'  # 北交所
+        elif code.startswith(('0', '2', '3')):
             return 'SZ'  # 深圳
         else:
             return 'SH'  # 默认上海
@@ -168,7 +170,7 @@ class TushareFields:
         'pct_chg': 'pct_change'
     }
     DAILY_DATA_OUTPUT = [
-        'trade_date', 'open', 'high', 'low', 'close',
+        'ts_code', 'trade_date', 'open', 'high', 'low', 'close',
         'volume', 'amount', 'amplitude', 'pct_change',
         'change_amount', 'turnover'
     ]

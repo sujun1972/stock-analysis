@@ -322,62 +322,72 @@ class TushareProvider(BaseDataProvider):
 
     def get_daily_data(
         self,
-        code: str,
+        code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = 'qfq'
+        adjust: str = 'none',
+        trade_date: Optional[str] = None
     ) -> Response:
         """
-        获取股票日线数据
+        获取股票日线数据（未复权）
+
+        注意：Tushare daily 接口返回未复权数据，不支持 adj 复权参数。
+        adjust 参数保留仅为接口兼容，不会影响实际结果。
 
         Args:
-            code: 股票代码 (不含后缀)
+            code: 股票代码（含或不含后缀）。留空时 trade_date 必填，返回全市场当日数据
             start_date: 开始日期 (YYYYMMDD 或 YYYY-MM-DD)
             end_date: 结束日期
-            adjust: 复权方式 ('qfq', 'hfq', '')
+            adjust: 已废弃，保留仅为兼容，daily 接口不支持复权
+            trade_date: 交易日期（YYYYMMDD），与 code=None 配合使用获取全市场单日数据
 
         Returns:
             Response: 响应对象
                 - data: pd.DataFrame 标准化的日线数据
-                - metadata: 元数据(code, n_records, date_range, adjust)
+                - metadata: 元数据(code, n_records, date_range)
         """
         try:
             start_time = time.time()
 
-            # 标准化日期格式
-            start = self.normalize_date(start_date) if start_date else \
-                (datetime.now() - timedelta(days=TushareConfig.DEFAULT_HISTORY_DAYS)).strftime('%Y%m%d')
-            end = self.normalize_date(end_date) if end_date else \
-                datetime.now().strftime('%Y%m%d')
+            # daily 接口不支持 adj 复权参数，params 不传 adj
+            params = {}
 
-            # 转换为 Tushare 格式的股票代码
-            ts_code = self.converter.to_ts_code(code)
+            if trade_date and not code:
+                # 全市场单日模式：按 trade_date 获取所有股票
+                td = self.normalize_date(trade_date)
+                params['trade_date'] = td
+                desc = f"全市场({td})"
+                logger.debug(f"获取全市场日线数据: trade_date={td}")
+            else:
+                if not code:
+                    raise ValueError("code 和 trade_date 不能同时为空")
+                # 标准化日期格式
+                start = self.normalize_date(start_date) if start_date else \
+                    (datetime.now() - timedelta(days=TushareConfig.DEFAULT_HISTORY_DAYS)).strftime('%Y%m%d')
+                end = self.normalize_date(end_date) if end_date else \
+                    datetime.now().strftime('%Y%m%d')
 
-            logger.debug(f"获取 {ts_code} 日线数据: {start} - {end}, 复权: {adjust}")
-
-            # 根据复权类型选择接口参数
-            params = {
-                'ts_code': ts_code,
-                'start_date': start,
-                'end_date': end
-            }
-
-            if adjust == 'qfq':
-                params['adj'] = 'qfq'  # 前复权
-            elif adjust == 'hfq':
-                params['adj'] = 'hfq'  # 后复权
+                # 转换为 Tushare 格式的股票代码
+                ts_code = self.converter.to_ts_code(code)
+                params['ts_code'] = ts_code
+                params['start_date'] = start
+                params['end_date'] = end
+                desc = code
+                logger.debug(f"获取 {ts_code} 日线数据: {start} - {end}")
 
             # 调用 API
             df = self.api_client.execute(self.api_client.daily, **params)
 
+            date_range = params.get('trade_date') or \
+                f"{params.get('start_date', '')}~{params.get('end_date', '')}"
+
             if df is None or df.empty:
-                logger.warning(f"{code}: 无数据")
+                logger.warning(f"{desc}: 无数据")
                 return Response.warning(
-                    message=f"{code}: 无数据",
+                    message=f"{desc}: 无数据",
                     data=pd.DataFrame(),
-                    code=code,
-                    date_range=f"{start}~{end}",
-                    adjust=adjust,
+                    code=code or '',
+                    date_range=date_range,
                     provider=self.provider_name
                 )
 
@@ -385,49 +395,48 @@ class TushareProvider(BaseDataProvider):
             df = self.converter.convert_daily_data(df)
             elapsed = time.time() - start_time
 
-            logger.debug(f"成功获取 {code} 日线数据 {len(df)} 条")
+            logger.debug(f"成功获取 {desc} 日线数据 {len(df)} 条")
             return Response.success(
                 data=df,
-                message=f"成功获取 {code} 日线数据",
-                code=code,
+                message=f"成功获取 {desc} 日线数据",
+                code=code or '',
                 n_records=len(df),
-                date_range=f"{start}~{end}",
-                adjust=adjust,
+                date_range=date_range,
                 provider=self.provider_name,
                 elapsed_time=f"{elapsed:.2f}s"
             )
 
         except TusharePermissionError as e:
-            logger.error(f"获取 {code} 日线数据失败: {e}")
+            logger.error(f"获取日线数据失败: {e}")
             return Response.error(
                 error=str(e),
                 error_code="TUSHARE_PERMISSION_ERROR",
-                code=code,
+                code=code or '',
                 provider=self.provider_name
             )
         except TushareRateLimitError as e:
-            logger.error(f"获取 {code} 日线数据失败: {e}")
+            logger.error(f"获取日线数据失败: {e}")
             return Response.error(
                 error=str(e),
                 error_code="TUSHARE_RATE_LIMIT_ERROR",
-                code=code,
+                code=code or '',
                 provider=self.provider_name,
                 retry_after=e.retry_after
             )
         except TushareDataError as e:
-            logger.error(f"获取 {code} 日线数据失败: {e}")
+            logger.error(f"获取日线数据失败: {e}")
             return Response.error(
                 error=str(e),
                 error_code="TUSHARE_DATA_ERROR",
-                code=code,
+                code=code or '',
                 provider=self.provider_name
             )
         except Exception as e:
-            logger.error(f"获取 {code} 日线数据失败: {e}")
+            logger.error(f"获取日线数据失败: {e}")
             return Response.error(
                 error=f"获取日线数据失败: {str(e)}",
                 error_code="TUSHARE_UNEXPECTED_ERROR",
-                code=code,
+                code=code or '',
                 provider=self.provider_name
             )
 

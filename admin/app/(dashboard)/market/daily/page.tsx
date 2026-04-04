@@ -357,7 +357,7 @@ export default function StockDailyPage() {
               ) : (
                 <>
                   <History className="h-4 w-4 mr-1" />
-                  历史全量同步
+                  全量同步
                 </>
               )}
             </Button>
