@@ -741,6 +741,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 800,
         'points_consumption': 2000
     },
+    'tasks.sync_income_full_history': {
+        'task': 'tasks.sync_income_full_history',
+        'name': '利润表全量历史同步',
+        'description': '按月切片全量同步利润表历史数据，支持中断续继（Redis进度记录）',
+        'category': '财务数据',
+        'display_order': 801,
+        'points_consumption': 2000
+    },
     'tasks.sync_balancesheet': {
         'task': 'tasks.sync_balancesheet',
         'name': '资产负债表数据',

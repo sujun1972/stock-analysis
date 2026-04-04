@@ -181,3 +181,46 @@ async def sync_income_async(
     except Exception as e:
         logger.error(f"提交利润表同步任务失败: {e}")
         return ApiResponse.error(message=f"任务提交失败: {str(e)}")
+
+
+@router.post("/sync-full-history-async")
+async def sync_income_full_history_async(
+    start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    异步全量同步利润表历史数据（按月切片 + Redis 续继）
+
+    Args:
+        start_date: 起始日期 YYYYMMDD，不传则由 hook 传入系统配置的 earliest_history_date
+        current_user: 当前用户
+
+    Returns:
+        任务信息
+    """
+    try:
+        from app.tasks.income_tasks import sync_income_full_history_task
+
+        celery_task = sync_income_full_history_task.apply_async(
+            kwargs={'start_date': start_date}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_income_full_history',
+            display_name='利润表全量同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date},
+            source='income_page'
+        )
+
+        return ApiResponse.success(
+            data=task_data,
+            message="利润表全量同步任务已提交，请在任务面板查看进度"
+        )
+
+    except Exception as e:
+        logger.error(f"提交利润表全量同步任务失败: {e}")
+        return ApiResponse.error(message=f"任务提交失败: {str(e)}")

@@ -425,7 +425,7 @@ const handleSyncConfirm = async () => {
 | 股东人数 | `/reference-data/stk-holdernumber` | |
 | 大宗交易 | `/reference-data/block-trade` | |
 | 股东增减持 | `/reference-data/stk-holdertrade` | syncStartDate/syncEndDate 独立 |
-| 利润表 | `/financial/income` | 同步接口需 YYYYMMDD 格式，查询需 YYYY-MM-DD |
+| 利润表 | `/financial/income` | 同步接口需 YYYYMMDD 格式，查询需 YYYY-MM-DD；全量同步按季度 period 切片（见下方说明） |
 | 资产负债表 | `/financial/balancesheet` | 同上 |
 | 现金流量表 | `/financial/cashflow` | period 用 DatePicker |
 | 业绩预告 | `/financial/forecast` | 含 syncForecastType 选项 |
@@ -435,6 +435,36 @@ const handleSyncConfirm = async () => {
 | 财务审计意见 | `/financial/fina-audit` | ts_code 为同步必填项 |
 | 主营业务构成 | `/financial/fina-mainbz` | 含 type 选项 |
 | 财报披露计划 | `/financial/disclosure-date` | |
+
+#### 财务报表全量同步：按季度 period 切片
+
+Tushare 财务报表接口（`income_vip`、`balancesheet_vip`、`cashflow_vip` 等）的 `start_date`/`end_date` 参数对应**公告日期**而非报告期，若按公告日切片会拉到跨越多个报告期的数据（例如 2018 年公告的 2017 年报）。
+
+**正确的全量同步策略：按季度 period 枚举**
+
+逐季传入 `period=YYYYMMDD`（季末日固定为 0331/0630/0930/1231），每个 period 拉取全市场当季全部公司数据：
+
+```python
+# income_service.py 实现模式（可复用于 balancesheet/cashflow）
+@staticmethod
+def _generate_quarters(start_date: str) -> List[str]:
+    start_year = int(start_date[:4])
+    quarter_ends = [331, 630, 930, 1231]
+    quarter_end_dates = [(y, qe) for y in range(start_year, datetime.now().year + 1) for qe in quarter_ends]
+    today_int = int(datetime.now().strftime("%Y%m%d"))
+    start_int = int(start_date)
+    return [f"{y}{qe:04d}" for y, qe in quarter_end_dates
+            if start_int <= int(f"{y}{qe:04d}") <= today_int]
+
+# 调用时传 period，而非 start_date/end_date
+df = provider.get_income(period=period)
+```
+
+- Redis Key：`sync:{table}:full_history:progress`，Set 内存 period 字符串，支持中断续继
+- 并发数：3（财务接口单次耗时较长，避免积分超限）
+- 起始季度默认：`20090101`（2009Q1，覆盖大多数上市公司历史）
+- 前端 `useDataBulkOps.syncFn` 传 `start_date`（来自系统配置 `earliest_history_date`，格式 YYYYMMDD）
+
 | 筹码分布 | `/features/cyq-chips` | 2000积分/次，单次最大1000行 |
 | 每日筹码及胜率 | `/features/cyq-perf` | 2000积分/次，含获利比例/成本分布 |
 | CCASS持股汇总 | `/features/ccass-hold` | 5000积分/次 |

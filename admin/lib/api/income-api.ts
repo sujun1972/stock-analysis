@@ -79,6 +79,17 @@ export class IncomeApiClient extends BaseApiClient {
   }>> {
     return this.post('/api/income/sync-async', {}, { params })
   }
+
+  async syncFullHistoryAsync(params?: {
+    start_date?: string
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/income/sync-full-history-async', {}, { params })
+  }
 }
 
 export const incomeApi = new IncomeApiClient()

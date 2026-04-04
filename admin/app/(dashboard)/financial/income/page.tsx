@@ -15,7 +15,6 @@ import type { IncomeData, IncomeStatistics } from '@/lib/api/income-api'
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
 import { TrendingUp, TrendingDown, DollarSign, PieChart, RefreshCw } from 'lucide-react'
 
 export default function IncomePage() {
@@ -25,8 +24,8 @@ export default function IncomePage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
-  const [reportType, setReportType] = useState<string>('1')
-  const [compType, setCompType] = useState<string>('1')
+  const [reportType, setReportType] = useState<string>('all')
+  const [compType, setCompType] = useState<string>('all')
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -113,8 +112,8 @@ export default function IncomePage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'income',
-    syncFn: (params) => apiClient.post('/api/income/sync-async', null, { params }),
-    taskName: 'tasks.sync_income',
+    syncFn: (params) => incomeApi.syncFullHistoryAsync(params),
+    taskName: 'tasks.sync_income_full_history',
     onSuccess: loadData,
   })
 
@@ -197,6 +196,11 @@ export default function IncomePage() {
       className: 'font-mono'
     },
     {
+      key: 'ann_date',
+      header: '公告日期',
+      accessor: (row) => row.ann_date || '-'
+    },
+    {
       key: 'end_date',
       header: '报告期',
       accessor: (row) => row.end_date
@@ -265,13 +269,25 @@ export default function IncomePage() {
           <a href="https://tushare.pro/document/2?doc_id=33" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="利润表"
+            />
+          </div>
         }
       />
 
@@ -404,8 +420,8 @@ export default function IncomePage() {
                 setTsCode('')
                 setStartDate(undefined)
                 setEndDate(undefined)
-                setReportType('1')
-                setCompType('1')
+                setReportType('all')
+                setCompType('all')
               }}
               variant="ghost"
             >
