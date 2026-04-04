@@ -45,8 +45,8 @@ export default function AdjFactorPage() {
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_adj_factor')
+  // 从 task store 派生 syncing 状态（普通同步 或 全量同步 任一在跑均禁用按钮）
+  const syncing = isTaskRunning('tasks.sync_adj_factor') || isTaskRunning('tasks.sync_adj_factor_full_history')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -54,7 +54,7 @@ export default function AdjFactorPage() {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = { limit: pageSize, page }
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
@@ -80,7 +80,7 @@ export default function AdjFactorPage() {
     } finally {
       setLoading(false)
     }
-  }, [tsCode, startDate, endDate, pageSize])
+  }, [tsCode, startDate, endDate, page, pageSize])
 
   const {
     handleFullSync,
@@ -93,8 +93,8 @@ export default function AdjFactorPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'adj_factor',
-    syncFn: (params) => adjFactorApi.syncAsync(params),
-    taskName: 'tasks.sync_adj_factor',
+    syncFn: (params) => adjFactorApi.syncFullHistoryAsync(params),
+    taskName: 'tasks.sync_adj_factor_full_history',
     onSuccess: loadData,
   })
 

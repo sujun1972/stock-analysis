@@ -209,6 +209,16 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
 
+    'tasks.sync_adj_factor_full_history': {
+        'task': 'tasks.sync_adj_factor_full_history',
+        'name': '复权因子（全量历史）',
+        'description': '逐只股票全量同步复权因子历史数据，8并发，支持Redis中断续继，避免单次返回上限6000条问题',
+        'category': '行情数据',
+        'display_order': 281,
+        'points_consumption': None,
+        'default_params': {'start_date': None}
+    },
+
     # ============================================
     # 扩展数据同步任务（display_order: 300-399）
     # ============================================

@@ -34,7 +34,8 @@ class AdjFactorService:
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        page: int = 1
     ) -> Dict:
         """
         获取复权因子数据
@@ -43,7 +44,8 @@ class AdjFactorService:
             ts_code: 股票代码（可选）
             start_date: 开始日期，格式：YYYY-MM-DD（可选）
             end_date: 结束日期，格式：YYYY-MM-DD（可选）
-            limit: 返回记录数限制
+            limit: 每页记录数
+            page: 页码（从1开始）
 
         Returns:
             包含数据列表和总数的字典
@@ -52,13 +54,24 @@ class AdjFactorService:
         start_date_fmt = start_date.replace('-', '') if start_date else None
         end_date_fmt = end_date.replace('-', '') if end_date else None
 
-        # 从数据库查询
-        items = await asyncio.to_thread(
-            self.adj_factor_repo.get_by_code_and_date_range,
-            ts_code=ts_code,
-            start_date=start_date_fmt,
-            end_date=end_date_fmt,
-            limit=limit
+        offset = (page - 1) * limit
+
+        # 并发查询数据和总数
+        items, total = await asyncio.gather(
+            asyncio.to_thread(
+                self.adj_factor_repo.get_by_code_and_date_range,
+                ts_code=ts_code,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt,
+                limit=limit,
+                offset=offset
+            ),
+            asyncio.to_thread(
+                self.adj_factor_repo.get_total_count,
+                ts_code=ts_code,
+                start_date=start_date_fmt,
+                end_date=end_date_fmt
+            )
         )
 
         # 日期格式转换：YYYYMMDD -> YYYY-MM-DD
@@ -69,7 +82,7 @@ class AdjFactorService:
 
         return {
             "items": items,
-            "total": len(items)
+            "total": total
         }
 
     async def get_statistics(

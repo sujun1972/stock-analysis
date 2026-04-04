@@ -10,6 +10,7 @@ export interface AdjFactorParams {
   start_date?: string  // YYYY-MM-DD
   end_date?: string    // YYYY-MM-DD
   limit?: number
+  page?: number
 }
 
 export interface AdjFactorData {
@@ -69,6 +70,18 @@ export class AdjFactorApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/adj-factor/sync-async', null, { params })
+  }
+
+  /**
+   * 全量历史同步：逐只股票同步，8 并发，支持中断续继
+   */
+  async syncFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/adj-factor/sync-full-history', null, { params })
   }
 }
 

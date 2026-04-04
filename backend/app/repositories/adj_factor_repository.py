@@ -20,12 +20,38 @@ class AdjFactorRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ AdjFactorRepository initialized")
 
+    def get_total_count(
+        self,
+        ts_code: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> int:
+        """按条件查询总记录数"""
+        conditions = []
+        params = []
+
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        if start_date:
+            conditions.append("trade_date >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("trade_date <= %s")
+            params.append(end_date)
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} {where_clause}"
+        result = self.execute_query(query, tuple(params) if params else None)
+        return result[0][0] if result else 0
+
     def get_by_code_and_date_range(
         self,
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按股票代码和日期范围查询复权因子数据
@@ -63,6 +89,7 @@ class AdjFactorRepository(BaseRepository):
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         limit_clause = f"LIMIT {limit}" if limit else ""
+        offset_clause = f"OFFSET {offset}" if offset > 0 else ""
 
         query = f"""
             SELECT
@@ -75,6 +102,7 @@ class AdjFactorRepository(BaseRepository):
             {where_clause}
             ORDER BY trade_date DESC, ts_code
             {limit_clause}
+            {offset_clause}
         """
 
         result = self.execute_query(query, tuple(params) if params else None)

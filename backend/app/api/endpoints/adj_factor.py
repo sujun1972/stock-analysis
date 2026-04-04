@@ -22,7 +22,8 @@ async def get_adj_factor_data(
     ts_code: Optional[str] = Query(None, description="股票代码，如：000001.SZ"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="返回记录数限制")
+    limit: int = Query(30, description="每页记录数"),
+    page: int = Query(1, description="页码，从1开始")
 ):
     """
     查询复权因子数据
@@ -31,7 +32,8 @@ async def get_adj_factor_data(
         ts_code: 股票代码（可选）
         start_date: 开始日期（可选）
         end_date: 结束日期（可选）
-        limit: 返回记录数限制
+        limit: 每页记录数
+        page: 页码
 
     Returns:
         复权因子数据列表
@@ -42,7 +44,8 @@ async def get_adj_factor_data(
             ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
-            limit=limit
+            limit=limit,
+            page=page
         )
         return ApiResponse.success(data=result)
     except Exception as e:
@@ -175,4 +178,41 @@ async def sync_adj_factor_async(
 
     except Exception as e:
         logger.error(f"提交复权因子同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_adj_factor_full_history(
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYYMMDD，默认 20210101"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量历史同步：逐只股票同步复权因子，8 并发，支持中断续继
+
+    每只股票单独请求 Tushare，避免单次返回上限 6000 条的问题。
+    支持 Redis 进度续继，任务中断后重新触发会自动跳过已完成股票。
+    """
+    try:
+        from app.tasks.adj_factor_tasks import sync_adj_factor_full_history_task
+
+        celery_task = sync_adj_factor_full_history_task.apply_async(
+            kwargs={'start_date': start_date}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_adj_factor_full_history',
+            display_name='复权因子（全量）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date},
+            source='adj_factor_page'
+        )
+
+        logger.info(f"复权因子全量同步任务已提交: {celery_task.id}")
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交复权因子全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
