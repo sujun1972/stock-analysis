@@ -78,8 +78,8 @@ export default function DailyBasicPage() {
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_daily_basic')
+  // 从 task store 派生 syncing 状态（普通同步或全量同步任一在跑均禁用按钮）
+  const syncing = isTaskRunning('tasks.sync_daily_basic') || isTaskRunning('tasks.sync_daily_basic_full_history')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -131,8 +131,8 @@ export default function DailyBasicPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'daily_basic',
-    syncFn: (params) => apiClient.post('/api/daily-basic/sync-async', null, { params }),
-    taskName: 'tasks.sync_daily_basic',
+    syncFn: (params) => apiClient.post('/api/daily-basic/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_daily_basic_full_history',
     onSuccess: loadData,
   })
 

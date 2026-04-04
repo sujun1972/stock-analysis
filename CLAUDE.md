@@ -454,7 +454,7 @@ const handleSyncConfirm = async () => {
 | 港股通每日成交统计 | `/market/ggt-daily` | 2000积分/次；数据从2014年起 |
 | 港股通每月成交统计 | `/market/ggt-monthly` | 5000积分/次；同步弹窗选月份 |
 | 复权因子 | `/market/adj-factor` | 2000积分/次；支持单只历史或单日全市场查询；全量同步逐只股票请求（8并发，Redis续继），避免单次6000条上限 |
-| 每日指标 | `/market/daily-basic` | 2000积分/次；17个核心指标 |
+| 每日指标 | `/market/daily-basic` | 2000积分/次；17个核心指标；全量同步逐只股票请求（8并发，Redis续继），避免单次6000条上限 |
 | 新股列表 | `/sync/new-stocks` | 独立 `new_stocks` 表；增量同步弹窗选天数（默认90天）；全量同步90天/片×5并发（new_share 单次上限2000条） |
 | ST股票列表 | `/data/stock-st` | 全量同步特殊处理（2交易日/批，10并发） |
 | 股票列表 | `/data/stock-list` | 17个字段；同步全状态 |

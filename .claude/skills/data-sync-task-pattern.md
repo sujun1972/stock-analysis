@@ -740,6 +740,156 @@ Args:
 - `/backend/app/api/endpoints/hk_hold.py` (无参数验证)
 - `/backend/app/services/hk_hold_service.py` (默认同步最近30天)
 
+### 3.2.9 逐只股票全量同步（绕过单次上限）
+
+当 Tushare 接口存在单次返回上限（如 6000 条），而历史数据量远超此限时，不能简单传 `start_date` 给普通 sync 接口。正确方案是新增独立的全量同步任务，逐只股票请求，结合 Redis 续继支持中断恢复。
+
+**适用场景**：
+- 接口单次上限 ≤ 6000 条（如 `daily_basic`、`adj_factor`）
+- 数据需按 `ts_code` 维度积累历史（每股×每日）
+- 全量同步耗时较长（需支持中断续继）
+
+**实现要点**：
+
+#### 后端 Celery 任务（`tasks/{resource}_tasks.py`）
+
+```python
+import asyncio
+from datetime import datetime
+from app.core.redis_lock import redis_client
+from app.repositories.stock_basic_repository import StockBasicRepository
+
+# Redis Set key，存储已完成的 ts_code
+FULL_HISTORY_PROGRESS_KEY = "sync:{resource}:full_history:progress"
+
+@celery_app.task(bind=True, name="tasks.sync_{resource}_full_history",
+                 max_retries=0, soft_time_limit=28800, time_limit=32400)
+def sync_{resource}_full_history_task(self, start_date=None):
+    effective_start = start_date or "20210101"
+    today = datetime.now().strftime("%Y%m%d")
+
+    # 获取全部上市股票
+    all_ts_codes = StockBasicRepository().get_listed_ts_codes(status='L')
+    total = len(all_ts_codes)
+
+    # 读取已完成进度（支持中断续继）
+    completed_set = redis_client.smembers(FULL_HISTORY_PROGRESS_KEY)
+    pending_codes = [c for c in all_ts_codes if c not in completed_set]
+
+    service = YourService()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    success_count = 0
+    skip_count = len(completed_set)
+    error_count = 0
+    CONCURRENCY = 8
+    BATCH_SIZE = 50
+
+    async def sync_one(ts_code, sem):
+        async with sem:
+            try:
+                result = await service.sync_data(ts_code=ts_code,
+                    start_date=effective_start, end_date=today)
+                if result.get("status") == "error":
+                    return ts_code, False, result.get("error")
+                return ts_code, True, None
+            except Exception as e:
+                return ts_code, False, str(e)
+
+    async def run_concurrent():
+        nonlocal success_count, error_count
+        sem = asyncio.Semaphore(CONCURRENCY)
+        for batch_start in range(0, len(pending_codes), BATCH_SIZE):
+            batch = pending_codes[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_one(c, sem) for c in batch])
+            for ts_code, ok, err in results:
+                if ok:
+                    redis_client.sadd(FULL_HISTORY_PROGRESS_KEY, ts_code)
+                    success_count += 1
+                else:
+                    error_count += 1
+            done = skip_count + success_count
+            # 批间上报进度
+            self.update_state(state='PROGRESS', meta={
+                'current': done, 'total': total,
+                'percent': round(done / total * 100, 1)
+            })
+
+    try:
+        loop.run_until_complete(run_concurrent())
+    finally:
+        loop.close()
+
+    # 全部完成后清除 Redis key，支持下次重新全量
+    if len(redis_client.smembers(FULL_HISTORY_PROGRESS_KEY)) >= total:
+        redis_client.delete(FULL_HISTORY_PROGRESS_KEY)
+```
+
+#### 后端 API 端点（新增 `/sync-full-history`）
+
+```python
+@router.post("/sync-full-history")
+async def sync_full_history(
+    start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD，默认 20210101"),
+    current_user: User = Depends(require_admin)
+):
+    celery_task = sync_{resource}_full_history_task.apply_async(
+        kwargs={'start_date': start_date}
+    )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_{resource}_full_history',
+        display_name='{资源名称}（全量）',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'start_date': start_date},
+        source='{resource}_page'
+    )
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+```
+
+#### 前端 `useDataBulkOps` 接入
+
+```typescript
+// BulkOpsButtons 的全量同步改为调用新接口
+const { handleFullSync, ... } = useDataBulkOps({
+  tableKey: '{resource}',
+  syncFn: (params) => apiClient.post('/api/{resource}/sync-full-history', null, { params }),
+  taskName: 'tasks.sync_{resource}_full_history',
+  onSuccess: loadData,
+})
+
+// syncing 同时监听普通同步和全量同步
+const syncing = isTaskRunning('tasks.sync_{resource}')
+           || isTaskRunning('tasks.sync_{resource}_full_history')
+```
+
+#### task_metadata.py 注册
+
+```python
+'tasks.sync_{resource}_full_history': {
+    'task': 'tasks.sync_{resource}_full_history',
+    'name': '{资源名称}（全量）',
+    'description': '逐只股票全量同步历史数据，8并发，支持Redis中断续继，避免单次6000条上限',
+    'category': '行情数据',
+    'display_order': {普通任务 display_order + 1},
+    'points_consumption': 2000,
+    'default_params': {'start_date': None}
+},
+```
+
+**注意事项**：
+- 全量任务完成后（`final_done >= total`）**必须清除 Redis key**，否则下次触发会跳过所有股票
+- 中断续继靠 Redis Set，股票同步成功后立即 `sadd`，不等批次结束
+- `soft_time_limit=28800`（8小时），`time_limit=32400`（9小时），给 5500 只股票留足余量
+- Tushare 接口消耗积分×逐只调用，确认积分余额足够（5500只 × 每次消耗）
+- 重启 Celery Worker 后新任务才能被识别：`docker-compose restart celery_worker`
+
+**已实现的页面**：
+- 复权因子（`/market/adj-factor`）：`tasks.sync_adj_factor_full_history`
+- 每日指标（`/market/daily-basic`）：`tasks.sync_daily_basic_full_history`
+
 ---
 
 ## 四、DataTable 组件正确使用方法
@@ -1520,5 +1670,5 @@ const handleSync = async () => {
 
 ---
 
-**最后更新**: 2026-03-26
-**版本**: 1.3.0
+**最后更新**: 2026-04-04
+**版本**: 1.4.0

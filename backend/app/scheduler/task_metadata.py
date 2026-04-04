@@ -164,6 +164,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 2000,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
+    'tasks.sync_daily_basic_full_history': {
+        'task': 'tasks.sync_daily_basic_full_history',
+        'name': '每日指标（全量）',
+        'description': '逐只股票全量同步每日指标历史数据，8并发，支持Redis中断续继，避免单次6000条上限',
+        'category': '行情数据',
+        'display_order': 231,
+        'points_consumption': 2000,
+        'default_params': {'start_date': None}
+    },
     'tasks.sync_hsgt_top10': {
         'task': 'tasks.sync_hsgt_top10',
         'name': '沪深股通十大成交股',

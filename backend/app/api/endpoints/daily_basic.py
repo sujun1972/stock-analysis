@@ -187,3 +187,40 @@ async def sync_daily_basic_async(
     except Exception as e:
         logger.error(f"提交每日指标同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_daily_basic_full_history(
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYYMMDD，默认 20210101"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量历史同步：逐只股票同步每日指标，8 并发，支持中断续继
+
+    每只股票单独请求 Tushare，避免单次返回上限 6000 条的问题。
+    支持 Redis 进度续继，任务中断后重新触发会自动跳过已完成股票。
+    """
+    try:
+        from app.tasks.daily_basic_tasks import sync_daily_basic_full_history_task
+
+        celery_task = sync_daily_basic_full_history_task.apply_async(
+            kwargs={'start_date': start_date}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_daily_basic_full_history',
+            display_name='每日指标（全量）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date},
+            source='daily_basic_page'
+        )
+
+        logger.info(f"每日指标全量同步任务已提交: {celery_task.id}")
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交每日指标全量同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
