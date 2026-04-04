@@ -20,8 +20,8 @@ class SuspendRepository(BaseRepository):
 
     def get_by_date_range(
         self,
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         suspend_type: Optional[str] = None,
         limit: Optional[int] = None,
@@ -49,15 +49,20 @@ class SuspendRepository(BaseRepository):
             SELECT ts_code, trade_date, suspend_timing, suspend_type,
                    created_at, updated_at
             FROM {self.TABLE_NAME}
-            WHERE trade_date >= %s AND trade_date <= %s
+            WHERE 1=1
         """
 
-        params = [start_date, end_date]
+        params = []
 
+        if start_date:
+            query += " AND trade_date >= %s"
+            params.append(start_date)
+        if end_date:
+            query += " AND trade_date <= %s"
+            params.append(end_date)
         if ts_code:
             query += " AND ts_code = %s"
             params.append(ts_code)
-
         if suspend_type:
             query += " AND suspend_type = %s"
             params.append(suspend_type)
@@ -67,7 +72,6 @@ class SuspendRepository(BaseRepository):
         if limit:
             query += " LIMIT %s"
             params.append(limit)
-
         if offset:
             query += " OFFSET %s"
             params.append(offset)
@@ -81,8 +85,8 @@ class SuspendRepository(BaseRepository):
 
     def count_by_date_range(
         self,
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         suspend_type: Optional[str] = None
     ) -> int:
@@ -105,15 +109,20 @@ class SuspendRepository(BaseRepository):
         query = f"""
             SELECT COUNT(*) as count
             FROM {self.TABLE_NAME}
-            WHERE trade_date >= %s AND trade_date <= %s
+            WHERE 1=1
         """
 
-        params = [start_date, end_date]
+        params = []
 
+        if start_date:
+            query += " AND trade_date >= %s"
+            params.append(start_date)
+        if end_date:
+            query += " AND trade_date <= %s"
+            params.append(end_date)
         if ts_code:
             query += " AND ts_code = %s"
             params.append(ts_code)
-
         if suspend_type:
             query += " AND suspend_type = %s"
             params.append(suspend_type)

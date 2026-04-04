@@ -3,7 +3,7 @@
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from typing import Optional, Dict, List
 from loguru import logger
 import pandas as pd
@@ -11,6 +11,12 @@ import pandas as pd
 from app.repositories.suspend_repository import SuspendRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
+
+# 全量同步 Redis key
+SUSPEND_FULL_HISTORY_PROGRESS_KEY = "sync:suspend:full_history:progress"
+SUSPEND_FULL_HISTORY_LOCK_KEY = "sync:suspend:full_history:lock"
+SUSPEND_FULL_HISTORY_START_DATE = "20050101"
+SUSPEND_FULL_HISTORY_CONCURRENCY = 5
 
 
 class SuspendService:
@@ -169,12 +175,6 @@ class SuspendService:
             停复牌数据（包含分页信息）
         """
         try:
-            # 如果没有指定日期，默认查询最近30天
-            if not start_date:
-                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
-            if not end_date:
-                end_date = datetime.now().strftime('%Y%m%d')
-
             # 计算 offset
             offset = (page - 1) * limit
 
@@ -201,15 +201,15 @@ class SuspendService:
             # 日期格式转换：YYYYMMDD → YYYY-MM-DD
             for item in items:
                 if item.get('trade_date'):
-                    date_str = item['trade_date']
-                    item['trade_date'] = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+                    d = item['trade_date']
+                    item['trade_date'] = f"{d[:4]}-{d[4:6]}-{d[6:]}"
 
             return {
                 "items": items,
                 "total": total,
                 "page": page,
                 "page_size": limit,
-                "total_pages": (total + limit - 1) // limit if limit > 0 else 0
+                "total_pages": (total + limit - 1) // limit if limit > 0 else 0,
             }
 
         except Exception as e:
@@ -232,12 +232,6 @@ class SuspendService:
             统计信息
         """
         try:
-            # 如果没有指定日期，默认查询最近30天
-            if not start_date:
-                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
-            if not end_date:
-                end_date = datetime.now().strftime('%Y%m%d')
-
             stats = await asyncio.to_thread(
                 self.suspend_repo.get_statistics,
                 start_date=start_date,
@@ -271,3 +265,119 @@ class SuspendService:
         except Exception as e:
             logger.error(f"获取最新交易日期失败: {str(e)}")
             raise
+
+    @staticmethod
+    def _generate_weeks(start_date: str, end_date: str) -> List[tuple]:
+        """
+        将日期范围切分为7天片段，每片返回 (week_start, week_end)，均为 YYYYMMDD 格式。
+
+        按周切片原因：全市场单月停复牌峰值可达 8000 条（2015年7月），单季度更高，
+        但单周最高约 4000 条（股灾期间），安全低于 Tushare 5000 条单次上限。
+        """
+        cur = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+        end = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+        weeks = []
+        while cur <= end:
+            ws = cur
+            we = min(cur + timedelta(days=6), end)
+            weeks.append((ws.strftime('%Y%m%d'), we.strftime('%Y%m%d')))
+            cur = we + timedelta(days=1)
+        return weeks
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        update_state_fn=None
+    ) -> Dict:
+        """
+        按周切片全量同步停复牌历史数据（支持 Redis 续继）
+
+        不传 ts_code，按7天窗口拉全市场停复牌记录。
+        历史峰值（2015年7月）单周约4000条，安全低于 Tushare 5000条上限。
+        5并发，Redis Set 记录已完成周起始日，支持中断续继。
+
+        Args:
+            redis_client: Redis 客户端，用于进度续继
+            update_state_fn: Celery self.update_state 回调，用于上报进度
+
+        Returns:
+            同步结果统计
+        """
+        today = datetime.now().strftime("%Y%m%d")
+        weeks = self._generate_weeks(SUSPEND_FULL_HISTORY_START_DATE, today)
+        total = len(weeks)
+        logger.info(f"[全量停复牌] 共 {total} 个周段需要同步")
+
+        # 读取已完成周段（用 week_start 作为唯一键）
+        completed_set = redis_client.smembers(SUSPEND_FULL_HISTORY_PROGRESS_KEY)
+        logger.info(f"[全量停复牌] 已完成 {len(completed_set)} 个，剩余 {total - len(completed_set)} 个")
+
+        pending = [(ws, we) for ws, we in weeks if ws not in completed_set]
+
+        provider = self._get_provider()
+        success_count = 0
+        skip_count = len(completed_set)
+        error_count = 0
+        total_records = 0
+
+        sem = asyncio.Semaphore(SUSPEND_FULL_HISTORY_CONCURRENCY)
+
+        async def sync_week(ws: str, we: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(
+                        provider.get_suspend_d,
+                        start_date=ws,
+                        end_date=we
+                    )
+                    records = 0
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.suspend_repo.bulk_upsert, df)
+                    return ws, we, True, records, None
+                except Exception as e:
+                    return ws, we, False, 0, str(e)
+
+        BATCH_SIZE = SUSPEND_FULL_HISTORY_CONCURRENCY * 2
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_week(ws, we) for ws, we in batch])
+
+            for ws, we, ok, records, err in results:
+                if ok:
+                    redis_client.sadd(SUSPEND_FULL_HISTORY_PROGRESS_KEY, ws)
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+                    logger.error(f"[全量停复牌] {ws}~{we} 失败（下次续继）: {err}")
+
+            done = skip_count + success_count
+            if update_state_fn:
+                update_state_fn(
+                    state='PROGRESS',
+                    meta={
+                        'current': done,
+                        'total': total,
+                        'percent': round(done / total * 100, 1),
+                        'records': total_records,
+                        'errors': error_count
+                    }
+                )
+            logger.info(f"[全量停复牌] 进度: {done}/{total} ({round(done/total*100,1)}%) "
+                        f"入库={total_records} 失败={error_count}")
+
+        final_done = len(redis_client.smembers(SUSPEND_FULL_HISTORY_PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(SUSPEND_FULL_HISTORY_PROGRESS_KEY)
+            logger.info("[全量停复牌] ✅ 全量同步完成，进度已清除")
+
+        return {
+            "status": "success",
+            "total": total,
+            "success": success_count,
+            "skipped": skip_count,
+            "errors": error_count,
+            "records": total_records,
+            "message": f"同步完成 {success_count} 个周段，入库 {total_records} 条，失败 {error_count} 个"
+        }

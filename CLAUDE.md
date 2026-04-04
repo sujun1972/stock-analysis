@@ -447,7 +447,7 @@ const handleSyncConfirm = async () => {
 | 机构调研表 | `/features/stk-surv` | 5000积分/次；单次最大100行；支持接待方式/机构类型筛选 |
 | 券商每月荐股 | `/features/broker-recommend` | 6000积分/次；每月1-3日更新；同步弹窗选月度 |
 | 股票日线数据 | `/market/daily` | 120积分/次；未复权数据（daily接口不支持adj参数）；全市场同步自动推算下一待补交易日；统计接口仅初始化时调用一次 |
-| 每日停复牌信息 | `/market/suspend` | |
+| 每日停复牌信息 | `/market/suspend` | 全量同步按7天窗口切片（不传 ts_code，按日期范围全市场拉取），5并发，Redis Set续继（约1100个周段）；无默认日期过滤，不传日期返回全部记录 |
 | 每日涨跌停价格 | `/market/stk-limit-d` | 2000积分/次；每交易日8:40更新；全量同步逐只股票请求（3并发，Redis续继），避免单次5800条上限 |
 | 沪深股通十大成交股 | `/market/hsgt-top10` | 同步不传 tsCode/marketType |
 | 港股通十大成交股 | `/market/ggt-top10` | 17个字段 |

@@ -2,8 +2,6 @@
 停复牌信息 API 端点
 """
 
-import asyncio
-import json
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
@@ -188,4 +186,41 @@ async def sync_suspend_async(
 
     except Exception as e:
         logger.error(f"提交停复牌信息同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_suspend_full_history(
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量同步停复牌历史数据（按周切片，支持中断续继）
+
+    按7天窗口拉取自2005年起的全市场停复牌记录，5并发，Redis续继。
+    """
+    try:
+        from app.tasks.suspend_tasks import sync_suspend_full_history_task
+
+        celery_task = sync_suspend_full_history_task.apply_async()
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_suspend_full_history',
+            display_name='停复牌全量历史同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={},
+            source='suspend_page'
+        )
+
+        logger.info(f"停复牌全量历史同步任务已提交: {celery_task.id}")
+
+        return ApiResponse.success(
+            data=task_data,
+            message="任务已提交，正在后台执行"
+        )
+
+    except Exception as e:
+        logger.error(f"提交停复牌全量历史同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

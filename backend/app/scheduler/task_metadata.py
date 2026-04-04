@@ -145,6 +145,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'suspend_type': None}
     },
 
+    'tasks.sync_suspend_full_history': {
+        'task': 'tasks.sync_suspend_full_history',
+        'name': '停复牌全量历史同步',
+        'description': '按周切片拉取自2005年起的全量停复牌历史数据，5并发，支持中断续继',
+        'category': '行情数据',
+        'display_order': 211,
+        'default_params': {}
+    },
+
     'tasks.sync_stk_limit_d': {
         'task': 'tasks.sync_stk_limit_d',
         'name': '每日涨跌停价格',

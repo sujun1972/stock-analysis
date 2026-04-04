@@ -96,8 +96,8 @@ export default function SuspendPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'suspend',
-    syncFn: (params) => suspendApi.syncAsync(params),
-    taskName: 'tasks.sync_suspend',
+    syncFn: () => suspendApi.syncFullHistoryAsync(),
+    taskName: 'tasks.sync_suspend_full_history',
     onSuccess: loadData,
   })
 

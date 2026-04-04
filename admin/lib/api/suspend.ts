@@ -78,6 +78,18 @@ export class SuspendApiClient extends BaseApiClient {
   }>> {
     return this.post('/api/suspend/sync-async', null, { params })
   }
+
+  /**
+   * 全量历史同步（逐只股票，支持中断续继）
+   */
+  async syncFullHistoryAsync(): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/suspend/sync-full-history', null)
+  }
 }
 
 export const suspendApi = new SuspendApiClient()
