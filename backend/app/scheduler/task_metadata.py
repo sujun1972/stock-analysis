@@ -44,7 +44,7 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'description': '同步最近上市的新股信息',
         'category': '基础数据',
         'display_order': 110,
-        'default_params': {'days': 30}
+        'default_params': {'days': 90}
     },
     'concept': {
         'task': 'sync.concept',

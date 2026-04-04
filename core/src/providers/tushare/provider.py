@@ -160,25 +160,31 @@ class TushareProvider(BaseDataProvider):
                 provider=self.provider_name
             )
 
-    def get_new_stocks(self, days: int = 30) -> Response:
+    def get_new_stocks(self, days: int = 30, start_date: str = None, end_date: str = None) -> Response:
         """
-        获取最近 N 天上市的新股
+        获取新股列表（来自 new_share 接口，保留完整字段）
 
         Args:
-            days: 最近天数
+            days: 最近天数（当 start_date 未指定时使用）
+            start_date: 上网发行开始日期，格式 YYYYMMDD（优先使用）
+            end_date: 上网发行结束日期，格式 YYYYMMDD（默认今天）
 
         Returns:
             Response: 响应对象
-                - data: pd.DataFrame 标准化的新股列表
-                - metadata: 元数据(n_stocks, days)
+                - data: pd.DataFrame，字段：ts_code, sub_code, name, ipo_date,
+                        issue_date, amount, market_amount, price, pe,
+                        limit_amount, funds, ballot
         """
         try:
             start_time = time.time()
-            logger.info(f"正在从 Tushare 获取最近 {days} 天的新股...")
 
-            # 计算日期范围
-            end_date = datetime.now().strftime('%Y%m%d')
-            start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+            # 计算日期范围：start_date 优先，否则用 days 推算
+            if not end_date:
+                end_date = datetime.now().strftime('%Y%m%d')
+            if not start_date:
+                start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+
+            logger.info(f"正在从 Tushare 获取新股（{start_date} ~ {end_date}）...")
 
             # 使用 new_share 接口获取新股上市日历
             df = self.api_client.execute(
@@ -188,32 +194,21 @@ class TushareProvider(BaseDataProvider):
             )
 
             if df is None or df.empty:
-                logger.warning("未获取到新股数据，尝试使用 stock_basic 接口")
-                # 备用方案：从 stock_basic 筛选最近上市的股票
-                df_all = self.api_client.execute(
-                    self.api_client.stock_basic,
-                    exchange='',
-                    list_status='L',
-                    fields=TushareFields.STOCK_LIST_FIELDS
+                logger.warning(f"new_share 接口未返回数据（{start_date} ~ {end_date}）")
+                return Response.success(
+                    data=pd.DataFrame(),
+                    message="该日期范围内无新股数据",
+                    n_stocks=0,
+                    provider=self.provider_name,
+                    elapsed_time="0s"
                 )
-                df_all['list_date'] = pd.to_datetime(
-                    df_all['list_date'],
-                    format='%Y%m%d',
-                    errors='coerce'
-                )
-                cutoff_date = datetime.now() - timedelta(days=days)
-                df = df_all[df_all['list_date'] >= cutoff_date]
 
-            # 转换为标准格式
-            df = self.converter.convert_new_stocks(df)
             elapsed = time.time() - start_time
-
             logger.info(f"成功获取 {len(df)} 只新股")
             return Response.success(
                 data=df,
-                message=f"成功获取最近 {days} 天的 {len(df)} 只新股",
+                message=f"成功获取 {len(df)} 只新股（{start_date} ~ {end_date}）",
                 n_stocks=len(df),
-                days=days,
                 provider=self.provider_name,
                 elapsed_time=f"{elapsed:.2f}s"
             )

@@ -26,6 +26,7 @@ CLEARABLE_TABLES: dict[str, str] = {
     # 基础数据
     "trade_cal":        "trade_cal",
     "stock_st":         "stock_st",
+    "new_stocks":       "new_stocks",
     # 行情数据
     "stock_daily":      "stock_daily",
     "adj_factor":       "adj_factor",
