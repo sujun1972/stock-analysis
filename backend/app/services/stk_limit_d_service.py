@@ -132,19 +132,21 @@ class StkLimitDService:
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 30
+        page: int = 1,
+        page_size: int = 30
     ) -> Dict[str, Any]:
         """
-        获取每日涨跌停价格数据
+        获取每日涨跌停价格数据（支持分页）
 
         Args:
             ts_code: 股票代码（可选）
             start_date: 开始日期 YYYYMMDD（可选）
             end_date: 结束日期 YYYYMMDD（可选）
-            limit: 返回记录数限制
+            page: 页码（从1开始）
+            page_size: 每页记录数
 
         Returns:
-            数据和统计信息
+            数据、统计信息和总记录数
         """
         try:
             # 如果没有指定日期范围，默认查询最近30天
@@ -154,27 +156,38 @@ class StkLimitDService:
                 start_date = start_date_dt.strftime('%Y%m%d')
                 end_date = end_date_dt.strftime('%Y%m%d')
 
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.stk_limit_d_repo.get_by_date_range,
-                start_date=start_date or '19900101',
-                end_date=end_date or '29991231',
-                ts_code=ts_code,
-                limit=limit
-            )
+            effective_start = start_date or '19900101'
+            effective_end = end_date or '29991231'
+            offset = (page - 1) * page_size
 
-            # 查询统计信息
-            statistics = await asyncio.to_thread(
-                self.stk_limit_d_repo.get_statistics,
-                start_date=start_date,
-                end_date=end_date,
-                ts_code=ts_code
+            # 并发查询数据、总数、统计信息
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.stk_limit_d_repo.get_by_date_range,
+                    start_date=effective_start,
+                    end_date=effective_end,
+                    ts_code=ts_code,
+                    limit=page_size,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.stk_limit_d_repo.get_total_count,
+                    start_date=effective_start,
+                    end_date=effective_end,
+                    ts_code=ts_code
+                ),
+                asyncio.to_thread(
+                    self.stk_limit_d_repo.get_statistics,
+                    start_date=start_date,
+                    end_date=end_date,
+                    ts_code=ts_code
+                )
             )
 
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

@@ -18,7 +18,6 @@ from .margin_secs_repository import MarginSecsRepository
 from .slb_len_repository import SlbLenRepository
 from .daily_basic_repository import DailyBasicRepository
 from .hk_hold_repository import HkHoldRepository
-from .stk_limit_repository import StkLimitRepository
 from .block_trade_repository import BlockTradeRepository
 from .sync_log_repository import SyncLogRepository
 from .config_repository import ConfigRepository

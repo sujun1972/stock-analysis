@@ -448,7 +448,7 @@ const handleSyncConfirm = async () => {
 | 券商每月荐股 | `/features/broker-recommend` | 6000积分/次；每月1-3日更新；同步弹窗选月度 |
 | 股票日线数据 | `/market/daily` | 120积分/次；未复权数据（daily接口不支持adj参数）；全市场同步自动推算下一待补交易日；统计接口仅初始化时调用一次 |
 | 每日停复牌信息 | `/market/suspend` | |
-| 每日涨跌停价格 | `/market/stk-limit-d` | 2000积分/次；每交易日8:40更新 |
+| 每日涨跌停价格 | `/market/stk-limit-d` | 2000积分/次；每交易日8:40更新；全量同步逐只股票请求（3并发，Redis续继），避免单次5800条上限 |
 | 沪深股通十大成交股 | `/market/hsgt-top10` | 同步不传 tsCode/marketType |
 | 港股通十大成交股 | `/market/ggt-top10` | 17个字段 |
 | 港股通每日成交统计 | `/market/ggt-daily` | 2000积分/次；数据从2014年起 |
@@ -2069,9 +2069,8 @@ Repository 层负责所有数据库访问操作，为 Service 层提供简洁的
 5. **扩展数据**
    - `DailyBasicRepository` - 每日指标数据（换手率、市盈率、市净率等）
    - `HkHoldRepository` - 北向资金持股数据
-   - `StkLimitRepository` - 涨跌停价格数据
    - `SuspendRepository` - 每日停复牌信息（停牌时间段、停复牌类型，支持分页查询）**（✨ 新增于 2026-03-24）**
-   - `StkLimitDRepository` - 每日涨跌停价格（昨收价、涨停价、跌停价，每交易日8:40更新）**（✨ 新增于 2026-03-24）**
+   - `StkLimitDRepository` - 每日涨跌停价格（昨收价、涨停价、跌停价，每交易日8:40更新；支持分页及全量逐只同步）**（✨ 新增于 2026-03-24）**
    - `AdjFactorRepository` - 复权因子（股票复权因子数据，盘前9:15~20分更新，支持单只股票历史查询）**（✨ 新增于 2026-03-24）**
 
 6. **策略和回测**
@@ -2587,7 +2586,6 @@ class ExperimentService:
 - **扩展数据服务**：
   - `DailyBasicService` - 每日指标服务
   - `BlockTradeService` - 大宗交易服务
-  - `StkLimitService` - 涨跌停价格服务
   - `HkHoldService` - 北向资金持股服务
 - **配置和同步服务**：
   - `SyncStatusManager` - 同步状态管理服务
@@ -2609,7 +2607,6 @@ class ExperimentService:
 **已创建的扩展数据 Repository**：
 - ✅ `DailyBasicRepository` - 每日指标数据
 - ✅ `HkHoldRepository` - 北向资金持股数据
-- ✅ `StkLimitRepository` - 涨跌停价格数据
 - ✅ `BlockTradeRepository` - 大宗交易数据
 - ✅ `SyncLogRepository` - 同步日志管理（sync_log 表）
 - ✅ `StockDailyRepository` - 股票日线数据（2026-03-20 新增）
@@ -2623,7 +2620,6 @@ class ExperimentService:
   - `GET /moneyflow/{ts_code}` - 使用 MoneyflowService
   - `GET /hk-hold` - 使用 HkHoldService
   - `GET /margin/{ts_code}` - 使用 MarginDetailService
-  - `GET /limit-prices` - 使用 StkLimitService
   - `GET /block-trade` - 使用 BlockTradeService
   - `GET /stats/summary` - 并发调用多个 Service（使用 asyncio.gather）
 - ✅ `moneyflow.py` - 3个端点（查询、同步、排名），使用 MoneyflowService

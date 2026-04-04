@@ -871,7 +871,7 @@ const syncing = isTaskRunning('tasks.sync_{resource}')
 'tasks.sync_{resource}_full_history': {
     'task': 'tasks.sync_{resource}_full_history',
     'name': '{资源名称}（全量）',
-    'description': '逐只股票全量同步历史数据，8并发，支持Redis中断续继，避免单次6000条上限',
+    'description': '逐只股票全量同步历史数据，并发控制在3~8（视接口限速而定），支持Redis中断续继，避免单次返回上限',
     'category': '行情数据',
     'display_order': {普通任务 display_order + 1},
     'points_consumption': 2000,
@@ -887,8 +887,11 @@ const syncing = isTaskRunning('tasks.sync_{resource}')
 - 重启 Celery Worker 后新任务才能被识别：`docker-compose restart celery_worker`
 
 **已实现的页面**：
-- 复权因子（`/market/adj-factor`）：`tasks.sync_adj_factor_full_history`
-- 每日指标（`/market/daily-basic`）：`tasks.sync_daily_basic_full_history`
+- 复权因子（`/market/adj-factor`）：`tasks.sync_adj_factor_full_history`（8并发）
+- 每日指标（`/market/daily-basic`）：`tasks.sync_daily_basic_full_history`（8并发）
+- 每日涨跌停价格（`/market/stk-limit-d`）：`tasks.sync_stk_limit_d_full_history`（3并发，因接口限速400次/分钟）
+
+> **并发数选择依据**：Tushare 接口限速各不相同。`stk_limit` 上限 400次/分钟（≈6.7 req/s），3并发约 3 req/s，安全系数>2x；`daily_basic`/`adj_factor` 限速更宽松，可用8并发。新接口接入前请确认其频率上限。
 
 ---
 

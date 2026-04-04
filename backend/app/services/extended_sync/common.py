@@ -14,7 +14,6 @@ class DataType(str, Enum):
     """数据类型枚举"""
     # 基础数据
     DAILY_BASIC = "daily_basic"
-    STK_LIMIT = "stk_limit"
     ADJ_FACTOR = "adj_factor"
     SUSPEND = "suspend"
 

@@ -82,7 +82,7 @@ def get_real_time_metrics(
     sources = [
         'daily_basic', 'moneyflow', 'moneyflow_hsgt',
         'hsgt_top10', 'hk_hold', 'margin', 'margin_detail',
-        'stk_limit', 'adj_factor', 'block_trade', 'suspend'
+        'adj_factor', 'block_trade', 'suspend'
     ]
 
     for source in sources:
@@ -163,7 +163,7 @@ def get_quality_trends(
     trends = {}
     sources = [
         'daily_basic', 'moneyflow', 'hsgt_top10',
-        'hk_hold', 'margin_detail', 'stk_limit'
+        'hk_hold', 'margin_detail'
     ]
 
     for source in sources:

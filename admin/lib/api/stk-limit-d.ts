@@ -9,7 +9,8 @@ export interface StkLimitDParams {
   ts_code?: string
   start_date?: string  // YYYY-MM-DD
   end_date?: string    // YYYY-MM-DD
-  limit?: number
+  page?: number
+  page_size?: number
 }
 
 export interface StkLimitDData {
@@ -62,13 +63,25 @@ export class StkLimitDApiClient extends BaseApiClient {
    * 异步同步每日涨跌停价格数据
    * 通过Celery任务异步执行，立即返回任务ID
    */
-  async syncAsync(params?: StkLimitDParams & { trade_date?: string }): Promise<ApiResponse<{
+  async syncAsync(params?: { ts_code?: string; trade_date?: string; start_date?: string; end_date?: string }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
     return this.post('/api/stk-limit-d/sync-async', null, { params })
+  }
+
+  /**
+   * 全量历史同步：逐只股票同步每日涨跌停价格，8并发，支持Redis中断续继
+   */
+  async syncFullHistory(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/stk-limit-d/sync-full-history', null, { params })
   }
 }
 

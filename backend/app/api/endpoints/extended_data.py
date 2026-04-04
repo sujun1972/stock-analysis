@@ -18,7 +18,6 @@ from app.models.api_response import ApiResponse
 from app.services import (
     DailyBasicService,
     HkHoldService,
-    StkLimitService,
     BlockTradeService,
     MoneyflowService,
     MarginDetailService
@@ -29,7 +28,6 @@ from app.tasks.extended_sync_tasks import (
     sync_moneyflow_task,
     sync_hk_hold_task,
     sync_margin_task,
-    sync_stk_limit_task,
     sync_block_trade_task
 )
 
@@ -183,38 +181,6 @@ async def get_margin_detail(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/limit-prices")
-async def get_limit_prices(
-    trade_date: date = Query(..., description="交易日期"),
-    ts_code: Optional[str] = Query(None, description="股票代码"),
-    limit: int = Query(100, le=5000, description="返回记录数")
-):
-    """
-    获取涨跌停价格
-    - 当日所有股票的涨跌停价格
-    - 用于交易参考
-    """
-    try:
-        # 使用 Service 层
-        service = StkLimitService()
-
-        # 转换日期格式 (date -> YYYY-MM-DD)
-        trade_date_str = trade_date.strftime("%Y-%m-%d")
-
-        # 调用 Service 查询
-        result = await service.get_stk_limit_data(
-            trade_date=trade_date_str,
-            ts_code=ts_code,
-            limit=limit
-        )
-
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"获取涨跌停价格失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/block-trade")
 async def get_block_trade(
     trade_date: Optional[date] = Query(None, description="交易日期"),
@@ -249,7 +215,7 @@ async def get_block_trade(
 
 @router.post("/sync/trigger")
 def trigger_sync(
-    data_type: str = Query(..., description="数据类型：daily_basic|moneyflow|hk_hold|margin|stk_limit|block_trade"),
+    data_type: str = Query(..., description="数据类型：daily_basic|moneyflow|hk_hold|margin|block_trade"),
     trade_date: Optional[str] = Query(None, description="交易日期 YYYYMMDD"),
     _: dict = Depends(get_current_user)
 ):
@@ -263,7 +229,6 @@ def trigger_sync(
         "moneyflow": sync_moneyflow_task,
         "hk_hold": sync_hk_hold_task,
         "margin": sync_margin_task,
-        "stk_limit": sync_stk_limit_task,
         "block_trade": sync_block_trade_task
     }
 

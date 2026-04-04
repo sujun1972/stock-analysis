@@ -154,6 +154,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 2000,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
+    'tasks.sync_stk_limit_d_full_history': {
+        'task': 'tasks.sync_stk_limit_d_full_history',
+        'name': '每日涨跌停价格（全量）',
+        'description': '逐只股票全量同步每日涨跌停价格历史数据，8并发，支持Redis中断续继，避免单次5800条上限',
+        'category': '行情数据',
+        'display_order': 221,
+        'points_consumption': 2000,
+        'default_params': {'start_date': None}
+    },
 
     'tasks.sync_daily_basic': {
         'task': 'tasks.sync_daily_basic',
@@ -315,13 +324,6 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'description': '同步个股融资融券余额和明细数据（已废弃，建议使用新版）',
         'category': '两融及转融通',
         'display_order': 530
-    },
-    'extended.sync_stk_limit': {
-        'task': 'extended.sync_stk_limit',
-        'name': '涨跌停价格同步',
-        'description': '同步股票涨跌停价格信息',
-        'category': '扩展数据',
-        'display_order': 370
     },
     'tasks.sync_block_trade': {
         'task': 'tasks.sync_block_trade',

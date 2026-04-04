@@ -44,16 +44,16 @@ export default function StkLimitDPage() {
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_stk_limit_d')
+  // 从 task store 派生 syncing 状态（普通同步或全量同步任一在跑均禁用按钮）
+  const syncing = isTaskRunning('tasks.sync_stk_limit_d') || isTaskRunning('tasks.sync_stk_limit_d_full_history')
 
-  // 加载数据
-  const loadData = useCallback(async () => {
+  // 加载数据（targetPage/targetPageSize 直接传入，绕过 setState 异步延迟）
+  const loadData = useCallback(async (targetPage = 1, targetPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = { page: targetPage, page_size: targetPageSize }
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
@@ -64,6 +64,7 @@ export default function StkLimitDPage() {
         setData(response.data.items || [])
         setStatistics(response.data.statistics)
         setTotal(response.data.total || 0)
+        setPage(targetPage)
       } else {
         throw new Error(response.message || '获取数据失败')
       }
@@ -86,8 +87,8 @@ export default function StkLimitDPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'stk_limit_d',
-    syncFn: (params) => stkLimitDApi.syncAsync(params),
-    taskName: 'tasks.sync_stk_limit_d',
+    syncFn: (params) => stkLimitDApi.syncFullHistory(params),
+    taskName: 'tasks.sync_stk_limit_d_full_history',
     onSuccess: loadData,
   })
 
@@ -386,7 +387,7 @@ export default function StkLimitDPage() {
             <div className="flex items-end">
               <Button
                 variant="default"
-                onClick={loadData}
+                onClick={() => loadData(1)}
                 disabled={loading}
                 className="w-full"
               >
@@ -411,11 +412,11 @@ export default function StkLimitDPage() {
             pageSize,
             total,
             onPageChange: (newPage) => {
-              setPage(newPage)
+              loadData(newPage)
             },
             onPageSizeChange: (newPageSize) => {
               setPageSize(newPageSize)
-              setPage(1)
+              loadData(1, newPageSize)
             },
             pageSizeOptions: [10, 20, 30, 50, 100]
           }}

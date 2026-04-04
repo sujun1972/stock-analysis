@@ -51,7 +51,7 @@ class DataQualityService:
         data_sources = [
             'daily_basic', 'moneyflow', 'moneyflow_hsgt',
             'hsgt_top10', 'hk_hold', 'margin', 'margin_detail',
-            'stk_limit', 'adj_factor', 'block_trade', 'suspend'
+            'adj_factor', 'block_trade', 'suspend'
         ]
 
         total_errors = 0

@@ -79,10 +79,6 @@ class ExtendedDataSyncService:
         """同步每日指标数据"""
         return await self._basic_data.sync_daily_basic(**kwargs)
 
-    async def sync_stk_limit(self, **kwargs):
-        """同步涨跌停价格数据"""
-        return await self._basic_data.sync_stk_limit(**kwargs)
-
     async def sync_adj_factor(self, **kwargs):
         """同步复权因子数据"""
         return await self._basic_data.sync_adj_factor(**kwargs)

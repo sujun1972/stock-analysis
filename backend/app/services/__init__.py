@@ -28,7 +28,6 @@ from .margin_detail_service import MarginDetailService
 # 扩展数据服务
 from .daily_basic_service import DailyBasicService
 from .block_trade_service import BlockTradeService
-from .stk_limit_service import StkLimitService
 from .hk_hold_service import HkHoldService
 
 # 定时任务管理服务（新架构：模块化）

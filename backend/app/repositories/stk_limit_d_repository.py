@@ -25,7 +25,8 @@ class StkLimitDRepository(BaseRepository):
         start_date: str,
         end_date: str,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
     ) -> List[Dict]:
         """
         按日期范围查询每日涨跌停价格数据
@@ -35,6 +36,7 @@ class StkLimitDRepository(BaseRepository):
             end_date: 结束日期，格式：YYYYMMDD
             ts_code: 股票代码（可选）
             limit: 返回记录数限制（可选）
+            offset: 跳过记录数（可选，用于分页）
 
         Returns:
             数据列表
@@ -61,6 +63,10 @@ class StkLimitDRepository(BaseRepository):
             query += " LIMIT %s"
             params.append(limit)
 
+        if offset:
+            query += " OFFSET %s"
+            params.append(offset)
+
         result = self.execute_query(query, tuple(params))
 
         return [
@@ -73,6 +79,37 @@ class StkLimitDRepository(BaseRepository):
             }
             for row in result
         ]
+
+    def get_total_count(
+        self,
+        start_date: str,
+        end_date: str,
+        ts_code: Optional[str] = None
+    ) -> int:
+        """
+        获取满足条件的总记录数（用于分页）
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+
+        Returns:
+            总记录数
+        """
+        query = f"""
+            SELECT COUNT(*)
+            FROM {self.TABLE_NAME}
+            WHERE trade_date >= %s AND trade_date <= %s
+        """
+        params = [start_date, end_date]
+
+        if ts_code:
+            query += " AND ts_code = %s"
+            params.append(ts_code)
+
+        result = self.execute_query(query, tuple(params))
+        return int(result[0][0]) if result else 0
 
     def get_by_trade_date(self, trade_date: str, ts_code: Optional[str] = None) -> List[Dict]:
         """

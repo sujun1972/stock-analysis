@@ -194,39 +194,6 @@ def sync_margin_task(self,
         self.retry(countdown=60, exc=e)
 
 
-@celery_app.task(name="extended.sync_stk_limit",
-             bind=True,
-             max_retries=3,
-             soft_time_limit=300,
-             time_limit=600)
-def sync_stk_limit_task(self,
-                       trade_date: Optional[str] = None,
-                       start_date: Optional[str] = None,
-                       end_date: Optional[str] = None):
-    """
-    同步涨跌停价格任务
-    积分消耗：120
-    建议执行时间：每日9:00
-    """
-    try:
-        logger.info(f"[Celery] 开始执行涨跌停价格同步任务: trade_date={trade_date}")
-
-        service = ExtendedDataSyncService()
-        result = run_async_in_celery(
-            service.sync_stk_limit,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date
-        )
-
-        logger.info(f"[Celery] 涨跌停价格同步任务完成: {result}")
-        return result
-
-    except Exception as e:
-        logger.error(f"[Celery] 涨跌停价格同步任务失败: {str(e)}")
-        self.retry(countdown=60, exc=e)
-
-
 @celery_app.task(name="extended.sync_adj_factor",
              bind=True,
              max_retries=3,
@@ -355,15 +322,6 @@ def sync_all_extended_data_task(self, trade_date: Optional[str] = None):
             logger.error(f"每日指标同步失败: {e}")
             results['daily_basic'] = {"status": "error", "error": str(e)}
 
-        # 涨跌停价格（120分）
-        try:
-            results['stk_limit'] = sync_stk_limit_task.apply_async(
-                kwargs={'trade_date': trade_date}
-            ).get(timeout=300)
-        except Exception as e:
-            logger.error(f"涨跌停价格同步失败: {e}")
-            results['stk_limit'] = {"status": "error", "error": str(e)}
-
         # 北向资金（300分）
         try:
             results['hk_hold'] = sync_hk_hold_task.apply_async(
@@ -402,13 +360,6 @@ EXTENDED_SYNC_SCHEDULES = {
         'task': 'extended.sync_daily_basic',
         'schedule': '0 17 * * *',  # 每日17:00
         'description': '同步每日指标数据（换手率、PE等）',
-        'points_consumption': 120,
-        'enabled': True
-    },
-    'sync-stk-limit': {
-        'task': 'extended.sync_stk_limit',
-        'schedule': '0 9 * * *',  # 每日9:00
-        'description': '同步涨跌停价格数据',
         'points_consumption': 120,
         'enabled': True
     },
