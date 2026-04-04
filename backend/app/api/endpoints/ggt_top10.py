@@ -22,7 +22,8 @@ async def get_ggt_top10(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     market_type: Optional[str] = Query(None, description="市场类型 2:港股通(沪) 4:港股通(深)"),
-    limit: int = Query(30, description="返回记录数限制")
+    limit: int = Query(30, description="每页记录数"),
+    offset: int = Query(0, description="分页偏移量")
 ):
     """
     查询港股通十大成交股数据
@@ -32,7 +33,8 @@ async def get_ggt_top10(
         end_date: 结束日期，格式：YYYY-MM-DD
         ts_code: 股票代码
         market_type: 市场类型 2:港股通(沪) 4:港股通(深)
-        limit: 返回记录数限制
+        limit: 每页记录数
+        offset: 分页偏移量
 
     Returns:
         港股通十大成交股数据列表
@@ -44,7 +46,8 @@ async def get_ggt_top10(
             end_date=end_date,
             ts_code=ts_code,
             market_type=market_type,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
     except Exception as e:
@@ -211,4 +214,36 @@ async def sync_ggt_top10_async(
 
     except Exception as e:
         logger.error(f"提交港股通十大成交股同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_ggt_top10_full_history(
+    start_date: Optional[str] = Query(None, description="同步起始日期，格式：YYYY-MM-DD，不传则从 2015-01-01 开始"),
+    current_user: User = Depends(require_admin)
+):
+    """全量历史同步：按月切片 + Redis 续继，覆盖指定起始日期至今所有数据。"""
+    try:
+        from app.tasks.ggt_top10_tasks import sync_ggt_top10_full_history_task
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+        celery_task = sync_ggt_top10_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_ggt_top10_full_history',
+            display_name='港股通十大成交股（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='ggt_top10_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

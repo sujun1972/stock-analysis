@@ -199,6 +199,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 250,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'market_type': None}
     },
+    'tasks.sync_hsgt_top10_full_history': {
+        'task': 'tasks.sync_hsgt_top10_full_history',
+        'name': '沪深股通十大成交股（全量历史）',
+        'description': '按月切片全量同步沪深股通十大成交股历史数据（2015年至今），5并发，支持中断续继',
+        'category': '行情数据',
+        'display_order': 251,
+        'default_params': {}
+    },
     'tasks.sync_ggt_top10': {
         'task': 'tasks.sync_ggt_top10',
         'name': '港股通十大成交股',
@@ -206,6 +214,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '行情数据',
         'display_order': 260,
         'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None, 'market_type': None}
+    },
+    'tasks.sync_ggt_top10_full_history': {
+        'task': 'tasks.sync_ggt_top10_full_history',
+        'name': '港股通十大成交股（全量历史）',
+        'description': '逐交易日全量同步港股通十大成交股历史数据（2015年至今），10并发，支持中断续继',
+        'category': '行情数据',
+        'display_order': 261,
+        'default_params': {}
     },
     'tasks.sync_ggt_daily': {
         'task': 'tasks.sync_ggt_daily',
@@ -216,12 +232,21 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 2000,
         'default_params': {'trade_date': None, 'start_date': None, 'end_date': None}
     },
+    'tasks.sync_ggt_daily_full_history': {
+        'task': 'tasks.sync_ggt_daily_full_history',
+        'name': '港股通每日成交统计（全量历史）',
+        'description': '按年切片全量同步港股通每日成交统计历史数据（2014年至今），3并发，支持中断续继',
+        'category': '行情数据',
+        'display_order': 271,
+        'points_consumption': 2000,
+        'default_params': {}
+    },
     'tasks.sync_ggt_monthly': {
         'task': 'tasks.sync_ggt_monthly',
         'name': '港股通每月成交统计',
         'description': '获取港股通每月成交信息，数据从2014年开始，单次最大1000条（Tushare ggt_monthly接口，5000积分/次）',
         'category': '行情数据',
-        'display_order': 271,
+        'display_order': 272,
         'points_consumption': 5000,
         'default_params': {'month': None, 'start_month': None, 'end_month': None}
     },

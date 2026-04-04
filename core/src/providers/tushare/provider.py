@@ -3781,8 +3781,8 @@ class TushareProvider(BaseDataProvider):
                 params['market_type'] = market_type
 
             # ggt_top10接口要求必须指定ts_code或trade_date之一
-            # 如果两者都未指定，默认获取昨日数据
-            if not ts_code and not trade_date:
+            # 如果四个参数都未指定，默认获取昨日数据
+            if not ts_code and not trade_date and not start_date and not end_date:
                 from datetime import datetime, timedelta
                 yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
                 params['trade_date'] = yesterday

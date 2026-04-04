@@ -449,10 +449,10 @@ const handleSyncConfirm = async () => {
 | 股票日线数据 | `/market/daily` | 120积分/次；未复权数据（daily接口不支持adj参数）；全市场同步自动推算下一待补交易日；统计接口仅初始化时调用一次 |
 | 每日停复牌信息 | `/market/suspend` | 全量同步按7天窗口切片（不传 ts_code，按日期范围全市场拉取），5并发，Redis Set续继（约1100个周段）；无默认日期过滤，不传日期返回全部记录 |
 | 每日涨跌停价格 | `/market/stk-limit-d` | 2000积分/次；每交易日8:40更新；全量同步逐只股票请求（3并发，Redis续继），避免单次5800条上限 |
-| 沪深股通十大成交股 | `/market/hsgt-top10` | 同步不传 tsCode/marketType |
-| 港股通十大成交股 | `/market/ggt-top10` | 17个字段 |
-| 港股通每日成交统计 | `/market/ggt-daily` | 2000积分/次；数据从2014年起 |
-| 港股通每月成交统计 | `/market/ggt-monthly` | 5000积分/次；同步弹窗选月份 |
+| 沪深股通十大成交股 | `/market/hsgt-top10` | 同步不传 tsCode/marketType；全量同步按月切片（5并发，Redis续继） |
+| 港股通十大成交股 | `/market/ggt-top10` | 17个字段；ggt_top10接口只支持 trade_date（不支持日期范围）；全量同步逐交易日请求（10并发，Redis续继） |
+| 港股通每日成交统计 | `/market/ggt-daily` | 2000积分/次；数据从2014年起；全量同步按年切片（3并发，Redis续继），每年约242条安全低于1000上限 |
+| 港股通每月成交统计 | `/market/ggt-monthly` | 5000积分/次；同步弹窗选月份；Tushare数据仅到2020-12（账号限制），全量同步不传日期参数获取全部74条 |
 | 复权因子 | `/market/adj-factor` | 2000积分/次；支持单只历史或单日全市场查询；全量同步逐只股票请求（8并发，Redis续继），避免单次6000条上限 |
 | 每日指标 | `/market/daily-basic` | 2000积分/次；17个核心指标；全量同步逐只股票请求（8并发，Redis续继），避免单次6000条上限 |
 | 新股列表 | `/sync/new-stocks` | 独立 `new_stocks` 表；增量同步弹窗选天数（默认90天）；全量同步90天/片×5并发（new_share 单次上限2000条） |

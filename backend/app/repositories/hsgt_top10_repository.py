@@ -26,7 +26,8 @@ class HsgtTop10Repository(BaseRepository):
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         market_type: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询沪深股通十大成交股数据
@@ -83,9 +84,39 @@ class HsgtTop10Repository(BaseRepository):
 
         if limit:
             query += f" LIMIT {limit}"
+        if offset:
+            query += f" OFFSET {offset}"
 
         result = self.execute_query(query, tuple(params) if params else None)
         return [self._row_to_dict(row) for row in result]
+
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        market_type: Optional[str] = None
+    ) -> int:
+        conditions = []
+        params = []
+
+        if start_date:
+            conditions.append("trade_date >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("trade_date <= %s")
+            params.append(end_date)
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        if market_type:
+            conditions.append("market_type = %s")
+            params.append(market_type)
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} {where_clause}"
+        result = self.execute_query(query, tuple(params) if params else None)
+        return result[0][0] if result else 0
 
     def get_statistics(
         self,

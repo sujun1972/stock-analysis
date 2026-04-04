@@ -5,8 +5,8 @@
 """
 
 import asyncio
-from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, List
+from datetime import datetime, date, timedelta
 from loguru import logger
 
 from app.repositories.hsgt_top10_repository import HsgtTop10Repository
@@ -130,7 +130,8 @@ class HsgtTop10Service:
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         market_type: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict[str, Any]:
         """
         查询沪深股通十大成交股数据
@@ -150,14 +151,24 @@ class HsgtTop10Service:
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.hsgt_top10_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                market_type=market_type,
-                limit=limit
+            # 查询数据和总数
+            items, total = await asyncio.gather(
+                asyncio.to_thread(
+                    self.hsgt_top10_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    market_type=market_type,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.hsgt_top10_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    market_type=market_type
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD（用于前端显示）
@@ -168,7 +179,7 @@ class HsgtTop10Service:
 
             return {
                 "items": items,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:
@@ -313,3 +324,134 @@ class HsgtTop10Service:
         except Exception as e:
             logger.error(f"获取净成交金额排名失败: {e}")
             raise
+
+    # ------------------------------------------------------------------ #
+    # 全量历史同步（按月切片 + Redis 续继）
+    # ------------------------------------------------------------------ #
+    FULL_HISTORY_START_DATE = "20150101"
+    FULL_HISTORY_PROGRESS_KEY = "sync:hsgt_top10:full_history:progress"
+    FULL_HISTORY_LOCK_KEY = "sync:hsgt_top10:full_history:lock"
+    FULL_HISTORY_CONCURRENCY = 5
+
+    @staticmethod
+    def _generate_months(start_date: str, end_date: str) -> List[tuple]:
+        """
+        将日期范围切分为自然月片段，每片返回 (month_start, month_end)，均为 YYYYMMDD 格式。
+
+        按月切片原因：hsgt_top10 每交易日沪市10条+深市10条=20条，
+        单月约 20×22=440 条，远低于 Tushare 单次 5000 条上限，且月份数量可控。
+        """
+        cur = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+        end = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+        months = []
+        while cur <= end:
+            # 月初
+            ms = cur.replace(day=1)
+            # 月末：下月1日减1天
+            if ms.month == 12:
+                me = date(ms.year + 1, 1, 1) - timedelta(days=1)
+            else:
+                me = date(ms.year, ms.month + 1, 1) - timedelta(days=1)
+            me = min(me, end)
+            months.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
+            cur = me + timedelta(days=1)
+        return months
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        update_state_fn=None
+    ) -> Dict:
+        """
+        按月切片全量同步沪深股通十大成交股历史数据（支持 Redis 续继）
+
+        每月约 440 条，安全低于 Tushare 5000 条上限。
+        5 并发，Redis Set 记录已完成月份起始日，支持中断续继。
+
+        Args:
+            redis_client: Redis 客户端，用于进度续继
+            start_date: 同步起始日期 YYYYMMDD，不传则使用 FULL_HISTORY_START_DATE
+            update_state_fn: Celery self.update_state 回调，用于上报进度
+
+        Returns:
+            同步结果统计
+        """
+        effective_start = start_date or self.FULL_HISTORY_START_DATE
+        today = datetime.now().strftime("%Y%m%d")
+        months = self._generate_months(effective_start, today)
+        total = len(months)
+        logger.info(f"[全量hsgt_top10] 共 {total} 个月段需要同步")
+
+        completed_set = redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY)
+        logger.info(f"[全量hsgt_top10] 已完成 {len(completed_set)} 个，剩余 {total - len(completed_set)} 个")
+
+        pending = [(ms, me) for ms, me in months if ms not in completed_set]
+
+        provider = self._get_provider()
+        success_count = 0
+        skip_count = len(completed_set)
+        error_count = 0
+        total_records = 0
+
+        sem = asyncio.Semaphore(self.FULL_HISTORY_CONCURRENCY)
+
+        async def sync_month(ms: str, me: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(
+                        provider.get_hsgt_top10,
+                        start_date=ms,
+                        end_date=me
+                    )
+                    records = 0
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.hsgt_top10_repo.bulk_upsert, df)
+                    return ms, me, True, records, None
+                except Exception as e:
+                    return ms, me, False, 0, str(e)
+
+        BATCH_SIZE = self.FULL_HISTORY_CONCURRENCY * 2
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_month(ms, me) for ms, me in batch])
+
+            for ms, me, ok, records, err in results:
+                if ok:
+                    redis_client.sadd(self.FULL_HISTORY_PROGRESS_KEY, ms)
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+                    logger.error(f"[全量hsgt_top10] {ms}~{me} 失败（下次续继）: {err}")
+
+            done = skip_count + success_count
+            if update_state_fn:
+                update_state_fn(
+                    state='PROGRESS',
+                    meta={
+                        'current': done,
+                        'total': total,
+                        'percent': round(done / total * 100, 1),
+                        'records': total_records,
+                        'errors': error_count
+                    }
+                )
+            logger.info(f"[全量hsgt_top10] 进度: {done}/{total} ({round(done/total*100,1)}%) "
+                        f"入库={total_records} 失败={error_count}")
+
+        final_done = len(redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(self.FULL_HISTORY_PROGRESS_KEY)
+            logger.info("[全量hsgt_top10] ✅ 全量同步完成，进度已清除")
+
+        return {
+            "status": "success",
+            "total": total,
+            "success": success_count,
+            "skipped": skip_count,
+            "errors": error_count,
+            "records": total_records,
+            "message": f"同步完成 {success_count} 个月段，入库 {total_records} 条，失败 {error_count} 个"
+        }

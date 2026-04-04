@@ -6,7 +6,7 @@
 """
 
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -131,7 +131,8 @@ class GgtTop10Service:
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         market_type: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict[str, Any]:
         """
         查询港股通十大成交股数据
@@ -141,7 +142,8 @@ class GgtTop10Service:
             end_date: 结束日期 YYYY-MM-DD（可选）
             ts_code: 股票代码（可选）
             market_type: 市场类型 2:港股通(沪) 4:港股通(深)（可选）
-            limit: 返回记录数限制
+            limit: 每页记录数
+            offset: 分页偏移量
 
         Returns:
             数据字典，包含items和total
@@ -151,14 +153,24 @@ class GgtTop10Service:
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.ggt_top10_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                market_type=market_type,
-                limit=limit
+            # 并发查询数据和总数
+            items, total = await asyncio.gather(
+                asyncio.to_thread(
+                    self.ggt_top10_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    market_type=market_type,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.ggt_top10_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    market_type=market_type
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD（用于前端显示）
@@ -169,7 +181,7 @@ class GgtTop10Service:
 
             return {
                 "items": items,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:
@@ -314,3 +326,118 @@ class GgtTop10Service:
         except Exception as e:
             logger.error(f"获取净买入金额排名失败: {e}")
             raise
+
+    # ------------------------------------------------------------------ #
+    # 全量历史同步（逐交易日 + Redis 续继）
+    # ggt_top10 接口只支持 trade_date（单日），不支持 start_date/end_date
+    # 每日约 20 条，10 并发，用 trading_calendar 获取交易日列表
+    # ------------------------------------------------------------------ #
+    FULL_HISTORY_START_DATE = "20150101"
+    FULL_HISTORY_PROGRESS_KEY = "sync:ggt_top10:full_history:progress"
+    FULL_HISTORY_LOCK_KEY = "sync:ggt_top10:full_history:lock"
+    FULL_HISTORY_CONCURRENCY = 10
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        update_state_fn=None
+    ) -> Dict:
+        """
+        逐交易日全量同步港股通十大成交股历史数据（支持 Redis 续继）
+
+        ggt_top10 接口只支持按 trade_date 单日查询，每日约 20 条。
+        从 trading_calendar 获取交易日列表，10 并发逐日请求。
+        Redis Set 记录已完成的交易日，支持中断续继。
+
+        Args:
+            redis_client: Redis 客户端
+            start_date: 同步起始日期 YYYYMMDD，不传则使用 FULL_HISTORY_START_DATE
+            update_state_fn: Celery self.update_state 回调
+        """
+        from app.repositories.trading_calendar_repository import TradingCalendarRepository
+
+        effective_start = start_date or self.FULL_HISTORY_START_DATE
+        today = datetime.now().strftime("%Y%m%d")
+
+        # 获取交易日列表
+        cal_repo = TradingCalendarRepository()
+        trading_days = await asyncio.to_thread(
+            cal_repo.get_trading_days_between, effective_start, today
+        )
+        total = len(trading_days)
+        logger.info(f"[全量ggt_top10] 共 {total} 个交易日需要同步")
+
+        completed_set = redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY)
+        # Redis 存储的可能是 bytes，统一转为 str
+        completed_set = {d.decode() if isinstance(d, bytes) else d for d in completed_set}
+        logger.info(f"[全量ggt_top10] 已完成 {len(completed_set)} 个，剩余 {total - len(completed_set)} 个")
+
+        pending = [d for d in trading_days if d not in completed_set]
+
+        provider = self._get_provider()
+        success_count = 0
+        skip_count = len(completed_set)
+        error_count = 0
+        total_records = 0
+
+        sem = asyncio.Semaphore(self.FULL_HISTORY_CONCURRENCY)
+
+        async def sync_day(trade_date: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(
+                        provider.get_ggt_top10,
+                        trade_date=trade_date
+                    )
+                    records = 0
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.ggt_top10_repo.bulk_upsert, df)
+                    return trade_date, True, records, None
+                except Exception as e:
+                    return trade_date, False, 0, str(e)
+
+        BATCH_SIZE = self.FULL_HISTORY_CONCURRENCY * 3
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_day(d) for d in batch])
+
+            for trade_date, ok, records, err in results:
+                if ok:
+                    redis_client.sadd(self.FULL_HISTORY_PROGRESS_KEY, trade_date)
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+                    logger.error(f"[全量ggt_top10] {trade_date} 失败（下次续继）: {err}")
+
+            done = skip_count + success_count
+            if update_state_fn:
+                update_state_fn(
+                    state='PROGRESS',
+                    meta={
+                        'current': done,
+                        'total': total,
+                        'percent': round(done / total * 100, 1),
+                        'records': total_records,
+                        'errors': error_count
+                    }
+                )
+            logger.info(f"[全量ggt_top10] 进度: {done}/{total} ({round(done/total*100,1)}%) "
+                        f"入库={total_records} 失败={error_count}")
+
+        final_done = len(redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(self.FULL_HISTORY_PROGRESS_KEY)
+            logger.info("[全量ggt_top10] ✅ 全量同步完成，进度已清除")
+
+        return {
+            "status": "success",
+            "total": total,
+            "success": success_count,
+            "skipped": skip_count,
+            "errors": error_count,
+            "records": total_records,
+            "message": f"同步完成 {success_count} 个交易日，入库 {total_records} 条，失败 {error_count} 个"
+        }

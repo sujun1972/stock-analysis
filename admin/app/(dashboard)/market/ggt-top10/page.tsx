@@ -57,12 +57,13 @@ export default function GgtTop10Page() {
   const syncing = isTaskRunning('tasks.sync_ggt_top10')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (targetPage = page, targetPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const offset = (targetPage - 1) * targetPageSize
+      const params: any = { limit: targetPageSize, offset }
 
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
@@ -94,7 +95,8 @@ export default function GgtTop10Page() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, tsCode, marketType, pageSize])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate, tsCode, marketType])
 
   const {
     handleFullSync,
@@ -107,8 +109,8 @@ export default function GgtTop10Page() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'ggt_top10',
-    syncFn: (params) => ggtTop10Api.syncAsync(params),
-    taskName: 'tasks.sync_ggt_top10',
+    syncFn: (params) => ggtTop10Api.syncFullHistory(params),
+    taskName: 'tasks.sync_ggt_top10_full_history',
     onSuccess: loadData,
   })
 
@@ -489,7 +491,7 @@ export default function GgtTop10Page() {
               </Select>
             </div>
             <div className="flex gap-2">
-              <Button onClick={loadData} disabled={loading} className="flex-1">
+              <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading} className="flex-1">
                 查询
               </Button>
             </div>
@@ -512,10 +514,12 @@ export default function GgtTop10Page() {
             total,
             onPageChange: (newPage) => {
               setPage(newPage)
+              loadData(newPage)
             },
             onPageSizeChange: (newPageSize) => {
               setPageSize(newPageSize)
               setPage(1)
+              loadData(1, newPageSize)
             },
             pageSizeOptions: [10, 20, 30, 50, 100]
           }}

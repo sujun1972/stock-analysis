@@ -31,6 +31,7 @@ export interface HsgtTop10Params {
   ts_code?: string
   market_type?: string  // 1:沪市 3:深市
   limit?: number
+  offset?: number
 }
 
 /**
@@ -121,6 +122,18 @@ export class HsgtTop10ApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/hsgt-top10/sync-async', null, { params })
+  }
+
+  /**
+   * 全量历史同步：按月切片 + Redis 续继，覆盖 2015 年至今
+   */
+  async syncFullHistory(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/hsgt-top10/sync-full-history', null, { params })
   }
 }
 

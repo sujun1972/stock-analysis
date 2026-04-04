@@ -31,6 +31,7 @@ export interface GgtMonthlyParams {
   start_month?: string  // YYYY-MM
   end_month?: string    // YYYY-MM
   limit?: number
+  offset?: number
 }
 
 export class GgtMonthlyApiClient extends BaseApiClient {

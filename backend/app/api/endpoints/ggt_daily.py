@@ -20,7 +20,8 @@ router = APIRouter()
 async def get_ggt_daily(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="返回记录数限制")
+    limit: int = Query(30, description="每页记录数"),
+    offset: int = Query(0, description="分页偏移量")
 ):
     """
     查询港股通每日成交统计数据
@@ -28,7 +29,8 @@ async def get_ggt_daily(
     Args:
         start_date: 开始日期，格式：YYYY-MM-DD
         end_date: 结束日期，格式：YYYY-MM-DD
-        limit: 返回记录数限制
+        limit: 每页记录数
+        offset: 分页偏移量
 
     Returns:
         港股通每日成交统计数据列表
@@ -38,7 +40,8 @@ async def get_ggt_daily(
         result = await service.get_data(
             start_date=start_date,
             end_date=end_date,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
     except Exception as e:
@@ -160,4 +163,37 @@ async def sync_ggt_daily_async(
 
     except Exception as e:
         logger.error(f"提交港股通每日成交统计同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_ggt_daily_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2014年开始"),
+    current_user: User = Depends(require_admin)
+):
+    """全量同步港股通每日成交统计历史数据（按年切片 + Redis 续继）"""
+    try:
+        from app.tasks.ggt_daily_tasks import sync_ggt_daily_full_history_task
+
+        start_date_fmt = start_date.replace('-', '') if start_date else None
+
+        celery_task = sync_ggt_daily_full_history_task.apply_async(
+            kwargs={'start_date': start_date_fmt}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_ggt_daily_full_history',
+            display_name='港股通每日成交统计（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_fmt},
+            source='ggt_daily_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

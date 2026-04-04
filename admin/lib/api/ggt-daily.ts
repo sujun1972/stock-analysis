@@ -23,6 +23,7 @@ export interface GgtDailyParams {
   start_date?: string   // YYYY-MM-DD
   end_date?: string     // YYYY-MM-DD
   limit?: number
+  offset?: number
 }
 
 /**
@@ -92,6 +93,15 @@ export class GgtDailyApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/ggt-daily/sync-async', null, { params })
+  }
+
+  async syncFullHistory(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/ggt-daily/sync-full-history', null, { params })
   }
 }
 

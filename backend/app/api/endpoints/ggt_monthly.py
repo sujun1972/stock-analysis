@@ -20,7 +20,8 @@ router = APIRouter()
 async def get_ggt_monthly(
     start_month: Optional[str] = Query(None, description="开始月度，格式：YYYY-MM"),
     end_month: Optional[str] = Query(None, description="结束月度，格式：YYYY-MM"),
-    limit: int = Query(30, description="返回记录数限制")
+    limit: int = Query(30, description="每页记录数"),
+    offset: int = Query(0, description="分页偏移量")
 ):
     """
     查询港股通每月成交统计数据
@@ -28,7 +29,8 @@ async def get_ggt_monthly(
     Args:
         start_month: 开始月度，格式：YYYY-MM
         end_month: 结束月度，格式：YYYY-MM
-        limit: 返回记录数限制
+        limit: 每页记录数
+        offset: 分页偏移量
 
     Returns:
         港股通每月成交统计数据列表
@@ -38,7 +40,8 @@ async def get_ggt_monthly(
         result = await service.get_data(
             start_month=start_month,
             end_month=end_month,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
     except Exception as e:

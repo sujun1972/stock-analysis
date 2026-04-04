@@ -57,12 +57,13 @@ export default function GgtDailyPage() {
   const syncing = isTaskRunning('tasks.sync_ggt_daily')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (targetPage = page, targetPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const offset = (targetPage - 1) * targetPageSize
+      const params: any = { limit: targetPageSize, offset }
 
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
@@ -82,7 +83,8 @@ export default function GgtDailyPage() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, pageSize, page])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate])
 
   const {
     handleFullSync,
@@ -95,8 +97,8 @@ export default function GgtDailyPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'ggt_daily',
-    syncFn: (params) => ggtDailyApi.syncAsync(params),
-    taskName: 'tasks.sync_ggt_daily',
+    syncFn: (params) => ggtDailyApi.syncFullHistory(params),
+    taskName: 'tasks.sync_ggt_daily_full_history',
     onSuccess: loadData,
   })
 
@@ -428,10 +430,7 @@ export default function GgtDailyPage() {
 
             <div className="flex gap-2">
               <Button
-                onClick={() => {
-                  setPage(1)
-                  loadData()
-                }}
+                onClick={() => { setPage(1); loadData(1) }}
                 disabled={loading}
                 variant="outline"
               >
@@ -455,8 +454,8 @@ export default function GgtDailyPage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
-              onPageSizeChange: setPageSize
+              onPageChange: (newPage) => { setPage(newPage); loadData(newPage) },
+              onPageSizeChange: (newSize) => { setPageSize(newSize); setPage(1); loadData(1, newSize) }
             }}
           />
         </CardContent>

@@ -9,7 +9,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { ggtMonthlyApi, type GgtMonthlyData, type GgtMonthlyStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
@@ -54,15 +53,17 @@ export default function GgtMonthlyPage() {
   const syncing = isTaskRunning('tasks.sync_ggt_monthly')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (targetPage = page, targetPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
 
+      const offset = (targetPage - 1) * targetPageSize
       const response = await ggtMonthlyApi.getData({
         start_month: startMonth || undefined,
         end_month: endMonth || undefined,
-        limit: pageSize
+        limit: targetPageSize,
+        offset
       })
 
       if (response.code === 200 && response.data) {
@@ -80,7 +81,8 @@ export default function GgtMonthlyPage() {
     } finally {
       setLoading(false)
     }
-  }, [startMonth, endMonth, pageSize])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startMonth, endMonth])
 
   const {
     handleFullSync,
@@ -93,7 +95,7 @@ export default function GgtMonthlyPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'ggt_monthly',
-    syncFn: (params) => apiClient.post('/api/ggt-monthly/sync-async', null, { params }),
+    syncFn: (_params) => ggtMonthlyApi.syncAsync({}),
     taskName: 'tasks.sync_ggt_monthly',
     onSuccess: loadData,
   })
@@ -459,10 +461,7 @@ export default function GgtMonthlyPage() {
             <div className="flex gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
-                onClick={() => {
-                  setPage(1)
-                  loadData()
-                }}
+                onClick={() => { setPage(1); loadData(1) }}
                 disabled={loading}
                 className="flex-1 sm:flex-initial"
               >
@@ -488,13 +487,8 @@ export default function GgtMonthlyPage() {
               page,
               pageSize,
               total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
+              onPageChange: (newPage) => { setPage(newPage); loadData(newPage) },
+              onPageSizeChange: (newPageSize) => { setPageSize(newPageSize); setPage(1); loadData(1, newPageSize) },
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
           />

@@ -95,7 +95,8 @@ class GgtMonthlyService:
         self,
         start_month: Optional[str] = None,
         end_month: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         获取港股通每月成交数据
@@ -103,26 +104,36 @@ class GgtMonthlyService:
         Args:
             start_month: 开始月度,格式:YYYY-MM(可选)
             end_month: 结束月度,格式:YYYY-MM(可选)
-            limit: 返回记录数限制(默认30)
+            limit: 每页记录数(默认30)
+            offset: 分页偏移量
 
         Returns:
             数据和统计信息
-
-        Examples:
-            >>> service = GgtMonthlyService()
-            >>> result = await service.get_data(start_month='2024-01', limit=50)
         """
         try:
             # 月度格式转换:YYYY-MM -> YYYYMM
             start_month_fmt = start_month.replace('-', '') if start_month else None
             end_month_fmt = end_month.replace('-', '') if end_month else None
 
-            # 获取数据
-            items = await asyncio.to_thread(
-                self.ggt_monthly_repo.get_by_month_range,
-                start_month=start_month_fmt,
-                end_month=end_month_fmt,
-                limit=limit
+            # 并发获取数据、总数、统计信息
+            items, total, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.ggt_monthly_repo.get_by_month_range,
+                    start_month=start_month_fmt,
+                    end_month=end_month_fmt,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.ggt_monthly_repo.get_total_count,
+                    start_month=start_month_fmt,
+                    end_month=end_month_fmt
+                ),
+                asyncio.to_thread(
+                    self.ggt_monthly_repo.get_statistics,
+                    start_month=start_month_fmt,
+                    end_month=end_month_fmt
+                )
             )
 
             # 月度格式转换:YYYYMM -> YYYY-MM(便于前端显示)
@@ -131,16 +142,9 @@ class GgtMonthlyService:
                     month_str = item['month']
                     item['month'] = f"{month_str[:4]}-{month_str[4:6]}"
 
-            # 获取统计信息
-            statistics = await asyncio.to_thread(
-                self.ggt_monthly_repo.get_statistics,
-                start_month=start_month_fmt,
-                end_month=end_month_fmt
-            )
-
             return {
                 "items": items,
-                "total": len(items),
+                "total": total,
                 "statistics": statistics
             }
 

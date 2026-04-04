@@ -26,7 +26,8 @@ class GgtMonthlyRepository(BaseRepository):
         self,
         start_month: Optional[str] = None,
         end_month: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按月度范围查询港股通成交数据
@@ -57,11 +58,14 @@ class GgtMonthlyRepository(BaseRepository):
                 ORDER BY month DESC
             """
 
+            extra_params = []
             if limit:
                 query += " LIMIT %s"
-                params = (start_month, end_month, limit)
-            else:
-                params = (start_month, end_month)
+                extra_params.append(limit)
+            if offset:
+                query += " OFFSET %s"
+                extra_params.append(offset)
+            params = (start_month, end_month) + tuple(extra_params)
 
             result = self.execute_query(query, params)
 
@@ -86,6 +90,18 @@ class GgtMonthlyRepository(BaseRepository):
         except Exception as e:
             logger.error(f"查询港股通每月成交数据失败: {e}")
             raise
+
+    def get_total_count(
+        self,
+        start_month: Optional[str] = None,
+        end_month: Optional[str] = None
+    ) -> int:
+        """按筛选条件统计总记录数"""
+        start_month = start_month or '190001'
+        end_month = end_month or '299912'
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE month >= %s AND month <= %s"
+        result = self.execute_query(query, (start_month, end_month))
+        return int(result[0][0]) if result else 0
 
     def get_statistics(
         self,

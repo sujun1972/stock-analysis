@@ -26,7 +26,8 @@ class GgtDailyRepository(BaseRepository):
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询港股通成交数据
@@ -56,11 +57,14 @@ class GgtDailyRepository(BaseRepository):
                 ORDER BY trade_date DESC
             """
 
+            extra_params = []
             if limit:
                 query += " LIMIT %s"
-                params = (start_date, end_date, limit)
-            else:
-                params = (start_date, end_date)
+                extra_params.append(limit)
+            if offset:
+                query += " OFFSET %s"
+                extra_params.append(offset)
+            params = (start_date, end_date) + tuple(extra_params)
 
             result = self.execute_query(query, params)
 
@@ -81,6 +85,18 @@ class GgtDailyRepository(BaseRepository):
         except Exception as e:
             logger.error(f"查询港股通成交数据失败: {e}")
             raise
+
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> int:
+        """按筛选条件统计总记录数"""
+        start_date = start_date or '19900101'
+        end_date = end_date or '29991231'
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE trade_date >= %s AND trade_date <= %s"
+        result = self.execute_query(query, (start_date, end_date))
+        return int(result[0][0]) if result else 0
 
     def get_statistics(
         self,
