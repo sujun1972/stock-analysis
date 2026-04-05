@@ -20,12 +20,36 @@ class DisclosureDateRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ DisclosureDateRepository initialized")
 
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
+    ) -> int:
+        """获取记录总数"""
+        conditions = []
+        params = []
+        if start_date:
+            conditions.append("end_date >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("end_date <= %s")
+            params.append(end_date)
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+        result = self.execute_query(query, tuple(params) if params else None)
+        return int(result[0][0]) if result else 0
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
     ) -> List[Dict]:
         """
         按日期范围查询财报披露计划数据
@@ -59,6 +83,9 @@ class DisclosureDateRepository(BaseRepository):
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
+            limit_clause = f"LIMIT {limit}" if limit else ""
+            offset_clause = f"OFFSET {offset}" if offset else ""
+
             query = f"""
                 SELECT
                     ts_code, ann_date, end_date, pre_date, actual_date, modify_date,
@@ -66,7 +93,8 @@ class DisclosureDateRepository(BaseRepository):
                 FROM {self.TABLE_NAME}
                 {where_clause}
                 ORDER BY end_date DESC, ann_date DESC, ts_code
-                {f"LIMIT {limit}" if limit else ""}
+                {limit_clause}
+                {offset_clause}
             """
 
             result = self.execute_query(query, tuple(params) if params else None)

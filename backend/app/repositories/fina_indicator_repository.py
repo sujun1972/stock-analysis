@@ -20,12 +20,31 @@ class FinaIndicatorRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ FinaIndicatorRepository initialized")
 
+    def get_total_count(
+        self,
+        start_date: str = '19900101',
+        end_date: str = '29991231',
+        ts_code: Optional[str] = None,
+        period: Optional[str] = None
+    ) -> int:
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE ann_date >= %s AND ann_date <= %s"
+        params = [start_date, end_date]
+        if ts_code:
+            query += " AND ts_code = %s"
+            params.append(ts_code)
+        if period:
+            query += " AND end_date = %s"
+            params.append(period)
+        result = self.execute_query(query, tuple(params))
+        return int(result[0][0]) if result else 0
+
     def get_by_date_range(
         self,
         start_date: str,
         end_date: str,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
     ) -> List[Dict]:
         """
         按日期范围查询财务指标数据
@@ -62,6 +81,10 @@ class FinaIndicatorRepository(BaseRepository):
         if limit:
             query += " LIMIT %s"
             params.append(limit)
+
+        if offset:
+            query += " OFFSET %s"
+            params.append(offset)
 
         result = self.execute_query(query, tuple(params))
         return [self._row_to_dict(row) for row in result]

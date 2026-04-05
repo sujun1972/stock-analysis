@@ -20,6 +20,53 @@ class BalancesheetRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ BalancesheetRepository initialized")
 
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        period: Optional[str] = None,
+        report_type: Optional[str] = None
+    ) -> int:
+        """获取符合条件的记录总数"""
+        try:
+            conditions = []
+            params = []
+
+            if start_date:
+                conditions.append("ann_date >= %s")
+                params.append(start_date)
+            else:
+                conditions.append("ann_date >= %s")
+                params.append('19900101')
+
+            if end_date:
+                conditions.append("ann_date <= %s")
+                params.append(end_date)
+            else:
+                conditions.append("ann_date <= %s")
+                params.append('29991231')
+
+            if ts_code:
+                conditions.append("ts_code = %s")
+                params.append(ts_code)
+
+            if period:
+                conditions.append("end_date = %s")
+                params.append(period)
+
+            if report_type:
+                conditions.append("report_type = %s")
+                params.append(report_type)
+
+            where_clause = " AND ".join(conditions)
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+            result = self.execute_query(query, tuple(params))
+            return int(result[0][0]) if result else 0
+        except Exception as e:
+            logger.error(f"获取资产负债表记录总数失败: {e}")
+            raise
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
@@ -27,7 +74,8 @@ class BalancesheetRepository(BaseRepository):
         ts_code: Optional[str] = None,
         period: Optional[str] = None,
         report_type: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
     ) -> List[Dict]:
         """
         按日期范围查询资产负债表数据
@@ -113,6 +161,9 @@ class BalancesheetRepository(BaseRepository):
 
             if limit:
                 query += f" LIMIT {limit}"
+
+            if offset:
+                query += f" OFFSET {offset}"
 
             result = self.execute_query(query, tuple(params))
 

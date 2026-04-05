@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
 
 from app.models.api_response import ApiResponse
-from app.core.dependencies import require_admin, get_current_user
+from app.core.dependencies import require_admin
 from app.models.user import User
 from app.services.express_service import ExpressService
 from app.services import TaskHistoryHelper
@@ -23,7 +23,8 @@ async def get_express(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="限制返回数量")
+    limit: int = Query(30, description="限制返回数量"),
+    offset: int = Query(0, ge=0, description="分页偏移量")
 ):
     """
     查询业绩快报数据
@@ -34,6 +35,7 @@ async def get_express(
         end_date: 结束日期，格式：YYYY-MM-DD（可选）
         period: 报告期，格式：YYYY-MM-DD（可选）
         limit: 限制返回数量（默认30）
+        offset: 分页偏移量
 
     Returns:
         业绩快报数据列表
@@ -50,7 +52,8 @@ async def get_express(
             start_date=start_date_fmt,
             end_date=end_date_fmt,
             period=period_fmt,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
 
         return ApiResponse.success(data=result)
@@ -169,4 +172,38 @@ async def sync_express_async(
 
     except Exception as e:
         logger.error(f"提交业绩快报同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history-async")
+async def sync_express_full_history_async(
+    start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
+    current_user: User = Depends(require_admin)
+):
+    """异步全量同步业绩快报历史数据（按季度 period 切片 + Redis 续继）"""
+    try:
+        from app.tasks.express_tasks import sync_express_full_history_task
+
+        celery_task = sync_express_full_history_task.apply_async(
+            kwargs={'start_date': start_date}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_express_full_history',
+            display_name='业绩快报全量同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date},
+            source='express_page'
+        )
+
+        return ApiResponse.success(
+            data=task_data,
+            message="业绩快报全量同步任务已提交，请在任务面板查看进度"
+        )
+
+    except Exception as e:
+        logger.error(f"提交业绩快报全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

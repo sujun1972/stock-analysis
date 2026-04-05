@@ -6,6 +6,7 @@
 
 import asyncio
 from typing import Optional, Dict, List
+from datetime import datetime
 from loguru import logger
 
 from app.repositories.dividend_repository import DividendRepository
@@ -21,6 +22,79 @@ class DividendService:
         self.dividend_repo = DividendRepository()
         self.stock_daily_repo = StockDailyRepository()
         self.provider_factory = DataProviderFactory()
+
+    async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None) -> dict:
+        """
+        逐只股票全量同步分红送股历史数据（5 并发，Redis Set 续继）
+
+        按 ts_code 逐只调用 dividend 接口，每只股票记录数极少，彻底避免 Tushare
+        单次返回上限导致的数据截断。Redis Set 记录已完成 ts_code，中断后自动续继。
+        """
+        from app.repositories.stock_basic_repository import StockBasicRepository
+
+        PROGRESS_KEY = "sync:dividend:full_history:progress"
+        CONCURRENCY = 5
+        BATCH_SIZE = 50
+
+        all_ts_codes = StockBasicRepository().get_listed_ts_codes(status='L')
+        total = len(all_ts_codes)
+        logger.info(f"全量同步分红送股，共 {total} 只上市股票，起始: {start_date or '20090101'}")
+
+        try:
+            completed_raw = redis_client.smembers(PROGRESS_KEY)
+            completed = {p.decode() if isinstance(p, bytes) else p for p in completed_raw}
+        except Exception:
+            completed = set()
+
+        pending = [c for c in all_ts_codes if c not in completed]
+        logger.info(f"待同步股票: {len(pending)}，已完成: {len(completed)}")
+
+        total_records = 0
+        error_count = 0
+        semaphore = asyncio.Semaphore(CONCURRENCY)
+
+        async def sync_one(ts_code: str):
+            nonlocal total_records, error_count
+            async with semaphore:
+                try:
+                    result = await self.sync_dividend(ts_code=ts_code)
+                    if result.get('status') == 'success':
+                        total_records += result.get('records', 0)
+                        redis_client.sadd(PROGRESS_KEY, ts_code)
+                    else:
+                        error_count += 1
+                except Exception as e:
+                    logger.error(f"[dividend] ts_code={ts_code} 同步失败: {e}")
+                    error_count += 1
+
+        skip_count = len(completed)
+        success_count = 0
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            await asyncio.gather(*[sync_one(c) for c in batch])
+            # 重新计算成功数（通过 Redis Set 大小）
+            try:
+                done = len(redis_client.smembers(PROGRESS_KEY))
+            except Exception:
+                done = skip_count + (batch_start + len(batch))
+            if update_state_fn:
+                pct = round(done / total * 100, 1)
+                try:
+                    update_state_fn(state='PROGRESS', meta={'current': done, 'total': total, 'percent': pct})
+                except Exception:
+                    pass
+            logger.info(f"[全量分红送股] 进度: {done}/{total} ({round(done/total*100,1)}%) 入库={total_records} 失败={error_count}")
+
+        try:
+            final_done = len(redis_client.smembers(PROGRESS_KEY))
+            if final_done >= total:
+                redis_client.delete(PROGRESS_KEY)
+                logger.info("[全量分红送股] ✅ 全量同步完成，进度已清除")
+        except Exception:
+            pass
+
+        logger.info(f"全量同步分红送股完成，共同步 {total_records} 条记录，失败 {error_count} 只")
+        return {'status': 'success', 'records': total_records, 'total': total, 'errors': error_count}
 
     def _get_provider(self):
         """获取 Tushare Provider"""
@@ -135,6 +209,13 @@ class DividendService:
                 logger.warning(f"缺少必需字段: {field}")
                 df[field] = None
 
+        # 过滤主键字段为空的行（ann_date 为主键一部分，不能为 NULL）
+        before = len(df)
+        df = df.dropna(subset=['ts_code', 'end_date', 'ann_date'])
+        dropped = before - len(df)
+        if dropped > 0:
+            logger.warning(f"过滤掉 {dropped} 条主键字段为空的记录（ann_date/end_date/ts_code 为 null）")
+
         # 处理空值（将NaN替换为None）
         df = df.where(df.notna(), None)
 
@@ -167,22 +248,28 @@ class DividendService:
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.dividend_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                limit=limit,
-                offset=offset
-            )
-
-            # 获取统计信息
-            statistics = await asyncio.to_thread(
-                self.dividend_repo.get_statistics,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code
+            # 并发查询总数、数据和统计
+            total, items, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.dividend_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                ),
+                asyncio.to_thread(
+                    self.dividend_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.dividend_repo.get_statistics,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD
@@ -207,7 +294,7 @@ class DividendService:
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

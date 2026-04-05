@@ -27,9 +27,9 @@ def sync_income_task(
 
     Args:
         ts_code: 股票代码
-        period: 报告期（YYYYMMDD或YYYYQQ格式）
-        start_date: 开始日期
-        end_date: 结束日期
+        period: 报告期（YYYYMMDD格式）
+        start_date: 开始日期 YYYYMMDD
+        end_date: 结束日期 YYYYMMDD
         report_type: 报告类型（1-12）
 
     Returns:
@@ -39,7 +39,6 @@ def sync_income_task(
         logger.info(f"开始执行利润表同步任务: ts_code={ts_code}, period={period}, "
                    f"start_date={start_date}, end_date={end_date}, report_type={report_type}")
 
-        # 使用辅助函数运行异步代码
         service = IncomeService()
         result = run_async_in_celery(
             service.sync_income,
@@ -67,10 +66,11 @@ def sync_income_task(
 )
 def sync_income_full_history_task(self, start_date: str = None):
     """
-    按季度报告期全量同步利润表历史数据（支持中断续继）
+    逐只股票全量同步利润表历史数据（5 并发，Redis Set 续继）
 
-    逐季调用 income_vip(period=YYYYMMDD)，3 并发，Redis Set 记录已完成 period，
-    中断后再次触发自动跳过已完成季度，直到全部完成后清除进度记录。
+    按 ts_code 逐只调用 income_vip，每只股票数据量极少，彻底避免 Tushare
+    单次返回上限（6400+）导致的数据截断。Redis Set 记录已完成 ts_code，
+    中断后自动续继。
 
     Args:
         start_date: 起始日期 YYYYMMDD，不传则使用 '20090101'

@@ -9,7 +9,7 @@ from loguru import logger
 from app.models.api_response import ApiResponse
 from app.services.cashflow_service import CashflowService
 from app.services import TaskHistoryHelper
-from app.core.dependencies import require_admin, get_current_user
+from app.core.dependencies import require_admin
 from app.models.user import User
 
 router = APIRouter()
@@ -22,7 +22,8 @@ async def get_cashflow_data(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD"),
     report_type: Optional[str] = Query(None, description="报告类型（1-12）"),
-    limit: int = Query(30, ge=1, le=1000, description="限制返回记录数")
+    limit: int = Query(30, ge=1, le=1000, description="限制返回记录数"),
+    offset: int = Query(0, ge=0, description="分页偏移量")
 ):
     """
     查询现金流量表数据
@@ -46,7 +47,8 @@ async def get_cashflow_data(
             ts_code=ts_code,
             period=period,
             report_type=report_type,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
 
@@ -180,4 +182,38 @@ async def sync_cashflow_async(
 
     except Exception as e:
         logger.error(f"提交现金流量表同步任务失败: {e}")
+        return ApiResponse.error(message=f"任务提交失败: {str(e)}")
+
+
+@router.post("/sync-full-history-async")
+async def sync_cashflow_full_history_async(
+    start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
+    current_user: User = Depends(require_admin)
+):
+    """异步全量同步现金流量表历史数据（按季度 period 切片 + Redis 续继）"""
+    try:
+        from app.tasks.cashflow_tasks import sync_cashflow_full_history_task
+
+        celery_task = sync_cashflow_full_history_task.apply_async(
+            kwargs={'start_date': start_date}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_cashflow_full_history',
+            display_name='现金流量表全量同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date},
+            source='cashflow_page'
+        )
+
+        return ApiResponse.success(
+            data=task_data,
+            message="现金流量表全量同步任务已提交，请在任务面板查看进度"
+        )
+
+    except Exception as e:
+        logger.error(f"提交现金流量表全量同步任务失败: {e}")
         return ApiResponse.error(message=f"任务提交失败: {str(e)}")

@@ -14,7 +14,6 @@ import { balancesheetApi } from '@/lib/api/balancesheet-api'
 import type { BalancesheetData, BalancesheetStatistics } from '@/lib/api/balancesheet-api'
 import { useTaskStore } from '@/stores/task-store'
 import { TrendingUp, TrendingDown, DollarSign, PieChart, RefreshCw } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 
@@ -25,8 +24,8 @@ export default function BalancesheetPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
-  const [reportType, setReportType] = useState<string>('1')
-  const [compType, setCompType] = useState<string>('1')
+  const [reportType, setReportType] = useState<string>('all')
+  const [compType, setCompType] = useState<string>('all')
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -45,14 +44,9 @@ export default function BalancesheetPage() {
   const syncing = isTaskRunning('tasks.sync_balancesheet')
 
   useEffect(() => {
-    loadData().catch(() => {})
-  }, [])
-
-  // 分页变化时重新加载数据
-  useEffect(() => {
-    loadData().catch(() => {})
+    loadData(1, pageSize).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize])
+  }, [])
 
   // 组件卸载时清理所有活跃的任务回调
   useEffect(() => {
@@ -67,7 +61,7 @@ export default function BalancesheetPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const loadData = async () => {
+  const loadData = async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setIsLoading(true)
 
@@ -77,8 +71,8 @@ export default function BalancesheetPage() {
         ts_code: tsCode || undefined,
         report_type: reportType !== 'all' ? reportType : undefined,
         comp_type: compType !== 'all' ? compType : undefined,
-        limit: pageSize,
-        offset: (page - 1) * pageSize
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
       }
 
       const [dataResponse, statsResponse] = await Promise.all([
@@ -112,8 +106,8 @@ export default function BalancesheetPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'balancesheet',
-    syncFn: (params) => apiClient.post('/api/balancesheet/sync-async', null, { params }),
-    taskName: 'tasks.sync_balancesheet',
+    syncFn: (params) => balancesheetApi.syncFullHistoryAsync(params),
+    taskName: 'tasks.sync_balancesheet_full_history',
     onSuccess: loadData,
   })
 
@@ -194,6 +188,11 @@ export default function BalancesheetPage() {
       header: '股票代码',
       accessor: (row) => row.ts_code,
       className: 'font-mono'
+    },
+    {
+      key: 'ann_date',
+      header: '公告日期',
+      accessor: (row) => row.ann_date || '-'
     },
     {
       key: 'end_date',
@@ -405,7 +404,7 @@ export default function BalancesheetPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={loadData} disabled={isLoading}>
+            <Button onClick={() => { setPage(1); loadData(1, pageSize).catch(() => {}) }} disabled={isLoading}>
               {isLoading ? '查询中...' : '查询'}
             </Button>
             <Button
@@ -413,8 +412,8 @@ export default function BalancesheetPage() {
                 setTsCode('')
                 setStartDate(undefined)
                 setEndDate(undefined)
-                setReportType('1')
-                setCompType('1')
+                setReportType('all')
+                setCompType('all')
               }}
               variant="ghost"
             >
@@ -437,10 +436,12 @@ export default function BalancesheetPage() {
               total,
               onPageChange: (newPage) => {
                 setPage(newPage)
+                loadData(newPage, pageSize).catch(() => {})
               },
               onPageSizeChange: (newPageSize) => {
                 setPageSize(newPageSize)
                 setPage(1)
+                loadData(1, newPageSize).catch(() => {})
               },
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}

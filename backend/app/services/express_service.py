@@ -6,6 +6,7 @@
 
 import asyncio
 from typing import Optional, Dict, List
+from datetime import datetime
 from loguru import logger
 
 from app.repositories.express_repository import ExpressRepository
@@ -19,6 +20,76 @@ class ExpressService:
         self.express_repo = ExpressRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ ExpressService initialized")
+
+    @staticmethod
+    def _generate_quarters(start_date: str) -> list:
+        """生成从start_date起到今天的所有季度末日期列表"""
+        start_year = int(start_date[:4])
+        quarter_ends = [331, 630, 930, 1231]
+        today_int = int(datetime.now().strftime("%Y%m%d"))
+        start_int = int(start_date)
+        periods = []
+        for y in range(start_year, datetime.now().year + 1):
+            for qe in quarter_ends:
+                period_str = f"{y}{qe:04d}"
+                if start_int <= int(period_str) <= today_int:
+                    periods.append(period_str)
+        return periods
+
+    async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None) -> dict:
+        """按季度报告期全量同步业绩快报历史数据（支持中断续继）"""
+        effective_start = start_date or '20090101'
+        quarters = self._generate_quarters(effective_start)
+        total_quarters = len(quarters)
+        logger.info(f"全量同步业绩快报，共 {total_quarters} 个季度，起始: {effective_start}")
+
+        PROGRESS_KEY = "sync:express:full_history:progress"
+        try:
+            completed_raw = redis_client.smembers(PROGRESS_KEY)
+            completed = {p.decode() if isinstance(p, bytes) else p for p in completed_raw}
+        except Exception:
+            completed = set()
+
+        pending = [q for q in quarters if q not in completed]
+        logger.info(f"待同步季度数: {len(pending)}，已完成: {len(completed)}")
+
+        total_records = 0
+        semaphore = asyncio.Semaphore(3)
+
+        async def sync_one(period: str):
+            nonlocal total_records
+            async with semaphore:
+                try:
+                    provider = self._get_provider()
+                    df = await asyncio.to_thread(provider.get_express, period=period)
+                    if df is not None and not df.empty:
+                        count = await asyncio.to_thread(self.express_repo.bulk_upsert, df)
+                        total_records += count
+                        logger.info(f"[express] period={period} 同步 {count} 条")
+                    else:
+                        logger.info(f"[express] period={period} 无数据")
+                    redis_client.sadd(PROGRESS_KEY, period)
+                except Exception as e:
+                    logger.error(f"[express] period={period} 同步失败: {e}")
+
+        done = 0
+        for period in pending:
+            await sync_one(period)
+            done += 1
+            if update_state_fn and done % 10 == 0:
+                pct = int((len(completed) + done) / total_quarters * 100)
+                try:
+                    update_state_fn(state='PROGRESS', meta={'progress': pct})
+                except Exception:
+                    pass
+
+        try:
+            redis_client.delete(PROGRESS_KEY)
+        except Exception:
+            pass
+
+        logger.info(f"全量同步业绩快报完成，共同步 {total_records} 条记录")
+        return {'status': 'success', 'records': total_records, 'quarters': total_quarters}
 
     def _get_provider(self):
         """获取 Tushare Provider"""
@@ -102,7 +173,8 @@ class ExpressService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         period: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         获取业绩快报数据
@@ -118,34 +190,27 @@ class ExpressService:
             数据列表
         """
         try:
-            # 如果指定了报告期，按报告期查询
-            if period:
-                items = await asyncio.to_thread(
-                    self.express_repo.get_by_period,
-                    period=period,
-                    limit=limit
-                )
-            # 如果指定了股票代码，按代码查询
-            elif ts_code:
-                items = await asyncio.to_thread(
-                    self.express_repo.get_by_code,
-                    ts_code=ts_code,
-                    start_date=start_date,
-                    end_date=end_date,
-                    limit=limit
-                )
-            # 否则按日期范围查询
-            else:
-                # 提供默认日期范围
-                start_date = start_date or '19900101'
-                end_date = end_date or '29991231'
+            start_date_q = start_date or '19900101'
+            end_date_q = end_date or '29991231'
 
-                items = await asyncio.to_thread(
+            # 并发查询总数和数据
+            total, items = await asyncio.gather(
+                asyncio.to_thread(
+                    self.express_repo.get_total_count,
+                    start_date=start_date_q,
+                    end_date=end_date_q,
+                    ts_code=ts_code,
+                    period=period
+                ),
+                asyncio.to_thread(
                     self.express_repo.get_by_date_range,
-                    start_date=start_date,
-                    end_date=end_date,
-                    limit=limit
+                    start_date=start_date_q,
+                    end_date=end_date_q,
+                    ts_code=ts_code,
+                    limit=limit,
+                    offset=offset
                 )
+            )
 
             # 转换单位（元 -> 亿元）
             for item in items:
@@ -164,7 +229,7 @@ class ExpressService:
 
             return {
                 "items": items,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

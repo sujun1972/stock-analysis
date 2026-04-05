@@ -4,12 +4,17 @@
 使用 run_async_in_celery 处理 Celery fork pool 中的事件循环冲突问题
 """
 
+import asyncio
 from typing import Optional
 from loguru import logger
 
 from app.celery_app import celery_app
 from app.services.cashflow_service import CashflowService
 from app.tasks.extended_sync_tasks import run_async_in_celery
+from app.core.redis_lock import redis_lock
+from app.tasks.sync_tasks import _DummyContext
+
+CASHFLOW_FULL_HISTORY_LOCK_KEY = "sync:cashflow:full_history:lock"
 
 
 @celery_app.task(bind=True, name="tasks.sync_cashflow")
@@ -60,3 +65,51 @@ def sync_cashflow_task(
         import traceback
         logger.error(traceback.format_exc())
         raise
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.sync_cashflow_full_history",
+    max_retries=0,
+    soft_time_limit=28800,
+    time_limit=32400
+)
+def sync_cashflow_full_history_task(self, start_date: str = None):
+    """
+    逐只股票全量同步现金流量表历史数据（5 并发，Redis Set 续继）
+
+    按 ts_code 逐只调用 cashflow_vip，每只股票数据量极少，彻底避免 Tushare
+    单次返回上限导致的数据截断。Redis Set 记录已完成 ts_code，中断后自动续继。
+
+    Args:
+        start_date: 起始日期 YYYYMMDD，不传则使用 '20090101'
+    """
+    from app.core.redis_lock import redis_client
+
+    logger.info(f"========== [Celery] 开始全量现金流量表同步任务，start_date={start_date} ==========")
+
+    if redis_client is None:
+        logger.error("Redis 不可用，无法执行全量同步任务")
+        return {"status": "error", "message": "Redis 不可用"}
+
+    with redis_lock.acquire(CASHFLOW_FULL_HISTORY_LOCK_KEY, timeout=28800, blocking=False) if redis_lock else _DummyContext() as acquired:
+        if not acquired and redis_lock:
+            logger.warning("⚠️  全量现金流量表同步任务已在执行中，跳过本次执行")
+            return {"status": "locked", "message": "已有全量同步任务正在进行"}
+
+        service = CashflowService()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                service.sync_full_history(
+                    redis_client=redis_client,
+                    start_date=start_date,
+                    update_state_fn=self.update_state
+                )
+            )
+        finally:
+            loop.close()
+
+    logger.info(f"========== [Celery] 全量现金流量表同步结束: {result} ==========")
+    return result

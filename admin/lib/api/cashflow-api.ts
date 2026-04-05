@@ -48,6 +48,7 @@ export interface CashflowQueryParams {
   period?: string
   report_type?: string
   limit?: number
+  offset?: number
 }
 
 export class CashflowApiClient extends BaseApiClient {
@@ -92,6 +93,17 @@ export class CashflowApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/cashflow/sync-async', null, { params })
+  }
+
+  async syncFullHistoryAsync(params?: {
+    start_date?: string
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/cashflow/sync-full-history-async', null, { params })
   }
 }
 

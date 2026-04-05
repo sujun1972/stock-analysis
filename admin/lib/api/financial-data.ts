@@ -61,6 +61,7 @@ export interface FinaIndicatorParams {
   end_date?: string    // YYYY-MM-DD
   period?: string      // YYYY-MM-DD
   limit?: number
+  offset?: number
 }
 
 export interface FinaIndicatorSyncParams {
@@ -190,6 +191,7 @@ export interface FinaMainbzParams {
   period?: string       // YYYY-MM-DD
   type?: string         // P按产品 D按地区 I按行业
   limit?: number
+  offset?: number
 }
 
 export interface FinaMainbzSyncParams {
@@ -225,6 +227,7 @@ export interface DisclosureDateParams {
   start_date?: string   // YYYY-MM-DD
   end_date?: string     // YYYY-MM-DD
   limit?: number
+  offset?: number
 }
 
 export interface DisclosureDateSyncParams {
@@ -275,6 +278,15 @@ export class FinancialDataApiClient extends BaseApiClient {
     return this.post('/api/fina-indicator/sync-async', null, { params })
   }
 
+  async syncFinaIndicatorFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/fina-indicator/sync-full-history-async', null, { params })
+  }
+
   // ============================================
   // 分红送股数据 API
   // ============================================
@@ -312,6 +324,15 @@ export class FinancialDataApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/dividend/sync-async', null, { params })
+  }
+
+  async syncDividendFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/dividend/sync-full-history-async', null, { params })
   }
 
   // ============================================
@@ -359,6 +380,15 @@ export class FinancialDataApiClient extends BaseApiClient {
     return this.post('/api/fina-audit/sync-async', null, { params })
   }
 
+  async syncFinaAuditFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/fina-audit/sync-full-history-async', null, { params })
+  }
+
   // ============================================
   // 主营业务构成数据 API
   // ============================================
@@ -388,6 +418,15 @@ export class FinancialDataApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/fina-mainbz/sync-async', null, { params })
+  }
+
+  async syncFinaMainbzFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/fina-mainbz/sync-full-history-async', null, { params })
   }
 
   // ============================================
@@ -427,6 +466,15 @@ export class FinancialDataApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/disclosure-date/sync-async', null, { params })
+  }
+
+  async syncDisclosureDateFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/disclosure-date/sync-full-history-async', null, { params })
   }
 }
 

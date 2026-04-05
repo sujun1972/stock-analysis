@@ -18,6 +18,7 @@ export interface ForecastParams {
   period?: string      // 报告期 YYYY-MM-DD
   type?: string        // 预告类型
   limit?: number       // 返回记录数限制
+  offset?: number      // 分页偏移量
 }
 
 /**
@@ -105,6 +106,20 @@ export class ForecastApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/forecast/sync-async', {}, { params })
+  }
+
+  /**
+   * 全量同步历史数据
+   */
+  async syncFullHistoryAsync(params?: {
+    start_date?: string
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/forecast/sync-full-history-async', {}, { params })
   }
 }
 

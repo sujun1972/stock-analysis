@@ -425,9 +425,9 @@ const handleSyncConfirm = async () => {
 | 股东人数 | `/reference-data/stk-holdernumber` | |
 | 大宗交易 | `/reference-data/block-trade` | |
 | 股东增减持 | `/reference-data/stk-holdertrade` | syncStartDate/syncEndDate 独立 |
-| 利润表 | `/financial/income` | 同步接口需 YYYYMMDD 格式，查询需 YYYY-MM-DD；全量同步按季度 period 切片（见下方说明） |
+| 利润表 | `/financial/income` | 同步接口需 YYYYMMDD 格式，查询需 YYYY-MM-DD；全量同步逐只股票请求（5并发，Redis续继） |
 | 资产负债表 | `/financial/balancesheet` | 同上 |
-| 现金流量表 | `/financial/cashflow` | period 用 DatePicker |
+| 现金流量表 | `/financial/cashflow` | period 用 DatePicker；全量同步逐只股票请求（5并发，Redis续继） |
 | 业绩预告 | `/financial/forecast` | 含 syncForecastType 选项 |
 | 业绩快报 | `/financial/express` | 所有日期字段用 Date \| undefined + DatePicker |
 | 分红送股 | `/financial/dividend` | |
@@ -436,34 +436,49 @@ const handleSyncConfirm = async () => {
 | 主营业务构成 | `/financial/fina-mainbz` | 含 type 选项 |
 | 财报披露计划 | `/financial/disclosure-date` | |
 
-#### 财务报表全量同步：按季度 period 切片
+#### 财务报表全量同步：逐只股票请求
 
-Tushare 财务报表接口（`income_vip`、`balancesheet_vip`、`cashflow_vip` 等）的 `start_date`/`end_date` 参数对应**公告日期**而非报告期，若按公告日切片会拉到跨越多个报告期的数据（例如 2018 年公告的 2017 年报）。
+Tushare 财务报表接口（`income_vip`、`balancesheet_vip`、`cashflow_vip` 等）单次返回上限为 6400~12000 条（依账号积分等级而异）。按公告日期范围或按季度 period 批量拉取时，极易触达上限导致数据截断。
 
-**正确的全量同步策略：按季度 period 枚举**
+**正确的全量同步策略：按 ts_code 逐只拉取**
 
-逐季传入 `period=YYYYMMDD`（季末日固定为 0331/0630/0930/1231），每个 period 拉取全市场当季全部公司数据：
+每只股票的财务历史记录极少（通常 20~60 条），逐只请求可完全避免截断问题：
 
 ```python
-# income_service.py 实现模式（可复用于 balancesheet/cashflow）
-@staticmethod
-def _generate_quarters(start_date: str) -> List[str]:
-    start_year = int(start_date[:4])
-    quarter_ends = [331, 630, 930, 1231]
-    quarter_end_dates = [(y, qe) for y in range(start_year, datetime.now().year + 1) for qe in quarter_ends]
-    today_int = int(datetime.now().strftime("%Y%m%d"))
-    start_int = int(start_date)
-    return [f"{y}{qe:04d}" for y, qe in quarter_end_dates
-            if start_int <= int(f"{y}{qe:04d}") <= today_int]
+# service.sync_full_history() 标准模式（income/balancesheet/cashflow/fina_indicator/fina_mainbz/fina_audit 均采用此模式）
+async def sync_full_history(self, redis_client, start_date=None, update_state_fn=None):
+    from app.repositories.stock_basic_repository import StockBasicRepository
 
-# 调用时传 period，而非 start_date/end_date
-df = provider.get_income(period=period)
+    PROGRESS_KEY = "sync:{table}:full_history:progress"
+    CONCURRENCY = 5
+    BATCH_SIZE = 50
+    effective_start = start_date or '20090101'
+    today = datetime.now().strftime("%Y%m%d")
+
+    all_ts_codes = StockBasicRepository().get_listed_ts_codes(status='L')
+    completed_set = {v.decode() if isinstance(v, bytes) else v for v in redis_client.smembers(PROGRESS_KEY)}
+    pending = [c for c in all_ts_codes if c not in completed_set]
+
+    sem = asyncio.Semaphore(CONCURRENCY)
+
+    async def sync_one(ts_code):
+        async with sem:
+            result = await self.sync_xxx(ts_code=ts_code, start_date=effective_start, end_date=today)
+            if result.get("status") != "error":
+                redis_client.sadd(PROGRESS_KEY, ts_code)
+
+    for batch in batched(pending, BATCH_SIZE):
+        await asyncio.gather(*[sync_one(c) for c in batch])
+        # 上报进度给 Celery update_state_fn
 ```
 
-- Redis Key：`sync:{table}:full_history:progress`，Set 内存 period 字符串，支持中断续继
-- 并发数：3（财务接口单次耗时较长，避免积分超限）
-- 起始季度默认：`20090101`（2009Q1，覆盖大多数上市公司历史）
+- Redis Key：`sync:{table}:full_history:progress`，Set 内存已完成 ts_code，支持中断续继
+- 并发数：5，批次大小：50
+- 起始日期默认：`'20090101'`，覆盖大多数上市公司历史
 - 前端 `useDataBulkOps.syncFn` 传 `start_date`（来自系统配置 `earliest_history_date`，格式 YYYYMMDD）
+- Celery task 通过 `asyncio.new_event_loop()` + `loop.run_until_complete()` 运行异步逻辑，并委托给 `service.sync_full_history()`，不在 task 内写内联循环
+
+**`fina_audit` 的特殊限制**：Tushare `fina_audit` 接口要求 `ts_code` 为必填参数，无法全市场拉取，因此只能逐只股票请求（与上述模式一致，但不支持按日期范围单次拉取全市场）。
 
 | 筹码分布 | `/features/cyq-chips` | 2000积分/次，单次最大1000行 |
 | 每日筹码及胜率 | `/features/cyq-perf` | 2000积分/次，含获利比例/成本分布 |

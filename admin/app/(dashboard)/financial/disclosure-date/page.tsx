@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DatePicker } from '@/components/ui/date-picker'
 import { toast } from 'sonner'
 import { RefreshCw, FileText, Calendar, TrendingUp, CheckCircle, Clock } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { financialDataApi, type DisclosureDateData, type DisclosureDateStatistics } from '@/lib/api/financial-data'
@@ -52,7 +51,7 @@ export default function DisclosureDatePage() {
   const syncing = isTaskRunning('tasks.sync_disclosure_date')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
@@ -61,7 +60,8 @@ export default function DisclosureDatePage() {
         ts_code: tsCode || undefined,
         start_date: startDate ? toDateStr(startDate) : undefined,
         end_date: endDate ? toDateStr(endDate) : undefined,
-        limit: pageSize
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
       })
 
       if (response.code === 200 && response.data) {
@@ -78,7 +78,7 @@ export default function DisclosureDatePage() {
     } finally {
       setLoading(false)
     }
-  }, [tsCode, startDate, endDate, pageSize])
+  }, [tsCode, startDate, endDate, page, pageSize])
 
   // 初始加载
   useEffect(() => {
@@ -96,8 +96,8 @@ export default function DisclosureDatePage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'disclosure_date',
-    syncFn: (params) => apiClient.post('/api/disclosure-date/sync-async', null, { params }),
-    taskName: 'tasks.sync_disclosure_date',
+    syncFn: (params) => financialDataApi.syncDisclosureDateFullHistoryAsync(params),
+    taskName: 'tasks.sync_disclosure_date_full_history',
     onSuccess: loadData,
   })
 
@@ -138,7 +138,7 @@ export default function DisclosureDatePage() {
 
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
-            loadData().catch(() => {})
+            loadData(1, pageSize).catch(() => {})
             toast.success('数据同步完成', { description: '财报披露计划数据已更新' })
           } else if (task.status === 'failure') {
             toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
@@ -415,7 +415,7 @@ export default function DisclosureDatePage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
+                  onClick={() => { const newPage = Math.max(1, page - 1); setPage(newPage); loadData(newPage, pageSize).catch(() => {}) }}
                   disabled={page === 1}
                 >
                   上一页
@@ -426,7 +426,7 @@ export default function DisclosureDatePage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
+                  onClick={() => { const newPage = Math.min(Math.ceil(total / pageSize), page + 1); setPage(newPage); loadData(newPage, pageSize).catch(() => {}) }}
                   disabled={page >= Math.ceil(total / pageSize)}
                 >
                   下一页
@@ -448,13 +448,8 @@ export default function DisclosureDatePage() {
               page,
               pageSize,
               total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
+              onPageChange: (newPage) => { setPage(newPage); loadData(newPage, pageSize).catch(() => {}) },
+              onPageSizeChange: (newPageSize) => { setPageSize(newPageSize); setPage(1); loadData(1, newPageSize).catch(() => {}) },
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
           />

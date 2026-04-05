@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
 
-from app.core.dependencies import require_admin, get_current_user
+from app.core.dependencies import require_admin
 from app.models.user import User
 from app.services.fina_indicator_service import FinaIndicatorService
 from app.models.api_response import ApiResponse
@@ -23,7 +23,8 @@ async def get_fina_indicator(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD（如2023-12-31表示年报）"),
-    limit: int = Query(30, description="限制返回数量，默认30")
+    limit: int = Query(30, description="限制返回数量，默认30"),
+    offset: int = Query(0, description="偏移量（用于分页）")
 ):
     """
     查询财务指标数据
@@ -42,7 +43,8 @@ async def get_fina_indicator(
             start_date=start_date_formatted,
             end_date=end_date_formatted,
             period=period_formatted,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
 
         return ApiResponse.success(data=result)
@@ -180,4 +182,38 @@ async def sync_fina_indicator_async(
 
     except Exception as e:
         logger.error(f"提交财务指标同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history-async")
+async def sync_fina_indicator_full_history_async(
+    start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
+    current_user: User = Depends(require_admin)
+):
+    """异步全量同步财务指标历史数据（按季度 period 切片 + Redis 续继）"""
+    try:
+        from app.tasks.fina_indicator_tasks import sync_fina_indicator_full_history_task
+
+        celery_task = sync_fina_indicator_full_history_task.apply_async(
+            kwargs={'start_date': start_date}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_fina_indicator_full_history',
+            display_name='财务指标全量同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date},
+            source='fina_indicator_page'
+        )
+
+        return ApiResponse.success(
+            data=task_data,
+            message="财务指标全量同步任务已提交，请在任务面板查看进度"
+        )
+
+    except Exception as e:
+        logger.error(f"提交财务指标全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

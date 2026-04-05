@@ -16,7 +16,6 @@ import { toast } from 'sonner'
 import { RefreshCw, PieChart, TrendingUp, DollarSign, Package } from 'lucide-react'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
 
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -55,7 +54,7 @@ export default function FinaMainbzPage() {
   const syncing = isTaskRunning('tasks.sync_fina_mainbz')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
@@ -66,12 +65,14 @@ export default function FinaMainbzPage() {
         end_date: endDate ? toDateStr(endDate) : undefined,
         period: period ? toDateStr(period) : undefined,
         type: type === 'ALL' ? undefined : type,
-        limit: pageSize
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
       })
 
       if (response.code === 200 && response.data) {
         setData(response.data.items || [])
         setTotal(response.data.total || 0)
+        if (response.data.statistics) setStatistics(response.data.statistics)
       } else {
         throw new Error(response.message || '获取数据失败')
       }
@@ -81,24 +82,7 @@ export default function FinaMainbzPage() {
     } finally {
       setLoading(false)
     }
-  }, [tsCode, startDate, endDate, period, type, pageSize])
-
-  // 加载统计信息
-  const loadStatistics = useCallback(async () => {
-    try {
-      const response = await financialDataApi.getFinaMainbzStatistics({
-        ts_code: tsCode || undefined,
-        start_date: startDate ? toDateStr(startDate) : undefined,
-        end_date: endDate ? toDateStr(endDate) : undefined
-      })
-
-      if (response.code === 200 && response.data) {
-        setStatistics(response.data)
-      }
-    } catch {
-      // 统计信息加载失败不影响主要数据展示
-    }
-  }, [tsCode, startDate, endDate])
+  }, [tsCode, startDate, endDate, period, type, page, pageSize])
 
   const {
     handleFullSync,
@@ -111,16 +95,15 @@ export default function FinaMainbzPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'fina_mainbz',
-    syncFn: (params) => apiClient.post('/api/fina-mainbz/sync-async', null, { params }),
-    taskName: 'tasks.sync_fina_mainbz',
+    syncFn: (params) => financialDataApi.syncFinaMainbzFullHistoryAsync(params),
+    taskName: 'tasks.sync_fina_mainbz_full_history',
     onSuccess: loadData,
   })
 
   // 初始化加载
   useEffect(() => {
     loadData()
-    loadStatistics()
-  }, [loadData, loadStatistics])
+  }, [loadData])
 
   // 同步确认
   const handleSyncConfirm = async () => {
@@ -148,8 +131,7 @@ export default function FinaMainbzPage() {
 
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
-            loadData().catch(() => {})
-            loadStatistics().catch(() => {})
+            loadData(1, pageSize).catch(() => {})
             toast.success('数据同步完成', { description: '主营业务构成数据已更新' })
           } else if (task.status === 'failure') {
             toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
@@ -381,11 +363,8 @@ export default function FinaMainbzPage() {
             page,
             pageSize,
             total,
-            onPageChange: (newPage) => setPage(newPage),
-            onPageSizeChange: (newPageSize) => {
-              setPageSize(newPageSize)
-              setPage(1)
-            },
+            onPageChange: (newPage) => { setPage(newPage); loadData(newPage, pageSize).catch(() => {}) },
+            onPageSizeChange: (newPageSize) => { setPageSize(newPageSize); setPage(1); loadData(1, newPageSize).catch(() => {}) },
             pageSizeOptions: [10, 20, 30, 50, 100]
           }}
         />

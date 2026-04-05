@@ -15,7 +15,6 @@ import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Building2, Users, DollarSign } from 'lucide-react'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
 
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -55,13 +54,14 @@ export default function FinaAuditPage() {
   /**
    * 加载数据
    */
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
 
       const params: any = {
-        limit: pageSize
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
       }
 
       if (tsCode) params.ts_code = tsCode
@@ -86,7 +86,7 @@ export default function FinaAuditPage() {
     } finally {
       setLoading(false)
     }
-  }, [tsCode, annDate, startDate, endDate, period, pageSize])
+  }, [tsCode, annDate, startDate, endDate, period, page, pageSize])
 
   /**
    * 异步同步数据
@@ -121,7 +121,7 @@ export default function FinaAuditPage() {
         // 注册任务完成回调
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
-            loadData().catch(() => {})
+            loadData(1, pageSize).catch(() => {})
             toast.success('数据同步完成', { description: '财务审计意见数据已更新' })
           } else if (task.status === 'failure') {
             toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
@@ -156,8 +156,8 @@ export default function FinaAuditPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'fina_audit',
-    syncFn: (params) => apiClient.post('/api/fina-audit/sync-async', null, { params }),
-    taskName: 'tasks.sync_fina_audit',
+    syncFn: (params) => financialDataApi.syncFinaAuditFullHistoryAsync({ start_date: params?.start_date }),
+    taskName: 'tasks.sync_fina_audit_full_history',
     onSuccess: loadData,
   })
 
@@ -498,7 +498,7 @@ export default function FinaAuditPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
+                  onClick={() => { const newPage = Math.max(1, page - 1); setPage(newPage); loadData(newPage, pageSize).catch(() => {}) }}
                   disabled={page === 1}
                 >
                   上一页
@@ -509,7 +509,7 @@ export default function FinaAuditPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
+                  onClick={() => { const newPage = Math.min(Math.ceil(total / pageSize), page + 1); setPage(newPage); loadData(newPage, pageSize).catch(() => {}) }}
                   disabled={page >= Math.ceil(total / pageSize)}
                 >
                   下一页
@@ -531,11 +531,8 @@ export default function FinaAuditPage() {
               page,
               pageSize,
               total,
-              onPageChange: (newPage) => setPage(newPage),
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
+              onPageChange: (newPage) => { setPage(newPage); loadData(newPage, pageSize).catch(() => {}) },
+              onPageSizeChange: (newPageSize) => { setPageSize(newPageSize); setPage(1); loadData(1, newPageSize).catch(() => {}) },
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
           />

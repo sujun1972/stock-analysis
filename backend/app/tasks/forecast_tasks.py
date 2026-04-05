@@ -4,12 +4,17 @@
 使用 run_async_in_celery 处理 Celery fork pool 中的事件循环冲突问题
 """
 
+import asyncio
 from typing import Optional
 from loguru import logger
 
 from app.celery_app import celery_app
 from app.services.forecast_service import ForecastService
 from app.tasks.extended_sync_tasks import run_async_in_celery
+from app.core.redis_lock import redis_lock
+from app.tasks.sync_tasks import _DummyContext
+
+FORECAST_FULL_HISTORY_LOCK_KEY = "sync:forecast:full_history:lock"
 
 
 @celery_app.task(bind=True, name="tasks.sync_forecast")
@@ -60,3 +65,48 @@ def sync_forecast_task(
         import traceback
         logger.error(traceback.format_exc())
         raise
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.sync_forecast_full_history",
+    max_retries=0,
+    soft_time_limit=28800,
+    time_limit=32400
+)
+def sync_forecast_full_history_task(self, start_date: str = None):
+    """
+    按季度报告期全量同步业绩预告历史数据（支持中断续继）
+
+    Args:
+        start_date: 起始日期 YYYYMMDD，不传则使用 '20090101'
+    """
+    from app.core.redis_lock import redis_client
+
+    logger.info(f"========== [Celery] 开始全量业绩预告同步任务，start_date={start_date} ==========")
+
+    if redis_client is None:
+        logger.error("Redis 不可用，无法执行全量同步任务")
+        return {"status": "error", "message": "Redis 不可用"}
+
+    with redis_lock.acquire(FORECAST_FULL_HISTORY_LOCK_KEY, timeout=28800, blocking=False) if redis_lock else _DummyContext() as acquired:
+        if not acquired and redis_lock:
+            logger.warning("⚠️  全量业绩预告同步任务已在执行中，跳过本次执行")
+            return {"status": "locked", "message": "已有全量同步任务正在进行"}
+
+        service = ForecastService()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                service.sync_full_history(
+                    redis_client=redis_client,
+                    start_date=start_date,
+                    update_state_fn=self.update_state
+                )
+            )
+        finally:
+            loop.close()
+
+    logger.info(f"========== [Celery] 全量业绩预告同步结束: {result} ==========")
+    return result

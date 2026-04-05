@@ -10,7 +10,6 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { financialDataApi } from '@/lib/api'
@@ -43,10 +42,10 @@ export default function DividendPage() {
 
   const syncing = isTaskRunning('tasks.sync_dividend')
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (pg = currentPage, ps = pageSize) => {
     try {
       setLoading(true)
-      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
+      const params: any = { limit: ps, offset: (pg - 1) * ps }
       if (tsCode) params.ts_code = tsCode
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
@@ -89,8 +88,8 @@ export default function DividendPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'dividend',
-    syncFn: (params) => apiClient.post('/api/dividend/sync-async', null, { params }),
-    taskName: 'tasks.sync_dividend',
+    syncFn: (params) => financialDataApi.syncDividendFullHistoryAsync(params),
+    taskName: 'tasks.sync_dividend_full_history',
     onSuccess: loadData,
   })
 
@@ -329,8 +328,8 @@ export default function DividendPage() {
           page={currentPage}
           pageSize={pageSize}
           total={totalRecords}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
+          onPageChange={(newPage) => { setCurrentPage(newPage); loadData(newPage, pageSize).catch(() => {}) }}
+          onPageSizeChange={(newSize) => { setPageSize(newSize); setCurrentPage(1); loadData(1, newSize).catch(() => {}) }}
           pageSizeOptions={[10, 20, 30, 50, 100]}
         />
       </Card>

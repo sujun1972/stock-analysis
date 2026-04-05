@@ -27,7 +27,8 @@ async def get_fina_audit(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, ge=1, le=1000, description="限制返回记录数")
+    limit: int = Query(30, ge=1, le=1000, description="限制返回记录数"),
+    offset: int = Query(0, ge=0, description="偏移量")
 ):
     """
     查询财务审计意见数据
@@ -58,7 +59,8 @@ async def get_fina_audit(
             start_date=start_date_fmt,
             end_date=end_date_fmt,
             period=period_fmt,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
 
         return ApiResponse.success(data=result)
@@ -201,4 +203,39 @@ async def sync_fina_audit_async(
 
     except Exception as e:
         logger.error(f"提交财务审计意见同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history-async")
+async def sync_fina_audit_full_history_async(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不填则从20090101开始"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量同步财务审计意见历史数据（逐只股票，5并发，Redis续继）
+    """
+    try:
+        from app.tasks.fina_audit_tasks import sync_fina_audit_full_history_task
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        celery_task = sync_fina_audit_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_fina_audit_full_history',
+            display_name='财务审计意见（全量）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='fina_audit_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交财务审计意见全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

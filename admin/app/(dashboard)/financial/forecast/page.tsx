@@ -16,7 +16,6 @@ import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Briefcase, TrendingDown, BarChart3 } from 'lucide-react'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
 
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -53,12 +52,15 @@ export default function ForecastPage() {
   const syncing = isTaskRunning('tasks.sync_forecast')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = {
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
+      }
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode) params.ts_code = tsCode.trim()
@@ -89,7 +91,7 @@ export default function ForecastPage() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, tsCode, forecastType, period, pageSize])
+  }, [startDate, endDate, tsCode, forecastType, period, page, pageSize])
 
   const {
     handleFullSync,
@@ -102,8 +104,8 @@ export default function ForecastPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'forecast',
-    syncFn: (params) => apiClient.post('/api/forecast/sync-async', null, { params }),
-    taskName: 'tasks.sync_forecast',
+    syncFn: (params) => forecastApi.syncFullHistoryAsync(params),
+    taskName: 'tasks.sync_forecast_full_history',
     onSuccess: loadData,
   })
 
@@ -568,7 +570,11 @@ export default function ForecastPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
+                  onClick={() => {
+                    const newPage = Math.max(1, page - 1)
+                    setPage(newPage)
+                    loadData(newPage, pageSize).catch(() => {})
+                  }}
                   disabled={page === 1}
                 >
                   上一页
@@ -579,7 +585,11 @@ export default function ForecastPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
+                  onClick={() => {
+                    const newPage = Math.min(Math.ceil(total / pageSize), page + 1)
+                    setPage(newPage)
+                    loadData(newPage, pageSize).catch(() => {})
+                  }}
                   disabled={page >= Math.ceil(total / pageSize)}
                 >
                   下一页
@@ -601,10 +611,14 @@ export default function ForecastPage() {
               page,
               pageSize,
               total,
-              onPageChange: (newPage) => setPage(newPage),
+              onPageChange: (newPage) => {
+                setPage(newPage)
+                loadData(newPage, pageSize).catch(() => {})
+              },
               onPageSizeChange: (newPageSize) => {
                 setPageSize(newPageSize)
                 setPage(1)
+                loadData(1, newPageSize).catch(() => {})
               },
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}

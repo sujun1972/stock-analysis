@@ -5,7 +5,8 @@
 """
 
 import asyncio
-from typing import Optional, Dict, List
+from datetime import datetime
+from typing import Optional, Dict
 from loguru import logger
 import pandas as pd
 
@@ -27,7 +28,8 @@ class CashflowService:
         ts_code: Optional[str] = None,
         period: Optional[str] = None,
         report_type: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         查询现金流量表数据
@@ -49,15 +51,26 @@ class CashflowService:
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
             period_fmt = period.replace('-', '') if period else None
 
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.cashflow_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                period=period_fmt,
-                report_type=report_type,
-                limit=limit
+            # 并发查询总数和数据
+            total, items = await asyncio.gather(
+                asyncio.to_thread(
+                    self.cashflow_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    period=period_fmt,
+                    report_type=report_type
+                ),
+                asyncio.to_thread(
+                    self.cashflow_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    period=period_fmt,
+                    report_type=report_type,
+                    limit=limit,
+                    offset=offset
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD
@@ -84,7 +97,7 @@ class CashflowService:
 
             return {
                 'items': items,
-                'total': len(items)
+                'total': total
             }
 
         except Exception as e:
@@ -255,6 +268,89 @@ class CashflowService:
                 "records": 0,
                 "error": str(e)
             }
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        update_state_fn=None
+    ) -> Dict:
+        """
+        逐只股票全量同步现金流量表历史数据（5 并发，Redis Set 续继）
+
+        按 ts_code 逐只调用 cashflow_vip，每只股票数据量极少，彻底避免 Tushare
+        单次返回上限导致的数据截断。Redis Set 记录已完成 ts_code，中断后自动续继。
+
+        Args:
+            redis_client: Redis 客户端，用于进度续继
+            start_date: 起始日期 YYYYMMDD，不传则使用 '20090101'
+            update_state_fn: Celery self.update_state 回调，用于上报进度
+        """
+        from app.repositories.stock_basic_repository import StockBasicRepository
+
+        PROGRESS_KEY = "sync:cashflow:full_history:progress"
+        CONCURRENCY = 5
+        BATCH_SIZE = 50
+        effective_start = start_date or '20090101'
+        today = datetime.now().strftime("%Y%m%d")
+
+        all_ts_codes = StockBasicRepository().get_listed_ts_codes(status='L')
+        total = len(all_ts_codes)
+        logger.info(f"[全量现金流量表] 共 {total} 只上市股票，start_date={effective_start}")
+
+        completed_set = redis_client.smembers(PROGRESS_KEY)
+        completed_set = {v.decode() if isinstance(v, bytes) else v for v in completed_set}
+        logger.info(f"[全量现金流量表] 已完成 {len(completed_set)} 只，剩余 {total - len(completed_set)} 只")
+
+        pending = [c for c in all_ts_codes if c not in completed_set]
+        skip_count = len(completed_set)
+        success_count = 0
+        error_count = 0
+        total_records = 0
+        sem = asyncio.Semaphore(CONCURRENCY)
+
+        async def sync_one(ts_code: str):
+            nonlocal success_count, error_count, total_records
+            async with sem:
+                try:
+                    result = await self.sync_cashflow(
+                        ts_code=ts_code,
+                        start_date=effective_start,
+                        end_date=today,
+                        report_type='1'
+                    )
+                    if result.get("status") == "error":
+                        error_count += 1
+                        return
+                    total_records += result.get("records", 0)
+                    redis_client.sadd(PROGRESS_KEY, ts_code)
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"[全量现金流量表] ts_code={ts_code} 失败: {e}")
+                    error_count += 1
+
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            await asyncio.gather(*[sync_one(c) for c in batch])
+            done = skip_count + success_count + error_count
+            if update_state_fn:
+                update_state_fn(state='PROGRESS', meta={
+                    'current': done, 'total': total,
+                    'percent': round(done / total * 100, 1),
+                    'success': success_count, 'errors': error_count
+                })
+            logger.info(f"[全量现金流量表] 进度: {done}/{total} ({round(done/total*100,1)}%) 成功={success_count} 失败={error_count}")
+
+        final_done = len(redis_client.smembers(PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(PROGRESS_KEY)
+            logger.info("[全量现金流量表] ✅ 全量同步完成，进度已清除")
+
+        return {
+            "status": "success", "total": total,
+            "success": success_count, "skipped": skip_count, "errors": error_count,
+            "message": f"同步完成 {success_count} 只，跳过 {skip_count} 只，失败 {error_count} 只"
+        }
 
     def _get_provider(self):
         """获取Tushare数据提供者"""

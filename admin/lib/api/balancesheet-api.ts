@@ -191,6 +191,17 @@ export class BalancesheetApiClient extends BaseApiClient {
   }>> {
     return this.post('/api/balancesheet/sync-async', {}, { params })
   }
+
+  async syncFullHistoryAsync(params?: {
+    start_date?: string
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/balancesheet/sync-full-history-async', {}, { params })
+  }
 }
 
 export const balancesheetApi = new BalancesheetApiClient()

@@ -6,6 +6,7 @@
 
 import asyncio
 from typing import Optional, Dict, List
+from datetime import datetime
 from loguru import logger
 
 from app.repositories.forecast_repository import ForecastRepository
@@ -26,7 +27,8 @@ class ForecastService:
         ts_code: Optional[str] = None,
         period: Optional[str] = None,
         type_: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         查询业绩预告数据
@@ -48,15 +50,26 @@ class ForecastService:
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
             period_fmt = period.replace('-', '') if period else None
 
-            # 查询数据
-            items = await asyncio.to_thread(
-                self.forecast_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                period=period_fmt,
-                type_=type_,
-                limit=limit
+            # 并发查询数据和总数
+            total, items = await asyncio.gather(
+                asyncio.to_thread(
+                    self.forecast_repo.get_total_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    period=period_fmt,
+                    type_=type_
+                ),
+                asyncio.to_thread(
+                    self.forecast_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    period=period_fmt,
+                    type_=type_,
+                    limit=limit,
+                    offset=offset
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD
@@ -70,7 +83,7 @@ class ForecastService:
 
             return {
                 'items': items,
-                'total': len(items)
+                'total': total
             }
 
         except Exception as e:
@@ -233,6 +246,85 @@ class ForecastService:
                 "error": str(e),
                 "records": 0
             }
+
+    @staticmethod
+    def _generate_quarters(start_date: str) -> List[str]:
+        """生成从start_date起到今天的所有季度末日期列表"""
+        start_year = int(start_date[:4])
+        quarter_ends = [331, 630, 930, 1231]
+        today_int = int(datetime.now().strftime("%Y%m%d"))
+        start_int = int(start_date)
+        periods = []
+        for y in range(start_year, datetime.now().year + 1):
+            for qe in quarter_ends:
+                period_str = f"{y}{qe:04d}"
+                if start_int <= int(period_str) <= today_int:
+                    periods.append(period_str)
+        return periods
+
+    async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None) -> Dict:
+        """按季度报告期全量同步业绩预告历史数据（支持中断续继）"""
+        import asyncio as _asyncio
+
+        effective_start = start_date or '20090101'
+        quarters = self._generate_quarters(effective_start)
+        total_quarters = len(quarters)
+        logger.info(f"全量同步业绩预告，共 {total_quarters} 个季度，起始: {effective_start}")
+
+        PROGRESS_KEY = "sync:forecast:full_history:progress"
+
+        # 读取已完成的季度
+        try:
+            completed_raw = redis_client.smembers(PROGRESS_KEY)
+            completed = {p.decode() if isinstance(p, bytes) else p for p in completed_raw}
+        except Exception:
+            completed = set()
+
+        pending = [q for q in quarters if q not in completed]
+        logger.info(f"待同步季度数: {len(pending)}，已完成: {len(completed)}")
+
+        total_records = 0
+        semaphore = _asyncio.Semaphore(3)
+
+        async def sync_one(period: str):
+            nonlocal total_records
+            async with semaphore:
+                try:
+                    provider = self._get_provider()
+                    df = await _asyncio.to_thread(
+                        provider.get_forecast,
+                        period=period
+                    )
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        count = await _asyncio.to_thread(self.forecast_repo.bulk_upsert, df)
+                        total_records += count
+                        logger.info(f"[forecast] period={period} 同步 {count} 条")
+                    else:
+                        logger.info(f"[forecast] period={period} 无数据")
+                    redis_client.sadd(PROGRESS_KEY, period)
+                except Exception as e:
+                    logger.error(f"[forecast] period={period} 同步失败: {e}")
+
+        done = 0
+        for period in pending:
+            await sync_one(period)
+            done += 1
+            if update_state_fn and done % 10 == 0:
+                pct = int((len(completed) + done) / total_quarters * 100)
+                try:
+                    update_state_fn(state='PROGRESS', meta={'progress': pct, 'current': done, 'total': len(pending)})
+                except Exception:
+                    pass
+
+        # 完成后删除进度key
+        try:
+            redis_client.delete(PROGRESS_KEY)
+        except Exception:
+            pass
+
+        logger.info(f"全量同步业绩预告完成，共同步 {total_records} 条记录")
+        return {'status': 'success', 'records': total_records, 'quarters': total_quarters}
 
     def _get_provider(self):
         """获取Tushare数据提供者"""

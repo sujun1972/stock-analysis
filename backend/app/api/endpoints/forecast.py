@@ -12,7 +12,7 @@ from loguru import logger
 from app.models.api_response import ApiResponse
 from app.services.forecast_service import ForecastService
 from app.services import TaskHistoryHelper
-from app.core.dependencies import require_admin, get_current_user
+from app.core.dependencies import require_admin
 from app.models.user import User
 
 
@@ -26,7 +26,8 @@ async def get_forecast(
     ts_code: Optional[str] = Query(None, description="股票代码，如：600000.SH"),
     period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD"),
     type: Optional[str] = Query(None, description="预告类型，如：预增、预减、扭亏、首亏"),
-    limit: int = Query(30, ge=1, le=1000, description="返回记录数限制")
+    limit: int = Query(30, ge=1, le=1000, description="返回记录数限制"),
+    offset: int = Query(0, ge=0, description="分页偏移量")
 ):
     """
     查询业绩预告数据
@@ -38,6 +39,7 @@ async def get_forecast(
         period: 报告期（可选）
         type: 预告类型（可选）
         limit: 返回记录数限制
+        offset: 分页偏移量
 
     Returns:
         业绩预告数据列表
@@ -50,7 +52,8 @@ async def get_forecast(
             ts_code=ts_code,
             period=period,
             type_=type,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
 
@@ -189,4 +192,38 @@ async def sync_forecast_async(
 
     except Exception as e:
         logger.error(f"提交业绩预告同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history-async")
+async def sync_forecast_full_history_async(
+    start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
+    current_user: User = Depends(require_admin)
+):
+    """异步全量同步业绩预告历史数据（按季度 period 切片 + Redis 续继）"""
+    try:
+        from app.tasks.forecast_tasks import sync_forecast_full_history_task
+
+        celery_task = sync_forecast_full_history_task.apply_async(
+            kwargs={'start_date': start_date}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_forecast_full_history',
+            display_name='业绩预告全量同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date},
+            source='forecast_page'
+        )
+
+        return ApiResponse.success(
+            data=task_data,
+            message="业绩预告全量同步任务已提交，请在任务面板查看进度"
+        )
+
+    except Exception as e:
+        logger.error(f"提交业绩预告全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

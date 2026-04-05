@@ -2,13 +2,11 @@
 主营业务构成数据 API 端点
 """
 
-import asyncio
-import json
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
 
-from app.core.dependencies import require_admin, get_current_user
+from app.core.dependencies import require_admin
 from app.models.user import User
 from app.services.fina_mainbz_service import FinaMainbzService
 from app.models.api_response import ApiResponse
@@ -24,7 +22,8 @@ async def get_fina_mainbz(
     end_date: Optional[str] = Query(None, description="报告期结束日期，格式：YYYY-MM-DD"),
     period: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD（每个季度最后一天）"),
     type: Optional[str] = Query(None, description="类型：P按产品 D按地区 I按行业"),
-    limit: int = Query(30, description="限制返回数量，默认30")
+    limit: int = Query(30, description="限制返回数量，默认30"),
+    offset: int = Query(0, ge=0, description="偏移量")
 ):
     """
     查询主营业务构成数据
@@ -44,7 +43,8 @@ async def get_fina_mainbz(
             end_date=end_date_formatted,
             period=period_formatted,
             type=type,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
 
         return ApiResponse.success(data=result)
@@ -182,4 +182,41 @@ async def sync_fina_mainbz_async(
 
     except Exception as e:
         logger.error(f"提交主营业务构成同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history-async")
+async def sync_fina_mainbz_full_history_async(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量历史同步主营业务构成数据（按季度 period 切片，支持 Redis 续继）
+    """
+    try:
+        from app.tasks.fina_mainbz_tasks import sync_fina_mainbz_full_history_task
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        celery_task = sync_fina_mainbz_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_fina_mainbz_full_history',
+            display_name='主营业务构成（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='fina_mainbz_page'
+        )
+
+        logger.info(f"主营业务构成全量历史同步任务已提交: {celery_task.id}")
+
+        return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
+
+    except Exception as e:
+        logger.error(f"提交主营业务构成全量历史同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

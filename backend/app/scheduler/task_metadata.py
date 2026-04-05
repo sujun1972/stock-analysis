@@ -573,6 +573,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 2000,
         'default_params': {'ts_code': None, 'ann_date': None, 'start_date': None, 'end_date': None, 'period': None, 'type_': None}
     },
+    'tasks.sync_forecast_full_history': {
+        'task': 'tasks.sync_forecast_full_history',
+        'name': '业绩预告全量同步',
+        'description': '按季度 period 切片全量同步业绩预告历史数据，支持中断续继（2000积分/季度）',
+        'category': '财务数据',
+        'display_order': 479,
+        'points_consumption': 2000
+    },
 
     'tasks.sync_express': {
         'task': 'tasks.sync_express',
@@ -582,6 +590,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 479,
         'points_consumption': 2000,
         'default_params': {'ann_date': None, 'start_date': None, 'end_date': None, 'period': None, 'type_': None}
+    },
+    'tasks.sync_express_full_history': {
+        'task': 'tasks.sync_express_full_history',
+        'name': '业绩快报全量同步',
+        'description': '按季度 period 切片全量同步业绩快报历史数据，支持中断续继（2000积分/季度）',
+        'category': '财务数据',
+        'display_order': 480,
+        'points_consumption': 2000
     },
 
     'tasks.sync_share_float': {
@@ -757,12 +773,28 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 801,
         'points_consumption': 2000
     },
+    'tasks.sync_balancesheet_full_history': {
+        'task': 'tasks.sync_balancesheet_full_history',
+        'name': '资产负债表全量同步',
+        'description': '按季度 period 切片全量同步资产负债表历史数据，支持中断续继（2000积分/季度）',
+        'category': '财务数据',
+        'display_order': 802,
+        'points_consumption': 2000
+    },
     'tasks.sync_cashflow': {
         'task': 'tasks.sync_cashflow',
         'name': '现金流量表数据',
         'description': '同步上市公司现金流量表数据（经营、投资、筹资活动现金流，2000积分/次）',
         'category': '财务数据',
-        'display_order': 802,
+        'display_order': 803,
+        'points_consumption': 2000
+    },
+    'tasks.sync_cashflow_full_history': {
+        'task': 'tasks.sync_cashflow_full_history',
+        'name': '现金流量表全量同步',
+        'description': '按季度 period 切片全量同步现金流量表历史数据，支持中断续继（2000积分/季度）',
+        'category': '财务数据',
+        'display_order': 804,
         'points_consumption': 2000
     },
     'tasks.sync_dividend': {
@@ -773,12 +805,28 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 803,
         'points_consumption': 2000
     },
+    'tasks.sync_dividend_full_history': {
+        'task': 'tasks.sync_dividend_full_history',
+        'name': '分红送股全量同步',
+        'description': '按季度 end_date 切片全量同步分红送股历史数据，支持中断续继（2000积分/季度）',
+        'category': '财务数据',
+        'display_order': 803,
+        'points_consumption': 2000
+    },
     'tasks.sync_fina_indicator': {
         'task': 'tasks.sync_fina_indicator',
         'name': '财务指标数据',
         'description': '同步上市公司财务指标数据（150+财务指标，包括EPS、ROE、资产负债率等，2000积分/次，每次最多100条记录）',
         'category': '财务数据',
         'display_order': 805,
+        'points_consumption': 2000
+    },
+    'tasks.sync_fina_indicator_full_history': {
+        'task': 'tasks.sync_fina_indicator_full_history',
+        'name': '财务指标全量同步',
+        'description': '按季度 period 切片全量同步财务指标历史数据，支持中断续继（2000积分/季度）',
+        'category': '财务数据',
+        'display_order': 8051,
         'points_consumption': 2000
     },
     'tasks.sync_fina_audit': {
@@ -797,12 +845,28 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 807,
         'points_consumption': 2000
     },
+    'tasks.sync_fina_mainbz_full_history': {
+        'task': 'tasks.sync_fina_mainbz_full_history',
+        'name': '主营业务构成（全量历史）',
+        'description': '按季度period切片全量同步历史主营业务构成数据，支持Redis续继',
+        'category': '财务数据',
+        'display_order': 8071,
+        'points_consumption': 2000
+    },
     'tasks.sync_disclosure_date': {
         'task': 'tasks.sync_disclosure_date',
         'name': '财报披露计划',
         'description': '同步财报披露计划日期（预计披露日期、实际披露日期等，500积分起）',
         'category': '财务数据',
         'display_order': 808,
+        'points_consumption': 500
+    },
+    'tasks.sync_disclosure_date_full_history': {
+        'task': 'tasks.sync_disclosure_date_full_history',
+        'name': '财报披露计划（全量历史）',
+        'description': '按季度period切片全量同步历史财报披露计划数据，支持Redis续继',
+        'category': '财务数据',
+        'display_order': 8081,
         'points_consumption': 500
     },
 

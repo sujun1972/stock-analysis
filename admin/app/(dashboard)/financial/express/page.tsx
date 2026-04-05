@@ -13,7 +13,6 @@ import { expressApi, type ExpressData, type ExpressStatistics } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Building2 } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 
@@ -52,7 +51,7 @@ export default function ExpressPage() {
   const syncing = isTaskRunning('tasks.sync_express')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
@@ -62,7 +61,8 @@ export default function ExpressPage() {
         start_date: startDate ? toDateStr(startDate) : undefined,
         end_date: endDate ? toDateStr(endDate) : undefined,
         period: period ? toDateStr(period) : undefined,
-        limit: pageSize
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
       })
 
       if (response.code === 200 && response.data) {
@@ -77,7 +77,7 @@ export default function ExpressPage() {
     } finally {
       setLoading(false)
     }
-  }, [tsCode, startDate, endDate, period, pageSize])
+  }, [tsCode, startDate, endDate, period, page, pageSize])
 
   // 加载统计信息
   const loadStatistics = useCallback(async () => {
@@ -113,8 +113,8 @@ export default function ExpressPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'express',
-    syncFn: (params) => apiClient.post('/api/express/sync-async', null, { params }),
-    taskName: 'tasks.sync_express',
+    syncFn: (params) => expressApi.syncFullHistoryAsync(params),
+    taskName: 'tasks.sync_express_full_history',
     onSuccess: loadData,
   })
 
@@ -420,10 +420,14 @@ export default function ExpressPage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
+              onPageChange: (newPage) => {
+                setPage(newPage)
+                loadData(newPage, pageSize).catch(() => {})
+              },
               onPageSizeChange: (newSize) => {
                 setPageSize(newSize)
                 setPage(1)
+                loadData(1, newSize).catch(() => {})
               },
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}

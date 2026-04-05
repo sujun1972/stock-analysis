@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { cashflowApi } from '@/lib/api'
@@ -52,7 +51,7 @@ export default function CashflowPage() {
   const syncing = isTaskRunning('tasks.sync_cashflow')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
@@ -60,7 +59,8 @@ export default function CashflowPage() {
       const response = await cashflowApi.getCashflowData({
         ts_code: tsCode || undefined,
         period: period ? toDateStr(period) : undefined,
-        limit: pageSize
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
       })
 
       if (response.code === 200 && response.data) {
@@ -75,7 +75,7 @@ export default function CashflowPage() {
     } finally {
       setLoading(false)
     }
-  }, [tsCode, period, pageSize])
+  }, [tsCode, period, page, pageSize])
 
   // 加载统计信息
   const loadStatistics = useCallback(async () => {
@@ -108,8 +108,8 @@ export default function CashflowPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'cashflow',
-    syncFn: (params) => apiClient.post('/api/cashflow/sync-async', null, { params }),
-    taskName: 'tasks.sync_cashflow',
+    syncFn: (params) => cashflowApi.syncFullHistoryAsync(params),
+    taskName: 'tasks.sync_cashflow_full_history',
     onSuccess: loadData,
   })
 
@@ -391,10 +391,14 @@ export default function CashflowPage() {
             page,
             pageSize,
             total,
-            onPageChange: (newPage) => setPage(newPage),
+            onPageChange: (newPage) => {
+              setPage(newPage)
+              loadData(newPage, pageSize).catch(() => {})
+            },
             onPageSizeChange: (newPageSize) => {
               setPageSize(newPageSize)
               setPage(1)
+              loadData(1, newPageSize).catch(() => {})
             },
             pageSizeOptions: [10, 20, 30, 50, 100]
           }}

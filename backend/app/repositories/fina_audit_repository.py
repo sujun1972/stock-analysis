@@ -21,6 +21,28 @@ class FinaAuditRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ FinaAuditRepository initialized")
 
+    def get_total_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
+    ) -> int:
+        conditions = []
+        params = []
+        if start_date:
+            conditions.append("ann_date >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("ann_date <= %s")
+            params.append(end_date)
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+        result = self.execute_query(query, tuple(params) if params else None)
+        return int(result[0][0]) if result else 0
+
     def get_by_ts_code(
         self,
         ts_code: str,
@@ -75,7 +97,8 @@ class FinaAuditRepository(BaseRepository):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
     ) -> List[Dict]:
         """
         按日期范围查询财务审计意见数据
@@ -119,6 +142,9 @@ class FinaAuditRepository(BaseRepository):
 
         if limit:
             query += f" LIMIT {int(limit)}"
+
+        if offset:
+            query += f" OFFSET {int(offset)}"
 
         result = self.execute_query(query, tuple(params))
         return [self._row_to_dict(row) for row in result]

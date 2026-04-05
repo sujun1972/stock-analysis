@@ -15,7 +15,6 @@ import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Percent, PieChart, Activity } from 'lucide-react'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
 
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -50,7 +49,7 @@ export default function FinaIndicatorPage() {
   const syncing = isTaskRunning('tasks.sync_fina_indicator')
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
     try {
       setLoading(true)
       setError(null)
@@ -60,12 +59,14 @@ export default function FinaIndicatorPage() {
         start_date: startDate ? toDateStr(startDate) : undefined,
         end_date: endDate ? toDateStr(endDate) : undefined,
         period: period ? toDateStr(period) : undefined,
-        limit: pageSize
+        limit: currentPageSize,
+        offset: (currentPage - 1) * currentPageSize
       })
 
       if (response.code === 200 && response.data) {
         setData(response.data.items || [])
         setTotal(response.data.total || 0)
+        if (response.data.statistics) setStatistics(response.data.statistics)
       } else {
         throw new Error(response.message || '获取数据失败')
       }
@@ -75,24 +76,7 @@ export default function FinaIndicatorPage() {
     } finally {
       setLoading(false)
     }
-  }, [tsCode, startDate, endDate, period, pageSize])
-
-  // 加载统计信息
-  const loadStatistics = useCallback(async () => {
-    try {
-      const response = await financialDataApi.getFinaIndicatorStatistics({
-        ts_code: tsCode || undefined,
-        start_date: startDate ? toDateStr(startDate) : undefined,
-        end_date: endDate ? toDateStr(endDate) : undefined
-      })
-
-      if (response.code === 200 && response.data) {
-        setStatistics(response.data)
-      }
-    } catch {
-      // 统计信息加载失败不影响主要数据展示
-    }
-  }, [tsCode, startDate, endDate])
+  }, [tsCode, startDate, endDate, period, page, pageSize])
 
   const {
     handleFullSync,
@@ -105,16 +89,15 @@ export default function FinaIndicatorPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'fina_indicator',
-    syncFn: (params) => apiClient.post('/api/fina-indicator/sync-async', null, { params }),
-    taskName: 'tasks.sync_fina_indicator',
+    syncFn: (params) => financialDataApi.syncFinaIndicatorFullHistoryAsync(params),
+    taskName: 'tasks.sync_fina_indicator_full_history',
     onSuccess: loadData,
   })
 
   // 初始化加载
   useEffect(() => {
     loadData()
-    loadStatistics()
-  }, [loadData, loadStatistics])
+  }, [loadData])
 
   // 异步同步
   const handleSyncConfirm = async () => {
@@ -144,7 +127,6 @@ export default function FinaIndicatorPage() {
         const completionCallback = (task: any) => {
           if (task.status === 'success') {
             loadData().catch(() => {})
-            loadStatistics().catch(() => {})
             toast.success('数据同步完成', { description: '财务指标数据已更新' })
           } else if (task.status === 'failure') {
             toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
@@ -466,11 +448,8 @@ export default function FinaIndicatorPage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
-              onPageSizeChange: (newSize) => {
-                setPageSize(newSize)
-                setPage(1)
-              },
+              onPageChange: (newPage) => { setPage(newPage); loadData(newPage, pageSize).catch(() => {}) },
+              onPageSizeChange: (newSize) => { setPageSize(newSize); setPage(1); loadData(1, newSize).catch(() => {}) },
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
           />

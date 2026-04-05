@@ -6,7 +6,7 @@
 
 import asyncio
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 from loguru import logger
 import pandas as pd
 
@@ -14,9 +14,6 @@ from app.repositories.income_repository import IncomeRepository
 from core.src.providers import DataProviderFactory
 
 # 全量同步 Redis key / 并发数
-INCOME_FULL_HISTORY_PROGRESS_KEY = "sync:income:full_history:progress"
-INCOME_FULL_HISTORY_CONCURRENCY = 3
-
 
 class IncomeService:
     """利润表数据服务"""
@@ -278,37 +275,6 @@ class IncomeService:
             logger.error(f"同步利润表数据失败: {e}")
             raise
 
-    @staticmethod
-    def _generate_quarters(start_date: str) -> List[str]:
-        """
-        从 start_date（YYYYMMDD）起枚举所有季度报告期，直到当前季度。
-
-        财务报表按报告期（period）拉取：每个 period 对应全市场当季度所有公司，
-        约 5000~20000 条（含多种 report_type），Tushare 单次最多返回 500 条，
-        但按 period 拉取时接口会自动分批返回全部数据（income_vip 无分页限制）。
-
-        季度末日期固定为：03-31 / 06-30 / 09-30 / 12-31。
-
-        Returns:
-            List[str]: 季度 period 列表，格式 YYYYMMDD
-        """
-        start_year = int(start_date[:4])
-        quarter_ends = [331, 630, 930, 1231]
-        quarter_end_dates = [
-            (y, qe)
-            for y in range(start_year, datetime.now().year + 1)
-            for qe in quarter_ends
-        ]
-        today_int = int(datetime.now().strftime("%Y%m%d"))
-        start_int = int(start_date)
-
-        periods = []
-        for y, qe in quarter_end_dates:
-            period_str = f"{y}{qe:04d}"
-            if int(period_str) >= start_int and int(period_str) <= today_int:
-                periods.append(period_str)
-        return periods
-
     async def sync_full_history(
         self,
         redis_client,
@@ -316,95 +282,78 @@ class IncomeService:
         update_state_fn=None
     ) -> Dict:
         """
-        按季度报告期全量同步利润表历史数据（支持 Redis 续继）
+        逐只股票全量同步利润表历史数据（5 并发，Redis Set 续继）
 
-        按 period（季报/半年报/年报末日）逐季拉取全市场数据，每批 3 并发，
-        Redis Set 记录已完成 period，支持中断续继。
+        按 ts_code 逐只调用 income_vip，每只股票数据量极少，彻底避免 Tushare
+        单次返回上限导致的数据截断。Redis Set 记录已完成 ts_code，中断后自动续继。
 
         Args:
             redis_client: Redis 客户端，用于进度续继
-            start_date: 起始季度所在日期 YYYYMMDD，不传则使用 '20090101'
+            start_date: 起始日期 YYYYMMDD，不传则使用 '20090101'
             update_state_fn: Celery self.update_state 回调，用于上报进度
-
-        Returns:
-            同步结果统计
         """
+        from app.repositories.stock_basic_repository import StockBasicRepository
+
+        PROGRESS_KEY = "sync:income:full_history:progress"
+        CONCURRENCY = 5
+        BATCH_SIZE = 50
         effective_start = start_date or '20090101'
-        quarters = self._generate_quarters(effective_start)
-        total = len(quarters)
-        logger.info(f"[全量利润表] 共 {total} 个季度需要同步，起始={effective_start}")
+        today = datetime.now().strftime("%Y%m%d")
 
-        completed_set = redis_client.smembers(INCOME_FULL_HISTORY_PROGRESS_KEY)
+        all_ts_codes = StockBasicRepository().get_listed_ts_codes(status='L')
+        total = len(all_ts_codes)
+        logger.info(f"[全量利润表] 共 {total} 只上市股票，start_date={effective_start}")
+
+        completed_set = redis_client.smembers(PROGRESS_KEY)
         completed_set = {v.decode() if isinstance(v, bytes) else v for v in completed_set}
-        logger.info(f"[全量利润表] 已完成 {len(completed_set)} 个，剩余 {total - len(completed_set)} 个")
+        logger.info(f"[全量利润表] 已完成 {len(completed_set)} 只，剩余 {total - len(completed_set)} 只")
 
-        pending = [p for p in quarters if p not in completed_set]
-
-        provider = self._get_provider()
-        success_count = 0
+        pending = [c for c in all_ts_codes if c not in completed_set]
         skip_count = len(completed_set)
+        success_count = 0
         error_count = 0
-        total_records = 0
+        sem = asyncio.Semaphore(CONCURRENCY)
 
-        sem = asyncio.Semaphore(INCOME_FULL_HISTORY_CONCURRENCY)
-
-        async def sync_quarter(period: str):
+        async def sync_one(ts_code: str):
+            nonlocal success_count, error_count
             async with sem:
                 try:
-                    df = await asyncio.to_thread(
-                        provider.get_income,
-                        period=period
+                    result = await self.sync_income(
+                        ts_code=ts_code,
+                        start_date=effective_start,
+                        end_date=today,
+                        report_type='1'
                     )
-                    records = 0
-                    if df is not None and not df.empty:
-                        df = self._validate_and_clean_data(df)
-                        records = await asyncio.to_thread(self.income_repo.bulk_upsert, df)
-                    return period, True, records, None
+                    if result.get("status") == "error":
+                        error_count += 1
+                        return
+                    redis_client.sadd(PROGRESS_KEY, ts_code)
+                    success_count += 1
                 except Exception as e:
-                    return period, False, 0, str(e)
+                    logger.error(f"[全量利润表] ts_code={ts_code} 失败: {e}")
+                    error_count += 1
 
-        BATCH_SIZE = INCOME_FULL_HISTORY_CONCURRENCY * 2
         for batch_start in range(0, len(pending), BATCH_SIZE):
             batch = pending[batch_start:batch_start + BATCH_SIZE]
-            results = await asyncio.gather(*[sync_quarter(p) for p in batch])
-
-            for period, ok, records, err in results:
-                if ok:
-                    redis_client.sadd(INCOME_FULL_HISTORY_PROGRESS_KEY, period)
-                    success_count += 1
-                    total_records += records
-                else:
-                    error_count += 1
-                    logger.error(f"[全量利润表] period={period} 失败（下次续继）: {err}")
-
-            done = skip_count + success_count
+            await asyncio.gather(*[sync_one(c) for c in batch])
+            done = skip_count + success_count + error_count
             if update_state_fn:
-                update_state_fn(
-                    state='PROGRESS',
-                    meta={
-                        'current': done,
-                        'total': total,
-                        'percent': round(done / total * 100, 1),
-                        'records': total_records,
-                        'errors': error_count
-                    }
-                )
-            logger.info(f"[全量利润表] 进度: {done}/{total} ({round(done/total*100,1)}%) "
-                        f"入库={total_records} 失败={error_count}")
+                update_state_fn(state='PROGRESS', meta={
+                    'current': done, 'total': total,
+                    'percent': round(done / total * 100, 1),
+                    'success': success_count, 'errors': error_count
+                })
+            logger.info(f"[全量利润表] 进度: {done}/{total} ({round(done/total*100,1)}%) 成功={success_count} 失败={error_count}")
 
-        final_done = len(redis_client.smembers(INCOME_FULL_HISTORY_PROGRESS_KEY))
+        final_done = len(redis_client.smembers(PROGRESS_KEY))
         if final_done >= total:
-            redis_client.delete(INCOME_FULL_HISTORY_PROGRESS_KEY)
+            redis_client.delete(PROGRESS_KEY)
             logger.info("[全量利润表] ✅ 全量同步完成，进度已清除")
 
         return {
-            "status": "success",
-            "total": total,
-            "success": success_count,
-            "skipped": skip_count,
-            "errors": error_count,
-            "records": total_records,
-            "message": f"同步完成 {success_count} 个季度，入库 {total_records} 条，失败 {error_count} 个"
+            "status": "success", "total": total,
+            "success": success_count, "skipped": skip_count, "errors": error_count,
+            "message": f"同步完成 {success_count} 只，跳过 {skip_count} 只，失败 {error_count} 只"
         }
 
     def _get_provider(self):

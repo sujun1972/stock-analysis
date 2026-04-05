@@ -17,6 +17,7 @@ export interface ExpressParams {
   ts_code?: string     // 股票代码
   period?: string      // 报告期 YYYY-MM-DD
   limit?: number       // 返回记录数限制
+  offset?: number      // 分页偏移量
 }
 
 /**
@@ -114,6 +115,20 @@ export class ExpressApiClient extends BaseApiClient {
     status: string
   }>> {
     return this.post('/api/express/sync-async', {}, { params })
+  }
+
+  /**
+   * 全量同步历史数据
+   */
+  async syncFullHistoryAsync(params?: {
+    start_date?: string
+  }): Promise<ApiResponse<{
+    celery_task_id: string
+    task_name: string
+    display_name: string
+    status: string
+  }>> {
+    return this.post('/api/express/sync-full-history-async', {}, { params })
   }
 }
 

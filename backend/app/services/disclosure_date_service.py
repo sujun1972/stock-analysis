@@ -4,7 +4,8 @@
 负责财报披露计划数据的业务逻辑处理
 """
 
-from typing import Optional, Dict
+from datetime import datetime
+from typing import Optional, Dict, List
 import asyncio
 from loguru import logger
 
@@ -32,40 +33,44 @@ class DisclosureDateService:
         ts_code: Optional[str] = None,
         end_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         获取财报披露计划数据
 
         Args:
             ts_code: 股票代码
-            end_date: 截止日期（报告期），格式：YYYY-MM-DD
-            start_date: 开始日期（报告期），格式：YYYY-MM-DD
+            end_date: 截止日期（报告期），格式：YYYYMMDD
+            start_date: 开始日期（报告期），格式：YYYYMMDD
             limit: 限制返回记录数
+            offset: 偏移量
 
         Returns:
             包含数据列表和统计信息的字典
         """
         try:
-            # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
-            start_date_fmt = start_date.replace('-', '') if start_date else None
-            end_date_fmt = end_date.replace('-', '') if end_date else None
-
-            # 查询数据
-            if ts_code:
-                items = await asyncio.to_thread(
-                    self.disclosure_date_repo.get_by_ts_code,
-                    ts_code,
-                    limit
-                )
-            else:
-                items = await asyncio.to_thread(
+            total, items, statistics = await asyncio.gather(
+                asyncio.to_thread(
+                    self.disclosure_date_repo.get_total_count,
+                    start_date=start_date,
+                    end_date=end_date,
+                    ts_code=ts_code
+                ),
+                asyncio.to_thread(
                     self.disclosure_date_repo.get_by_date_range,
-                    start_date_fmt,
-                    end_date_fmt,
-                    None,
-                    limit
+                    start_date,
+                    end_date,
+                    ts_code,
+                    limit,
+                    offset
+                ),
+                asyncio.to_thread(
+                    self.disclosure_date_repo.get_statistics,
+                    start_date,
+                    end_date
                 )
+            )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD（用于前端显示）
             for item in items:
@@ -74,22 +79,92 @@ class DisclosureDateService:
                         date_str = str(item[field])
                         item[field] = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
 
-            # 获取统计信息
-            statistics = await asyncio.to_thread(
-                self.disclosure_date_repo.get_statistics,
-                start_date_fmt,
-                end_date_fmt
-            )
-
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:
             logger.error(f"获取财报披露计划数据失败: {e}")
             raise
+
+    @staticmethod
+    def _generate_quarters(start_date: str) -> List[str]:
+        """生成从 start_date 到今天的所有季度末日期列表（YYYYMMDD）"""
+        start_year = int(start_date[:4])
+        quarter_ends = [331, 630, 930, 1231]
+        today_int = int(datetime.now().strftime("%Y%m%d"))
+        start_int = int(start_date)
+        periods = []
+        for y in range(start_year, datetime.now().year + 1):
+            for qe in quarter_ends:
+                period_str = f"{y}{qe:04d}"
+                if start_int <= int(period_str) <= today_int:
+                    periods.append(period_str)
+        return periods
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        update_state_fn=None
+    ) -> Dict:
+        """
+        全量历史同步：按季度 period 切片，支持 Redis 续继
+
+        Args:
+            redis_client: Redis 客户端
+            start_date: 起始日期 YYYYMMDD，默认 20090101
+            update_state_fn: Celery 进度回调
+
+        Returns:
+            同步结果
+        """
+        PROGRESS_KEY = "sync:disclosure_date:full_history:progress"
+        start_date = start_date or "20090101"
+        all_periods = self._generate_quarters(start_date)
+
+        completed_raw = redis_client.smembers(PROGRESS_KEY) if redis_client else set()
+        completed = {p.decode() if isinstance(p, bytes) else p for p in (completed_raw or [])}
+        pending = [p for p in all_periods if p not in completed]
+
+        logger.info(f"全量同步财报披露计划: 共 {len(all_periods)} 个季度，待同步 {len(pending)} 个")
+
+        sem = asyncio.Semaphore(3)
+        total_records = 0
+        errors = []
+
+        async def sync_one(period: str):
+            nonlocal total_records
+            async with sem:
+                try:
+                    result = await self.sync_disclosure_date(end_date=period)
+                    records = result.get("records", 0)
+                    total_records += records
+                    if redis_client:
+                        redis_client.sadd(PROGRESS_KEY, period)
+                    logger.info(f"✓ period={period}: {records} 条")
+                except Exception as e:
+                    errors.append(f"period={period}: {e}")
+                    logger.error(f"同步 period={period} 失败: {e}")
+
+        tasks_list = [sync_one(p) for p in pending]
+        for i, coro in enumerate(asyncio.as_completed(tasks_list)):
+            await coro
+            if update_state_fn:
+                progress = int((len(completed) + i + 1) / max(len(all_periods), 1) * 100)
+                update_state_fn(state='PROGRESS', meta={'progress': progress})
+
+        if not errors and redis_client:
+            redis_client.delete(PROGRESS_KEY)
+
+        return {
+            "status": "success" if not errors else "partial",
+            "records": total_records,
+            "errors": errors,
+            "message": f"同步完成，共 {total_records} 条记录" + (f"，{len(errors)} 个季度失败" if errors else "")
+        }
 
     async def sync_disclosure_date(
         self,
