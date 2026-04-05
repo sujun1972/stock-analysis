@@ -19,12 +19,44 @@ class StkHolderNumberRepository(BaseRepository):
     def __init__(self, db=None):
         super().__init__(db)
 
+    def get_count(
+        self,
+        ts_code: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的记录总数
+
+        Args:
+            ts_code: 股票代码（可选）
+            start_date: 开始日期，格式：YYYYMMDD（可选）
+            end_date: 结束日期，格式：YYYYMMDD（可选）
+
+        Returns:
+            记录总数
+        """
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE 1=1"
+        params = []
+        if ts_code:
+            query += " AND ts_code = %s"
+            params.append(ts_code)
+        if start_date:
+            query += " AND ann_date >= %s"
+            params.append(start_date)
+        if end_date:
+            query += " AND ann_date <= %s"
+            params.append(end_date)
+        result = self.execute_query(query, tuple(params) if params else None)
+        return result[0][0] if result else 0
+
     def get_by_code_and_date_range(
         self,
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按股票代码和日期范围查询股东人数数据
@@ -68,6 +100,10 @@ class StkHolderNumberRepository(BaseRepository):
         if limit:
             query += " LIMIT %s"
             params.append(limit)
+
+        if offset:
+            query += " OFFSET %s"
+            params.append(offset)
 
         result = self.execute_query(query, tuple(params) if params else None)
 

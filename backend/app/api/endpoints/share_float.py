@@ -24,7 +24,8 @@ async def get_share_float(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     ann_date: Optional[str] = Query(None, description="公告日期，格式：YYYY-MM-DD"),
     float_date: Optional[str] = Query(None, description="解禁日期，格式：YYYY-MM-DD"),
-    limit: int = Query(100, description="返回记录数限制")
+    limit: int = Query(100, description="返回记录数限制"),
+    offset: int = Query(0, description="偏移量")
 ):
     """
     查询限售股解禁数据
@@ -54,7 +55,8 @@ async def get_share_float(
             ts_code=ts_code,
             ann_date=ann_date_formatted,
             float_date=float_date_formatted,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
 
         return ApiResponse.success(data=result)
@@ -121,6 +123,38 @@ async def get_latest(
 
     except Exception as e:
         logger.error(f"获取最新限售股解禁数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_share_float_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2005年开始"),
+    current_user: User = Depends(require_admin)
+):
+    """按年切片全量同步限售股解禁历史数据（支持中断续继）"""
+    try:
+        from app.tasks.share_float_tasks import sync_share_float_full_history_task
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        celery_task = sync_share_float_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_share_float_full_history',
+            display_name='限售股解禁（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='share_float_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+    except Exception as e:
+        logger.error(f"提交限售股解禁全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

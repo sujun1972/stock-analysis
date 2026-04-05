@@ -41,32 +41,17 @@ export default function BlockTradePage() {
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_block_trade')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'block_trade',
-    syncFn: (params) => apiClient.post('/api/block-trade/sync-async', null, { params }),
-    taskName: 'tasks.sync_block_trade',
-    onSuccess: loadData,
-  })
-
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (newPage?: number) => {
+    const currentPage = newPage ?? page
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode) params.ts_code = tsCode.trim()
@@ -81,7 +66,7 @@ export default function BlockTradePage() {
 
       if (dataResponse.code === 200) {
         setData(dataResponse.data?.items || [])
-        setTotal(dataResponse.data?.count || 0)
+        setTotal(dataResponse.data?.total || 0)
       }
 
       if (statsResponse.code === 200) {
@@ -93,7 +78,23 @@ export default function BlockTradePage() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, tsCode, pageSize])
+  }, [startDate, endDate, tsCode, pageSize, page])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'block_trade',
+    syncFn: (params) => apiClient.post('/api/block-trade/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_block_trade_full_history',
+    onSuccess: loadData,
+  })
 
   useEffect(() => {
     loadData()
@@ -154,6 +155,7 @@ export default function BlockTradePage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
 
@@ -237,13 +239,25 @@ export default function BlockTradePage() {
           <a href="https://tushare.pro/document/2?doc_id=161" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="大宗交易"
+            />
+          </div>
         }
       />
 
@@ -345,7 +359,7 @@ export default function BlockTradePage() {
               <label className="text-sm font-medium mb-2 block">结束日期</label>
               <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
-            <Button onClick={loadData} disabled={loading}>查询</Button>
+            <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading}>查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -364,7 +378,7 @@ export default function BlockTradePage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
+              onPageChange: (newPage: number) => { setPage(newPage); loadData(newPage) },
               onPageSizeChange: () => {},
               pageSizeOptions: [100]
             }}

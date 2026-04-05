@@ -39,33 +39,18 @@ export default function StkShockPage() {
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_stk_shock')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'stk_shock',
-    syncFn: (params) => apiClient.post('/api/stk-shock/sync-async', null, { params }),
-    taskName: 'tasks.sync_stk_shock',
-    onSuccess: loadData,
-  })
-
   // 构建本地时间日期字符串（避免 UTC 偏移）
   const toDateStr = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
   // 加载数据
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (newPage?: number) => {
+    const currentPage = newPage ?? page
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
       if (tradeDate) params.trade_date = toDateStr(tradeDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
 
@@ -94,7 +79,7 @@ export default function StkShockPage() {
     } finally {
       setLoading(false)
     }
-  }, [tradeDate, tsCode, pageSize])
+  }, [tradeDate, tsCode, pageSize, page])
 
   // 确认同步
   const handleSyncConfirm = async () => {
@@ -152,8 +137,25 @@ export default function StkShockPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'stk_shock',
+    syncFn: (params) => apiClient.post('/api/stk-shock/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_stk_shock_full_history',
+    onSuccess: loadData,
+  })
 
   useEffect(() => {
     loadData()
@@ -209,13 +211,25 @@ export default function StkShockPage() {
           <a href="https://tushare.pro/document/2?doc_id=451" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="个股异常波动"
+            />
+          </div>
         }
       />
 
@@ -311,7 +325,7 @@ export default function StkShockPage() {
               <label className="block text-sm font-medium mb-2">交易日期</label>
               <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="选择交易日期" />
             </div>
-            <Button onClick={loadData} disabled={loading} className="w-full sm:w-auto">查询</Button>
+            <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading} className="w-full sm:w-auto">查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -330,7 +344,7 @@ export default function StkShockPage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
+              onPageChange: (newPage: number) => { setPage(newPage); loadData(newPage) },
               onPageSizeChange: () => {},
               pageSizeOptions: [100]
             }}

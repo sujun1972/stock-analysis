@@ -36,11 +36,40 @@ class BlockTradeRepository(BaseRepository):
 
     # ==================== 查询操作 ====================
 
+    def get_count(
+        self,
+        trade_date: Optional[str] = None,
+        ts_code: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的记录总数
+
+        Args:
+            trade_date: 交易日期，格式：YYYYMMDD（可选）
+            ts_code: 股票代码（可选）
+
+        Returns:
+            记录总数
+        """
+        conditions = []
+        params = []
+        if trade_date:
+            conditions.append("trade_date = %s")
+            params.append(trade_date)
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+        result = self.execute_query(query, tuple(params) if params else None)
+        return result[0][0] if result else 0
+
     def get_by_date(
         self,
         trade_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按交易日期和股票代码查询大宗交易数据
@@ -82,6 +111,11 @@ class BlockTradeRepository(BaseRepository):
             """
 
             params.append(limit)
+
+            if offset:
+                query = query.rstrip() + "\n                OFFSET %s\n            "
+                params.append(offset)
+
             results = self.execute_query(query, tuple(params))
 
             return [
@@ -329,8 +363,8 @@ class BlockTradeRepository(BaseRepository):
                     to_python_type(row.get('price')),
                     to_python_type(row.get('vol')),
                     to_python_type(row.get('amount')),
-                    to_python_type(row.get('buyer')),
-                    to_python_type(row.get('seller'))
+                    to_python_type(row.get('buyer')) or '',
+                    to_python_type(row.get('seller')) or ''
                 ))
 
             # 执行批量插入

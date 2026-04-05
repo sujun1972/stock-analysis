@@ -58,32 +58,17 @@ export default function PledgeStatPage() {
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_pledge_stat')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'pledge_stat',
-    syncFn: (params) => apiClient.post('/api/pledge-stat/sync-async', null, { params }),
-    taskName: 'tasks.sync_pledge_stat',
-    onSuccess: loadData,
-  })
-
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (newPage?: number) => {
+    const currentPage = newPage ?? page
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
       if (tradeDate) params.trade_date = toDateStr(tradeDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
 
@@ -114,7 +99,7 @@ export default function PledgeStatPage() {
     } finally {
       setLoading(false)
     }
-  }, [tradeDate, tsCode, pageSize])
+  }, [tradeDate, tsCode, pageSize, page])
 
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
@@ -170,8 +155,25 @@ export default function PledgeStatPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'pledge_stat',
+    syncFn: (params) => apiClient.post('/api/pledge-stat/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_pledge_stat_full_history',
+    onSuccess: loadData,
+  })
 
   useEffect(() => {
     loadData()
@@ -257,13 +259,25 @@ export default function PledgeStatPage() {
           <a href="https://tushare.pro/document/2?doc_id=110" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="股权质押统计"
+            />
+          </div>
         }
       />
 
@@ -357,7 +371,7 @@ export default function PledgeStatPage() {
                 onChange={(e) => setTsCode(e.target.value)}
               />
             </div>
-            <Button onClick={loadData} disabled={loading}>查询</Button>
+            <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading}>查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -376,7 +390,7 @@ export default function PledgeStatPage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
+              onPageChange: (newPage: number) => { setPage(newPage); loadData(newPage) },
               onPageSizeChange: () => {},
               pageSizeOptions: [100]
             }}

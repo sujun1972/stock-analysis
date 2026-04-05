@@ -19,6 +19,51 @@ class StkHoldertradeRepository(BaseRepository):
     def __init__(self, db=None):
         super().__init__(db)
 
+    def get_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None,
+        holder_type: Optional[str] = None,
+        trade_type: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的记录总数
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+            holder_type: 股东类型（可选）
+            trade_type: 交易类型（可选）
+
+        Returns:
+            记录总数
+        """
+        try:
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE 1=1"
+            params = []
+            if start_date:
+                query += " AND ann_date >= %s"
+                params.append(start_date)
+            if end_date:
+                query += " AND ann_date <= %s"
+                params.append(end_date)
+            if ts_code:
+                query += " AND ts_code = %s"
+                params.append(ts_code)
+            if holder_type:
+                query += " AND holder_type = %s"
+                params.append(holder_type)
+            if trade_type:
+                query += " AND in_de = %s"
+                params.append(trade_type)
+            result = self.execute_query(query, tuple(params) if params else None)
+            return int(result[0][0]) if result else 0
+        except Exception as e:
+            logger.error(f"获取记录总数失败: {e}")
+            return 0
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
@@ -26,7 +71,8 @@ class StkHoldertradeRepository(BaseRepository):
         ts_code: Optional[str] = None,
         holder_type: Optional[str] = None,
         trade_type: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询股东增减持数据
@@ -95,6 +141,10 @@ class StkHoldertradeRepository(BaseRepository):
             if limit:
                 query += " LIMIT %s"
                 params.append(limit)
+
+            if offset:
+                query += " OFFSET %s"
+                params.append(offset)
 
             result = self.execute_query(query, tuple(params) if params else None)
 

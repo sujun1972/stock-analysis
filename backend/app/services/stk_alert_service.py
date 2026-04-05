@@ -5,8 +5,8 @@
 """
 
 import asyncio
-from datetime import datetime, date
-from typing import Optional, Dict, List
+from datetime import datetime
+from typing import Optional, Dict
 from loguru import logger
 
 from app.repositories.stk_alert_repository import StkAlertRepository
@@ -16,10 +16,35 @@ from core.src.providers import DataProviderFactory
 class StkAlertService:
     """交易所重点提示证券服务"""
 
+    FULL_HISTORY_LOCK_KEY = "sync:stk_alert:full_history:lock"
+
     def __init__(self):
         self.stk_alert_repo = StkAlertRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ StkAlertService initialized")
+
+    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, update_state_fn=None) -> Dict:
+        """全量同步交易所重点提示证券数据（单次请求，接口不支持日期范围参数）
+
+        stk_alert 接口不支持 start_date/end_date 过滤，不传日期直接返回全量最新数据。
+        """
+        logger.info("[全量stk_alert] 开始全量同步（接口不支持日期范围，单次拉取全量）")
+        try:
+            provider = self._get_provider()
+            df = await asyncio.to_thread(provider.get_stk_alert)
+            records = 0
+            if df is not None and not df.empty:
+                df = self._validate_and_clean_data(df)
+                records = await asyncio.to_thread(self.stk_alert_repo.bulk_upsert, df)
+            if update_state_fn:
+                update_state_fn(state='PROGRESS', meta={'current': 1, 'total': 1, 'percent': 100.0, 'records': records, 'errors': 0})
+            logger.info(f"[全量stk_alert] ✅ 同步完成，入库 {records} 条")
+            return {"status": "success", "total": 1, "success": 1, "skipped": 0, "errors": 0,
+                    "records": records, "message": f"同步完成，入库 {records} 条"}
+        except Exception as e:
+            logger.error(f"[全量stk_alert] 同步失败: {e}")
+            return {"status": "error", "total": 1, "success": 0, "skipped": 0, "errors": 1,
+                    "records": 0, "message": f"同步失败: {str(e)}"}
 
     async def sync_stk_alert(
         self,
@@ -95,7 +120,8 @@ class StkAlertService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         获取交易所重点提示证券数据
@@ -115,12 +141,21 @@ class StkAlertService:
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
             # 获取数据
-            items = await asyncio.to_thread(
-                self.stk_alert_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                limit=limit
+            items, total = await asyncio.gather(
+                asyncio.to_thread(
+                    self.stk_alert_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.stk_alert_repo.get_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD（用于前端显示）
@@ -132,7 +167,7 @@ class StkAlertService:
 
             return {
                 "items": items,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

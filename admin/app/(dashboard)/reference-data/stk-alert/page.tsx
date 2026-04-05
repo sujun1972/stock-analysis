@@ -39,32 +39,17 @@ export default function StkAlertPage() {
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_stk_alert')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'stk_alert',
-    syncFn: (params) => apiClient.post('/api/stk-alert/sync-async', null, { params }),
-    taskName: 'tasks.sync_stk_alert',
-    onSuccess: loadData,
-  })
-
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (newPage?: number) => {
+    const currentPage = newPage ?? page
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
       if (tradeDate) params.trade_date = toDateStr(tradeDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
 
@@ -93,7 +78,7 @@ export default function StkAlertPage() {
     } finally {
       setLoading(false)
     }
-  }, [tradeDate, tsCode, pageSize])
+  }, [tradeDate, tsCode, pageSize, page])
 
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
@@ -149,8 +134,25 @@ export default function StkAlertPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'stk_alert',
+    syncFn: (params) => apiClient.post('/api/stk-alert/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_stk_alert_full_history',
+    onSuccess: loadData,
+  })
 
   useEffect(() => {
     loadData()
@@ -195,13 +197,25 @@ export default function StkAlertPage() {
           <a href="https://tushare.pro/document/2?doc_id=453" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="交易所重点提示证券"
+            />
+          </div>
         }
       />
 
@@ -281,7 +295,7 @@ export default function StkAlertPage() {
                 onChange={(e) => setTsCode(e.target.value)}
               />
             </div>
-            <Button onClick={loadData} disabled={loading}>查询</Button>
+            <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading}>查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -300,7 +314,7 @@ export default function StkAlertPage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
+              onPageChange: (newPage: number) => { setPage(newPage); loadData(newPage) },
               onPageSizeChange: () => {},
               pageSizeOptions: [100]
             }}

@@ -6,6 +6,7 @@
 
 import asyncio
 from typing import Dict, Optional
+from datetime import datetime, date
 from loguru import logger
 import pandas as pd
 
@@ -16,9 +17,94 @@ from core.src.providers import DataProviderFactory
 class StkHoldertradeService:
     """股东增减持服务"""
 
+    FULL_HISTORY_START_DATE = "20090101"
+    FULL_HISTORY_PROGRESS_KEY = "sync:stk_holdertrade:full_history:progress"
+    FULL_HISTORY_LOCK_KEY = "sync:stk_holdertrade:full_history:lock"
+    FULL_HISTORY_CONCURRENCY = 5
+
     def __init__(self):
         self.repo = StkHoldertradeRepository()
         self.provider_factory = DataProviderFactory()
+
+    @staticmethod
+    def _generate_months(start_date: str, end_date: str) -> list:
+        """将日期范围切分为自然月片段，每片返回 (month_start, month_end)，均为 YYYYMMDD。"""
+        import calendar
+        start_d = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+        end_d = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+        segments = []
+        cur = date(start_d.year, start_d.month, 1)
+        while cur <= end_d:
+            ms = max(cur, start_d)
+            last_day = calendar.monthrange(cur.year, cur.month)[1]
+            me = min(date(cur.year, cur.month, last_day), end_d)
+            segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
+            if cur.month == 12:
+                cur = date(cur.year + 1, 1, 1)
+            else:
+                cur = date(cur.year, cur.month + 1, 1)
+        return segments
+
+    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, update_state_fn=None) -> Dict:
+        """按月切片全量同步股东增减持历史数据（支持 Redis 续继）
+
+        stk_holdertrade 单次上限3000条，按年切片会截断，改为按月切片。
+        """
+        effective_start = start_date or self.FULL_HISTORY_START_DATE
+        today = datetime.now().strftime("%Y%m%d")
+        segments = self._generate_months(effective_start, today)
+        total = len(segments)
+        logger.info(f"[全量stk_holdertrade] 共 {total} 个月段需要同步")
+
+        completed_set = redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY)
+        completed_set = {d.decode() if isinstance(d, bytes) else d for d in completed_set}
+        pending = [(ms, me) for ms, me in segments if ms not in completed_set]
+        skip_count = len(completed_set)
+        success_count = 0
+        error_count = 0
+        total_records = 0
+
+        provider = self._get_provider()
+        sem = asyncio.Semaphore(self.FULL_HISTORY_CONCURRENCY)
+
+        async def sync_month(ms: str, me: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(provider.get_stk_holdertrade, start_date=ms, end_date=me)
+                    records = 0
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.repo.bulk_upsert, df)
+                    return ms, me, True, records, None
+                except Exception as e:
+                    return ms, me, False, 0, str(e)
+
+        BATCH_SIZE = self.FULL_HISTORY_CONCURRENCY * 2
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_month(ms, me) for ms, me in batch])
+            for ms, me, ok, records, err in results:
+                if ok:
+                    redis_client.sadd(self.FULL_HISTORY_PROGRESS_KEY, ms)
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+                    logger.error(f"[全量stk_holdertrade] {ms}~{me} 失败（下次续继）: {err}")
+            done = skip_count + success_count
+            if update_state_fn:
+                update_state_fn(state='PROGRESS', meta={'current': done, 'total': total,
+                    'percent': round(done / total * 100, 1), 'records': total_records, 'errors': error_count})
+            logger.info(f"[全量stk_holdertrade] 进度: {done}/{total} ({round(done/total*100,1)}%) 入库={total_records} 失败={error_count}")
+
+        final_done = len(redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(self.FULL_HISTORY_PROGRESS_KEY)
+            logger.info("[全量stk_holdertrade] ✅ 全量同步完成，进度已清除")
+
+        return {"status": "success", "total": total, "success": success_count,
+                "skipped": skip_count, "errors": error_count, "records": total_records,
+                "message": f"同步完成 {success_count} 个月段，入库 {total_records} 条，失败 {error_count} 个"}
 
     def _get_provider(self):
         """获取Tushare数据提供者"""
@@ -161,7 +247,8 @@ class StkHoldertradeService:
         ts_code: Optional[str] = None,
         holder_type: Optional[str] = None,
         trade_type: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0
     ) -> Dict:
         """
         获取股东增减持数据
@@ -190,7 +277,8 @@ class StkHoldertradeService:
                 ts_code=ts_code,
                 holder_type=holder_type,
                 trade_type=trade_type,
-                limit=limit
+                limit=limit,
+                offset=offset
             )
 
             # 日期格式转换 YYYYMMDD -> YYYY-MM-DD
@@ -202,18 +290,28 @@ class StkHoldertradeService:
                 if item.get('close_date'):
                     item['close_date'] = self._format_date(item['close_date'])
 
-            # 查询统计信息
-            statistics = await asyncio.to_thread(
-                self.repo.get_statistics,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code
+            # 查询统计信息和总数
+            statistics, total = await asyncio.gather(
+                asyncio.to_thread(
+                    self.repo.get_statistics,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                ),
+                asyncio.to_thread(
+                    self.repo.get_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    holder_type=holder_type,
+                    trade_type=trade_type
+                )
             )
 
             return {
                 "items": items,
                 "statistics": statistics,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

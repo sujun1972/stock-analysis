@@ -21,13 +21,48 @@ class RepurchaseRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ RepurchaseRepository initialized")
 
+    def get_count(
+        self,
+        start_date: str = '19900101',
+        end_date: str = '29991231',
+        ts_code: Optional[str] = None,
+        proc: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的记录总数
+
+        Args:
+            start_date: 开始日期，格式：YYYYMMDD
+            end_date: 结束日期，格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+            proc: 回购进度（可选）
+
+        Returns:
+            记录总数
+        """
+        try:
+            query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE ann_date >= %s AND ann_date <= %s"
+            params = [start_date, end_date]
+            if ts_code:
+                query += " AND ts_code = %s"
+                params.append(ts_code)
+            if proc:
+                query += " AND proc = %s"
+                params.append(proc)
+            result = self.execute_query(query, tuple(params))
+            return result[0][0] if result else 0
+        except Exception as e:
+            logger.error(f"获取回购记录总数失败: {e}")
+            return 0
+
     def get_by_date_range(
         self,
         start_date: str = '19900101',
         end_date: str = '29991231',
         ts_code: Optional[str] = None,
         proc: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询回购数据
@@ -70,6 +105,10 @@ class RepurchaseRepository(BaseRepository):
             if limit:
                 query += " LIMIT %s"
                 params.append(limit)
+
+            if offset:
+                query += " OFFSET %s"
+                params.append(offset)
 
             result = self.execute_query(query, tuple(params))
 

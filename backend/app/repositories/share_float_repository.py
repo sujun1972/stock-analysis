@@ -20,6 +20,45 @@ class ShareFloatRepository(BaseRepository):
         super().__init__(db)
         logger.debug("✓ ShareFloatRepository initialized")
 
+    def get_count(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        ts_code: Optional[str] = None
+    ) -> int:
+        """
+        获取符合条件的记录总数
+
+        Args:
+            start_date: 开始日期（解禁日期），格式：YYYYMMDD
+            end_date: 结束日期（解禁日期），格式：YYYYMMDD
+            ts_code: 股票代码（可选）
+
+        Returns:
+            记录总数
+        """
+        conditions = []
+        params = []
+        if start_date:
+            conditions.append("float_date >= %s")
+            params.append(start_date)
+        else:
+            conditions.append("float_date >= %s")
+            params.append('19900101')
+        if end_date:
+            conditions.append("float_date <= %s")
+            params.append(end_date)
+        else:
+            conditions.append("float_date <= %s")
+            params.append('29991231')
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        where_clause = " AND ".join(conditions)
+        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+        result = self.execute_query(query, tuple(params))
+        return result[0][0] if result else 0
+
     def get_by_date_range(
         self,
         start_date: Optional[str] = None,
@@ -27,7 +66,8 @@ class ShareFloatRepository(BaseRepository):
         ts_code: Optional[str] = None,
         ann_date: Optional[str] = None,
         float_date: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[Dict]:
         """
         按日期范围查询限售股解禁数据
@@ -97,7 +137,12 @@ class ShareFloatRepository(BaseRepository):
             """
 
             if limit:
-                query += f" LIMIT {limit}"
+                query += " LIMIT %s"
+                params.append(limit)
+
+            if offset:
+                query += " OFFSET %s"
+                params.append(offset)
 
             result = self.execute_query(query, tuple(params))
 

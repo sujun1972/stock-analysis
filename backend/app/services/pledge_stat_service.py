@@ -16,10 +16,78 @@ from core.src.providers import DataProviderFactory
 class PledgeStatService:
     """股权质押统计服务"""
 
+    FULL_HISTORY_PROGRESS_KEY = "sync:pledge_stat:full_history:progress"
+    FULL_HISTORY_LOCK_KEY = "sync:pledge_stat:full_history:lock"
+    FULL_HISTORY_CONCURRENCY = 5
+
     def __init__(self):
         self.pledge_stat_repo = PledgeStatRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ PledgeStatService initialized")
+
+    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, update_state_fn=None) -> Dict:
+        """逐只股票全量同步股权质押统计历史数据（支持 Redis 续继）
+
+        pledge_stat 接口只支持 ts_code + end_date，无法按日期范围拉全市场，
+        需逐只股票请求（不传 end_date 则返回该股全量历史记录）。
+        """
+        from app.repositories.stock_basic_repository import StockBasicRepository
+
+        all_ts_codes = await asyncio.to_thread(
+            StockBasicRepository().get_listed_ts_codes, status='L'
+        )
+        total = len(all_ts_codes)
+        logger.info(f"[全量pledge_stat] 共 {total} 只股票需要同步")
+
+        completed_set = redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY)
+        completed_set = {d.decode() if isinstance(d, bytes) else d for d in completed_set}
+        pending = [c for c in all_ts_codes if c not in completed_set]
+        skip_count = len(completed_set)
+        success_count = 0
+        error_count = 0
+        total_records = 0
+
+        provider = self._get_provider()
+        sem = asyncio.Semaphore(self.FULL_HISTORY_CONCURRENCY)
+
+        async def sync_one(ts_code: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(provider.get_pledge_stat, ts_code=ts_code)
+                    records = 0
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.pledge_stat_repo.bulk_upsert, df)
+                    return ts_code, True, records, None
+                except Exception as e:
+                    return ts_code, False, 0, str(e)
+
+        BATCH_SIZE = 50
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_one(c) for c in batch])
+            for ts_code, ok, records, err in results:
+                if ok:
+                    redis_client.sadd(self.FULL_HISTORY_PROGRESS_KEY, ts_code)
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+                    logger.error(f"[全量pledge_stat] {ts_code} 失败（下次续继）: {err}")
+            done = skip_count + success_count
+            if update_state_fn:
+                update_state_fn(state='PROGRESS', meta={'current': done, 'total': total,
+                    'percent': round(done / total * 100, 1), 'records': total_records, 'errors': error_count})
+            logger.info(f"[全量pledge_stat] 进度: {done}/{total} ({round(done/total*100,1)}%) 入库={total_records} 失败={error_count}")
+
+        final_done = len(redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(self.FULL_HISTORY_PROGRESS_KEY)
+            logger.info("[全量pledge_stat] ✅ 全量同步完成，进度已清除")
+
+        return {"status": "success", "total": total, "success": success_count,
+                "skipped": skip_count, "errors": error_count, "records": total_records,
+                "message": f"同步完成 {success_count} 只股票，入库 {total_records} 条，失败 {error_count} 只"}
 
     async def sync_pledge_stat(
         self,
@@ -100,7 +168,8 @@ class PledgeStatService:
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         min_pledge_ratio: Optional[float] = None,
-        limit: int = 30
+        limit: int = 30,
+        offset: int = 0
     ) -> Dict:
         """
         获取股权质押统计数据
@@ -121,13 +190,22 @@ class PledgeStatService:
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
             # 获取数据
-            items = await asyncio.to_thread(
-                self.pledge_stat_repo.get_by_date_range,
-                start_date=start_date_fmt,
-                end_date=end_date_fmt,
-                ts_code=ts_code,
-                min_pledge_ratio=min_pledge_ratio,
-                limit=limit
+            items, total = await asyncio.gather(
+                asyncio.to_thread(
+                    self.pledge_stat_repo.get_by_date_range,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code,
+                    min_pledge_ratio=min_pledge_ratio,
+                    limit=limit,
+                    offset=offset
+                ),
+                asyncio.to_thread(
+                    self.pledge_stat_repo.get_count,
+                    start_date=start_date_fmt,
+                    end_date=end_date_fmt,
+                    ts_code=ts_code
+                )
             )
 
             # 日期格式转换：YYYYMMDD -> YYYY-MM-DD（用于前端显示）
@@ -137,7 +215,7 @@ class PledgeStatService:
 
             return {
                 "items": items,
-                "total": len(items)
+                "total": total
             }
 
         except Exception as e:

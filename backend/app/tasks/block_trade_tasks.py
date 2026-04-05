@@ -4,12 +4,15 @@
 使用 run_async_in_celery 处理 Celery fork pool 中的事件循环冲突问题
 """
 
+import asyncio
 from typing import Optional
 from loguru import logger
 
 from app.celery_app import celery_app
 from app.services.block_trade_service import BlockTradeService
 from app.tasks.extended_sync_tasks import run_async_in_celery
+from app.core.redis_lock import redis_lock
+from app.tasks.sync_tasks import _DummyContext
 
 
 @celery_app.task(bind=True, name="tasks.sync_block_trade")
@@ -57,3 +60,44 @@ def sync_block_trade_task(
         import traceback
         logger.error(traceback.format_exc())
         raise
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.sync_block_trade_full_history",
+    max_retries=0,
+    soft_time_limit=7200,
+    time_limit=10800
+)
+def sync_block_trade_full_history_task(self, start_date: str = None):
+    """按月切片全量同步大宗交易历史数据（支持 Redis 续继）
+
+    block_trade 单次上限1000条，按月切片避免截断，5并发。
+    """
+    from app.core.redis_lock import redis_client
+
+    logger.info("========== [Celery] 开始全量历史大宗交易同步任务 ==========")
+
+    if redis_client is None:
+        return {"status": "error", "message": "Redis 不可用"}
+
+    with redis_lock.acquire(BlockTradeService.FULL_HISTORY_LOCK_KEY, timeout=7200, blocking=False) if redis_lock else _DummyContext() as acquired:
+        if not acquired and redis_lock:
+            return {"status": "locked", "message": "已有全量同步任务正在进行"}
+
+        service = BlockTradeService()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                service.sync_full_history(
+                    redis_client=redis_client,
+                    start_date=start_date,
+                    update_state_fn=self.update_state
+                )
+            )
+        finally:
+            loop.close()
+
+    logger.info(f"========== [Celery] 全量历史大宗交易同步结束: {result} ==========")
+    return result

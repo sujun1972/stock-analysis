@@ -24,7 +24,8 @@ async def get_stk_holdertrade(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     holder_type: Optional[str] = Query(None, description="股东类型：G=高管 P=个人 C=公司"),
     trade_type: Optional[str] = Query(None, description="交易类型：IN=增持 DE=减持"),
-    limit: int = Query(100, description="返回记录数")
+    limit: int = Query(100, description="返回记录数"),
+    offset: int = Query(0, description="偏移量")
 ):
     """
     查询股东增减持数据
@@ -36,6 +37,7 @@ async def get_stk_holdertrade(
         holder_type: 股东类型：G=高管 P=个人 C=公司
         trade_type: 交易类型：IN=增持 DE=减持
         limit: 返回记录数
+        offset: 偏移量
 
     Returns:
         股东增减持数据列表和统计信息
@@ -48,7 +50,8 @@ async def get_stk_holdertrade(
             ts_code=ts_code,
             holder_type=holder_type,
             trade_type=trade_type,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
 
         return ApiResponse.success(data=result)
@@ -106,6 +109,38 @@ async def get_latest():
 
     except Exception as e:
         logger.error(f"获取最新数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_stk_holdertrade_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2009年开始"),
+    current_user: User = Depends(require_admin)
+):
+    """按年切片全量同步股东增减持历史数据（支持中断续继）"""
+    try:
+        from app.tasks.stk_holdertrade_tasks import sync_stk_holdertrade_full_history_task
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        celery_task = sync_stk_holdertrade_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_stk_holdertrade_full_history',
+            display_name='股东增减持（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='stk_holdertrade_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+    except Exception as e:
+        logger.error(f"提交股东增减持全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

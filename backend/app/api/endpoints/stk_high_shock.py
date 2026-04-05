@@ -23,7 +23,8 @@ async def get_stk_high_shock(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     trade_market: Optional[str] = Query(None, description="交易所"),
-    limit: int = Query(30, description="返回记录数限制")
+    limit: int = Query(30, description="返回记录数限制"),
+    offset: int = Query(0, description="偏移量")
 ):
     """
     获取个股严重异常波动数据
@@ -45,7 +46,8 @@ async def get_stk_high_shock(
             end_date=end_date,
             ts_code=ts_code,
             trade_market=trade_market,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
 
@@ -102,6 +104,38 @@ async def get_latest(
 
     except Exception as e:
         logger.error(f"获取最新数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_stk_high_shock_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2009年开始"),
+    current_user: User = Depends(require_admin)
+):
+    """按年切片全量同步个股严重异常波动历史数据（支持中断续继）"""
+    try:
+        from app.tasks.stk_high_shock_tasks import sync_stk_high_shock_full_history_task
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        celery_task = sync_stk_high_shock_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_stk_high_shock_full_history',
+            display_name='个股严重异常波动（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='stk_high_shock_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+    except Exception as e:
+        logger.error(f"提交个股严重异常波动全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -44,32 +44,17 @@ export default function ShareFloatPage() {
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_share_float')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'share_float',
-    syncFn: (params) => apiClient.post('/api/share-float/sync-async', null, { params }),
-    taskName: 'tasks.sync_share_float',
-    onSuccess: loadData,
-  })
-
   // 构建本地时间日期字符串
   const toDateStr = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (newPage?: number) => {
+    const currentPage = newPage ?? page
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = { limit: pageSize }
+      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
@@ -99,7 +84,23 @@ export default function ShareFloatPage() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, tsCode, pageSize])
+  }, [startDate, endDate, tsCode, pageSize, page])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'share_float',
+    syncFn: (params) => apiClient.post('/api/share-float/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_share_float_full_history',
+    onSuccess: loadData,
+  })
 
   useEffect(() => {
     loadData()
@@ -160,6 +161,7 @@ export default function ShareFloatPage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
 
@@ -224,13 +226,25 @@ export default function ShareFloatPage() {
           <a href="https://tushare.pro/document/2?doc_id=160" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="限售股解禁"
+            />
+          </div>
         }
       />
 
@@ -332,7 +346,7 @@ export default function ShareFloatPage() {
               <label className="text-sm font-medium mb-2 block">解禁结束日期</label>
               <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
-            <Button onClick={loadData} disabled={loading}>查询</Button>
+            <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading}>查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -351,7 +365,7 @@ export default function ShareFloatPage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
+              onPageChange: (newPage: number) => { setPage(newPage); loadData(newPage) },
               onPageSizeChange: () => {},
               pageSizeOptions: [100]
             }}

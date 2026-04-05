@@ -44,6 +44,40 @@ export default function StkHoldertradePage() {
   // 从 task store 实时派生 syncing 状态
   const syncing = isTaskRunning('tasks.sync_stk_holdertrade')
 
+  // 构建本地时间日期字符串
+  const toDateStr = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+  const loadData = useCallback(async (newPage?: number) => {
+    const currentPage = newPage ?? page
+    try {
+      setLoading(true)
+      setError(null)
+
+      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
+      if (tsCode) params.ts_code = tsCode
+      if (holderType && holderType !== 'ALL') params.holder_type = holderType
+      if (tradeType && tradeType !== 'ALL') params.trade_type = tradeType
+
+      const response = await stkHoldertradeApi.getStkHoldertrade(params)
+
+      if (response.code === 200 && response.data) {
+        setData(response.data.items || [])
+        setTotal(response.data.total || 0)
+        setStatistics(response.data.statistics || null)
+      } else {
+        throw new Error(response.message || '获取数据失败')
+      }
+    } catch (err: any) {
+      setError(err.message || '加载数据失败')
+      toast.error('加载失败', { description: err.message || '无法加载股东增减持数据' })
+    } finally {
+      setLoading(false)
+    }
+  }, [startDate, endDate, tsCode, holderType, tradeType, pageSize, page])
+
   const {
     handleFullSync,
     handleClear,
@@ -55,43 +89,10 @@ export default function StkHoldertradePage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'stk_holdertrade',
-    syncFn: (params) => apiClient.post('/api/stk-holdertrade/sync-async', null, { params }),
-    taskName: 'tasks.sync_stk_holdertrade',
+    syncFn: (params) => apiClient.post('/api/stk-holdertrade/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_stk_holdertrade_full_history',
     onSuccess: loadData,
   })
-
-  // 构建本地时间日期字符串
-  const toDateStr = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const params: any = { limit: pageSize }
-      if (startDate) params.start_date = toDateStr(startDate)
-      if (endDate) params.end_date = toDateStr(endDate)
-      if (tsCode) params.ts_code = tsCode
-      if (holderType && holderType !== 'ALL') params.holder_type = holderType
-      if (tradeType && tradeType !== 'ALL') params.trade_type = tradeType
-
-      const response = await stkHoldertradeApi.getStkHoldertrade(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setTotal(response.data.items?.length || 0)
-        setStatistics(response.data.statistics || null)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载失败', { description: err.message || '无法加载股东增减持数据' })
-    } finally {
-      setLoading(false)
-    }
-  }, [startDate, endDate, tsCode, holderType, tradeType, pageSize])
 
   useEffect(() => {
     loadData()
@@ -152,6 +153,7 @@ export default function StkHoldertradePage() {
         unregisterCompletionCallback(taskId, callback)
       })
       callbacks.clear()
+      cleanup()
     }
   }, [])
 
@@ -233,13 +235,25 @@ export default function StkHoldertradePage() {
           <a href="https://tushare.pro/document/2?doc_id=175" target="_blank" rel="noopener noreferrer">查看文档</a>
         </>}
         actions={
-          <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-            {syncing ? (
-              <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+              {syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
+              )}
+            </Button>
+            <BulkOpsButtons
+              onFullSync={handleFullSync}
+              onClearConfirm={handleClear}
+              isClearDialogOpen={isClearDialogOpen}
+              setIsClearDialogOpen={setIsClearDialogOpen}
+              fullSyncing={fullSyncing}
+              isClearing={isClearing}
+              earliestHistoryDate={earliestHistoryDate}
+              tableName="股东增减持"
+            />
+          </div>
         }
       />
 
@@ -377,7 +391,7 @@ export default function StkHoldertradePage() {
               </Select>
             </div>
           </div>
-          <Button onClick={loadData} disabled={loading}>查询</Button>
+          <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading}>查询</Button>
         </CardContent>
       </Card>
 
@@ -395,7 +409,7 @@ export default function StkHoldertradePage() {
               page,
               pageSize,
               total,
-              onPageChange: setPage,
+              onPageChange: (newPage: number) => { setPage(newPage); loadData(newPage) },
               onPageSizeChange: () => {},
               pageSizeOptions: [100]
             }}

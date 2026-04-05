@@ -20,7 +20,8 @@ async def get_stk_holdernumber(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    limit: int = Query(30, description="返回记录数限制")
+    limit: int = Query(30, description="返回记录数限制"),
+    offset: int = Query(0, description="偏移量")
 ):
     """
     获取股东人数数据
@@ -30,6 +31,7 @@ async def get_stk_holdernumber(
         start_date: 开始日期，格式：YYYY-MM-DD（可选）
         end_date: 结束日期，格式：YYYY-MM-DD（可选）
         limit: 返回记录数限制
+        offset: 偏移量
 
     Returns:
         股东人数数据列表
@@ -40,7 +42,8 @@ async def get_stk_holdernumber(
             ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
     except Exception as e:
@@ -102,6 +105,38 @@ async def get_latest(
         return ApiResponse.success(data=result)
     except Exception as e:
         logger.error(f"获取最新数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_stk_holdernumber_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2009年开始"),
+    current_user: User = Depends(require_admin)
+):
+    """按年切片全量同步股东人数历史数据（支持中断续继）"""
+    try:
+        from app.tasks.stk_holdernumber_tasks import sync_stk_holdernumber_full_history_task
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        celery_task = sync_stk_holdernumber_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_stk_holdernumber_full_history',
+            display_name='股东人数（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='stk_holdernumber_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+    except Exception as e:
+        logger.error(f"提交股东人数全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

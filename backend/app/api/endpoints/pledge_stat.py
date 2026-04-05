@@ -23,7 +23,8 @@ async def get_pledge_stat(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
     min_pledge_ratio: Optional[float] = Query(None, description="最小质押比例"),
-    limit: int = Query(30, description="返回记录数限制")
+    limit: int = Query(30, description="返回记录数限制"),
+    offset: int = Query(0, description="偏移量")
 ):
     """
     获取股权质押统计数据
@@ -45,7 +46,8 @@ async def get_pledge_stat(
             end_date=end_date,
             ts_code=ts_code,
             min_pledge_ratio=min_pledge_ratio,
-            limit=limit
+            limit=limit,
+            offset=offset
         )
         return ApiResponse.success(data=result)
 
@@ -135,6 +137,36 @@ async def get_high_pledge_stocks(
 
     except Exception as e:
         logger.error(f"获取高质押比例股票失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_pledge_stat_full_history(
+    current_user: User = Depends(require_admin)
+):
+    """逐只股票全量同步股权质押统计历史数据（支持中断续继）
+
+    pledge_stat 接口只支持 ts_code + end_date，采用逐只股票请求方式，约5500只，5并发。
+    """
+    try:
+        from app.tasks.pledge_stat_tasks import sync_pledge_stat_full_history_task
+
+        celery_task = sync_pledge_stat_full_history_task.apply_async(kwargs={})
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_pledge_stat_full_history',
+            display_name='股权质押统计（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={},
+            source='pledge_stat_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+    except Exception as e:
+        logger.error(f"提交股权质押统计全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -416,15 +416,15 @@ const handleSyncConfirm = async () => {
 | 连板天梯 | `/boardgame/limit-step` | |
 | 最强板块统计 | `/boardgame/limit-cpt` | |
 | 卖方盈利预测 | `/features/report-rc` | |
-| 个股异常波动 | `/reference-data/stk-shock` | |
-| 个股严重异常波动 | `/reference-data/stk-high-shock` | |
-| 交易所重点提示证券 | `/reference-data/stk-alert` | |
-| 股权质押统计 | `/reference-data/pledge-stat` | |
-| 股票回购 | `/reference-data/repurchase` | syncStartDate/syncEndDate 独立 |
-| 限售股解禁 | `/reference-data/share-float` | |
-| 股东人数 | `/reference-data/stk-holdernumber` | |
-| 大宗交易 | `/reference-data/block-trade` | |
-| 股东增减持 | `/reference-data/stk-holdertrade` | syncStartDate/syncEndDate 独立 |
+| 个股异常波动 | `/reference-data/stk-shock` | 快照接口，全量同步单次请求不传日期 |
+| 个股严重异常波动 | `/reference-data/stk-high-shock` | 快照接口，全量同步单次请求不传日期 |
+| 交易所重点提示证券 | `/reference-data/stk-alert` | 快照接口，全量同步单次请求不传日期 |
+| 股权质押统计 | `/reference-data/pledge-stat` | 全量同步逐只股票请求（5并发，Redis续继） |
+| 股票回购 | `/reference-data/repurchase` | syncStartDate/syncEndDate 独立；全量同步按月切片（5并发，Redis续继） |
+| 限售股解禁 | `/reference-data/share-float` | 全量同步按月切片（5并发，Redis续继），年数据量约6000接近上限 |
+| 股东人数 | `/reference-data/stk-holdernumber` | 全量同步按月切片（5并发，Redis续继），年数据量约5500接近上限 |
+| 大宗交易 | `/reference-data/block-trade` | 全量同步按月切片（5并发，Redis续继），单次上限1000条；buyer/seller NOT NULL需替换空串 |
+| 股东增减持 | `/reference-data/stk-holdertrade` | syncStartDate/syncEndDate 独立；全量同步按月切片（5并发，Redis续继） |
 | 利润表 | `/financial/income` | 同步接口需 YYYYMMDD 格式，查询需 YYYY-MM-DD；全量同步逐只股票请求（5并发，Redis续继） |
 | 资产负债表 | `/financial/balancesheet` | 同上 |
 | 现金流量表 | `/financial/cashflow` | period 用 DatePicker；全量同步逐只股票请求（5并发，Redis续继） |
@@ -435,6 +435,52 @@ const handleSyncConfirm = async () => {
 | 财务审计意见 | `/financial/fina-audit` | ts_code 为同步必填项 |
 | 主营业务构成 | `/financial/fina-mainbz` | 含 type 选项 |
 | 财报披露计划 | `/financial/disclosure-date` | |
+
+#### 全量同步策略分类：实现前必须确认接口能力
+
+Tushare 接口分三类，全量同步策略不同，**实现前必须用实际请求验证**：
+
+| 类型 | 特征 | 策略 | 代表接口 |
+|------|------|------|---------|
+| **快照接口** | 不支持日期范围；传日期参数返回 0 条；不传则返回全量当前数据 | 单次请求，不传日期 | `stk_shock`、`stk_high_shock`、`stk_alert` |
+| **日期范围接口** | 支持 `start_date`/`end_date`，但单次有上限（300~6000条） | 按月切片，5并发，Redis Set续继（月起始日期为 key） | `block_trade`（1000/次）、`stk_holdertrade`（~3000/年）、`repurchase`（~1000/年）、`share_float`（~6000/年）、`stk_holdernumber`（~5500/年） |
+| **仅支持 ts_code** | 无法按日期拉全市场；必须逐只股票请求 | 逐只请求，5并发，Redis Set续继（ts_code 为 key） | `pledge_stat`、财务报表系列 |
+
+**验证步骤**（对不熟悉的接口）：
+1. 不传任何日期，查看返回条数是否为全量
+2. 传 `start_date`/`end_date`，查看是否有数据返回（快照接口会返回 0）
+3. 传单年日期范围，查看是否逼近上限（接近则需切小片）
+
+**月切片实现模板**（`_generate_months` 统一方法）：
+```python
+@staticmethod
+def _generate_months(start_date: str, end_date: str) -> list:
+    """将日期范围切分为自然月片段，每片返回 (month_start, month_end)，均为 YYYYMMDD。"""
+    import calendar
+    start_d = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+    end_d = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+    segments = []
+    cur = date(start_d.year, start_d.month, 1)
+    while cur <= end_d:
+        ms = max(cur, start_d)
+        last_day = calendar.monthrange(cur.year, cur.month)[1]
+        me = min(date(cur.year, cur.month, last_day), end_d)
+        segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
+        if cur.month == 12:
+            cur = date(cur.year + 1, 1, 1)
+        else:
+            cur = date(cur.year, cur.month + 1, 1)
+    return segments
+```
+Redis Set 以月起始日期（`ms`）为 key 记录已完成片段，支持中断续继。
+
+**快照接口标志性错误**：对快照接口传日期参数后日志显示 `0 条`，但去掉日期后正常返回数千条——这是判断快照接口的关键特征。
+
+**block_trade 特殊约束**：`buyer`/`seller` 字段是复合主键的一部分（NOT NULL），Tushare 偶尔返回 null，写库时必须替换为空字符串：
+```python
+to_python_type(row.get('buyer')) or '',
+to_python_type(row.get('seller')) or ''
+```
 
 #### 财务报表全量同步：逐只股票请求
 
