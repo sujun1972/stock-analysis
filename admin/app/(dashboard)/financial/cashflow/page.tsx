@@ -371,7 +371,7 @@ export default function CashflowPage() {
               <DatePicker date={period} onDateChange={setPeriod} placeholder="选择报告期" />
             </div>
             <div className="flex items-end">
-              <Button onClick={loadData} disabled={loading} className="w-full">
+              <Button onClick={() => loadData()} disabled={loading} className="w-full">
                 {loading ? '查询中...' : '查询'}
               </Button>
             </div>

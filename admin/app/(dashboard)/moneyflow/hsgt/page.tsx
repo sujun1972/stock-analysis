@@ -101,22 +101,6 @@ export default function MoneyflowHsgtPage() {
   // 从 task store 实时派生——不用本地 useState
   const syncing = isTaskRunning('tasks.sync_moneyflow_hsgt')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'moneyflow_hsgt',
-    syncFn: (params) => apiClient.post('/api/moneyflow-hsgt/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow_hsgt',
-    onSuccess: loadData,
-  })
-
   const loadData = useCallback(async (targetPage: number = 1) => {
     setIsLoading(true)
     try {
@@ -143,6 +127,22 @@ export default function MoneyflowHsgtPage() {
       setIsLoading(false)
     }
   }, [startDate, endDate])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'moneyflow_hsgt',
+    syncFn: (params) => apiClient.post('/api/moneyflow-hsgt/sync-async', null, { params }),
+    taskName: 'tasks.sync_moneyflow_hsgt',
+    onSuccess: loadData,
+  })
 
   // 仅在 mount 时加载，后续由用户点击查询按钮触发
   // eslint-disable-next-line react-hooks/exhaustive-deps

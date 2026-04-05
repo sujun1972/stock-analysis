@@ -359,7 +359,7 @@ export default function DisclosureDatePage() {
               <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
             </div>
             <div className="flex gap-2">
-              <Button onClick={loadData} disabled={loading}>
+              <Button onClick={() => loadData()} disabled={loading}>
                 查询
               </Button>
             </div>

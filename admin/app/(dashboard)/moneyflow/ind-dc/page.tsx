@@ -91,22 +91,6 @@ export default function MoneyflowIndDcPage() {
   // 从 task store 实时派生——不用本地 useState
   const syncing = isTaskRunning('tasks.sync_moneyflow_ind_dc')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'moneyflow_ind_dc',
-    syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow_ind_dc',
-    onSuccess: loadData,
-  })
-
   useEffect(() => {
     loadData(1).catch(() => {})
     loadTopSectors().catch(() => {})
@@ -162,6 +146,22 @@ export default function MoneyflowIndDcPage() {
       // 图表加载失败不阻断主流程
     }
   }
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'moneyflow_ind_dc',
+    syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-async', null, { params }),
+    taskName: 'tasks.sync_moneyflow_ind_dc',
+    onSuccess: loadData,
+  })
 
   const handleQuery = () => {
     loadData(1).catch(() => {})

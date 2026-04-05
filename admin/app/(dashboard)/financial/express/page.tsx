@@ -399,7 +399,7 @@ export default function ExpressPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <Button onClick={loadData} disabled={loading}>
+            <Button onClick={() => loadData()} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
               查询
             </Button>

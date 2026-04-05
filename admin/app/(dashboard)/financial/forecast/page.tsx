@@ -514,7 +514,7 @@ export default function ForecastPage() {
               </Select>
             </div>
             <div className="flex items-end">
-              <Button variant="default" onClick={loadData} disabled={loading} className="w-full">
+              <Button variant="default" onClick={() => loadData()} disabled={loading} className="w-full">
                 查询
               </Button>
             </div>

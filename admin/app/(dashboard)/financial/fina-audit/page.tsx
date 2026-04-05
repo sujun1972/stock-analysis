@@ -430,7 +430,7 @@ export default function FinaAuditPage() {
             <Button
               variant="default"
               size="sm"
-              onClick={loadData}
+              onClick={() => loadData()}
               disabled={loading}
             >
               {loading ? (

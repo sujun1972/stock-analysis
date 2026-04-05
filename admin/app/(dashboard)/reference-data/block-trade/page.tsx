@@ -66,7 +66,7 @@ export default function BlockTradePage() {
 
       if (dataResponse.code === 200) {
         setData(dataResponse.data?.items || [])
-        setTotal(dataResponse.data?.total || 0)
+        setTotal(dataResponse.data?.count || 0)
       }
 
       if (statsResponse.code === 200) {

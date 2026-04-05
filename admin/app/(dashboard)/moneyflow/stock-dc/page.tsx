@@ -82,22 +82,6 @@ export default function MoneyflowStockDcPage() {
   const syncing = isTaskRunning('tasks.sync_moneyflow_stock_dc')
   const { config } = useSystemConfig()
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'moneyflow_stock_dc',
-    syncFn: (params) => apiClient.post('/api/moneyflow-stock-dc/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow_stock_dc',
-    onSuccess: loadData,
-  })
-
   const openStockAnalysis = useCallback((tsCode: string) => {
     const url = config?.stock_analysis_url
     if (!url) return
@@ -158,6 +142,22 @@ export default function MoneyflowStockDcPage() {
       // 图表加载失败不阻断主流程
     }
   }
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'moneyflow_stock_dc',
+    syncFn: (params) => apiClient.post('/api/moneyflow-stock-dc/sync-async', null, { params }),
+    taskName: 'tasks.sync_moneyflow_stock_dc',
+    onSuccess: loadData,
+  })
 
   const handleQuery = () => {
     loadData(1).catch(() => {})

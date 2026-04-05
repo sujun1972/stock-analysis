@@ -106,7 +106,7 @@ function SyncRow({
           <span className="font-medium truncate">{item.display_name}</span>
         )}
         {item.passive_sync_enabled && (
-          <Zap className="w-3 h-3 text-yellow-500 flex-shrink-0" title="已启用被动同步" />
+          <Zap className="w-3 h-3 text-yellow-500 flex-shrink-0" aria-label="已启用被动同步" />
         )}
       </div>
 
@@ -120,7 +120,7 @@ function SyncRow({
           )}
         </span>
         {incTask?.status === 'failure' && (
-          <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" title={incTask.error || '未知错误'} />
+          <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" aria-label={incTask.error || '未知错误'} />
         )}
       </div>
 
@@ -378,7 +378,7 @@ export default function SyncConfigPage() {
         setEditDialogOpen(false)
         const now = new Date().toISOString()
         setItems(prev => prev.map(i =>
-          i.table_key === editingItem.table_key ? { ...i, ...editForm, updated_at: now } : i
+          i.table_key === editingItem.table_key ? { ...i, ...editForm, updated_at: now } as SyncOverviewItem : i
         ))
       } else {
         toast.error(resp.message || '保存失败')

@@ -59,22 +59,26 @@ export default function FinaMainbzPage() {
       setLoading(true)
       setError(null)
 
-      const response = await financialDataApi.getFinaMainbz({
+      const queryParams = {
         ts_code: tsCode || undefined,
         start_date: startDate ? toDateStr(startDate) : undefined,
         end_date: endDate ? toDateStr(endDate) : undefined,
         period: period ? toDateStr(period) : undefined,
         type: type === 'ALL' ? undefined : type,
-        limit: currentPageSize,
-        offset: (currentPage - 1) * currentPageSize
-      })
+      }
+      const [response, statsResponse] = await Promise.all([
+        financialDataApi.getFinaMainbz({ ...queryParams, limit: currentPageSize, offset: (currentPage - 1) * currentPageSize }),
+        financialDataApi.getFinaMainbzStatistics(queryParams),
+      ])
 
       if (response.code === 200 && response.data) {
         setData(response.data.items || [])
         setTotal(response.data.total || 0)
-        if (response.data.statistics) setStatistics(response.data.statistics)
       } else {
         throw new Error(response.message || '获取数据失败')
+      }
+      if (statsResponse.code === 200 && statsResponse.data) {
+        setStatistics(statsResponse.data)
       }
     } catch (err: any) {
       setError(err.message || '加载数据失败')
@@ -346,7 +350,7 @@ export default function FinaMainbzPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <Button onClick={loadData} variant="default">查询</Button>
+            <Button onClick={() => loadData()} variant="default">查询</Button>
           </div>
         </CardContent>
       </Card>
