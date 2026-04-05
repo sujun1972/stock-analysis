@@ -28,6 +28,7 @@ export const axiosInstance: AxiosInstance = axios.create({
 
 // Token 刷新状态管理
 let isRefreshing = false
+let refreshPromise: Promise<string | null> | null = null
 let failedQueue: Array<{
   resolve: (value?: any) => void
   reject: (reason?: any) => void
@@ -48,47 +49,58 @@ const processQueue = (error: any = null, token: string | null = null) => {
 }
 
 /**
- * 刷新Token
+ * 刷新Token（单例模式：多个并发调用共享同一个 Promise，避免 race condition）
  */
-async function refreshAccessToken(): Promise<string | null> {
-  try {
-    const authStorage = localStorage.getItem('auth-storage')
-    if (!authStorage) return null
-
-    const { state } = JSON.parse(authStorage)
-    const refreshToken = state?.refreshToken
-
-    if (!refreshToken) return null
-
-    const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
-      refresh_token: refreshToken,
-    })
-
-    if (response.data.code === 200 && response.data.data) {
-      const { access_token, refresh_token } = response.data.data
-
-      // 更新存储
-      const newAuthState = {
-        ...state,
-        accessToken: access_token,
-        refreshToken: refresh_token,
-      }
-
-      const newAuthStorage = {
-        ...JSON.parse(authStorage),
-        state: newAuthState,
-      }
-
-      localStorage.setItem('auth-storage', JSON.stringify(newAuthStorage))
-
-      return access_token
-    }
-
-    return null
-  } catch (error) {
-    logger.error('Token refresh failed', error)
-    return null
+function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise
   }
+
+  refreshPromise = (async () => {
+    try {
+      const authStorage = localStorage.getItem('auth-storage')
+      if (!authStorage) return null
+
+      const { state } = JSON.parse(authStorage)
+      const refreshToken = state?.refreshToken
+
+      if (!refreshToken) return null
+
+      const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+        refresh_token: refreshToken,
+      })
+
+      if (response.data.code === 200 && response.data.data) {
+        const { access_token, refresh_token } = response.data.data
+
+        // 更新存储
+        const newAuthState = {
+          ...state,
+          accessToken: access_token,
+          refreshToken: refresh_token,
+        }
+
+        const newAuthStorage = {
+          ...JSON.parse(authStorage),
+          state: newAuthState,
+        }
+
+        localStorage.setItem('auth-storage', JSON.stringify(newAuthStorage))
+
+        return access_token
+      }
+
+      return null
+    } catch (error) {
+      logger.error('Token refresh failed', error)
+      return null
+    } finally {
+      refreshPromise = null
+      isRefreshing = false
+    }
+  })()
+
+  return refreshPromise
 }
 
 /**
@@ -113,31 +125,13 @@ axiosInstance.interceptors.request.use(
             config.url?.includes('/api/auth/login')
 
           if (!isAuthRequest && isTokenExpiringSoon(accessToken, 5)) {
-            if (isRefreshing) {
-              // 等待刷新完成
-              return new Promise((resolve, reject) => {
-                failedQueue.push({ resolve, reject })
-              }).then(() => {
-                const newAuthStorage = localStorage.getItem('auth-storage')
-                if (newAuthStorage) {
-                  const { state: newState } = JSON.parse(newAuthStorage)
-                  if (newState?.accessToken) {
-                    config.headers.Authorization = `Bearer ${newState.accessToken}`
-                  }
-                }
-                return config
-              }).catch((err) => Promise.reject(err))
-            } else {
+            if (!isRefreshing) {
               isRefreshing = true
-              const newToken = await refreshAccessToken()
-              isRefreshing = false
-
-              if (newToken) {
-                processQueue(null, newToken)
-                config.headers.Authorization = `Bearer ${newToken}`
-              } else {
-                processQueue(new Error('Token refresh failed'), null)
-              }
+            }
+            // 所有并发请求共享同一个 refreshPromise，不会重复发送 refresh 请求
+            const newToken = await refreshAccessToken()
+            if (newToken) {
+              config.headers.Authorization = `Bearer ${newToken}`
             }
           } else if (accessToken) {
             config.headers.Authorization = `Bearer ${accessToken}`
@@ -187,7 +181,7 @@ axiosInstance.interceptors.response.use(
       }
 
       if (isRefreshing) {
-        // 等待刷新完成
+        // 等待当前 refresh 完成，再重试原请求
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
         }).then(() => {
@@ -207,7 +201,7 @@ axiosInstance.interceptors.response.use(
 
       try {
         const newToken = await refreshAccessToken()
-        isRefreshing = false
+        // isRefreshing 由 refreshAccessToken 的 finally 块重置
 
         if (newToken) {
           processQueue(null, newToken)
@@ -218,7 +212,6 @@ axiosInstance.interceptors.response.use(
           throw new Error('Token refresh failed')
         }
       } catch (refreshError) {
-        isRefreshing = false
         processQueue(refreshError, null)
 
         // 清除认证信息并重定向
