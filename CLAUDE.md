@@ -1520,7 +1520,7 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 
 ### 同步配置页面（sync_configs 表）
 
-同步配置页面（`/settings/sync-config`）提供所有数据表的增量/全量同步状态一览与参数编辑，基于 `sync_configs` 数据库表驱动。
+同步配置页面（`/settings/sync-config`）提供所有数据表的增量/全量同步状态一览与配置编辑，基于 `sync_configs` 数据库表驱动。页面右上角「配置」按钮可打开弹窗设置 Tushare Token 和全量同步最早日期（原数据源设置页已合并至此）。
 
 #### 关键文件
 
@@ -1538,6 +1538,7 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 - `api_prefix`：后端 API 前缀（如 `/income`），用于构造 `sync-async` 端点，**页面上的增量/全量同步按钮通过它调用**
 - `page_url`：对应前端数据页面 URL，支持点击跳转
 - `full_sync_strategy`：`'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none'`
+- `data_source`：每个同步任务独立的数据源（`'tushare'`（默认）或 `'akshare'`），在任务编辑弹窗中修改
 - `api_name` / `description` / `doc_url`：Tushare 接口元数据，**由管理员在页面手动维护**，迁移脚本不覆盖
 - `points_consumption`：保留字段，页面不展示
 

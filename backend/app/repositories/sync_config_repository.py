@@ -20,7 +20,7 @@ class SyncConfigRepository(BaseRepository):
                    full_sync_task_name, full_sync_strategy, full_sync_concurrency,
                    passive_sync_enabled, passive_sync_task_name,
                    page_url, api_prefix, notes,
-                   api_name, description, doc_url, updated_at
+                   api_name, description, doc_url, data_source, updated_at
             FROM sync_configs
             ORDER BY category, display_order
         """
@@ -34,7 +34,7 @@ class SyncConfigRepository(BaseRepository):
                    full_sync_task_name, full_sync_strategy, full_sync_concurrency,
                    passive_sync_enabled, passive_sync_task_name,
                    page_url, api_prefix, notes,
-                   api_name, description, doc_url, updated_at
+                   api_name, description, doc_url, data_source, updated_at
             FROM sync_configs
             WHERE table_key = %s
         """
@@ -45,7 +45,7 @@ class SyncConfigRepository(BaseRepository):
         allowed = {
             'incremental_default_days', 'full_sync_strategy', 'full_sync_concurrency',
             'passive_sync_enabled', 'passive_sync_task_name', 'notes',
-            'api_name', 'description', 'doc_url',
+            'api_name', 'description', 'doc_url', 'data_source',
         }
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
@@ -77,5 +77,6 @@ class SyncConfigRepository(BaseRepository):
             'api_name': row[15],
             'description': row[16],
             'doc_url': row[17],
-            'updated_at': row[18].isoformat() + 'Z' if row[18] else None,
+            'data_source': row[18],
+            'updated_at': row[19].isoformat() + 'Z' if row[19] else None,
         }

@@ -20,14 +20,6 @@ router = APIRouter()
 class DataSourceConfigRequest(BaseModel):
     """数据源配置请求"""
 
-    data_source: str
-    minute_data_source: Optional[str] = None
-    realtime_data_source: Optional[str] = None
-    limit_up_data_source: Optional[str] = None
-    top_list_data_source: Optional[str] = None
-    premarket_data_source: Optional[str] = None
-    concept_data_source: Optional[str] = None
-    sentiment_data_source: Optional[str] = None
     tushare_token: Optional[str] = None
     earliest_history_date: Optional[str] = None
 
@@ -72,21 +64,13 @@ async def update_data_source_config(
 
     # 更新数据源配置
     config = await config_service.update_data_source(
-        data_source=request.data_source,
-        minute_data_source=request.minute_data_source,
-        realtime_data_source=request.realtime_data_source,
-        limit_up_data_source=request.limit_up_data_source,
-        top_list_data_source=request.top_list_data_source,
-        premarket_data_source=request.premarket_data_source,
-        concept_data_source=request.concept_data_source,
-        sentiment_data_source=request.sentiment_data_source,
         tushare_token=request.tushare_token,
         earliest_history_date=request.earliest_history_date,
     )
 
     return ApiResponse.success(
         data=config,
-        message=f"成功切换数据源：主={request.data_source}, 涨停板={request.limit_up_data_source or '未更改'}, 龙虎榜={request.top_list_data_source or '未更改'}",
+        message="配置已保存",
     )
 
 

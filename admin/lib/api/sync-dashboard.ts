@@ -37,6 +37,7 @@ export interface SyncConfig {
   api_name: string | null
   description: string | null
   doc_url: string | null
+  data_source: string | null
   updated_at: string | null
 }
 
@@ -69,6 +70,7 @@ export interface SyncConfigUpdate {
   api_name?: string | null
   description?: string | null
   doc_url?: string | null
+  data_source?: string | null
 }
 
 export class SyncDashboardApiClient extends BaseApiClient {

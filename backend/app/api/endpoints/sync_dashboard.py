@@ -132,6 +132,7 @@ class SyncConfigUpdate(BaseModel):
     api_name: Optional[str] = None
     description: Optional[str] = None
     doc_url: Optional[str] = None
+    data_source: Optional[str] = None  # 'tushare' 或 'akshare'，None 表示不修改
 
 
 # ==================== 路由 ====================
@@ -224,7 +225,7 @@ async def update_config(
     body: SyncConfigUpdate,
     current_user: User = Depends(require_admin),
 ):
-    """更新单条同步配置（可编辑的字段：并发数、回看天数、被动同步开关、备注）"""
+    """更新单条同步配置（可编辑的字段：并发数、回看天数、被动同步开关、备注、数据源）"""
     repo = SyncConfigRepository()
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     updated = await asyncio.to_thread(repo.update, table_key, data)

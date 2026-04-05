@@ -8,14 +8,6 @@ import { apiClient } from '@/lib/api-client';
 import logger from '@/lib/logger';
 
 export interface DataSourceConfig {
-  data_source: string;
-  minute_data_source: string;
-  realtime_data_source: string;
-  limit_up_data_source?: string;
-  top_list_data_source?: string;
-  premarket_data_source?: string;
-  concept_data_source?: string;
-  sentiment_data_source?: string;
   tushare_token: string;
   earliest_history_date?: string;
 }

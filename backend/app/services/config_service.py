@@ -1,17 +1,10 @@
 """
-配置管理服务（重构版 - Facade 模式）
-委托给专门的服务类，保持向后兼容
+配置管理服务（Facade 模式，保持向后兼容）
 
-重构说明：
-- 使用 Facade 模式委托给专门的服务
+委托给三个专门的服务类：
 - SystemConfigService: 通用系统配置
-- DataSourceConfigService: 数据源配置（原 DataSourceManager）
-- SyncStatusManager: 同步状态管理（保持不变）
-- 保持与原 ConfigService 的接口完全兼容
-
-注意：
-- 此类标记为 @deprecated，推荐直接使用具体的服务类
-- 但为了向后兼容，所有原有接口保持不变
+- DataSourceConfigService: Tushare Token / 全量同步起始日期
+- SyncStatusManager: 同步状态管理
 """
 
 import asyncio
@@ -27,16 +20,7 @@ from app.services.system_config_service import SystemConfigService
 
 
 class ConfigService:
-    """
-    配置管理服务（Facade 模式 - 向后兼容）
-
-    @deprecated 推荐直接使用具体的服务类：
-    - SystemConfigService: 系统配置
-    - DataSourceConfigService: 数据源配置
-    - SyncStatusManager: 同步状态
-
-    此类保留用于向后兼容，将调用委托给专门的服务。
-    """
+    """配置管理服务（Facade 模式，向后兼容）。"""
 
     def __init__(self, db: Optional[DatabaseManager] = None):
         """
@@ -102,49 +86,28 @@ class ConfigService:
             mask_token: 是否对 Token 进行脱敏处理（默认 True）
 
         Returns:
-            Dict: 包含 data_source、minute_data_source、realtime_data_source 和 tushare_token
+            Dict: 包含 tushare_token 和 earliest_history_date
         """
         return await self.data_source_config.get_data_source_config(mask_token=mask_token)
 
     async def update_data_source(
         self,
-        data_source: str,
-        minute_data_source: Optional[str] = None,
-        realtime_data_source: Optional[str] = None,
-        limit_up_data_source: Optional[str] = None,
-        top_list_data_source: Optional[str] = None,
-        premarket_data_source: Optional[str] = None,
-        concept_data_source: Optional[str] = None,
-        sentiment_data_source: Optional[str] = None,
         tushare_token: Optional[str] = None,
+        earliest_history_date: Optional[str] = None,
     ) -> Dict:
         """
-        更新数据源配置
+        更新数据源配置（Token 和全量同步最早日期）
 
         Args:
-            data_source: 主数据源 ('akshare' 或 'tushare')
-            minute_data_source: 分时数据源（可选）
-            realtime_data_source: 实时数据源（可选）
-            limit_up_data_source: 涨停板池数据源（可选）
-            top_list_data_source: 龙虎榜数据源（可选）
-            premarket_data_source: 盘前数据源（可选）
-            concept_data_source: 概念数据源（可选）
-            sentiment_data_source: 市场情绪数据源（可选）
-            tushare_token: Tushare Token (可选)
+            tushare_token: Tushare Token (可选，留空不修改)
+            earliest_history_date: 全量同步最早日期（可选）
 
         Returns:
             Dict: 更新后的配置
         """
         return await self.data_source_config.update_data_source(
-            data_source=data_source,
-            minute_data_source=minute_data_source,
-            realtime_data_source=realtime_data_source,
-            limit_up_data_source=limit_up_data_source,
-            top_list_data_source=top_list_data_source,
-            premarket_data_source=premarket_data_source,
-            concept_data_source=concept_data_source,
-            sentiment_data_source=sentiment_data_source,
             tushare_token=tushare_token,
+            earliest_history_date=earliest_history_date,
         )
 
     # ==================== 同步状态接口（委托给 SyncStatusManager）====================

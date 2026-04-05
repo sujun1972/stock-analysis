@@ -4,11 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   RefreshCw, Database, ChevronDown, ChevronRight,
-  XCircle, Loader2, RotateCcw, Zap, Settings
+  XCircle, Loader2, RotateCcw, Zap, Settings, KeyRound
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label'
 import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate } from '@/lib/api/sync-dashboard'
 import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
+import { useConfigStore } from '@/stores/config-store'
 import Link from 'next/link'
 
 const STRATEGY_LABELS: Record<string, string> = {
@@ -156,6 +157,13 @@ function SyncRow({
         {item.api_name ? (
           <div className="text-gray-300 truncate" title={item.api_name}>{item.api_name}</div>
         ) : null}
+        {item.data_source && (
+          <div className={`font-medium mt-0.5 ${
+            item.data_source === 'tushare' ? 'text-blue-500' : 'text-gray-400'
+          }`}>
+            {item.data_source}
+          </div>
+        )}
       </div>
 
       {/* 操作按钮 */}
@@ -270,6 +278,46 @@ export default function SyncConfigPage() {
   const [editForm, setEditForm] = useState<SyncConfigUpdate>({})
   const [isSaving, setIsSaving] = useState(false)
 
+  // 全局配置弹窗
+  const { dataSource: configData, fetchDataSourceConfig } = useConfigStore()
+  const [globalConfigOpen, setGlobalConfigOpen] = useState(false)
+  const [tokenInput, setTokenInput] = useState('')
+  const [earliestDate, setEarliestDate] = useState('2021-01-04')
+  const [isSavingGlobal, setIsSavingGlobal] = useState(false)
+
+  useEffect(() => {
+    if (globalConfigOpen) {
+      fetchDataSourceConfig()
+      setTokenInput('')
+      setEarliestDate(configData?.earliest_history_date || '2021-01-04')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalConfigOpen])
+
+  useEffect(() => {
+    if (configData && globalConfigOpen) {
+      setEarliestDate(configData.earliest_history_date || '2021-01-04')
+    }
+  }, [configData, globalConfigOpen])
+
+  const handleSaveGlobal = async () => {
+    setIsSavingGlobal(true)
+    try {
+      const tokenToSave = tokenInput.trim() ? tokenInput.trim() : undefined
+      await apiClient.updateDataSourceConfig({
+        tushare_token: tokenToSave,
+        earliest_history_date: earliestDate || undefined,
+      })
+      fetchDataSourceConfig(true)
+      toast.success('配置已保存')
+      setGlobalConfigOpen(false)
+    } catch (err: any) {
+      toast.error(err.message || '保存配置失败')
+    } finally {
+      setIsSavingGlobal(false)
+    }
+  }
+
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
   const callbacksRef = useRef<Map<string, () => void>>(new Map())
 
@@ -364,6 +412,7 @@ export default function SyncConfigPage() {
       api_name: item.api_name,
       description: item.description,
       doc_url: item.doc_url,
+      data_source: item.data_source ?? 'tushare',
     })
     setEditDialogOpen(true)
   }
@@ -423,12 +472,18 @@ export default function SyncConfigPage() {
         title="同步配置"
         description="管理所有数据表的增量/全量同步任务状态与配置参数"
         actions={
-          <Button size="sm" onClick={loadData} disabled={isLoading}>
-            {isLoading
-              ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              : <RefreshCw className="h-4 w-4 mr-1" />}
-            刷新
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setGlobalConfigOpen(true)}>
+              <KeyRound className="h-4 w-4 mr-1" />
+              配置
+            </Button>
+            <Button size="sm" onClick={loadData} disabled={isLoading}>
+              {isLoading
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <RefreshCw className="h-4 w-4 mr-1" />}
+              刷新
+            </Button>
+          </div>
         }
       />
 
@@ -510,6 +565,60 @@ export default function SyncConfigPage() {
         </DialogContent>
       </Dialog>
 
+      {/* 全局配置弹窗 */}
+      <Dialog open={globalConfigOpen} onOpenChange={setGlobalConfigOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              数据源配置
+            </DialogTitle>
+            <DialogDescription>配置 Tushare API Token 及全量同步起始日期</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="global-token">Tushare API Token</Label>
+                {configData?.tushare_token && configData.tushare_token.includes('*') ? (
+                  <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-800 rounded">已配置</span>
+                ) : (
+                  <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded">未配置</span>
+                )}
+              </div>
+              <Input
+                id="global-token"
+                type="password"
+                value={tokenInput}
+                onChange={e => setTokenInput(e.target.value)}
+                placeholder={
+                  configData?.tushare_token && configData.tushare_token.includes('*')
+                    ? `留空不修改（${configData.tushare_token}）`
+                    : '请输入您的 Tushare Token'
+                }
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="global-earliest-date">全量同步最早日期</Label>
+              <Input
+                id="global-earliest-date"
+                type="date"
+                value={earliestDate}
+                onChange={e => setEarliestDate(e.target.value)}
+                className="max-w-xs"
+              />
+              <p className="text-xs text-gray-500">各页面点击「全量同步」时以此日期为起始日</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGlobalConfigOpen(false)}>取消</Button>
+            <Button onClick={handleSaveGlobal} disabled={isSavingGlobal}>
+              {isSavingGlobal ? '保存中...' : '保存配置'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 编辑配置弹窗 */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
@@ -559,6 +668,21 @@ export default function SyncConfigPage() {
 
             {/* 同步参数 */}
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide border-b pb-1 pt-2">同步参数</div>
+            <div className="grid grid-cols-3 items-center gap-4">
+              <Label className="text-right text-sm">数据源</Label>
+              <Select
+                value={editForm.data_source ?? 'tushare'}
+                onValueChange={v => setEditForm(prev => ({ ...prev, data_source: v }))}
+              >
+                <SelectTrigger className="col-span-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tushare">Tushare</SelectItem>
+                  <SelectItem value="akshare">AkShare</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-3 items-center gap-4">
               <Label className="text-right text-sm">回看天数</Label>
               <Input

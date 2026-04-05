@@ -472,12 +472,7 @@ const navItems: NavItem[] = [
         href: '/settings/system',
         icon: Wrench
       },
-      {
-        name: '数据源设置',
-        href: '/settings/datasource',
-        icon: Database
-      },
-      {
+{
         name: 'AI 配置',
         href: '/settings/ai-config',
         icon: Sparkles
