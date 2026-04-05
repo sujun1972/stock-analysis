@@ -493,6 +493,11 @@ const navItems: NavItem[] = [
         icon: Clock
       },
       {
+        name: '同步配置',
+        href: '/settings/sync-config',
+        icon: Database
+      },
+      {
         name: '通知渠道',
         href: '/settings/notification-channels',
         icon: Bell

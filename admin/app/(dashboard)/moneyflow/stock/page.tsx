@@ -77,28 +77,6 @@ export default function MoneyflowPage() {
   // 从 task store 实时派生 — 不用 useState(false)
   const syncing = isTaskRunning('tasks.sync_moneyflow')
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'moneyflow',
-    syncFn: (params) => apiClient.post('/api/moneyflow/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow',
-    onSuccess: loadData,
-  })
-
-  const openStockAnalysis = (tsCode: string) => {
-    const url = config?.stock_analysis_url
-    if (!url) return
-    window.open(url.replace('{code}', formatStockCode(tsCode)), '_blank')
-  }
-
   // 加载数据
   const loadData = useCallback(async (targetPage: number = 1) => {
     setIsLoading(true)
@@ -130,6 +108,28 @@ export default function MoneyflowPage() {
       setIsLoading(false)
     }
   }, [tsCode, tradeDate])
+
+  const {
+    handleFullSync,
+    handleClear,
+    fullSyncing,
+    isClearing,
+    isClearDialogOpen,
+    setIsClearDialogOpen,
+    cleanup,
+    earliestHistoryDate,
+  } = useDataBulkOps({
+    tableKey: 'moneyflow',
+    syncFn: (params) => apiClient.post('/api/moneyflow/sync-async', null, { params }),
+    taskName: 'tasks.sync_moneyflow',
+    onSuccess: loadData,
+  })
+
+  const openStockAnalysis = (tsCode: string) => {
+    const url = config?.stock_analysis_url
+    if (!url) return
+    window.open(url.replace('{code}', formatStockCode(tsCode)), '_blank')
+  }
 
   // 加载TOP排名图表数据
   const loadTopStocks = useCallback(async () => {

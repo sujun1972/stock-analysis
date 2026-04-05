@@ -1271,6 +1271,26 @@ docker-compose restart celery_worker
 docker-compose logs celery_worker | grep "tasks.sync_your_data"
 ```
 
+#### 11. 注册到 sync_configs 表
+
+新增的数据同步表需要在 `sync_configs` 中登记，才会出现在 `/settings/sync-config` 同步配置页面：
+
+```sql
+-- 在 db_init/migrations/105_create_sync_configs.sql 的 INSERT 列表中追加
+('your_table',  '显示名称',  '所属分类', 排序号,
+ 'tasks.sync_your_task', 7,                        -- 增量任务名, 默认回看天数
+ 'tasks.sync_your_full', 'by_ts_code', 5,          -- 全量任务名（NULL=无全量）, 策略, 并发数
+ FALSE, NULL,                                       -- 被动同步开关, 被动同步任务名
+ '/your-page', '/your-api-prefix', NULL, NULL)      -- 页面URL, API前缀, 积分消耗, 备注
+```
+
+然后执行迁移（ON CONFLICT 会更新现有行）：
+```bash
+docker-compose exec -T timescaledb psql -U stock_user -d stock_analysis < db_init/migrations/105_create_sync_configs.sql
+```
+
+**`api_name`/`description`/`doc_url` 三个字段不在迁移脚本中维护**，由管理员在 `/settings/sync-config` 页面手动填写。
+
 #### 开发检查清单
 
 - [ ] 数据库迁移脚本已创建并执行
@@ -1284,6 +1304,7 @@ docker-compose logs celery_worker | grep "tasks.sync_your_data"
 - [ ] 前端 API 客户端已创建并导出，`getData` 返回类型包含 `trade_date?`（用于日期回填）
 - [ ] 前端页面实现了数据展示、筛选、同步功能
 - [ ] 菜单项已添加到 AdminLayout
+- [ ] **sync_configs 表已登记**（`105_create_sync_configs.sql` 追加一行并重新执行）
 - [ ] Celery Worker 已重启并验证任务注册成功
 - [ ] 所有代码遵循项目三层架构（Repository → Service → API）
 - [ ] 日期格式正确处理（数据库 YYYYMMDD ↔ API/前端 YYYY-MM-DD）
@@ -1496,6 +1517,43 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
   />
   ```
   **关键点**：`compositionend` 后必须直接调用搜索函数，不能依赖 `useEffect` — 因为选字后 `onChange` 触发时 state 值可能与之前相同，`useEffect` 不会重新执行。
+
+### 同步配置页面（sync_configs 表）
+
+同步配置页面（`/settings/sync-config`）提供所有数据表的增量/全量同步状态一览与参数编辑，基于 `sync_configs` 数据库表驱动。
+
+#### 关键文件
+
+| 文件 | 说明 |
+|------|------|
+| `db_init/migrations/105_create_sync_configs.sql` | 表定义 + 61 行初始数据 |
+| `backend/app/repositories/sync_config_repository.py` | 数据访问层 |
+| `backend/app/api/endpoints/sync_dashboard.py` | REST API（overview/configs/progress/clear-progress） |
+| `admin/lib/api/sync-dashboard.ts` | 前端 API 客户端 |
+| `admin/app/(dashboard)/settings/sync-config/page.tsx` | 页面（状态概览 + 配置编辑） |
+
+#### sync_configs 表结构要点
+
+- `table_key`：唯一标识，与 `data_ops.py` 的 `CLEARABLE_TABLES` 白名单对应
+- `api_prefix`：后端 API 前缀（如 `/income`），用于构造 `sync-async` 端点，**页面上的增量/全量同步按钮通过它调用**
+- `page_url`：对应前端数据页面 URL，支持点击跳转
+- `full_sync_strategy`：`'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none'`
+- `api_name` / `description` / `doc_url`：Tushare 接口元数据，**由管理员在页面手动维护**，迁移脚本不覆盖
+- `points_consumption`：保留字段，页面不展示
+
+#### Redis 续继进度
+
+`FULL_SYNC_REDIS_KEYS`（在 `sync_dashboard.py` 中维护）记录各表全量同步的 Redis Set key。新增支持全量同步续继的数据表时，需同步更新该字典。
+
+#### CATEGORY_ORDER 排序
+
+前端 `sync-config/page.tsx` 的 `CATEGORY_ORDER` 常量控制分组显示顺序，与 `AdminLayout.tsx` 侧边菜单保持一致：
+```typescript
+const CATEGORY_ORDER = [
+  '基础数据', '行情数据', '财务数据', '参考数据',
+  '特色数据', '两融及转融通', '资金流向', '打板专题',
+]
+```
 
 ### 定时任务页面架构
 定时任务配置页面（`/settings/scheduler`）采用数据库驱动的元数据管理：

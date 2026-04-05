@@ -38,7 +38,6 @@ import {
   Wrench,
   UserCog,
   Shield,
-  ChartBar,
   List,
   BarChart3,
   PieChart,
@@ -102,6 +101,7 @@ const routeLabelMap: Record<string, string> = {
   'new-stocks': '新股列表同步',
   'delisted-stocks': '退市列表同步',
   'realtime': '实时行情同步',
+  'sync-config': '同步配置',
 
   // 日志管理子路由
   'llm-calls': 'LLM调用日志',
@@ -221,6 +221,7 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   'ai-config': Sparkles,
   'prompt-templates': FileText,
   'scheduler': Clock,
+  'sync-config': Database,
   'notification-channels': Bell,
 
   // 日志管理子路由

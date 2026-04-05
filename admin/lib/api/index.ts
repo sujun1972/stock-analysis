@@ -69,6 +69,7 @@ import { StockDailyApiClient, stockDailyApi as stockDailyApiInst } from './stock
 import { StockListApiClient, stockListApi as stockListApiInst } from './stock-list-api'
 import { StockStApiClient, stockStApi as stockStApiInst } from './stock-st-api'
 import { TradeCalApiClient, tradeCalApi as tradeCalApiInst } from './trade-cal-api'
+import { SyncDashboardApiClient, syncDashboardApi as syncDashboardApiInst } from './sync-dashboard'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -946,6 +947,19 @@ export type {
   StockStResponse,
   StockStTypeDistribution
 } from './stock-st-api'
+
+// 重新导出同步仪表盘 API
+export { SyncDashboardApiClient }
+export const syncDashboardApi = syncDashboardApiInst
+export type {
+  SyncConfig,
+  SyncOverviewItem,
+  SyncOverviewResponse,
+  SyncConfigUpdate,
+  LastTaskRecord,
+  RedisProgress,
+  CategoryStat,
+} from './sync-dashboard'
 
 // 导出默认实例
 export default apiClient
