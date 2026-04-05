@@ -66,19 +66,22 @@ def sync_fina_mainbz_task(
 
 
 @celery_app.task(bind=True, name="tasks.sync_fina_mainbz_full_history",
-                 max_retries=0, soft_time_limit=28800, time_limit=32400)
-def sync_fina_mainbz_full_history_task(self, start_date: Optional[str] = None):
+                 max_retries=0, soft_time_limit=28800, time_limit=32400,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
+)
+def sync_fina_mainbz_full_history_task(self, start_date: Optional[str] = None, concurrency: int = 5):
     """
     全量历史同步主营业务构成数据（按季度 period 切片，支持 Redis 续继）
 
     Args:
         start_date: 起始日期 YYYYMMDD，默认 20090101
+        concurrency: 并发数，默认 5
 
     Returns:
         同步结果
     """
     try:
-        logger.info(f"开始全量同步主营业务构成历史数据: start_date={start_date}")
+        logger.info(f"开始全量同步主营业务构成历史数据: start_date={start_date}, concurrency={concurrency}")
 
         try:
             from app.core.redis_lock import redis_lock, redis_client
@@ -105,7 +108,8 @@ def sync_fina_mainbz_full_history_task(self, start_date: Optional[str] = None):
                     service.sync_full_history(
                         redis_client=redis_client,
                         start_date=start_date,
-                        update_state_fn=self.update_state
+                        update_state_fn=self.update_state,
+                        concurrency=concurrency
                     )
                 )
             finally:

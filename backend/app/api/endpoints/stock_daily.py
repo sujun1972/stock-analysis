@@ -200,6 +200,7 @@ async def get_full_history_progress(
 @router.post("/sync-full-history")
 @handle_api_errors
 async def sync_full_history(
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """
@@ -209,8 +210,17 @@ async def sync_full_history(
     中断后再次触发会自动从断点继续，跳过已同步完成的股票。
     """
     from app.tasks.sync_tasks import sync_daily_full_history_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-    celery_task = sync_daily_full_history_task.apply_async()
+    # 未传并发数时，从 sync_configs 读取，兜底默认值
+    if concurrency is None:
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'stock_daily')
+        concurrency = (cfg.get('full_sync_concurrency') or 8) if cfg else 8
+
+    celery_task = sync_daily_full_history_task.apply_async(
+        kwargs={'concurrency': concurrency}
+    )
 
     helper = TaskHistoryHelper()
     task_data = await helper.create_task_record(
@@ -219,7 +229,7 @@ async def sync_full_history(
         display_name='日线数据全量历史同步',
         task_type='data_sync',
         user_id=current_user.id,
-        task_params={'start_date': '20210101', 'scope': 'all_listed'},
+        task_params={'start_date': '20210101', 'scope': 'all_listed', 'concurrency': concurrency},
         source='stock_daily_page'
     )
 

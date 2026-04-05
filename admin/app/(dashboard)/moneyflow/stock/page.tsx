@@ -120,8 +120,10 @@ export default function MoneyflowPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'moneyflow',
-    syncFn: (params) => apiClient.post('/api/moneyflow/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow',
+    syncFn: (params) => moneyflowApi.syncMoneyflowFullHistoryAsync({
+      start_date: params?.start_date,
+    }),
+    taskName: 'tasks.sync_moneyflow_full_history',
     onSuccess: loadData,
   })
 

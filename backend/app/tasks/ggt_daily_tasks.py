@@ -55,9 +55,10 @@ def sync_ggt_daily_task(
     name="tasks.sync_ggt_daily_full_history",
     max_retries=0,
     soft_time_limit=7200,
-    time_limit=10800
+    time_limit=10800,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_ggt_daily_full_history_task(self, start_date: str = None):
+def sync_ggt_daily_full_history_task(self, start_date: str = None, concurrency: int = 3):
     """
     按年切片全量同步港股通每日成交统计历史数据（支持中断续继）
 
@@ -72,7 +73,7 @@ def sync_ggt_daily_full_history_task(self, start_date: str = None):
     """
     from app.core.redis_lock import redis_client
 
-    logger.info("========== [Celery] 开始全量历史港股通每日成交统计同步任务 ==========")
+    logger.info(f"========== [Celery] 开始全量历史港股通每日成交统计同步任务 concurrency={concurrency} ==========")
 
     if redis_client is None:
         logger.error("Redis 不可用，无法执行全量同步任务")
@@ -91,7 +92,8 @@ def sync_ggt_daily_full_history_task(self, start_date: str = None):
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=start_date,
-                    update_state_fn=self.update_state
+                    update_state_fn=self.update_state,
+                    concurrency=concurrency
                 )
             )
         finally:

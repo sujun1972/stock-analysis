@@ -22,11 +22,13 @@ class HsgtTop10Service:
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
-        """获取 Tushare Provider"""
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     async def sync_hsgt_top10(
         self,
@@ -361,6 +363,7 @@ class HsgtTop10Service:
         self,
         redis_client,
         start_date: Optional[str] = None,
+        concurrency: int = 5,
         update_state_fn=None
     ) -> Dict:
         """
@@ -394,7 +397,7 @@ class HsgtTop10Service:
         error_count = 0
         total_records = 0
 
-        sem = asyncio.Semaphore(self.FULL_HISTORY_CONCURRENCY)
+        sem = asyncio.Semaphore(max(1, concurrency))
 
         async def sync_month(ms: str, me: str):
             async with sem:
@@ -412,7 +415,7 @@ class HsgtTop10Service:
                 except Exception as e:
                     return ms, me, False, 0, str(e)
 
-        BATCH_SIZE = self.FULL_HISTORY_CONCURRENCY * 2
+        BATCH_SIZE = max(1, concurrency) * 2
         for batch_start in range(0, len(pending), BATCH_SIZE):
             batch = pending[batch_start:batch_start + BATCH_SIZE]
             results = await asyncio.gather(*[sync_month(ms, me) for ms, me in batch])

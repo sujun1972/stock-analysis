@@ -10,8 +10,9 @@
 - moneyflow_stock_dc: 个股资金流向 (东方财富DC)
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 import asyncio
+from datetime import datetime
 import pandas as pd
 from loguru import logger
 
@@ -23,6 +24,7 @@ from app.repositories import (
     MoneyflowStockDcRepository
 )
 from app.repositories.trading_calendar_repository import TradingCalendarRepository
+from app.repositories.stock_basic_repository import StockBasicRepository
 from .base_sync_service import BaseSyncService
 from .common import DataType
 
@@ -211,6 +213,128 @@ class MoneyflowSyncService(BaseSyncService):
             start_date=start_date,
             end_date=end_date
         )
+
+    async def sync_moneyflow_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        update_state_fn: Optional[Callable] = None
+    ) -> Dict[str, Any]:
+        """
+        按股票代码逐只同步个股资金流向全量历史数据
+
+        策略：仅支持 ts_code 维度的逐只请求（Tushare moneyflow 接口按日期全市场拉取
+        单次上限 6000 条，历史年份数据极易截断，因此改为逐只请求保证完整性）。
+
+        支持中断续继：Redis Set 记录已完成的 ts_code，重新触发时自动跳过。
+
+        Redis Key: sync:moneyflow:full_history:progress
+
+        Args:
+            redis_client: Redis 连接实例
+            start_date: 开始日期 YYYYMMDD，默认 20100101
+            concurrency: 并发数，来自 sync_configs.full_sync_concurrency，默认 5
+            update_state_fn: Celery update_state 回调，用于上报进度
+
+        Returns:
+            {"status": "success", "total": int, "success": int, "skipped": int, "errors": int}
+        """
+        PROGRESS_KEY = "sync:moneyflow:full_history:progress"
+        CONCURRENCY = max(1, concurrency)
+        BATCH_SIZE = 50
+        effective_start = start_date or "20100101"
+        today = datetime.now().strftime("%Y%m%d")
+
+        stock_repo = StockBasicRepository()
+        all_ts_codes = await asyncio.to_thread(stock_repo.get_listed_ts_codes, status='L')
+        total = len(all_ts_codes)
+        logger.info(f"[全量资金流向] 共 {total} 只上市股票")
+
+        completed_set = {
+            v.decode() if isinstance(v, bytes) else v
+            for v in redis_client.smembers(PROGRESS_KEY)
+        }
+        pending_codes = [c for c in all_ts_codes if c not in completed_set]
+        skip_count = len(completed_set)
+        logger.info(f"[全量资金流向] 已完成 {skip_count} 只，剩余 {len(pending_codes)} 只")
+
+        success_count = 0
+        error_count = 0
+        sem = asyncio.Semaphore(CONCURRENCY)
+
+        def sync_one_sync(ts_code: str):
+            """同步版本，在线程池中执行，避免 Tushare 同步 I/O 阻塞事件循环"""
+            import asyncio as _asyncio
+            loop = _asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(
+                    self._sync_data_template(
+                        data_type=DataType.MONEYFLOW,
+                        fetch_method=lambda p, **kw: p.get_moneyflow(**kw),
+                        insert_method=self._insert_moneyflow,
+                        validator_method=None,
+                        ts_code=ts_code,
+                        start_date=effective_start,
+                        end_date=today
+                    )
+                )
+            finally:
+                loop.close()
+
+        async def sync_one(ts_code: str):
+            async with sem:
+                try:
+                    result = await asyncio.to_thread(sync_one_sync, ts_code)
+                    if result.get("status") == "error":
+                        return ts_code, False, result.get("error", "未知错误")
+                    return ts_code, True, None
+                except Exception as e:
+                    return ts_code, False, str(e)
+
+        for batch_start in range(0, len(pending_codes), BATCH_SIZE):
+            batch = pending_codes[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_one(c) for c in batch])
+
+            for ts_code, ok, err in results:
+                if ok:
+                    redis_client.sadd(PROGRESS_KEY, ts_code)
+                    success_count += 1
+                else:
+                    error_count += 1
+                    logger.error(f"[全量资金流向] 同步 {ts_code} 失败（下次续继）: {err}")
+
+            done = skip_count + success_count
+            if update_state_fn:
+                pct = round(done / total * 100, 1) if total else 0
+                update_state_fn(
+                    state='PROGRESS',
+                    meta={
+                        'progress': pct,   # 前端 & 后端统一读此字段
+                        'current': done,
+                        'total': total,
+                        'success': success_count,
+                        'errors': error_count
+                    }
+                )
+            logger.info(
+                f"[全量资金流向] 进度: {done}/{total} ({round(done/total*100,1)}%) "
+                f"| 本次成功={success_count} 失败={error_count}"
+            )
+
+        final_done = len(redis_client.smembers(PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(PROGRESS_KEY)
+            logger.info("[全量资金流向] ✅ 全部完成，进度已清除")
+
+        return {
+            "status": "success",
+            "total": total,
+            "success": success_count,
+            "skipped": skip_count,
+            "errors": error_count,
+            "completed": final_done
+        }
 
     # ========== 私有数据插入方法 ==========
 

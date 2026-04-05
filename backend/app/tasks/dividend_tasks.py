@@ -73,13 +73,14 @@ def sync_dividend_task(
     name="tasks.sync_dividend_full_history",
     max_retries=0,
     soft_time_limit=28800,
-    time_limit=32400
+    time_limit=32400,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_dividend_full_history_task(self, start_date: str = None):
+def sync_dividend_full_history_task(self, start_date: str = None, concurrency: int = 5):
     """按季度报告期全量同步分红送股历史数据（支持中断续继）"""
     from app.core.redis_lock import redis_client
 
-    logger.info(f"========== [Celery] 开始全量分红送股同步任务，start_date={start_date} ==========")
+    logger.info(f"========== [Celery] 开始全量分红送股同步任务，start_date={start_date}, concurrency={concurrency} ==========")
 
     if redis_client is None:
         logger.error("Redis 不可用，无法执行全量同步任务")
@@ -98,7 +99,8 @@ def sync_dividend_full_history_task(self, start_date: str = None):
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=start_date,
-                    update_state_fn=self.update_state
+                    update_state_fn=self.update_state,
+                    concurrency=concurrency
                 )
             )
         finally:

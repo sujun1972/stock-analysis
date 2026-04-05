@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.repositories.pledge_stat_repository import PledgeStatRepository
 from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 
 class PledgeStatService:
@@ -25,7 +26,7 @@ class PledgeStatService:
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ PledgeStatService initialized")
 
-    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, update_state_fn=None) -> Dict:
+    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, concurrency: int = 5, update_state_fn=None) -> Dict:
         """逐只股票全量同步股权质押统计历史数据（支持 Redis 续继）
 
         pledge_stat 接口只支持 ts_code + end_date，无法按日期范围拉全市场，
@@ -48,7 +49,7 @@ class PledgeStatService:
         total_records = 0
 
         provider = self._get_provider()
-        sem = asyncio.Semaphore(self.FULL_HISTORY_CONCURRENCY)
+        sem = asyncio.Semaphore(max(1, concurrency))
 
         async def sync_one(ts_code: str):
             async with sem:
@@ -351,12 +352,13 @@ class PledgeStatService:
             raise
 
     def _get_provider(self):
-        """获取Tushare数据提供者"""
-        from app.core.config import settings
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     def _validate_and_clean_data(self, df):
         """

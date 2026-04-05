@@ -352,8 +352,13 @@ export default function SyncConfigPage() {
     const syncKey = `${type === 'incremental' ? 'incr' : 'full'}_${item.table_key}`
     setSyncing(prev => ({ ...prev, [syncKey]: true }))
     try {
-      const endpoint = `/api${item.api_prefix}/sync-async`
-      const resp = await apiClient.post(endpoint, null, {})
+      const endpoint = type === 'full'
+        ? `/api${item.api_prefix}/sync-full-history`
+        : `/api${item.api_prefix}/sync-async`
+      const params = type === 'full' && item.full_sync_concurrency
+        ? { concurrency: item.full_sync_concurrency }
+        : {}
+      const resp = await apiClient.post(endpoint, null, { params })
       if (resp.code === 200 && resp.data) {
         const taskId = resp.data.celery_task_id
         addTask({

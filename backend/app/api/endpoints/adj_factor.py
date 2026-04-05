@@ -184,6 +184,7 @@ async def sync_adj_factor_async(
 @router.post("/sync-full-history")
 async def sync_adj_factor_full_history(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYYMMDD，默认 20210101"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """
@@ -194,9 +195,16 @@ async def sync_adj_factor_full_history(
     """
     try:
         from app.tasks.adj_factor_tasks import sync_adj_factor_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'adj_factor')
+            concurrency = (cfg.get('full_sync_concurrency') or 8) if cfg else 8
 
         celery_task = sync_adj_factor_full_history_task.apply_async(
-            kwargs={'start_date': start_date}
+            kwargs={'start_date': start_date, 'concurrency': concurrency}
         )
 
         helper = TaskHistoryHelper()
@@ -206,7 +214,7 @@ async def sync_adj_factor_full_history(
             display_name='复权因子（全量）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date},
+            task_params={'start_date': start_date, 'concurrency': concurrency},
             source='adj_factor_page'
         )
 

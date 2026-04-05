@@ -4,6 +4,7 @@
 提供每日指标数据（换手率、市盈率、市净率等）的查询和同步功能
 """
 
+import asyncio
 from fastapi import APIRouter, Query, Depends, HTTPException
 from typing import Optional
 from loguru import logger
@@ -192,6 +193,7 @@ async def sync_daily_basic_async(
 @router.post("/sync-full-history")
 async def sync_daily_basic_full_history(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYYMMDD，默认 20210101"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """
@@ -202,9 +204,16 @@ async def sync_daily_basic_full_history(
     """
     try:
         from app.tasks.daily_basic_tasks import sync_daily_basic_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'daily_basic')
+            concurrency = (cfg.get('full_sync_concurrency') or 8) if cfg else 8
 
         celery_task = sync_daily_basic_full_history_task.apply_async(
-            kwargs={'start_date': start_date}
+            kwargs={'start_date': start_date, 'concurrency': concurrency}
         )
 
         helper = TaskHistoryHelper()
@@ -214,7 +223,7 @@ async def sync_daily_basic_full_history(
             display_name='每日指标（全量）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date},
+            task_params={'start_date': start_date, 'concurrency': concurrency},
             source='daily_basic_page'
         )
 

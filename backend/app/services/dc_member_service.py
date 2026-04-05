@@ -12,6 +12,7 @@ from loguru import logger
 from app.repositories.dc_member_repository import DcMemberRepository
 from app.repositories.dc_index_repository import DcIndexRepository
 from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 
 class DcMemberService:
@@ -24,12 +25,13 @@ class DcMemberService:
         logger.debug("✓ DcMemberService initialized")
 
     def _get_provider(self):
-        """获取 Tushare 数据提供者"""
-        from app.core.config import settings
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     async def resolve_default_trade_date(self) -> Optional[str]:
         """

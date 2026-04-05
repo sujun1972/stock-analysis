@@ -220,15 +220,23 @@ async def sync_ggt_top10_async(
 @router.post("/sync-full-history")
 async def sync_ggt_top10_full_history(
     start_date: Optional[str] = Query(None, description="同步起始日期，格式：YYYY-MM-DD，不传则从 2015-01-01 开始"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """全量历史同步：按月切片 + Redis 续继，覆盖指定起始日期至今所有数据。"""
     try:
         from app.tasks.ggt_top10_tasks import sync_ggt_top10_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'ggt_top10')
+            concurrency = (cfg.get('full_sync_concurrency') or 10) if cfg else 10
 
         start_date_formatted = start_date.replace('-', '') if start_date else None
         celery_task = sync_ggt_top10_full_history_task.apply_async(
-            kwargs={'start_date': start_date_formatted}
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
         )
 
         helper = TaskHistoryHelper()
@@ -238,7 +246,7 @@ async def sync_ggt_top10_full_history(
             display_name='港股通十大成交股（全量历史）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date_formatted},
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
             source='ggt_top10_page'
         )
 

@@ -452,9 +452,10 @@ FULL_HISTORY_START_DATE = "20210101"
     bind=True,
     max_retries=0,          # 不自动重试（可手动续继）
     soft_time_limit=28800,  # 8小时软超时
-    time_limit=32400        # 9小时硬超时
+    time_limit=32400        # 9小时硬超时,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_daily_full_history_task(self: Task):
+def sync_daily_full_history_task(self: Task, concurrency: int = 8):
     """
     逐只同步全部上市股票自2021年1月1日起的全量日线数据
 
@@ -504,7 +505,7 @@ def sync_daily_full_history_task(self: Task):
         error_count = 0
 
         # 并发控制：每分钟 500 次限制，保守取 8 并发（~480次/分）
-        CONCURRENCY = 8
+        CONCURRENCY = max(1, concurrency)
         BATCH_SIZE = 50   # 每批处理 50 只，批间打印进度
 
         async def sync_one(ts_code: str, sem: asyncio.Semaphore):

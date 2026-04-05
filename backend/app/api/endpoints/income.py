@@ -2,6 +2,7 @@
 利润表数据API端点
 """
 
+import asyncio
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from loguru import logger
@@ -186,6 +187,7 @@ async def sync_income_async(
 @router.post("/sync-full-history-async")
 async def sync_income_full_history_async(
     start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """
@@ -193,6 +195,7 @@ async def sync_income_full_history_async(
 
     Args:
         start_date: 起始日期 YYYYMMDD，不传则由 hook 传入系统配置的 earliest_history_date
+        concurrency: 并发数，不传则从 sync_configs 读取
         current_user: 当前用户
 
     Returns:
@@ -200,9 +203,16 @@ async def sync_income_full_history_async(
     """
     try:
         from app.tasks.income_tasks import sync_income_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'income')
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
 
         celery_task = sync_income_full_history_task.apply_async(
-            kwargs={'start_date': start_date}
+            kwargs={'start_date': start_date, 'concurrency': concurrency}
         )
 
         helper = TaskHistoryHelper()
@@ -212,7 +222,7 @@ async def sync_income_full_history_async(
             display_name='利润表全量同步',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date},
+            task_params={'start_date': start_date, 'concurrency': concurrency},
             source='income_page'
         )
 

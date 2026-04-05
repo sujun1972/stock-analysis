@@ -2,6 +2,7 @@
 主营业务构成数据 API 端点
 """
 
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
@@ -188,6 +189,7 @@ async def sync_fina_mainbz_async(
 @router.post("/sync-full-history-async")
 async def sync_fina_mainbz_full_history_async(
     start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """
@@ -195,11 +197,18 @@ async def sync_fina_mainbz_full_history_async(
     """
     try:
         from app.tasks.fina_mainbz_tasks import sync_fina_mainbz_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
 
         start_date_formatted = start_date.replace('-', '') if start_date else None
 
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'fina_mainbz')
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
         celery_task = sync_fina_mainbz_full_history_task.apply_async(
-            kwargs={'start_date': start_date_formatted}
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
         )
 
         helper = TaskHistoryHelper()
@@ -209,7 +218,7 @@ async def sync_fina_mainbz_full_history_async(
             display_name='主营业务构成（全量历史）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date_formatted},
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
             source='fina_mainbz_page'
         )
 

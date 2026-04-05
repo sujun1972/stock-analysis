@@ -75,9 +75,10 @@ def sync_fina_audit_task(
     name="tasks.sync_fina_audit_full_history",
     max_retries=0,
     soft_time_limit=28800,
-    time_limit=32400
+    time_limit=32400,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_fina_audit_full_history_task(self, start_date: str = None):
+def sync_fina_audit_full_history_task(self, start_date: str = None, concurrency: int = 5):
     """
     逐只股票全量同步财务审计意见历史数据（5 并发，Redis Set 续继）
 
@@ -86,7 +87,7 @@ def sync_fina_audit_full_history_task(self, start_date: str = None):
     from app.core.redis_lock import redis_client
 
     effective_start = start_date or '20090101'
-    logger.info(f"========== [Celery] 开始全量财务审计意见同步任务，start_date={effective_start} ==========")
+    logger.info(f"========== [Celery] 开始全量财务审计意见同步任务，start_date={effective_start}, concurrency={concurrency} ==========")
 
     if redis_client is None:
         logger.error("Redis 不可用，无法执行全量同步任务")
@@ -105,7 +106,8 @@ def sync_fina_audit_full_history_task(self, start_date: str = None):
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=effective_start,
-                    update_state_fn=self.update_state
+                    update_state_fn=self.update_state,
+                    concurrency=concurrency
                 )
             )
         finally:

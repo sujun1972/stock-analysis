@@ -295,6 +295,14 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '扩展数据',
         'display_order': 310
     },
+    'tasks.sync_moneyflow_full_history': {
+        'task': 'tasks.sync_moneyflow_full_history',
+        'name': '个股资金流向全量历史同步',
+        'description': '按股票代码逐只同步个股资金流向全量历史数据，支持中断续继（2000积分/只）',
+        'category': '资金流向',
+        'display_order': 311,
+        'points_consumption': 2000
+    },
     'tasks.sync_moneyflow_hsgt': {
         'task': 'tasks.sync_moneyflow_hsgt',
         'name': '沪深港通资金流向',

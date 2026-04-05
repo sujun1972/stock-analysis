@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.repositories.express_repository import ExpressRepository
 from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 
 class ExpressService:
@@ -36,7 +37,7 @@ class ExpressService:
                     periods.append(period_str)
         return periods
 
-    async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None) -> dict:
+    async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None, concurrency: int = 3) -> dict:
         """按季度报告期全量同步业绩快报历史数据（支持中断续继）"""
         effective_start = start_date or '20090101'
         quarters = self._generate_quarters(effective_start)
@@ -54,7 +55,7 @@ class ExpressService:
         logger.info(f"待同步季度数: {len(pending)}，已完成: {len(completed)}")
 
         total_records = 0
-        semaphore = asyncio.Semaphore(3)
+        semaphore = asyncio.Semaphore(max(1, concurrency))
 
         async def sync_one(period: str):
             nonlocal total_records
@@ -92,12 +93,13 @@ class ExpressService:
         return {'status': 'success', 'records': total_records, 'quarters': total_quarters}
 
     def _get_provider(self):
-        """获取 Tushare Provider"""
-        from app.core.config import settings
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     async def sync_express(
         self,

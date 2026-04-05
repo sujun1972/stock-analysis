@@ -206,6 +206,14 @@ export class MoneyflowApiClient extends BaseApiClient {
   }
 
   /**
+   * 全量历史同步个股资金流向数据（按股票代码逐只请求，支持中断续继）
+   * @param params.start_date 开始日期 YYYY-MM-DD，默认 2010-01-01
+   */
+  async syncMoneyflowFullHistoryAsync(params?: { start_date?: string; concurrency?: number }): Promise<ApiResponse<SyncTaskResponse>> {
+    return this.post('/api/moneyflow/sync-full-history', null, { params })
+  }
+
+  /**
    * 获取资金净流入排名前N的股票（Tushare标准接口）
    * @param params 查询参数
    * @returns 排名数据

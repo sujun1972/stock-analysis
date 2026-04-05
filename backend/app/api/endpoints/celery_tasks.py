@@ -18,6 +18,8 @@ Celery 任务管理 API
 - 移除所有直接 SQL 查询
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Depends
 from celery.result import AsyncResult
 from loguru import logger
@@ -30,6 +32,7 @@ from app.core.dependencies import get_current_active_user
 from app.models.user import User
 from app.celery_app import celery_app
 from app.services.celery_task_history_service import CeleryTaskHistoryService
+from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
 
 router = APIRouter(prefix="/celery", tags=["Celery Tasks"])
 
@@ -112,6 +115,37 @@ async def get_celery_task_status(
                 is_successful = (task_state == 'SUCCESS')
                 is_failed = (task_state in ['FAILURE', 'REVOKED'])
 
+        # PENDING + 数据库有 started_at 说明 worker 重启后任务已丢失（僵尸任务）
+        # 注意：新提交的任务存在竞态窗口（task_prerun 已写 started_at，但 Redis 还未变成 STARTED）
+        # 因此要求 started_at 距今超过 60 秒才判定为僵尸，避免误杀新任务
+        zombie_error: Optional[str] = None
+        if task_state == 'PENDING':
+            try:
+                repo = CeleryTaskHistoryRepository()
+                db_task = await asyncio.to_thread(repo.get_by_task_id, task_id)
+                if db_task and db_task.get('started_at') and db_task.get('status') in ('running', 'pending', 'progress'):
+                    started_at = db_task['started_at']
+                    # 计算 started_at 距今的秒数，给新任务 60 秒的宽限期
+                    if isinstance(started_at, str):
+                        started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                    now = datetime.now(tz=started_at.tzinfo) if started_at.tzinfo else datetime.now()
+                    seconds_since_start = (now - started_at).total_seconds()
+                    if seconds_since_start > 60:
+                        # worker 已重启，任务不会再运行，标记为失败并更新数据库
+                        zombie_error = 'Worker 重启，任务已中断'
+                        await asyncio.to_thread(
+                            repo.update_task_status,
+                            task_id,
+                            status='failure',
+                            error=zombie_error
+                        )
+                        task_state = 'FAILURE'
+                        is_ready = True
+                        is_failed = True
+                        logger.warning(f"检测到僵尸任务（worker重启）: {task_id[:8]}... (started {seconds_since_start:.0f}s ago)")
+            except Exception as e:
+                logger.warning(f"僵尸任务检测失败: {e}")
+
         response_data = {
             'task_id': task_id,
             'state': task_state,
@@ -121,10 +155,12 @@ async def get_celery_task_status(
             'failed': is_failed
         }
 
-        # 添加进度信息（如果任务设置了meta）
+        # 添加进度信息（如果任务设置了meta）—— 仅在 PROGRESS/STARTED 状态时读取，
+        # PENDING 下 result.info 可能是残留的旧数据，不可信
         try:
-            if hasattr(result, 'info') and hasattr(result.info, 'get') and callable(result.info.get):
-                response_data['progress'] = result.info.get('progress', 0)
+            if task_state in ('PROGRESS', 'STARTED') and hasattr(result, 'info') and hasattr(result.info, 'get') and callable(result.info.get):
+                # 优先读 progress（百分比），兜底读 percent（旧字段名兼容）
+                response_data['progress'] = result.info.get('progress') or result.info.get('percent', 0)
                 response_data['current'] = result.info.get('current', 0)
                 response_data['total'] = result.info.get('total', 100)
                 response_data['status_text'] = result.info.get('status', '')
@@ -142,7 +178,9 @@ async def get_celery_task_status(
         # 添加错误信息（失败时）
         if task_state == 'FAILURE':
             try:
-                if hasattr(result, 'info') and result.info:
+                if zombie_error:
+                    error_msg = zombie_error
+                elif hasattr(result, 'info') and result.info:
                     error_msg = str(result.info)
                 else:
                     error_msg = "Unknown error"
@@ -393,6 +431,15 @@ async def delete_task_history(
         # 检查权限
         if task.get('user_id') != current_user.id:
             raise HTTPException(status_code=403, detail="无权删除此任务记录")
+
+        # 若任务仍在运行，先撤销 Celery 任务（防止后台继续运行）
+        active_statuses = {'pending', 'running'}
+        if task.get('status') in active_statuses:
+            try:
+                celery_app.control.revoke(task_id, terminate=True)
+                logger.info(f"删除前撤销活动任务: {task_id[:8]}...")
+            except Exception as revoke_err:
+                logger.warning(f"撤销任务失败（继续删除记录）: {revoke_err}")
 
         # 删除任务记录
         rows_deleted = await service.delete_task_history(

@@ -142,6 +142,7 @@ async def get_high_pledge_stocks(
 
 @router.post("/sync-full-history")
 async def sync_pledge_stat_full_history(
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """逐只股票全量同步股权质押统计历史数据（支持中断续继）
@@ -150,8 +151,15 @@ async def sync_pledge_stat_full_history(
     """
     try:
         from app.tasks.pledge_stat_tasks import sync_pledge_stat_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
 
-        celery_task = sync_pledge_stat_full_history_task.apply_async(kwargs={})
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'pledge_stat')
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+        celery_task = sync_pledge_stat_full_history_task.apply_async(kwargs={'concurrency': concurrency})
 
         helper = TaskHistoryHelper()
         task_data = await helper.create_task_record(
@@ -160,7 +168,7 @@ async def sync_pledge_stat_full_history(
             display_name='股权质押统计（全量历史）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={},
+            task_params={'concurrency': concurrency},
             source='pledge_stat_page'
         )
 

@@ -169,16 +169,24 @@ async def sync_ggt_daily_async(
 @router.post("/sync-full-history")
 async def sync_ggt_daily_full_history(
     start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2014年开始"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """全量同步港股通每日成交统计历史数据（按年切片 + Redis 续继）"""
     try:
         from app.tasks.ggt_daily_tasks import sync_ggt_daily_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'ggt_daily')
+            concurrency = (cfg.get('full_sync_concurrency') or 3) if cfg else 3
 
         start_date_fmt = start_date.replace('-', '') if start_date else None
 
         celery_task = sync_ggt_daily_full_history_task.apply_async(
-            kwargs={'start_date': start_date_fmt}
+            kwargs={'start_date': start_date_fmt, 'concurrency': concurrency}
         )
 
         helper = TaskHistoryHelper()
@@ -188,7 +196,7 @@ async def sync_ggt_daily_full_history(
             display_name='港股通每日成交统计（全量历史）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date_fmt},
+            task_params={'start_date': start_date_fmt, 'concurrency': concurrency},
             source='ggt_daily_page'
         )
 

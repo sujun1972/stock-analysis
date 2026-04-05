@@ -66,9 +66,10 @@ def sync_suspend_task(
     name="tasks.sync_suspend_full_history",
     max_retries=0,
     soft_time_limit=28800,
-    time_limit=32400
+    time_limit=32400,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_suspend_full_history_task(self):
+def sync_suspend_full_history_task(self, concurrency: int = 5):
     """
     按周切片全量同步停复牌历史数据（支持中断续继）
 
@@ -80,7 +81,7 @@ def sync_suspend_full_history_task(self):
     """
     from app.core.redis_lock import redis_client
 
-    logger.info("========== [Celery] 开始全量历史停复牌数据同步任务 ==========")
+    logger.info(f"========== [Celery] 开始全量历史停复牌数据同步任务 concurrency={concurrency} ==========")
 
     if redis_client is None:
         logger.error("Redis 不可用，无法执行全量同步任务")
@@ -98,7 +99,8 @@ def sync_suspend_full_history_task(self):
             result = loop.run_until_complete(
                 service.sync_full_history(
                     redis_client=redis_client,
-                    update_state_fn=self.update_state
+                    update_state_fn=self.update_state,
+                    concurrency=concurrency
                 )
             )
         finally:

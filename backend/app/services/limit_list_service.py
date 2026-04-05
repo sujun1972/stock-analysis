@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.repositories import LimitListRepository
 from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 
 class LimitListService:
@@ -23,12 +24,13 @@ class LimitListService:
         logger.debug("✓ LimitListService initialized")
 
     def _get_provider(self):
-        """获取Tushare数据提供者"""
-        from app.core.config import settings
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     def _format_date(self, date_str: str) -> str:
         """将 YYYYMMDD 转为 YYYY-MM-DD"""

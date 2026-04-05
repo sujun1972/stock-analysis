@@ -2,6 +2,7 @@
 停复牌信息 API 端点
 """
 
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
@@ -191,6 +192,7 @@ async def sync_suspend_async(
 
 @router.post("/sync-full-history")
 async def sync_suspend_full_history(
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """
@@ -200,8 +202,17 @@ async def sync_suspend_full_history(
     """
     try:
         from app.tasks.suspend_tasks import sync_suspend_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
 
-        celery_task = sync_suspend_full_history_task.apply_async()
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'suspend')
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+        celery_task = sync_suspend_full_history_task.apply_async(
+            kwargs={'concurrency': concurrency}
+        )
 
         helper = TaskHistoryHelper()
         task_data = await helper.create_task_record(
@@ -210,7 +221,7 @@ async def sync_suspend_full_history(
             display_name='停复牌全量历史同步',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={},
+            task_params={'concurrency': concurrency},
             source='suspend_page'
         )
 

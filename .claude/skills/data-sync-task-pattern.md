@@ -121,11 +121,27 @@ def sync_{resource}_task(
 - ✅ 捕获异常并记录详细日志
 - ❌ **禁止在任务体内调用 `DatabaseManager.reset_instance()`** — 该方法仅用于测试，在生产任务中调用会关闭 FastAPI 主进程正在使用的 psycopg2 连接池，导致后续所有数据库请求报 `connection pool exhausted`
 
+**全量历史同步任务额外要求**（`sync_*_full_history` 类型）：
+
+```python
+@celery_app.task(
+    bind=True,
+    name="tasks.sync_{resource}_full_history",
+    max_retries=0,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
+)
+def sync_{resource}_full_history_task(self, start_date=None, concurrency=5):
+    ...
+```
+
+- `acks_late=False`：全局配置 `task_acks_late=True` 让短任务在 worker 崩溃时自动重试，但全量历史任务耗时数小时，worker 重启后不应自动重投递（会产生两个任务并发竞争同一 Redis 续继 key）。全量任务中断后通过手动重新触发 + Redis Set 续继恢复。
+- `concurrency` 参数：由 API 端点从 `sync_configs.full_sync_concurrency` 读取后传入，不在任务内硬编码。
+
 ---
 
 ### 2.2 API Endpoint 层 (`/backend/app/api/endpoints/{resource}.py`)
 
-**异步同步端点模板**：
+**增量同步端点模板**：
 
 ```python
 @router.post("/sync-async")
@@ -135,114 +151,73 @@ async def sync_{resource}_async(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
 ):
-    """
-    异步同步{资源名称}数据（通过Celery任务）
+    from app.tasks.{resource}_tasks import sync_{resource}_task
+    from app.services import TaskHistoryHelper
 
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
+    trade_date_formatted = trade_date.replace('-', '') if trade_date else None
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-    Args:
-        trade_date: 单个交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        current_user: 当前登录用户（管理员）
+    celery_task = sync_{resource}_task.apply_async(
+        kwargs={'trade_date': trade_date_formatted, 'start_date': start_date_formatted, 'end_date': end_date_formatted}
+    )
 
-    Returns:
-        包含Celery任务ID和任务信息的响应
-    """
-    try:
-        from app.tasks.{resource}_tasks import sync_{resource}_task
-        from src.database.db_manager import DatabaseManager
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_{resource}',
+        display_name='{资源中文名称}',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'trade_date': trade_date_formatted},
+        source='{resource}_page'
+    )
+    return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
+```
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
-        trade_date_formatted = trade_date.replace('-', '') if trade_date else None
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+**全量历史同步端点模板**（支持从 sync_configs 读取并发数）：
 
-        # 提交Celery任务（异步执行）
-        celery_task = sync_{resource}_task.apply_async(
-            kwargs={
-                'trade_date': trade_date_formatted,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted
-            }
-        )
+```python
+@router.post("/sync-full-history")
+async def sync_{resource}_full_history_async(
+    start_date: Optional[str] = Query(None),
+    concurrency: Optional[int] = Query(None, ge=1, le=20),  # 不传则从 sync_configs 读取
+    current_user: User = Depends(require_admin)
+):
+    from app.tasks.{resource}_tasks import sync_{resource}_full_history_task
+    from app.services import TaskHistoryHelper
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 记录任务到celery_task_history表，用于任务面板显示
-        db_manager = DatabaseManager()
-        history_query = """
-            INSERT INTO celery_task_history
-            (celery_task_id, task_name, display_name, task_type, user_id, status, params, metadata, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-        """
+    start_date_formatted = start_date.replace('-', '') if start_date else None
 
-        task_params = {
-            'trade_date': trade_date_formatted,
-            'start_date': start_date_formatted,
-            'end_date': end_date_formatted
-        }
+    # 未传并发数时从 sync_configs 读取，兜底 5
+    if concurrency is None:
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, '{table_key}')
+        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
 
-        task_metadata = {
-            "trigger": "manual",
-            "source": "{resource}_page"
-        }
+    celery_task = sync_{resource}_full_history_task.apply_async(
+        kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+    )
 
-        await asyncio.to_thread(
-            db_manager._execute_update,
-            history_query,
-            (
-                celery_task.id,
-                'tasks.sync_{resource}',
-                '{资源中文名称}',
-                'data_sync',
-                current_user.id,
-                'pending',
-                json.dumps(task_params),
-                json.dumps(task_metadata)
-            )
-        )
-
-        logger.info(f"{资源名称}同步任务已提交: {celery_task.id}")
-
-        return ApiResponse.success(
-            data={
-                "celery_task_id": celery_task.id,
-                "task_name": "tasks.sync_{resource}",
-                "display_name": "{资源中文名称}",
-                "status": "pending"
-            },
-            message="任务已提交，正在后台执行"
-        )
-
-    except Exception as e:
-        logger.error(f"提交{资源名称}同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_{resource}_full_history',
+        display_name='{资源中文名称}全量历史同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'start_date': start_date_formatted},
+        source='{resource}_page'
+    )
+    return ApiResponse.success(data=task_data, message="全量历史同步任务已提交，正在后台执行")
 ```
 
 **关键点**：
-- ✅ 端点路径：`/sync-async`（与 `/sync` 同步端点区分）
-- ✅ 管理员权限：`Depends(require_admin)`
-- ✅ 日期格式转换：`YYYY-MM-DD` → `YYYYMMDD`
-- ✅ 必须记录到 `celery_task_history` 表 — **使用 `TaskHistoryHelper`，禁止直接调用 `DatabaseManager._execute_update`**
+- ✅ 使用 `TaskHistoryHelper`，禁止直接调用 `DatabaseManager._execute_update`
+- ✅ 全量端点 `concurrency` 参数默认 `None`，从 `sync_configs.full_sync_concurrency` 读取
 - ✅ `task_type` 应为 `'data_sync'`
-- ✅ 立即返回任务ID，不等待完成
-
-> ⚠️ **模板代码已过时**：上方端点模板中直接使用 `DatabaseManager` 插入任务历史的写法已被废弃。
-> 请改用 `TaskHistoryHelper`（详见 CLAUDE.md「任务历史记录统一管理」章节）：
-> ```python
-> from app.services import TaskHistoryHelper
-> helper = TaskHistoryHelper()
-> task_data = await helper.create_task_record(
->     celery_task_id=celery_task.id,
->     task_name='tasks.sync_{resource}',
->     display_name='{资源中文名称}',
->     task_type='data_sync',
->     user_id=current_user.id,
->     task_params={...},
->     source='{resource}_page'
-> )
-> return ApiResponse.success(data=task_data)
-> ```
+- ✅ 日期格式转换：`YYYY-MM-DD` → `YYYYMMDD`
 
 ---
 

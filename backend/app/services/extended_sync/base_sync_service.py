@@ -29,15 +29,17 @@ class BaseSyncService:
     """
 
     def __init__(self):
-        self.provider_factory = DataProviderFactory()
         self.validator = ExtendedDataValidator()
-
-    def _get_provider(self):
-        """获取Tushare数据提供者"""
-        return self.provider_factory.create_provider(
+        self.provider_factory = DataProviderFactory()  # 保留向后兼容
+        # 每个服务实例只初始化一次 provider，避免全量同步时每只股票都重复初始化
+        self._provider = DataProviderFactory.create_provider(
             source='tushare',
             token=settings.TUSHARE_TOKEN
         )
+
+    def _get_provider(self):
+        """获取Tushare数据提供者（复用已初始化的实例）"""
+        return self._provider
 
     def _calculate_trade_date(
         self,

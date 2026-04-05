@@ -12,6 +12,7 @@ import pandas as pd
 
 from app.repositories.share_float_repository import ShareFloatRepository
 from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 
 class ShareFloatService:
@@ -45,7 +46,7 @@ class ShareFloatService:
                 cur = date(cur.year, cur.month + 1, 1)
         return segments
 
-    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, update_state_fn=None) -> Dict:
+    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, concurrency: int = 5, update_state_fn=None) -> Dict:
         """按月切片全量同步限售股解禁历史数据（支持 Redis 续继）
 
         share_float 单次上限6000条，按年切片严重截断（每年可能超过6000条），改为按月切片。
@@ -65,7 +66,7 @@ class ShareFloatService:
         total_records = 0
 
         provider = self._get_provider()
-        sem = asyncio.Semaphore(self.FULL_HISTORY_CONCURRENCY)
+        sem = asyncio.Semaphore(max(1, concurrency))
 
         async def sync_month(ms: str, me: str):
             async with sem:
@@ -79,7 +80,7 @@ class ShareFloatService:
                 except Exception as e:
                     return ms, me, False, 0, str(e)
 
-        BATCH_SIZE = self.FULL_HISTORY_CONCURRENCY * 2
+        BATCH_SIZE = max(1, concurrency) * 2
         for batch_start in range(0, len(pending), BATCH_SIZE):
             batch = pending[batch_start:batch_start + BATCH_SIZE]
             results = await asyncio.gather(*[sync_month(ms, me) for ms, me in batch])
@@ -337,12 +338,13 @@ class ShareFloatService:
             }
 
     def _get_provider(self):
-        """获取Tushare数据提供者"""
-        from app.core.config import settings
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     def _validate_and_clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """

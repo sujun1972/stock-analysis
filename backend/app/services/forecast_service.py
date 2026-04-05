@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.repositories.forecast_repository import ForecastRepository
 from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 
 class ForecastService:
@@ -262,7 +263,7 @@ class ForecastService:
                     periods.append(period_str)
         return periods
 
-    async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None) -> Dict:
+    async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None, concurrency: int = 3) -> Dict:
         """按季度报告期全量同步业绩预告历史数据（支持中断续继）"""
         import asyncio as _asyncio
 
@@ -284,7 +285,7 @@ class ForecastService:
         logger.info(f"待同步季度数: {len(pending)}，已完成: {len(completed)}")
 
         total_records = 0
-        semaphore = _asyncio.Semaphore(3)
+        semaphore = _asyncio.Semaphore(max(1, concurrency))
 
         async def sync_one(period: str):
             nonlocal total_records
@@ -327,12 +328,13 @@ class ForecastService:
         return {'status': 'success', 'records': total_records, 'quarters': total_quarters}
 
     def _get_provider(self):
-        """获取Tushare数据提供者"""
-        from app.core.config import settings
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     def _validate_and_clean_data(self, df):
         """验证和清洗数据"""

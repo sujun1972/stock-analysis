@@ -55,11 +55,13 @@ export function useTaskPolling(enabled: boolean = true, interval: number = 3000)
               // 添加完成时间
               if (response.status === 'success' || response.status === 'failure') {
                 updates.endTime = Date.now()
+                // 任务结束后清除进度，避免残留旧值在下次执行时被误用
+                updates.progress = undefined
                 logger.info(`[TaskPolling] 任务完成: ${task.displayName} - ${response.status === 'success' ? '成功' : '失败'}`)
               }
 
-              // 添加进度
-              if (response.progress !== undefined) {
+              // 添加进度（仅活动状态时更新）
+              if (response.status !== 'success' && response.status !== 'failure' && response.progress !== undefined) {
                 updates.progress = response.progress
               }
 
@@ -157,9 +159,17 @@ async function fetchTaskStatus(taskId: string, taskName: string) {
  */
 function mapCeleryStatus(celeryData: any) {
   const state = celeryData.state || celeryData.status
+  // progress / percent 都是百分比（0-100），current 是完成数量不能用作进度
+  const rawProgress = celeryData.progress ?? celeryData.percent ?? undefined
+  // 计算型进度：current/total * 100（两者都存在且 total > 0 时）
+  const computedProgress =
+    typeof celeryData.current === 'number' && typeof celeryData.total === 'number' && celeryData.total > 0
+      ? Math.round((celeryData.current / celeryData.total) * 100)
+      : undefined
+  const progress = rawProgress ?? computedProgress
   return {
     status: mapStatus(state),
-    progress: celeryData.progress || celeryData.current,
+    progress: typeof progress === 'number' ? Math.min(100, Math.max(0, progress)) : undefined,
     result: celeryData.result,
     error: celeryData.error || (state === 'FAILURE' ? celeryData.traceback : undefined)
   }

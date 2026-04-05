@@ -43,6 +43,7 @@ import {
 } from 'lucide-react'
 import { useTaskStore, TaskType } from '@/stores/task-store'
 import { apiClient } from '@/lib/api-client'
+import { celeryTasksApi } from '@/lib/api'
 
 interface TaskPanelProps {
   open: boolean
@@ -119,17 +120,43 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
     }
   }
 
-  // 删除单个任务
-  const handleDeleteTask = async (taskId: string) => {
+  // 取消活动任务（撤销 Celery 任务 + 删除数据库记录）
+  const handleCancelTask = async (taskId: string) => {
     try {
-      const response = await apiClient.delete(`/api/celery/task-history/${taskId}`) as any
+      // 先撤销 Celery 任务，再删除数据库记录
+      await celeryTasksApi.cancelTask(taskId)
+      const response = await celeryTasksApi.deleteTask(taskId)
       if (response.code === 200) {
-        logger.info(`[TaskPanel] 删除任务 ${taskId.substring(0, 8)}... 成功`)
-        // 从本地store移除
+        logger.info(`[TaskPanel] 取消任务 ${taskId.substring(0, 8)}... 成功`)
         removeTask(taskId)
       }
-    } catch (error) {
-      logger.error('[TaskPanel] 删除任务失败', error)
+    } catch (error: any) {
+      // 404 说明数据库里本就没有此记录（幽灵任务），直接从 store 移除
+      if (error?.code === 404 || error?.response?.status === 404) {
+        logger.warn(`[TaskPanel] 取消任务 ${taskId.substring(0, 8)}... 数据库无记录，直接移除`)
+        removeTask(taskId)
+      } else {
+        logger.error('[TaskPanel] 取消任务失败', error)
+      }
+    }
+  }
+
+  // 删除已完成任务记录（只删数据库记录）
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const response = await celeryTasksApi.deleteTask(taskId)
+      if (response.code === 200) {
+        logger.info(`[TaskPanel] 删除任务 ${taskId.substring(0, 8)}... 成功`)
+        removeTask(taskId)
+      }
+    } catch (error: any) {
+      // 404 说明数据库里本就没有此记录（幽灵任务），直接从 store 移除
+      if (error?.code === 404 || error?.response?.status === 404) {
+        logger.warn(`[TaskPanel] 删除任务 ${taskId.substring(0, 8)}... 数据库无记录，直接移除`)
+        removeTask(taskId)
+      } else {
+        logger.error('[TaskPanel] 删除任务失败', error)
+      }
     }
   }
 
@@ -333,8 +360,8 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
                                 variant="ghost"
                                 size="sm"
                                 className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
-                                onClick={() => handleDeleteTask(task.taskId)}
-                                title="删除任务"
+                                onClick={() => handleCancelTask(task.taskId)}
+                                title="取消任务"
                               >
                                 <XCircleIcon className="h-4 w-4" />
                               </Button>

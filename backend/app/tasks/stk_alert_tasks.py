@@ -67,7 +67,8 @@ def sync_stk_alert_task(
     name="tasks.sync_stk_alert_full_history",
     max_retries=0,
     soft_time_limit=300,
-    time_limit=600
+    time_limit=600,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
 def sync_stk_alert_full_history_task(self, start_date: str = None):
     """全量同步交易所重点提示证券数据（单次请求）

@@ -27,10 +27,10 @@ export interface DataBulkOpsOptions {
   tableKey: string
   /**
    * 各页面自己的 sync-async 函数。
-   * hook 会在调用时传入 { start_date: 'YYYYMMDD' }，
+   * hook 会在调用时传入 { start_date: 'YYYYMMDD', concurrency?: number }，
    * 函数应该将其透传给后端 sync-async 接口。
    */
-  syncFn: (params: { start_date: string }) => Promise<{
+  syncFn: (params: { start_date: string; concurrency?: number }) => Promise<{
     code: number
     data?: {
       celery_task_id: string
@@ -43,10 +43,12 @@ export interface DataBulkOpsOptions {
   taskName: string
   /** 同步或清空完成后的回调（通常是 loadData） */
   onSuccess?: () => void
+  /** 全量同步并发数，透传给后端（默认不传，后端使用自身默认值） */
+  concurrency?: number
 }
 
 export function useDataBulkOps(options: DataBulkOpsOptions) {
-  const { tableKey, syncFn, taskName, onSuccess } = options
+  const { tableKey, syncFn, taskName, onSuccess, concurrency } = options
 
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } =
     useTaskStore()
@@ -68,7 +70,9 @@ export function useDataBulkOps(options: DataBulkOpsOptions) {
   const handleFullSync = useCallback(async () => {
     try {
       const startDate = getEarliestDate()
-      const response = await syncFn({ start_date: startDate })
+      const params: { start_date: string; concurrency?: number } = { start_date: startDate }
+      if (concurrency !== undefined) params.concurrency = concurrency
+      const response = await syncFn(params)
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -104,6 +108,7 @@ export function useDataBulkOps(options: DataBulkOpsOptions) {
   }, [
     syncFn,
     getEarliestDate,
+    concurrency,
     addTask,
     triggerPoll,
     registerCompletionCallback,

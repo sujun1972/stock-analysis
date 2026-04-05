@@ -352,10 +352,40 @@ class MoneyflowRepository(BaseRepository):
                 if col not in df.columns:
                     df[col] = 0
 
+            # 标准化 trade_date：Tushare 历史数据有时返回 YYYY-MM-DD（10位），需转为 YYYYMMDD（8位）
+            if 'trade_date' in df.columns:
+                df['trade_date'] = df['trade_date'].astype(str).str.replace('-', '', regex=False).str[:8]
+
+            # vol 列为 BIGINT，必须转为 Python int；amount 列为 DECIMAL，转为 float
+            VOL_COLS = {
+                'buy_sm_vol', 'sell_sm_vol', 'buy_md_vol', 'sell_md_vol',
+                'buy_lg_vol', 'sell_lg_vol', 'buy_elg_vol', 'sell_elg_vol',
+                'net_mf_vol'
+            }
+
+            def _to_val(col, v):
+                if pd.isna(v):
+                    return None
+                if col in ('trade_date', 'ts_code'):
+                    return str(v)
+                if col in VOL_COLS:
+                    try:
+                        iv = int(float(v))
+                        # bigint 范围检查
+                        if iv > 9223372036854775807 or iv < -9223372036854775808:
+                            return None
+                        return iv
+                    except (ValueError, OverflowError):
+                        return None
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    return None
+
             # 准备数据
             values = []
             for _, row in df.iterrows():
-                values.append(tuple(row[col] for col in columns))
+                values.append(tuple(_to_val(col, row[col]) for col in columns))
 
             if not values:
                 return 0
@@ -377,17 +407,25 @@ class MoneyflowRepository(BaseRepository):
                     updated_at = NOW()
             """
 
-            # 批量执行
+            # 批量执行（使用 executemany，单行出错时跳过并继续）
             conn = self.db.get_connection()
             try:
                 cursor = conn.cursor()
                 affected_rows = 0
+                skip_count = 0
                 for value_tuple in values:
-                    cursor.execute(query, value_tuple)
-                    affected_rows += cursor.rowcount
+                    try:
+                        cursor.execute(query, value_tuple)
+                        affected_rows += cursor.rowcount
+                    except Exception as row_err:
+                        conn.rollback()
+                        skip_count += 1
+                        logger.debug(f"跳过异常行: {row_err} | 值: {value_tuple[:2]}")
                 conn.commit()
                 cursor.close()
 
+                if skip_count:
+                    logger.warning(f"批量插入资金流向：跳过 {skip_count} 条异常行")
                 logger.info(f"✓ 批量插入/更新资金流向数据: {affected_rows} 条")
                 return affected_rows
 

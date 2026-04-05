@@ -198,14 +198,22 @@ async def sync_forecast_async(
 @router.post("/sync-full-history-async")
 async def sync_forecast_full_history_async(
     start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """异步全量同步业绩预告历史数据（按季度 period 切片 + Redis 续继）"""
     try:
         from app.tasks.forecast_tasks import sync_forecast_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'forecast')
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
 
         celery_task = sync_forecast_full_history_task.apply_async(
-            kwargs={'start_date': start_date}
+            kwargs={'start_date': start_date, 'concurrency': concurrency}
         )
 
         helper = TaskHistoryHelper()
@@ -215,7 +223,7 @@ async def sync_forecast_full_history_async(
             display_name='业绩预告全量同步',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date},
+            task_params={'start_date': start_date, 'concurrency': concurrency},
             source='forecast_page'
         )
 

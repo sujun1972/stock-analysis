@@ -27,11 +27,13 @@ class SuspendService:
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
-        """获取 Tushare Provider"""
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     async def sync_suspend(
         self,
@@ -287,6 +289,7 @@ class SuspendService:
     async def sync_full_history(
         self,
         redis_client,
+        concurrency: int = 5,
         update_state_fn=None
     ) -> Dict:
         """
@@ -320,7 +323,7 @@ class SuspendService:
         error_count = 0
         total_records = 0
 
-        sem = asyncio.Semaphore(SUSPEND_FULL_HISTORY_CONCURRENCY)
+        sem = asyncio.Semaphore(max(1, concurrency))
 
         async def sync_week(ws: str, we: str):
             async with sem:
@@ -338,7 +341,7 @@ class SuspendService:
                 except Exception as e:
                     return ws, we, False, 0, str(e)
 
-        BATCH_SIZE = SUSPEND_FULL_HISTORY_CONCURRENCY * 2
+        BATCH_SIZE = max(1, concurrency) * 2
         for batch_start in range(0, len(pending), BATCH_SIZE):
             batch = pending[batch_start:batch_start + BATCH_SIZE]
             results = await asyncio.gather(*[sync_week(ws, we) for ws, we in batch])

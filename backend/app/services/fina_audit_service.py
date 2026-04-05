@@ -23,11 +23,13 @@ class FinaAuditService:
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
-        """获取 Tushare Provider"""
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     async def get_fina_audit_data(
         self,
@@ -197,7 +199,8 @@ class FinaAuditService:
         self,
         redis_client,
         start_date: Optional[str] = None,
-        update_state_fn=None
+        update_state_fn=None,
+        concurrency: int = 5
     ) -> Dict:
         """
         逐只股票全量同步财务审计意见历史数据（5 并发，Redis Set 续继）
@@ -208,7 +211,7 @@ class FinaAuditService:
         from app.repositories.stock_basic_repository import StockBasicRepository
 
         PROGRESS_KEY = "sync:fina_audit:full_history:progress"
-        CONCURRENCY = 5
+        CONCURRENCY = max(1, concurrency)
         BATCH_SIZE = 50
 
         all_ts_codes = StockBasicRepository().get_listed_ts_codes(status='L')

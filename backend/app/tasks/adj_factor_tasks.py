@@ -70,9 +70,10 @@ def sync_adj_factor_task(
     name="tasks.sync_adj_factor_full_history",
     max_retries=0,
     soft_time_limit=28800,
-    time_limit=32400
+    time_limit=32400,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_adj_factor_full_history_task(self, start_date: Optional[str] = None):
+def sync_adj_factor_full_history_task(self, start_date: Optional[str] = None, concurrency: int = 8):
     """
     逐只股票全量同步复权因子历史数据
 
@@ -117,7 +118,7 @@ def sync_adj_factor_full_history_task(self, start_date: Optional[str] = None):
     skip_count = len(completed_set)
     error_count = 0
 
-    CONCURRENCY = 8
+    CONCURRENCY = max(1, concurrency)
     BATCH_SIZE = 50
 
     async def sync_one(ts_code: str, sem: asyncio.Semaphore):

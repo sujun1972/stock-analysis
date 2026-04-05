@@ -221,6 +221,26 @@ def task_failure_handler(sender=None, exception=None, traceback=None, **kwargs):
         logger.error(f"更新任务失败状态失败: {e}")
 
 
+@signals.worker_process_init.connect
+def worker_process_init_handler(**kwargs):
+    """
+    每个 Fork Pool Worker 进程启动时重置 DatabaseManager 单例。
+
+    问题：Celery 使用 fork() 创建 worker 进程，子进程继承父进程的
+    DatabaseManager 单例（包含已损坏的连接池），导致第一次查询时报
+    "server closed the connection unexpectedly"。
+
+    解决：在 worker 进程初始化时重置单例，强制子进程在首次使用时
+    重新创建自己的连接池。
+    """
+    try:
+        from src.database.db_manager import DatabaseManager
+        DatabaseManager.reset_instance()
+        logger.info("✅ Fork worker 已重置 DatabaseManager 单例（连接池将在首次使用时重建）")
+    except Exception as e:
+        logger.warning(f"重置 DatabaseManager 单例失败（无害）: {e}")
+
+
 @signals.task_revoked.connect
 def task_revoked_handler(sender=None, **kwargs):
     """

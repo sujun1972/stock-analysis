@@ -67,9 +67,10 @@ def sync_pledge_stat_task(
     name="tasks.sync_pledge_stat_full_history",
     max_retries=0,
     soft_time_limit=10800,
-    time_limit=14400
+    time_limit=14400,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_pledge_stat_full_history_task(self, start_date: str = None):
+def sync_pledge_stat_full_history_task(self, start_date: str = None, concurrency: int = 5):
     """逐只股票全量同步股权质押统计历史数据（支持中断续继）
 
     pledge_stat 接口只支持 ts_code + end_date，无法按日期范围拉全市场，
@@ -77,7 +78,7 @@ def sync_pledge_stat_full_history_task(self, start_date: str = None):
     """
     from app.core.redis_lock import redis_client
 
-    logger.info("========== [Celery] 开始全量历史股权质押统计同步任务 ==========")
+    logger.info(f"========== [Celery] 开始全量历史股权质押统计同步任务 concurrency={concurrency} ==========")
 
     if redis_client is None:
         return {"status": "error", "message": "Redis 不可用"}
@@ -94,7 +95,8 @@ def sync_pledge_stat_full_history_task(self, start_date: str = None):
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=start_date,
-                    update_state_fn=self.update_state
+                    update_state_fn=self.update_state,
+                    concurrency=concurrency
                 )
             )
         finally:

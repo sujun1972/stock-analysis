@@ -67,7 +67,9 @@ def sync_disclosure_date_task(
 
 
 @celery_app.task(bind=True, name="tasks.sync_disclosure_date_full_history",
-                 max_retries=0, soft_time_limit=28800, time_limit=32400)
+                 max_retries=0, soft_time_limit=28800, time_limit=32400,
+    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
+)
 def sync_disclosure_date_full_history_task(self, start_date: Optional[str] = None):
     """
     全量历史同步财报披露计划数据（按季度 period 切片，支持 Redis 续继）

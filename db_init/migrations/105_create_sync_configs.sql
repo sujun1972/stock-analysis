@@ -137,7 +137,7 @@ INSERT INTO sync_configs (
 -- ============ 资金流向 ============
 ('moneyflow',           '个股资金流向（Tushare）', '资金流向', 310,
  'tasks.sync_moneyflow', 7,
- NULL, 'none', 1,
+ 'tasks.sync_moneyflow_full_history', 'by_ts_code', 5,
  FALSE, NULL,
  '/moneyflow/stock', '/moneyflow', 2000, NULL),
 

@@ -12,6 +12,7 @@ import pandas as pd
 
 from app.repositories.income_repository import IncomeRepository
 from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 # 全量同步 Redis key / 并发数
 
@@ -279,7 +280,8 @@ class IncomeService:
         self,
         redis_client,
         start_date: Optional[str] = None,
-        update_state_fn=None
+        update_state_fn=None,
+        concurrency: int = 5
     ) -> Dict:
         """
         逐只股票全量同步利润表历史数据（5 并发，Redis Set 续继）
@@ -295,7 +297,7 @@ class IncomeService:
         from app.repositories.stock_basic_repository import StockBasicRepository
 
         PROGRESS_KEY = "sync:income:full_history:progress"
-        CONCURRENCY = 5
+        CONCURRENCY = max(1, concurrency)
         BATCH_SIZE = 50
         effective_start = start_date or '20090101'
         today = datetime.now().strftime("%Y%m%d")
@@ -357,12 +359,13 @@ class IncomeService:
         }
 
     def _get_provider(self):
-        """获取Tushare数据提供者"""
-        from app.core.config import settings
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     def _validate_and_clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """

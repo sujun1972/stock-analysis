@@ -25,11 +25,13 @@ class StkAhComparisonService:
         self.calendar_repo = TradingCalendarRepository()
 
     def _get_provider(self):
-        """获取 Tushare Provider"""
-        return self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
 
     async def sync_stk_ah_comparison(
         self,
