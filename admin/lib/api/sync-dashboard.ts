@@ -41,11 +41,19 @@ export interface SyncConfig {
   updated_at: string | null
 }
 
+/** 增量任务的定时调度配置 */
+export interface IncrementalSchedule {
+  schedule_id: number
+  cron_expression: string | null
+  enabled: boolean
+}
+
 /** 仪表盘概览条目（配置 + 运行状态） */
 export interface SyncOverviewItem extends SyncConfig {
   last_incremental: LastTaskRecord | null
   last_full_sync: LastTaskRecord | null
   redis_progress: RedisProgress | null
+  incremental_schedule: IncrementalSchedule | null
 }
 
 /** 分类统计 */
@@ -71,6 +79,11 @@ export interface SyncConfigUpdate {
   description?: string | null
   doc_url?: string | null
   data_source?: string | null
+}
+
+export interface ScheduleUpdate {
+  enabled?: boolean
+  cron_expression?: string | null
 }
 
 export class SyncDashboardApiClient extends BaseApiClient {
@@ -106,6 +119,11 @@ export class SyncDashboardApiClient extends BaseApiClient {
     deleted: boolean
   }>> {
     return this.post(`/api/sync-dashboard/${tableKey}/clear-progress`, {})
+  }
+
+  /** 更新增量同步任务的定时调度配置（启用/禁用、Cron 表达式） */
+  async updateSchedule(tableKey: string, data: ScheduleUpdate): Promise<ApiResponse<IncrementalSchedule & { task_name: string }>> {
+    return this.put(`/api/sync-dashboard/configs/${tableKey}/schedule`, data)
   }
 }
 

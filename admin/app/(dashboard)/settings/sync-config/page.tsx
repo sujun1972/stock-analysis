@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate } from '@/lib/api/sync-dashboard'
+import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate, type ScheduleUpdate } from '@/lib/api/sync-dashboard'
 import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
 import { useConfigStore } from '@/stores/config-store'
@@ -276,6 +276,7 @@ export default function SyncConfigPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<SyncOverviewItem | null>(null)
   const [editForm, setEditForm] = useState<SyncConfigUpdate>({})
+  const [scheduleForm, setScheduleForm] = useState<ScheduleUpdate>({})
   const [isSaving, setIsSaving] = useState(false)
 
   // 全局配置弹窗
@@ -414,6 +415,10 @@ export default function SyncConfigPage() {
       doc_url: item.doc_url,
       data_source: item.data_source ?? 'tushare',
     })
+    setScheduleForm({
+      enabled: item.incremental_schedule?.enabled ?? undefined,
+      cron_expression: item.incremental_schedule?.cron_expression ?? undefined,
+    })
     setEditDialogOpen(true)
   }
 
@@ -421,17 +426,39 @@ export default function SyncConfigPage() {
     if (!editingItem) return
     setIsSaving(true)
     try {
-      const resp = await syncDashboardApi.updateConfig(editingItem.table_key, editForm)
-      if (resp.code === 200) {
-        toast.success('配置已保存')
-        setEditDialogOpen(false)
+      const configResp = await syncDashboardApi.updateConfig(editingItem.table_key, editForm)
+      if (configResp.code !== 200) {
+        toast.error(configResp.message || '保存失败')
+        return
+      }
+
+      // 若该表有增量调度任务，同步更新调度配置
+      if (editingItem.incremental_schedule && (scheduleForm.enabled !== undefined || scheduleForm.cron_expression !== undefined)) {
+        const schedResp = await syncDashboardApi.updateSchedule(editingItem.table_key, scheduleForm)
+        if (schedResp.code !== 200) {
+          toast.error(schedResp.message || '调度配置保存失败')
+          return
+        }
+        const now = new Date().toISOString()
+        setItems(prev => prev.map(i =>
+          i.table_key === editingItem.table_key
+            ? {
+                ...i, ...editForm, updated_at: now,
+                incremental_schedule: i.incremental_schedule
+                  ? { ...i.incremental_schedule, ...scheduleForm }
+                  : i.incremental_schedule,
+              } as SyncOverviewItem
+            : i
+        ))
+      } else {
         const now = new Date().toISOString()
         setItems(prev => prev.map(i =>
           i.table_key === editingItem.table_key ? { ...i, ...editForm, updated_at: now } as SyncOverviewItem : i
         ))
-      } else {
-        toast.error(resp.message || '保存失败')
       }
+
+      toast.success('配置已保存')
+      setEditDialogOpen(false)
     } catch {
       toast.error('保存失败，请重试')
     } finally {
@@ -751,6 +778,45 @@ export default function SyncConfigPage() {
                 onChange={e => setEditForm(prev => ({ ...prev, notes: e.target.value || null }))}
               />
             </div>
+
+            {/* 增量同步调度 */}
+            {editingItem?.incremental_task_name && (
+              <>
+                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide border-b pb-1 pt-2">增量同步调度</div>
+                {editingItem.incremental_schedule ? (
+                  <>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                      <Label className="text-right text-sm">启用定时任务</Label>
+                      <div className="col-span-2 flex items-center gap-2">
+                        <Switch
+                          checked={scheduleForm.enabled ?? editingItem.incremental_schedule.enabled}
+                          onCheckedChange={v => setScheduleForm(prev => ({ ...prev, enabled: v }))}
+                        />
+                        <span className="text-sm text-gray-500">
+                          {(scheduleForm.enabled ?? editingItem.incremental_schedule.enabled) ? '已启用' : '已禁用'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                      <Label className="text-right text-sm">Cron 表达式</Label>
+                      <Input
+                        className="col-span-2 font-mono text-sm"
+                        placeholder="如 0 8 * * *（每天8点）"
+                        value={scheduleForm.cron_expression ?? editingItem.incremental_schedule.cron_expression ?? ''}
+                        onChange={e => setScheduleForm(prev => ({ ...prev, cron_expression: e.target.value || null }))}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 col-span-3 pl-[calc(33%+0.5rem)]">
+                      任务名：{editingItem.incremental_task_name}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-400 pl-[calc(33%+0.5rem)]">
+                    该增量任务（{editingItem.incremental_task_name}）尚未在定时任务表中登记，请先到定时任务页面创建。
+                  </p>
+                )}
+              </>
+            )}
           </div>
 
           <DialogFooter>

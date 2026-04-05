@@ -22,6 +22,7 @@ from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.repositories.sync_config_repository import SyncConfigRepository
 from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
+from app.repositories.scheduled_task_repository import ScheduledTaskRepository
 
 router = APIRouter()
 
@@ -135,6 +136,11 @@ class SyncConfigUpdate(BaseModel):
     data_source: Optional[str] = None  # 'tushare' 或 'akshare'，None 表示不修改
 
 
+class ScheduleUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    cron_expression: Optional[str] = None
+
+
 # ==================== 路由 ====================
 
 @router.get("/overview")
@@ -154,6 +160,7 @@ async def get_overview(
     """
     config_repo = SyncConfigRepository()
     task_repo = CeleryTaskHistoryRepository()
+    schedule_repo = ScheduledTaskRepository()
 
     configs = await asyncio.to_thread(config_repo.get_all)
     if category:
@@ -178,7 +185,23 @@ async def get_overview(
                 result[task_name] = record
         return result
 
-    last_tasks = await _batch_last_tasks()
+    # 批量查询增量任务的定时调度配置
+    async def _batch_schedules():
+        incr_names = [cfg['incremental_task_name'] for cfg in configs if cfg['incremental_task_name']]
+        if not incr_names:
+            return {}
+        result = {}
+        all_tasks = await asyncio.to_thread(schedule_repo.get_all_tasks)
+        for t in all_tasks:
+            if t['task_name'] in incr_names:
+                result[t['task_name']] = {
+                    'schedule_id': t['id'],
+                    'cron_expression': t['cron_expression'],
+                    'enabled': t['enabled'],
+                }
+        return result
+
+    last_tasks, schedules = await asyncio.gather(_batch_last_tasks(), _batch_schedules())
 
     # 组合结果
     items = []
@@ -187,6 +210,7 @@ async def get_overview(
         item['last_incremental'] = last_tasks.get(cfg['incremental_task_name'])
         item['last_full_sync'] = last_tasks.get(cfg['full_sync_task_name'])
         item['redis_progress'] = _get_redis_progress(cfg['table_key'])
+        item['incremental_schedule'] = schedules.get(cfg['incremental_task_name'])
         items.append(item)
 
     # 分类汇总
@@ -233,6 +257,40 @@ async def update_config(
         return ApiResponse.error(message=f"配置 {table_key} 不存在或无可更新字段", code=400)
     cfg = await asyncio.to_thread(repo.get_by_table_key, table_key)
     return ApiResponse.success(data=cfg, message="配置已更新")
+
+
+@router.put("/configs/{table_key}/schedule")
+@handle_api_errors
+async def update_schedule(
+    table_key: str,
+    body: ScheduleUpdate,
+    current_user: User = Depends(require_admin),
+):
+    """更新增量同步任务的定时调度配置（启用/禁用、Cron 表达式）"""
+    config_repo = SyncConfigRepository()
+    cfg = await asyncio.to_thread(config_repo.get_by_table_key, table_key)
+    if not cfg or not cfg.get('incremental_task_name'):
+        return ApiResponse.error(message=f"表 {table_key} 不存在或无增量同步任务", code=400)
+
+    task_name = cfg['incremental_task_name']
+    schedule_repo = ScheduledTaskRepository()
+    task = await asyncio.to_thread(schedule_repo.get_by_task_name, task_name)
+    if not task:
+        return ApiResponse.error(message=f"定时任务 {task_name} 不存在于 scheduled_tasks 表", code=404)
+
+    await asyncio.to_thread(
+        schedule_repo.update_task_config,
+        task_name,
+        body.cron_expression,
+        body.enabled,
+    )
+    updated = await asyncio.to_thread(schedule_repo.get_by_task_name, task_name)
+    return ApiResponse.success(data={
+        'schedule_id': updated['id'],
+        'task_name': task_name,
+        'cron_expression': updated['cron_expression'],
+        'enabled': updated['enabled'],
+    }, message="调度配置已更新")
 
 
 @router.get("/{table_key}/progress")

@@ -1522,13 +1522,15 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 
 同步配置页面（`/settings/sync-config`）提供所有数据表的增量/全量同步状态一览与配置编辑，基于 `sync_configs` 数据库表驱动。页面右上角「配置」按钮可打开弹窗设置 Tushare Token 和全量同步最早日期（原数据源设置页已合并至此）。
 
+编辑弹窗中包含**增量同步调度**区块，可直接配置该表对应增量任务在 `scheduled_tasks` 中的启用状态和 Cron 表达式，无需跳转到定时任务页面。若增量任务尚未在 `scheduled_tasks` 登记，区块会显示引导提示。
+
 #### 关键文件
 
 | 文件 | 说明 |
 |------|------|
 | `db_init/migrations/105_create_sync_configs.sql` | 表定义 + 61 行初始数据 |
 | `backend/app/repositories/sync_config_repository.py` | 数据访问层 |
-| `backend/app/api/endpoints/sync_dashboard.py` | REST API（overview/configs/progress/clear-progress） |
+| `backend/app/api/endpoints/sync_dashboard.py` | REST API（overview/configs/progress/clear-progress/schedule） |
 | `admin/lib/api/sync-dashboard.ts` | 前端 API 客户端 |
 | `admin/app/(dashboard)/settings/sync-config/page.tsx` | 页面（状态概览 + 配置编辑） |
 
