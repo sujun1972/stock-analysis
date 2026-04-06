@@ -324,6 +324,13 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '扩展数据',
         'display_order': 340
     },
+    'tasks.sync_moneyflow_ind_dc_full_history': {
+        'task': 'tasks.sync_moneyflow_ind_dc_full_history',
+        'name': '板块资金流向（DC）全量历史',
+        'description': '按月切片×三板块类型（行业/概念/地域）全量同步板块资金流向历史数据，支持中断续继（6000积分/次×三类型）',
+        'category': '资金流向',
+        'display_order': 341
+    },
     'tasks.sync_moneyflow_stock_dc': {
         'task': 'tasks.sync_moneyflow_stock_dc',
         'name': '个股资金流向（DC）',

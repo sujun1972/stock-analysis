@@ -1,18 +1,165 @@
 """板块资金流向业务逻辑层（东财概念及行业板块资金流向 DC）"""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, date
 from typing import Dict, List, Optional
 from loguru import logger
 from app.repositories.moneyflow_ind_dc_repository import MoneyflowIndDcRepository
+from core.src.providers import DataProviderFactory
+from app.core.config import settings
 
 
 class MoneyflowIndDcService:
     """板块资金流向业务逻辑层"""
 
+    FULL_HISTORY_START_DATE = "20150101"
+    FULL_HISTORY_PROGRESS_KEY = "sync:moneyflow_ind_dc:full_history:progress"
+    FULL_HISTORY_LOCK_KEY = "sync:moneyflow_ind_dc:full_history:lock"
+    # 板块类型：行业、概念、地域。全量同步需逐类型拉取
+    CONTENT_TYPES = ["行业", "概念", "地域"]
+
     def __init__(self):
         self.repo = MoneyflowIndDcRepository()
+        self.provider_factory = DataProviderFactory()
         logger.debug("✓ MoneyflowIndDcService initialized")
+
+    def _get_provider(self):
+        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
+        if not hasattr(self, '_provider') or self._provider is None:
+            self._provider = self.provider_factory.create_provider(
+                source='tushare',
+                token=settings.TUSHARE_TOKEN
+            )
+        return self._provider
+
+    @staticmethod
+    def _generate_weeks(start_date: str, end_date: str, window: int = 7) -> list:
+        """将日期范围切分为固定天数窗口，每片返回 (window_start, window_end)，均为 YYYYMMDD。
+
+        window=7 时约每月产生 4~5 片。行业（~100板块/天）每片 ~700 条，
+        地域（~20板块/天）每片 ~140 条，均安全低于 5000 条上限。
+        概念（~1500板块/天）每片 ~10500 条仍超限，因此概念类型改用按天切片（window=1）。
+        实际调用时按 content_type 自动选择窗口大小。
+        """
+        from datetime import timedelta
+        start_d = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+        end_d = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+        segments = []
+        cur = start_d
+        while cur <= end_d:
+            ms = cur
+            me = min(cur + timedelta(days=window - 1), end_d)
+            segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
+            cur = me + timedelta(days=1)
+        return segments
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        update_state_fn=None
+    ) -> Dict:
+        """按日期窗口切片 × 三板块类型，全量同步板块资金流向历史数据（支持 Redis 续继）
+
+        切片策略（单次上限 5000 条）：
+          - 行业（~100板块）：7天窗口，每片约 700 条 ✓
+          - 地域（~20板块）：7天窗口，每片约 140 条 ✓
+          - 概念（~1500板块）：1天窗口，每片约 1500 条 ✓
+
+        Redis Key: sync:moneyflow_ind_dc:full_history:progress
+        Redis 续继 Key 格式："{window_start}:{content_type}"
+        """
+        effective_start = start_date or self.FULL_HISTORY_START_DATE
+        today = datetime.now().strftime("%Y%m%d")
+
+        # 行业/地域用7天窗口，概念用1天窗口
+        WINDOW_MAP = {"行业": 7, "地域": 7, "概念": 1}
+
+        all_segments = []
+        for ct in self.CONTENT_TYPES:
+            window = WINDOW_MAP[ct]
+            for ms, me in self._generate_weeks(effective_start, today, window=window):
+                all_segments.append((ms, me, ct))
+
+        total = len(all_segments)
+        logger.info(
+            f"[全量moneyflow_ind_dc] 共 {total} 个片段 "
+            f"（行业/地域 7天窗口，概念 1天窗口）"
+        )
+
+        completed_set = redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY)
+        completed_set = {d.decode() if isinstance(d, bytes) else d for d in completed_set}
+        # Redis Key 格式："{ms}:{content_type}"
+        pending = [(ms, me, ct) for ms, me, ct in all_segments if f"{ms}:{ct}" not in completed_set]
+        skip_count = len(completed_set)
+        success_count = 0
+        error_count = 0
+        total_records = 0
+
+        provider = self._get_provider()
+        sem = asyncio.Semaphore(max(1, concurrency))
+
+        async def sync_segment(ms: str, me: str, ct: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(
+                        provider.get_moneyflow_ind_dc,
+                        start_date=ms,
+                        end_date=me,
+                        content_type=ct
+                    )
+                    records = 0
+                    if df is not None and not df.empty:
+                        records = await asyncio.to_thread(self.repo.bulk_upsert, df)
+                    return ms, me, ct, True, records, None
+                except Exception as e:
+                    return ms, me, ct, False, 0, str(e)
+
+        BATCH_SIZE = max(1, concurrency) * 2
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_segment(ms, me, ct) for ms, me, ct in batch])
+            for ms, me, ct, ok, records, err in results:
+                if ok:
+                    redis_client.sadd(self.FULL_HISTORY_PROGRESS_KEY, f"{ms}:{ct}")
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+                    logger.error(f"[全量moneyflow_ind_dc] {ms}~{me} {ct} 失败（下次续继）: {err}")
+
+            done = skip_count + success_count
+            if update_state_fn:
+                update_state_fn(
+                    state='PROGRESS',
+                    meta={
+                        'current': done,
+                        'total': total,
+                        'percent': round(done / total * 100, 1),
+                        'records': total_records,
+                        'errors': error_count
+                    }
+                )
+            logger.info(
+                f"[全量moneyflow_ind_dc] 进度: {done}/{total} ({round(done / total * 100, 1)}%) "
+                f"入库={total_records} 失败={error_count}"
+            )
+
+        final_done = len(redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY))
+        if final_done >= total:
+            redis_client.delete(self.FULL_HISTORY_PROGRESS_KEY)
+            logger.info("[全量moneyflow_ind_dc] ✅ 全量同步完成，进度已清除")
+
+        return {
+            "status": "success",
+            "total": total,
+            "success": success_count,
+            "skipped": skip_count,
+            "errors": error_count,
+            "records": total_records,
+            "message": f"同步完成 {success_count} 个片段，入库 {total_records} 条，失败 {error_count} 个"
+        }
 
     # 原始数据单位为元，统一换算为亿元
     _AMOUNT_KEYS = ('net_amount', 'buy_elg_amount', 'buy_lg_amount', 'buy_md_amount', 'buy_sm_amount')

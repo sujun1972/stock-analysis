@@ -421,10 +421,17 @@ class MoneyflowIndDcRepository(BaseRepository):
                     elif col not in ['trade_date', 'ts_code']:
                         df[col] = 0
 
-            # 准备数据
+            # 准备数据（必须转换 numpy 类型，否则 psycopg2 报 integer out of range）
+            def to_python_type(value):
+                if pd.isna(value):
+                    return None
+                if hasattr(value, 'item'):
+                    return value.item()
+                return value
+
             values = []
             for _, row in df.iterrows():
-                values.append(tuple(row[col] for col in columns))
+                values.append(tuple(to_python_type(row[col]) for col in columns))
 
             if not values:
                 return 0

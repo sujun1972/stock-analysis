@@ -158,8 +158,8 @@ export default function MoneyflowIndDcPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'moneyflow_ind_dc',
-    syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow_ind_dc',
+    syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_moneyflow_ind_dc_full_history',
     onSuccess: loadData,
   })
 

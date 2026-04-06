@@ -145,6 +145,52 @@ async def sync_moneyflow_ind_dc_async(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/sync-full-history")
+async def sync_moneyflow_ind_dc_full_history_async(
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD，默认 2015-01-01"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量同步板块资金流向历史数据（按窗口切片 × 三板块类型，支持中断续继）
+
+    行业/地域用 7 天窗口，概念用 1 天窗口；Redis Set 记录已完成片段，支持中断后续继。
+    积分消耗较高（6000积分/次 × 三类型），建议仅在初次建库或需要补全历史数据时使用。
+    """
+    try:
+        from app.tasks.moneyflow_ind_dc_tasks import sync_moneyflow_ind_dc_full_history_task
+        from app.services import TaskHistoryHelper
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'moneyflow_ind_dc')
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+        celery_task = sync_moneyflow_ind_dc_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_moneyflow_ind_dc_full_history',
+            display_name='板块资金流向（DC）全量历史同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+            source='moneyflow_ind_dc_page'
+        )
+
+        logger.info(f"板块资金流向（DC）全量历史同步任务已提交: {celery_task.id}")
+        return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
+    except Exception as e:
+        logger.error(f"提交板块资金流向（DC）全量历史同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/latest")
 async def get_latest_moneyflow_ind_dc(
     content_type: Optional[str] = Query(None, description="数据类型(行业、概念、地域)"),
@@ -160,4 +206,22 @@ async def get_latest_moneyflow_ind_dc(
         return ApiResponse.success(data=data, message="获取最新板块资金流向成功")
     except Exception as e:
         logger.error(f"获取最新板块资金流向失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/top")
+async def get_top_moneyflow_ind_dc(
+    content_type: Optional[str] = Query(None, description="数据类型(行业、概念、地域)"),
+    limit: int = Query(20, ge=1, le=100, description="返回记录数"),
+    current_user: User = Depends(get_current_user)
+):
+    """获取最新交易日 TOP N 板块资金流向数据（供图表使用）"""
+    try:
+        service = MoneyflowIndDcService()
+        data = await asyncio.to_thread(service.get_latest_moneyflow, content_type=content_type, limit=limit)
+        if not data:
+            return ApiResponse.success(data=[], message="暂无板块资金流向数据")
+        return ApiResponse.success(data=data, message="获取TOP板块资金流向成功")
+    except Exception as e:
+        logger.error(f"获取TOP板块资金流向失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

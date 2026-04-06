@@ -2066,10 +2066,12 @@ docker-compose down
   - 分页查询（100条/页），page/page_size 参数，向后兼容旧 limit/offset
   - 同步弹窗：点击"同步数据"弹出 Dialog，用户可选日期（留空同步最新交易日）和板块类型；选"全部"依次提交三个任务
   - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_ind_dc')` 派生，不用本地 boolean
+  - 全量同步按钮（BulkOpsButtons）调用 `POST /api/moneyflow-ind-dc/sync-full-history`，taskName 为 `tasks.sync_moneyflow_ind_dc_full_history`
   - 数据单位：统一使用亿元（原始数据为元）
   - 响应式布局：
     - 桌面端：完整表格视图，显示所有资金流向指标和排名
     - 移动端：卡片视图，hover/active 反馈
+- **全量同步策略**：按日期窗口切片 × 三板块类型（行业/地域 7天窗口约700/140条，概念 1天窗口约1500条），均安全低于 Tushare 5000条上限；Redis Set 续继（key 格式 `"{window_start}:{content_type}"`）；并发数 5
 
 #### 个股资金流向（Tushare）
 - **API端点**: `/api/moneyflow`
@@ -4078,6 +4080,12 @@ end_date = datetime.now().strftime("%Y%m%d")
 **问题：Celery 任务报 `connection pool is closed`（尤其是 `moneyflow_stock_dc` 任务）**
 - **根本原因**：`ExtendedDataSyncService` 使用模块级全局单例 `moneyflow_sync_service = MoneyflowSyncService()`（在主进程 import 时创建）；Celery fork worker 继承该单例，其 Repository 内的 `DatabaseManager` 连接池在 fork 后已损坏
 - **解决**：在任务函数体内每次创建新实例（`service = MoneyflowSyncService()`），而非复用全局单例；禁止在 Celery 任务中引用在主进程 import 时创建的 Service 单例
+
+**问题：`celery_beat` 容器启动时大量任务模块报 "Tushare Token 未配置"**
+- **根本原因（双重）**：① `docker-compose.yml` 的 `celery_beat` 服务缺少 `TUSHARE_TOKEN` 环境变量；② `BaseSyncService.__init__` 中曾直接调用 `DataProviderFactory.create_provider()`（非惰性），导致 `extended_sync/__init__.py` 的模块级单例（如 `basic_data_sync_service = BasicDataSyncService()`）在 import 时就触发 token 验证，而 `extended_sync_tasks.py` 在模块级 import 这些单例，被所有使用 `run_async_in_celery` 的 task 文件间接引入。
+- **解决**：① 在 `docker-compose.yml` 的 `celery_beat` environment 中添加 `TUSHARE_TOKEN=${TUSHARE_TOKEN:-}`；② 将 `BaseSyncService._get_provider()` 改为惰性初始化（`hasattr` 检查），`__init__` 不再调用 `create_provider`。
+- **涉及文件**：`docker-compose.yml`、`backend/app/services/extended_sync/base_sync_service.py`
+- **规律**：`BaseSyncService` 子类的所有实例化（包括模块级单例）不得在导入期触发 provider 初始化；服务类的 `_get_provider()` 必须是惰性的。
 
 **问题：执行日线批量同步后后端大量接口返回 500，日志报 `connection pool exhausted`**
 - **原因**：`sync_daily_full_history_task` / `sync_daily_recent_all_task` 在任务体内调用了 `DatabaseManager.reset_instance()`，该方法会调用 `closeall()` 关闭 psycopg2 连接池的**所有连接**（包括 FastAPI 主进程正在使用的）。关闭后 Repository 再取连接时连接池已耗尽。

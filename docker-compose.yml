@@ -209,6 +209,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_DB=0
       - PYTHONPATH=/app/core:/app
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
     volumes:
       - ./backend/app:/app/app:rw
       - ./core:/app/core:ro
