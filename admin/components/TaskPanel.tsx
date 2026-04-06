@@ -288,7 +288,7 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleCleanupStale}
-                  title="清理僵尸任务（运行超过5分钟的任务）"
+                  title="清理僵尸任务（运行超过10小时未完成的任务）"
                   className="text-orange-600 hover:text-orange-700"
                 >
                   <XCircleIcon className="h-4 w-4 sm:mr-2" />

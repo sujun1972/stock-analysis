@@ -130,6 +130,59 @@ async def sync_moneyflow_stock_dc_async(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/sync-full-history")
+async def sync_moneyflow_stock_dc_full_history_async(
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD，默认 2023-09-11"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量历史同步个股资金流向（DC）数据（按股票代码逐只请求）
+
+    采用逐只股票请求策略，避免单次6000行截断问题，支持中断续继。
+    数据起始：20230911（DC 接口最早数据日期）
+    积分消耗较高（5000积分/次），建议仅在初次建库或需要补全历史数据时使用。
+    """
+    try:
+        from app.tasks.moneyflow_stock_dc_tasks import sync_moneyflow_stock_dc_full_history_task
+        from app.services import TaskHistoryHelper
+        from app.repositories.sync_config_repository import SyncConfigRepository
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        # 未传并发数时，从 sync_configs 读取配置值，兜底 5
+        if concurrency is None:
+            sync_config_repo = SyncConfigRepository()
+            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'moneyflow_stock_dc')
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+        celery_task = sync_moneyflow_stock_dc_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_moneyflow_stock_dc_full_history',
+            display_name='个股资金流向（DC）全量历史同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted},
+            source='moneyflow_stock_dc_page'
+        )
+
+        logger.info(f"个股资金流向（DC）全量历史同步任务已提交: {celery_task.id}")
+
+        return ApiResponse.success(
+            data=task_data,
+            message="全量历史同步任务已提交，正在后台执行"
+        )
+
+    except Exception as e:
+        logger.error(f"提交个股资金流向（DC）全量历史同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/top")
 async def get_top_moneyflow_stocks(
     limit: int = Query(20, ge=1, le=100, description="返回记录数"),

@@ -41,6 +41,7 @@ celery_app.conf.update(
     # 任务执行配置
     task_acks_late=True,  # 任务执行完成后才确认
     worker_prefetch_multiplier=1,  # 每次只预取1个任务（防止长任务阻塞）
+    task_track_started=True,  # 任务开始时在 result backend 记录 STARTED 状态，避免轮询时误判为僵尸任务
 
     # 任务默认队列（所有任务都使用 default 队列）
     task_default_queue='default',

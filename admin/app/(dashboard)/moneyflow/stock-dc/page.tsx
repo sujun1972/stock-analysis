@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { moneyflowApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
 import { formatStockCode, pctChangeColor } from '@/lib/utils'
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
@@ -154,8 +153,8 @@ export default function MoneyflowStockDcPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'moneyflow_stock_dc',
-    syncFn: (params) => apiClient.post('/api/moneyflow-stock-dc/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow_stock_dc',
+    syncFn: (params) => moneyflowApi.syncMoneyflowStockDcFullHistoryAsync(params),
+    taskName: 'tasks.sync_moneyflow_stock_dc_full_history',
     onSuccess: loadData,
   })
 

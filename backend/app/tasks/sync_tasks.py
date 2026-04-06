@@ -452,7 +452,7 @@ FULL_HISTORY_START_DATE = "20210101"
     bind=True,
     max_retries=0,          # 不自动重试（可手动续继）
     soft_time_limit=28800,  # 8小时软超时
-    time_limit=32400        # 9小时硬超时,
+    time_limit=32400,       # 9小时硬超时
     acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
 def sync_daily_full_history_task(self: Task, concurrency: int = 8):

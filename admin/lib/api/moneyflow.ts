@@ -176,6 +176,14 @@ export class MoneyflowApiClient extends BaseApiClient {
   }
 
   /**
+   * 全量历史同步个股资金流向数据（东方财富DC）
+   * 按股票逐只请求，支持中断续继
+   */
+  async syncMoneyflowStockDcFullHistoryAsync(params?: { start_date?: string; concurrency?: number }): Promise<ApiResponse<SyncTaskResponse>> {
+    return this.post('/api/moneyflow-stock-dc/sync-full-history', null, { params })
+  }
+
+  /**
    * 获取主力资金流入排名前N的股票（东方财富DC）
    * @param params 查询参数
    * @returns 排名数据

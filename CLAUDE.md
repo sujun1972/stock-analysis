@@ -2097,6 +2097,8 @@ docker-compose down
 - **前端页面**: `/admin/app/(dashboard)/moneyflow/stock-dc/page.tsx`
 - **数据内容**: 东方财富个股资金流向，包含个股主力资金（超大单、大单、中单、小单）流入流出情况
 - **积分消耗**: 5000积分/次（Tushare Pro接口）
+- **数据起始**: 20230911（DC 接口最早数据日期）
+- **全量同步策略**: 逐只股票请求（`by_ts_code`），DC 接口按日期全市场单次上限 6000 条极易截断，必须逐只请求；Redis Set 续继（key: `sync:moneyflow_stock_dc:full_history:progress`）；并发数 5
 - **页面功能**（2026-03-27 全面优化）:
   - 统计卡片：左文字右图标布局，显示统计股票数、主力均值、最大净流入、超大单均值
   - 趋势图表：TOP 20个股资金流向可视化（主力净流入、超大单、大单）
@@ -2107,6 +2109,7 @@ docker-compose down
   - 股票列合并名称+纯代码可点击跳转分析页面
   - 数据单位：统一使用亿元（原始数据为万元）
   - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_stock_dc')` 派生，不用本地 boolean
+  - 全量同步按钮（BulkOpsButtons）调用 `POST /api/moneyflow-stock-dc/sync-full-history`，taskName 为 `tasks.sync_moneyflow_stock_dc_full_history`
   - 响应式布局：桌面端表格视图，移动端卡片视图（hover/active 反馈）
 
 ### 数据库连接池规划
@@ -4066,6 +4069,15 @@ end_date = datetime.now().strftime("%Y%m%d")
 - **原因**：Celery 信号处理器（`task_prerun_handler` 等）使用了 `DatabaseManager` 单例，而 fork pool worker 继承了父进程已损坏的连接池，导致 UPDATE 静默失败
 - **解决**：`celery_signals.py` 中的所有信号处理器必须使用 `_get_direct_conn()` 创建独立 psycopg2 直连，避免依赖单例连接池
 - **手动修复卡住的记录**：`UPDATE celery_task_history SET status='failure', error='stuck' WHERE status='pending' AND created_at < NOW() - INTERVAL '1 hour'`
+
+**问题：活动任务在任务面板消失，但 worker 日志显示任务仍在运行**
+- **根本原因**：`GET /api/celery/task/{task_id}` 的僵尸检测逻辑读取 `result.state`；若未配置 `task_track_started=True`，Celery 不会在结果后端存储 `STARTED` 状态，导致正在运行的任务也返回 `PENDING`，被误判为僵尸后标记为 `failure`
+- **解决**：在 `celery_app.conf.update()` 中添加 `task_track_started=True`，使运行中的任务在结果后端记录 `STARTED` 状态，轮询端点能正确区分「未开始」与「正在运行」
+- **同时**：`cleanup-stale` 端点的僵尸阈值从 5 分钟改为 600 分钟（10小时），避免手动清理时误杀全量历史同步等耗时数小时的长任务
+
+**问题：Celery 任务报 `connection pool is closed`（尤其是 `moneyflow_stock_dc` 任务）**
+- **根本原因**：`ExtendedDataSyncService` 使用模块级全局单例 `moneyflow_sync_service = MoneyflowSyncService()`（在主进程 import 时创建）；Celery fork worker 继承该单例，其 Repository 内的 `DatabaseManager` 连接池在 fork 后已损坏
+- **解决**：在任务函数体内每次创建新实例（`service = MoneyflowSyncService()`），而非复用全局单例；禁止在 Celery 任务中引用在主进程 import 时创建的 Service 单例
 
 **问题：执行日线批量同步后后端大量接口返回 500，日志报 `connection pool exhausted`**
 - **原因**：`sync_daily_full_history_task` / `sync_daily_recent_all_task` 在任务体内调用了 `DatabaseManager.reset_instance()`，该方法会调用 `closeall()` 关闭 psycopg2 连接池的**所有连接**（包括 FastAPI 主进程正在使用的）。关闭后 Repository 再取连接时连接池已耗尽。

@@ -19,13 +19,12 @@ class ReportRcService:
 
     def __init__(self):
         self.report_rc_repo = ReportRcRepository()
-        self.provider_factory = DataProviderFactory()
         logger.debug("✓ ReportRcService initialized")
 
     def _get_provider(self):
         """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
         if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
+            self._provider = DataProviderFactory.create_provider(
                 source='tushare',
                 token=settings.TUSHARE_TOKEN
             )

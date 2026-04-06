@@ -331,6 +331,13 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '扩展数据',
         'display_order': 350
     },
+    'tasks.sync_moneyflow_stock_dc_full_history': {
+        'task': 'tasks.sync_moneyflow_stock_dc_full_history',
+        'name': '个股资金流向（DC）全量历史',
+        'description': '按股票逐只同步个股资金流向（DC）全量历史数据，支持中断续继（5000积分/次，数据起始20230911）',
+        'category': '扩展数据',
+        'display_order': 351
+    },
     'tasks.sync_margin': {
         'task': 'tasks.sync_margin',
         'name': '融资融券交易汇总',

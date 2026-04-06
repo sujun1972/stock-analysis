@@ -143,7 +143,7 @@ INSERT INTO sync_configs (
 
 ('moneyflow_stock_dc',  '个股资金流向（DC）',      '资金流向', 311,
  'tasks.sync_moneyflow_stock_dc', 7,
- NULL, 'none', 1,
+ 'tasks.sync_moneyflow_stock_dc_full_history', 'by_ts_code', 5,
  FALSE, NULL,
  '/moneyflow/stock-dc', '/moneyflow-stock-dc', 5000, NULL),
 

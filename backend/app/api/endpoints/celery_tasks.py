@@ -466,7 +466,10 @@ async def cleanup_stale_tasks(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    清理僵尸任务（运行中但超过5分钟未完成的任务）
+    清理僵尸任务（运行中但超过10小时未完成的任务）
+
+    注意：全量历史同步任务（_full_history）可能运行数小时，因此阈值设为 600 分钟（10小时），
+    避免误杀正在运行的长任务。
 
     Returns:
         清理结果
@@ -474,10 +477,10 @@ async def cleanup_stale_tasks(
     try:
         service = CeleryTaskHistoryService()
 
-        # 查找僵尸任务
+        # 查找僵尸任务（10小时阈值，避免误杀全量历史同步等长任务）
         stale_tasks = await service.get_stale_tasks(
             user_id=current_user.id,
-            minutes=5
+            minutes=600
         )
 
         if not stale_tasks:
@@ -489,7 +492,7 @@ async def cleanup_stale_tasks(
         # 清理僵尸任务
         deleted_count = await service.cleanup_stale_tasks(
             user_id=current_user.id,
-            minutes=5
+            minutes=600
         )
 
         logger.info(f"清理了 {deleted_count} 个僵尸任务 (user_id={current_user.id})")
