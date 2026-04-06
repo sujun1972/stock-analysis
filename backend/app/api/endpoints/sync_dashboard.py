@@ -53,6 +53,9 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "block_trade":      "sync:block_trade:full_history:progress",
     "stk_holdertrade":  "sync:stk_holdertrade:full_history:progress",
     "moneyflow":             "sync:moneyflow:full_history:progress",
+    "moneyflow_hsgt":        "sync:moneyflow_hsgt:full_history:progress",
+    "moneyflow_mkt_dc":      "sync:moneyflow_mkt_dc:full_history:progress",
+    "moneyflow_ind_dc":      "sync:moneyflow_ind_dc:full_history:progress",
     "moneyflow_stock_dc":    "sync:moneyflow_stock_dc:full_history:progress",
 }
 

@@ -155,13 +155,13 @@ INSERT INTO sync_configs (
 
 ('moneyflow_mkt_dc',    '大盘资金流向（DC）',      '资金流向', 313,
  'tasks.sync_moneyflow_mkt_dc', 7,
- NULL, 'none', 1,
+ 'tasks.sync_moneyflow_mkt_dc_full_history', 'by_date', 5,
  FALSE, NULL,
  '/moneyflow/mkt-dc', '/moneyflow-mkt-dc', 120, NULL),
 
 ('moneyflow_hsgt',      '沪深港通资金流向',        '资金流向', 314,
  'tasks.sync_moneyflow_hsgt', 30,
- NULL, 'none', 1,
+ 'tasks.sync_moneyflow_hsgt_full_history', 'by_date', 5,
  FALSE, NULL,
  '/moneyflow/hsgt', '/moneyflow-hsgt', 2000, NULL),
 

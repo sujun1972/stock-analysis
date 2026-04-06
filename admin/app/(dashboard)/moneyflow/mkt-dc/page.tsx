@@ -128,8 +128,8 @@ export default function MoneyflowMktDcPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'moneyflow_mkt_dc',
-    syncFn: (params) => apiClient.post('/api/moneyflow-mkt-dc/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow_mkt_dc',
+    syncFn: (params) => apiClient.post('/api/moneyflow-mkt-dc/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_moneyflow_mkt_dc_full_history',
     onSuccess: loadData,
   })
 

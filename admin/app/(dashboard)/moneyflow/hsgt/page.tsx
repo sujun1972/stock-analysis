@@ -139,8 +139,8 @@ export default function MoneyflowHsgtPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'moneyflow_hsgt',
-    syncFn: (params) => apiClient.post('/api/moneyflow-hsgt/sync-async', null, { params }),
-    taskName: 'tasks.sync_moneyflow_hsgt',
+    syncFn: (params) => apiClient.post('/api/moneyflow-hsgt/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_moneyflow_hsgt_full_history',
     onSuccess: loadData,
   })
 

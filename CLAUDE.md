@@ -401,8 +401,8 @@ const handleSyncConfirm = async () => {
 | 页面 | 路由 | 特殊说明 |
 |------|------|---------|
 | 定时任务配置 | `/settings/scheduler` | |
-| 沪深港通资金流向 | `/moneyflow/hsgt` | 趋势图用 LineChart |
-| 大盘资金流向 | `/moneyflow/mkt-dc` | 数据单位亿元 |
+| 沪深港通资金流向 | `/moneyflow/hsgt` | 趋势图用 LineChart；全量同步按月切片（5并发，Redis续继），起始 20140101 |
+| 大盘资金流向 | `/moneyflow/mkt-dc` | 数据单位亿元；全量同步按月切片（5并发，Redis续继），起始 20150101 |
 | 板块资金流向 | `/moneyflow/ind-dc` | "全部"同步依次提交行业/概念/地域三任务；TOP 20 图表 |
 | 个股资金流向（Tushare） | `/moneyflow/stock` | 数据单位万元 |
 | 个股资金流向（DC） | `/moneyflow/stock-dc` | 数据单位亿元 |
@@ -1593,6 +1593,8 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 
 `FULL_SYNC_REDIS_KEYS`（在 `sync_dashboard.py` 中维护）记录各表全量同步的 Redis Set key。新增支持全量同步续继的数据表时，需同步更新该字典。
 
+**⚠️ 新增全量同步时必须同步更新 `FULL_SYNC_REDIS_KEYS`**，否则同步配置页面无法查询/清除该表的续继进度。遗漏此步骤是常见错误：`moneyflow_hsgt`、`moneyflow_mkt_dc`、`moneyflow_ind_dc` 均曾因此缺失进度查询能力（已于 2026-04-06 补齐）。
+
 #### CATEGORY_ORDER 排序
 
 前端 `sync-config/page.tsx` 的 `CATEGORY_ORDER` 常量控制分组显示顺序，与 `AdminLayout.tsx` 侧边菜单保持一致：
@@ -2038,6 +2040,8 @@ docker-compose down
   - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_hsgt')` 派生，不用本地 boolean
   - 模块化 API：使用 `moneyflowApi.getMoneyflowHsgt` / `syncMoneyflowHsgtAsync`
   - 响应式布局：统一使用 DataTable `mobileCard` prop，移动端卡片含北向/南向双区块
+  - 全量同步：`BulkOpsButtons` 调用 `POST /api/moneyflow-hsgt/sync-full-history`，taskName `tasks.sync_moneyflow_hsgt_full_history`
+- **全量同步策略**：按自然月切片（hsgt 每天4条，每月约80条，安全低于5000上限）；Redis Set 续继（key: `sync:moneyflow_hsgt:full_history:progress`，以月起始日期为字段）；并发数5；起始日期 20140101
 
 #### 大盘资金流向（DC）
 - **API端点**: `/api/moneyflow-mkt-dc`
@@ -2052,6 +2056,8 @@ docker-compose down
   - 同步弹窗：点击同步弹出 Dialog 选择日期范围（不预填查询日期），让后端自动取最新交易日
   - `syncing` 从 `isTaskRunning('tasks.sync_moneyflow_mkt_dc')` 派生，不用本地 boolean
   - 响应式布局：统一使用 DataTable `mobileCard` prop，移动端卡片含上证/深证涨跌幅行
+  - 全量同步：`BulkOpsButtons` 调用 `POST /api/moneyflow-mkt-dc/sync-full-history`，taskName `tasks.sync_moneyflow_mkt_dc_full_history`
+- **全量同步策略**：按自然月切片（大盘DC每天1条，每月约20条，安全低于5000上限）；Redis Set 续继（key: `sync:moneyflow_mkt_dc:full_history:progress`，以月起始日期为字段）；并发数5；起始日期 20150101
 
 #### 板块资金流向（DC）
 - **API端点**: `/api/moneyflow-ind-dc`
@@ -4077,9 +4083,21 @@ end_date = datetime.now().strftime("%Y%m%d")
 - **解决**：在 `celery_app.conf.update()` 中添加 `task_track_started=True`，使运行中的任务在结果后端记录 `STARTED` 状态，轮询端点能正确区分「未开始」与「正在运行」
 - **同时**：`cleanup-stale` 端点的僵尸阈值从 5 分钟改为 600 分钟（10小时），避免手动清理时误杀全量历史同步等耗时数小时的长任务
 
-**问题：Celery 任务报 `connection pool is closed`（尤其是 `moneyflow_stock_dc` 任务）**
-- **根本原因**：`ExtendedDataSyncService` 使用模块级全局单例 `moneyflow_sync_service = MoneyflowSyncService()`（在主进程 import 时创建）；Celery fork worker 继承该单例，其 Repository 内的 `DatabaseManager` 连接池在 fork 后已损坏
-- **解决**：在任务函数体内每次创建新实例（`service = MoneyflowSyncService()`），而非复用全局单例；禁止在 Celery 任务中引用在主进程 import 时创建的 Service 单例
+**问题：Celery 任务报 `connection pool is closed`（资金流向增量同步任务）**
+- **根本原因**：任务文件顶层 `from app.services.extended_sync_service import ExtendedDataSyncService` 或其他 Service 在主进程 import 时初始化，包括其内部的 `DatabaseManager` 连接池。Celery fork worker 继承已损坏的连接池，首次 Repository 调用即报此错。
+- **解决**：将 Service 实例化移入任务函数体（延迟导入），每次任务执行都创建新实例。**禁止**在任务文件顶层创建 Service 实例：
+  ```python
+  # ❌ 错误：顶层导入导致 fork 后连接池损坏
+  from app.services.extended_sync_service import ExtendedDataSyncService
+  _service = ExtendedDataSyncService()  # 主进程初始化
+
+  # ✅ 正确：延迟导入，每次任务创建新实例
+  @celery_app.task(...)
+  def sync_task(self, ...):
+      from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
+      service = MoneyflowSyncService()  # worker 进程初始化
+  ```
+- **已修复文件**：`moneyflow_mkt_dc_tasks.py`、`moneyflow_hsgt_tasks.py`（2026-04-06）；`moneyflow_stock_dc_tasks.py` 等（更早）
 
 **问题：`celery_beat` 容器启动时大量任务模块报 "Tushare Token 未配置"**
 - **根本原因（双重）**：① `docker-compose.yml` 的 `celery_beat` 服务缺少 `TUSHARE_TOKEN` 环境变量；② `BaseSyncService.__init__` 中曾直接调用 `DataProviderFactory.create_provider()`（非惰性），导致 `extended_sync/__init__.py` 的模块级单例（如 `basic_data_sync_service = BasicDataSyncService()`）在 import 时就触发 token 验证，而 `extended_sync_tasks.py` 在模块级 import 这些单例，被所有使用 `run_async_in_celery` 的 task 文件间接引入。

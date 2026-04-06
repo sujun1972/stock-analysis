@@ -4,12 +4,13 @@
 使用 run_async_in_celery 处理 Celery fork pool 中的事件循环冲突问题
 """
 
+import asyncio
 from typing import Optional
 from loguru import logger
 
 from app.celery_app import celery_app
-from app.services.extended_sync_service import ExtendedDataSyncService
 from app.tasks.extended_sync_tasks import run_async_in_celery
+from app.tasks.sync_tasks import _DummyContext
 
 
 @celery_app.task(bind=True, name="tasks.sync_moneyflow_hsgt")
@@ -33,7 +34,9 @@ def sync_moneyflow_hsgt_task(
     try:
         logger.info(f"开始执行沪深港通资金流向同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
-        service = ExtendedDataSyncService()
+        # 延迟导入，避免模块级单例在 fork 前被初始化导致连接池损坏
+        from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
+        service = MoneyflowSyncService()
         result = run_async_in_celery(
             service.sync_moneyflow_hsgt,
             trade_date=trade_date,
@@ -105,3 +108,68 @@ def sync_moneyflow_hsgt_range_task(
     except Exception as e:
         logger.error(f"执行沪深港通资金流向范围同步任务失败: {str(e)}")
         raise
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.sync_moneyflow_hsgt_full_history",
+    max_retries=0,
+    soft_time_limit=7200,
+    time_limit=10800,
+    acks_late=False,
+)
+def sync_moneyflow_hsgt_full_history_task(
+    self,
+    start_date: Optional[str] = None,
+    concurrency: int = 5,
+    **kwargs
+):
+    """
+    按自然月切片全量同步沪深港通资金流向历史数据（支持中断续继）
+
+    hsgt 每天4条记录，每月约 80 条，按月切片远低于 5000 上限。
+    Redis Set 记录已完成月份，支持中断后续继。
+
+    Args:
+        start_date: 开始日期 YYYYMMDD，默认 20140101
+        concurrency: 并发数，来自 sync_configs.full_sync_concurrency，默认 5
+    """
+    from app.core.redis_lock import redis_client, redis_lock
+    from app.services.moneyflow_hsgt_service import MoneyflowHsgtService
+
+    LOCK_KEY = "sync:moneyflow_hsgt:full_history:lock"
+
+    logger.info(
+        f"========== [Celery] 开始沪深港通资金流向全量历史同步任务 "
+        f"start_date={start_date} concurrency={concurrency} =========="
+    )
+
+    if redis_client is None:
+        logger.error("Redis 不可用，无法执行全量同步任务")
+        return {"status": "error", "message": "Redis 不可用"}
+
+    with redis_lock.acquire(LOCK_KEY, timeout=7200, blocking=False) if redis_lock else _DummyContext() as acquired:
+        if not acquired and redis_lock:
+            logger.warning("⚠️  全量沪深港通资金流向同步任务已在执行中，跳过本次执行")
+            return {"status": "locked", "message": "已有全量同步任务正在进行"}
+
+        service = MoneyflowHsgtService()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                service.sync_full_history(
+                    redis_client=redis_client,
+                    start_date=start_date,
+                    concurrency=concurrency,
+                    update_state_fn=self.update_state
+                )
+            )
+        finally:
+            loop.close()
+
+    logger.info(
+        f"========== [Celery] 沪深港通资金流向全量历史同步结束: "
+        f"成功={result.get('success')}, 跳过={result.get('skipped')}, 失败={result.get('errors')} =========="
+    )
+    return result

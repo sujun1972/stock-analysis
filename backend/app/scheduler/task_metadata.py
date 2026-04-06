@@ -310,12 +310,28 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '扩展数据',
         'display_order': 320
     },
+    'tasks.sync_moneyflow_hsgt_full_history': {
+        'task': 'tasks.sync_moneyflow_hsgt_full_history',
+        'name': '沪深港通资金流向全量历史同步',
+        'description': '全量同步沪深港通资金流向历史数据（按自然月切片，支持续继，2000积分/次）',
+        'category': '资金流向',
+        'display_order': 321,
+        'points_consumption': 2000
+    },
     'tasks.sync_moneyflow_mkt_dc': {
         'task': 'tasks.sync_moneyflow_mkt_dc',
         'name': '大盘资金流向（DC）',
         'description': '同步大盘资金流向数据（东方财富DC，120积分/次）',
         'category': '扩展数据',
         'display_order': 330
+    },
+    'tasks.sync_moneyflow_mkt_dc_full_history': {
+        'task': 'tasks.sync_moneyflow_mkt_dc_full_history',
+        'name': '大盘资金流向（DC）全量历史同步',
+        'description': '全量同步大盘资金流向历史数据（按自然月切片，支持续继，120积分/次）',
+        'category': '资金流向',
+        'display_order': 331,
+        'points_consumption': 120
     },
     'tasks.sync_moneyflow_ind_dc': {
         'task': 'tasks.sync_moneyflow_ind_dc',
