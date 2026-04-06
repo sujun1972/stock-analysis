@@ -36,17 +36,19 @@ class DataSourceConfigService:
         获取数据源配置。
 
         Returns:
-            Dict: 包含 tushare_token（脱敏）和 earliest_history_date
+            Dict: 包含 tushare_token（脱敏）、earliest_history_date、max_requests_per_minute
         """
         try:
             configs = await asyncio.to_thread(
                 self.config_repo.get_configs_by_keys,
-                ["tushare_token", "earliest_history_date"],
+                ["tushare_token", "earliest_history_date", "max_requests_per_minute"],
             )
             raw_token = configs.get("tushare_token") or ""
+            raw_max_rpm = configs.get("max_requests_per_minute")
             return {
                 "tushare_token": self._mask_token(raw_token) if mask_token else raw_token,
                 "earliest_history_date": configs.get("earliest_history_date") or "2021-01-04",
+                "max_requests_per_minute": int(raw_max_rpm) if raw_max_rpm is not None else 0,
             }
         except DatabaseError:
             raise
@@ -65,6 +67,7 @@ class DataSourceConfigService:
         self,
         tushare_token: Optional[str] = None,
         earliest_history_date: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
         """
         更新数据源配置。Token 为 None 时保持原值不变。
@@ -78,6 +81,8 @@ class DataSourceConfigService:
                 updates["tushare_token"] = tushare_token
             if earliest_history_date:
                 updates["earliest_history_date"] = earliest_history_date
+            if max_requests_per_minute is not None:
+                updates["max_requests_per_minute"] = str(max_requests_per_minute)
 
             if updates:
                 await asyncio.to_thread(self.config_repo.set_configs_batch, updates)

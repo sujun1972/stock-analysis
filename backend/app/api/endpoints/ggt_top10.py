@@ -225,6 +225,8 @@ async def sync_ggt_top10_full_history(
 ):
     """全量历史同步：按月切片 + Redis 续继，覆盖指定起始日期至今所有数据。"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'ggt_top10')
         from app.tasks.ggt_top10_tasks import sync_ggt_top10_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

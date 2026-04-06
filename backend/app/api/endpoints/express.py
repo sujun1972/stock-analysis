@@ -183,6 +183,8 @@ async def sync_express_full_history_async(
 ):
     """异步全量同步业绩快报历史数据（按季度 period 切片 + Redis 续继）"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'express')
         from app.tasks.express_tasks import sync_express_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

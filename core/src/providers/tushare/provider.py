@@ -54,6 +54,7 @@ class TushareProvider(BaseDataProvider):
                 - retry_count: 失败重试次数（默认 3）
                 - retry_delay: 重试延迟（秒，默认 1）
                 - request_delay: 请求间隔（秒，默认 0.2）
+                - max_requests_per_minute: 每分钟最大请求数，0 表示不限速（默认 0）
         """
         # 先设置属性
         self.token: str = kwargs.get('token', '')
@@ -61,6 +62,7 @@ class TushareProvider(BaseDataProvider):
         self.retry_count: int = kwargs.get('retry_count', TushareConfig.DEFAULT_RETRY_COUNT)
         self.retry_delay: int = kwargs.get('retry_delay', TushareConfig.DEFAULT_RETRY_DELAY)
         self.request_delay: float = kwargs.get('request_delay', TushareConfig.DEFAULT_REQUEST_DELAY)
+        self.max_requests_per_minute: int = kwargs.get('max_requests_per_minute', TushareConfig.DEFAULT_MAX_REQUESTS_PER_MINUTE)
 
         # 初始化 API 客户端
         self.api_client: Optional[TushareAPIClient] = None
@@ -84,7 +86,8 @@ class TushareProvider(BaseDataProvider):
             timeout=self.timeout,
             retry_count=self.retry_count,
             retry_delay=self.retry_delay,
-            request_delay=self.request_delay
+            request_delay=self.request_delay,
+            max_requests_per_minute=self.max_requests_per_minute,
         )
 
     # ========== 股票列表相关 ==========
@@ -1800,7 +1803,9 @@ class TushareProvider(BaseDataProvider):
         ann_date: Optional[str] = None,
         float_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取限售股解禁数据
@@ -1812,6 +1817,8 @@ class TushareProvider(BaseDataProvider):
             float_date: 解禁日期 YYYYMMDD（可选）
             start_date: 解禁开始日期 YYYYMMDD（可选）
             end_date: 解禁结束日期 YYYYMMDD（可选）
+            limit: 单次返回上限（可选，默认 2000）
+            offset: 翻页偏移（可选）
 
         Returns:
             pd.DataFrame: 限售股解禁数据，包含以下列：
@@ -1825,7 +1832,7 @@ class TushareProvider(BaseDataProvider):
         """
         try:
             logger.info(f"获取限售股解禁数据: ts_code={ts_code}, ann_date={ann_date}, "
-                       f"float_date={float_date}, start_date={start_date}, end_date={end_date}")
+                       f"float_date={float_date}, start_date={start_date}, end_date={end_date}, limit={limit}, offset={offset}")
 
             # 构建查询参数（只包含非空参数）
             params = {}
@@ -1839,10 +1846,16 @@ class TushareProvider(BaseDataProvider):
                 params['start_date'] = start_date
             if end_date:
                 params['end_date'] = end_date
+            if limit is not None:
+                params['limit'] = limit
+            if offset is not None:
+                params['offset'] = offset
 
             df = self.api_client.query('share_float', **params)
-            logger.info(f"获取到 {len(df)} 条限售股解禁记录")
+            logger.info(f"获取到 {len(df)} 条限售股解禁记录 [ts_code={ts_code}, start={start_date}, end={end_date}, limit={limit}, offset={offset}]")
             return df
+        except TushareRateLimitError:
+            raise
         except Exception as e:
             logger.error(f"获取限售股解禁数据失败: {e}")
             raise TushareDataError(f"获取限售股解禁数据失败: {str(e)}")

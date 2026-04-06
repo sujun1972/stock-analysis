@@ -172,6 +172,8 @@ async def sync_moneyflow_hsgt_full_history_async(
     全量同步沪深港通资金流向历史数据（按自然月切片，支持中断续继）
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'moneyflow_hsgt')
         from app.tasks.moneyflow_hsgt_tasks import sync_moneyflow_hsgt_full_history_task
         from app.services import TaskHistoryHelper
         from app.repositories.sync_config_repository import SyncConfigRepository

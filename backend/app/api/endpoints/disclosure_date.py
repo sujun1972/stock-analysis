@@ -192,6 +192,8 @@ async def sync_disclosure_date_full_history_async(
     全量历史同步财报披露计划数据（按季度 period 切片，支持 Redis 续继）
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'disclosure_date')
         from app.tasks.disclosure_date_tasks import sync_disclosure_date_full_history_task
 
         start_date_formatted = start_date.replace('-', '') if start_date else None

@@ -196,6 +196,8 @@ async def sync_fina_mainbz_full_history_async(
     全量历史同步主营业务构成数据（按季度 period 切片，支持 Redis 续继）
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'fina_mainbz')
         from app.tasks.fina_mainbz_tasks import sync_fina_mainbz_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

@@ -487,15 +487,29 @@ async def sync_full_history_async(
     concurrency: Optional[int] = Query(None, ge=1, le=20),  # 不传则从 sync_configs 读取
     current_user: User = Depends(require_admin)
 ):
+    # 提交前先清理残留锁，防止任务被拒绝
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'your_table')
+
     if concurrency is None:
         sync_config_repo = SyncConfigRepository()
         cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'your_table')
         concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+    max_rpm = cfg.get('max_requests_per_minute') if cfg else None
 
     celery_task = sync_full_history_task.apply_async(
-        kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+        kwargs={'start_date': start_date_formatted, 'concurrency': concurrency,
+                'max_requests_per_minute': max_rpm}
     )
 ```
+
+**`release_stale_lock`（残留锁自动清理）**：
+
+全量同步任务被 revoke 或 worker 崩溃时，`sync:{table_key}:full_history:lock` 可能留在 Redis 中，导致下次提交被拒绝（"已有全量同步任务正在进行"）即使任务面板里已无运行中任务。
+
+`release_stale_lock(table_key)` 在提交全量任务前自动检测并清理此类残留锁：若锁存在但 DB 中 4 小时内无对应 `running` 任务，则删除锁。**所有全量同步 API 端点必须在提交 Celery task 前调用此函数。**
+
+`POST /{table_key}/clear-progress` 也会同时删除 lock key（不仅是进度 Set）。
 
 对应的 Service `sync_full_history` 方法签名：
 ```python
@@ -503,20 +517,94 @@ async def sync_full_history(self, redis_client, start_date=None, concurrency: in
     sem = asyncio.Semaphore(max(1, concurrency))
 ```
 
-**Tushare Provider 实例缓存**：
+**Tushare Provider 实例缓存（支持 rpm 限速）**：
 
-Service 的 `_get_provider()` 方法必须缓存 provider 实例，避免全量同步时每只股票都重复初始化（Tushare 客户端初始化耗时约 0.5s，5500 只股票会浪费 45 分钟）：
+Service 的 `_get_provider(max_requests_per_minute)` 方法按 rpm 值缓存 provider 实例，避免重复初始化，同时支持两级限速配置：
 
 ```python
-def _get_provider(self):
-    """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-    if not hasattr(self, '_provider') or self._provider is None:
-        from app.core.config import settings
-        self._provider = self.provider_factory.create_provider(
-            source='tushare',
-            token=settings.TUSHARE_TOKEN
-        )
-    return self._provider
+def _get_provider(self, max_requests_per_minute: Optional[int] = None):
+    """获取Tushare数据提供者（惰性初始化，按 rpm 值缓存）
+
+    Args:
+        max_requests_per_minute:
+            None  = 使用全局设置（从 config 表 max_requests_per_minute 键读取）
+            0     = 不限速
+            正整数 = 按此值限速（覆盖全局）
+    """
+    cache_key = f'_provider_{max_requests_per_minute}'
+    cached = getattr(self, cache_key, None)
+    if cached is not None:
+        return cached
+
+    if max_requests_per_minute is not None:
+        effective_rpm = max_requests_per_minute
+    else:
+        effective_rpm = 0
+        try:
+            from app.repositories.config_repository import ConfigRepository
+            raw = ConfigRepository().get_config_value("max_requests_per_minute")
+            if raw is not None:
+                effective_rpm = int(raw)
+        except Exception:
+            pass
+
+    provider = DataProviderFactory.create_provider(
+        source='tushare',
+        token=settings.TUSHARE_TOKEN,
+        max_requests_per_minute=effective_rpm,
+    )
+    setattr(self, cache_key, provider)
+    return provider
+```
+
+**两级限速配置（全局 + 任务级）**：
+
+| 来源 | 字段 | 优先级 | 含义 |
+|------|------|--------|------|
+| `sync_configs.max_requests_per_minute` | 任务级 | 高 | NULL = 继承全局；0 = 不限速；正整数 = 覆盖全局 |
+| `config` 表 `max_requests_per_minute` 键 | 全局 | 低 | 系统默认限速，管理员在"数据源配置"弹窗设置 |
+
+读取规则（API 端点 → Celery task → Service）：
+```python
+# API 端点：从 sync_configs 读取任务级 rpm，传给 Celery task
+cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'your_table')
+max_rpm = cfg.get('max_requests_per_minute') if cfg else None  # None = 继承全局
+
+celery_task = your_full_history_task.apply_async(
+    kwargs={'max_requests_per_minute': max_rpm, ...}
+)
+
+# Service：调用 _get_provider(max_rpm)，None 时自动读全局
+provider = self._get_provider(max_requests_per_minute=max_rpm)
+```
+
+`TushareAPIClient` 使用**滑动窗口算法**（60s deque）实现主动限速，在请求前等待而非靠异常重试。限速发生时日志输出 `[限速] 已达 N 次/分钟，等待 X.Xs...`。
+
+注意：`BaseSyncService._get_provider()` 已实现此模式；继承它的 Service 直接使用即可。
+
+**Tushare 频率限制错误识别（重要）**：
+
+只有明确包含 `抱歉，您每分钟最多访问` 或 `抱歉，您每小时最多访问` 的错误才是真正的频率限制，需等待 65s 后重试。
+
+`查询数据失败，请确认参数` 是**通用查询失败**（offset 超限、参数错误等），**不是**频率限制，不应触发 65s 等待。`TushareErrorMessages.is_rate_limit_error()` 已于 2026-04-06 修正，不再包含 `QUERY_FAILED_GENERIC`。
+
+**分页 offset 上限保护（`MAX_OFFSET`）**：
+
+Tushare 接口的 offset 超过约 100,000 时返回 `查询数据失败，请确认参数` 而非明确的"超限"错误。所有分页循环必须加 `MAX_OFFSET` 上限保护：
+
+```python
+MAX_OFFSET = 90_000  # Tushare offset 约 100,000 触发通用错误，留 10% 安全余量
+
+offset = 0
+while True:
+    if offset >= MAX_OFFSET:
+        logger.warning(f"offset 已达 {MAX_OFFSET} 上限，停止分页（可能数据未全取）")
+        break
+    df = provider.get_xxx(..., limit=api_limit, offset=offset)
+    if df is None or df.empty:
+        break
+    # 处理数据...
+    offset += api_limit
 ```
 
 注意：Service 文件顶部必须有 `from app.core.config import settings` 才能在方法中省略局部 import。
@@ -1585,6 +1673,9 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 - `api_prefix`：后端 API 前缀（如 `/income`），用于构造 `sync-async` 端点，**页面上的增量/全量同步按钮通过它调用**
 - `page_url`：对应前端数据页面 URL，支持点击跳转
 - `full_sync_strategy`：`'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none'`
+- `incremental_sync_strategy`：增量同步策略，`'by_date_range' | 'by_date' | 'by_week' | 'by_month' | 'by_ts_code' | 'snapshot' | 'none'`，NULL 表示使用接口默认逻辑
+- `api_limit`：接口单次请求上限（超出则分页继续），用于分页循环的 `limit` 参数
+- `max_requests_per_minute`：每分钟最大请求数（NULL = 继承全局设置；0 = 不限速；正整数 = 覆盖全局）
 - `data_source`：每个同步任务独立的数据源（`'tushare'`（默认）或 `'akshare'`），在任务编辑弹窗中修改
 - `api_name` / `description` / `doc_url`：Tushare 接口元数据，**由管理员在页面手动维护**，迁移脚本不覆盖
 - `points_consumption`：保留字段，页面不展示
@@ -4104,6 +4195,15 @@ end_date = datetime.now().strftime("%Y%m%d")
 - **解决**：① 在 `docker-compose.yml` 的 `celery_beat` environment 中添加 `TUSHARE_TOKEN=${TUSHARE_TOKEN:-}`；② 将 `BaseSyncService._get_provider()` 改为惰性初始化（`hasattr` 检查），`__init__` 不再调用 `create_provider`。
 - **涉及文件**：`docker-compose.yml`、`backend/app/services/extended_sync/base_sync_service.py`
 - **规律**：`BaseSyncService` 子类的所有实例化（包括模块级单例）不得在导入期触发 provider 初始化；服务类的 `_get_provider()` 必须是惰性的。
+
+**问题：全量同步提交报"已有全量同步任务正在进行"，但任务面板无运行中任务**
+- **原因**：任务被 revoke 或 worker 崩溃时，Redis lock key `sync:{table_key}:full_history:lock` 未被清除（残留锁）。
+- **解决**：所有全量同步 API 端点在提交 Celery task 前调用 `release_stale_lock(table_key)`（位于 `sync_dashboard.py`），自动检测并清除残留锁。也可在同步配置页面点击"清除进度"按钮手动解锁（同时清除 lock key 和 progress Set）。
+- **注意**：新增全量同步端点时必须加此调用，否则一旦任务异常终止就需要手动干预。
+
+**问题：全量同步分页时日志报"查询数据失败，请确认参数"并等待 65s**
+- **原因**：Tushare 的 offset 超过约 100,000 时返回 `查询数据失败，请确认参数`，该错误早期被误分类为频率限制，触发 65s 等待。
+- **解决**：`TushareErrorMessages.is_rate_limit_error()` 已修正，不再包含 `QUERY_FAILED_GENERIC`，此类错误现在按普通错误处理（短暂重试后报错）。同时，所有分页循环须加 `MAX_OFFSET = 90_000` 上限保护，在接近 Tushare offset 上限前主动停止分页。
 
 **问题：执行日线批量同步后后端大量接口返回 500，日志报 `connection pool exhausted`**
 - **原因**：`sync_daily_full_history_task` / `sync_daily_recent_all_task` 在任务体内调用了 `DatabaseManager.reset_instance()`，该方法会调用 `closeall()` 关闭 psycopg2 连接池的**所有连接**（包括 FastAPI 主进程正在使用的）。关闭后 Repository 再取连接时连接池已耗尽。

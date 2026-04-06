@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS sync_configs (
 
     -- 全量同步配置
     full_sync_task_name VARCHAR(200),            -- 全量同步的 Celery 任务名（有则显示全量同步按钮）
-    full_sync_strategy VARCHAR(30),              -- 全量策略：'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none'
+    full_sync_strategy VARCHAR(30),              -- 全量策略：'by_ts_code' | 'by_date' | 'by_week' | 'by_month' | 'by_quarter' | 'snapshot' | 'none'
     full_sync_concurrency INT DEFAULT 5,         -- 全量同步并发数（展示用，实际在 Service 层控制）
 
     -- 被动同步配置
@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS sync_configs (
     api_name VARCHAR(200),                       -- Tushare 接口名称（如 income_vip）
     description TEXT,                            -- 数据说明
     doc_url VARCHAR(500),                        -- Tushare 文档链接
+    api_limit INT DEFAULT 2000,                  -- 接口单次请求上限（超出则分页继续，默认 2000）
 
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -106,13 +107,13 @@ INSERT INTO sync_configs (
 
 ('suspend',      '每日停复牌信息',     '行情数据', 209,
  'tasks.sync_suspend', 30,
- 'tasks.sync_suspend_full_history', 'by_date', 5,
+ 'tasks.sync_suspend_full_history', 'by_week', 5,
  FALSE, NULL,
  '/market/suspend', '/suspend', NULL, '按7天窗口切片'),
 
 ('hsgt_top10',   '沪深股通十大成交股', '行情数据', 210,
  'tasks.sync_hsgt_top10', 30,
- 'tasks.sync_hsgt_top10_full_history', 'by_date', 5,
+ 'tasks.sync_hsgt_top10_full_history', 'by_month', 5,
  FALSE, NULL,
  '/market/hsgt-top10', '/hsgt-top10', NULL, '按月切片'),
 
@@ -149,19 +150,19 @@ INSERT INTO sync_configs (
 
 ('moneyflow_ind_dc',    '板块资金流向（DC）',      '资金流向', 312,
  'tasks.sync_moneyflow_ind_dc', 7,
- 'tasks.sync_moneyflow_ind_dc_full_history', 'by_date', 5,
+ 'tasks.sync_moneyflow_ind_dc_full_history', 'by_month', 5,
  FALSE, NULL,
  '/moneyflow/ind-dc', '/moneyflow-ind-dc', 6000, NULL),
 
 ('moneyflow_mkt_dc',    '大盘资金流向（DC）',      '资金流向', 313,
  'tasks.sync_moneyflow_mkt_dc', 7,
- 'tasks.sync_moneyflow_mkt_dc_full_history', 'by_date', 5,
+ 'tasks.sync_moneyflow_mkt_dc_full_history', 'by_month', 5,
  FALSE, NULL,
  '/moneyflow/mkt-dc', '/moneyflow-mkt-dc', 120, NULL),
 
 ('moneyflow_hsgt',      '沪深港通资金流向',        '资金流向', 314,
  'tasks.sync_moneyflow_hsgt', 30,
- 'tasks.sync_moneyflow_hsgt_full_history', 'by_date', 5,
+ 'tasks.sync_moneyflow_hsgt_full_history', 'by_month', 5,
  FALSE, NULL,
  '/moneyflow/hsgt', '/moneyflow-hsgt', 2000, NULL),
 
@@ -333,37 +334,37 @@ INSERT INTO sync_configs (
 
 ('pledge_stat',     '股权质押统计',       '参考数据', 453,
  'tasks.sync_pledge_stat', 90,
- NULL, 'by_ts_code', 5,
+ 'tasks.sync_pledge_stat_full_history', 'by_ts_code', 5,
  FALSE, NULL,
  '/reference-data/pledge-stat', '/pledge-stat', 500, '逐只股票请求'),
 
 ('repurchase',      '股票回购',           '参考数据', 454,
  'tasks.sync_repurchase', 90,
- NULL, 'by_date', 5,
+ 'tasks.sync_repurchase_full_history', 'by_month', 5,
  FALSE, NULL,
  '/reference-data/repurchase', '/repurchase', 600, '按月切片'),
 
 ('share_float',     '限售股解禁',         '参考数据', 455,
  'tasks.sync_share_float', 90,
- NULL, 'by_date', 5,
+ 'tasks.sync_share_float_full_history', 'by_month', 5,
  FALSE, NULL,
  '/reference-data/share-float', '/share-float', 120, '按月切片'),
 
 ('block_trade',     '大宗交易',           '参考数据', 456,
  'tasks.sync_block_trade', 30,
- NULL, 'by_date', 5,
+ 'tasks.sync_block_trade_full_history', 'by_month', 5,
  FALSE, NULL,
  '/reference-data/block-trade', '/block-trade', 300, '按月切片，单次上限1000条'),
 
 ('stk_holdernumber','股东人数',           '参考数据', 457,
  'tasks.sync_stk_holdernumber', 90,
- NULL, 'by_date', 5,
+ 'tasks.sync_stk_holdernumber_full_history', 'by_month', 5,
  FALSE, NULL,
  '/reference-data/stk-holdernumber', '/stk-holdernumber', 600, '按月切片'),
 
 ('stk_holdertrade', '股东增减持',         '参考数据', 458,
  'tasks.sync_stk_holdertrade', 90,
- NULL, 'by_date', 5,
+ 'tasks.sync_stk_holdertrade_full_history', 'by_month', 5,
  FALSE, NULL,
  '/reference-data/stk-holdertrade', '/stk-holdertrade', 2000, '按月切片'),
 
@@ -443,5 +444,5 @@ ON CONFLICT (table_key) DO UPDATE SET
     api_prefix = EXCLUDED.api_prefix,
     points_consumption = EXCLUDED.points_consumption,
     notes = EXCLUDED.notes,
-    -- api_name/description/doc_url 由管理页面手动维护，迁移脚本不覆盖
+    -- api_name/description/doc_url/api_limit 由管理页面手动维护，迁移脚本不覆盖
     updated_at = NOW();

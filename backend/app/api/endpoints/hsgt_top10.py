@@ -227,6 +227,8 @@ async def sync_hsgt_top10_full_history(
     任务在后台异步执行，可通过任务面板查看进度。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'hsgt_top10')
         from app.tasks.hsgt_top10_tasks import sync_hsgt_top10_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

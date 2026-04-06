@@ -17,6 +17,8 @@ export interface RedisProgress {
   completed_count: number
 }
 
+export type SyncStrategy = 'by_ts_code' | 'by_date_range' | 'by_date' | 'by_week' | 'by_month' | 'by_quarter' | 'snapshot' | 'none'
+
 /** 同步配置条目 */
 export interface SyncConfig {
   id: number
@@ -26,8 +28,9 @@ export interface SyncConfig {
   display_order: number
   incremental_task_name: string | null
   incremental_default_days: number
+  incremental_sync_strategy: SyncStrategy | null
   full_sync_task_name: string | null
-  full_sync_strategy: 'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none' | null
+  full_sync_strategy: SyncStrategy | null
   full_sync_concurrency: number
   passive_sync_enabled: boolean
   passive_sync_task_name: string | null
@@ -38,6 +41,8 @@ export interface SyncConfig {
   description: string | null
   doc_url: string | null
   data_source: string | null
+  api_limit: number | null
+  max_requests_per_minute: number | null
   updated_at: string | null
 }
 
@@ -70,7 +75,8 @@ export interface SyncOverviewResponse {
 
 export interface SyncConfigUpdate {
   incremental_default_days?: number
-  full_sync_strategy?: string
+  incremental_sync_strategy?: SyncStrategy | null
+  full_sync_strategy?: SyncStrategy | null
   full_sync_concurrency?: number
   passive_sync_enabled?: boolean
   passive_sync_task_name?: string | null
@@ -79,6 +85,8 @@ export interface SyncConfigUpdate {
   description?: string | null
   doc_url?: string | null
   data_source?: string | null
+  api_limit?: number | null
+  max_requests_per_minute?: number | null
 }
 
 export interface ScheduleUpdate {
@@ -124,6 +132,11 @@ export class SyncDashboardApiClient extends BaseApiClient {
   /** 更新增量同步任务的定时调度配置（启用/禁用、Cron 表达式） */
   async updateSchedule(tableKey: string, data: ScheduleUpdate): Promise<ApiResponse<IncrementalSchedule & { task_name: string }>> {
     return this.put(`/api/sync-dashboard/configs/${tableKey}/schedule`, data)
+  }
+
+  /** 获取指定表增量同步的建议起始日期（YYYYMMDD） */
+  async getSuggestStartDate(apiPrefix: string): Promise<ApiResponse<{ suggested_start_date: string | null }>> {
+    return this.get(`/api${apiPrefix}/suggest-start-date`)
   }
 }
 

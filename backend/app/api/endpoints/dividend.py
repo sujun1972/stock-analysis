@@ -179,6 +179,8 @@ async def sync_dividend_full_history_async(
 ):
     """异步全量同步分红送股历史数据（按季度 period 切片 + Redis 续继）"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'dividend')
         from app.tasks.dividend_tasks import sync_dividend_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

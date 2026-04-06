@@ -13,11 +13,13 @@ import type { ApiResponse } from '@/types/api'
 export interface DataSourceConfig {
   tushare_token: string
   earliest_history_date?: string
+  max_requests_per_minute?: number
 }
 
 export interface UpdateDataSourceConfigRequest {
   tushare_token?: string
   earliest_history_date?: string
+  max_requests_per_minute?: number
 }
 
 export interface AIProviderConfig {

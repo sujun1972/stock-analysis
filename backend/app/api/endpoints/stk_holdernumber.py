@@ -117,6 +117,8 @@ async def sync_stk_holdernumber_full_history(
 ):
     """按年切片全量同步股东人数历史数据（支持中断续继）"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'stk_holdernumber')
         from app.tasks.stk_holdernumber_tasks import sync_stk_holdernumber_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

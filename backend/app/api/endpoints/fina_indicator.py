@@ -193,6 +193,8 @@ async def sync_fina_indicator_full_history_async(
 ):
     """异步全量同步财务指标历史数据（按季度 period 切片 + Redis 续继）"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'fina_indicator')
         from app.tasks.fina_indicator_tasks import sync_fina_indicator_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

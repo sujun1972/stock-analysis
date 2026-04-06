@@ -22,24 +22,16 @@ def sync_share_float_task(
     ann_date: Optional[str] = None,
     float_date: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    sync_strategy: Optional[str] = None,
+    max_requests_per_minute: Optional[int] = None,
 ):
-    """
-    同步限售股解禁数据
-
-    Args:
-        ts_code: 股票代码
-        ann_date: 公告日期 YYYYMMDD
-        float_date: 解禁日期 YYYYMMDD
-        start_date: 解禁开始日期 YYYYMMDD
-        end_date: 解禁结束日期 YYYYMMDD
-
-    Returns:
-        同步结果
-    """
+    """增量同步限售股解禁数据"""
     try:
-        logger.info(f"开始执行限售股解禁同步任务: ts_code={ts_code}, ann_date={ann_date}, "
-                   f"float_date={float_date}, start_date={start_date}, end_date={end_date}")
+        logger.info(
+            f"开始执行限售股解禁增量同步任务: strategy={sync_strategy} "
+            f"ts_code={ts_code} start_date={start_date} end_date={end_date}"
+        )
 
         service = ShareFloatService()
         result = run_async_in_celery(
@@ -48,7 +40,9 @@ def sync_share_float_task(
             ann_date=ann_date,
             float_date=float_date,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            sync_strategy=sync_strategy,
+            max_requests_per_minute=max_requests_per_minute,
         )
 
         if result["status"] == "success":
@@ -74,14 +68,16 @@ def sync_share_float_task(
     time_limit=10800,
     acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_share_float_full_history_task(self, start_date: str = None, concurrency: int = 5):
-    """按月切片全量同步限售股解禁历史数据（支持 Redis 续继）
+def sync_share_float_full_history_task(self, start_date: str = None, concurrency: int = 5, strategy: str = 'by_month',
+                                       max_requests_per_minute: Optional[int] = None):
+    """全量同步限售股解禁历史数据（支持 Redis 续继，切片策略由 strategy 参数控制）
 
-    share_float 单次上限6000条，年数据量接近上限，按月切片避免截断，5并发。
+    strategy: 'by_month'（按月，默认）、'by_week'（按7天窗口）、'by_date'（逐日）
+    share_float 单次上限6000条，年数据量接近上限，默认按月切片避免截断，5并发。
     """
     from app.core.redis_lock import redis_client
 
-    logger.info(f"========== [Celery] 开始全量历史限售股解禁同步任务 concurrency={concurrency} ==========")
+    logger.info(f"========== [Celery] 开始全量历史限售股解禁同步任务 strategy={strategy} concurrency={concurrency} ==========")
 
     if redis_client is None:
         return {"status": "error", "message": "Redis 不可用"}
@@ -98,8 +94,10 @@ def sync_share_float_full_history_task(self, start_date: str = None, concurrency
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=start_date,
+                    concurrency=concurrency,
+                    strategy=strategy,
                     update_state_fn=self.update_state,
-                    concurrency=concurrency
+                    max_requests_per_minute=max_requests_per_minute if max_requests_per_minute is not None else 0,
                 )
             )
         finally:

@@ -194,6 +194,8 @@ async def sync_adj_factor_full_history(
     支持 Redis 进度续继，任务中断后重新触发会自动跳过已完成股票。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'adj_factor')
         from app.tasks.adj_factor_tasks import sync_adj_factor_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

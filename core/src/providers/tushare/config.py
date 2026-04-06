@@ -22,6 +22,7 @@ class TushareConfig:
     DEFAULT_RETRY_COUNT = 3
     DEFAULT_RETRY_DELAY = 1
     DEFAULT_REQUEST_DELAY = 0.2  # 请求间隔（秒）
+    DEFAULT_MAX_REQUESTS_PER_MINUTE = 0  # 每分钟最大请求数，0 表示不限速
 
     # ========== 数据范围 ==========
     DEFAULT_HISTORY_DAYS = 365  # 默认获取一年数据
@@ -101,9 +102,12 @@ class TushareErrorMessages:
     INSUFFICIENT_PERMISSION = '权限不足'
     DAILY_LIMIT = '每天最多访问'  # 每日访问次数限制
 
-    # 频率限制错误
+    # 频率限制错误（明确的限速消息，需等待限速窗口后重试）
     RATE_LIMIT_PER_MINUTE = '抱歉，您每分钟最多访问'
     RATE_LIMIT_PER_HOUR = '抱歉，您每小时最多访问'
+
+    # 通用查询失败（参数错误、offset 超限等，不是限速，不应等待 65s）
+    QUERY_FAILED_GENERIC = '查询数据失败，请确认参数'
 
     @classmethod
     def is_permission_error(cls, error_msg: str) -> bool:
@@ -114,8 +118,9 @@ class TushareErrorMessages:
 
     @classmethod
     def is_rate_limit_error(cls, error_msg: str) -> bool:
-        """判断是否为频率限制错误"""
-        return cls.RATE_LIMIT_PER_MINUTE in error_msg or cls.RATE_LIMIT_PER_HOUR in error_msg
+        """判断是否为频率限制错误（仅明确的限速消息，不含通用查询失败）"""
+        return (cls.RATE_LIMIT_PER_MINUTE in error_msg or
+                cls.RATE_LIMIT_PER_HOUR in error_msg)
 
 
 class TushareFields:

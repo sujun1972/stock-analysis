@@ -201,6 +201,8 @@ async def sync_suspend_full_history(
     按7天窗口拉取自2005年起的全市场停复牌记录，5并发，Redis续继。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'suspend')
         from app.tasks.suspend_tasks import sync_suspend_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

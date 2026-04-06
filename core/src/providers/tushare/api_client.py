@@ -5,6 +5,7 @@ Tushare API 客户端封装
 """
 
 import time
+import collections
 from typing import Any, Callable, Optional
 
 try:
@@ -41,7 +42,8 @@ class TushareAPIClient:
         timeout: int = TushareConfig.DEFAULT_TIMEOUT,
         retry_count: int = TushareConfig.DEFAULT_RETRY_COUNT,
         retry_delay: int = TushareConfig.DEFAULT_RETRY_DELAY,
-        request_delay: float = TushareConfig.DEFAULT_REQUEST_DELAY
+        request_delay: float = TushareConfig.DEFAULT_REQUEST_DELAY,
+        max_requests_per_minute: int = TushareConfig.DEFAULT_MAX_REQUESTS_PER_MINUTE,
     ):
         """
         初始化 API 客户端
@@ -52,6 +54,7 @@ class TushareAPIClient:
             retry_count: 失败重试次数
             retry_delay: 重试延迟（秒）
             request_delay: 请求间隔（秒）
+            max_requests_per_minute: 每分钟最大请求数，0 表示不限速
         """
         if not token:
             raise TushareTokenError("Tushare Token 未配置")
@@ -61,6 +64,10 @@ class TushareAPIClient:
         self.retry_count = retry_count
         self.retry_delay = retry_delay
         self.request_delay = request_delay
+        self.max_requests_per_minute = max_requests_per_minute
+
+        # 滑动窗口限速：记录最近 60s 内的请求时间戳
+        self._request_timestamps: collections.deque = collections.deque()
 
         # 初始化 Tushare API
         self._init_tushare_api()
@@ -104,6 +111,21 @@ class TushareAPIClient:
         last_exception: Optional[Exception] = None
         func_name = func.__name__ if hasattr(func, '__name__') else str(func)
 
+        # 滑动窗口限速：若配置了 max_requests_per_minute，在请求前主动等待
+        if self.max_requests_per_minute > 0:
+            while True:
+                now = time.monotonic()
+                # 清除 60s 之前的记录
+                while self._request_timestamps and now - self._request_timestamps[0] >= 60:
+                    self._request_timestamps.popleft()
+                if len(self._request_timestamps) < self.max_requests_per_minute:
+                    self._request_timestamps.append(now)
+                    break
+                # 窗口已满，等到最早记录过期
+                wait = 60 - (now - self._request_timestamps[0]) + 0.05
+                logger.debug(f"[限速] 已达 {self.max_requests_per_minute} 次/分钟，等待 {wait:.1f}s...")
+                time.sleep(wait)
+
         for attempt in range(1, self.retry_count + 1):
             try:
                 logger.debug(f"调用 {func_name} (尝试 {attempt}/{self.retry_count})")
@@ -126,9 +148,15 @@ class TushareAPIClient:
                     logger.error(f"{func_name} 调用失败: 积分不足或权限不足 - {error_msg}")
                     raise TusharePermissionError(error_msg) from e
 
-                # 检查是否是频率限制错误（不重试，由外层决定）
+                # 检查是否是频率限制错误（等待限流窗口后重试）
                 if TushareErrorMessages.is_rate_limit_error(error_msg):
-                    logger.warning(f"{func_name} 调用失败: 频率限制 - {error_msg}")
+                    if attempt < self.retry_count:
+                        # 默认等待 65s（Tushare 限流窗口约 60s）
+                        wait = 65
+                        logger.warning(f"{func_name} 频率限制，等待 {wait}s 后重试 ({attempt}/{self.retry_count})...")
+                        time.sleep(wait)
+                        continue
+                    logger.warning(f"{func_name} 调用失败: 频率限制（已用尽重试）- {error_msg}")
                     raise TushareRateLimitError(error_msg) from e
 
                 # 其他错误，记录并准备重试

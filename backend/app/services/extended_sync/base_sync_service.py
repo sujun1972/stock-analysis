@@ -32,14 +32,39 @@ class BaseSyncService:
         self.validator = ExtendedDataValidator()
         self.provider_factory = DataProviderFactory()  # 保留向后兼容
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（惰性初始化，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = DataProviderFactory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    def _get_provider(self, max_requests_per_minute: Optional[int] = None):
+        """获取Tushare数据提供者（惰性初始化，按 rpm 值缓存）
+
+        Args:
+            max_requests_per_minute: 覆盖全局限速配置。
+                None  = 使用全局设置（从 config 表读取）
+                0     = 不限速
+                正整数 = 按此值限速
+        """
+        cache_key = f'_provider_{max_requests_per_minute}'
+        cached = getattr(self, cache_key, None)
+        if cached is not None:
+            return cached
+
+        if max_requests_per_minute is not None:
+            effective_rpm = max_requests_per_minute
+        else:
+            effective_rpm = 0
+            try:
+                from app.repositories.config_repository import ConfigRepository
+                raw = ConfigRepository().get_config_value("max_requests_per_minute")
+                if raw is not None:
+                    effective_rpm = int(raw)
+            except Exception:
+                pass
+
+        provider = DataProviderFactory.create_provider(
+            source='tushare',
+            token=settings.TUSHARE_TOKEN,
+            max_requests_per_minute=effective_rpm,
+        )
+        setattr(self, cache_key, provider)
+        return provider
 
     def _calculate_trade_date(
         self,

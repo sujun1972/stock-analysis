@@ -203,6 +203,8 @@ async def sync_daily_basic_full_history(
     支持 Redis 进度续继，任务中断后重新触发会自动跳过已完成股票。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'daily_basic')
         from app.tasks.daily_basic_tasks import sync_daily_basic_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

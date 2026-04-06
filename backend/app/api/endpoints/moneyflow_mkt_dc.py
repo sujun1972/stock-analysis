@@ -135,6 +135,8 @@ async def sync_moneyflow_mkt_dc_full_history_async(
     Redis Set 记录已完成月份，支持中断后续继。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'moneyflow_mkt_dc')
         from app.tasks.moneyflow_mkt_dc_tasks import sync_moneyflow_mkt_dc_full_history_task
         from app.services import TaskHistoryHelper
         from app.repositories.sync_config_repository import SyncConfigRepository

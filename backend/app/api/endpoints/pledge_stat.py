@@ -150,6 +150,8 @@ async def sync_pledge_stat_full_history(
     pledge_stat 接口只支持 ts_code + end_date，采用逐只股票请求方式，约5500只，5并发。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'pledge_stat')
         from app.tasks.pledge_stat_tasks import sync_pledge_stat_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

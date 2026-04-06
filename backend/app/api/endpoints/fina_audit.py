@@ -216,6 +216,8 @@ async def sync_fina_audit_full_history_async(
     全量同步财务审计意见历史数据（逐只股票，1并发，Redis续继）
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'fina_audit')
         from app.tasks.fina_audit_tasks import sync_fina_audit_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

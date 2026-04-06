@@ -94,6 +94,7 @@ class ConfigService:
         self,
         tushare_token: Optional[str] = None,
         earliest_history_date: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
         """
         更新数据源配置（Token 和全量同步最早日期）
@@ -101,6 +102,7 @@ class ConfigService:
         Args:
             tushare_token: Tushare Token (可选，留空不修改)
             earliest_history_date: 全量同步最早日期（可选）
+            max_requests_per_minute: 每分钟最大请求数，0 表示不限速（可选）
 
         Returns:
             Dict: 更新后的配置
@@ -108,6 +110,7 @@ class ConfigService:
         return await self.data_source_config.update_data_source(
             tushare_token=tushare_token,
             earliest_history_date=earliest_history_date,
+            max_requests_per_minute=max_requests_per_minute,
         )
 
     # ==================== 同步状态接口（委托给 SyncStatusManager）====================

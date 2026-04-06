@@ -209,6 +209,8 @@ async def sync_full_history(
     从2021年1月1日起，逐只同步全部上市股票的日线数据。
     中断后再次触发会自动从断点继续，跳过已同步完成的股票。
     """
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'stock_daily')
     from app.tasks.sync_tasks import sync_daily_full_history_task
     from app.repositories.sync_config_repository import SyncConfigRepository
 

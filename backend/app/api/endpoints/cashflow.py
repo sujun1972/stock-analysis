@@ -2,6 +2,7 @@
 现金流量表数据API端点
 """
 
+import asyncio
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from loguru import logger
@@ -193,6 +194,8 @@ async def sync_cashflow_full_history_async(
 ):
     """异步全量同步现金流量表历史数据（按季度 period 切片 + Redis 续继）"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'cashflow')
         from app.tasks.cashflow_tasks import sync_cashflow_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

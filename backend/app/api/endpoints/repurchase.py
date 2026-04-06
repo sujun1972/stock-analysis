@@ -120,6 +120,8 @@ async def sync_repurchase_full_history(
 ):
     """按年切片全量同步股票回购历史数据（支持中断续继）"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'repurchase')
         from app.tasks.repurchase_tasks import sync_repurchase_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

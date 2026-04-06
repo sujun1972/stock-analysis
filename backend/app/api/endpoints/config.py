@@ -22,6 +22,7 @@ class DataSourceConfigRequest(BaseModel):
 
     tushare_token: Optional[str] = None
     earliest_history_date: Optional[str] = None
+    max_requests_per_minute: Optional[int] = None
 
 
 @router.get("/source")
@@ -66,6 +67,7 @@ async def update_data_source_config(
     config = await config_service.update_data_source(
         tushare_token=request.tushare_token,
         earliest_history_date=request.earliest_history_date,
+        max_requests_per_minute=request.max_requests_per_minute,
     )
 
     return ApiResponse.success(

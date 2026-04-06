@@ -76,6 +76,43 @@ def _get_redis():
         return None
 
 
+def release_stale_lock(table_key: str) -> bool:
+    """
+    检查全量同步 lock key 是否为残留锁（锁存在但数据库中没有对应的 running 任务），
+    若是则删除并返回 True；锁不存在或任务真实在跑返回 False。
+
+    供各全量同步 API 端点在提交新任务前调用，实现无感知自动解锁。
+    """
+    lock_key = f"sync:{table_key}:full_history:lock"
+    r = _get_redis()
+    if not r:
+        return False
+    try:
+        if not r.exists(lock_key):
+            return False  # 锁不存在，无需处理
+        # 锁存在，检查数据库里是否有真实 running 的全量任务
+        repo = CeleryTaskHistoryRepository()
+        rows = repo.execute_query(
+            """
+            SELECT id FROM celery_task_history
+            WHERE task_name LIKE %s
+              AND status = 'running'
+              AND started_at > NOW() - INTERVAL '4 hours'
+            LIMIT 1
+            """,
+            (f"tasks.sync_{table_key.replace('-', '_')}_full_history%",),
+        )
+        if rows:
+            return False  # 任务确实在跑，不清锁
+        # 没有活跃任务，锁是残留的
+        r.delete(lock_key)
+        logger.warning(f"[release_stale_lock] 检测到 {table_key} 残留锁，已自动释放（无对应活跃任务）")
+        return True
+    except Exception as e:
+        logger.error(f"[release_stale_lock] 检查 {table_key} 锁失败: {e}")
+        return False
+
+
 def _get_redis_progress(table_key: str) -> Optional[Dict]:
     """查询单表的 Redis 全量同步进度"""
     redis_key = FULL_SYNC_REDIS_KEYS.get(table_key)
@@ -130,6 +167,7 @@ def _get_last_task(task_name: str, repo: CeleryTaskHistoryRepository) -> Optiona
 
 class SyncConfigUpdate(BaseModel):
     incremental_default_days: Optional[int] = None
+    incremental_sync_strategy: Optional[str] = None  # 增量同步策略
     full_sync_strategy: Optional[str] = None
     full_sync_concurrency: Optional[int] = None
     passive_sync_enabled: Optional[bool] = None
@@ -139,6 +177,8 @@ class SyncConfigUpdate(BaseModel):
     description: Optional[str] = None
     doc_url: Optional[str] = None
     data_source: Optional[str] = None  # 'tushare' 或 'akshare'，None 表示不修改
+    api_limit: Optional[int] = None    # 接口单次请求上限（超出则分页继续）
+    max_requests_per_minute: Optional[int] = None  # 每分钟最大请求数（None=不修改，0=不限速，正整数=覆盖全局）
 
 
 class ScheduleUpdate(BaseModel):
@@ -256,7 +296,9 @@ async def update_config(
 ):
     """更新单条同步配置（可编辑的字段：并发数、回看天数、被动同步开关、备注、数据源）"""
     repo = SyncConfigRepository()
-    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    # 使用 exclude_unset=True：只包含客户端显式传入的字段（含显式传 null 的字段），
+    # 未传入的字段不会覆盖数据库现有值。
+    data = body.model_dump(exclude_unset=True)
     updated = await asyncio.to_thread(repo.update, table_key, data)
     if not updated:
         return ApiResponse.error(message=f"配置 {table_key} 不存在或无可更新字段", code=400)
@@ -322,10 +364,10 @@ async def clear_progress(
     current_user: User = Depends(require_admin),
 ):
     """
-    清除 Redis 全量同步进度。
+    清除 Redis 全量同步进度（同时释放残留锁）。
 
     清除后下次触发全量同步时将从头开始，而不是续继。
-    适用于：数据库已清空后重新全量同步的场景。
+    适用于：数据库已清空后重新全量同步的场景，或任务异常中断后锁未释放的场景。
     """
     redis_key = FULL_SYNC_REDIS_KEYS.get(table_key)
     if not redis_key:
@@ -334,11 +376,14 @@ async def clear_progress(
     if not r:
         return ApiResponse.error(message="Redis 连接失败", code=500)
     try:
-        deleted = r.delete(redis_key)
+        lock_key = f"sync:{table_key}:full_history:lock"
+        deleted_progress = r.delete(redis_key)
+        deleted_lock = r.delete(lock_key)
         return ApiResponse.success(data={
             "table_key": table_key,
             "redis_key": redis_key,
-            "deleted": deleted > 0,
-        }, message="进度已清除，下次全量同步将从头开始")
+            "deleted": deleted_progress > 0,
+            "lock_released": deleted_lock > 0,
+        }, message="进度已清除，锁已释放，下次全量同步将从头开始")
     except Exception as e:
         return ApiResponse.error(message=f"清除失败: {e}", code=500)

@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate, type ScheduleUpdate } from '@/lib/api/sync-dashboard'
+import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate, type ScheduleUpdate, type SyncStrategy } from '@/lib/api/sync-dashboard'
 import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
 import { useConfigStore } from '@/stores/config-store'
@@ -28,7 +28,9 @@ import Link from 'next/link'
 
 const STRATEGY_LABELS: Record<string, string> = {
   by_ts_code: '逐只股票',
-  by_date: '按日期切片',
+  by_date: '按日切片',
+  by_week: '按周切片',
+  by_month: '按月切片',
   by_quarter: '按季度切片',
   snapshot: '快照',
   none: '无全量',
@@ -36,10 +38,20 @@ const STRATEGY_LABELS: Record<string, string> = {
 
 const STRATEGY_OPTIONS = [
   { value: 'by_ts_code', label: '逐只股票' },
-  { value: 'by_date', label: '按日期切片' },
+  { value: 'by_date', label: '按日切片' },
+  { value: 'by_week', label: '按周切片' },
+  { value: 'by_month', label: '按月切片' },
   { value: 'by_quarter', label: '按季度切片' },
   { value: 'snapshot', label: '快照' },
   { value: 'none', label: '无全量' },
+]
+
+// 增量同步策略选项（比全量策略更精简）
+const INCREMENTAL_STRATEGY_OPTIONS = [
+  { value: 'by_ts_code', label: '逐只股票' },
+  { value: 'by_date_range', label: '按时间段' },
+  { value: 'snapshot', label: '快照' },
+  { value: 'none', label: '无' },
 ]
 
 const CATEGORY_ORDER = [
@@ -80,20 +92,19 @@ function SyncRow({
   onSync,
   onClearProgress,
   onEdit,
-  syncing,
 }: {
   item: SyncOverviewItem
   onSync: (item: SyncOverviewItem, type: 'incremental' | 'full') => void
   onClearProgress: (item: SyncOverviewItem) => void
   onEdit: (item: SyncOverviewItem) => void
-  syncing: Record<string, boolean>
 }) {
+  const isTaskRunning = useTaskStore(state => state.isTaskRunning)
   const incTask = item.last_incremental
   const fullTask = item.last_full_sync
   const progress = item.redis_progress
   const hasFullSync = !!item.full_sync_task_name
-  const isIncrSyncing = syncing[`incr_${item.table_key}`]
-  const isFullSyncing = syncing[`full_${item.table_key}`]
+  const isIncrSyncing = item.incremental_task_name ? isTaskRunning(item.incremental_task_name) : false
+  const isFullSyncing = item.full_sync_task_name ? isTaskRunning(item.full_sync_task_name) : false
 
   return (
     <div className="grid grid-cols-12 gap-2 items-center py-2.5 px-3 border-b border-gray-100 hover:bg-gray-50 text-sm">
@@ -199,14 +210,13 @@ function SyncRow({
 }
 
 function CategorySection({
-  category, items, onSync, onClearProgress, onEdit, syncing,
+  category, items, onSync, onClearProgress, onEdit,
 }: {
   category: string
   items: SyncOverviewItem[]
   onSync: (item: SyncOverviewItem, type: 'incremental' | 'full') => void
   onClearProgress: (item: SyncOverviewItem) => void
   onEdit: (item: SyncOverviewItem) => void
-  syncing: Record<string, boolean>
 }) {
   const [expanded, setExpanded] = useState(true)
   const failureCount = items.filter(
@@ -252,7 +262,6 @@ function CategorySection({
               onSync={onSync}
               onClearProgress={onClearProgress}
               onEdit={onEdit}
-              syncing={syncing}
             />
           ))}
         </>
@@ -267,7 +276,6 @@ export default function SyncConfigPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>('全部')
   const [searchText, setSearchText] = useState('')
-  const [syncing, setSyncing] = useState<Record<string, boolean>>({})
 
   // 清除进度确认
   const [clearProgressItem, setClearProgressItem] = useState<SyncOverviewItem | null>(null)
@@ -284,6 +292,7 @@ export default function SyncConfigPage() {
   const [globalConfigOpen, setGlobalConfigOpen] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
   const [earliestDate, setEarliestDate] = useState('2021-01-04')
+  const [maxRpmInput, setMaxRpmInput] = useState('0')
   const [isSavingGlobal, setIsSavingGlobal] = useState(false)
 
   useEffect(() => {
@@ -291,6 +300,7 @@ export default function SyncConfigPage() {
       fetchDataSourceConfig()
       setTokenInput('')
       setEarliestDate(configData?.earliest_history_date || '2021-01-04')
+      setMaxRpmInput(String(configData?.max_requests_per_minute ?? 0))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalConfigOpen])
@@ -298,6 +308,7 @@ export default function SyncConfigPage() {
   useEffect(() => {
     if (configData && globalConfigOpen) {
       setEarliestDate(configData.earliest_history_date || '2021-01-04')
+      setMaxRpmInput(String(configData.max_requests_per_minute ?? 0))
     }
   }, [configData, globalConfigOpen])
 
@@ -305,9 +316,11 @@ export default function SyncConfigPage() {
     setIsSavingGlobal(true)
     try {
       const tokenToSave = tokenInput.trim() ? tokenInput.trim() : undefined
+      const maxRpm = parseInt(maxRpmInput, 10)
       await apiClient.updateDataSourceConfig({
         tushare_token: tokenToSave,
         earliest_history_date: earliestDate || undefined,
+        max_requests_per_minute: isNaN(maxRpm) ? 0 : maxRpm,
       })
       fetchDataSourceConfig(true)
       toast.success('配置已保存')
@@ -322,8 +335,8 @@ export default function SyncConfigPage() {
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
   const callbacksRef = useRef<Map<string, () => void>>(new Map())
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true)
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true)
     try {
       const cat = selectedCategory === '全部' ? undefined : selectedCategory
       const resp = await syncDashboardApi.getOverview(cat)
@@ -332,9 +345,9 @@ export default function SyncConfigPage() {
         setCategories(resp.data.categories)
       }
     } catch {
-      toast.error('加载失败')
+      if (!silent) toast.error('加载失败')
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }, [selectedCategory])
 
@@ -349,15 +362,18 @@ export default function SyncConfigPage() {
 
   const handleSync = useCallback(async (item: SyncOverviewItem, type: 'incremental' | 'full') => {
     if (!item.api_prefix) return
-    const syncKey = `${type === 'incremental' ? 'incr' : 'full'}_${item.table_key}`
-    setSyncing(prev => ({ ...prev, [syncKey]: true }))
     try {
       const endpoint = type === 'full'
         ? `/api${item.api_prefix}/sync-full-history`
         : `/api${item.api_prefix}/sync-async`
-      const params = type === 'full' && item.full_sync_concurrency
-        ? { concurrency: item.full_sync_concurrency }
-        : {}
+      const params: Record<string, string | number> = {}
+      if (type === 'full') {
+        if (item.full_sync_concurrency) params.concurrency = item.full_sync_concurrency
+        if (earliestDate) {
+          // YYYY-MM-DD → YYYYMMDD
+          params.start_date = earliestDate.replace(/-/g, '')
+        }
+      }
       const resp = await apiClient.post(endpoint, null, { params })
       if (resp.code === 200 && resp.data) {
         const taskId = resp.data.celery_task_id
@@ -371,10 +387,9 @@ export default function SyncConfigPage() {
           startTime: Date.now(),
         })
         const cb = () => {
-          loadData()
+          loadData(true)
           unregisterCompletionCallback(taskId, cb)
           callbacksRef.current.delete(taskId)
-          setSyncing(prev => ({ ...prev, [syncKey]: false }))
         }
         callbacksRef.current.set(taskId, cb)
         registerCompletionCallback(taskId, cb)
@@ -385,7 +400,6 @@ export default function SyncConfigPage() {
       }
     } catch (err: any) {
       toast.error(`提交失败: ${err.message}`)
-      setSyncing(prev => ({ ...prev, [syncKey]: false }))
     }
   }, [addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, loadData])
 
@@ -395,7 +409,7 @@ export default function SyncConfigPage() {
       const resp = await syncDashboardApi.clearProgress(clearProgressItem.table_key)
       if (resp.code === 200) {
         toast.success(`${clearProgressItem.display_name} 进度已清除`)
-        loadData()
+        loadData(true)
       } else {
         throw new Error(resp.message)
       }
@@ -410,6 +424,7 @@ export default function SyncConfigPage() {
     setEditingItem(item)
     setEditForm({
       incremental_default_days: item.incremental_default_days,
+      incremental_sync_strategy: item.incremental_sync_strategy ?? undefined,
       full_sync_strategy: item.full_sync_strategy ?? undefined,
       full_sync_concurrency: item.full_sync_concurrency,
       passive_sync_enabled: item.passive_sync_enabled,
@@ -419,6 +434,8 @@ export default function SyncConfigPage() {
       description: item.description,
       doc_url: item.doc_url,
       data_source: item.data_source ?? 'tushare',
+      api_limit: item.api_limit ?? 2000,
+      max_requests_per_minute: item.max_requests_per_minute ?? null,
     })
     setScheduleForm({
       enabled: item.incremental_schedule?.enabled ?? undefined,
@@ -574,7 +591,6 @@ export default function SyncConfigPage() {
               onSync={handleSync}
               onClearProgress={setClearProgressItem}
               onEdit={openEditDialog}
-              syncing={syncing}
             />
           ))}
         </div>
@@ -641,6 +657,19 @@ export default function SyncConfigPage() {
               />
               <p className="text-xs text-gray-500">各页面点击「全量同步」时以此日期为起始日</p>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="global-max-rpm">每分钟最大请求数</Label>
+              <Input
+                id="global-max-rpm"
+                type="number"
+                min={0}
+                max={500}
+                value={maxRpmInput}
+                onChange={e => setMaxRpmInput(e.target.value)}
+                className="max-w-xs"
+              />
+              <p className="text-xs text-gray-500">主动限速以防触达 Tushare 频率限制，0 表示不限速</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setGlobalConfigOpen(false)}>取消</Button>
@@ -697,6 +726,18 @@ export default function SyncConfigPage() {
                 onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value || null }))}
               />
             </div>
+            <div className="grid grid-cols-3 items-center gap-4">
+              <Label className="text-right text-sm">请求限量</Label>
+              <div className="col-span-2 flex items-center gap-2">
+                <Input
+                  type="number" min={100} step={100} className="w-28 text-sm"
+                  placeholder="2000"
+                  value={editForm.api_limit ?? ''}
+                  onChange={e => setEditForm(prev => ({ ...prev, api_limit: e.target.value === '' ? null : Number(e.target.value) }))}
+                />
+                <span className="text-xs text-gray-400">条/次，超出自动分页（默认 2000）</span>
+              </div>
+            </div>
 
             {/* 同步参数 */}
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide border-b pb-1 pt-2">同步参数</div>
@@ -727,10 +768,24 @@ export default function SyncConfigPage() {
               />
             </div>
             <div className="grid grid-cols-3 items-center gap-4">
+              <Label className="text-right text-sm">增量策略</Label>
+              <Select
+                value={editForm.incremental_sync_strategy ?? 'none'}
+                onValueChange={v => setEditForm(prev => ({ ...prev, incremental_sync_strategy: v === 'none' ? null : v as SyncStrategy }))}
+              >
+                <SelectTrigger className="col-span-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INCREMENTAL_STRATEGY_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 items-center gap-4">
               <Label className="text-right text-sm">全量策略</Label>
               <Select
                 value={editForm.full_sync_strategy ?? 'none'}
-                onValueChange={v => setEditForm(prev => ({ ...prev, full_sync_strategy: v }))}
+                onValueChange={v => setEditForm(prev => ({ ...prev, full_sync_strategy: v as SyncStrategy }))}
               >
                 <SelectTrigger className="col-span-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -750,6 +805,21 @@ export default function SyncConfigPage() {
                   full_sync_concurrency: e.target.value === '' ? undefined : Number(e.target.value)
                 }))}
               />
+            </div>
+            <div className="grid grid-cols-3 items-center gap-4">
+              <Label className="text-right text-sm">任务限速（次/分钟）</Label>
+              <div className="col-span-2 flex items-center gap-2">
+                <Input
+                  type="number" min={0} max={500} className="w-28 text-sm"
+                  placeholder="留空继承全局设置"
+                  value={editForm.max_requests_per_minute ?? ''}
+                  onChange={e => setEditForm(prev => ({
+                    ...prev,
+                    max_requests_per_minute: e.target.value === '' ? null : Number(e.target.value)
+                  }))}
+                />
+                <span className="text-xs text-gray-400">留空=继承全局，0=不限速</span>
+              </div>
             </div>
             <div className="grid grid-cols-3 items-center gap-4">
               <Label className="text-right text-sm">被动同步</Label>

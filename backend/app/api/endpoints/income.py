@@ -202,6 +202,8 @@ async def sync_income_full_history_async(
         任务信息
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'income')
         from app.tasks.income_tasks import sync_income_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

@@ -174,6 +174,8 @@ async def sync_ggt_daily_full_history(
 ):
     """全量同步港股通每日成交统计历史数据（按年切片 + Redis 续继）"""
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'ggt_daily')
         from app.tasks.ggt_daily_tasks import sync_ggt_daily_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

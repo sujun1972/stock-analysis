@@ -144,6 +144,8 @@ async def sync_moneyflow_stock_dc_full_history_async(
     积分消耗较高（5000积分/次），建议仅在初次建库或需要补全历史数据时使用。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'moneyflow_stock_dc')
         from app.tasks.moneyflow_stock_dc_tasks import sync_moneyflow_stock_dc_full_history_task
         from app.services import TaskHistoryHelper
         from app.repositories.sync_config_repository import SyncConfigRepository

@@ -202,6 +202,8 @@ async def sync_stk_limit_d_full_history(
     支持 Redis 进度续继，任务中断后重新触发会自动跳过已完成股票。
     """
     try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'stk_limit_d')
         from app.tasks.stk_limit_d_tasks import sync_stk_limit_d_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
 

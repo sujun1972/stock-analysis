@@ -20,6 +20,7 @@ from .daily_basic_repository import DailyBasicRepository
 from .hk_hold_repository import HkHoldRepository
 from .block_trade_repository import BlockTradeRepository
 from .sync_log_repository import SyncLogRepository
+from .sync_history_repository import SyncHistoryRepository
 from .config_repository import ConfigRepository
 from .celery_task_history_repository import CeleryTaskHistoryRepository
 from .scheduled_task_repository import ScheduledTaskRepository
@@ -114,6 +115,7 @@ __all__ = [
     # 配置和同步
     "ConfigRepository",
     "SyncLogRepository",
+    "SyncHistoryRepository",
     # 任务管理
     "CeleryTaskHistoryRepository",
     "ScheduledTaskRepository",

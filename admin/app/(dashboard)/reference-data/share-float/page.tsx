@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { apiClient } from '@/lib/api-client'
+import { syncDashboardApi } from '@/lib/api/sync-dashboard'
 import { RefreshCw, TrendingUp, Users, Calendar, Package } from 'lucide-react'
 
 export default function ShareFloatPage() {
@@ -32,6 +33,7 @@ export default function ShareFloatPage() {
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
   const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
+  const [isFetchingSuggest, setIsFetchingSuggest] = useState(false)
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -105,6 +107,28 @@ export default function ShareFloatPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const handleOpenSyncDialog = async () => {
+    setSyncStartDate(undefined)
+    setSyncEndDate(undefined)
+    setSyncDialogOpen(true)
+    setIsFetchingSuggest(true)
+    try {
+      const resp = await syncDashboardApi.getSuggestStartDate('/share-float')
+      if (resp.code === 200 && resp.data?.suggested_start_date) {
+        const d = resp.data.suggested_start_date
+        // YYYYMMDD → Date (local time)
+        const year = parseInt(d.slice(0, 4))
+        const month = parseInt(d.slice(4, 6)) - 1
+        const day = parseInt(d.slice(6, 8))
+        setSyncStartDate(new Date(year, month, day))
+      }
+    } catch {
+      // 获取建议日期失败时静默处理，用户可手动选择
+    } finally {
+      setIsFetchingSuggest(false)
+    }
+  }
 
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
@@ -227,7 +251,7 @@ export default function ShareFloatPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
+            <Button onClick={handleOpenSyncDialog} disabled={syncing || isFetchingSuggest}>
               {syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
@@ -257,7 +281,11 @@ export default function ShareFloatPage() {
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div>
-              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium">开始日期（可选）</label>
+                {isFetchingSuggest && <span className="text-xs text-gray-400">获取建议日期...</span>}
+                {!isFetchingSuggest && syncStartDate && <span className="text-xs text-blue-500">已回填建议起始日期</span>}
+              </div>
               <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
             </div>
             <div>

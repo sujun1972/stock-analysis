@@ -10,6 +10,7 @@ import logger from '@/lib/logger';
 export interface DataSourceConfig {
   tushare_token: string;
   earliest_history_date?: string;
+  max_requests_per_minute?: number;
 }
 
 interface ConfigState {
