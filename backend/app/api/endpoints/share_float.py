@@ -214,8 +214,8 @@ async def sync_share_float_async(
         sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_month') if cfg else 'by_month'
         max_rpm = cfg.get('max_requests_per_minute') if cfg else None
 
-        # 若未指定 start_date 且策略为日期范围模式，自动计算建议起始日期
-        if not start_date_formatted and sync_strategy in ('by_date_range', 'by_month', 'by_week', 'by_date'):
+        # 若未指定 start_date 且策略需要日期范围，自动计算建议起始日期
+        if not start_date_formatted and sync_strategy in ('by_date_range', 'by_month', 'by_week', 'by_date', 'by_ts_code'):
             from app.services.share_float_service import ShareFloatService
             suggested = await ShareFloatService().get_suggested_start_date()
             if suggested:

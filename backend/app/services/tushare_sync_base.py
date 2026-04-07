@@ -483,7 +483,8 @@ class TushareSyncBase(BaseSyncService):
             date_slice_strategies = {'by_month', 'by_week', 'by_date'}
             MAX_OFFSET = self.MAX_OFFSET
 
-            if start_date and sync_strategy == 'by_date_range':
+            # by_ts_code 在增量上与 by_date_range 相同：按整段时间请求（不是逐只股票）
+            if start_date and sync_strategy in ('by_date_range', 'by_ts_code'):
                 # 整段请求 + 翻页
                 logger.info(
                     f"[{table_key}] 增量按时间段 {start_date}~{effective_end}，api_limit={api_limit}"
