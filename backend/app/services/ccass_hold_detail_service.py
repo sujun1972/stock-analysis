@@ -75,15 +75,11 @@ class CcassHoldDetailService(TushareSyncBase):
         redis_client,
         start_date: Optional[str] = None,
         concurrency: int = 5,
-        strategy: str = 'by_date',
+        strategy: str = 'by_month',
         update_state_fn=None,
         max_requests_per_minute: int = 0,
     ) -> Dict:
-        """全量同步历史数据（按交易日切片，Redis Set 续继）
-
-        ccass_hold_detail 接口要求 ts_code 或 trade_date 至少输入一个，
-        不支持 start_date/end_date 范围查询，故使用 by_date 策略逐日请求。
-        """
+        """全量同步历史数据（按月切片，Redis Set 续继）"""
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
         api_limit = (cfg.get('api_limit') or 6000) if cfg else 6000
         provider = self._get_provider(max_requests_per_minute)
@@ -102,7 +98,6 @@ class CcassHoldDetailService(TushareSyncBase):
             max_requests_per_minute=max_requests_per_minute,
             update_state_fn=update_state_fn,
             table_key=self.TABLE_KEY,
-            date_param='trade_date',
         )
 
     # ------------------------------------------------------------------

@@ -267,7 +267,7 @@ INSERT INTO sync_configs (
 
 ('ccass_hold_detail','中央结算系统持股明细', '特色数据', 404,
  'tasks.sync_ccass_hold_detail', 30,
- 'tasks.sync_ccass_hold_detail_full_history', 'by_date', 5,
+ 'tasks.sync_ccass_hold_detail_full_history', 'by_month', 5,
  FALSE, NULL,
  '/features/ccass-hold-detail', '/ccass-hold-detail', 8000, NULL),
 
