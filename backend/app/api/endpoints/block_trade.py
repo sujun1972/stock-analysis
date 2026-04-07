@@ -3,16 +3,14 @@
 """
 
 import asyncio
-import json
 from typing import Optional
-from datetime import date
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
 
 from app.models.api_response import ApiResponse
 from app.services.block_trade_service import BlockTradeService
 from app.services import TaskHistoryHelper
-from app.core.dependencies import require_admin, get_current_user
+from app.core.dependencies import require_admin
 from app.models.user import User
 
 
@@ -28,20 +26,7 @@ async def get_block_trade(
     limit: int = Query(30, ge=1, le=1000, description="返回记录数限制"),
     offset: int = Query(0, description="偏移量")
 ):
-    """
-    查询大宗交易数据
-
-    Args:
-        trade_date: 交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        ts_code: 股票代码（可选）
-        limit: 返回记录数限制
-        offset: 偏移量
-
-    Returns:
-        大宗交易数据列表
-    """
+    """查询大宗交易数据"""
     try:
         service = BlockTradeService()
         result = await service.get_block_trade_data(
@@ -64,16 +49,7 @@ async def get_statistics(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD")
 ):
-    """
-    获取大宗交易统计信息
-
-    Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-
-    Returns:
-        统计信息
-    """
+    """获取大宗交易统计信息"""
     try:
         service = BlockTradeService()
         statistics = await service.get_statistics(
@@ -89,12 +65,7 @@ async def get_statistics(
 
 @router.get("/latest")
 async def get_latest():
-    """
-    获取最新大宗交易数据
-
-    Returns:
-        最新大宗交易记录
-    """
+    """获取最新大宗交易数据"""
     try:
         service = BlockTradeService()
         latest = await service.get_latest_data()
@@ -105,29 +76,48 @@ async def get_latest():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/suggest-start-date")
+async def get_suggest_start_date(
+    _current_user: User = Depends(require_admin)
+):
+    """
+    返回增量同步的建议起始日期（YYYYMMDD）。
+
+    计算规则：
+      候选起始 = 今天 - incremental_default_days（sync_configs 中配置）
+      上次结束 = sync_history 中最近一次增量成功的 data_end_date
+      建议起始 = min(候选起始, 上次结束)，取更早者保证数据连续
+    """
+    service = BlockTradeService()
+    suggested = await service.get_suggested_start_date()
+    return ApiResponse.success(data={"suggested_start_date": suggested})
+
+
 @router.post("/sync-full-history")
 async def sync_block_trade_full_history(
-    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2010年开始"),
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从2010年开始"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
-    """按年切片全量同步大宗交易历史数据（支持中断续继）"""
+    """全量同步大宗交易历史数据（支持中断续继，切片策略从 sync_configs.full_sync_strategy 读取）"""
     try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'block_trade')
         from app.tasks.block_trade_tasks import sync_block_trade_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'block_trade')
 
         start_date_formatted = start_date.replace('-', '') if start_date else None
 
-        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'block_trade')
         if concurrency is None:
-            sync_config_repo = SyncConfigRepository()
-            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'block_trade')
             concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+        strategy = (cfg.get('full_sync_strategy') or 'by_month') if cfg else 'by_month'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
 
         celery_task = sync_block_trade_full_history_task.apply_async(
-            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency,
+                    'strategy': strategy, 'max_requests_per_minute': max_rpm}
         )
 
         helper = TaskHistoryHelper()
@@ -137,7 +127,8 @@ async def sync_block_trade_full_history(
             display_name='大宗交易（全量历史）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency,
+                         'strategy': strategy, 'max_requests_per_minute': max_rpm},
             source='block_trade_page'
         )
 
@@ -155,41 +146,38 @@ async def sync_block_trade_async(
     ts_code: Optional[str] = Query(None, description="股票代码，如：600000.SH"),
     current_user: User = Depends(require_admin)
 ):
-    """
-    异步同步大宗交易数据（通过Celery任务）
-
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    Args:
-        trade_date: 交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        ts_code: 股票代码（可选）
-        current_user: 当前登录用户（管理员）
-
-    Returns:
-        包含Celery任务ID和任务信息的响应
-    """
+    """异步增量同步大宗交易数据（Celery 任务）"""
     try:
         from app.tasks.block_trade_tasks import sync_block_trade_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
         trade_date_formatted = trade_date.replace('-', '') if trade_date else None
         start_date_formatted = start_date.replace('-', '') if start_date else None
         end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        # 提交Celery任务（异步执行）
+        # 从 sync_configs 读取增量同步策略及任务限速
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'block_trade')
+        sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_month') if cfg else 'by_month'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
+
+        # 若未指定 start_date 且策略需要日期范围，自动计算建议起始日期
+        if not start_date_formatted and sync_strategy in ('by_date_range', 'by_month', 'by_week', 'by_date'):
+            suggested = await BlockTradeService().get_suggested_start_date()
+            if suggested:
+                start_date_formatted = suggested
+                logger.info(f"大宗交易增量同步：未传 start_date，自动使用建议起始日期 {start_date_formatted}")
+
         celery_task = sync_block_trade_task.apply_async(
             kwargs={
                 'trade_date': trade_date_formatted,
+                'ts_code': ts_code,
                 'start_date': start_date_formatted,
                 'end_date': end_date_formatted,
-                'ts_code': ts_code
+                'sync_strategy': sync_strategy,
+                'max_requests_per_minute': max_rpm,
             }
         )
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
         helper = TaskHistoryHelper()
         task_data = await helper.create_task_record(
             celery_task_id=celery_task.id,
@@ -199,19 +187,17 @@ async def sync_block_trade_async(
             user_id=current_user.id,
             task_params={
                 'trade_date': trade_date_formatted,
+                'ts_code': ts_code,
                 'start_date': start_date_formatted,
                 'end_date': end_date_formatted,
-                'ts_code': ts_code
+                'sync_strategy': sync_strategy,
+                'max_requests_per_minute': max_rpm,
             },
             source='block_trade_page'
         )
 
-        logger.info(f"大宗交易同步任务已提交: {celery_task.id}")
-
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
+        logger.info(f"大宗交易增量同步任务已提交: {celery_task.id} strategy={sync_strategy}")
+        return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
 
     except Exception as e:
         logger.error(f"提交大宗交易同步任务失败: {e}")

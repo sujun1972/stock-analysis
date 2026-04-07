@@ -1,34 +1,37 @@
 """
 神奇九转指标数据服务
+
+处理神奇九转指标数据的业务逻辑。
+继承 TushareSyncBase，同步逻辑委托给基类。
 """
 
-import traceback
 from typing import Optional, Dict, List
 import asyncio
 from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories import StkNineturnRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from app.services.stock_quote_cache import stock_quote_cache
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class StkNineturnService:
+class StkNineturnService(TushareSyncBase):
     """神奇九转指标数据服务"""
 
-    def __init__(self):
-        self.stk_nineturn_repo = StkNineturnRepository()
-        self.provider_factory = DataProviderFactory()
+    TABLE_KEY = 'stk_nineturn'
+    FULL_HISTORY_START_DATE = '20230101'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:stk_nineturn:full_history:progress'
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    def __init__(self):
+        super().__init__()
+        self.stk_nineturn_repo = StkNineturnRepository()
+        self.sync_history_repo = SyncHistoryRepository()
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
     async def sync_stk_nineturn(
         self,
@@ -36,126 +39,117 @@ class StkNineturnService:
         trade_date: Optional[str] = None,
         freq: str = 'daily',
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
-        """
-        同步神奇九转指标数据
+        """增量同步神奇九转指标数据。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 8000) if cfg else 8000
+        provider = self._get_provider(max_requests_per_minute)
 
-        Args:
-            ts_code: 股票代码
-            trade_date: 交易日期，格式：YYYYMMDD
-            freq: 频率，默认daily
-            start_date: 开始日期，格式：YYYYMMDD
-            end_date: 结束日期，格式：YYYYMMDD
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_stk_nineturn,
+            upsert_fn=self.stk_nineturn_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+            extra_fetch_kwargs={
+                'ts_code': ts_code,
+                'trade_date': trade_date,
+                'freq': freq,
+            },
+        )
 
-        Returns:
-            同步结果字典
-        """
-        try:
-            # 参数验证：至少提供一个参数
-            if not any([ts_code, trade_date, start_date, end_date]):
-                # 默认同步最近30天数据
-                end_date_dt = datetime.now()
-                start_date_dt = end_date_dt - timedelta(days=30)
-                start_date = start_date_dt.strftime('%Y%m%d')
-                end_date = end_date_dt.strftime('%Y%m%d')
-                logger.info(f"未指定参数，默认同步最近30天: {start_date} ~ {end_date}")
+    # ------------------------------------------------------------------
+    # 全量历史同步
+    # ------------------------------------------------------------------
 
-            # 从 Tushare 获取数据
-            provider = self._get_provider()
-            logger.info(f"开始从 Tushare 获取神奇九转数据: ts_code={ts_code}, trade_date={trade_date}, freq={freq}")
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_month',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
+        """全量同步历史数据（按月切片，Redis Set 续继）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 8000) if cfg else 8000
+        provider = self._get_provider(max_requests_per_minute)
 
-            df = await asyncio.to_thread(
-                provider.get_stk_nineturn,
-                ts_code=ts_code,
-                trade_date=trade_date,
-                freq=freq,
-                start_date=start_date,
-                end_date=end_date
-            )
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_stk_nineturn,
+            upsert_fn=self.stk_nineturn_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+            fetch_kwargs={'freq': 'daily'},
+        )
 
-            if df is None or df.empty:
-                logger.warning("未获取到神奇九转数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "未获取到数据"
-                }
+    # ------------------------------------------------------------------
+    # 建议起始日期
+    # ------------------------------------------------------------------
 
-            logger.info(f"获取到 {len(df)} 条神奇九转数据")
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+        if last_end and last_end < candidate:
+            return last_end
+        return candidate
 
-            # 数据验证和清洗
-            df = self._validate_and_clean_data(df)
-
-            # 批量插入数据库
-            records = await asyncio.to_thread(
-                self.stk_nineturn_repo.bulk_upsert,
-                df
-            )
-
-            logger.info(f"成功同步 {records} 条神奇九转数据")
-
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条数据"
-            }
-
-        except Exception as e:
-            logger.error(f"同步神奇九转数据失败: {e}\n{traceback.format_exc()}")
-            return {
-                "status": "error",
-                "records": 0,
-                "error": str(e)
-            }
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
 
     def _validate_and_clean_data(self, df):
-        """
-        验证和清洗数据
-
-        Args:
-            df: 原始DataFrame
-
-        Returns:
-            清洗后的DataFrame
-        """
+        """验证和清洗数据"""
         try:
-            # 删除重复记录（基于 ts_code + trade_date + freq）
             initial_count = len(df)
             df = df.drop_duplicates(subset=['ts_code', 'trade_date', 'freq'], keep='last')
             if len(df) < initial_count:
-                logger.info(f"删除了 {initial_count - len(df)} 条重复记录")
+                logger.debug(f"删除了 {initial_count - len(df)} 条重复记录")
 
-            # 确保必需字段不为空
             required_fields = ['ts_code', 'trade_date']
             for field in required_fields:
                 if field in df.columns:
                     df = df[df[field].notna()]
 
-            # 设置默认值
             if 'freq' not in df.columns or df['freq'].isna().any():
                 df['freq'] = 'daily'
 
-            # 处理日期格式 (Tushare返回的是datetime字符串)
-            if 'trade_date' in df.columns:
-                # trade_date 已经是 datetime 格式，无需转换
-                pass
-
-            logger.info(f"数据验证完成，有效记录数: {len(df)}")
+            logger.debug(f"数据验证完成，有效记录数: {len(df)}")
             return df
 
         except Exception as e:
             logger.error(f"数据验证失败: {e}")
             raise
 
-    async def resolve_default_date_range(self):
-        """
-        解析默认日期范围：返回表中最新日期（作为 end_date），往前30天作为 start_date。
-        用于查询端点在用户未传日期时自动回填。
+    # ------------------------------------------------------------------
+    # 查询
+    # ------------------------------------------------------------------
 
-        Returns:
-            (start_date_str, end_date_str) YYYY-MM-DD 格式，或 (None, None)
-        """
+    async def resolve_default_date_range(self):
+        """返回表中最新日期（作为 end_date），往前30天作为 start_date，用于前端回填。"""
         try:
             latest = await asyncio.to_thread(self.stk_nineturn_repo.get_latest_trade_date)
             if latest:
@@ -178,30 +172,13 @@ class StkNineturnService:
         sort_by: Optional[str] = None,
         sort_order: Optional[str] = None
     ) -> Dict:
-        """
-        获取神奇九转数据
-
-        Args:
-            ts_code: 股票代码
-            start_date: 开始日期，格式：YYYY-MM-DD
-            end_date: 结束日期，格式：YYYY-MM-DD
-            freq: 频率，默认daily
-            limit: 返回记录数限制
-            offset: 偏移量
-            sort_by: 排序字段
-            sort_order: 排序方向 asc/desc
-
-        Returns:
-            包含数据列表和统计信息的字典
-        """
+        """获取神奇九转数据"""
         try:
-            # 未传日期时自动回填默认日期范围
             resolved_start = start_date
             resolved_end = end_date
             if not start_date and not end_date and not ts_code:
                 resolved_start, resolved_end = await self.resolve_default_date_range()
 
-            # 并发查询数据、总数、统计
             items, total, statistics = await asyncio.gather(
                 asyncio.to_thread(
                     self.stk_nineturn_repo.get_by_date_range,
@@ -230,7 +207,6 @@ class StkNineturnService:
                 )
             )
 
-            # 注入股票名称
             if items:
                 ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
                 quotes = await asyncio.to_thread(stock_quote_cache._repo.get_quotes, ts_codes)
@@ -256,50 +232,25 @@ class StkNineturnService:
         signal_type: str = 'all',
         limit: int = 50
     ) -> List[Dict]:
-        """
-        获取九转信号
-
-        Args:
-            start_date: 开始日期，格式：YYYY-MM-DD
-            end_date: 结束日期，格式：YYYY-MM-DD
-            signal_type: 信号类型 ('up': 上九转, 'down': 下九转, 'all': 全部)
-            limit: 返回记录数限制
-
-        Returns:
-            九转信号列表
-        """
+        """获取九转信号"""
         try:
-            signals = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 self.stk_nineturn_repo.get_turn_signals,
                 start_date=start_date,
                 end_date=end_date,
                 signal_type=signal_type,
                 limit=limit
             )
-
-            return signals
-
         except Exception as e:
             logger.error(f"获取九转信号失败: {e}")
             raise
 
     async def get_latest_date(self, ts_code: Optional[str] = None) -> Optional[str]:
-        """
-        获取最新交易日期
-
-        Args:
-            ts_code: 股票代码（可选）
-
-        Returns:
-            最新交易日期字符串（YYYY-MM-DD）
-        """
+        """获取最新交易日期"""
         try:
-            latest_date = await asyncio.to_thread(
-                self.stk_nineturn_repo.get_latest_trade_date,
-                ts_code=ts_code
+            return await asyncio.to_thread(
+                self.stk_nineturn_repo.get_latest_trade_date, ts_code=ts_code
             )
-            return latest_date
-
         except Exception as e:
             logger.error(f"获取最新交易日期失败: {e}")
             raise

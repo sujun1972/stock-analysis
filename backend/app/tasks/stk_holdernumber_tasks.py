@@ -9,7 +9,6 @@ from typing import Optional
 from loguru import logger
 
 from app.celery_app import celery_app
-from app.services.stk_holdernumber_service import StkHolderNumberService
 from app.tasks.extended_sync_tasks import run_async_in_celery
 from app.core.redis_lock import redis_lock
 from app.tasks.sync_tasks import _DummyContext
@@ -21,33 +20,27 @@ def sync_stk_holdernumber_task(
     ts_code: Optional[str] = None,
     ann_date: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    sync_strategy: Optional[str] = None,
+    max_requests_per_minute: Optional[int] = None,
 ):
-    """
-    同步股东人数数据
-
-    Args:
-        ts_code: 股票代码（可选）
-        ann_date: 公告日期 YYYYMMDD（可选）
-        start_date: 开始日期 YYYYMMDD（可选）
-        end_date: 结束日期 YYYYMMDD（可选）
-
-    Returns:
-        同步结果
-    """
+    """增量同步股东人数数据"""
     try:
         logger.info(
-            f"开始执行股东人数同步任务: ts_code={ts_code}, ann_date={ann_date}, "
-            f"start_date={start_date}, end_date={end_date}"
+            f"开始执行股东人数增量同步任务: strategy={sync_strategy} "
+            f"ts_code={ts_code} ann_date={ann_date} start_date={start_date} end_date={end_date}"
         )
 
+        from app.services.stk_holdernumber_service import StkHolderNumberService
         service = StkHolderNumberService()
         result = run_async_in_celery(
             service.sync_stk_holdernumber,
             ts_code=ts_code,
             ann_date=ann_date,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            sync_strategy=sync_strategy,
+            max_requests_per_minute=max_requests_per_minute,
         )
 
         if result["status"] == "success":
@@ -73,14 +66,22 @@ def sync_stk_holdernumber_task(
     time_limit=10800,
     acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_stk_holdernumber_full_history_task(self, start_date: str = None, concurrency: int = 5):
-    """按月切片全量同步股东人数历史数据（支持 Redis 续继）
+def sync_stk_holdernumber_full_history_task(
+    self,
+    start_date: str = None,
+    concurrency: int = 5,
+    strategy: str = 'by_month',
+    max_requests_per_minute: Optional[int] = None,
+):
+    """全量同步股东人数历史数据（支持 Redis 续继，切片策略由 strategy 参数控制）
 
     stk_holdernumber 单次上限5500条，年数据量接近上限，按月切片避免截断，5并发。
+    strategy: 'by_month'（按月，默认）、'by_week'（按7天窗口）、'by_date'（逐日）
     """
     from app.core.redis_lock import redis_client
+    from app.services.stk_holdernumber_service import StkHolderNumberService
 
-    logger.info(f"========== [Celery] 开始全量历史股东人数同步任务 concurrency={concurrency} ==========")
+    logger.info(f"========== [Celery] 开始全量历史股东人数同步任务 strategy={strategy} concurrency={concurrency} ==========")
 
     if redis_client is None:
         return {"status": "error", "message": "Redis 不可用"}
@@ -97,8 +98,10 @@ def sync_stk_holdernumber_full_history_task(self, start_date: str = None, concur
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=start_date,
+                    concurrency=concurrency,
+                    strategy=strategy,
                     update_state_fn=self.update_state,
-                    concurrency=concurrency
+                    max_requests_per_minute=max_requests_per_minute if max_requests_per_minute is not None else 0,
                 )
             )
         finally:

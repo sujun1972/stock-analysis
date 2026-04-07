@@ -9,7 +9,6 @@ from typing import Optional
 from loguru import logger
 
 from app.celery_app import celery_app
-from app.services.block_trade_service import BlockTradeService
 from app.tasks.extended_sync_tasks import run_async_in_celery
 from app.core.redis_lock import redis_lock
 from app.tasks.sync_tasks import _DummyContext
@@ -21,30 +20,27 @@ def sync_block_trade_task(
     trade_date: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    ts_code: Optional[str] = None
+    ts_code: Optional[str] = None,
+    sync_strategy: Optional[str] = None,
+    max_requests_per_minute: Optional[int] = None,
 ):
-    """
-    同步大宗交易数据
-
-    Args:
-        trade_date: 交易日期 YYYYMMDD
-        start_date: 开始日期 YYYYMMDD
-        end_date: 结束日期 YYYYMMDD
-        ts_code: 股票代码（可选）
-
-    Returns:
-        同步结果
-    """
+    """增量同步大宗交易数据"""
     try:
-        logger.info(f"开始执行大宗交易同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, ts_code={ts_code}")
+        logger.info(
+            f"开始执行大宗交易增量同步任务: strategy={sync_strategy} "
+            f"trade_date={trade_date} start_date={start_date} end_date={end_date} ts_code={ts_code}"
+        )
 
+        from app.services.block_trade_service import BlockTradeService
         service = BlockTradeService()
         result = run_async_in_celery(
             service.sync_block_trade,
             trade_date=trade_date,
+            ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
-            ts_code=ts_code
+            sync_strategy=sync_strategy,
+            max_requests_per_minute=max_requests_per_minute,
         )
 
         if result["status"] == "success":
@@ -70,14 +66,22 @@ def sync_block_trade_task(
     time_limit=10800,
     acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_block_trade_full_history_task(self, start_date: str = None, concurrency: int = 5):
-    """按月切片全量同步大宗交易历史数据（支持 Redis 续继）
+def sync_block_trade_full_history_task(
+    self,
+    start_date: str = None,
+    concurrency: int = 5,
+    strategy: str = 'by_month',
+    max_requests_per_minute: Optional[int] = None,
+):
+    """全量同步大宗交易历史数据（支持 Redis 续继，切片策略由 strategy 参数控制）
 
     block_trade 单次上限1000条，按月切片避免截断，5并发。
+    strategy: 'by_month'（按月，默认）、'by_week'（按7天窗口）、'by_date'（逐日）
     """
     from app.core.redis_lock import redis_client
+    from app.services.block_trade_service import BlockTradeService
 
-    logger.info(f"========== [Celery] 开始全量历史大宗交易同步任务 concurrency={concurrency} ==========")
+    logger.info(f"========== [Celery] 开始全量历史大宗交易同步任务 strategy={strategy} concurrency={concurrency} ==========")
 
     if redis_client is None:
         return {"status": "error", "message": "Redis 不可用"}
@@ -94,8 +98,10 @@ def sync_block_trade_full_history_task(self, start_date: str = None, concurrency
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=start_date,
+                    concurrency=concurrency,
+                    strategy=strategy,
                     update_state_fn=self.update_state,
-                    concurrency=concurrency
+                    max_requests_per_minute=max_requests_per_minute if max_requests_per_minute is not None else 0,
                 )
             )
         finally:

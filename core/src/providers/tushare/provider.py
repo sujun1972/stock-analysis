@@ -90,6 +90,34 @@ class TushareProvider(BaseDataProvider):
             max_requests_per_minute=self.max_requests_per_minute,
         )
 
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_params(**kwargs) -> dict:
+        """过滤 None/空值，构建 Tushare 查询参数字典。"""
+        return {k: v for k, v in kwargs.items() if v is not None}
+
+    def _query(self, api_name: str, data_desc: str, **params) -> pd.DataFrame:
+        """统一执行 Tushare 查询，记录入参/结果日志，统一异常处理。
+
+        Args:
+            api_name: Tushare 接口名（如 'share_float'）
+            data_desc: 数据描述（用于日志，如 '限售股解禁'）
+            **params: 已过滤好的查询参数（直接传给 api_client.query）
+        """
+        try:
+            logger.info(f"获取{data_desc}数据: {params}")
+            df = self.api_client.query(api_name, **params)
+            logger.info(f"获取到 {len(df)} 条{data_desc}记录 {params}")
+            return df
+        except TushareRateLimitError:
+            raise
+        except Exception as e:
+            logger.error(f"获取{data_desc}数据失败: {e}")
+            raise TushareDataError(f"获取{data_desc}数据失败: {str(e)}")
+
     # ========== 股票列表相关 ==========
 
     def get_stock_list(self) -> Response:
@@ -887,17 +915,13 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 每日指标数据
         """
-        try:
-            logger.info(f"获取每日指标数据: ts_code={ts_code}, trade_date={trade_date}")
-            df = self.api_client.query('daily_basic',
-                                     ts_code=ts_code,
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取每日指标数据失败: {e}")
-            raise TushareDataError(f"获取每日指标数据失败: {str(e)}")
+        return self._query(
+            'daily_basic', '每日指标',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_moneyflow(self, ts_code: Optional[str] = None,
                      trade_date: Optional[str] = None,
@@ -916,17 +940,13 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 资金流向数据
         """
-        try:
-            logger.info(f"获取资金流向数据: ts_code={ts_code}, trade_date={trade_date}")
-            df = self.api_client.query('moneyflow',
-                                     ts_code=ts_code,
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取资金流向数据失败: {e}")
-            raise TushareDataError(f"获取资金流向数据失败: {str(e)}")
+        return self._query(
+            'moneyflow', '个股资金流向',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_adj_factor(self, ts_code: Optional[str] = None,
                       trade_date: Optional[str] = None,
@@ -945,17 +965,13 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 复权因子数据
         """
-        try:
-            logger.info(f"获取复权因子数据: ts_code={ts_code}")
-            df = self.api_client.query('adj_factor',
-                                     ts_code=ts_code,
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取复权因子数据失败: {e}")
-            raise TushareDataError(f"获取复权因子数据失败: {str(e)}")
+        return self._query(
+            'adj_factor', '复权因子',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_margin(self,
                    trade_date: Optional[str] = None,
@@ -985,17 +1001,13 @@ class TushareProvider(BaseDataProvider):
                 - rzrqye: 融资融券余额(元)
                 - rqyl: 融券余量(股,份,手)
         """
-        try:
-            logger.info(f"获取融资融券交易汇总: trade_date={trade_date}, exchange_id={exchange_id}")
-            df = self.api_client.query('margin',
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date,
-                                     exchange_id=exchange_id)
-            return df
-        except Exception as e:
-            logger.error(f"获取融资融券交易汇总失败: {e}")
-            raise TushareDataError(f"获取融资融券交易汇总失败: {str(e)}")
+        return self._query(
+            'margin', '融资融券汇总',
+            **self._build_params(
+                trade_date=trade_date, start_date=start_date,
+                end_date=end_date, exchange_id=exchange_id,
+            )
+        )
 
     def get_slb_len(self,
                     trade_date: Optional[str] = None,
@@ -1020,16 +1032,12 @@ class TushareProvider(BaseDataProvider):
                 - repay_amount: 偿还金额(亿元)
                 - cb: 期末余额(亿元)
         """
-        try:
-            logger.info(f"获取转融资交易汇总: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-            df = self.api_client.query('slb_len',
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取转融资交易汇总失败: {e}")
-            raise TushareDataError(f"获取转融资交易汇总失败: {str(e)}")
+        return self._query(
+            'slb_len', '转融资汇总',
+            **self._build_params(
+                trade_date=trade_date, start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_margin_detail(self, ts_code: Optional[str] = None,
                          trade_date: Optional[str] = None,
@@ -1048,22 +1056,20 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 融资融券数据
         """
-        try:
-            logger.info(f"获取融资融券数据: ts_code={ts_code}, trade_date={trade_date}")
-            df = self.api_client.query('margin_detail',
-                                     ts_code=ts_code,
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取融资融券数据失败: {e}")
-            raise TushareDataError(f"获取融资融券数据失败: {str(e)}")
+        return self._query(
+            'margin_detail', '融资融券明细',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_block_trade(self, ts_code: Optional[str] = None,
                        trade_date: Optional[str] = None,
                        start_date: Optional[str] = None,
-                       end_date: Optional[str] = None) -> pd.DataFrame:
+                       end_date: Optional[str] = None,
+                       limit: Optional[int] = None,
+                       offset: Optional[int] = None) -> pd.DataFrame:
         """
         获取大宗交易数据
         积分消耗：300分
@@ -1073,21 +1079,20 @@ class TushareProvider(BaseDataProvider):
             trade_date: 交易日期 YYYYMMDD
             start_date: 开始日期 YYYYMMDD
             end_date: 结束日期 YYYYMMDD
+            limit: 单次返回记录数上限
+            offset: 分页偏移量
 
         Returns:
             pd.DataFrame: 大宗交易数据
         """
-        try:
-            logger.info(f"获取大宗交易数据: ts_code={ts_code}, trade_date={trade_date}")
-            df = self.api_client.query('block_trade',
-                                     ts_code=ts_code,
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取大宗交易数据失败: {e}")
-            raise TushareDataError(f"获取大宗交易数据失败: {str(e)}")
+        return self._query(
+            'block_trade', '大宗交易',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_moneyflow_hsgt(self, trade_date: Optional[str] = None,
                           start_date: Optional[str] = None,
@@ -1166,29 +1171,12 @@ class TushareProvider(BaseDataProvider):
                 - buy_sm_amount: 今日小单净流入净额（元）
                 - buy_sm_amount_rate: 今日小单净流入净占比(%)
         """
-        try:
-            logger.info(f"获取大盘资金流向: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            if trade_date:
-                df = self.api_client.query('moneyflow_mkt_dc', trade_date=trade_date)
-            elif start_date and end_date:
-                df = self.api_client.query('moneyflow_mkt_dc', start_date=start_date, end_date=end_date)
-            elif start_date:
-                # 只有开始日期，默认到今天
-                from datetime import datetime
-                end_date = datetime.now().strftime('%Y%m%d')
-                df = self.api_client.query('moneyflow_mkt_dc', start_date=start_date, end_date=end_date)
-            else:
-                # 获取最近30天的数据
-                from datetime import datetime, timedelta
-                end_date = datetime.now().strftime('%Y%m%d')
-                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
-                df = self.api_client.query('moneyflow_mkt_dc', start_date=start_date, end_date=end_date)
-
-            return df
-        except Exception as e:
-            logger.error(f"获取大盘资金流向失败: {e}")
-            raise TushareDataError(f"获取大盘资金流向失败: {str(e)}")
+        return self._query(
+            'moneyflow_mkt_dc', '大盘资金流向',
+            **self._build_params(
+                trade_date=trade_date, start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_moneyflow_ind_dc(self,
                              ts_code: Optional[str] = None,
@@ -1228,26 +1216,14 @@ class TushareProvider(BaseDataProvider):
                 - buy_sm_amount_stock: 今日主力净流入最大股
                 - rank: 序号
         """
-        try:
-            logger.info(f"获取板块资金流向: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}, content_type={content_type}")
-
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if content_type:
-                params['content_type'] = content_type
-
-            df = self.api_client.query('moneyflow_ind_dc', **params)
-            return df
-        except Exception as e:
-            logger.error(f"获取板块资金流向失败: {e}")
-            raise TushareDataError(f"获取板块资金流向失败: {str(e)}")
+        return self._query(
+            'moneyflow_ind_dc', '板块资金流向',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                content_type=content_type,
+            )
+        )
 
     def get_moneyflow_stock_dc(self,
                                ts_code: Optional[str] = None,
@@ -1283,24 +1259,13 @@ class TushareProvider(BaseDataProvider):
                 - buy_sm_amount: 今日小单净流入额（万元）
                 - buy_sm_amount_rate: 今日小单净流入占比(%)
         """
-        try:
-            logger.info(f"获取个股资金流向: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('moneyflow_dc', **params)
-            return df
-        except Exception as e:
-            logger.error(f"获取个股资金流向失败: {e}")
-            raise TushareDataError(f"获取个股资金流向失败: {str(e)}")
+        return self._query(
+            'moneyflow_dc', '个股资金流向DC',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_stk_limit(self, ts_code: Optional[str] = None,
                      trade_date: Optional[str] = None,
@@ -1319,17 +1284,13 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 涨跌停价格数据
         """
-        try:
-            logger.info(f"获取涨跌停价格数据: ts_code={ts_code}, trade_date={trade_date}")
-            df = self.api_client.query('stk_limit',
-                                     ts_code=ts_code,
-                                     trade_date=trade_date,
-                                     start_date=start_date,
-                                     end_date=end_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取涨跌停价格数据失败: {e}")
-            raise TushareDataError(f"获取涨跌停价格数据失败: {str(e)}")
+        return self._query(
+            'stk_limit', '每日涨跌停',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_suspend(self, ts_code: Optional[str] = None,
                    suspend_date: Optional[str] = None,
@@ -1346,16 +1307,12 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 停复牌信息数据
         """
-        try:
-            logger.info(f"获取停复牌信息: ts_code={ts_code}")
-            df = self.api_client.query('suspend',
-                                     ts_code=ts_code,
-                                     suspend_date=suspend_date,
-                                     resume_date=resume_date)
-            return df
-        except Exception as e:
-            logger.error(f"获取停复牌信息失败: {e}")
-            raise TushareDataError(f"获取停复牌信息失败: {str(e)}")
+        return self._query(
+            'suspend', '停复牌信息',
+            **self._build_params(
+                ts_code=ts_code, suspend_date=suspend_date, resume_date=resume_date,
+            )
+        )
 
     def get_top_list(self, trade_date: str,
                     ts_code: Optional[str] = None) -> pd.DataFrame:
@@ -1386,22 +1343,10 @@ class TushareProvider(BaseDataProvider):
                 - float_values: 当日流通市值
                 - reason: 上榜理由
         """
-        try:
-            logger.info(f"获取龙虎榜每日明细: trade_date={trade_date}, ts_code={ts_code}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if ts_code:
-                params['ts_code'] = ts_code
-
-            df = self.api_client.query('top_list', **params)
-            logger.info(f"获取到 {len(df)} 条龙虎榜记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取龙虎榜每日明细失败: {e}")
-            raise TushareDataError(f"获取龙虎榜每日明细失败: {str(e)}")
+        return self._query(
+            'top_list', '龙虎榜每日明细',
+            **self._build_params(trade_date=trade_date, ts_code=ts_code)
+        )
 
     def get_top_inst(self, trade_date: str,
                     ts_code: Optional[str] = None) -> pd.DataFrame:
@@ -1427,22 +1372,10 @@ class TushareProvider(BaseDataProvider):
                 - net_buy: 净成交额（元）
                 - reason: 上榜理由
         """
-        try:
-            logger.info(f"获取龙虎榜机构明细: trade_date={trade_date}, ts_code={ts_code}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if ts_code:
-                params['ts_code'] = ts_code
-
-            df = self.api_client.query('top_inst', **params)
-            logger.info(f"获取到 {len(df)} 条龙虎榜机构明细记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取龙虎榜机构明细失败: {e}")
-            raise TushareDataError(f"获取龙虎榜机构明细失败: {str(e)}")
+        return self._query(
+            'top_inst', '龙虎榜机构明细',
+            **self._build_params(trade_date=trade_date, ts_code=ts_code)
+        )
 
     def get_limit_list_d(
         self,
@@ -1487,30 +1420,13 @@ class TushareProvider(BaseDataProvider):
                 - limit_times: 连板数
                 - limit: D跌停U涨停Z炸板
         """
-        try:
-            logger.info(f"获取涨跌停列表: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, limit_type={limit_type}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if ts_code:
-                params['ts_code'] = ts_code
-            if limit_type:
-                params['limit_type'] = limit_type
-            if exchange:
-                params['exchange'] = exchange
-
-            df = self.api_client.query('limit_list_d', **params)
-            logger.info(f"获取到 {len(df)} 条涨跌停列表记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取涨跌停列表失败: {e}")
-            raise TushareDataError(f"获取涨跌停列表失败: {str(e)}")
+        return self._query(
+            'limit_list_d', '涨跌停列表',
+            **self._build_params(
+                trade_date=trade_date, start_date=start_date, end_date=end_date,
+                ts_code=ts_code, limit_type=limit_type, exchange=exchange,
+            )
+        )
 
     def get_limit_step(
         self,
@@ -1539,28 +1455,13 @@ class TushareProvider(BaseDataProvider):
                 - trade_date: 交易日期
                 - nums: 连板次数
         """
-        try:
-            logger.info(f"获取连板天梯: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, nums={nums}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if ts_code:
-                params['ts_code'] = ts_code
-            if nums:
-                params['nums'] = nums
-
-            df = self.api_client.query('limit_step', **params)
-            logger.info(f"获取到 {len(df)} 条连板天梯记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取连板天梯失败: {e}")
-            raise TushareDataError(f"获取连板天梯失败: {str(e)}")
+        return self._query(
+            'limit_step', '连板天梯',
+            **self._build_params(
+                trade_date=trade_date, start_date=start_date, end_date=end_date,
+                ts_code=ts_code, nums=nums,
+            )
+        )
 
     def get_limit_cpt_list(
         self,
@@ -1592,26 +1493,13 @@ class TushareProvider(BaseDataProvider):
                 - pct_chg: 涨跌幅%
                 - rank: 板块热点排名
         """
-        try:
-            logger.info(f"获取最强板块统计: trade_date={trade_date}, ts_code={ts_code}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if ts_code:
-                params['ts_code'] = ts_code
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('limit_cpt_list', **params)
-            logger.info(f"获取到 {len(df)} 条最强板块统计记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取最强板块统计失败: {e}")
-            raise TushareDataError(f"获取最强板块统计失败: {str(e)}")
+        return self._query(
+            'limit_cpt_list', '最强板块',
+            **self._build_params(
+                trade_date=trade_date, ts_code=ts_code,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_stk_shock(
         self,
@@ -1640,26 +1528,13 @@ class TushareProvider(BaseDataProvider):
                 - reason: 异常说明
                 - period: 异常期间
         """
-        try:
-            logger.info(f"获取个股异常波动: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_shock', **params)
-            logger.info(f"获取到 {len(df)} 条个股异常波动记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取个股异常波动失败: {e}")
-            raise TushareDataError(f"获取个股异常波动失败: {str(e)}")
+        return self._query(
+            'stk_shock', '个股异常波动',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_stk_high_shock(
         self,
@@ -1688,26 +1563,13 @@ class TushareProvider(BaseDataProvider):
                 - reason: 异常说明
                 - period: 异常期间
         """
-        try:
-            logger.info(f"获取个股严重异常波动: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_high_shock', **params)
-            logger.info(f"获取到 {len(df)} 条个股严重异常波动记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取个股严重异常波动失败: {e}")
-            raise TushareDataError(f"获取个股严重异常波动失败: {str(e)}")
+        return self._query(
+            'stk_high_shock', '个股严重异常波动',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_stk_alert(
         self,
@@ -1735,26 +1597,13 @@ class TushareProvider(BaseDataProvider):
                 - end_date: 交易所重点提示参考截至日期
                 - type: 提示类型
         """
-        try:
-            logger.info(f"获取交易所重点提示证券: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_alert', **params)
-            logger.info(f"获取到 {len(df)} 条交易所重点提示证券记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取交易所重点提示证券失败: {e}")
-            raise TushareDataError(f"获取交易所重点提示证券失败: {str(e)}")
+        return self._query(
+            'stk_alert', '交易所重点提示证券',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_pledge_stat(
         self,
@@ -1780,22 +1629,10 @@ class TushareProvider(BaseDataProvider):
                 - total_share: 总股本
                 - pledge_ratio: 质押比例
         """
-        try:
-            logger.info(f"获取股权质押统计数据: ts_code={ts_code}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('pledge_stat', **params)
-            logger.info(f"获取到 {len(df)} 条股权质押统计记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取股权质押统计数据失败: {e}")
-            raise TushareDataError(f"获取股权质押统计数据失败: {str(e)}")
+        return self._query(
+            'pledge_stat', '股权质押统计',
+            **self._build_params(ts_code=ts_code, end_date=end_date)
+        )
 
     def get_share_float(
         self,
@@ -1830,35 +1667,13 @@ class TushareProvider(BaseDataProvider):
                 - holder_name: 股东名称
                 - share_type: 股份类型
         """
-        try:
-            logger.info(f"获取限售股解禁数据: ts_code={ts_code}, ann_date={ann_date}, "
-                       f"float_date={float_date}, start_date={start_date}, end_date={end_date}, limit={limit}, offset={offset}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if float_date:
-                params['float_date'] = float_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if limit is not None:
-                params['limit'] = limit
-            if offset is not None:
-                params['offset'] = offset
-
-            df = self.api_client.query('share_float', **params)
-            logger.info(f"获取到 {len(df)} 条限售股解禁记录 [ts_code={ts_code}, start={start_date}, end={end_date}, limit={limit}, offset={offset}]")
-            return df
-        except TushareRateLimitError:
-            raise
-        except Exception as e:
-            logger.error(f"获取限售股解禁数据失败: {e}")
-            raise TushareDataError(f"获取限售股解禁数据失败: {str(e)}")
+        return self._query(
+            'share_float', '限售股解禁',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date, float_date=float_date,
+                start_date=start_date, end_date=end_date, limit=limit, offset=offset,
+            )
+        )
 
     def get_stk_holdernumber(
         self,
@@ -1866,7 +1681,9 @@ class TushareProvider(BaseDataProvider):
         ann_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        enddate: Optional[str] = None
+        enddate: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取上市公司股东户数数据
@@ -1886,35 +1703,22 @@ class TushareProvider(BaseDataProvider):
                 - end_date: 截止日期
                 - holder_num: 股东户数
         """
-        try:
-            logger.info(f"获取股东户数数据: ts_code={ts_code}, ann_date={ann_date}, "
-                       f"start_date={start_date}, end_date={end_date}, enddate={enddate}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if enddate:
-                params['enddate'] = enddate
-
-            df = self.api_client.query('stk_holdernumber', **params)
-            logger.info(f"获取到 {len(df)} 条股东户数记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取股东户数数据失败: {e}")
-            raise TushareDataError(f"获取股东户数数据失败: {str(e)}")
+        return self._query(
+            'stk_holdernumber', '股东户数',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date,
+                start_date=start_date, end_date=end_date,
+                enddate=enddate, limit=limit, offset=offset,
+            )
+        )
 
     def get_repurchase(
         self,
         ann_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取上市公司回购股票数据
@@ -1937,24 +1741,13 @@ class TushareProvider(BaseDataProvider):
                 - high_limit: 回购最高价
                 - low_limit: 回购最低价
         """
-        try:
-            logger.info(f"获取股票回购数据: ann_date={ann_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ann_date:
-                params['ann_date'] = ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('repurchase', **params)
-            logger.info(f"获取到 {len(df)} 条股票回购记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取股票回购数据失败: {e}")
-            raise TushareDataError(f"获取股票回购数据失败: {str(e)}")
+        return self._query(
+            'repurchase', '股票回购',
+            **self._build_params(
+                ann_date=ann_date, start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_forecast(
         self,
@@ -1992,30 +1785,13 @@ class TushareProvider(BaseDataProvider):
                 - summary: 业绩预告摘要
                 - change_reason: 业绩变动原因
         """
-        try:
-            logger.info(f"获取业绩预告数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}, type={type_}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if period:
-                params['period'] = period
-            if type_:
-                params['type'] = type_
-
-            df = self.api_client.query('forecast_vip', **params)
-            logger.info(f"获取到 {len(df)} 条业绩预告记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取业绩预告数据失败: {e}")
-            raise TushareDataError(f"获取业绩预告数据失败: {str(e)}")
+        params = self._build_params(
+            ts_code=ts_code, ann_date=ann_date,
+            start_date=start_date, end_date=end_date, period=period,
+        )
+        if type_:
+            params['type'] = type_
+        return self._query('forecast_vip', '业绩预告', **params)
 
     def get_fina_indicator(
         self,
@@ -2040,28 +1816,13 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 财务指标数据，包含150+财务指标字段
         """
-        try:
-            logger.info(f"获取财务指标数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if period:
-                params['period'] = period
-
-            df = self.api_client.query('fina_indicator_vip', **params)
-            logger.info(f"获取到 {len(df)} 条财务指标记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取财务指标数据失败: {e}")
-            raise TushareDataError(f"获取财务指标数据失败: {str(e)}")
+        return self._query(
+            'fina_indicator_vip', '财务指标',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date,
+                start_date=start_date, end_date=end_date, period=period,
+            )
+        )
 
     def get_express(
         self,
@@ -2117,28 +1878,13 @@ class TushareProvider(BaseDataProvider):
                 - is_audit: 是否审计：1是 0否
                 - remark: 备注
         """
-        try:
-            logger.info(f"获取业绩快报数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if period:
-                params['period'] = period
-
-            df = self.api_client.query('express_vip', **params)
-            logger.info(f"获取到 {len(df)} 条业绩快报记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取业绩快报数据失败: {e}")
-            raise TushareDataError(f"获取业绩快报数据失败: {str(e)}")
+        return self._query(
+            'express_vip', '业绩快报',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date,
+                start_date=start_date, end_date=end_date, period=period,
+            )
+        )
 
     def get_dividend(
         self,
@@ -2179,32 +1925,13 @@ class TushareProvider(BaseDataProvider):
                 - base_date: 基准日
                 - base_share: 基准股本（万）
         """
-        try:
-            logger.info(f"获取分红送股数据: ts_code={ts_code}, ann_date={ann_date}, record_date={record_date}, ex_date={ex_date}, imp_ann_date={imp_ann_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if record_date:
-                params['record_date'] = record_date
-            if ex_date:
-                params['ex_date'] = ex_date
-            if imp_ann_date:
-                params['imp_ann_date'] = imp_ann_date
-
-            # 至少需要一个参数
-            if not params:
-                raise ValueError("至少需要提供一个查询参数: ts_code, ann_date, record_date, ex_date, imp_ann_date")
-
-            df = self.api_client.query('dividend', **params)
-            logger.info(f"获取到 {len(df)} 条分红送股记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取分红送股数据失败: {e}")
-            raise TushareDataError(f"获取分红送股数据失败: {str(e)}")
+        params = self._build_params(
+            ts_code=ts_code, ann_date=ann_date, record_date=record_date,
+            ex_date=ex_date, imp_ann_date=imp_ann_date,
+        )
+        if not params:
+            raise ValueError("至少需要提供一个查询参数: ts_code, ann_date, record_date, ex_date, imp_ann_date")
+        return self._query('dividend', '分红送股', **params)
 
     def get_fina_audit(
         self,
@@ -2235,26 +1962,13 @@ class TushareProvider(BaseDataProvider):
                 - audit_agency: 会计事务所
                 - audit_sign: 签字会计师
         """
-        try:
-            logger.info(f"获取财务审计意见数据: ts_code={ts_code}, ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {'ts_code': ts_code}
-            if ann_date:
-                params['ann_date'] = ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if period:
-                params['period'] = period
-
-            df = self.api_client.query('fina_audit', **params)
-            logger.info(f"获取到 {len(df)} 条财务审计意见记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取财务审计意见数据失败: {e}")
-            raise TushareDataError(f"获取财务审计意见数据失败: {str(e)}")
+        return self._query(
+            'fina_audit', '财务审计意见',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date,
+                start_date=start_date, end_date=end_date, period=period,
+            )
+        )
 
     def get_stk_holdertrade(
         self,
@@ -2263,7 +1977,9 @@ class TushareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         trade_type: Optional[str] = None,
-        holder_type: Optional[str] = None
+        holder_type: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取上市公司股东增减持数据
@@ -2293,32 +2009,15 @@ class TushareProvider(BaseDataProvider):
                 - begin_date: 增减持开始日期
                 - close_date: 增减持结束日期
         """
-        try:
-            logger.info(f"获取股东增减持数据: ts_code={ts_code}, ann_date={ann_date}, "
-                       f"start_date={start_date}, end_date={end_date}, "
-                       f"trade_type={trade_type}, holder_type={holder_type}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if trade_type:
-                params['trade_type'] = trade_type
-            if holder_type:
-                params['holder_type'] = holder_type
-
-            df = self.api_client.query('stk_holdertrade', **params)
-            logger.info(f"获取到 {len(df)} 条股东增减持记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取股东增减持数据失败: {e}")
-            raise TushareDataError(f"获取股东增减持数据失败: {str(e)}")
+        return self._query(
+            'stk_holdertrade', '股东增减持',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date,
+                start_date=start_date, end_date=end_date,
+                trade_type=trade_type, holder_type=holder_type,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_income(
         self,
@@ -2370,32 +2069,14 @@ class TushareProvider(BaseDataProvider):
             >>> # 查询日期范围内的数据
             >>> df = provider.get_income(start_date='20240101', end_date='20241231')
         """
-        try:
-            params = {}
-
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if f_ann_date:
-                params['f_ann_date'] = f_ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if period:
-                params['period'] = period
-            if report_type:
-                params['report_type'] = report_type
-            if comp_type:
-                params['comp_type'] = comp_type
-
-            df = self.api_client.query('income_vip', **params)
-            logger.info(f"获取到 {len(df)} 条利润表记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取利润表数据失败: {e}")
-            raise TushareDataError(f"获取利润表数据失败: {str(e)}")
+        return self._query(
+            'income_vip', '利润表',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date, f_ann_date=f_ann_date,
+                start_date=start_date, end_date=end_date,
+                period=period, report_type=report_type, comp_type=comp_type,
+            )
+        )
 
     def get_balancesheet(
         self,
@@ -2447,32 +2128,14 @@ class TushareProvider(BaseDataProvider):
             >>> # 查询日期范围内的数据
             >>> df = provider.get_balancesheet(start_date='20230101', end_date='20231231')
         """
-        try:
-            params = {}
-
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if f_ann_date:
-                params['f_ann_date'] = f_ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if period:
-                params['period'] = period
-            if report_type:
-                params['report_type'] = report_type
-            if comp_type:
-                params['comp_type'] = comp_type
-
-            df = self.api_client.query('balancesheet_vip', **params)
-            logger.info(f"获取到 {len(df)} 条资产负债表记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取资产负债表数据失败: {e}")
-            raise TushareDataError(f"获取资产负债表数据失败: {str(e)}")
+        return self._query(
+            'balancesheet_vip', '资产负债表',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date, f_ann_date=f_ann_date,
+                start_date=start_date, end_date=end_date,
+                period=period, report_type=report_type, comp_type=comp_type,
+            )
+        )
 
     def get_cashflow(
         self,
@@ -2524,32 +2187,14 @@ class TushareProvider(BaseDataProvider):
             >>> # 查询日期范围内的数据
             >>> df = provider.get_cashflow(start_date='20230101', end_date='20231231')
         """
-        try:
-            params = {}
-
-            if ts_code:
-                params['ts_code'] = ts_code
-            if ann_date:
-                params['ann_date'] = ann_date
-            if f_ann_date:
-                params['f_ann_date'] = f_ann_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if period:
-                params['period'] = period
-            if report_type:
-                params['report_type'] = report_type
-            if comp_type:
-                params['comp_type'] = comp_type
-
-            df = self.api_client.query('cashflow_vip', **params)
-            logger.info(f"获取到 {len(df)} 条现金流量表记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取现金流量表数据失败: {e}")
-            raise TushareDataError(f"获取现金流量表数据失败: {str(e)}")
+        return self._query(
+            'cashflow_vip', '现金流量表',
+            **self._build_params(
+                ts_code=ts_code, ann_date=ann_date, f_ann_date=f_ann_date,
+                start_date=start_date, end_date=end_date,
+                period=period, report_type=report_type, comp_type=comp_type,
+            )
+        )
 
     def get_fina_mainbz_vip(
         self,
@@ -2581,29 +2226,13 @@ class TushareProvider(BaseDataProvider):
                 - curr_type: 货币代码
                 - update_flag: 是否更新
         """
-        try:
-            logger.info(f"获取主营业务构成数据: ts_code={ts_code}, period={period}, type={type}, "
-                       f"start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if period:
-                params['period'] = period
-            if type:
-                params['type'] = type
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('fina_mainbz_vip', **params)
-            logger.info(f"获取到 {len(df)} 条主营业务构成记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取主营业务构成数据失败: {e}")
-            raise TushareDataError(f"获取主营业务构成数据失败: {str(e)}")
+        params = self._build_params(
+            ts_code=ts_code, period=period,
+            start_date=start_date, end_date=end_date,
+        )
+        if type:
+            params['type'] = type
+        return self._query('fina_mainbz_vip', '主营业务构成', **params)
 
     def get_disclosure_date(
         self,
@@ -2633,36 +2262,22 @@ class TushareProvider(BaseDataProvider):
                 - actual_date: 实际披露日期
                 - modify_date: 披露日期修正记录
         """
-        try:
-            logger.info(f"获取财报披露计划: ts_code={ts_code}, end_date={end_date}, "
-                       f"pre_date={pre_date}, ann_date={ann_date}, actual_date={actual_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if end_date:
-                params['end_date'] = end_date
-            if pre_date:
-                params['pre_date'] = pre_date
-            if ann_date:
-                params['ann_date'] = ann_date
-            if actual_date:
-                params['actual_date'] = actual_date
-
-            df = self.api_client.query('disclosure_date', **params)
-            logger.info(f"获取到 {len(df)} 条财报披露计划记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取财报披露计划失败: {e}")
-            raise TushareDataError(f"获取财报披露计划失败: {str(e)}")
+        return self._query(
+            'disclosure_date', '财报披露计划',
+            **self._build_params(
+                ts_code=ts_code, end_date=end_date, pre_date=pre_date,
+                ann_date=ann_date, actual_date=actual_date,
+            )
+        )
 
     def get_cyq_perf(
         self,
         ts_code: str,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取A股每日筹码平均成本和胜率情况
@@ -2688,32 +2303,23 @@ class TushareProvider(BaseDataProvider):
                 - weight_avg: 加权平均成本
                 - winner_rate: 胜率(%)
         """
-        try:
-            logger.info(f"获取筹码及胜率数据: ts_code={ts_code}, trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {'ts_code': ts_code}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('cyq_perf', **params)
-            logger.info(f"获取到 {len(df)} 条筹码及胜率记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取筹码及胜率数据失败: {e}")
-            raise TushareDataError(f"获取筹码及胜率数据失败: {str(e)}")
+        return self._query(
+            'cyq_perf', '筹码及胜率',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_cyq_chips(
         self,
         ts_code: str,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取A股每日的筹码分布情况，提供各价位占比
@@ -2734,25 +2340,14 @@ class TushareProvider(BaseDataProvider):
                 - price: 成本价格
                 - percent: 价格占比(%)
         """
-        try:
-            logger.info(f"获取筹码分布数据: ts_code={ts_code}, trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {'ts_code': ts_code}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('cyq_chips', **params)
-            logger.info(f"获取到 {len(df)} 条筹码分布记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取筹码分布数据失败: {e}")
-            raise TushareDataError(f"获取筹码分布数据失败: {str(e)}")
+        return self._query(
+            'cyq_chips', '筹码分布',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_ccass_hold(
         self,
@@ -2760,7 +2355,9 @@ class TushareProvider(BaseDataProvider):
         hk_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取中央结算系统持股汇总数据
@@ -2782,36 +2379,23 @@ class TushareProvider(BaseDataProvider):
                 - hold_nums: 参与者数目（个）
                 - hold_ratio: 占于上交所上市及交易的A股总数的百分比（%）
         """
-        try:
-            logger.info(f"获取中央结算系统持股汇总数据: ts_code={ts_code}, hk_code={hk_code}, "
-                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if hk_code:
-                params['hk_code'] = hk_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('ccass_hold', **params)
-            logger.info(f"获取到 {len(df)} 条中央结算系统持股汇总记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取中央结算系统持股汇总数据失败: {e}")
-            raise TushareDataError(f"获取中央结算系统持股汇总数据失败: {str(e)}")
+        return self._query(
+            'ccass_hold', 'CCASS持股汇总',
+            **self._build_params(
+                ts_code=ts_code, hk_code=hk_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_stk_auction_o(
         self,
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取股票开盘集合竞价数据
@@ -2841,36 +2425,23 @@ class TushareProvider(BaseDataProvider):
             >>> df = provider.get_stk_auction_o(trade_date='20241122')
             >>> df = provider.get_stk_auction_o(ts_code='600000.SH', start_date='20241101', end_date='20241130')
         """
-        try:
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_auction_o', **params)
-
-            if df is None or df.empty:
-                logger.warning(f"未获取到开盘集合竞价数据: {params}")
-                return pd.DataFrame()
-
-            logger.info(f"✓ 获取到 {len(df)} 条开盘集合竞价数据")
-            return df
-
-        except Exception as e:
-            logger.error(f"获取开盘集合竞价数据失败: {str(e)}")
-            raise TushareDataError(f"获取开盘集合竞价数据失败: {str(e)}")
+        return self._query(
+            'stk_auction_o', '开盘集合竞价',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_stk_auction_c(
         self,
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取股票收盘集合竞价数据
@@ -2900,29 +2471,14 @@ class TushareProvider(BaseDataProvider):
             >>> df = provider.get_stk_auction_c(trade_date='20241122')
             >>> df = provider.get_stk_auction_c(ts_code='600000.SH', start_date='20241101', end_date='20241130')
         """
-        try:
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_auction_c', **params)
-
-            if df is None or df.empty:
-                logger.warning(f"未获取到收盘集合竞价数据: {params}")
-                return pd.DataFrame()
-
-            logger.info(f"✓ 获取到 {len(df)} 条收盘集合竞价数据")
-            return df
-
-        except Exception as e:
-            logger.error(f"获取收盘集合竞价数据失败: {str(e)}")
-            raise TushareDataError(f"获取收盘集合竞价数据失败: {str(e)}")
+        return self._query(
+            'stk_auction_c', '收盘集合竞价',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_hk_hold(
         self,
@@ -2931,7 +2487,9 @@ class TushareProvider(BaseDataProvider):
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        exchange: Optional[str] = None
+        exchange: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取沪深港股通持股明细数据
@@ -2956,31 +2514,14 @@ class TushareProvider(BaseDataProvider):
                 - ratio: 持股占比（%），占已发行股份百分比
                 - exchange: 类型
         """
-        try:
-            logger.info(f"获取沪深港股通持股明细数据: code={code}, ts_code={ts_code}, "
-                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}, exchange={exchange}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if code:
-                params['code'] = code
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if exchange:
-                params['exchange'] = exchange
-
-            df = self.api_client.query('hk_hold', **params)
-            logger.info(f"获取到 {len(df)} 条沪深港股通持股明细记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取沪深港股通持股明细数据失败: {e}")
-            raise TushareDataError(f"获取沪深港股通持股明细数据失败: {str(e)}")
+        return self._query(
+            'hk_hold', '沪深港股通持股',
+            **self._build_params(
+                code=code, ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                exchange=exchange, limit=limit, offset=offset,
+            )
+        )
 
     def get_ccass_hold_detail(
         self,
@@ -2988,7 +2529,9 @@ class TushareProvider(BaseDataProvider):
         hk_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取中央结算系统机构席位持股明细
@@ -3011,29 +2554,14 @@ class TushareProvider(BaseDataProvider):
                 - col_shareholding: 持股量(股)
                 - col_shareholding_percent: 占已发行股份/权证/单位百分比(%)
         """
-        try:
-            logger.info(f"获取中央结算系统持股明细数据: ts_code={ts_code}, hk_code={hk_code}, "
-                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if hk_code:
-                params['hk_code'] = hk_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('ccass_hold_detail', **params)
-            logger.info(f"获取到 {len(df)} 条中央结算系统持股明细记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取中央结算系统持股明细数据失败: {e}")
-            raise TushareDataError(f"获取中央结算系统持股明细数据失败: {str(e)}")
+        return self._query(
+            'ccass_hold_detail', 'CCASS持股明细',
+            **self._build_params(
+                ts_code=ts_code, hk_code=hk_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_stk_nineturn(
         self,
@@ -3041,7 +2569,9 @@ class TushareProvider(BaseDataProvider):
         trade_date: Optional[str] = None,
         freq: str = 'daily',
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取神奇九转指标数据
@@ -3088,28 +2618,14 @@ class TushareProvider(BaseDataProvider):
             - 数据起始: 20230101
             - 建议配合60分钟级别数据使用效果更好
         """
-        try:
-            logger.info(f"获取神奇九转指标数据: ts_code={ts_code}, trade_date={trade_date}, freq={freq}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if freq:
-                params['freq'] = freq
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_nineturn', **params)
-            logger.info(f"获取到 {len(df)} 条神奇九转指标记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取神奇九转指标数据失败: {e}")
-            raise TushareDataError(f"获取神奇九转指标数据失败: {str(e)}")
+        return self._query(
+            'stk_nineturn', '神奇九转指标',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date, freq=freq,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_stk_ah_comparison(
         self,
@@ -3117,7 +2633,9 @@ class TushareProvider(BaseDataProvider):
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取AH股比价数据
@@ -3165,35 +2683,23 @@ class TushareProvider(BaseDataProvider):
             - 每天盘后17:00更新
             - 由于历史不好补充，只能累积
         """
-        try:
-            logger.info(f"获取AH股比价数据: hk_code={hk_code}, ts_code={ts_code}, trade_date={trade_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if hk_code:
-                params['hk_code'] = hk_code
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_ah_comparison', **params)
-            logger.info(f"获取到 {len(df)} 条AH股比价记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取AH股比价数据失败: {e}")
-            raise TushareDataError(f"获取AH股比价数据失败: {str(e)}")
+        return self._query(
+            'stk_ah_comparison', 'AH股比价',
+            **self._build_params(
+                hk_code=hk_code, ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_stk_surv(
         self,
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取机构调研表数据
@@ -3236,26 +2742,14 @@ class TushareProvider(BaseDataProvider):
             - 数据起始: 较早期数据都有
             - 更新频率: 实时更新
         """
-        try:
-            logger.info(f"获取机构调研数据: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('stk_surv', **params)
-            logger.info(f"获取到 {len(df)} 条机构调研记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取机构调研数据失败: {e}")
-            raise TushareDataError(f"获取机构调研数据失败: {str(e)}")
+        return self._query(
+            'stk_surv', '机构调研',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_broker_recommend(
         self,
@@ -3290,15 +2784,40 @@ class TushareProvider(BaseDataProvider):
             - 数据起始: 较早期数据都有
             - 更新频率: 每月1-3日更新当月数据
         """
-        try:
-            logger.info(f"获取券商荐股数据: month={month}")
+        return self._query('broker_recommend', '券商荐股', month=month)
 
-            df = self.api_client.query('broker_recommend', month=month)
-            logger.info(f"获取到 {len(df)} 条券商荐股记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取券商荐股数据失败: {e}")
-            raise TushareDataError(f"获取券商荐股数据失败: {str(e)}")
+    def get_report_rc(
+        self,
+        ts_code: Optional[str] = None,
+        report_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """
+        获取卖方盈利预测数据
+        积分消耗：5000分
+
+        Args:
+            ts_code: TS股票代码（可选）
+            report_date: 研报日期 YYYYMMDD（可选）
+            start_date: 研报开始日期 YYYYMMDD（可选）
+            end_date: 研报结束日期 YYYYMMDD（可选）
+            limit: 单次返回条数（可选）
+            offset: 数据偏移量（可选）
+
+        Returns:
+            pd.DataFrame: 卖方盈利预测数据
+        """
+        return self._query(
+            'report_rc', '卖方盈利预测',
+            **self._build_params(
+                ts_code=ts_code, report_date=report_date,
+                start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
+            )
+        )
 
     def get_dc_member(
         self,
@@ -3343,29 +2862,13 @@ class TushareProvider(BaseDataProvider):
             - 数据来源: 东方财富
             - 注意: 本接口只限个人学习和研究使用，如需商业用途，请自行联系东方财富解决数据采购问题
         """
-        try:
-            logger.info(f"获取东方财富板块成分数据: ts_code={ts_code}, con_code={con_code}, "
-                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
-
-            # 构建查询参数（只包含非空参数）
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if con_code:
-                params['con_code'] = con_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('dc_member', **params)
-            logger.info(f"获取到 {len(df)} 条东方财富板块成分记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取东方财富板块成分数据失败: {e}")
-            raise TushareDataError(f"获取东方财富板块成分数据失败: {str(e)}")
+        return self._query(
+            'dc_member', '东方财富板块成分',
+            **self._build_params(
+                ts_code=ts_code, con_code=con_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_dc_index(
         self,
@@ -3418,28 +2921,13 @@ class TushareProvider(BaseDataProvider):
             - 单次限制: 最大返回5000行数据
             - idx_type 为必填参数
         """
-        try:
-            logger.info(f"获取东方财富板块数据: ts_code={ts_code}, name={name}, "
-                       f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}, idx_type={idx_type}")
-
-            params = {'idx_type': idx_type}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if name:
-                params['name'] = name
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('dc_index', **params)
-            logger.info(f"获取到 {len(df)} 条东方财富板块记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取东方财富板块数据失败: {e}")
-            raise TushareDataError(f"获取东方财富板块数据失败: {str(e)}")
+        return self._query(
+            'dc_index', '东方财富板块数据',
+            **self._build_params(
+                ts_code=ts_code, name=name, trade_date=trade_date,
+                start_date=start_date, end_date=end_date, idx_type=idx_type,
+            )
+        )
 
     def get_dc_daily(
         self,
@@ -3484,31 +2972,13 @@ class TushareProvider(BaseDataProvider):
             - 单次限制: 最大返回2000行数据
             - 历史数据从2020年开始
         """
-        try:
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if idx_type:
-                params['idx_type'] = idx_type
-
-            df = self.api_client.query('dc_daily', **params)
-
-            if df is None or df.empty:
-                logger.warning("dc_daily 接口返回空数据")
-                return pd.DataFrame()
-
-            logger.debug(f"获取到 {len(df)} 条东方财富概念板块行情数据")
-            return df
-
-        except Exception as e:
-            logger.error(f"获取东方财富概念板块行情数据失败: {e}")
-            raise TushareDataError(f"获取东方财富概念板块行情数据失败: {e}")
+        return self._query(
+            'dc_daily', '东方财富概念板块行情',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date, idx_type=idx_type,
+            )
+        )
 
     def get_suspend_d(
         self,
@@ -3552,23 +3022,14 @@ class TushareProvider(BaseDataProvider):
             - 数据起始: 根据实际停复牌情况
             - 更新频率: 不定期
         """
-        try:
-            logger.info(f"获取停复牌数据: ts_code={ts_code}, trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}, suspend_type={suspend_type}")
-
-            df = self.api_client.query(
-                'suspend_d',
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date,
-                suspend_type=suspend_type
+        return self._query(
+            'suspend_d', '每日停复牌',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                suspend_type=suspend_type,
             )
-            logger.info(f"获取到 {len(df)} 条停复牌记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取停复牌数据失败: {e}")
-            raise TushareDataError(f"获取停复牌数据失败: {str(e)}")
+        )
 
     def get_stk_limit_d(
         self,
@@ -3615,22 +3076,13 @@ class TushareProvider(BaseDataProvider):
             - 单次限制: 最多5800条
             - 更新时间: 每交易日8:40
         """
-        try:
-            logger.info(f"获取每日涨跌停价格: ts_code={ts_code}, trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}")
-
-            df = self.api_client.query(
-                'stk_limit',
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
+        return self._query(
+            'stk_limit', '每日涨跌停价格',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
             )
-            logger.info(f"获取到 {len(df)} 条每日涨跌停价格记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取每日涨跌停价格失败: {e}")
-            raise TushareDataError(f"获取每日涨跌停价格失败: {str(e)}")
+        )
 
     def get_hsgt_top10(self,
                        ts_code: Optional[str] = None,
@@ -3664,38 +3116,14 @@ class TushareProvider(BaseDataProvider):
                 - buy: 买入金额（元）
                 - sell: 卖出金额（元）
         """
-        try:
-            logger.info(f"获取沪深股通十大成交股: ts_code={ts_code}, trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}, market_type={market_type}")
-
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if market_type:
-                params['market_type'] = market_type
-
-            # 如果没有指定任何参数，获取最近一个交易日的数据
-            if not params:
-                from datetime import datetime, timedelta
-                # 获取最近5天的数据（确保包含至少一个交易日）
-                end_date = datetime.now().strftime('%Y%m%d')
-                start_date = (datetime.now() - timedelta(days=5)).strftime('%Y%m%d')
-                params['start_date'] = start_date
-                params['end_date'] = end_date
-                logger.info(f"未指定参数，默认获取最近5天数据: {start_date} ~ {end_date}")
-
-            df = self.api_client.query('hsgt_top10', **params)
-            logger.info(f"获取到 {len(df)} 条沪深股通十大成交股记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取沪深股通十大成交股失败: {e}")
-            raise TushareDataError(f"获取沪深股通十大成交股失败: {str(e)}")
+        return self._query(
+            'hsgt_top10', '沪深股通十大成交股',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                market_type=market_type,
+            )
+        )
 
     def get_ggt_daily(self,
                       trade_date: Optional[str] = None,
@@ -3720,24 +3148,12 @@ class TushareProvider(BaseDataProvider):
                 - sell_amount: 卖出成交金额（亿元）
                 - sell_volume: 卖出成交笔数（万笔）
         """
-        try:
-            logger.info(f"获取港股通每日成交统计: trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}")
-
-            params = {}
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('ggt_daily', **params)
-            logger.info(f"获取到 {len(df)} 条港股通每日成交统计记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取港股通每日成交统计失败: {e}")
-            raise TushareDataError(f"获取港股通每日成交统计失败: {str(e)}")
+        return self._query(
+            'ggt_daily', '港股通每日成交',
+            **self._build_params(
+                trade_date=trade_date, start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_ggt_top10(self,
                       ts_code: Optional[str] = None,
@@ -3777,36 +3193,14 @@ class TushareProvider(BaseDataProvider):
                 - sz_buy: 深市买入金额（元）
                 - sz_sell: 深市卖出金额（元）
         """
-        try:
-            logger.info(f"获取港股通十大成交股: ts_code={ts_code}, trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}, market_type={market_type}")
-
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-            if market_type:
-                params['market_type'] = market_type
-
-            # ggt_top10接口要求必须指定ts_code或trade_date之一
-            # 如果四个参数都未指定，默认获取昨日数据
-            if not ts_code and not trade_date and not start_date and not end_date:
-                from datetime import datetime, timedelta
-                yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
-                params['trade_date'] = yesterday
-                logger.info(f"未指定核心参数，默认获取昨日数据: trade_date={yesterday}")
-
-            df = self.api_client.query('ggt_top10', **params)
-            logger.info(f"获取到 {len(df)} 条港股通十大成交股记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取港股通十大成交股失败: {e}")
-            raise TushareDataError(f"获取港股通十大成交股失败: {str(e)}")
+        return self._query(
+            'ggt_top10', '港股通十大成交股',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+                market_type=market_type,
+            )
+        )
 
     def get_ggt_monthly(self,
                         month: Optional[str] = None,
@@ -3836,24 +3230,12 @@ class TushareProvider(BaseDataProvider):
                 - total_sell_amt: 总卖出成交金额（亿元）
                 - total_sell_vol: 总卖出成交笔数（万笔）
         """
-        try:
-            logger.info(f"获取港股通每月成交统计: month={month}, "
-                       f"start_month={start_month}, end_month={end_month}")
-
-            params = {}
-            if month:
-                params['month'] = month
-            if start_month:
-                params['start_month'] = start_month
-            if end_month:
-                params['end_month'] = end_month
-
-            df = self.api_client.query('ggt_monthly', **params)
-            logger.info(f"获取到 {len(df)} 条港股通每月成交统计记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取港股通每月成交统计失败: {e}")
-            raise TushareDataError(f"获取港股通每月成交统计失败: {str(e)}")
+        return self._query(
+            'ggt_monthly', '港股通每月成交',
+            **self._build_params(
+                month=month, start_month=start_month, end_month=end_month,
+            )
+        )
 
     def get_adj_factor(
         self,
@@ -3891,23 +3273,13 @@ class TushareProvider(BaseDataProvider):
         Raises:
             TushareDataError: 数据获取失败
         """
-        try:
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            df = self.api_client.query('adj_factor', **params)
-            logger.info(f"获取到 {len(df)} 条复权因子记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取复权因子失败: {e}")
-            raise TushareDataError(f"获取复权因子失败: {str(e)}")
+        return self._query(
+            'adj_factor', '复权因子',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_stock_st(self,
                      ts_code: Optional[str] = None,
@@ -3948,32 +3320,13 @@ class TushareProvider(BaseDataProvider):
             # 获取日期范围内的ST股票
             >>> df = provider.get_stock_st(start_date='20240101', end_date='20240131')
         """
-        try:
-            logger.info(f"获取ST股票列表: ts_code={ts_code}, trade_date={trade_date}, "
-                       f"start_date={start_date}, end_date={end_date}")
-
-            params = {}
-            if ts_code:
-                params['ts_code'] = ts_code
-            if trade_date:
-                params['trade_date'] = trade_date
-            if start_date:
-                params['start_date'] = start_date
-            if end_date:
-                params['end_date'] = end_date
-
-            # stock_st 不支持 offset 分页，直接按调用方传入的时间段拉取
-            # 若时间段较大，调用方（Service）负责按月切片后分批调用本方法
-            df = self.api_client.query('stock_st', **params)
-            if df is None or df.empty:
-                logger.info("未获取到ST股票记录")
-                return pd.DataFrame()
-
-            logger.info(f"获取到 {len(df)} 条ST股票记录")
-            return df
-        except Exception as e:
-            logger.error(f"获取ST股票列表失败: {e}")
-            raise TushareDataError(f"获取ST股票列表失败: {str(e)}")
+        return self._query(
+            'stock_st', 'ST股票',
+            **self._build_params(
+                ts_code=ts_code, trade_date=trade_date,
+                start_date=start_date, end_date=end_date,
+            )
+        )
 
     def get_trade_calendar(
         self,
@@ -3995,22 +3348,13 @@ class TushareProvider(BaseDataProvider):
         Returns:
             pd.DataFrame: 交易日历数据，包含 exchange, cal_date, is_open, pretrade_date 列
         """
-        try:
-            logger.info(f"获取交易日历数据: exchange={exchange}, start_date={start_date}, end_date={end_date}")
-            params = {}
-            if exchange is not None:
-                params['exchange'] = exchange
-            if start_date is not None:
-                params['start_date'] = start_date
-            if end_date is not None:
-                params['end_date'] = end_date
-            if is_open is not None:
-                params['is_open'] = is_open
-            df = self.api_client.query('trade_cal', **params)
-            return df
-        except Exception as e:
-            logger.error(f"获取交易日历数据失败: {e}")
-            raise TushareDataError(f"获取交易日历数据失败: {str(e)}")
+        return self._query(
+            'trade_cal', '交易日历',
+            **self._build_params(
+                exchange=exchange, start_date=start_date,
+                end_date=end_date, is_open=is_open,
+            )
+        )
 
     def __repr__(self) -> str:
         token_preview = f"{self.token[:8]}***" if self.token else "未配置"

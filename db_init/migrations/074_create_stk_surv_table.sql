@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS stk_surv (
     -- 数据字段
     name VARCHAR(100),                        -- 股票名称
     rece_place TEXT,                          -- 接待地点
-    rece_mode VARCHAR(50),                    -- 接待方式
+    rece_mode VARCHAR(200),                   -- 接待方式
     rece_org TEXT,                            -- 接待的公司
-    org_type VARCHAR(50),                     -- 接待公司类型
+    org_type VARCHAR(200),                    -- 接待公司类型
     comp_rece TEXT,                           -- 上市公司接待人员
     content TEXT,                             -- 调研内容
 

@@ -1,37 +1,36 @@
 """
 AH股比价数据同步服务
 
-负责从 Tushare 获取 AH股比价数据并同步到数据库
+负责从 Tushare 获取 AH股比价数据并同步到数据库。
+继承 TushareSyncBase，同步逻辑委托给基类。
 """
 
 import asyncio
-import traceback
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories import StkAhComparisonRepository
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
-from app.repositories.trading_calendar_repository import TradingCalendarRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class StkAhComparisonService:
+class StkAhComparisonService(TushareSyncBase):
     """AH股比价数据同步服务"""
 
-    def __init__(self):
-        self.stk_ah_comparison_repo = StkAhComparisonRepository()
-        self.provider_factory = DataProviderFactory()
-        self.calendar_repo = TradingCalendarRepository()
+    TABLE_KEY = 'stk_ah_comparison'
+    FULL_HISTORY_START_DATE = '20250812'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:stk_ah_comparison:full_history:progress'
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    def __init__(self):
+        super().__init__()
+        self.stk_ah_comparison_repo = StkAhComparisonRepository()
+        self.sync_history_repo = SyncHistoryRepository()
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
     async def sync_stk_ah_comparison(
         self,
@@ -39,130 +38,115 @@ class StkAhComparisonService:
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
-        """
-        同步AH股比价数据
+        """增量同步AH股比价数据。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 3000) if cfg else 3000
+        provider = self._get_provider(max_requests_per_minute)
 
-        Args:
-            hk_code: 港股代码，格式：xxxxx.HK
-            ts_code: A股代码，格式：xxxxxx.SH/SZ/BJ
-            trade_date: 交易日期，格式：YYYYMMDD
-            start_date: 开始日期，格式：YYYYMMDD
-            end_date: 结束日期，格式：YYYYMMDD
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_stk_ah_comparison,
+            upsert_fn=self.stk_ah_comparison_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+            extra_fetch_kwargs={
+                'hk_code': hk_code,
+                'ts_code': ts_code,
+                'trade_date': trade_date,
+            },
+        )
 
-        Returns:
-            同步结果字典
+    # ------------------------------------------------------------------
+    # 全量历史同步
+    # ------------------------------------------------------------------
 
-        Examples:
-            >>> service = StkAhComparisonService()
-            >>> result = await service.sync_stk_ah_comparison(trade_date='20250812')
-        """
-        try:
-            logger.info(f"开始同步AH股比价数据: hk_code={hk_code}, ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_month',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
+        """全量同步历史数据（按月切片，Redis Set 续继）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 3000) if cfg else 3000
+        provider = self._get_provider(max_requests_per_minute)
 
-            # 如果没有指定任何日期，默认同步最近30天
-            if not trade_date and not start_date and not end_date:
-                end_date = datetime.now().strftime('%Y%m%d')
-                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
-                logger.info(f"未指定日期，默认同步最近30天: {start_date} ~ {end_date}")
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_stk_ah_comparison,
+            upsert_fn=self.stk_ah_comparison_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
 
-            # 获取 Tushare Provider
-            provider = self._get_provider()
+    # ------------------------------------------------------------------
+    # 建议起始日期
+    # ------------------------------------------------------------------
 
-            # 调用 Provider 方法获取数据
-            df = await asyncio.to_thread(
-                provider.get_stk_ah_comparison,
-                hk_code=hk_code,
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+        if last_end and last_end < candidate:
+            return last_end
+        return candidate
 
-            # 检查数据
-            if df is None or df.empty:
-                logger.warning("未获取到AH股比价数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "未获取到数据"
-                }
-
-            logger.info(f"从Tushare获取到 {len(df)} 条AH股比价数据")
-
-            # 数据验证和清洗
-            df = self._validate_and_clean_data(df)
-
-            # 批量插入数据库
-            records = await asyncio.to_thread(
-                self.stk_ah_comparison_repo.bulk_upsert,
-                df
-            )
-
-            logger.info(f"成功同步 {records} 条AH股比价数据到数据库")
-
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条数据"
-            }
-
-        except Exception as e:
-            logger.error(f"同步AH股比价数据失败: {e}\n{traceback.format_exc()}")
-            return {
-                "status": "error",
-                "records": 0,
-                "error": error_msg
-            }
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
 
     def _validate_and_clean_data(self, df):
-        """
-        数据验证和清洗
-
-        Args:
-            df: 原始DataFrame
-
-        Returns:
-            清洗后的DataFrame
-        """
-        # 检查必需字段
+        """验证和清洗数据"""
         required_fields = ['hk_code', 'ts_code', 'trade_date']
         for field in required_fields:
             if field not in df.columns:
                 raise ValueError(f"缺少必需字段: {field}")
 
-        # 删除trade_date为空的记录
         df = df.dropna(subset=['trade_date'])
 
-        # 确保数值字段为数值类型
-        numeric_fields = [
-            'hk_pct_chg', 'hk_close', 'close',
-            'pct_chg', 'ah_comparison', 'ah_premium'
-        ]
+        numeric_fields = ['hk_pct_chg', 'hk_close', 'close', 'pct_chg', 'ah_comparison', 'ah_premium']
         for field in numeric_fields:
             if field in df.columns:
                 df[field] = df[field].astype(float, errors='ignore')
 
-        logger.info(f"数据验证和清洗完成，剩余 {len(df)} 条记录")
+        logger.debug(f"数据验证完成，有效数据: {len(df)} 条")
         return df
 
-    async def resolve_default_trade_date(self) -> Optional[str]:
-        """
-        获取最近有数据的交易日期，返回 YYYY-MM-DD 格式
+    # ------------------------------------------------------------------
+    # 查询
+    # ------------------------------------------------------------------
 
-        Returns:
-            最近有数据的交易日期，格式：YYYY-MM-DD
-        """
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """返回最近有数据的交易日期（YYYY-MM-DD），用于前端日期选择器回填。"""
         today = datetime.now().strftime('%Y%m%d')
-        has_today = await asyncio.to_thread(
-            self.stk_ah_comparison_repo.exists_by_date, today
-        )
+        has_today = await asyncio.to_thread(self.stk_ah_comparison_repo.exists_by_date, today)
         if has_today:
             return f"{today[:4]}-{today[4:6]}-{today[6:8]}"
-        latest = await asyncio.to_thread(
-            self.stk_ah_comparison_repo.get_latest_trade_date
-        )
+        latest = await asyncio.to_thread(self.stk_ah_comparison_repo.get_latest_trade_date)
         if latest:
             return f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
         return None
@@ -176,25 +160,7 @@ class StkAhComparisonService:
         limit: int = 30,
         offset: int = 0
     ) -> Dict:
-        """
-        查询AH股比价数据
-
-        Args:
-            hk_code: 港股代码
-            ts_code: A股代码
-            start_date: 开始日期，格式：YYYYMMDD
-            end_date: 结束日期，格式：YYYYMMDD
-            limit: 返回记录数
-            offset: 偏移量
-
-        Returns:
-            包含数据列表和统计信息的字典
-
-        Examples:
-            >>> service = StkAhComparisonService()
-            >>> result = await service.get_stk_ah_comparison_data(limit=50)
-        """
-        # 并发查询数据、总数、统计
+        """查询AH股比价数据"""
         items, total, statistics = await asyncio.gather(
             asyncio.to_thread(
                 self.stk_ah_comparison_repo.get_by_date_range,
@@ -217,51 +183,17 @@ class StkAhComparisonService:
             )
         )
 
-        return {
-            "items": items,
-            "statistics": statistics,
-            "total": total
-        }
+        return {"items": items, "statistics": statistics, "total": total}
 
     async def get_top_premium(self, trade_date: Optional[str] = None, limit: int = 20) -> Dict:
-        """
-        获取溢价率最高的股票
-
-        Args:
-            trade_date: 交易日期，格式：YYYYMMDD，默认最新交易日
-            limit: 返回记录数
-
-        Returns:
-            包含数据列表的字典
-
-        Examples:
-            >>> service = StkAhComparisonService()
-            >>> result = await service.get_top_premium(limit=20)
-        """
+        """获取溢价率最高的股票"""
         items = await asyncio.to_thread(
             self.stk_ah_comparison_repo.get_top_premium,
             trade_date=trade_date,
             limit=limit
         )
-
-        return {
-            "items": items,
-            "total": len(items)
-        }
+        return {"items": items, "total": len(items)}
 
     async def get_latest_trade_date(self) -> Optional[str]:
-        """
-        获取最新交易日期
-
-        Returns:
-            最新交易日期（YYYYMMDD格式）
-
-        Examples:
-            >>> service = StkAhComparisonService()
-            >>> latest_date = await service.get_latest_trade_date()
-        """
-        latest_date = await asyncio.to_thread(
-            self.stk_ah_comparison_repo.get_latest_trade_date
-        )
-
-        return latest_date
+        """获取最新交易日期"""
+        return await asyncio.to_thread(self.stk_ah_comparison_repo.get_latest_trade_date)

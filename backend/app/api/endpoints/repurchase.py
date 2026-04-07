@@ -3,16 +3,14 @@
 """
 
 import asyncio
-import json
 from typing import Optional
-from datetime import date
 from fastapi import APIRouter, Query, Depends, HTTPException
 from loguru import logger
 
 from app.models.api_response import ApiResponse
 from app.services.repurchase_service import RepurchaseService
 from app.services import TaskHistoryHelper
-from app.core.dependencies import require_admin, get_current_user
+from app.core.dependencies import require_admin
 from app.models.user import User
 
 
@@ -28,19 +26,7 @@ async def get_repurchase(
     limit: int = Query(30, ge=1, le=1000, description="返回记录数限制"),
     offset: int = Query(0, description="偏移量")
 ):
-    """
-    查询股票回购数据
-
-    Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        ts_code: 股票代码（可选）
-        proc: 回购进度（可选）
-        limit: 返回记录数限制
-
-    Returns:
-        回购数据列表
-    """
+    """查询股票回购数据"""
     try:
         service = RepurchaseService()
         result = await service.get_repurchase_data(
@@ -64,17 +50,7 @@ async def get_statistics(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="股票代码，如：600000.SH")
 ):
-    """
-    获取回购统计信息
-
-    Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        ts_code: 股票代码（可选）
-
-    Returns:
-        统计信息
-    """
+    """获取回购统计信息"""
     try:
         service = RepurchaseService()
         statistics = await service.get_statistics(
@@ -93,15 +69,7 @@ async def get_statistics(
 async def get_latest(
     ts_code: Optional[str] = Query(None, description="股票代码，如：600000.SH")
 ):
-    """
-    获取最新回购数据
-
-    Args:
-        ts_code: 股票代码（可选）
-
-    Returns:
-        最新回购记录
-    """
+    """获取最新回购数据"""
     try:
         service = RepurchaseService()
         latest = await service.get_latest_data(ts_code=ts_code)
@@ -112,29 +80,48 @@ async def get_latest(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/suggest-start-date")
+async def get_suggest_start_date(
+    _current_user: User = Depends(require_admin)
+):
+    """
+    返回增量同步的建议起始日期（YYYYMMDD）。
+
+    计算规则：
+      候选起始 = 今天 - incremental_default_days（sync_configs 中配置）
+      上次结束 = sync_history 中最近一次增量成功的 data_end_date
+      建议起始 = min(候选起始, 上次结束)，取更早者保证数据连续
+    """
+    service = RepurchaseService()
+    suggested = await service.get_suggested_start_date()
+    return ApiResponse.success(data={"suggested_start_date": suggested})
+
+
 @router.post("/sync-full-history")
 async def sync_repurchase_full_history(
-    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2009年开始"),
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从2009年开始"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
-    """按年切片全量同步股票回购历史数据（支持中断续继）"""
+    """全量同步股票回购历史数据（支持中断续继，切片策略从 sync_configs.full_sync_strategy 读取）"""
     try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'repurchase')
         from app.tasks.repurchase_tasks import sync_repurchase_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'repurchase')
 
         start_date_formatted = start_date.replace('-', '') if start_date else None
 
-        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'repurchase')
         if concurrency is None:
-            sync_config_repo = SyncConfigRepository()
-            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'repurchase')
             concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+        strategy = (cfg.get('full_sync_strategy') or 'by_month') if cfg else 'by_month'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
 
         celery_task = sync_repurchase_full_history_task.apply_async(
-            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency,
+                    'strategy': strategy, 'max_requests_per_minute': max_rpm}
         )
 
         helper = TaskHistoryHelper()
@@ -144,7 +131,8 @@ async def sync_repurchase_full_history(
             display_name='股票回购（全量历史）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency,
+                         'strategy': strategy, 'max_requests_per_minute': max_rpm},
             source='repurchase_page'
         )
 
@@ -161,39 +149,37 @@ async def sync_repurchase_async(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
 ):
-    """
-    异步同步股票回购数据（通过Celery任务）
-
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    Args:
-        ann_date: 公告日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        current_user: 当前登录用户（管理员）
-
-    Returns:
-        包含Celery任务ID和任务信息的响应
-    """
+    """异步增量同步股票回购数据（Celery 任务）"""
     try:
         from app.tasks.repurchase_tasks import sync_repurchase_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
         ann_date_formatted = ann_date.replace('-', '') if ann_date else None
         start_date_formatted = start_date.replace('-', '') if start_date else None
         end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        # 提交Celery任务（异步执行）
+        # 从 sync_configs 读取增量同步策略及任务限速
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'repurchase')
+        sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_month') if cfg else 'by_month'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
+
+        # 若未指定 start_date 且策略需要日期范围，自动计算建议起始日期
+        if not start_date_formatted and sync_strategy in ('by_date_range', 'by_month', 'by_week', 'by_date'):
+            suggested = await RepurchaseService().get_suggested_start_date()
+            if suggested:
+                start_date_formatted = suggested
+                logger.info(f"股票回购增量同步：未传 start_date，自动使用建议起始日期 {start_date_formatted}")
+
         celery_task = sync_repurchase_task.apply_async(
             kwargs={
                 'ann_date': ann_date_formatted,
                 'start_date': start_date_formatted,
-                'end_date': end_date_formatted
+                'end_date': end_date_formatted,
+                'sync_strategy': sync_strategy,
+                'max_requests_per_minute': max_rpm,
             }
         )
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
         helper = TaskHistoryHelper()
         task_data = await helper.create_task_record(
             celery_task_id=celery_task.id,
@@ -204,17 +190,15 @@ async def sync_repurchase_async(
             task_params={
                 'ann_date': ann_date_formatted,
                 'start_date': start_date_formatted,
-                'end_date': end_date_formatted
+                'end_date': end_date_formatted,
+                'sync_strategy': sync_strategy,
+                'max_requests_per_minute': max_rpm,
             },
             source='repurchase_page'
         )
 
-        logger.info(f"股票回购同步任务已提交: {celery_task.id}")
-
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
+        logger.info(f"股票回购增量同步任务已提交: {celery_task.id} strategy={sync_strategy}")
+        return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
 
     except Exception as e:
         logger.error(f"提交股票回购同步任务失败: {e}")

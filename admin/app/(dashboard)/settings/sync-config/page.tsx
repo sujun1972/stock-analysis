@@ -373,6 +373,12 @@ export default function SyncConfigPage() {
           // YYYY-MM-DD → YYYYMMDD
           params.start_date = earliestDate.replace(/-/g, '')
         }
+        // 全量同步前先清除 Redis 续继进度，确保从头开始而非续继上次
+        try {
+          await syncDashboardApi.clearProgress(item.table_key)
+        } catch {
+          // 清除失败不阻止全量同步（Redis 可能无进度记录）
+        }
       }
       const resp = await apiClient.post(endpoint, null, { params })
       if (resp.code === 200 && resp.data) {

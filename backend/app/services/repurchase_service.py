@@ -1,119 +1,125 @@
 """
-股票回购数据Service
+股票回购服务
 
-管理股票回购数据的业务逻辑
+处理股票回购数据的业务逻辑。
+继承 TushareSyncBase，全量/增量同步逻辑均委托给基类。
 """
 
 import asyncio
-from datetime import datetime, date
-from typing import Optional, Dict, List
+from typing import Optional, Dict
+from datetime import datetime, timedelta
 from loguru import logger
+import pandas as pd
 
-from app.core.config import settings
 from app.repositories.repurchase_repository import RepurchaseRepository
-from core.src.providers import DataProviderFactory
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class RepurchaseService:
-    """股票回购数据服务"""
+class RepurchaseService(TushareSyncBase):
+    """股票回购服务"""
 
-    FULL_HISTORY_START_DATE = "20090101"
-    FULL_HISTORY_PROGRESS_KEY = "sync:repurchase:full_history:progress"
-    FULL_HISTORY_LOCK_KEY = "sync:repurchase:full_history:lock"
+    TABLE_KEY = 'repurchase'
+    FULL_HISTORY_START_DATE = '20090101'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:repurchase:full_history:progress'
+    FULL_HISTORY_LOCK_KEY = 'sync:repurchase:full_history:lock'
     FULL_HISTORY_CONCURRENCY = 5
 
     def __init__(self):
+        super().__init__()
         self.repurchase_repo = RepurchaseRepository()
-        self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
 
-    @staticmethod
-    def _generate_months(start_date: str, end_date: str) -> list:
-        """将日期范围切分为自然月片段，每片返回 (month_start, month_end)，均为 YYYYMMDD。"""
-        import calendar
-        start_d = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
-        end_d = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
-        segments = []
-        cur = date(start_d.year, start_d.month, 1)
-        while cur <= end_d:
-            ms = max(cur, start_d)
-            last_day = calendar.monthrange(cur.year, cur.month)[1]
-            me = min(date(cur.year, cur.month, last_day), end_d)
-            segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
-            if cur.month == 12:
-                cur = date(cur.year + 1, 1, 1)
-            else:
-                cur = date(cur.year, cur.month + 1, 1)
-        return segments
+    # ------------------------------------------------------------------
+    # 全量同步
+    # ------------------------------------------------------------------
 
-    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, concurrency: int = 5, update_state_fn=None) -> Dict:
-        """按月切片全量同步股票回购历史数据（支持 Redis 续继）
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_month',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
+        """全量同步股票回购历史数据（支持 Redis 续继）
 
-        repurchase 单次上限约1000条，按年切片可能截断，改为按月切片。
+        repurchase 单次上限约1000条，按月切片避免截断。
+
+        strategy 支持：
+          'by_month'   — 按自然月切片（默认）
+          'by_week'    — 按 7 天窗口切片
+          'by_date'    — 逐日切片
         """
-        effective_start = start_date or self.FULL_HISTORY_START_DATE
-        today = datetime.now().strftime("%Y%m%d")
-        segments = self._generate_months(effective_start, today)
-        total = len(segments)
-        logger.info(f"[全量repurchase] 共 {total} 个月段需要同步")
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 1000) if cfg else 1000
+        provider = self._get_provider(max_requests_per_minute)
 
-        completed_set = redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY)
-        completed_set = {d.decode() if isinstance(d, bytes) else d for d in completed_set}
-        pending = [(ms, me) for ms, me in segments if ms not in completed_set]
-        skip_count = len(completed_set)
-        success_count = 0
-        error_count = 0
-        total_records = 0
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_repurchase,
+            upsert_fn=self.repurchase_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
 
-        provider = self._get_provider()
-        sem = asyncio.Semaphore(max(1, concurrency))
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
-        async def sync_month(ms: str, me: str):
-            async with sem:
-                try:
-                    df = await asyncio.to_thread(provider.get_repurchase, start_date=ms, end_date=me)
-                    records = 0
-                    if df is not None and not df.empty:
-                        df = self._validate_and_clean_data(df)
-                        records = await asyncio.to_thread(self.repurchase_repo.bulk_upsert, df)
-                    return ms, me, True, records, None
-                except Exception as e:
-                    return ms, me, False, 0, str(e)
+    async def sync_repurchase(
+        self,
+        ann_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """增量同步股票回购数据。
 
-        BATCH_SIZE = max(1, concurrency) * 2
-        for batch_start in range(0, len(pending), BATCH_SIZE):
-            batch = pending[batch_start:batch_start + BATCH_SIZE]
-            results = await asyncio.gather(*[sync_month(ms, me) for ms, me in batch])
-            for ms, me, ok, records, err in results:
-                if ok:
-                    redis_client.sadd(self.FULL_HISTORY_PROGRESS_KEY, ms)
-                    success_count += 1
-                    total_records += records
-                else:
-                    error_count += 1
-                    logger.error(f"[全量repurchase] {ms}~{me} 失败（下次续继）: {err}")
-            done = skip_count + success_count
-            if update_state_fn:
-                update_state_fn(state='PROGRESS', meta={'current': done, 'total': total,
-                    'percent': round(done / total * 100, 1), 'records': total_records, 'errors': error_count})
-            logger.info(f"[全量repurchase] 进度: {done}/{total} ({round(done/total*100,1)}%) 入库={total_records} 失败={error_count}")
+        当 start_date 存在且 sync_strategy 为日期切片策略时（by_month/by_week/by_date），
+        按切片逐段请求并支持每段翻页（api_limit）。
+        否则（无 start_date 或其他策略）执行单次全量请求。
 
-        final_done = len(redis_client.smembers(self.FULL_HISTORY_PROGRESS_KEY))
-        if final_done >= total:
-            redis_client.delete(self.FULL_HISTORY_PROGRESS_KEY)
-            logger.info("[全量repurchase] ✅ 全量同步完成，进度已清除")
+        Args:
+            ann_date:      公告日期 YYYYMMDD（单次请求分支使用）
+            start_date:    时间范围起始 YYYYMMDD
+            end_date:      时间范围结束 YYYYMMDD
+            sync_strategy: 同步策略（来自 sync_configs.incremental_sync_strategy）
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 1000) if cfg else 1000
+        provider = self._get_provider(max_requests_per_minute)
 
-        return {"status": "success", "total": total, "success": success_count,
-                "skipped": skip_count, "errors": error_count, "records": total_records,
-                "message": f"同步完成 {success_count} 个月段，入库 {total_records} 条，失败 {error_count} 个"}
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_repurchase,
+            upsert_fn=self.repurchase_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='ann_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+            extra_fetch_kwargs={
+                'ann_date': ann_date,
+            },
+        )
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    # ------------------------------------------------------------------
+    # 查询
+    # ------------------------------------------------------------------
 
     async def get_repurchase_data(
         self,
@@ -122,27 +128,13 @@ class RepurchaseService:
         ts_code: Optional[str] = None,
         proc: Optional[str] = None,
         limit: int = 30,
-        offset: int = 0
+        offset: int = 0,
     ) -> Dict:
-        """
-        查询回购数据
-
-        Args:
-            start_date: 开始日期，格式：YYYY-MM-DD
-            end_date: 结束日期，格式：YYYY-MM-DD
-            ts_code: 股票代码
-            proc: 回购进度
-            limit: 限制返回记录数
-
-        Returns:
-            包含数据列表和总数的字典
-        """
+        """获取股票回购数据"""
         try:
-            # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
             start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
-            # 查询数据
             items, total = await asyncio.gather(
                 asyncio.to_thread(
                     self.repurchase_repo.get_by_date_range,
@@ -151,18 +143,17 @@ class RepurchaseService:
                     ts_code=ts_code,
                     proc=proc,
                     limit=limit,
-                    offset=offset
+                    offset=offset,
                 ),
                 asyncio.to_thread(
                     self.repurchase_repo.get_count,
                     start_date=start_date_fmt,
                     end_date=end_date_fmt,
                     ts_code=ts_code,
-                    proc=proc
-                )
+                    proc=proc,
+                ),
             )
 
-            # 日期格式转换：YYYYMMDD -> YYYY-MM-DD
             for item in items:
                 if item.get('ann_date'):
                     item['ann_date'] = self._format_date(item['ann_date'])
@@ -170,57 +161,37 @@ class RepurchaseService:
                     item['end_date'] = self._format_date(item['end_date'])
                 if item.get('exp_date'):
                     item['exp_date'] = self._format_date(item['exp_date'])
-
-                # 金额单位转换：元 -> 万元
                 if item.get('amount') is not None:
                     item['amount'] = round(item['amount'] / 10000, 2)
 
-            return {
-                'items': items,
-                'total': total
-            }
+            return {'items': items, 'total': total}
 
         except Exception as e:
-            logger.error(f"查询回购数据失败: {e}")
+            logger.error(f"获取股票回购数据失败: {e}")
             raise
 
     async def get_statistics(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        ts_code: Optional[str] = None
+        ts_code: Optional[str] = None,
     ) -> Dict:
-        """
-        获取统计信息
-
-        Args:
-            start_date: 开始日期，格式：YYYY-MM-DD
-            end_date: 结束日期，格式：YYYY-MM-DD
-            ts_code: 股票代码
-
-        Returns:
-            统计信息字典
-        """
+        """获取统计信息"""
         try:
-            # 日期格式转换
             start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
-            # 获取统计
             statistics = await asyncio.to_thread(
                 self.repurchase_repo.get_statistics,
                 start_date=start_date_fmt,
                 end_date=end_date_fmt,
-                ts_code=ts_code
+                ts_code=ts_code,
             )
 
-            # 金额单位转换：元 -> 万元
             statistics['total_amount'] = round(statistics['total_amount'] / 10000, 2)
             statistics['avg_amount'] = round(statistics['avg_amount'] / 10000, 2)
             statistics['max_amount'] = round(statistics['max_amount'] / 10000, 2)
             statistics['min_amount'] = round(statistics['min_amount'] / 10000, 2)
-
-            # 数量单位转换：股 -> 万股
             statistics['total_vol'] = round(statistics['total_vol'] / 10000, 2)
 
             return statistics
@@ -230,19 +201,11 @@ class RepurchaseService:
             raise
 
     async def get_latest_data(self, ts_code: Optional[str] = None) -> Optional[Dict]:
-        """
-        获取最新回购数据
-
-        Args:
-            ts_code: 股票代码
-
-        Returns:
-            最新回购记录
-        """
+        """获取最新回购数据"""
         try:
             latest_date = await asyncio.to_thread(
                 self.repurchase_repo.get_latest_ann_date,
-                ts_code=ts_code
+                ts_code=ts_code,
             )
 
             if not latest_date:
@@ -253,23 +216,19 @@ class RepurchaseService:
                 start_date=latest_date,
                 end_date=latest_date,
                 ts_code=ts_code,
-                limit=1
+                limit=1,
             )
 
             if items:
                 item = items[0]
-                # 日期格式转换
                 if item.get('ann_date'):
                     item['ann_date'] = self._format_date(item['ann_date'])
                 if item.get('end_date'):
                     item['end_date'] = self._format_date(item['end_date'])
                 if item.get('exp_date'):
                     item['exp_date'] = self._format_date(item['exp_date'])
-
-                # 金额单位转换
                 if item.get('amount') is not None:
                     item['amount'] = round(item['amount'] / 10000, 2)
-
                 return item
 
             return None
@@ -278,94 +237,61 @@ class RepurchaseService:
             logger.error(f"获取最新回购数据失败: {e}")
             raise
 
-    async def sync_repurchase(
-        self,
-        ann_date: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ) -> Dict:
+    async def get_suggested_start_date(self) -> Optional[str]:
         """
-        同步回购数据
+        计算增量同步的建议起始日期（YYYYMMDD）。
 
-        Args:
-            ann_date: 公告日期，格式：YYYYMMDD
-            start_date: 开始日期，格式：YYYYMMDD
-            end_date: 结束日期，格式：YYYYMMDD
-
-        Returns:
-            同步结果
+        逻辑：
+          候选起始 = 今天 - incremental_default_days（从 sync_configs 读取，默认 90 天）
+          上次结束 = sync_history 中最近一次增量成功的 data_end_date
+          实际起始 = min(候选起始, 上次结束)，取两者中更早的，保证数据连续不遗漏
         """
-        try:
-            logger.info(f"开始同步回购数据: ann_date={ann_date}, start_date={start_date}, end_date={end_date}")
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
 
-            # 1. 获取Tushare数据
-            provider = self._get_provider()
-            df = await asyncio.to_thread(
-                provider.get_repurchase,
-                ann_date=ann_date,
-                start_date=start_date,
-                end_date=end_date
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+
+        if last_end and last_end < candidate:
+            suggested = last_end
+            logger.debug(
+                f"[repurchase] 建议起始={suggested}（上次结束={last_end} < 候选={candidate}）"
+            )
+        else:
+            suggested = candidate
+            logger.debug(
+                f"[repurchase] 建议起始={suggested}（候选={candidate}，上次结束={last_end}）"
             )
 
-            if df is None or df.empty:
-                logger.warning("未获取到回购数据")
-                return {
-                    "status": "success",
-                    "message": "未获取到数据",
-                    "records": 0
-                }
+        return suggested
 
-            logger.info(f"获取到 {len(df)} 条回购数据")
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
 
-            # 2. 数据验证和清洗
-            df = self._validate_and_clean_data(df)
-
-            # 3. 批量插入数据库
-            records = await asyncio.to_thread(
-                self.repurchase_repo.bulk_upsert,
-                df
-            )
-
-            logger.info(f"成功同步 {records} 条回购记录")
-
-            return {
-                "status": "success",
-                "message": f"成功同步 {records} 条记录",
-                "records": records
-            }
-
-        except Exception as e:
-            logger.error(f"同步回购数据失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {
-                "status": "error",
-                "message": str(e),
-                "error": str(e),
-                "records": 0
-            }
-
-    def _validate_and_clean_data(self, df):
+    def _validate_and_clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """验证和清洗数据"""
-        # 确保必需字段存在
-        required_fields = ['ts_code', 'ann_date']
-        for field in required_fields:
-            if field not in df.columns:
-                raise ValueError(f"缺少必需字段: {field}")
+        if df is None or df.empty:
+            return df
 
-        # 移除空的ts_code或ann_date
-        df = df.dropna(subset=['ts_code', 'ann_date'])
+        df = df.copy()
 
-        # 确保日期格式正确（YYYYMMDD）
+        required_cols = ['ts_code', 'ann_date']
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"缺少必需字段: {col}")
+
+        df = df.dropna(subset=required_cols)
         df['ann_date'] = df['ann_date'].astype(str)
 
-        # 处理可选的日期字段
         for date_field in ['end_date', 'exp_date']:
             if date_field in df.columns:
                 df[date_field] = df[date_field].astype(str).replace('nan', None)
                 df[date_field] = df[date_field].replace('None', None)
 
-        # 处理字符串字段
         if 'proc' in df.columns:
             df['proc'] = df['proc'].astype(str).replace('nan', None)
             df['proc'] = df['proc'].replace('None', None)
@@ -377,4 +303,7 @@ class RepurchaseService:
         """格式化日期：YYYYMMDD -> YYYY-MM-DD"""
         if not date_str or len(date_str) != 8:
             return date_str
-        return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+        try:
+            return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+        except Exception:
+            return date_str

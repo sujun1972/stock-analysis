@@ -130,6 +130,16 @@ async def get_latest():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/suggest-start-date")
+async def get_suggest_start_date(
+    _current_user: User = Depends(require_admin)
+):
+    """返回增量同步的建议起始日期（YYYYMMDD）。"""
+    service = StkAuctionCService()
+    suggested = await service.get_suggested_start_date()
+    return ApiResponse.success(data={"suggested_start_date": suggested})
+
+
 @router.post("/sync-async")
 async def sync_async(
     ts_code: Optional[str] = Query(None, description="股票代码"),
@@ -138,43 +148,38 @@ async def sync_async(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
 ):
-    """
-    异步同步股票收盘集合竞价数据（通过Celery任务）
-
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    注意：所有参数均为可选，不传参数时将同步最近交易日数据
-
-    Args:
-        ts_code: 股票代码
-        trade_date: 单个交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        current_user: 当前登录用户（管理员）
-
-    Returns:
-        包含Celery任务ID和任务信息的响应
-    """
+    """异步同步股票收盘集合竞价数据（通过Celery任务）"""
     try:
         from app.tasks.stk_auction_c_tasks import sync_stk_auction_c_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
         trade_date_formatted = trade_date.replace('-', '') if trade_date else None
         start_date_formatted = start_date.replace('-', '') if start_date else None
         end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        # 提交Celery任务（异步执行）
+        # 从 sync_configs 读取增量同步策略及限速
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'stk_auction_c')
+        sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
+
+        # 若未指定 start_date，自动计算建议起始日期
+        if not start_date_formatted and sync_strategy in ('by_date_range', 'by_month', 'by_week', 'by_date', 'by_ts_code'):
+            suggested = await StkAuctionCService().get_suggested_start_date()
+            if suggested:
+                start_date_formatted = suggested
+                logger.info(f"收盘集合竞价增量同步：未传 start_date，自动使用建议起始日期 {start_date_formatted}")
+
         celery_task = sync_stk_auction_c_task.apply_async(
             kwargs={
                 'ts_code': ts_code,
                 'trade_date': trade_date_formatted,
                 'start_date': start_date_formatted,
-                'end_date': end_date_formatted
+                'end_date': end_date_formatted,
+                'sync_strategy': sync_strategy,
+                'max_requests_per_minute': max_rpm,
             }
         )
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
         helper = TaskHistoryHelper()
         task_data = await helper.create_task_record(
             celery_task_id=celery_task.id,
@@ -186,20 +191,68 @@ async def sync_async(
                 'ts_code': ts_code,
                 'trade_date': trade_date_formatted,
                 'start_date': start_date_formatted,
-                'end_date': end_date_formatted
+                'end_date': end_date_formatted,
+                'sync_strategy': sync_strategy,
             },
             source='stk_auction_c_page'
         )
 
-        logger.info(f"股票收盘集合竞价数据同步任务已提交: {celery_task.id}")
+        logger.info(f"股票收盘集合竞价数据同步任务已提交: {celery_task.id} strategy={sync_strategy}")
+        return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
-
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"提交股票收盘集合竞价数据同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_stk_auction_c_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD 或 YYYYMMDD"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """全量同步股票收盘集合竞价历史数据（按月切片，Redis Set 续继）"""
+    try:
+        from app.tasks.stk_auction_c_tasks import sync_stk_auction_c_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+
+        await asyncio.to_thread(release_stale_lock, 'stk_auction_c')
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'stk_auction_c')
+        if concurrency is None:
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+        strategy = (cfg.get('full_sync_strategy') or 'by_month') if cfg else 'by_month'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
+
+        celery_task = sync_stk_auction_c_full_history_task.apply_async(
+            kwargs={
+                'start_date': start_date_formatted,
+                'concurrency': concurrency,
+                'strategy': strategy,
+                'max_requests_per_minute': max_rpm,
+            }
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_stk_auction_c_full_history',
+            display_name='股票收盘集合竞价全量同步',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={
+                'start_date': start_date_formatted,
+                'concurrency': concurrency,
+                'strategy': strategy,
+            },
+            source='stk_auction_c_page'
+        )
+
+        logger.info(f"股票收盘集合竞价全量同步任务已提交: {celery_task.id}")
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交股票收盘集合竞价全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

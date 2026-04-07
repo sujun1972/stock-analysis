@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS ccass_hold_detail (
     trade_date VARCHAR(8) NOT NULL,
     ts_code VARCHAR(10) NOT NULL,
     name VARCHAR(100),
-    col_participant_id VARCHAR(20) NOT NULL,
+    col_participant_id VARCHAR(100) NOT NULL,
     col_participant_name VARCHAR(200),
     col_shareholding BIGINT,
     col_shareholding_percent DECIMAL(10, 4),

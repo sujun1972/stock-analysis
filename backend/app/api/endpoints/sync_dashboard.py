@@ -57,6 +57,19 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "moneyflow_mkt_dc":      "sync:moneyflow_mkt_dc:full_history:progress",
     "moneyflow_ind_dc":      "sync:moneyflow_ind_dc:full_history:progress",
     "moneyflow_stock_dc":    "sync:moneyflow_stock_dc:full_history:progress",
+    # 特色数据
+    "report_rc":             "sync:report_rc:full_history:progress",
+    "cyq_perf":              "sync:cyq_perf:full_history:progress",
+    "cyq_chips":             "sync:cyq_chips:full_history:progress",
+    "ccass_hold":            "sync:ccass_hold:full_history:progress",
+    "ccass_hold_detail":     "sync:ccass_hold_detail:full_history:progress",
+    "hk_hold":               "sync:hk_hold:full_history:progress",
+    "stk_auction_o":         "sync:stk_auction_o:full_history:progress",
+    "stk_auction_c":         "sync:stk_auction_c:full_history:progress",
+    "stk_nineturn":          "sync:stk_nineturn:full_history:progress",
+    "stk_ah_comparison":     "sync:stk_ah_comparison:full_history:progress",
+    "stk_surv":              "sync:stk_surv:full_history:progress",
+    "broker_recommend":      "sync:broker_recommend:full_history:progress",
 }
 
 

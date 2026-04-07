@@ -24,19 +24,7 @@ async def get_stk_holdernumber(
     limit: int = Query(30, description="返回记录数限制"),
     offset: int = Query(0, description="偏移量")
 ):
-    """
-    获取股东人数数据
-
-    Args:
-        ts_code: 股票代码（可选）
-        start_date: 开始日期，格式：YYYY-MM-DD（可选）
-        end_date: 结束日期，格式：YYYY-MM-DD（可选）
-        limit: 返回记录数限制
-        offset: 偏移量
-
-    Returns:
-        股东人数数据列表
-    """
+    """获取股东人数数据"""
     try:
         service = StkHolderNumberService()
         result = await service.get_stk_holdernumber_data(
@@ -58,17 +46,7 @@ async def get_statistics(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD")
 ):
-    """
-    获取股东人数统计信息
-
-    Args:
-        ts_code: 股票代码（可选）
-        start_date: 开始日期，格式：YYYY-MM-DD（可选）
-        end_date: 结束日期，格式：YYYY-MM-DD（可选）
-
-    Returns:
-        统计信息
-    """
+    """获取股东人数统计信息"""
     try:
         service = StkHolderNumberService()
         stats = await service.get_statistics(
@@ -87,51 +65,58 @@ async def get_latest(
     ts_code: str,
     limit: int = Query(10, description="返回记录数限制")
 ):
-    """
-    获取指定股票的最新股东人数数据
-
-    Args:
-        ts_code: 股票代码
-        limit: 返回记录数限制
-
-    Returns:
-        最新的股东人数数据
-    """
+    """获取指定股票的最新股东人数数据"""
     try:
         service = StkHolderNumberService()
-        result = await service.get_latest_by_code(
-            ts_code=ts_code,
-            limit=limit
-        )
+        result = await service.get_latest_by_code(ts_code=ts_code, limit=limit)
         return ApiResponse.success(data=result)
     except Exception as e:
         logger.error(f"获取最新数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/suggest-start-date")
+async def get_suggest_start_date(
+    _current_user: User = Depends(require_admin)
+):
+    """
+    返回增量同步的建议起始日期（YYYYMMDD）。
+
+    计算规则：
+      候选起始 = 今天 - incremental_default_days（sync_configs 中配置）
+      上次结束 = sync_history 中最近一次增量成功的 data_end_date
+      建议起始 = min(候选起始, 上次结束)，取更早者保证数据连续
+    """
+    service = StkHolderNumberService()
+    suggested = await service.get_suggested_start_date()
+    return ApiResponse.success(data={"suggested_start_date": suggested})
+
+
 @router.post("/sync-full-history")
 async def sync_stk_holdernumber_full_history(
-    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD，不传则从2009年开始"),
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从2009年开始"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
-    """按年切片全量同步股东人数历史数据（支持中断续继）"""
+    """全量同步股东人数历史数据（支持中断续继，切片策略从 sync_configs.full_sync_strategy 读取）"""
     try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'stk_holdernumber')
         from app.tasks.stk_holdernumber_tasks import sync_stk_holdernumber_full_history_task
         from app.repositories.sync_config_repository import SyncConfigRepository
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'stk_holdernumber')
 
         start_date_formatted = start_date.replace('-', '') if start_date else None
 
-        # 未传并发数时，从 sync_configs 读取，兜底默认值
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'stk_holdernumber')
         if concurrency is None:
-            sync_config_repo = SyncConfigRepository()
-            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'stk_holdernumber')
             concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+        strategy = (cfg.get('full_sync_strategy') or 'by_month') if cfg else 'by_month'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
 
         celery_task = sync_stk_holdernumber_full_history_task.apply_async(
-            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency,
+                    'strategy': strategy, 'max_requests_per_minute': max_rpm}
         )
 
         helper = TaskHistoryHelper()
@@ -141,7 +126,8 @@ async def sync_stk_holdernumber_full_history(
             display_name='股东人数（全量历史）',
             task_type='data_sync',
             user_id=current_user.id,
-            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency,
+                         'strategy': strategy, 'max_requests_per_minute': max_rpm},
             source='stk_holdernumber_page'
         )
 
@@ -159,41 +145,38 @@ async def sync_stk_holdernumber_async(
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
 ):
-    """
-    异步同步股东人数数据（通过Celery任务）
-
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    Args:
-        ts_code: 股票代码（可选）
-        ann_date: 公告日期，格式：YYYY-MM-DD（可选）
-        start_date: 开始日期，格式：YYYY-MM-DD（可选）
-        end_date: 结束日期，格式：YYYY-MM-DD（可选）
-        current_user: 当前登录用户（管理员）
-
-    Returns:
-        包含Celery任务ID和任务信息的响应
-    """
+    """异步增量同步股东人数数据（Celery 任务）"""
     try:
         from app.tasks.stk_holdernumber_tasks import sync_stk_holdernumber_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
         ann_date_formatted = ann_date.replace('-', '') if ann_date else None
         start_date_formatted = start_date.replace('-', '') if start_date else None
         end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        # 提交Celery任务（异步执行）
+        # 从 sync_configs 读取增量同步策略及任务限速
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'stk_holdernumber')
+        sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_month') if cfg else 'by_month'
+        max_rpm = cfg.get('max_requests_per_minute') if cfg else None
+
+        # 若未指定 start_date 且策略需要日期范围，自动计算建议起始日期
+        if not start_date_formatted and sync_strategy in ('by_date_range', 'by_month', 'by_week', 'by_date'):
+            suggested = await StkHolderNumberService().get_suggested_start_date()
+            if suggested:
+                start_date_formatted = suggested
+                logger.info(f"股东人数增量同步：未传 start_date，自动使用建议起始日期 {start_date_formatted}")
+
         celery_task = sync_stk_holdernumber_task.apply_async(
             kwargs={
                 'ts_code': ts_code,
                 'ann_date': ann_date_formatted,
                 'start_date': start_date_formatted,
-                'end_date': end_date_formatted
+                'end_date': end_date_formatted,
+                'sync_strategy': sync_strategy,
+                'max_requests_per_minute': max_rpm,
             }
         )
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
         helper = TaskHistoryHelper()
         task_data = await helper.create_task_record(
             celery_task_id=celery_task.id,
@@ -205,17 +188,15 @@ async def sync_stk_holdernumber_async(
                 'ts_code': ts_code,
                 'ann_date': ann_date_formatted,
                 'start_date': start_date_formatted,
-                'end_date': end_date_formatted
+                'end_date': end_date_formatted,
+                'sync_strategy': sync_strategy,
+                'max_requests_per_minute': max_rpm,
             },
             source='stk_holdernumber_page'
         )
 
-        logger.info(f"股东人数同步任务已提交: {celery_task.id}")
-
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
+        logger.info(f"股东人数增量同步任务已提交: {celery_task.id} strategy={sync_strategy}")
+        return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
 
     except Exception as e:
         logger.error(f"提交股东人数同步任务失败: {e}")

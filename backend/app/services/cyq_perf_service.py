@@ -1,129 +1,140 @@
 """
 每日筹码及胜率数据服务
 
-处理筹码及胜率数据的业务逻辑
+处理筹码及胜率数据的业务逻辑。
+继承 TushareSyncBase，同步逻辑委托给基类。
 """
 
 import asyncio
 from typing import Optional, Dict, List
+from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories.cyq_perf_repository import CyqPerfRepository
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class CyqPerfService:
+class CyqPerfService(TushareSyncBase):
     """每日筹码及胜率数据服务"""
 
+    TABLE_KEY = 'cyq_perf'
+    FULL_HISTORY_START_DATE = '20180101'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:cyq_perf:full_history:progress'
+
     def __init__(self):
+        super().__init__()
         self.cyq_perf_repo = CyqPerfRepository()
-        self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ CyqPerfService initialized")
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
     async def sync_cyq_perf(
         self,
-        ts_code: str,
+        ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
+        """增量同步筹码及胜率数据。
+
+        cyq_perf 接口要求 ts_code 必填，因此增量同步为单次请求（不切片）。
+        若 ts_code 未提供，不同于其他接口，不能全市场拉取。
         """
-        同步筹码及胜率数据
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        provider = self._get_provider(max_requests_per_minute)
 
-        Args:
-            ts_code: 股票代码（必填）
-            trade_date: 交易日期 YYYYMMDD
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_cyq_perf,
+            upsert_fn=self.cyq_perf_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+            extra_fetch_kwargs={
+                'ts_code': ts_code,
+                'trade_date': trade_date,
+            },
+        )
 
-        Returns:
-            同步结果
-        """
-        try:
-            logger.info(f"开始同步筹码及胜率数据: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+    # ------------------------------------------------------------------
+    # 全量历史同步
+    # ------------------------------------------------------------------
 
-            # 1. 从 Tushare 获取数据
-            provider = self._get_provider()
-            df = await asyncio.to_thread(
-                provider.get_cyq_perf,
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_ts_code',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
+        """全量同步历史数据（逐只股票请求，Redis Set 续继）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        provider = self._get_provider(max_requests_per_minute)
 
-            if df is None or df.empty:
-                logger.warning(f"未获取到筹码及胜率数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "未获取到数据"
-                }
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_cyq_perf,
+            upsert_fn=self.cyq_perf_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
 
-            logger.info(f"从 Tushare 获取到 {len(df)} 条筹码及胜率数据")
+    # ------------------------------------------------------------------
+    # 建议起始日期
+    # ------------------------------------------------------------------
 
-            # 2. 数据验证和清洗
-            df = self._validate_and_clean_data(df)
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+        if last_end and last_end < candidate:
+            return last_end
+        return candidate
 
-            # 3. 批量插入数据库（使用 Repository）
-            records = await asyncio.to_thread(
-                self.cyq_perf_repo.bulk_upsert,
-                df
-            )
-
-            logger.info(f"成功同步 {records} 条筹码及胜率数据")
-
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条数据"
-            }
-
-        except Exception as e:
-            logger.error(f"同步筹码及胜率数据失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {
-                "status": "error",
-                "records": 0,
-                "error": str(e)
-            }
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
 
     def _validate_and_clean_data(self, df):
-        """
-        验证和清洗数据
-
-        Args:
-            df: 原始数据 DataFrame
-
-        Returns:
-            清洗后的 DataFrame
-        """
+        """验证和清洗数据"""
         try:
-            # 确保必需字段存在
             required_fields = ['ts_code', 'trade_date']
             for field in required_fields:
                 if field not in df.columns:
                     raise ValueError(f"缺少必需字段: {field}")
 
-            # 删除缺少必需字段的行
             df = df.dropna(subset=required_fields)
 
-            # 确保日期字段为字符串格式
             if 'trade_date' in df.columns:
                 df['trade_date'] = df['trade_date'].astype(str)
 
-            # 处理数值字段的空值
             numeric_fields = [
                 'his_low', 'his_high',
                 'cost_5pct', 'cost_15pct', 'cost_50pct', 'cost_85pct', 'cost_95pct',
@@ -131,7 +142,7 @@ class CyqPerfService:
             ]
             for field in numeric_fields:
                 if field in df.columns:
-                    df[field] = df[field].apply(lambda x: None if str(x).strip() == '' or str(x) == 'nan' else x)
+                    df[field] = df[field].apply(lambda x: None if str(x).strip() in ('', 'nan', 'None') else x)
 
             logger.debug(f"数据验证完成，有效数据: {len(df)} 条")
             return df
@@ -139,6 +150,10 @@ class CyqPerfService:
         except Exception as e:
             logger.error(f"数据验证失败: {e}")
             raise
+
+    # ------------------------------------------------------------------
+    # 查询
+    # ------------------------------------------------------------------
 
     async def resolve_default_trade_date(self) -> Optional[str]:
         """返回最近有数据的交易日期（YYYY-MM-DD），用于前端日期选择器回填。"""
@@ -158,29 +173,12 @@ class CyqPerfService:
         sort_by: Optional[str] = None,
         sort_order: Optional[str] = None
     ) -> Dict:
-        """
-        查询筹码及胜率数据
-
-        Args:
-            ts_code: 股票代码（可选）
-            trade_date: 单日交易日期 YYYY-MM-DD（可选）
-            start_date: 开始日期 YYYY-MM-DD（可选）
-            end_date: 结束日期 YYYY-MM-DD（可选）
-            page: 页码
-            page_size: 每页记录数
-            sort_by: 排序字段
-            sort_order: 排序方向
-
-        Returns:
-            查询结果字典（items, statistics, total）
-        """
+        """查询筹码及胜率数据"""
         try:
-            # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
             trade_date_fmt = trade_date.replace('-', '') if trade_date else None
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 单日查询：将 trade_date 映射为 start_date/end_date
             if trade_date_fmt and not start_date_fmt and not end_date_fmt:
                 start_date_fmt = trade_date_fmt
                 end_date_fmt = trade_date_fmt
@@ -210,48 +208,25 @@ class CyqPerfService:
                 )
             )
 
-            return {
-                "items": items,
-                "statistics": statistics,
-                "total": total
-            }
+            return {"items": items, "statistics": statistics, "total": total}
 
         except Exception as e:
             logger.error(f"获取筹码及胜率数据失败: {e}")
             raise
 
     async def get_latest_data(self) -> Dict:
-        """
-        获取最新的筹码及胜率数据
-
-        Returns:
-            最新数据
-        """
+        """获取最新的筹码及胜率数据"""
         try:
-            # 获取最新交易日期
-            latest_date = await asyncio.to_thread(
-                self.cyq_perf_repo.get_latest_trade_date
-            )
-
+            latest_date = await asyncio.to_thread(self.cyq_perf_repo.get_latest_trade_date)
             if not latest_date:
-                return {
-                    "latest_date": None,
-                    "data": []
-                }
-
-            # 获取该日期的数据
+                return {"latest_date": None, "data": []}
             items = await asyncio.to_thread(
                 self.cyq_perf_repo.get_by_date_range,
                 start_date=latest_date,
                 end_date=latest_date,
                 page_size=100
             )
-
-            return {
-                "latest_date": latest_date,
-                "data": items
-            }
-
+            return {"latest_date": latest_date, "data": items}
         except Exception as e:
             logger.error(f"获取最新筹码及胜率数据失败: {e}")
             raise
@@ -261,38 +236,21 @@ class CyqPerfService:
         trade_date: Optional[str] = None,
         limit: int = 20
     ) -> List[Dict]:
-        """
-        获取高胜率股票
-
-        Args:
-            trade_date: 交易日期 YYYY-MM-DD（可选，默认最新）
-            limit: 返回记录数
-
-        Returns:
-            高胜率股票列表
-        """
+        """获取高胜率股票"""
         try:
-            # 如果未指定日期，使用最新日期
             if not trade_date:
-                latest_date = await asyncio.to_thread(
-                    self.cyq_perf_repo.get_latest_trade_date
-                )
+                latest_date = await asyncio.to_thread(self.cyq_perf_repo.get_latest_trade_date)
                 if not latest_date:
                     return []
                 trade_date_fmt = latest_date
             else:
-                # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
                 trade_date_fmt = trade_date.replace('-', '')
 
-            # 获取高胜率股票
-            items = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 self.cyq_perf_repo.get_top_winner_stocks,
                 trade_date=trade_date_fmt,
                 limit=limit
             )
-
-            return items
-
         except Exception as e:
             logger.error(f"获取高胜率股票失败: {e}")
             raise

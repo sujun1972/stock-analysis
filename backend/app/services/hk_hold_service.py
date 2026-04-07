@@ -1,7 +1,8 @@
 """
 北向资金持股服务
 
-提供北向资金持股数据（沪股通、深股通）的同步和查询功能
+提供北向资金持股数据（沪股通、深股通）的同步和查询功能。
+继承 TushareSyncBase，同步逻辑委托给基类。
 数据来源：Tushare Pro hk_hold 接口
 积分消耗：2000分/次
 注意：该接口仅支持到2025年，2026年及以后请使用 moneyflow_hsgt 接口
@@ -10,29 +11,29 @@
 import asyncio
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
-import pandas as pd
 from loguru import logger
 
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
 from app.repositories import HkHoldRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class HkHoldService:
+class HkHoldService(TushareSyncBase):
     """北向资金持股服务"""
 
-    def __init__(self):
-        self.hk_hold_repo = HkHoldRepository()
-        self.provider_factory = DataProviderFactory()
+    TABLE_KEY = 'hk_hold'
+    FULL_HISTORY_START_DATE = '20170301'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:hk_hold:full_history:progress'
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    def __init__(self):
+        super().__init__()
+        self.hk_hold_repo = HkHoldRepository()
+        self.sync_history_repo = SyncHistoryRepository()
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
     async def sync_hk_hold(
         self,
@@ -41,109 +42,112 @@ class HkHoldService:
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        exchange: Optional[str] = None
+        exchange: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """
-        同步北向资金持股数据
+        """增量同步北向资金持股数据。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 3000) if cfg else 3000
+        provider = self._get_provider(max_requests_per_minute)
 
-        Args:
-            code: 原始代码（如 90000）
-            ts_code: 股票代码（如 600000.SH）
-            trade_date: 交易日期 YYYYMMDD
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
-            exchange: 交易所代码（SH上交所/SZ深交所/HK港股通）
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_hk_hold,
+            upsert_fn=self.hk_hold_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+            extra_fetch_kwargs={
+                'code': code,
+                'ts_code': ts_code,
+                'trade_date': trade_date,
+                'exchange': exchange,
+            },
+        )
 
-        Returns:
-            同步结果字典
-        """
-        try:
-            logger.info(f"开始同步北向资金持股: code={code}, ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}, exchange={exchange}")
+    # ------------------------------------------------------------------
+    # 全量历史同步
+    # ------------------------------------------------------------------
 
-            # 如果没有指定任何日期，默认同步最近30天
-            if not trade_date and not start_date and not end_date:
-                end_date = datetime.now().strftime('%Y%m%d')
-                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
-                logger.info(f"未指定日期，默认同步最近30天: {start_date} ~ {end_date}")
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_month',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict[str, Any]:
+        """全量同步历史数据（按月切片，Redis Set 续继）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 3000) if cfg else 3000
+        provider = self._get_provider(max_requests_per_minute)
 
-            # 获取数据提供者
-            provider = self._get_provider()
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_hk_hold,
+            upsert_fn=self.hk_hold_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
 
-            # 从Tushare获取数据
-            df = await asyncio.to_thread(
-                provider.get_hk_hold,
-                code=code,
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date,
-                exchange=exchange
-            )
+    # ------------------------------------------------------------------
+    # 建议起始日期
+    # ------------------------------------------------------------------
 
-            if df is None or len(df) == 0:
-                logger.warning("未获取到北向资金持股数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "无数据需要同步"
-                }
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+        if last_end and last_end < candidate:
+            return last_end
+        return candidate
 
-            # 数据验证和清洗
-            df = self._validate_and_clean_data(df)
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
 
-            # 批量插入数据库
-            records = await asyncio.to_thread(self.hk_hold_repo.bulk_upsert, df)
-
-            logger.info(f"成功同步北向资金持股数据 {records} 条")
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条北向资金持股数据"
-            }
-
-        except Exception as e:
-            logger.error("同步北向资金持股失败: {}", str(e), exc_info=True)
-            return {
-                "status": "error",
-                "records": 0,
-                "error": str(e)
-            }
-
-    def _validate_and_clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        验证和清洗数据
-
-        Args:
-            df: 原始数据
-
-        Returns:
-            清洗后的数据
-        """
-        # 移除空行
+    def _validate_and_clean_data(self, df):
+        """验证和清洗数据"""
+        import pandas as pd
         df = df.dropna(subset=['trade_date', 'ts_code'])
 
-        # 确保必需字段存在
         required_columns = ['trade_date', 'ts_code']
         for col in required_columns:
             if col not in df.columns:
                 raise ValueError(f"缺少必需字段: {col}")
 
-        # 数值字段转换（exchange 是字符串字段，不做转换）
         numeric_columns = ['vol', 'ratio', 'amount']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        logger.info(f"数据清洗完成，有效数据 {len(df)} 条")
+        logger.debug(f"数据验证完成，有效数据: {len(df)} 条")
         return df
 
-    async def resolve_default_trade_date(self) -> Optional[str]:
-        """
-        解析默认查询日期：优先今天，否则回退到表中最新交易日
+    # ------------------------------------------------------------------
+    # 查询
+    # ------------------------------------------------------------------
 
-        Returns:
-            日期字符串 YYYY-MM-DD 格式，无数据则返回 None
-        """
+    async def resolve_default_trade_date(self) -> Optional[str]:
+        """返回最近有数据的交易日期（YYYY-MM-DD），用于前端日期选择器回填。"""
         today = datetime.now().strftime('%Y%m%d')
         has_today = await asyncio.to_thread(self.hk_hold_repo.exists_by_date, today)
         if has_today:
@@ -164,27 +168,10 @@ class HkHoldService:
         page: int = 1,
         page_size: int = 100
     ) -> Dict[str, Any]:
-        """
-        查询北向资金持股数据（支持分页和排序）
-
-        Args:
-            trade_date: 交易日期 YYYY-MM-DD
-            ts_code: A股代码
-            code: 港股代码
-            exchange: 交易所代码（SH/SZ）
-            sort_by: 排序字段
-            sort_order: 排序方向（asc/desc）
-            page: 页码（从1开始）
-            page_size: 每页记录数
-
-        Returns:
-            包含数据、分页信息、统计信息的字典
-        """
+        """查询北向资金持股数据（支持分页和排序）"""
         try:
-            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
             trade_date_fmt = trade_date.replace('-', '') if trade_date else None
 
-            # 并发查询数据、总数和统计
             items, total, statistics = await asyncio.gather(
                 asyncio.to_thread(
                     self.hk_hold_repo.get_paged,
@@ -213,11 +200,7 @@ class HkHoldService:
                 )
             )
 
-            return {
-                "items": items,
-                "total": total,
-                "statistics": statistics
-            }
+            return {"items": items, "total": total, "statistics": statistics}
 
         except Exception as e:
             logger.error(f"查询北向资金持股数据失败: {str(e)}")
@@ -228,30 +211,16 @@ class HkHoldService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        获取北向资金持股统计数据
-
-        Args:
-            start_date: 开始日期 YYYY-MM-DD
-            end_date: 结束日期 YYYY-MM-DD
-
-        Returns:
-            统计数据字典
-        """
+        """获取北向资金持股统计数据"""
         try:
-            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 使用 Repository 获取统计数据
-            stats = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 self.hk_hold_repo.get_statistics,
                 start_date=start_date_fmt,
                 end_date=end_date_fmt
             )
-
-            return stats
-
         except Exception as e:
             logger.error(f"获取北向资金持股统计数据失败: {str(e)}")
             raise

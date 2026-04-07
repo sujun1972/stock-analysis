@@ -1,94 +1,168 @@
 """
 机构调研表服务
 
-负责机构调研数据的同步和查询业务逻辑
+负责机构调研数据的同步和查询业务逻辑。
+继承 TushareSyncBase，同步逻辑委托给基类。
 """
 
 import asyncio
-import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from loguru import logger
 
 from app.repositories.stk_surv_repository import StkSurvRepository
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class StkSurvService:
+class StkSurvService(TushareSyncBase):
     """机构调研表服务"""
 
+    TABLE_KEY = 'stk_surv'
+    FULL_HISTORY_START_DATE = '20100101'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:stk_surv:full_history:progress'
+
     def __init__(self):
+        super().__init__()
         self.stk_surv_repo = StkSurvRepository()
-        self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ StkSurvService initialized")
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
     async def sync_stk_surv(
         self,
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
-        """
-        同步机构调研数据
+        """增量同步机构调研数据。
 
-        Args:
-            ts_code: 股票代码
-            trade_date: 调研日期 YYYYMMDD
-            start_date: 调研开始日期 YYYYMMDD
-            end_date: 调研结束日期 YYYYMMDD
-
-        Returns:
-            同步结果字典
+        机构调研接口使用 surv_date 作为日期字段（而非 trade_date）。
         """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 100) if cfg else 100
+        provider = self._get_provider(max_requests_per_minute)
+
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_stk_surv,
+            upsert_fn=self.stk_surv_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='surv_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+            extra_fetch_kwargs={
+                'ts_code': ts_code,
+                'trade_date': trade_date,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # 全量历史同步
+    # ------------------------------------------------------------------
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_month',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
+        """全量同步历史数据（按月切片，Redis Set 续继）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 100) if cfg else 100
+        provider = self._get_provider(max_requests_per_minute)
+
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_stk_surv,
+            upsert_fn=self.stk_surv_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
+
+    # ------------------------------------------------------------------
+    # 建议起始日期
+    # ------------------------------------------------------------------
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+        if last_end and last_end < candidate:
+            return last_end
+        return candidate
+
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
+
+    def _validate_and_clean_data(self, df):
+        """验证和清洗数据"""
+        required_columns = ['ts_code', 'surv_date']
+        for col in required_columns:
+            if col not in df.columns:
+                raise ValueError(f"缺少必需列: {col}")
+
+        if 'surv_date' in df.columns:
+            df['surv_date'] = df['surv_date'].astype(str).str.replace('-', '')
+            invalid_dates = df[df['surv_date'].str.len() != 8]
+            if not invalid_dates.empty:
+                logger.warning(f"发现 {len(invalid_dates)} 条无效surv_date记录，将被过滤")
+                df = df[df['surv_date'].str.len() == 8]
+
+        df = df.drop_duplicates(subset=['ts_code', 'surv_date', 'fund_visitors'], keep='last')
+
+        df = df.fillna({
+            'name': '',
+            'fund_visitors': '',
+            'rece_place': '',
+            'rece_mode': '',
+            'rece_org': '',
+            'org_type': '',
+            'comp_rece': '',
+            'content': ''
+        })
+
+        logger.debug(f"数据验证完成，有效数据: {len(df)} 条")
+        return df
+
+    def _format_date_for_display(self, date_str: str) -> str:
+        """格式化日期用于前端显示（YYYYMMDD -> YYYY-MM-DD）"""
+        if not date_str or len(date_str) != 8:
+            return date_str
         try:
-            logger.info(f"开始同步机构调研数据: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
+            return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+        except Exception:
+            return date_str
 
-            # 1. 获取Tushare数据
-            provider = self._get_provider()
-            df = await asyncio.to_thread(
-                provider.get_stk_surv,
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
-
-            if df is None or df.empty:
-                logger.warning("未获取到数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "未获取到数据"
-                }
-
-            logger.info(f"从Tushare获取到 {len(df)} 条记录")
-
-            # 2. 数据验证和清洗
-            df = self._validate_and_clean_data(df)
-
-            # 3. 批量插入数据库
-            records = await asyncio.to_thread(
-                self.stk_surv_repo.bulk_upsert,
-                df
-            )
-
-            logger.info(f"成功同步 {records} 条机构调研记录")
-
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条记录"
-            }
-
-        except Exception as e:
-            logger.error(f"同步机构调研数据失败: {e}\n{traceback.format_exc()}")
-            return {
-                "status": "error",
-                "error": str(e),
-                "message": f"同步失败: {str(e)}"
-            }
+    # ------------------------------------------------------------------
+    # 查询
+    # ------------------------------------------------------------------
 
     async def get_stk_surv_data(
         self,
@@ -100,27 +174,11 @@ class StkSurvService:
         limit: int = 30,
         offset: int = 0
     ) -> Dict:
-        """
-        获取机构调研数据
-
-        Args:
-            start_date: 开始日期（YYYY-MM-DD格式）
-            end_date: 结束日期（YYYY-MM-DD格式）
-            ts_code: 股票代码（可选）
-            org_type: 接待公司类型（可选）
-            rece_mode: 接待方式（可选）
-            limit: 返回记录数限制
-            offset: 偏移量
-
-        Returns:
-            数据字典，包含items、total和statistics
-        """
+        """获取机构调研数据"""
         try:
-            # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
             start_date_fmt = start_date.replace('-', '') if start_date else '19900101'
             end_date_fmt = end_date.replace('-', '') if end_date else '29991231'
 
-            # 并发查询数据和统计
             items, statistics = await asyncio.gather(
                 asyncio.to_thread(
                     self.stk_surv_repo.get_by_date_range,
@@ -139,7 +197,6 @@ class StkSurvService:
                 )
             )
 
-            # 日期格式转换：YYYYMMDD -> YYYY-MM-DD（用于前端显示）
             for item in items:
                 if item['surv_date']:
                     item['surv_date'] = self._format_date_for_display(item['surv_date'])
@@ -159,53 +216,27 @@ class StkSurvService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> Dict:
-        """
-        获取统计信息
-
-        Args:
-            start_date: 开始日期（YYYY-MM-DD格式）
-            end_date: 结束日期（YYYY-MM-DD格式）
-
-        Returns:
-            统计信息字典
-        """
+        """获取统计信息"""
         try:
-            # 日期格式转换
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            stats = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 self.stk_surv_repo.get_statistics,
                 start_date=start_date_fmt,
                 end_date=end_date_fmt
             )
-
-            return stats
-
         except Exception as e:
             logger.error(f"获取统计信息失败: {e}")
             raise
 
     async def get_latest_data(self, limit: int = 20) -> Dict:
-        """
-        获取最新的机构调研数据
-
-        Args:
-            limit: 返回记录数限制
-
-        Returns:
-            数据字典
-        """
+        """获取最新的机构调研数据"""
         try:
-            # 获取最新调研日期
-            latest_date = await asyncio.to_thread(
-                self.stk_surv_repo.get_latest_date
-            )
-
+            latest_date = await asyncio.to_thread(self.stk_surv_repo.get_latest_date)
             if not latest_date:
                 return {"items": [], "total": 0}
 
-            # 获取该日期的数据
             items = await asyncio.to_thread(
                 self.stk_surv_repo.get_by_date_range,
                 start_date=latest_date,
@@ -213,85 +244,12 @@ class StkSurvService:
                 limit=limit
             )
 
-            # 日期格式转换
             for item in items:
                 if item['surv_date']:
                     item['surv_date'] = self._format_date_for_display(item['surv_date'])
 
-            return {
-                "items": items,
-                "total": len(items)
-            }
+            return {"items": items, "total": len(items)}
 
         except Exception as e:
             logger.error(f"获取最新数据失败: {e}")
             raise
-
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
-
-    def _validate_and_clean_data(self, df):
-        """
-        验证和清洗数据
-
-        Args:
-            df: 原始DataFrame
-
-        Returns:
-            清洗后的DataFrame
-        """
-        # 确保必需列存在
-        required_columns = ['ts_code', 'surv_date']
-        for col in required_columns:
-            if col not in df.columns:
-                raise ValueError(f"缺少必需列: {col}")
-
-        # 确保日期格式为 YYYYMMDD（8位）
-        if 'surv_date' in df.columns:
-            df['surv_date'] = df['surv_date'].astype(str).str.replace('-', '')
-            # 验证日期格式
-            invalid_dates = df[df['surv_date'].str.len() != 8]
-            if not invalid_dates.empty:
-                logger.warning(f"发现 {len(invalid_dates)} 条无效surv_date记录，将被过滤")
-                df = df[df['surv_date'].str.len() == 8]
-
-        # 删除重复记录（基于ts_code, surv_date, fund_visitors）
-        df = df.drop_duplicates(subset=['ts_code', 'surv_date', 'fund_visitors'], keep='last')
-
-        # 处理空值
-        df = df.fillna({
-            'name': '',
-            'fund_visitors': '',
-            'rece_place': '',
-            'rece_mode': '',
-            'rece_org': '',
-            'org_type': '',
-            'comp_rece': '',
-            'content': ''
-        })
-
-        return df
-
-    def _format_date_for_display(self, date_str: str) -> str:
-        """
-        格式化日期用于前端显示
-
-        Args:
-            date_str: YYYYMMDD格式的日期字符串
-
-        Returns:
-            YYYY-MM-DD格式的日期字符串
-        """
-        if not date_str or len(date_str) != 8:
-            return date_str
-
-        try:
-            return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
-        except Exception:
-            return date_str

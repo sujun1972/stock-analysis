@@ -32,8 +32,8 @@ class TushareSyncBase(BaseSyncService):
       - sync_history_repo（通过 getattr 可选调用，缺失时跳过 sync_history 记录）
     """
 
-    # Tushare offset 约 100,000 触发通用错误，留 10% 安全余量
-    MAX_OFFSET = 90_000
+    # Tushare offset 上限为 100,000（offset=100001 报错），最大允许值为 100,000
+    MAX_OFFSET = 100_000
 
     # ------------------------------------------------------------------
     # 日期切片工具
@@ -115,6 +115,7 @@ class TushareSyncBase(BaseSyncService):
         update_state_fn: Optional[Callable] = None,
         fetch_kwargs: Optional[Dict] = None,
         table_key: str = '',
+        date_param: Optional[str] = None,
     ) -> Dict:
         """
         全量同步入口，根据 strategy 分发到相应实现。
@@ -139,8 +140,11 @@ class TushareSyncBase(BaseSyncService):
         fetch_fn 调用签名约定：
           - by_ts_code：fetch_fn(ts_code=ts_code, start_date=..., end_date=...,
                                  limit=api_limit, offset=offset, **fetch_kwargs)
-          - by_date_range：fetch_fn(start_date=ms, end_date=me,
+          - by_date_range（date_param=None）：fetch_fn(start_date=ms, end_date=me,
                                     limit=api_limit, offset=offset, **fetch_kwargs)
+          - by_date_range（date_param='trade_date'）：fetch_fn(trade_date=ms,
+                                    limit=api_limit, offset=offset, **fetch_kwargs)
+            适用于只接受单日 trade_date 而不接受日期范围的接口（如 ccass_hold_detail）
 
         Returns:
             {"status", "total", "success", "skipped", "errors", "records", "message"}
@@ -178,6 +182,7 @@ class TushareSyncBase(BaseSyncService):
             update_state_fn=update_state_fn,
             fetch_kwargs=fetch_kwargs,
             table_key=table_key,
+            date_param=date_param,
         )
 
     # ------------------------------------------------------------------
@@ -319,6 +324,7 @@ class TushareSyncBase(BaseSyncService):
         update_state_fn: Optional[Callable],
         fetch_kwargs: Dict,
         table_key: str,
+        date_param: Optional[str] = None,
     ) -> Dict:
         """按日期切片全量同步（支持 Redis 续继、翻页）"""
         tag = f'[全量{table_key}]' if table_key else f'[全量{strategy}]'
@@ -355,10 +361,13 @@ class TushareSyncBase(BaseSyncService):
                                 f"停止翻页（已入库 {records} 条）"
                             )
                             break
+                        if date_param:
+                            date_kwargs = {date_param: ms}
+                        else:
+                            date_kwargs = {'start_date': ms, 'end_date': me}
                         df = await asyncio.to_thread(
                             fetch_fn,
-                            start_date=ms,
-                            end_date=me,
+                            **date_kwargs,
                             limit=api_limit,
                             offset=offset,
                             **fetch_kwargs,
