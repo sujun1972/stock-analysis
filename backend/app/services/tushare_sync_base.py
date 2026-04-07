@@ -462,6 +462,8 @@ class TushareSyncBase(BaseSyncService):
             {"status": "error", "records", "error"}
         """
         extra_fetch_kwargs = extra_fetch_kwargs or {}
+        # effective_end 仅用于切片生成（必须有终点）；传给 fetch_fn 时用原始 end_date，
+        # 保持 None 则让 Tushare 自行决定截止范围（不截断未来数据）
         effective_end = end_date or datetime.now().strftime('%Y%m%d')
 
         # 写 sync_history running 记录（可选）
@@ -476,7 +478,7 @@ class TushareSyncBase(BaseSyncService):
         try:
             logger.info(
                 f"开始增量同步 {table_key}: strategy={sync_strategy} "
-                f"start={start_date} end={effective_end}"
+                f"start={start_date} end={end_date or '(不限)'}"
             )
 
             all_dfs = []
@@ -491,7 +493,7 @@ class TushareSyncBase(BaseSyncService):
                 )
                 logger.info(
                     f"[{table_key}] 增量 by_ts_code：共 {len(all_ts_codes)} 只股票，"
-                    f"start={start_date} end={effective_end} api_limit={api_limit}"
+                    f"start={start_date} end={end_date or '(不限)'} api_limit={api_limit}"
                 )
                 sem = asyncio.Semaphore(5)
 
@@ -509,7 +511,7 @@ class TushareSyncBase(BaseSyncService):
                                 fetch_fn,
                                 ts_code=ts_code,
                                 start_date=start_date,
-                                end_date=effective_end,
+                                end_date=end_date,   # 保持原始值，None 时不传截止日期
                                 limit=api_limit,
                                 offset=offset,
                             )
@@ -532,7 +534,7 @@ class TushareSyncBase(BaseSyncService):
             elif start_date and sync_strategy == 'by_date_range':
                 # 整段请求 + 翻页
                 logger.info(
-                    f"[{table_key}] 增量按时间段 {start_date}~{effective_end}，api_limit={api_limit}"
+                    f"[{table_key}] 增量按时间段 {start_date}~{end_date or '(不限)'}，api_limit={api_limit}"
                 )
                 offset = 0
                 while True:
@@ -544,7 +546,7 @@ class TushareSyncBase(BaseSyncService):
                     df = await asyncio.to_thread(
                         fetch_fn,
                         start_date=start_date,
-                        end_date=effective_end,
+                        end_date=end_date,           # 保持原始值，None 时不传截止日期
                         limit=api_limit,
                         offset=offset,
                     )
@@ -561,6 +563,7 @@ class TushareSyncBase(BaseSyncService):
 
             elif start_date and sync_strategy in date_slice_strategies:
                 # 切片请求 + 每段翻页
+                # 切片必须有终点，使用 effective_end（今日）；但每段的 end_date 由切片算法精确给出
                 segments = self._generate_segments(sync_strategy, start_date, effective_end)
                 logger.info(
                     f"[{table_key}] 增量切片 strategy={sync_strategy} "
@@ -577,7 +580,7 @@ class TushareSyncBase(BaseSyncService):
                         df = await asyncio.to_thread(
                             fetch_fn,
                             start_date=ms,
-                            end_date=me,
+                            end_date=me,             # 切片端点，始终有值
                             limit=api_limit,
                             offset=offset,
                         )
