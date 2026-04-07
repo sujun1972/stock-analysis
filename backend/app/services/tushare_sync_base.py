@@ -483,8 +483,53 @@ class TushareSyncBase(BaseSyncService):
             date_slice_strategies = {'by_month', 'by_week', 'by_date'}
             MAX_OFFSET = self.MAX_OFFSET
 
-            # by_ts_code 在增量上与 by_date_range 相同：按整段时间请求（不是逐只股票）
-            if start_date and sync_strategy in ('by_date_range', 'by_ts_code'):
+            if start_date and sync_strategy == 'by_ts_code':
+                # 逐只股票请求，起始日期由调用方算好（回看天数/上次成功记录取较早者）
+                from app.repositories.stock_basic_repository import StockBasicRepository
+                all_ts_codes = await asyncio.to_thread(
+                    StockBasicRepository().get_listed_ts_codes, status='L'
+                )
+                logger.info(
+                    f"[{table_key}] 增量 by_ts_code：共 {len(all_ts_codes)} 只股票，"
+                    f"start={start_date} end={effective_end} api_limit={api_limit}"
+                )
+                sem = asyncio.Semaphore(5)
+
+                async def _fetch_one_ts(ts_code: str):
+                    async with sem:
+                        offset = 0
+                        dfs = []
+                        while True:
+                            if offset >= MAX_OFFSET:
+                                logger.warning(
+                                    f"[{table_key}] {ts_code} offset={offset} 达上限，停止翻页"
+                                )
+                                break
+                            df = await asyncio.to_thread(
+                                fetch_fn,
+                                ts_code=ts_code,
+                                start_date=start_date,
+                                end_date=effective_end,
+                                limit=api_limit,
+                                offset=offset,
+                            )
+                            if df is None or df.empty:
+                                break
+                            raw_count = len(df)
+                            dfs.append(df)
+                            if raw_count < api_limit:
+                                break
+                            offset += api_limit
+                        return dfs
+
+                BATCH_SIZE = 50
+                for batch_start in range(0, len(all_ts_codes), BATCH_SIZE):
+                    batch = all_ts_codes[batch_start: batch_start + BATCH_SIZE]
+                    batch_results = await asyncio.gather(*[_fetch_one_ts(c) for c in batch])
+                    for dfs in batch_results:
+                        all_dfs.extend(dfs)
+
+            elif start_date and sync_strategy == 'by_date_range':
                 # 整段请求 + 翻页
                 logger.info(
                     f"[{table_key}] 增量按时间段 {start_date}~{effective_end}，api_limit={api_limit}"
