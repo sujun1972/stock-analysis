@@ -2294,7 +2294,7 @@ class TushareProvider(BaseDataProvider):
 
     def get_cyq_perf(
         self,
-        ts_code: str,
+        ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -2306,7 +2306,7 @@ class TushareProvider(BaseDataProvider):
         积分消耗：5000分起
 
         Args:
-            ts_code: 股票代码（必填）
+            ts_code: 股票代码（可选，不传则按日期范围全市场查询）
             trade_date: 交易日期 YYYYMMDD（可选）
             start_date: 开始日期 YYYYMMDD（可选）
             end_date: 结束日期 YYYYMMDD（可选）
@@ -2336,7 +2336,7 @@ class TushareProvider(BaseDataProvider):
 
     def get_cyq_chips(
         self,
-        ts_code: str,
+        ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -2350,7 +2350,7 @@ class TushareProvider(BaseDataProvider):
         单次最大2000条，可以按股票代码和日期循环提取
 
         Args:
-            ts_code: 股票代码（必填）
+            ts_code: 股票代码（可选，不传则按日期范围全市场查询）
             trade_date: 交易日期 YYYYMMDD（可选）
             start_date: 开始日期 YYYYMMDD（可选）
             end_date: 结束日期 YYYYMMDD（可选）

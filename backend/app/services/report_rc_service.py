@@ -226,72 +226,26 @@ class ReportRcService(TushareSyncBase):
         update_state_fn=None,
         max_requests_per_minute: int = 0,
     ) -> Dict:
-        """全量同步历史数据（按月切片，Redis Set 续继）"""
-        full_start = start_date or self.FULL_HISTORY_START_DATE
-        today = datetime.now().strftime('%Y%m%d')
+        """全量同步历史数据（Redis Set 续继，切片策略由 strategy 参数控制）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 6000) if cfg else 6000
+        provider = self._get_provider(max_requests_per_minute or None)
 
-        PROGRESS_KEY = self.FULL_HISTORY_PROGRESS_KEY
-
-        completed = {v.decode() if isinstance(v, bytes) else v
-                     for v in (redis_client.smembers(PROGRESS_KEY) if redis_client else set())}
-
-        segments = self._generate_months(full_start, today)
-        pending = [(ms, me) for ms, me in segments if ms not in completed]
-
-        total_records = 0
-        total_segments = len(segments)
-        done_segments = total_segments - len(pending)
-
-        sem = asyncio.Semaphore(max(1, concurrency))
-
-        async def sync_segment(ms, me):
-            nonlocal total_records, done_segments
-            async with sem:
-                result = await self.sync_report_rc(
-                    start_date=ms,
-                    end_date=me,
-                    max_requests_per_minute=max_requests_per_minute or None,
-                )
-                if result.get('status') != 'error':
-                    if redis_client:
-                        redis_client.sadd(PROGRESS_KEY, ms)
-                done_segments += 1
-                total_records += result.get('records', 0)
-                if update_state_fn:
-                    update_state_fn(state='PROGRESS', meta={
-                        'done': done_segments,
-                        'total': total_segments,
-                        'records': total_records,
-                    })
-
-        await asyncio.gather(*[sync_segment(ms, me) for ms, me in pending])
-
-        return {
-            'status': 'success',
-            'records': total_records,
-            'done': done_segments,
-            'total': total_segments,
-        }
-
-    @staticmethod
-    def _generate_months(start_date: str, end_date: str) -> list:
-        """将日期范围切分为自然月片段，每片返回 (month_start, month_end)，均为 YYYYMMDD。"""
-        import calendar
-        from datetime import date as date_cls
-        start_d = date_cls(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
-        end_d = date_cls(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
-        segments = []
-        cur = date_cls(start_d.year, start_d.month, 1)
-        while cur <= end_d:
-            ms = max(cur, start_d)
-            last_day = calendar.monthrange(cur.year, cur.month)[1]
-            me = min(date_cls(cur.year, cur.month, last_day), end_d)
-            segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
-            if cur.month == 12:
-                cur = date_cls(cur.year + 1, 1, 1)
-            else:
-                cur = date_cls(cur.year, cur.month + 1, 1)
-        return segments
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_report_rc,
+            upsert_fn=self.report_rc_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute or None,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
 
     # ------------------------------------------------------------------
     # 内部辅助

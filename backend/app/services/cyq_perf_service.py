@@ -44,9 +44,16 @@ class CyqPerfService(TushareSyncBase):
     ) -> Dict:
         """增量同步筹码及胜率数据。
 
-        cyq_perf 接口要求 ts_code 必填，因此增量同步为单次请求（不切片）。
-        若 ts_code 未提供，不同于其他接口，不能全市场拉取。
+        cyq_perf 接口服务端要求 ts_code 或 trade_date 至少传一个，
+        不支持纯按日期范围全市场查询，只能使用 by_ts_code 策略。
         """
+        if sync_strategy and sync_strategy not in ('by_ts_code', 'none'):
+            logger.warning(
+                f"[cyq_perf] 接口不支持按日期范围全市场查询，"
+                f"忽略 sync_strategy={sync_strategy}，强制使用 by_ts_code"
+            )
+            sync_strategy = 'by_ts_code'
+
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
         api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
         provider = self._get_provider(max_requests_per_minute)
@@ -81,7 +88,18 @@ class CyqPerfService(TushareSyncBase):
         update_state_fn=None,
         max_requests_per_minute: int = 0,
     ) -> Dict:
-        """全量同步历史数据（逐只股票请求，Redis Set 续继）"""
+        """全量同步历史数据（逐只股票请求，Redis Set 续继）
+
+        cyq_perf 接口服务端要求 ts_code 或 trade_date 至少传一个，
+        不支持纯按日期范围全市场查询，只能使用 by_ts_code 策略。
+        """
+        if strategy != 'by_ts_code':
+            logger.warning(
+                f"[cyq_perf] 接口不支持按日期范围全市场查询，"
+                f"忽略 strategy={strategy}，强制使用 by_ts_code"
+            )
+            strategy = 'by_ts_code'
+
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
         api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
         provider = self._get_provider(max_requests_per_minute)

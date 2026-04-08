@@ -11,7 +11,6 @@ import asyncio
 from loguru import logger
 
 from app.celery_app import celery_app
-from app.services.extended_sync_service import ExtendedDataSyncService
 from app.tasks.extended_sync_tasks import run_async_in_celery
 
 
@@ -47,7 +46,8 @@ def sync_moneyflow_task(
     try:
         logger.info(f"开始执行个股资金流向同步任务: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
-        service = ExtendedDataSyncService()
+        from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
+        service = MoneyflowSyncService()
         result = run_async_in_celery(
             service.sync_moneyflow,
             ts_code=ts_code,
