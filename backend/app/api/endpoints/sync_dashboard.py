@@ -70,6 +70,10 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "stk_ah_comparison":     "sync:stk_ah_comparison:full_history:progress",
     "stk_surv":              "sync:stk_surv:full_history:progress",
     "broker_recommend":      "sync:broker_recommend:full_history:progress",
+    # 参考数据（异常波动类）
+    "stk_shock":             "sync:stk_shock:full_history:progress",
+    "stk_high_shock":        "sync:stk_high_shock:full_history:progress",
+    "stk_alert":             "sync:stk_alert:full_history:progress",
 }
 
 

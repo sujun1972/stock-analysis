@@ -5,115 +5,93 @@
 """
 
 import asyncio
+from datetime import datetime, timedelta
 from typing import Optional, Dict
 from loguru import logger
 
 from app.repositories.stk_high_shock_repository import StkHighShockRepository
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class StkHighShockService:
+class StkHighShockService(TushareSyncBase):
     """个股严重异常波动服务"""
 
-    FULL_HISTORY_LOCK_KEY = "sync:stk_high_shock:full_history:lock"
+    TABLE_KEY = 'stk_high_shock'
+    FULL_HISTORY_START_DATE = '20050101'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:stk_high_shock:full_history:progress'
+    FULL_HISTORY_LOCK_KEY = 'sync:stk_high_shock:full_history:lock'
 
     def __init__(self):
+        super().__init__()
         self.stk_high_shock_repo = StkHighShockRepository()
-        self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ StkHighShockService initialized")
 
-    async def sync_full_history(self, redis_client, start_date: Optional[str] = None, update_state_fn=None) -> Dict:
-        """全量同步个股严重异常波动数据（单次请求，接口不支持日期范围参数）
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_month',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
+        """全量同步个股严重异常波动历史数据（按月切片，支持 Redis 续继）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 6000) if cfg else 6000
+        provider = self._get_provider(max_requests_per_minute)
 
-        stk_high_shock 接口不支持 start_date/end_date 过滤，不传日期直接返回全量最新数据。
-        """
-        logger.info("[全量stk_high_shock] 开始全量同步（接口不支持日期范围，单次拉取全量）")
-        try:
-            provider = self._get_provider()
-            df = await asyncio.to_thread(provider.get_stk_high_shock)
-            records = 0
-            if df is not None and not df.empty:
-                df = self._validate_and_clean_data(df)
-                records = await asyncio.to_thread(self.stk_high_shock_repo.bulk_upsert, df)
-            if update_state_fn:
-                update_state_fn(state='PROGRESS', meta={'current': 1, 'total': 1, 'percent': 100.0, 'records': records, 'errors': 0})
-            logger.info(f"[全量stk_high_shock] ✅ 同步完成，入库 {records} 条")
-            return {"status": "success", "total": 1, "success": 1, "skipped": 0, "errors": 0,
-                    "records": records, "message": f"同步完成，入库 {records} 条"}
-        except Exception as e:
-            logger.error(f"[全量stk_high_shock] 同步失败: {e}")
-            return {"status": "error", "total": 1, "success": 0, "skipped": 0, "errors": 1,
-                    "records": 0, "message": f"同步失败: {str(e)}"}
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_stk_high_shock,
+            upsert_fn=self.stk_high_shock_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
 
     async def sync_stk_high_shock(
         self,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        ts_code: Optional[str] = None
+        ts_code: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
+        """增量同步个股严重异常波动数据。
+
+        当 start_date 存在且 sync_strategy 为日期切片策略时，按切片逐段请求并支持翻页。
         """
-        同步个股严重异常波动数据
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 6000) if cfg else 6000
+        provider = self._get_provider(max_requests_per_minute)
 
-        Args:
-            trade_date: 单个交易日期 YYYYMMDD
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
-            ts_code: 股票代码（可选）
-
-        Returns:
-            同步结果字典
-        """
-        try:
-            logger.info(f"开始同步个股严重异常波动数据: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, ts_code={ts_code}")
-
-            # 1. 获取Tushare数据
-            provider = self._get_provider()
-            df = await asyncio.to_thread(
-                provider.get_stk_high_shock,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date,
-                ts_code=ts_code
-            )
-
-            if df is None or df.empty:
-                logger.warning("未获取到数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "未获取到数据"
-                }
-
-            logger.info(f"从Tushare获取到 {len(df)} 条记录")
-
-            # 2. 数据验证和清洗
-            df = self._validate_and_clean_data(df)
-
-            # 3. 批量插入数据库
-            records = await asyncio.to_thread(
-                self.stk_high_shock_repo.bulk_upsert,
-                df
-            )
-
-            logger.info(f"成功同步 {records} 条个股严重异常波动记录")
-
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条记录"
-            }
-
-        except Exception as e:
-            logger.error(f"同步个股严重异常波动数据失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {
-                "status": "error",
-                "error": str(e),
-                "message": f"同步失败: {str(e)}"
-            }
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_stk_high_shock,
+            upsert_fn=self.stk_high_shock_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+            extra_fetch_kwargs={
+                'trade_date': trade_date,
+                'ts_code': ts_code,
+            },
+        )
 
     async def get_stk_high_shock_data(
         self,
@@ -295,14 +273,17 @@ class StkHighShockService:
             logger.error(f"按交易所查询数据失败: {e}")
             raise
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+        if last_end and last_end < candidate:
+            return last_end
+        return candidate
 
     def _validate_and_clean_data(self, df):
         """

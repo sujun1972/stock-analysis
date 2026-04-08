@@ -21,22 +21,16 @@ def sync_pledge_stat_task(
     trade_date: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    ts_code: Optional[str] = None
+    ts_code: Optional[str] = None,
+    sync_strategy: Optional[str] = None,
+    max_requests_per_minute: Optional[int] = None,
 ):
-    """
-    同步股权质押统计数据
-
-    Args:
-        trade_date: 交易日期 YYYYMMDD (实际为end_date)
-        start_date: 开始日期 YYYYMMDD
-        end_date: 结束日期 YYYYMMDD
-        ts_code: 股票代码
-
-    Returns:
-        同步结果
-    """
+    """增量同步股权质押统计数据"""
     try:
-        logger.info(f"开始执行股权质押统计同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, ts_code={ts_code}")
+        logger.info(
+            f"开始执行股权质押统计增量同步任务: strategy={sync_strategy} "
+            f"trade_date={trade_date} start_date={start_date} end_date={end_date} ts_code={ts_code}"
+        )
 
         service = PledgeStatService()
         result = run_async_in_celery(
@@ -44,7 +38,9 @@ def sync_pledge_stat_task(
             trade_date=trade_date,
             start_date=start_date,
             end_date=end_date,
-            ts_code=ts_code
+            ts_code=ts_code,
+            sync_strategy=sync_strategy,
+            max_requests_per_minute=max_requests_per_minute,
         )
 
         if result["status"] == "success":
@@ -70,12 +66,14 @@ def sync_pledge_stat_task(
     time_limit=14400,
     acks_late=False,  # 支持续继，worker 重启后不自动重新入队
 )
-def sync_pledge_stat_full_history_task(self, start_date: str = None, concurrency: int = 5):
-    """逐只股票全量同步股权质押统计历史数据（支持中断续继）
-
-    pledge_stat 接口只支持 ts_code + end_date，无法按日期范围拉全市场，
-    因此采用逐只股票请求方式，5并发，每批50只，约5500只。
-    """
+def sync_pledge_stat_full_history_task(
+    self,
+    start_date: Optional[str] = None,
+    concurrency: int = 5,
+    strategy: str = 'by_ts_code',
+    max_requests_per_minute: Optional[int] = None,
+):
+    """全量同步股权质押统计历史数据（支持中断续继，策略由 sync_configs 控制）"""
     from app.core.redis_lock import redis_client
 
     logger.info(f"========== [Celery] 开始全量历史股权质押统计同步任务 concurrency={concurrency} ==========")
@@ -95,8 +93,10 @@ def sync_pledge_stat_full_history_task(self, start_date: str = None, concurrency
                 service.sync_full_history(
                     redis_client=redis_client,
                     start_date=start_date,
+                    concurrency=concurrency,
+                    strategy=strategy,
                     update_state_fn=self.update_state,
-                    concurrency=concurrency
+                    max_requests_per_minute=max_requests_per_minute if max_requests_per_minute is not None else 0,
                 )
             )
         finally:

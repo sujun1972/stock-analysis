@@ -85,12 +85,36 @@ class TushareSyncBase(BaseSyncService):
             cur += timedelta(days=1)
         return segments
 
+    @staticmethod
+    def _generate_quarters(start_date: str, end_date: str) -> List[Tuple[str, str]]:
+        """将日期范围切分为自然季度片段，每片返回 (quarter_start, quarter_end)，均为 YYYYMMDD。"""
+        import calendar
+        QUARTER_MONTHS = [(1, 3), (4, 6), (7, 9), (10, 12)]
+        start_d = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+        end_d = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+        segments = []
+        year = start_d.year
+        while True:
+            for qstart_m, qend_m in QUARTER_MONTHS:
+                qs = date(year, qstart_m, 1)
+                last_day = calendar.monthrange(year, qend_m)[1]
+                qe = date(year, qend_m, last_day)
+                if qs > end_d:
+                    return segments
+                ms = max(qs, start_d)
+                me = min(qe, end_d)
+                segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
+            year += 1
+        return segments
+
     def _generate_segments(self, strategy: str, start_date: str, end_date: str) -> List[Tuple[str, str]]:
         """根据策略生成切片片段列表。"""
         if strategy == 'by_week':
             return self._generate_weeks(start_date, end_date)
         elif strategy == 'by_date':
             return self._generate_dates(start_date, end_date)
+        elif strategy == 'by_quarter':
+            return self._generate_quarters(start_date, end_date)
         else:  # by_month（默认）
             return self._generate_months(start_date, end_date)
 
@@ -166,6 +190,15 @@ class TushareSyncBase(BaseSyncService):
                 fetch_kwargs=fetch_kwargs,
                 table_key=table_key,
             )
+        if strategy == 'snapshot':
+            return await self._full_sync_snapshot(
+                fetch_fn=fetch_fn,
+                upsert_fn=upsert_fn,
+                clean_fn=clean_fn,
+                api_limit=api_limit,
+                fetch_kwargs=fetch_kwargs,
+                table_key=table_key,
+            )
         return await self._full_sync_by_date_range(
             redis_client=redis_client,
             fetch_fn=fetch_fn,
@@ -186,6 +219,52 @@ class TushareSyncBase(BaseSyncService):
         )
 
     # ------------------------------------------------------------------
+    # 全量同步：快照（不传日期，直接分页拉取全量当前数据）
+    # ------------------------------------------------------------------
+
+    async def _full_sync_snapshot(
+        self,
+        fetch_fn: Callable,
+        upsert_fn: Callable,
+        clean_fn: Optional[Callable],
+        api_limit: int,
+        fetch_kwargs: Dict,
+        table_key: str,
+    ) -> Dict:
+        """快照全量同步：不传任何日期参数，直接分页拉取接口返回的全量当前数据。"""
+        tag = f'[全量{table_key}]' if table_key else '[全量snapshot]'
+        logger.info(f"{tag} 策略=snapshot api_limit={api_limit} 开始拉取")
+
+        total_records = 0
+        offset = 0
+        MAX_OFFSET = self.MAX_OFFSET
+
+        while True:
+            if offset >= MAX_OFFSET:
+                logger.warning(f"{tag} offset={offset} 达上限，停止翻页")
+                break
+            df = await asyncio.to_thread(
+                fetch_fn,
+                limit=api_limit,
+                offset=offset,
+                **fetch_kwargs,
+            )
+            if df is None or df.empty:
+                break
+            raw_count = len(df)
+            if clean_fn is not None:
+                df = clean_fn(df)
+            if df is not None and not df.empty:
+                total_records += await asyncio.to_thread(upsert_fn, df)
+            if raw_count < api_limit:
+                break
+            offset += api_limit
+            logger.info(f"{tag} 触发分页（原始={raw_count}>={api_limit}），offset={offset}")
+
+        logger.info(f"{tag} 快照同步完成，入库={total_records}")
+        return {"status": "success", "total": 1, "success": 1, "skipped": 0,
+                "errors": 0, "records": total_records, "message": f"快照同步完成，入库 {total_records} 条"}
+
     # 全量同步：逐只股票
     # ------------------------------------------------------------------
 

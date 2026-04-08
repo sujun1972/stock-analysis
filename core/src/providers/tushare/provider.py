@@ -1506,7 +1506,9 @@ class TushareProvider(BaseDataProvider):
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取个股异常波动数据
@@ -1518,6 +1520,8 @@ class TushareProvider(BaseDataProvider):
             trade_date: 交易日期 YYYYMMDD（可选）
             start_date: 开始日期 YYYYMMDD（可选）
             end_date: 结束日期 YYYYMMDD（可选）
+            limit: 单次返回上限（可选）
+            offset: 翻页偏移（可选）
 
         Returns:
             pd.DataFrame: 个股异常波动数据，包含以下列：
@@ -1533,6 +1537,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 
@@ -1541,7 +1546,9 @@ class TushareProvider(BaseDataProvider):
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取个股严重异常波动数据
@@ -1553,6 +1560,8 @@ class TushareProvider(BaseDataProvider):
             trade_date: 公告日期 YYYYMMDD（可选）
             start_date: 开始日期 YYYYMMDD（可选）
             end_date: 结束日期 YYYYMMDD（可选）
+            limit: 单次返回上限（可选）
+            offset: 翻页偏移（可选）
 
         Returns:
             pd.DataFrame: 个股严重异常波动数据，包含以下列：
@@ -1568,6 +1577,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 
@@ -1576,7 +1586,9 @@ class TushareProvider(BaseDataProvider):
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取交易所重点提示证券数据
@@ -1588,6 +1600,8 @@ class TushareProvider(BaseDataProvider):
             trade_date: 交易日期 YYYYMMDD（可选）
             start_date: 开始日期 YYYYMMDD（可选）
             end_date: 结束日期 YYYYMMDD（可选）
+            limit: 单次返回上限（可选）
+            offset: 翻页偏移（可选）
 
         Returns:
             pd.DataFrame: 交易所重点提示证券数据，包含以下列：
@@ -1602,13 +1616,17 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 
     def get_pledge_stat(
         self,
         ts_code: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        start_date: Optional[str] = None,  # 接口不支持，忽略（供 by_ts_code 全量同步兼容）
     ) -> pd.DataFrame:
         """
         获取股权质押统计数据
@@ -1618,6 +1636,9 @@ class TushareProvider(BaseDataProvider):
         Args:
             ts_code: 股票代码（可选）
             end_date: 截止日期 YYYYMMDD（可选）
+            limit: 单次返回上限（可选）
+            offset: 翻页偏移（可选）
+            start_date: 忽略（pledge_stat 接口不支持，传入不影响）
 
         Returns:
             pd.DataFrame: 股权质押统计数据，包含以下列：
@@ -1631,7 +1652,8 @@ class TushareProvider(BaseDataProvider):
         """
         return self._query(
             'pledge_stat', '股权质押统计',
-            **self._build_params(ts_code=ts_code, end_date=end_date)
+            **self._build_params(ts_code=ts_code, end_date=end_date,
+                                 limit=limit, offset=offset)
         )
 
     def get_share_float(
