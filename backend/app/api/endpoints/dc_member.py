@@ -154,6 +154,12 @@ async def sync_dc_member_async(
         start_date_formatted = start_date.replace('-', '') if start_date else None
         end_date_formatted = end_date.replace('-', '') if end_date else None
 
+        # 未指定任何日期时，使用最新交易日（dc_member 每日约 5000+ 行，不使用日期范围）
+        if not trade_date_formatted and not start_date_formatted and not end_date_formatted:
+            from app.repositories.trading_calendar_repository import TradingCalendarRepository
+            latest_day = await asyncio.to_thread(TradingCalendarRepository().get_latest_trading_day)
+            trade_date_formatted = latest_day
+
         # 提交Celery任务（异步执行）
         celery_task = sync_dc_member_task.apply_async(
             kwargs={
@@ -192,4 +198,45 @@ async def sync_dc_member_async(
 
     except Exception as e:
         logger.error(f"提交东方财富板块成分同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_dc_member_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从最早历史开始"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """全量同步东方财富板块成分历史数据（按月切片，支持 Redis 续继）"""
+    try:
+        from app.tasks.dc_member_tasks import sync_dc_member_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'dc_member')
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'dc_member')
+        if concurrency is None:
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+        celery_task = sync_dc_member_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_dc_member_full_history',
+            display_name='东方财富板块成分（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+            source='dc_member_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+    except Exception as e:
+        logger.error(f"提交东方财富板块成分全量同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

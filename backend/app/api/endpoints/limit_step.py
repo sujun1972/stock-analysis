@@ -1,9 +1,10 @@
 """
 连板天梯 API 端点
 """
+import asyncio
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from app.services.limit_step_service import LimitStepService
 from app.services import TaskHistoryHelper
@@ -203,6 +204,14 @@ async def sync_async(
     start_date_formatted = start_date.strftime('%Y%m%d') if start_date else None
     end_date_formatted = end_date.strftime('%Y%m%d') if end_date else None
 
+    # 未指定任何日期时，按 sync_configs.incremental_default_days 计算回看窗口
+    if not trade_date_formatted and not start_date_formatted and not end_date_formatted:
+        from app.repositories.sync_config_repository import SyncConfigRepository
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'limit_step')
+        default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+        end_date_formatted = datetime.now().strftime('%Y%m%d')
+        start_date_formatted = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
     # 提交 Celery 任务
     celery_task = sync_limit_step_task.apply_async(
         kwargs={
@@ -244,3 +253,40 @@ async def sync_async(
         data=task_data,
         message=date_msg
     )
+
+
+@router.post("/sync-full-history")
+async def sync_limit_step_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从最早历史开始"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """全量同步连板天梯历史数据（按月切片，支持 Redis 续继）"""
+    from app.tasks.limit_step_tasks import sync_limit_step_full_history_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'limit_step')
+
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+
+    sync_config_repo = SyncConfigRepository()
+    cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'limit_step')
+    if concurrency is None:
+        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+    celery_task = sync_limit_step_full_history_task.apply_async(
+        kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+    )
+
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_limit_step_full_history',
+        display_name='连板天梯（全量历史）',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+        source='limit_step_page'
+    )
+
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

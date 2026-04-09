@@ -410,11 +410,11 @@ const handleSyncConfirm = async () => {
 | 融资融券交易明细 | `/margin/detail` | ETF名称从 margin_secs 回退；ETF不可点击跳转 |
 | 融资融券标的 | `/margin/secs` | isStock 排除5/1/821前缀 |
 | 转融资交易汇总 | `/margin/slb-len` | |
-| 龙虎榜每日明细 | `/boardgame/top-list` | |
-| 龙虎榜机构明细 | `/boardgame/top-inst` | |
-| 涨跌停列表 | `/boardgame/limit-list` | |
-| 连板天梯 | `/boardgame/limit-step` | |
-| 最强板块统计 | `/boardgame/limit-cpt` | |
+| 龙虎榜每日明细 | `/boardgame/top-list` | 全量同步逐交易日请求（top_list 接口 trade_date 必需，不支持日期范围），5并发，Redis续继，起始 20050101 |
+| 龙虎榜机构明细 | `/boardgame/top-inst` | 全量同步逐交易日请求（同上），5并发，Redis续继，起始 20050101 |
+| 涨跌停列表 | `/boardgame/limit-list` | 增量同步按回看天数（默认7天）；全量同步按月切片（5并发，Redis续继） |
+| 连板天梯 | `/boardgame/limit-step` | 增量同步按回看天数（默认7天）；全量同步按月切片（5并发，Redis续继） |
+| 最强板块统计 | `/boardgame/limit-cpt` | 增量同步按回看天数（默认7天）；全量同步按月切片（5并发，Redis续继） |
 | 卖方盈利预测 | `/features/report-rc` | |
 | 个股异常波动 | `/reference-data/stk-shock` | 全量策略可配置（默认 by_month，支持 snapshot），增量按日期范围 |
 | 个股严重异常波动 | `/reference-data/stk-high-shock` | 全量策略可配置（默认 by_month，支持 snapshot），增量按日期范围 |
@@ -735,9 +735,9 @@ async def sync_full_history(self, redis_client, start_date=None, update_state_fn
 | 新股列表 | `/sync/new-stocks` | 独立 `new_stocks` 表；增量同步弹窗选天数（默认90天）；全量同步90天/片×5并发（new_share 单次上限2000条） |
 | ST股票列表 | `/data/stock-st` | 全量同步特殊处理（2交易日/批，10并发） |
 | 股票列表 | `/data/stock-list` | 17个字段；同步全状态 |
-| 东方财富板块成分 | `/boardgame/dc-member` | 6000积分/次；板块名称从 dc_index 注入 |
-| 东方财富板块数据 | `/boardgame/dc-index` | 6000积分/次；leading_stock 规避 PG 保留字；"全部"同步消耗18000积分 |
-| 东财概念板块行情 | `/boardgame/dc-daily` | 6000积分/次；名称从 dc_index 注入 |
+| 东方财富板块成分 | `/boardgame/dc-member` | 6000积分/次；板块名称从 dc_index 注入；增量用最新交易日（每日21000+行需分页），全量按月切片（5并发，Redis续继） |
+| 东方财富板块数据 | `/boardgame/dc-index` | 6000积分/次；leading_stock 规避 PG 保留字；"全部"同步消耗18000积分；增量用最新交易日（每板块类型1000+行），全量按月切片（3并发，Redis续继，key含板块类型） |
+| 东财概念板块行情 | `/boardgame/dc-daily` | 6000积分/次；名称从 dc_index 注入；增量用最新交易日（每日1100+行），全量按月切片（5并发，Redis续继） |
 | 交易日历 | `/data/trade-cal` | 2000积分/次；支持7个交易所 |
 
 **注意**：旧的同步阻塞API（如 `/sync`）保留用于向后兼容，但新开发的功能应优先使用异步模式。
@@ -990,6 +990,47 @@ if not trade_date:
 **判断依据**：查看 `core/src/providers/tushare/provider.py` 中对应方法的参数签名，若 `trade_date` 标注为必需参数（无默认值），则使用方式 B。
 
 **已修复文件**：`top_list_service.py`、`top_inst_service.py`（已于 2026-03-25 修复，使用方式 B）
+
+#### 增量同步 API 端点：高数据量板块接口必须使用单日模式
+
+当 sync-config 页面或前端同步按钮不传日期参数调用 `POST /api/xxx/sync-async` 时，后端必须计算合适的默认日期范围。**不同接口应采用不同策略**：
+
+**策略一：使用最新交易日（适用于高数据量接口）**
+
+每日数据量超过单次接口上限（约 5000 条）的接口，**不得使用日期范围**，否则分页请求会持续数十次、消耗大量积分。应直接取最新交易日：
+
+```python
+# 适用：dc_member（21000+条/日）、dc_index（1000+条/板块类型/日）、dc_daily（1100+条/日）
+if not trade_date_formatted and not start_date_formatted and not end_date_formatted:
+    from app.repositories.trading_calendar_repository import TradingCalendarRepository
+    latest_day = await asyncio.to_thread(TradingCalendarRepository().get_latest_trading_day)
+    trade_date_formatted = latest_day
+```
+
+**策略二：按 incremental_default_days 计算回看窗口（适用于低数据量接口）**
+
+每日数据量远低于接口上限的接口，可使用 `sync_configs.incremental_default_days` 配置的天数：
+
+```python
+# 适用：limit_step（几十条/日）、limit_cpt（几十条/日）、limit_list（几百条/日）
+if not trade_date_formatted and not start_date_formatted and not end_date_formatted:
+    from app.repositories.sync_config_repository import SyncConfigRepository
+    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'your_table')
+    default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+    end_date_formatted = datetime.now().strftime('%Y%m%d')
+    start_date_formatted = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+```
+
+**判断阈值**：日数据量超过 5000 条（接口单次上限）→ 策略一；远低于上限 → 策略二。
+
+| 接口 | 日数据量 | 策略 |
+|------|----------|------|
+| dc_member | ~21000条 | 策略一（最新交易日） |
+| dc_index | ~1000条/板块类型 | 策略一（最新交易日） |
+| dc_daily | ~1100条 | 策略一（最新交易日） |
+| limit_list | ~几百条 | 策略二（回看N天） |
+| limit_step | ~几十条 | 策略二（回看N天） |
+| limit_cpt | ~几十条 | 策略二（回看N天） |
 
 #### 方式 C：查询端点默认日期解析（`resolve_default_trade_date`）
 
@@ -1739,7 +1780,7 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 
 `FULL_SYNC_REDIS_KEYS`（在 `sync_dashboard.py` 中维护）记录各表全量同步的 Redis Set key。新增支持全量同步续继的数据表时，需同步更新该字典。
 
-**⚠️ 新增全量同步时必须同步更新 `FULL_SYNC_REDIS_KEYS`**，否则同步配置页面无法查询/清除该表的续继进度。遗漏此步骤是常见错误：`moneyflow_hsgt`、`moneyflow_mkt_dc`、`moneyflow_ind_dc` 均曾因此缺失进度查询能力（已于 2026-04-06 补齐）。
+**⚠️ 新增全量同步时必须同步更新 `FULL_SYNC_REDIS_KEYS`**，否则同步配置页面无法查询/清除该表的续继进度。遗漏此步骤是常见错误：`moneyflow_hsgt`、`moneyflow_mkt_dc`、`moneyflow_ind_dc` 均曾因此缺失进度查询能力（已于 2026-04-06 补齐）。打板专题 8 张表已于 2026-04-09 补齐（`top_list`、`top_inst`、`limit_list`、`limit_step`、`limit_cpt`、`dc_index`×3类型、`dc_member`、`dc_daily`）。
 
 #### CATEGORY_ORDER 排序
 

@@ -2,7 +2,8 @@
 龙虎榜机构明细 Service
 """
 import asyncio
-from datetime import datetime
+import calendar
+from datetime import datetime, date
 from typing import Dict, Optional
 import pandas as pd
 from loguru import logger
@@ -255,6 +256,113 @@ class TopInstService:
                 "message": f"同步失败: {str(e)}",
                 "records": 0
             }
+
+    @staticmethod
+    def _generate_months(start_date: str, end_date: str) -> list:
+        """将日期范围切分为自然月片段，每片返回 (month_start, month_end)，均为 YYYYMMDD。"""
+        start_d = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+        end_d = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+        segments = []
+        cur = date(start_d.year, start_d.month, 1)
+        while cur <= end_d:
+            ms = max(cur, start_d)
+            last_day = calendar.monthrange(cur.year, cur.month)[1]
+            me = min(date(cur.year, cur.month, last_day), end_d)
+            segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
+            if cur.month == 12:
+                cur = date(cur.year + 1, 1, 1)
+            else:
+                cur = date(cur.year, cur.month + 1, 1)
+        return segments
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        update_state_fn=None
+    ) -> Dict:
+        """逐交易日全量同步龙虎榜机构明细历史数据（支持 Redis 续继）
+
+        top_inst 接口只接受 trade_date（必需），不支持日期范围，必须逐日请求。
+        Redis Key: sync:top_inst:full_history:progress
+        Redis 续继 Key 格式："{trade_date}"（每个交易日）
+        """
+        FULL_HISTORY_START_DATE = "20050101"
+        PROGRESS_KEY = "sync:top_inst:full_history:progress"
+
+        effective_start = start_date or FULL_HISTORY_START_DATE
+        today = datetime.now().strftime("%Y%m%d")
+
+        all_days = await asyncio.to_thread(
+            self.calendar_repo.get_trading_days_between, effective_start, today
+        )
+        total = len(all_days)
+        logger.info(f"[全量top_inst] 共 {total} 个交易日")
+
+        completed_set = redis_client.smembers(PROGRESS_KEY)
+        completed_set = {d.decode() if isinstance(d, bytes) else d for d in completed_set}
+        pending = [d for d in all_days if d not in completed_set]
+        skip_count = len(all_days) - len(pending)
+        success_count = 0
+        error_count = 0
+        total_records = 0
+
+        provider = self._get_provider()
+        sem = asyncio.Semaphore(max(1, concurrency))
+
+        async def sync_day(trade_date: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(
+                        provider.get_top_inst,
+                        trade_date=trade_date
+                    )
+                    records = 0
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.top_inst_repo.bulk_upsert, df)
+                    return trade_date, True, records, None
+                except Exception as e:
+                    logger.warning(f"[全量top_inst] {trade_date} 失败: {e}")
+                    return trade_date, False, 0, str(e)
+
+        BATCH_SIZE = concurrency * 4
+        for i in range(0, len(pending), BATCH_SIZE):
+            batch = pending[i:i + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_day(d) for d in batch])
+
+            for trade_date, ok, records, _err in results:
+                if ok:
+                    redis_client.sadd(PROGRESS_KEY, trade_date)
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+
+            if update_state_fn:
+                done = skip_count + success_count + error_count
+                pct = int(done / total * 100) if total > 0 else 0
+                update_state_fn(
+                    state='PROGRESS',
+                    meta={
+                        'current': done, 'total': total, 'percent': pct,
+                        'success': success_count, 'skipped': skip_count,
+                        'errors': error_count, 'records': total_records
+                    }
+                )
+
+        all_done = (skip_count + success_count) >= total
+        if all_done and error_count == 0:
+            redis_client.delete(PROGRESS_KEY)
+            logger.info(f"[全量top_inst] 全部完成，已清除进度记录")
+
+        return {
+            'status': 'success',
+            'success': success_count, 'skipped': skip_count,
+            'errors': error_count, 'records': total_records,
+            'total_segments': total
+        }
 
     def _get_provider(self):
         """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""

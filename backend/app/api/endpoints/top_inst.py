@@ -1,6 +1,7 @@
 """
 龙虎榜机构明细 API 端点
 """
+import asyncio
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from datetime import date
@@ -162,3 +163,40 @@ async def sync_async(
         data=task_data,
         message=date_msg
     )
+
+
+@router.post("/sync-full-history")
+async def sync_top_inst_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从最早历史开始"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """全量同步龙虎榜机构明细历史数据（按月切片，支持 Redis 续继）"""
+    from app.tasks.top_inst_tasks import sync_top_inst_full_history_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'top_inst')
+
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+
+    sync_config_repo = SyncConfigRepository()
+    cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'top_inst')
+    if concurrency is None:
+        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+    celery_task = sync_top_inst_full_history_task.apply_async(
+        kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+    )
+
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_top_inst_full_history',
+        display_name='龙虎榜机构明细（全量历史）',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+        source='top_inst_page'
+    )
+
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

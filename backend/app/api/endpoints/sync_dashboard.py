@@ -74,6 +74,18 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "stk_shock":             "sync:stk_shock:full_history:progress",
     "stk_high_shock":        "sync:stk_high_shock:full_history:progress",
     "stk_alert":             "sync:stk_alert:full_history:progress",
+    # 打板专题
+    "top_list":              "sync:top_list:full_history:progress",
+    "top_inst":              "sync:top_inst:full_history:progress",
+    "limit_list":            "sync:limit_list:full_history:progress",
+    "limit_step":            "sync:limit_step:full_history:progress",
+    "limit_cpt":             "sync:limit_cpt:full_history:progress",
+    # dc_index 按板块类型分 key，此处列出默认类型（概念板块）
+    "dc_index":              "sync:dc_index:full_history:progress:概念板块",
+    "dc_index_industry":     "sync:dc_index:full_history:progress:行业板块",
+    "dc_index_region":       "sync:dc_index:full_history:progress:地域板块",
+    "dc_member":             "sync:dc_member:full_history:progress",
+    "dc_daily":              "sync:dc_daily:full_history:progress",
 }
 
 

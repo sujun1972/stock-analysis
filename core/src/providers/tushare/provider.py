@@ -1384,7 +1384,9 @@ class TushareProvider(BaseDataProvider):
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         limit_type: Optional[str] = None,
-        exchange: Optional[str] = None
+        exchange: Optional[str] = None,
+        limit: int = 2500,
+        offset: int = 0
     ) -> pd.DataFrame:
         """
         获取涨跌停列表
@@ -1425,6 +1427,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 trade_date=trade_date, start_date=start_date, end_date=end_date,
                 ts_code=ts_code, limit_type=limit_type, exchange=exchange,
+                limit=limit, offset=offset,
             )
         )
 
@@ -1434,7 +1437,9 @@ class TushareProvider(BaseDataProvider):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None,
-        nums: Optional[str] = None
+        nums: Optional[str] = None,
+        limit: int = 2000,
+        offset: int = 0
     ) -> pd.DataFrame:
         """
         获取连板天梯（每天连板个数晋级的股票）
@@ -1460,6 +1465,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 trade_date=trade_date, start_date=start_date, end_date=end_date,
                 ts_code=ts_code, nums=nums,
+                limit=limit, offset=offset,
             )
         )
 
@@ -1468,7 +1474,9 @@ class TushareProvider(BaseDataProvider):
         trade_date: Optional[str] = None,
         ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: int = 2000,
+        offset: int = 0
     ) -> pd.DataFrame:
         """
         获取最强板块统计（每天涨停股票最多最强的概念板块）
@@ -1498,6 +1506,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 trade_date=trade_date, ts_code=ts_code,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 
@@ -2847,7 +2856,9 @@ class TushareProvider(BaseDataProvider):
         con_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: int = 5000,
+        offset: int = 0
     ) -> pd.DataFrame:
         """
         获取东方财富板块成分数据
@@ -2889,6 +2900,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 ts_code=ts_code, con_code=con_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 
@@ -2899,7 +2911,9 @@ class TushareProvider(BaseDataProvider):
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        idx_type: str = '概念板块'
+        idx_type: str = '概念板块',
+        limit: int = 5000,
+        offset: int = 0
     ) -> pd.DataFrame:
         """
         获取东方财富板块数据（概念/行业/地域）
@@ -2948,6 +2962,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 ts_code=ts_code, name=name, trade_date=trade_date,
                 start_date=start_date, end_date=end_date, idx_type=idx_type,
+                limit=limit, offset=offset,
             )
         )
 
@@ -2957,7 +2972,9 @@ class TushareProvider(BaseDataProvider):
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        idx_type: Optional[str] = None
+        idx_type: Optional[str] = None,
+        limit: int = 2000,
+        offset: int = 0
     ) -> pd.DataFrame:
         """
         获取东方财富概念板块行情数据
@@ -2999,6 +3016,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date, idx_type=idx_type,
+                limit=limit, offset=offset,
             )
         )
 
