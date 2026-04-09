@@ -1533,7 +1533,9 @@ docker-compose exec -T timescaledb psql -U stock_user -d stock_analysis < db_ini
 - [ ] 前端 API 客户端已创建并导出，`getData` 返回类型包含 `trade_date?`（用于日期回填）
 - [ ] 前端页面实现了数据展示、筛选、同步功能
 - [ ] 菜单项已添加到 AdminLayout
-- [ ] **sync_configs 表已登记**（`105_create_sync_configs.sql` 追加一行并重新执行）
+- [ ] **sync_configs 表已登记**（`105_create_sync_configs.sql` 追加一行并重新执行）；若有全量同步，`full_sync_task_name` 必须填写任务名（不能为 NULL），`full_sync_strategy` 不能为 `'none'`
+- [ ] **全量同步路由命名**：后端路由必须注册为 `/sync-full-history`（不带 `-async` 后缀），与前端 `handleSync` 拼接逻辑一致
+- [ ] **`FULL_SYNC_REDIS_KEYS` 已更新**（`sync_dashboard.py`），新增全量同步表的 Redis 续继进度 key
 - [ ] Celery Worker 已重启并验证任务注册成功
 - [ ] 所有代码遵循项目三层架构（Repository → Service → API）
 - [ ] 日期格式正确处理（数据库 YYYYMMDD ↔ API/前端 YYYY-MM-DD）
@@ -1768,7 +1770,8 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 - `table_key`：唯一标识，与 `data_ops.py` 的 `CLEARABLE_TABLES` 白名单对应
 - `api_prefix`：后端 API 前缀（如 `/income`），用于构造 `sync-async` 端点，**页面上的增量/全量同步按钮通过它调用**
 - `page_url`：对应前端数据页面 URL，支持点击跳转
-- `full_sync_strategy`：`'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none'`
+- `full_sync_strategy`：`'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none'`；若有全量同步能力，**禁止填 `NULL` 或 `'none'`**——同步配置页面通过 `!!full_sync_task_name` 判断是否显示"全量"按钮，NULL 会导致按钮不显示
+- `full_sync_task_name`：对应 Celery 全量任务名（如 `tasks.sync_xxx_full_history`）；后端已实现全量接口但此字段为 NULL，会导致同步配置页面只有"增量"按钮
 - `incremental_sync_strategy`：增量同步策略，`'by_date_range' | 'by_date' | 'by_week' | 'by_month' | 'by_ts_code' | 'snapshot' | 'none'`，NULL 表示使用接口默认逻辑
 - `api_limit`：接口单次请求上限（超出则分页继续），用于分页循环的 `limit` 参数
 - `max_requests_per_minute`：每分钟最大请求数（NULL = 继承全局设置；0 = 不限速；正整数 = 覆盖全局）
@@ -1780,7 +1783,7 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 
 `FULL_SYNC_REDIS_KEYS`（在 `sync_dashboard.py` 中维护）记录各表全量同步的 Redis Set key。新增支持全量同步续继的数据表时，需同步更新该字典。
 
-**⚠️ 新增全量同步时必须同步更新 `FULL_SYNC_REDIS_KEYS`**，否则同步配置页面无法查询/清除该表的续继进度。遗漏此步骤是常见错误：`moneyflow_hsgt`、`moneyflow_mkt_dc`、`moneyflow_ind_dc` 均曾因此缺失进度查询能力（已于 2026-04-06 补齐）。打板专题 8 张表已于 2026-04-09 补齐（`top_list`、`top_inst`、`limit_list`、`limit_step`、`limit_cpt`、`dc_index`×3类型、`dc_member`、`dc_daily`）。
+**⚠️ 新增全量同步时必须同步更新 `FULL_SYNC_REDIS_KEYS`**，否则同步配置页面无法查询/清除该表的续继进度。遗漏此步骤是常见错误：`moneyflow_hsgt`、`moneyflow_mkt_dc`、`moneyflow_ind_dc` 均曾因此缺失进度查询能力（已于 2026-04-06 补齐）。打板专题 8 张表已于 2026-04-09 补齐（`top_list`、`top_inst`、`limit_list`、`limit_step`、`limit_cpt`、`dc_index`×3类型、`dc_member`、`dc_daily`）。`fina_audit` 已于 2026-04-09 补齐。
 
 #### CATEGORY_ORDER 排序
 

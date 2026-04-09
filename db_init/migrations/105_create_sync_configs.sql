@@ -413,9 +413,9 @@ INSERT INTO sync_configs (
 
 ('fina_audit',      '财务审计意见',   '财务数据', 807,
  'tasks.sync_fina_audit', 90,
- NULL, 'none', 1,
+ 'tasks.sync_fina_audit_full_history', 'by_ts_code', 5,
  FALSE, NULL,
- '/financial/fina-audit', '/fina-audit', 500, '必填ts_code，无法全市场拉取'),
+ '/financial/fina-audit', '/fina-audit', 500, '必填ts_code，逐只股票全量拉取'),
 
 ('fina_mainbz',     '主营业务构成',   '财务数据', 808,
  'tasks.sync_fina_mainbz', 90,
@@ -425,7 +425,7 @@ INSERT INTO sync_configs (
 
 ('disclosure_date', '财报披露计划',   '财务数据', 809,
  'tasks.sync_disclosure_date', 90,
- NULL, 'none', 1,
+ 'tasks.sync_disclosure_date_full_history', 'by_quarter', 1,
  FALSE, NULL,
  '/financial/disclosure-date', '/disclosure-date', 500, NULL)
 

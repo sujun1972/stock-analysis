@@ -45,6 +45,7 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "dividend":         "sync:dividend:full_history:progress",
     "fina_indicator":   "sync:fina_indicator:full_history:progress",
     "fina_mainbz":      "sync:fina_mainbz:full_history:progress",
+    "fina_audit":       "sync:fina_audit:full_history:progress",
     "disclosure_date":  "sync:disclosure_date:full_history:progress",
     "pledge_stat":      "sync:pledge_stat:full_history:progress",
     "repurchase":       "sync:repurchase:full_history:progress",

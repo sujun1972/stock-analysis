@@ -186,7 +186,7 @@ async def sync_fina_mainbz_async(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/sync-full-history-async")
+@router.post("/sync-full-history")
 async def sync_fina_mainbz_full_history_async(
     start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),

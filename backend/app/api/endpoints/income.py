@@ -184,7 +184,7 @@ async def sync_income_async(
         return ApiResponse.error(message=f"任务提交失败: {str(e)}")
 
 
-@router.post("/sync-full-history-async")
+@router.post("/sync-full-history")
 async def sync_income_full_history_async(
     start_date: Optional[str] = Query(None, description="起始日期（YYYYMMDD），不传则从系统配置读取"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),

@@ -369,10 +369,7 @@ export default function SyncConfigPage() {
       const params: Record<string, string | number> = {}
       if (type === 'full') {
         if (item.full_sync_concurrency) params.concurrency = item.full_sync_concurrency
-        if (earliestDate) {
-          // YYYY-MM-DD → YYYYMMDD
-          params.start_date = earliestDate.replace(/-/g, '')
-        }
+        // start_date 由后端从任务默认值读取，不从前端传入
         // 全量同步前先清除 Redis 续继进度，确保从头开始而非续继上次
         try {
           await syncDashboardApi.clearProgress(item.table_key)

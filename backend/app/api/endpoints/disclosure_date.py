@@ -183,7 +183,7 @@ async def sync_disclosure_date_async(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/sync-full-history-async")
+@router.post("/sync-full-history")
 async def sync_disclosure_date_full_history_async(
     start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
