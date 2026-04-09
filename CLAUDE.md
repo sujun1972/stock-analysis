@@ -406,10 +406,10 @@ const handleSyncConfirm = async () => {
 | 板块资金流向 | `/moneyflow/ind-dc` | "全部"同步依次提交行业/概念/地域三任务；TOP 20 图表 |
 | 个股资金流向（Tushare） | `/moneyflow/stock` | 数据单位万元 |
 | 个股资金流向（DC） | `/moneyflow/stock-dc` | 数据单位亿元 |
-| 融资融券交易汇总 | `/margin/summary` | |
-| 融资融券交易明细 | `/margin/detail` | ETF名称从 margin_secs 回退；ETF不可点击跳转 |
-| 融资融券标的 | `/margin/secs` | isStock 排除5/1/821前缀 |
-| 转融资交易汇总 | `/margin/slb-len` | |
+| 融资融券交易汇总 | `/margin/summary` | 全量同步按月切片（5并发，Redis续继），起始 20100101；汇总每月约60条，不分页 |
+| 融资融券交易明细 | `/margin/detail` | ETF名称从 margin_secs 回退；ETF不可点击跳转；全量同步按月切片（5并发，Redis续继），起始 20100101；明细每月约5000~6000条，需分页 |
+| 融资融券标的 | `/margin/secs` | isStock 排除5/1/821前缀；全量同步按月切片（5并发，Redis续继），起始 20100101；每日约3000条，直接调用 `api_client.pro.margin_secs()` 分页 |
+| 转融资交易汇总 | `/margin/slb-len` | 全量同步按月切片（5并发，Redis续继），起始 20130101；每月约20条，不分页 |
 | 龙虎榜每日明细 | `/boardgame/top-list` | 全量同步逐交易日请求（top_list 接口 trade_date 必需，不支持日期范围），5并发，Redis续继，起始 20050101 |
 | 龙虎榜机构明细 | `/boardgame/top-inst` | 全量同步逐交易日请求（同上），5并发，Redis续继，起始 20050101 |
 | 涨跌停列表 | `/boardgame/limit-list` | 增量同步按回看天数（默认7天）；全量同步按月切片（5并发，Redis续继） |

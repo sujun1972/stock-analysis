@@ -1042,7 +1042,9 @@ class TushareProvider(BaseDataProvider):
     def get_margin_detail(self, ts_code: Optional[str] = None,
                          trade_date: Optional[str] = None,
                          start_date: Optional[str] = None,
-                         end_date: Optional[str] = None) -> pd.DataFrame:
+                         end_date: Optional[str] = None,
+                         limit: Optional[int] = None,
+                         offset: Optional[int] = None) -> pd.DataFrame:
         """
         获取融资融券详细数据（个股）
         积分消耗：300分
@@ -1052,6 +1054,8 @@ class TushareProvider(BaseDataProvider):
             trade_date: 交易日期 YYYYMMDD
             start_date: 开始日期 YYYYMMDD
             end_date: 结束日期 YYYYMMDD
+            limit: 每次返回记录数
+            offset: 偏移量
 
         Returns:
             pd.DataFrame: 融资融券数据
@@ -1061,6 +1065,7 @@ class TushareProvider(BaseDataProvider):
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 

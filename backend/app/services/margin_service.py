@@ -7,8 +7,9 @@
 """
 
 import asyncio
+import calendar
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pandas as pd
 from loguru import logger
 
@@ -151,6 +152,112 @@ class MarginService:
         # 使用 Repository 批量插入
         records = await asyncio.to_thread(self.margin_repo.bulk_upsert, df)
         return records
+
+    @staticmethod
+    def _generate_months(start_date: str, end_date: str) -> list:
+        """将日期范围切分为自然月片段，每片返回 (month_start, month_end)，均为 YYYYMMDD。"""
+        start_d = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+        end_d = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+        segments = []
+        cur = date(start_d.year, start_d.month, 1)
+        while cur <= end_d:
+            ms = max(cur, start_d)
+            last_day = calendar.monthrange(cur.year, cur.month)[1]
+            me = min(date(cur.year, cur.month, last_day), end_d)
+            segments.append((ms.strftime('%Y%m%d'), me.strftime('%Y%m%d')))
+            if cur.month == 12:
+                cur = date(cur.year + 1, 1, 1)
+            else:
+                cur = date(cur.year, cur.month + 1, 1)
+        return segments
+
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 5,
+        strategy: str = 'by_month',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0
+    ) -> Dict:
+        """按自然月切片全量同步融资融券交易汇总历史数据（支持 Redis 续继）
+
+        Redis Key: sync:margin:full_history:progress
+        """
+        FULL_HISTORY_START_DATE = "20100101"
+        PROGRESS_KEY = "sync:margin:full_history:progress"
+
+        effective_start = start_date or FULL_HISTORY_START_DATE
+        today = datetime.now().strftime("%Y%m%d")
+
+        all_segments = self._generate_months(effective_start, today)
+        total = len(all_segments)
+        logger.info(f"[全量margin] 共 {total} 个月度片段")
+
+        completed_set = redis_client.smembers(PROGRESS_KEY)
+        completed_set = {d.decode() if isinstance(d, bytes) else d for d in completed_set}
+        pending = [(ms, me) for ms, me in all_segments if ms not in completed_set]
+        skip_count = len(completed_set)
+        success_count = 0
+        error_count = 0
+        total_records = 0
+
+        provider = self._get_provider()
+        sem = asyncio.Semaphore(max(1, concurrency))
+
+        async def sync_month(ms: str, me: str):
+            async with sem:
+                try:
+                    df = await asyncio.to_thread(
+                        provider.get_margin,
+                        start_date=ms,
+                        end_date=me,
+                    )
+                    records = 0
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.margin_repo.bulk_upsert, df)
+                    return ms, me, True, records, None
+                except Exception as e:
+                    logger.warning(f"[全量margin] 片段 {ms}-{me} 失败: {e}")
+                    return ms, me, False, 0, str(e)
+
+        BATCH_SIZE = concurrency * 2
+        for i in range(0, len(pending), BATCH_SIZE):
+            batch = pending[i:i + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_month(ms, me) for ms, me in batch])
+
+            for ms, _me, ok, records, _err in results:
+                if ok:
+                    redis_client.sadd(PROGRESS_KEY, ms)
+                    success_count += 1
+                    total_records += records
+                else:
+                    error_count += 1
+
+            if update_state_fn:
+                done = skip_count + success_count + error_count
+                pct = int(done / total * 100) if total > 0 else 0
+                update_state_fn(
+                    state='PROGRESS',
+                    meta={
+                        'current': done, 'total': total, 'percent': pct,
+                        'success': success_count, 'skipped': skip_count,
+                        'errors': error_count, 'records': total_records
+                    }
+                )
+
+        all_done = (skip_count + success_count) >= total
+        if all_done and error_count == 0:
+            redis_client.delete(PROGRESS_KEY)
+            logger.info(f"[全量margin] 全部完成，已清除进度记录")
+
+        return {
+            'status': 'success',
+            'success': success_count, 'skipped': skip_count,
+            'errors': error_count, 'records': total_records,
+            'total_segments': total
+        }
 
     async def resolve_default_date_range(self) -> Dict[str, Optional[str]]:
         """

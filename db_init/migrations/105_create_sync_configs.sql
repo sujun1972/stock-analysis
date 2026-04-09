@@ -169,25 +169,25 @@ INSERT INTO sync_configs (
 -- ============ 两融及转融通 ============
 ('margin',        '融资融券交易汇总', '两融及转融通', 510,
  'tasks.sync_margin', 30,
- NULL, 'none', 1,
+ 'tasks.sync_margin_full_history', 'by_month', 5,
  FALSE, NULL,
  '/margin/summary', '/margin', NULL, NULL),
 
 ('margin_detail', '融资融券交易明细', '两融及转融通', 515,
  'tasks.sync_margin_detail', 30,
- NULL, 'none', 1,
+ 'tasks.sync_margin_detail_full_history', 'by_month', 5,
  FALSE, NULL,
  '/margin/detail', '/margin-detail', 2000, NULL),
 
 ('margin_secs',   '融资融券标的',     '两融及转融通', 520,
  'extended.sync_margin_secs', 1,
- NULL, 'none', 1,
+ 'tasks.sync_margin_secs_full_history', 'by_month', 5,
  FALSE, NULL,
  '/margin/secs', '/margin-secs', NULL, '盘前每日更新'),
 
 ('slb_len',       '转融资交易汇总',   '两融及转融通', 525,
  'tasks.sync_slb_len', 30,
- NULL, 'none', 1,
+ 'tasks.sync_slb_len_full_history', 'by_month', 5,
  FALSE, NULL,
  '/margin/slb-len', '/slb-len', 2000, NULL),
 

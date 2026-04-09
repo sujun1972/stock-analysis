@@ -162,3 +162,47 @@ async def sync_slb_len_async(
     except Exception as e:
         logger.error(f"提交转融资交易汇总同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_slb_len_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从最早历史开始"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """全量同步转融资交易汇总历史数据（按月切片，支持 Redis 续继）"""
+    try:
+        from app.tasks.slb_len_tasks import sync_slb_len_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        from app.services import TaskHistoryHelper
+
+        await asyncio.to_thread(release_stale_lock, 'slb_len')
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'slb_len')
+        if concurrency is None:
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+        celery_task = sync_slb_len_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_slb_len_full_history',
+            display_name='转融资交易汇总（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+            source='slb_len_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交转融资交易汇总全量同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -4,14 +4,15 @@
 提供融资融券标的数据的查询、同步和统计功能
 """
 
-from fastapi import APIRouter, Depends
+import asyncio
+from fastapi import APIRouter, Depends, Query
 from typing import Optional
 
 from app.models.api_response import ApiResponse
 from app.services.margin_secs_service import MarginSecsService
 from app.services import TaskHistoryHelper
 from app.tasks.extended_sync_tasks import sync_margin_secs_task
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_admin
 from app.models.user import User
 
 router = APIRouter()
@@ -148,3 +149,48 @@ async def get_margin_secs_statistics(
     )
 
     return ApiResponse.success(data=statistics)
+
+
+@router.post("/sync-full-history")
+async def sync_margin_secs_full_history(
+    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从最早历史开始"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """全量同步融资融券标的历史数据（按月切片，支持 Redis 续继）"""
+    try:
+        from app.tasks.extended_sync_tasks import sync_margin_secs_full_history_task
+        from app.repositories.sync_config_repository import SyncConfigRepository
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+
+        await asyncio.to_thread(release_stale_lock, 'margin_secs')
+
+        start_date_formatted = start_date.replace('-', '') if start_date else None
+
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'margin_secs')
+        if concurrency is None:
+            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+
+        celery_task = sync_margin_secs_full_history_task.apply_async(
+            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+        )
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_margin_secs_full_history',
+            display_name='融资融券标的（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={'start_date': start_date_formatted, 'concurrency': concurrency},
+            source='margin_secs_page'
+        )
+
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        from fastapi import HTTPException
+        from loguru import logger
+        logger.error(f"提交融资融券标的全量同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
