@@ -7,8 +7,8 @@
 
 import pandas as pd
 import psycopg2
-import logging
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
+from src.utils.logger import get_logger
 from datetime import datetime, timedelta
 
 # 导入异常类
@@ -20,7 +20,7 @@ except ImportError:
 if TYPE_CHECKING:
     from .connection_pool_manager import ConnectionPoolManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DataQueryManager:

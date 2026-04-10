@@ -6,12 +6,13 @@
 采用单一职责原则，将功能拆分为多个专门的管理器。
 """
 
-import logging
 import os
 import threading
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 import pandas as pd
-from loguru import logger
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 import psycopg2
 
 # 导入专门的管理器
@@ -45,8 +46,6 @@ except ImportError:
             'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
         }
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:

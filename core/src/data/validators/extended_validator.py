@@ -7,10 +7,10 @@ import pandas as pd
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timedelta
-import logging
 from .base_validator import BaseDataValidator
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ExtendedDataValidator(BaseDataValidator):

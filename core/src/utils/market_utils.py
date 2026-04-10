@@ -6,9 +6,9 @@
 
 from datetime import datetime, time, timedelta
 from typing import Tuple
-import logging
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MarketUtils:

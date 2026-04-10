@@ -7,17 +7,17 @@ import pandas as pd
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, date
-import logging
 from abc import ABC, abstractmethod
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BaseDataValidator(ABC):
     """基础数据验证器抽象类"""
 
     def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = get_logger(self.__class__.__name__)
         self.validation_rules = {}
         self.error_threshold = 0.05  # 5%的错误容忍度
 

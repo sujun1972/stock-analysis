@@ -8,10 +8,10 @@
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extensions import connection
-import logging
 from typing import Dict, Any, Optional
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ConnectionPoolManager:

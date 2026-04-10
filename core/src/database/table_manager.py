@@ -5,8 +5,8 @@
 负责创建和管理数据库表结构、索引等。
 """
 
-import logging
 import psycopg2
+from src.utils.logger import get_logger
 from typing import TYPE_CHECKING
 
 # 导入异常类
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from psycopg2.extensions import cursor as Cursor
     from .connection_pool_manager import ConnectionPoolManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TableManager:
