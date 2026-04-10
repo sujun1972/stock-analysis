@@ -1,7 +1,7 @@
 """
 策略动态加载器 - 统一入口
 
-完全数据库驱动的策略加载系统，支持入场策略和离场策略的动态加载。
+完全数据库驱动的策略加载系统，支持入场策略、离场策略、选股策略的动态加载。
 策略代码存储在数据库中，运行时通过 exec() 动态执行。
 
 功能:
@@ -9,12 +9,12 @@
 - 代码哈希验证（SHA-256）
 - 安全的命名空间隔离
 - 支持自定义配置参数覆盖
-
-作者: Backend Team
-创建日期: 2026-03-07
+- 选股策略执行：构建全市场价格 DataFrame，调用 calculate_scores()，返回 top-N 股票代码
 """
 import sys
+import asyncio
 import hashlib
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from loguru import logger
@@ -86,12 +86,22 @@ class StrategyDynamicLoader:
         core_module = types.ModuleType('core')
         import src.strategies
         import src.ml
+        import src.features
+        import src.features.technical_indicators
+        import src.features.alpha_factors
         core_module.strategies = src.strategies
         core_module.ml = src.ml
+        core_module.features = src.features
 
         sys.modules['core'] = core_module
         sys.modules['core.strategies'] = src.strategies
         sys.modules['core.ml'] = src.ml
+        sys.modules['core.features'] = src.features
+        # 选股策略常用子模块别名
+        sys.modules['core.strategies.technical_indicators'] = src.features.technical_indicators
+        sys.modules['core.strategies.alpha_factors'] = src.features.alpha_factors
+        sys.modules['core.features.technical_indicators'] = src.features.technical_indicators
+        sys.modules['core.features.alpha_factors'] = src.features.alpha_factors
 
         namespace = {
             '__builtins__': __builtins__,
@@ -245,3 +255,128 @@ class StrategyDynamicLoader:
         logger.info(f"✓ 成功加载离场管理器: {len(exit_strategies)} 个策略")
 
         return exit_manager
+
+    @staticmethod
+    async def run_stock_selection(
+        strategy_record: Dict[str, Any],
+        lookback_days: int = 60,
+        top_n: Optional[int] = None,
+    ) -> List[str]:
+        """
+        执行选股策略，返回按评分降序排列的 ts_code 列表。
+
+        流程：
+        1. 加载策略实例
+        2. 从 stock_daily 获取近 lookback_days 天收盘价，构建 prices DataFrame
+        3. 调用 strategy.calculate_scores(prices, features, {})
+        4. 取前 top_n 只股票（默认从 strategy.default_params.top_n 读取，再兜底 50）
+
+        Args:
+            strategy_record: 来自 StrategyRepository.get_by_id() 的策略字典
+            lookback_days: 价格回看天数（多取 10 天作为缓冲，保证实际可用天数足够）
+            top_n: 最多返回股票数量；None 时从 default_params.top_n 读取，默认 50
+
+        Returns:
+            ts_code 列表，如 ["000001.SZ", "600000.SH", ...]
+            策略执行失败时返回空列表并记录警告日志。
+
+        Raises:
+            ValueError: 策略类型不是 stock_selection
+        """
+        import pandas as pd
+        import numpy as np
+        from app.repositories.stock_daily_repository import StockDailyRepository
+
+        if strategy_record.get("strategy_type") != "stock_selection":
+            raise ValueError(
+                f"策略 {strategy_record.get('id')} 不是选股策略，"
+                f"实际类型: {strategy_record.get('strategy_type')}"
+            )
+
+        strategy = StrategyDynamicLoader.load_strategy(strategy_record)
+
+        # 计算日期范围（多取 10 天缓冲以覆盖非交易日）
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = (datetime.now() - timedelta(days=lookback_days + 10)).strftime("%Y%m%d")
+
+        daily_repo = StockDailyRepository()
+
+        def _fetch_prices() -> list:
+            """从 stock_daily 同步拉取全市场收盘价（在线程池中执行）"""
+            conn = daily_repo.db.get_connection()
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT code, date, close
+                    FROM stock_daily
+                    WHERE date >= %s AND date <= %s
+                      AND close IS NOT NULL AND close > 0
+                    ORDER BY date ASC
+                    """,
+                    (start_date, end_date),
+                )
+                rows = cur.fetchall()
+                cur.close()
+                return rows
+            finally:
+                daily_repo.db.release_connection(conn)
+
+        rows = await asyncio.to_thread(_fetch_prices)
+        if not rows:
+            logger.warning(f"选股策略 {strategy_record.get('id')} 无可用价格数据，返回空列表")
+            return []
+
+        def _code_to_ts_code(code: str) -> str:
+            """将纯数字代码（如 600000）转为 ts_code 格式（如 600000.SH）"""
+            if "." in code:
+                return code.upper()
+            if code.startswith("6"):
+                return f"{code}.SH"
+            if code.startswith("4") or code.startswith("8"):
+                return f"{code}.BJ"
+            return f"{code}.SZ"
+
+        # 构建 prices DataFrame: index=日期, columns=ts_code
+        df = pd.DataFrame(rows, columns=["code", "date", "close"])
+        df["date"] = pd.to_datetime(df["date"].astype(str))
+        # psycopg2 返回 Decimal，需转 float 才能正确做 groupby/mean
+        df["close"] = df["close"].astype(float)
+        df["ts_code"] = df["code"].apply(_code_to_ts_code)
+        # stock_daily 同一日期同一股票可能存在重复行，取均值去重
+        df = df.groupby(["date", "ts_code"], as_index=False)["close"].mean()
+        prices = df.pivot(index="date", columns="ts_code", values="close")
+        prices = prices.sort_index().tail(lookback_days)
+
+        # 调用策略打分（空 features，选股策略自行从 prices 计算因子）
+        features = pd.DataFrame(index=prices.columns)
+        try:
+            scores = await asyncio.to_thread(
+                strategy.calculate_scores, prices, features, {}
+            )
+        except Exception as e:
+            logger.warning(f"选股策略 {strategy_record.get('id')} calculate_scores 失败: {e}")
+            return []
+
+        if scores is None or scores.empty:
+            return []
+
+        # 兼容策略返回 list-wrapped 值的情况（部分策略返回 [[score]] 而非 score）
+        scores = pd.to_numeric(
+            scores.apply(lambda x: x[0] if isinstance(x, (list, tuple)) and len(x) > 0 else x),
+            errors="coerce",
+        )
+
+        # 确定 top_n：优先参数 > default_params > 50
+        if top_n is None:
+            dp = strategy_record.get("default_params") or {}
+            top_n = dp.get("top_n", 50) if isinstance(dp, dict) else 50
+
+        valid_scores = scores[scores > -np.inf].dropna()
+        result = valid_scores.nlargest(top_n).index.tolist()
+
+        logger.info(
+            f"选股策略执行完成: id={strategy_record.get('id')}, "
+            f"候选={len(valid_scores)}, 选出={len(result)}"
+        )
+        return result

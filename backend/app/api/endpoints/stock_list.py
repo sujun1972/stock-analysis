@@ -11,6 +11,7 @@
 
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
+from loguru import logger
 from src.database.db_manager import DatabaseManager
 from app.core.dependencies import require_admin
 from app.models.user import User
@@ -112,17 +113,42 @@ async def get_stock_list(
     industry: Optional[str] = Query(None, description="行业筛选，如: 电气设备、软件服务、化工原料"),
     concept_code: Optional[str] = Query(None, description="概念板块代码，如: BK0714.DC"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
+    stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
-    offset: int = Query(0, ge=0, description="偏移量")
+    offset: int = Query(0, ge=0, description="偏移量"),
+    skip: int = Query(0, ge=0, description="偏移量（offset别名，兼容前端）"),
 ):
     """
     查询股票列表
 
-    概念板块筛选通过 JOIN dc_member 最新一天的成分股实现。
-    当 concept_code 存在时，FROM 子句改为 stock_basic JOIN dc_member 子查询，
-    所有 WHERE 条件需带 sb. 别名。
+    - 概念板块筛选通过 JOIN dc_member 最新一天的成分股实现
+    - 当 stock_selection_strategy_id 存在时，先通过
+      StrategyDynamicLoader.run_stock_selection() 执行选股策略，
+      再将选出的 ts_code 追加为 WHERE sb.ts_code IN (...) 条件
+    - offset 和 skip 均可作为分页偏移量（前端历史原因同时传了 skip）
     """
+    from app.services.strategy_loader import StrategyDynamicLoader
+    from app.repositories.strategy_repository import StrategyRepository
+
+    # 前端同时使用 offset 和 skip 两个参数名，取非零的那个
+    effective_offset = offset if offset > 0 else skip
+
     db = DatabaseManager()
+
+    # 执行选股策略，获取选中的 ts_code 列表（失败时降级为全量，记录警告）
+    selection_ts_codes: Optional[list] = None
+    selection_strategy_name: Optional[str] = None
+    if stock_selection_strategy_id is not None:
+        strategy_repo = StrategyRepository()
+        strategy_record = strategy_repo.get_by_id(stock_selection_strategy_id)
+        if strategy_record and strategy_record.get("strategy_type") == "stock_selection":
+            selection_strategy_name = strategy_record.get("display_name")
+            try:
+                selection_ts_codes = await StrategyDynamicLoader.run_stock_selection(
+                    strategy_record
+                )
+            except Exception as e:
+                logger.warning(f"选股策略 {stock_selection_strategy_id} 执行失败，返回全量: {e}")
 
     conditions = []
     params = []
@@ -171,6 +197,20 @@ async def get_stock_list(
         params.append(f"%{search}%")
         params.append(f"%{search}%")
 
+    # 选股策略过滤：WHERE sb.ts_code IN (...)
+    if selection_ts_codes is not None:
+        if selection_ts_codes:
+            placeholders = ",".join(["%s"] * len(selection_ts_codes))
+            conditions.append(f"{col('ts_code')} IN ({placeholders})")
+            params.extend(selection_ts_codes)
+        else:
+            # 策略未选出任何股票，直接返回空
+            return ApiResponse.success(data={
+                'items': [],
+                'total': 0,
+                'strategy_name': selection_strategy_name,
+            }).to_dict()
+
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     # 查询总数
@@ -181,7 +221,7 @@ async def get_stock_list(
     total = count_result[0][0] if count_result else 0
 
     # 查询数据
-    params.extend([limit, offset])
+    params.extend([limit, effective_offset])
     result = db._execute_query(
         f"""
         SELECT sb.code, sb.name, sb.ts_code, sb.fullname, sb.enname, sb.cnspell,
@@ -219,7 +259,10 @@ async def get_stock_list(
             'status': row[17]
         })
 
-    return ApiResponse.success(data={'items': items, 'total': total}).to_dict()
+    response_data: dict = {'items': items, 'total': total}
+    if selection_strategy_name is not None:
+        response_data['strategy_name'] = selection_strategy_name
+    return ApiResponse.success(data=response_data).to_dict()
 
 
 @router.get("/statistics")

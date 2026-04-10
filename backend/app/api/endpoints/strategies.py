@@ -16,6 +16,7 @@
 """
 
 import hashlib
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -195,11 +196,15 @@ async def create_strategy(
         )
 
     # 3. 保存到数据库
+    # 从代码中提取真实类名（AI 生成的代码类名可能与 class_name 字段不一致）
+    code_class_match = re.search(r'^class\s+(\w+)\s*\(', data.code, re.MULTILINE)
+    actual_class_name = code_class_match.group(1) if code_class_match else data.class_name
+
     strategy_data = {
         "name": data.name,
         "display_name": data.display_name,
         "code": data.code,
-        "class_name": data.class_name,
+        "class_name": actual_class_name,
         "source_type": data.source_type,
         "strategy_type": data.strategy_type,
         "description": data.description,
@@ -212,6 +217,7 @@ async def create_strategy(
         "risk_level": validation_data["risk_level"],
         "parent_strategy_id": data.parent_strategy_id,
         "created_by": data.created_by,
+        "user_id": current_user.id,
     }
 
     strategy_id = repo.create(strategy_data)
@@ -640,3 +646,47 @@ async def test_strategy(
                 "error_type": e.__class__.__name__,
             }
         )
+
+
+@router.get("/{strategy_id}/run-selection", summary="运行选股策略，返回股票代码列表")
+@handle_api_errors
+async def run_stock_selection(
+    strategy_id: int,
+    top_n: int = Query(50, ge=1, le=500, description="最多返回股票数量"),
+    lookback_days: int = Query(60, ge=10, le=120, description="价格回看天数"),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    执行选股策略，返回股票代码列表。
+
+    实际执行逻辑委托给 StrategyDynamicLoader.run_stock_selection()，
+    该方法构建全市场 prices DataFrame 并调用策略的 calculate_scores()。
+    """
+    from app.services.strategy_loader import StrategyDynamicLoader
+
+    repo = StrategyRepository()
+    strategy_record = repo.get_by_id(strategy_id)
+    if not strategy_record:
+        raise HTTPException(status_code=404, detail=f"策略不存在: {strategy_id}")
+    if strategy_record["strategy_type"] != "stock_selection":
+        raise HTTPException(status_code=400, detail="该策略不是选股策略")
+
+    try:
+        top_codes = await StrategyDynamicLoader.run_stock_selection(
+            strategy_record, lookback_days=lookback_days, top_n=top_n
+        )
+        return ApiResponse.success(
+            data={
+                "strategy_id": strategy_id,
+                "strategy_name": strategy_record["display_name"],
+                "ts_codes": top_codes,
+                "total": len(top_codes),
+                "lookback_days": lookback_days,
+            },
+            message=f"选股完成，共选出 {len(top_codes)} 只股票"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"运行选股策略失败: strategy_id={strategy_id}, error={e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"选股策略执行失败: {str(e)}")

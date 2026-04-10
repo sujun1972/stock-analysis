@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { useStockStore } from '@/store/stock-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -45,6 +46,7 @@ import {
   X,
   ChevronDown,
   Plus,
+  Filter,
 } from 'lucide-react'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
@@ -255,7 +257,12 @@ function RenameListDialog({ open, list, onClose }: RenameListDialogProps) {
 }
 
 // ── 主页面 ────────────────────────────────────────────────────
-export default function StocksPage() {
+function StocksPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const stockSelectionStrategyId = searchParams.get('stock_selection_strategy_id')
+  const [selectionStrategyName, setSelectionStrategyName] = useState<string | null>(null)
+
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const {
@@ -327,17 +334,19 @@ export default function StocksPage() {
       if (industryFilter !== 'all') params.industry = industryFilter
       if (conceptFilter !== 'all') params.concept_code = conceptFilter
       if (searchTerm?.trim()) params.search = searchTerm.trim()
+      if (stockSelectionStrategyId) params.stock_selection_strategy_id = Number(stockSelectionStrategyId)
 
       const response = await apiClient.getStockList(params)
       setStocks(response.items || [])
       setTotalStocks(response.total ?? 0)
+      if (response.strategy_name) setSelectionStrategyName(response.strategy_name)
     } catch (err: any) {
       setError(err.message || '加载股票列表失败')
       if (!silent) { setStocks([]); setTotalStocks(0) }
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [currentPage, marketFilter, industryFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder, setStocks, setLoading, setError])
+  }, [currentPage, marketFilter, industryFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder, stockSelectionStrategyId, setStocks, setLoading, setError])
 
   const loadStocks = useCallback(() => fetchStocks(false), [fetchStocks])
 
@@ -435,10 +444,12 @@ export default function StocksPage() {
 
   // ── 激活列表视图时，把表格股票过滤为列表成分股 ──
   const visibleStocks = useMemo(() => {
-    if (activeListId === null) return displayedStocks
+    const base = displayedStocks
+
+    if (activeListId === null) return base
     // 列表视图：显示激活列表中在当前页也存在的股票；若搜索/筛选无结果，直接显示列表成分股
     const listCodes = new Set(activeListItems.map((i) => i.code))
-    const filtered = displayedStocks.filter((s) => listCodes.has(s.code))
+    const filtered = base.filter((s) => listCodes.has(s.code))
     // 如果当前筛选器有内容，用过滤后结果；否则直接展示列表成分股行情
     if (searchTerm || marketFilter !== 'all' || industryFilter !== 'all' || conceptFilter !== 'all') {
       return filtered
@@ -557,6 +568,35 @@ export default function StocksPage() {
         <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
           <AlertDescription className="text-red-800 dark:text-red-200">{error}</AlertDescription>
         </Alert>
+      )}
+
+      {/* 选股策略 Banner */}
+      {stockSelectionStrategyId && (
+        <div className="flex items-center gap-3 px-4 py-3 border rounded-lg bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
+          <Filter className="h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+          <div className="flex-1 min-w-0">
+            {isLoading ? (
+              <p className="text-sm text-blue-700 dark:text-blue-300">正在运行选股策略，请稍候...</p>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  选股策略：<span className="font-semibold">{selectionStrategyName}</span>
+                  <span className="ml-2 text-blue-600 dark:text-blue-400">共 {totalStocks} 只股票</span>
+                </p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                  基于近60日价格数据运行选股策略，结果仅供参考
+                </p>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => router.replace('/stocks')}
+            className="flex-shrink-0 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-200"
+            title="清除策略筛选"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
       {/* 批量操作浮动栏（已登录且有选中时显示） */}
@@ -813,12 +853,12 @@ export default function StocksPage() {
                         <span className="hidden md:inline">上一页</span>
                       </Button>
                     </PaginationItem>
-                    {currentPage > 2 && (
+                    {currentPage - 2 > 1 && (
                       <>
                         <PaginationItem>
                           <PaginationLink onClick={() => setCurrentPage(1)} isActive={false} className="cursor-pointer">1</PaginationLink>
                         </PaginationItem>
-                        {currentPage > 3 && (
+                        {currentPage - 2 > 2 && (
                           <PaginationItem className="hidden md:inline-flex"><PaginationEllipsis /></PaginationItem>
                         )}
                       </>
@@ -830,9 +870,9 @@ export default function StocksPage() {
                           <PaginationLink onClick={() => setCurrentPage(page)} isActive={currentPage === page} className="cursor-pointer">{page}</PaginationLink>
                         </PaginationItem>
                       ))}
-                    {currentPage < totalPages - 1 && (
+                    {currentPage + 2 < totalPages && (
                       <>
-                        {currentPage < totalPages - 2 && (
+                        {currentPage + 2 < totalPages - 1 && (
                           <PaginationItem className="hidden md:inline-flex"><PaginationEllipsis /></PaginationItem>
                         )}
                         <PaginationItem>
@@ -871,5 +911,13 @@ export default function StocksPage() {
         onClose={() => { setRenameDialogOpen(false); setRenameTarget(null) }}
       />
     </div>
+  )
+}
+
+export default function StocksPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-muted-foreground">加载中...</div>}>
+      <StocksPageContent />
+    </Suspense>
   )
 }

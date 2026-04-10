@@ -312,7 +312,8 @@ class ApiClient {
     industry?: string
     sort_by?: string
     sort_order?: string
-  }): Promise<PaginatedResponse<StockInfo>> {
+    stock_selection_strategy_id?: number
+  }): Promise<PaginatedResponse<StockInfo> & { strategy_name?: string }> {
     const response = await axiosInstance.get('/api/stocks/list', { params })
     const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
     // 返回嵌套在 data 字段中的分页数据
@@ -753,7 +754,7 @@ class ApiClient {
    */
   async getStrategies(params?: {
     source_type?: 'ai' | 'custom'
-    strategy_type?: 'entry' | 'exit'
+    strategy_type?: 'entry' | 'exit' | 'stock_selection'
     category?: string
     is_enabled?: boolean
     publish_status?: 'draft' | 'pending_review' | 'approved' | 'rejected'
@@ -1303,6 +1304,7 @@ class ApiClient {
    */
   async generateStrategyAsync(params: {
     strategy_requirement: string
+    strategy_type?: 'entry' | 'exit' | 'stock_selection'
     provider?: string
     use_custom_prompt?: boolean
     custom_prompt_template?: string
@@ -1313,7 +1315,7 @@ class ApiClient {
     provider_used: string
   }> {
     const response = await axiosInstance.post('/api/ai-strategy/async-generate', params)
-    return response.data
+    return response.data.data
   }
 
   /**
@@ -1331,7 +1333,7 @@ class ApiClient {
     error?: string
   }> {
     const response = await axiosInstance.get(`/api/ai-strategy/status/${taskId}`)
-    return response.data
+    return response.data.data
   }
 
   /**

@@ -22,6 +22,31 @@ Database (TimescaleDB / PostgreSQL)
 
 ---
 
+## 选股策略执行模式
+
+选股策略通过 `StrategyDynamicLoader.run_stock_selection()` 统一执行，**不要在 API 端点中内联实现**：
+
+```python
+from app.services.strategy_loader import StrategyDynamicLoader
+from app.repositories.strategy_repository import StrategyRepository
+
+repo = StrategyRepository()
+strategy_record = repo.get_by_id(strategy_id)
+ts_codes = await StrategyDynamicLoader.run_stock_selection(
+    strategy_record,
+    lookback_days=60,   # 可选，默认 60 天
+    top_n=50,           # 可选，默认从 default_params.top_n 读取
+)
+```
+
+**`GET /api/stocks/list` 支持 `stock_selection_strategy_id` 参数**，在数据库层（`WHERE ts_code IN (...)`）过滤选股结果，无需前端二次过滤。
+
+**psycopg2 Decimal 坑**：`stock_daily.close` 是 `numeric` 类型，psycopg2 返回 `decimal.Decimal`，在 pandas 中存为 `object` dtype。做 `groupby/mean` 或 `pivot` 前必须先 `df["close"] = df["close"].astype(float)`，否则抛 `Index contains duplicate entries` 或 `Invalid value` 错误。
+
+**重复行去重**：`stock_daily` 可能存在同日期同股票的重复行，pivot 前必须 `df.groupby(["date", "ts_code"], as_index=False)["close"].mean()`。
+
+---
+
 ## API 响应格式
 
 所有端点必须使用 `ApiResponse`：
