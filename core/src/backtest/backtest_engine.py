@@ -8,8 +8,11 @@ import numpy as np
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 import warnings
-from loguru import logger
 import gc
+
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 warnings.filterwarnings('ignore')
 

@@ -63,8 +63,11 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Union, Callable
 import pandas as pd
 import numpy as np
-from loguru import logger
 from functools import wraps
+
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # 导入技术指标计算器
 try:

@@ -26,9 +26,12 @@ from typing import Optional, Dict, List, Tuple, Any
 from pathlib import Path
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from loguru import logger
 import json
 import warnings
+
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 warnings.filterwarnings('ignore')
 

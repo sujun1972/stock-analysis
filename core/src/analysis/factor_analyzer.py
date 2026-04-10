@@ -14,19 +14,20 @@
 - 自动化报告：一键生成完整分析
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Tuple, Union, Any
-from loguru import logger
-from dataclasses import dataclass
-import warnings
 import time
+import warnings
+from typing import Dict, List, Optional, Tuple, Union, Any
 
+import pandas as pd
+
+from src.utils.logger import get_logger
+from src.utils.response import Response, ResponseStatus
 from .ic_calculator import ICCalculator, ICResult
 from .layering_test import LayeringTest
 from .factor_correlation import FactorCorrelation
 from .factor_optimizer import FactorOptimizer, OptimizationResult
-from src.utils.response import Response, ResponseStatus
+from ._report import FactorAnalysisReport
+from ._batch_worker import _analyze_single_factor_worker_v2
 
 # 导入异常类
 try:
@@ -46,7 +47,9 @@ except ImportError:
 
 warnings.filterwarnings('ignore')
 
-# 导入并行计算工具
+logger = get_logger(__name__)
+
+# 并行计算支持检测
 try:
     from utils.parallel_executor import ParallelExecutor
     from config.features import ParallelComputingConfig, get_feature_config
@@ -54,164 +57,6 @@ try:
 except ImportError:
     HAS_PARALLEL_SUPPORT = False
     logger.warning("并行计算模块未找到，批量分析将使用串行执行")
-
-
-# ==================== 模块级辅助函数（用于并行计算） ====================
-
-def _analyze_single_factor_worker_v2(args):
-    """
-    分析单个因子（模块级函数，用于批量并行分析）
-
-    Args:
-        args: (factor_name, factor_df, prices, forward_periods, n_layers, holding_period, method, long_short)
-
-    Returns:
-        (factor_name, report, error)
-    """
-    factor_name, factor_df, prices, forward_periods, n_layers, holding_period, method, long_short = args
-
-    try:
-        # 创建禁用并行的分析器（避免嵌套并行）
-        if HAS_PARALLEL_SUPPORT:
-            from config.features import ParallelComputingConfig
-            sub_config = ParallelComputingConfig(enable_parallel=False)
-        else:
-            sub_config = None
-
-        # 必须在这里导入，避免循环导入
-        from .factor_analyzer import FactorAnalyzer
-
-        analyzer = FactorAnalyzer(
-            forward_periods=forward_periods,
-            n_layers=n_layers,
-            holding_period=holding_period,
-            method=method,
-            long_short=long_short,
-            parallel_config=sub_config
-        )
-
-        response = analyzer.quick_analyze(
-            factor_df, prices,
-            factor_name=factor_name,
-            include_layering=True
-        )
-
-        # 从Response中提取报告数据
-        if response.is_success() or response.status.value == "warning":
-            return (factor_name, response.data, None)
-        else:
-            return (factor_name, None, response.error)
-
-    except (DataValidationError, InsufficientDataError, FeatureCalculationError, AnalysisError) as e:
-        # 已知的分析异常，直接返回错误信息
-        logger.warning(f"并行分析因子{factor_name}失败(已知异常): {e}")
-        error_dict = {
-            'error_type': e.__class__.__name__,
-            'error_code': getattr(e, 'error_code', 'KNOWN_ANALYSIS_ERROR'),
-            'message': str(e),
-            'context': {'factor_name': factor_name}
-        }
-        return (factor_name, None, error_dict)
-
-    except Exception as e:
-        # 未预期的异常
-        logger.warning(f"并行分析因子{factor_name}失败(未预期异常): {e}")
-        error_dict = {
-            'error_type': 'Exception',
-            'error_code': 'PARALLEL_ANALYSIS_FAILED',
-            'message': f'并行分析因子失败: {str(e)}',
-            'context': {'factor_name': factor_name}
-        }
-        return (factor_name, None, error_dict)
-
-
-@dataclass
-class FactorAnalysisReport:
-    """因子分析完整报告"""
-    factor_name: str
-
-    # IC分析结果
-    ic_result: Optional[ICResult] = None
-
-    # 分层测试结果
-    layering_result: Optional[pd.DataFrame] = None
-    layering_summary: Optional[Dict] = None
-
-    # 相关性分析结果（多因子时）
-    correlation_matrix: Optional[pd.DataFrame] = None
-    high_corr_pairs: Optional[List[Tuple[str, str, float]]] = None
-
-    # 优化结果（多因子时）
-    optimization_result: Optional[OptimizationResult] = None
-
-    # 综合评价
-    overall_score: Optional[float] = None
-    recommendation: Optional[str] = None
-
-    def to_dict(self) -> Dict:
-        """转换为字典格式"""
-        result = {
-            'factor_name': self.factor_name,
-        }
-
-        if self.ic_result:
-            result['ic_analysis'] = self.ic_result.to_dict()
-
-        if self.layering_result is not None:
-            result['layering_test'] = self.layering_result.to_dict()
-
-        if self.layering_summary:
-            result['layering_summary'] = self.layering_summary
-
-        if self.correlation_matrix is not None:
-            result['correlation_matrix'] = self.correlation_matrix.to_dict()
-
-        if self.high_corr_pairs:
-            result['high_correlation_pairs'] = [
-                {'factor1': f1, 'factor2': f2, 'correlation': corr}
-                for f1, f2, corr in self.high_corr_pairs
-            ]
-
-        if self.optimization_result:
-            result['optimization'] = self.optimization_result.to_dict()
-
-        if self.overall_score is not None:
-            result['overall_score'] = self.overall_score
-
-        if self.recommendation:
-            result['recommendation'] = self.recommendation
-
-        return result
-
-    def __str__(self) -> str:
-        """格式化输出"""
-        lines = [f"\n{'='*60}"]
-        lines.append(f"因子分析报告: {self.factor_name}")
-        lines.append(f"{'='*60}\n")
-
-        if self.ic_result:
-            lines.append("【IC分析】")
-            lines.append(str(self.ic_result))
-            lines.append("")
-
-        if self.layering_summary:
-            lines.append("【分层测试】")
-            for key, value in self.layering_summary.items():
-                if isinstance(value, (int, float)):
-                    lines.append(f"  {key}: {value:.4f}")
-                else:
-                    lines.append(f"  {key}: {value}")
-            lines.append("")
-
-        if self.overall_score is not None:
-            lines.append(f"【综合评分】: {self.overall_score:.2f}/100")
-
-        if self.recommendation:
-            lines.append(f"【建议】: {self.recommendation}")
-
-        lines.append(f"{'='*60}\n")
-
-        return '\n'.join(lines)
 
 
 class FactorAnalyzer:
@@ -348,7 +193,7 @@ class FactorAnalyzer:
                 )
 
             report = FactorAnalysisReport(factor_name=factor_name)
-            warnings = []
+            warn_msgs = []
 
             # 1. IC分析（必选）
             try:
@@ -360,33 +205,28 @@ class FactorAnalyzer:
                 else:
                     error_msg = ic_response.error if hasattr(ic_response, 'error') else str(ic_response)
                     logger.warning(f"IC分析失败: {error_msg}")
-                    warnings.append(f"IC分析失败: {error_msg}")
+                    warn_msgs.append(f"IC分析失败: {error_msg}")
             except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
                 logger.warning(f"IC分析失败(已知异常): {e}")
-                warnings.append(f"IC分析失败: {str(e)}")
+                warn_msgs.append(f"IC分析失败: {str(e)}")
             except Exception as e:
                 logger.warning(f"IC分析失败(未预期异常): {e}", exc_info=True)
-                warnings.append(f"IC分析失败: {str(e)}")
+                warn_msgs.append(f"IC分析失败: {str(e)}")
 
             # 2. 分层测试（可选）
             if include_layering:
                 try:
-                    layering_result = self.layering_test.perform_layering_test(
-                        factor, prices
-                    )
+                    layering_result = self.layering_test.perform_layering_test(factor, prices)
                     report.layering_result = layering_result
-
-                    # 分析单调性
                     monotonicity = self.layering_test.analyze_monotonicity(layering_result)
                     report.layering_summary = monotonicity
-
                     logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
                 except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
                     logger.warning(f"分层测试失败(已知异常): {e}")
-                    warnings.append(f"分层测试失败: {str(e)}")
+                    warn_msgs.append(f"分层测试失败: {str(e)}")
                 except Exception as e:
                     logger.warning(f"分层测试失败(未预期异常): {e}", exc_info=True)
-                    warnings.append(f"分层测试失败: {str(e)}")
+                    warn_msgs.append(f"分层测试失败: {str(e)}")
 
             # 3. 综合评分
             report.overall_score = self._calculate_overall_score(report)
@@ -394,14 +234,13 @@ class FactorAnalyzer:
 
             elapsed_time = time.time() - start_time
 
-            # 判断是否有警告
-            if warnings:
+            if warn_msgs:
                 return Response.warning(
-                    message=f"因子分析完成但有{len(warnings)}个警告",
+                    message=f"因子分析完成但有{len(warn_msgs)}个警告",
                     data=report,
                     factor_name=factor_name,
                     elapsed_time=f"{elapsed_time:.2f}s",
-                    warnings=warnings,
+                    warnings=warn_msgs,
                     overall_score=report.overall_score,
                     recommendation=report.recommendation
                 )
@@ -445,24 +284,11 @@ class FactorAnalyzer:
 
         Returns:
             Response对象，data字段包含FactorAnalysisReport
-
-        Examples:
-            >>> analyzer = FactorAnalyzer()
-            >>> response = analyzer.analyze_factor(
-            ...     factor_df, prices_df,
-            ...     factor_name='REV',
-            ...     include_ic=True,
-            ...     include_layering=True
-            ... )
-            >>> if response.is_success():
-            ...     report = response.data
-            ...     print(report.to_dict())
         """
         try:
             start_time = time.time()
             logger.info(f"完整分析因子: {factor_name}")
 
-            # 数据验证
             if factor is None or prices is None:
                 return Response.error(
                     error="因子数据或价格数据为空",
@@ -470,7 +296,6 @@ class FactorAnalyzer:
                     factor_name=factor_name
                 )
 
-            # 确保factor是DataFrame格式
             if isinstance(factor, pd.Series):
                 factor = factor.to_frame(name=factor_name)
 
@@ -506,15 +331,10 @@ class FactorAnalyzer:
             # 2. 分层测试
             if include_layering:
                 try:
-                    layering_result = self.layering_test.perform_layering_test(
-                        factor, prices
-                    )
+                    layering_result = self.layering_test.perform_layering_test(factor, prices)
                     report.layering_result = layering_result
-
-                    # 分析单调性
                     monotonicity = self.layering_test.analyze_monotonicity(layering_result)
                     report.layering_summary = monotonicity
-
                     logger.info(f"分层测试完成: 单调性={monotonicity['是否单调']}")
                 except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
                     logger.warning(f"分层测试失败(已知异常): {e}")
@@ -539,7 +359,6 @@ class FactorAnalyzer:
 
             elapsed_time = time.time() - start_time
 
-            # 检查是否有足够的分析结果
             if report.ic_result is None and report.layering_result is None:
                 return Response.error(
                     error="所有分析项目均失败",
@@ -548,7 +367,6 @@ class FactorAnalyzer:
                     warnings=warnings_list
                 )
 
-            # 判断是否有警告
             if warnings_list:
                 return Response.warning(
                     message=f"因子完整分析完成但有{len(warnings_list)}个警告",
@@ -602,25 +420,19 @@ class FactorAnalyzer:
 
         for factor_name, factor_df in factor_dict.items():
             try:
-                # 快速分析每个因子
                 response = self.quick_analyze(
                     factor_df, prices,
                     factor_name=factor_name,
                     include_layering=True
                 )
 
-                # 检查Response是否成功
                 if not (response.is_success() or response.status.name == 'WARNING'):
                     logger.warning(f"分析因子{factor_name}失败: {response.error}")
                     continue
 
-                # 从Response中提取报告
                 report = response.data
 
-                # 提取关键指标
-                row = {
-                    '因子名': factor_name,
-                }
+                row = {'因子名': factor_name}
 
                 if report.ic_result:
                     row.update({
@@ -637,7 +449,6 @@ class FactorAnalyzer:
                     })
 
                 row['综合评分'] = report.overall_score or 0
-
                 results.append(row)
 
             except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
@@ -647,7 +458,6 @@ class FactorAnalyzer:
 
         comparison_df = pd.DataFrame(results)
 
-        # 排序
         if rank_by == 'ic':
             comparison_df = comparison_df.sort_values('IC均值', ascending=False)
         elif rank_by == 'ic_ir':
@@ -655,7 +465,6 @@ class FactorAnalyzer:
         elif rank_by == 'overall_score':
             comparison_df = comparison_df.sort_values('综合评分', ascending=False)
 
-        # 相关性分析
         if include_correlation and len(factor_dict) > 1:
             try:
                 corr_matrix = self.correlation_analyzer.calculate_factor_correlation(
@@ -686,11 +495,7 @@ class FactorAnalyzer:
         Args:
             factor_dict: 因子字典
             prices: 价格DataFrame
-            optimization_method: 优化方法
-                - 'equal': 等权重
-                - 'ic': IC加权
-                - 'ic_ir': ICIR加权
-                - 'max_icir': 最大化ICIR（优化算法）
+            optimization_method: 优化方法 ('equal', 'ic', 'ic_ir', 'max_icir')
             max_weight: 单因子最大权重
             min_weight: 单因子最小权重
 
@@ -699,7 +504,6 @@ class FactorAnalyzer:
         """
         logger.info(f"优化因子组合: {len(factor_dict)}个因子, 方法={optimization_method}")
 
-        # 1. 计算各因子的IC序列
         ic_series_dict = {}
         ic_stats_list = []
 
@@ -725,37 +529,15 @@ class FactorAnalyzer:
 
         ic_stats_df = pd.DataFrame(ic_stats_list).set_index('因子名')
 
-        # 2. 根据方法选择权重
         if optimization_method == 'equal':
             weights = self.optimizer.equal_weight(list(factor_dict.keys()))
-            opt_result = OptimizationResult(
-                weights=weights,
-                objective_value=0,
-                ic_mean=0,
-                ic_ir=0,
-                method='equal'
-            )
-
+            opt_result = OptimizationResult(weights=weights, objective_value=0, ic_mean=0, ic_ir=0, method='equal')
         elif optimization_method == 'ic':
             weights = self.optimizer.ic_weight(ic_stats_df)
-            opt_result = OptimizationResult(
-                weights=weights,
-                objective_value=0,
-                ic_mean=0,
-                ic_ir=0,
-                method='ic'
-            )
-
+            opt_result = OptimizationResult(weights=weights, objective_value=0, ic_mean=0, ic_ir=0, method='ic')
         elif optimization_method == 'ic_ir':
             weights = self.optimizer.ic_ir_weight(ic_stats_df)
-            opt_result = OptimizationResult(
-                weights=weights,
-                objective_value=0,
-                ic_mean=0,
-                ic_ir=0,
-                method='ic_ir'
-            )
-
+            opt_result = OptimizationResult(weights=weights, objective_value=0, ic_mean=0, ic_ir=0, method='ic_ir')
         elif optimization_method == 'max_icir':
             opt_result = self.optimizer.optimize_max_icir(
                 ic_series_dict,
@@ -764,16 +546,10 @@ class FactorAnalyzer:
                 min_weight=min_weight
             )
             weights = opt_result.weights
-
         else:
             raise ValueError(f"未知的优化方法: {optimization_method}")
 
-        # 3. 组合因子
-        combined_factor = self.optimizer.combine_factors(
-            factor_dict,
-            weights,
-            normalize=True
-        )
+        combined_factor = self.optimizer.combine_factors(factor_dict, weights, normalize=True)
 
         logger.info(f"因子组合完成: ICIR={opt_result.ic_ir:.4f}")
 
@@ -828,7 +604,6 @@ class FactorAnalyzer:
                         include_ic=include_ic,
                         include_layering=include_layering
                     )
-                    # 从Response中提取报告
                     if response.is_success() or response.status.name == 'WARNING':
                         factor_report = response.data
                         report['individual_analysis'][factor_name] = factor_report.to_dict()
@@ -841,11 +616,7 @@ class FactorAnalyzer:
 
         # 2. 因子对比
         try:
-            comparison_df = self.compare_factors(
-                factor_dict, prices,
-                include_correlation=False,
-                rank_by='ic_ir'
-            )
+            comparison_df = self.compare_factors(factor_dict, prices, include_correlation=False, rank_by='ic_ir')
             report['comparison'] = comparison_df.to_dict('records')
         except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
             logger.warning(f"因子对比失败(已知异常): {e}")
@@ -856,15 +627,9 @@ class FactorAnalyzer:
         if include_correlation and len(factor_dict) > 1:
             try:
                 corr_matrix = self.correlation_analyzer.calculate_factor_correlation(
-                    factor_dict,
-                    aggregate_method='concat'
+                    factor_dict, aggregate_method='concat'
                 )
-
-                high_corr_pairs = self.correlation_analyzer.find_high_correlation_pairs(
-                    corr_matrix,
-                    threshold=0.7
-                )
-
+                high_corr_pairs = self.correlation_analyzer.find_high_correlation_pairs(corr_matrix, threshold=0.7)
                 report['correlation'] = {
                     'correlation_matrix': corr_matrix.to_dict(),
                     'high_correlation_pairs': [
@@ -880,18 +645,14 @@ class FactorAnalyzer:
         # 4. 组合优化
         if include_optimization and len(factor_dict) > 1:
             try:
-                opt_result, combined_factor = self.optimize_factor_portfolio(
-                    factor_dict, prices,
-                    optimization_method='max_icir'
-                )
-
+                opt_result, _ = self.optimize_factor_portfolio(factor_dict, prices, optimization_method='max_icir')
                 report['optimization'] = opt_result.to_dict()
             except (DataValidationError, InsufficientDataError, FeatureCalculationError) as e:
                 logger.warning(f"组合优化失败(已知异常): {e}")
             except Exception as e:
                 logger.warning(f"组合优化失败(未预期异常): {e}", exc_info=True)
 
-        # 5. 保存报告（如果指定路径）
+        # 5. 保存报告
         if output_path:
             import json
             with open(output_path, 'w', encoding='utf-8') as f:
@@ -918,34 +679,16 @@ class FactorAnalyzer:
 
         Returns:
             Response对象，data字段包含 {因子名: FactorAnalysisReport} 字典
-
-        Examples:
-            >>> analyzer = FactorAnalyzer()
-            >>> response = analyzer.batch_analyze(factor_dict, prices)
-            >>> if response.is_success():
-            ...     reports = response.data
-            ...     for name, report in reports.items():
-            ...         print(f"{name}: {report.overall_score}")
-
-            >>> # 或显式指定worker数量
-            >>> response = analyzer.batch_analyze(factor_dict, prices, n_jobs=8)
         """
         try:
             start_time = time.time()
             logger.info(f"批量分析{len(factor_dict)}个因子...")
 
-            # 数据验证
             if not factor_dict:
-                return Response.error(
-                    error="因子字典为空",
-                    error_code="EMPTY_FACTOR_DICT"
-                )
+                return Response.error(error="因子字典为空", error_code="EMPTY_FACTOR_DICT")
 
             if prices is None or prices.empty:
-                return Response.error(
-                    error="价格数据为空",
-                    error_code="EMPTY_PRICE_DATA"
-                )
+                return Response.error(error="价格数据为空", error_code="EMPTY_PRICE_DATA")
 
             # 向后兼容：n_jobs覆盖配置
             if n_jobs is not None and n_jobs != 1:
@@ -955,13 +698,12 @@ class FactorAnalyzer:
                 else:
                     logger.warning("并行计算模块未找到，将忽略n_jobs参数")
 
-            # 判断是否使用并行
             use_parallel = (
                 HAS_PARALLEL_SUPPORT and
                 self.parallel_config and
                 self.parallel_config.enable_parallel and
                 self.parallel_config.n_workers > 1 and
-                len(factor_dict) >= 4  # 至少4个因子才并行
+                len(factor_dict) >= 4
             )
 
             if use_parallel:
@@ -971,7 +713,7 @@ class FactorAnalyzer:
                 )
                 reports = self._batch_analyze_parallel(factor_dict, prices)
             else:
-                if not use_parallel and len(factor_dict) < 4:
+                if len(factor_dict) < 4:
                     logger.debug(f"因子数量较少({len(factor_dict)})，使用串行分析")
                 reports = self._batch_analyze_serial(factor_dict, prices)
 
@@ -982,7 +724,6 @@ class FactorAnalyzer:
 
             logger.info(f"批量分析完成: {success_count}/{total_count}个成功")
 
-            # 判断结果
             if success_count == 0:
                 return Response.error(
                     error="所有因子分析均失败",
@@ -1028,11 +769,7 @@ class FactorAnalyzer:
 
         for factor_name, factor_df in factor_dict.items():
             try:
-                response = self.quick_analyze(
-                    factor_df, prices,
-                    factor_name=factor_name
-                )
-                # 提取Response中的报告数据
+                response = self.quick_analyze(factor_df, prices, factor_name=factor_name)
                 if response.is_success() or response.status == ResponseStatus.WARNING:
                     reports[factor_name] = response.data
                 else:
@@ -1057,40 +794,30 @@ class FactorAnalyzer:
         - 子任务禁用并行，避免嵌套并行
         - 捕获所有异常，返回部分结果
         """
-        # 转为列表以便分片
         factor_items = list(factor_dict.items())
 
-        # 准备任务参数（包含所有需要的配置）
         tasks = [
             (
-                factor_name,
-                factor_df,
-                prices,
-                self.forward_periods,
-                self.n_layers,
-                self.holding_period,
-                self.method,
-                self.long_short
+                factor_name, factor_df, prices,
+                self.forward_periods, self.n_layers,
+                self.holding_period, self.method, self.long_short
             )
             for factor_name, factor_df in factor_items
         ]
 
-        # 创建并行执行器
         executor = ParallelExecutor(self.parallel_config)
 
         try:
-            # 并行执行（使用模块级函数）
             results = executor.map(
                 _analyze_single_factor_worker_v2,
                 tasks,
                 desc="批量因子分析"
             )
 
-            # 聚合结果
             reports = {}
             failed_count = 0
 
-            for factor_name, report, error in results:
+            for factor_name, report, _error in results:
                 if report is not None:
                     reports[factor_name] = report
                 else:
@@ -1116,7 +843,6 @@ class FactorAnalyzer:
         """
         score = 0.0
 
-        # IC均值得分（40分）
         if report.ic_result:
             ic_mean = abs(report.ic_result.mean_ic)
             if ic_mean >= 0.05:
@@ -1128,7 +854,6 @@ class FactorAnalyzer:
             else:
                 score += ic_mean / 0.05 * 40
 
-        # ICIR得分（30分）
         if report.ic_result:
             ic_ir = abs(report.ic_result.ic_ir)
             if ic_ir >= 1.0:
@@ -1138,7 +863,6 @@ class FactorAnalyzer:
             else:
                 score += ic_ir / 1.0 * 30
 
-        # IC正值率得分（15分）
         if report.ic_result:
             positive_rate = report.ic_result.positive_rate
             if positive_rate >= 0.6:
@@ -1148,12 +872,10 @@ class FactorAnalyzer:
             else:
                 score += (positive_rate - 0.5) / 0.1 * 15
 
-        # 单调性得分（15分）
         if report.layering_summary:
             if report.layering_summary.get('是否单调', False):
                 score += 15
             else:
-                # 根据收益差距给部分分
                 revenue_gap = abs(report.layering_summary.get('收益差距', 0))
                 score += min(revenue_gap / 0.02 * 15, 15)
 
@@ -1181,18 +903,7 @@ def quick_analyze_factor(
     factor_name: str = "Factor",
     **kwargs
 ) -> FactorAnalysisReport:
-    """
-    快速分析单个因子的便捷函数
-
-    Args:
-        factor: 因子数据
-        prices: 价格数据
-        factor_name: 因子名称
-        **kwargs: 传递给FactorAnalyzer的参数
-
-    Returns:
-        因子分析报告
-    """
+    """快速分析单个因子的便捷函数"""
     analyzer = FactorAnalyzer(**kwargs)
     return analyzer.quick_analyze(factor, prices, factor_name)
 
@@ -1202,17 +913,7 @@ def compare_multiple_factors(
     prices: pd.DataFrame,
     **kwargs
 ) -> pd.DataFrame:
-    """
-    对比多个因子的便捷函数
-
-    Args:
-        factor_dict: 因子字典
-        prices: 价格数据
-        **kwargs: 传递给FactorAnalyzer的参数
-
-    Returns:
-        因子对比DataFrame
-    """
+    """对比多个因子的便捷函数"""
     analyzer = FactorAnalyzer(**kwargs)
     return analyzer.compare_factors(factor_dict, prices)
 
@@ -1223,17 +924,6 @@ def optimize_factor_combination(
     method: str = 'max_icir',
     **kwargs
 ) -> Tuple[OptimizationResult, pd.DataFrame]:
-    """
-    优化因子组合的便捷函数
-
-    Args:
-        factor_dict: 因子字典
-        prices: 价格数据
-        method: 优化方法
-        **kwargs: 传递给FactorAnalyzer的参数
-
-    Returns:
-        (优化结果, 组合因子)
-    """
+    """优化因子组合的便捷函数"""
     analyzer = FactorAnalyzer(**kwargs)
     return analyzer.optimize_factor_portfolio(factor_dict, prices, method)
