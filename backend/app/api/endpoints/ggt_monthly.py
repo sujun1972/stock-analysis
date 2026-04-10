@@ -164,3 +164,42 @@ async def sync_ggt_monthly_async(
     except Exception as e:
         logger.error(f"提交港股通每月成交统计同步任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-full-history")
+async def sync_ggt_monthly_full_history(
+    current_user: User = Depends(require_admin)
+):
+    """
+    全量同步港股通每月成交统计历史数据（snapshot 策略）
+
+    数据量极小（约74条），不传日期参数直接获取全量，单次请求完成。
+
+    Returns:
+        包含 Celery 任务 ID 和任务信息的响应
+    """
+    try:
+        from app.api.endpoints.sync_dashboard import release_stale_lock
+        await asyncio.to_thread(release_stale_lock, 'ggt_monthly')
+
+        from app.tasks.ggt_monthly_tasks import sync_ggt_monthly_full_history_task
+
+        celery_task = sync_ggt_monthly_full_history_task.apply_async(kwargs={})
+
+        helper = TaskHistoryHelper()
+        task_data = await helper.create_task_record(
+            celery_task_id=celery_task.id,
+            task_name='tasks.sync_ggt_monthly_full_history',
+            display_name='港股通每月成交统计（全量历史）',
+            task_type='data_sync',
+            user_id=current_user.id,
+            task_params={},
+            source='ggt_monthly_page'
+        )
+
+        logger.info(f"港股通每月成交统计全量同步任务已提交: {celery_task.id}")
+        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
+
+    except Exception as e:
+        logger.error(f"提交港股通每月成交统计全量同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

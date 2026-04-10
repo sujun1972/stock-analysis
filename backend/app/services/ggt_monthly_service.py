@@ -215,6 +215,61 @@ class GgtMonthlyService:
             logger.error(f"获取最新港股通每月成交数据失败: {e}")
             raise
 
+    async def sync_full_history(
+        self,
+        update_state_fn=None
+    ) -> Dict:
+        """
+        全量同步港股通每月成交历史数据（snapshot 策略）
+
+        ggt_monthly 接口不传日期参数时直接返回全部约 74 条历史数据，
+        无需分片，一次请求即可获取全量。与其他全量同步不同，
+        此方法不需要 Redis 客户端（无续继需求）。
+
+        Args:
+            update_state_fn: Celery update_state 回调（可选）
+
+        Returns:
+            同步结果字典，含 status、message、records
+        """
+        try:
+            logger.info("开始全量同步港股通每月成交数据（snapshot 策略）")
+
+            if update_state_fn:
+                update_state_fn(state='PROGRESS', meta={'progress': 10, 'message': '正在获取数据...'})
+
+            provider = self._get_provider()
+            df = await asyncio.to_thread(
+                provider.get_ggt_monthly,
+                month=None,
+                start_month=None,
+                end_month=None
+            )
+
+            if df is None or df.empty:
+                logger.warning("全量同步：未获取到港股通每月成交数据")
+                return {"status": "success", "message": "未获取到数据", "records": 0}
+
+            if update_state_fn:
+                update_state_fn(state='PROGRESS', meta={'progress': 60, 'message': f'获取到 {len(df)} 条，写入数据库...'})
+
+            df = self._validate_and_clean_data(df)
+            records = await asyncio.to_thread(self.ggt_monthly_repo.bulk_upsert, df)
+
+            if update_state_fn:
+                update_state_fn(state='PROGRESS', meta={'progress': 100, 'message': f'完成，共 {records} 条'})
+
+            logger.info(f"全量同步港股通每月成交数据完成：{records} 条")
+            return {
+                "status": "success",
+                "message": f"全量同步完成，共 {records} 条数据",
+                "records": records
+            }
+
+        except Exception as e:
+            logger.error(f"全量同步港股通每月成交数据失败: {e}")
+            raise
+
     def _get_provider(self):
         """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
         if not hasattr(self, '_provider') or self._provider is None:

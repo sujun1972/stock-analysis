@@ -43,10 +43,25 @@ class CcassHoldDetailService(TushareSyncBase):
         sync_strategy: Optional[str] = None,
         max_requests_per_minute: Optional[int] = None,
     ) -> Dict:
-        """增量同步中央结算系统持股明细数据。"""
+        """增量同步中央结算系统持股明细数据。
+
+        ccass_hold_detail 接口要求 ts_code 或 trade_date 至少传一个。
+        当两者都为 None 且 start_date 也为 None 时（例如定时任务以空参数触发），
+        自动从 sync_history 计算建议起始日期，确保切片策略能被正确触发。
+        """
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
         api_limit = (cfg.get('api_limit') or 6000) if cfg else 6000
+        effective_strategy = sync_strategy or (cfg.get('incremental_sync_strategy') or 'by_date') if cfg else 'by_date'
         provider = self._get_provider(max_requests_per_minute)
+
+        effective_start = start_date
+        if not ts_code and not trade_date and not effective_start:
+            # 无任何过滤参数，自动计算起始日期以触发切片策略（by_date/by_month/...）
+            effective_start = await self.get_suggested_start_date()
+            logger.info(
+                f"ccass_hold_detail 增量同步：未传 ts_code/trade_date/start_date，"
+                f"自动使用建议起始日期 {effective_start}"
+            )
 
         return await self.run_incremental_sync(
             fetch_fn=provider.get_ccass_hold_detail,
@@ -54,8 +69,8 @@ class CcassHoldDetailService(TushareSyncBase):
             clean_fn=self._validate_and_clean_data,
             table_key=self.TABLE_KEY,
             date_col='trade_date',
-            sync_strategy=sync_strategy,
-            start_date=start_date,
+            sync_strategy=effective_strategy,
+            start_date=effective_start,
             end_date=end_date,
             max_requests_per_minute=max_requests_per_minute,
             api_limit=api_limit,

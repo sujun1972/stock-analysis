@@ -107,7 +107,7 @@ class DataProviderService:
             )
 
         config_key = self.MODULE_CONFIG_MAP[module]
-        provider_type = config.get(config_key, "akshare")
+        provider_type = config.get(config_key, "tushare")
 
         logger.debug(f"模块 '{module}' 使用数据源: {provider_type}")
         return provider_type

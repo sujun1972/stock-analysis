@@ -4,6 +4,7 @@
 职责：
 - Tushare Token 的读写与脱敏
 - 全量同步最早日期的读写
+- 各模块数据源类型的读写（main/minute/realtime/limit_up/top_list/premarket/concept）
 """
 
 import asyncio
@@ -37,11 +38,17 @@ class DataSourceConfigService:
 
         Returns:
             Dict: 包含 tushare_token（脱敏）、earliest_history_date、max_requests_per_minute
+                  以及各模块数据源类型（data_source、minute_data_source 等）
         """
         try:
             configs = await asyncio.to_thread(
                 self.config_repo.get_configs_by_keys,
-                ["tushare_token", "earliest_history_date", "max_requests_per_minute"],
+                [
+                    "tushare_token", "earliest_history_date", "max_requests_per_minute",
+                    "data_source", "minute_data_source", "realtime_data_source",
+                    "limit_up_data_source", "top_list_data_source",
+                    "premarket_data_source", "concept_data_source",
+                ],
             )
             raw_token = configs.get("tushare_token") or ""
             raw_max_rpm = configs.get("max_requests_per_minute")
@@ -49,6 +56,14 @@ class DataSourceConfigService:
                 "tushare_token": self._mask_token(raw_token) if mask_token else raw_token,
                 "earliest_history_date": configs.get("earliest_history_date") or "2021-01-04",
                 "max_requests_per_minute": int(raw_max_rpm) if raw_max_rpm is not None else 0,
+                # 各模块数据源类型，默认 tushare
+                "data_source": configs.get("data_source") or "tushare",
+                "minute_data_source": configs.get("minute_data_source") or "tushare",
+                "realtime_data_source": configs.get("realtime_data_source") or "tushare",
+                "limit_up_data_source": configs.get("limit_up_data_source") or "tushare",
+                "top_list_data_source": configs.get("top_list_data_source") or "tushare",
+                "premarket_data_source": configs.get("premarket_data_source") or "tushare",
+                "concept_data_source": configs.get("concept_data_source") or "tushare",
             }
         except DatabaseError:
             raise

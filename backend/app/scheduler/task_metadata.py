@@ -250,6 +250,15 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'points_consumption': 5000,
         'default_params': {'month': None, 'start_month': None, 'end_month': None}
     },
+    'tasks.sync_ggt_monthly_full_history': {
+        'task': 'tasks.sync_ggt_monthly_full_history',
+        'name': '港股通每月成交统计（全量历史）',
+        'description': '全量同步港股通每月成交历史数据，snapshot 策略，数据量极小（约74条），单次请求获取全量',
+        'category': '行情数据',
+        'display_order': 273,
+        'points_consumption': 5000,
+        'default_params': {}
+    },
 
     'tasks.sync_adj_factor': {
         'task': 'tasks.sync_adj_factor',

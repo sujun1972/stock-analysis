@@ -131,9 +131,9 @@ INSERT INTO sync_configs (
 
 ('ggt_monthly',  '港股通每月成交统计', '行情数据', 213,
  'tasks.sync_ggt_monthly', 365,
- NULL, 'none', 1,
+ 'tasks.sync_ggt_monthly_full_history', 'snapshot', 1,
  FALSE, NULL,
- '/market/ggt-monthly', '/ggt-monthly', 5000, NULL),
+ '/market/ggt-monthly', '/ggt-monthly', 5000, '数据量极小（约74条），snapshot 策略单次获取全量'),
 
 -- ============ 资金流向 ============
 ('moneyflow',           '个股资金流向（Tushare）', '资金流向', 310,

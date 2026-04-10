@@ -37,6 +37,7 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "hsgt_top10":       "sync:hsgt_top10:full_history:progress",
     "ggt_top10":        "sync:ggt_top10:full_history:progress",
     "ggt_daily":        "sync:ggt_daily:full_history:progress",
+    "ggt_monthly":      "sync:ggt_monthly:full_history:progress",
     "income":           "sync:income:full_history:progress",
     "balancesheet":     "sync:balancesheet:full_history:progress",
     "cashflow":         "sync:cashflow:full_history:progress",
