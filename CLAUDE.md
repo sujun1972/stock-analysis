@@ -1537,7 +1537,7 @@ docker-compose logs celery_worker | grep "tasks.sync_your_data"
 -- 在 db_init/migrations/105_create_sync_configs.sql 的 INSERT 列表中追加
 ('your_table',  '显示名称',  '所属分类', 排序号,
  'tasks.sync_your_task', 7,                        -- 增量任务名, 默认回看天数
- 'tasks.sync_your_full', 'by_ts_code', 5,          -- 全量任务名（NULL=无全量）, 策略, 并发数
+ 'tasks.sync_your_full', 'by_ts_code', 5,          -- 全量任务名（NULL=无全量；与增量同名=共用任务模式）, 策略, 并发数
  FALSE, NULL,                                       -- 被动同步开关, 被动同步任务名
  '/your-page', '/your-api-prefix', NULL, NULL)      -- 页面URL, API前缀, 积分消耗, 备注
 ```
@@ -1562,8 +1562,8 @@ docker-compose exec -T timescaledb psql -U stock_user -d stock_analysis < db_ini
 - [ ] 前端 API 客户端已创建并导出，`getData` 返回类型包含 `trade_date?`（用于日期回填）
 - [ ] 前端页面实现了数据展示、筛选、同步功能
 - [ ] 菜单项已添加到 AdminLayout
-- [ ] **sync_configs 表已登记**（`105_create_sync_configs.sql` 追加一行并重新执行）；若有全量同步，`full_sync_task_name` 必须填写任务名（不能为 NULL），`full_sync_strategy` 不能为 `'none'`
-- [ ] **全量同步路由命名**：后端路由必须注册为 `/sync-full-history`（不带 `-async` 后缀），与前端 `handleSync` 拼接逻辑一致
+- [ ] **sync_configs 表已登记**（`105_create_sync_configs.sql` 追加一行并重新执行）；若有全量同步，`full_sync_task_name` 必须填写任务名（不能为 NULL），`full_sync_strategy` 不能为 `'none'`；若无独立全量路由（如基础数据类），可将 `full_sync_task_name` 设为与增量任务名相同（共用任务模式），前端会自动调用 `/sync-async` + `start_date` 而非 `/sync-full-history`
+- [ ] **全量同步路由命名**：独立全量任务的路由必须注册为 `/sync-full-history`（不带 `-async` 后缀）；共用任务模式无需此路由
 - [ ] **`FULL_SYNC_REDIS_KEYS` 已更新**（`sync_dashboard.py`），新增全量同步表的 Redis 续继进度 key
 - [ ] Celery Worker 已重启并验证任务注册成功
 - [ ] 所有代码遵循项目三层架构（Repository → Service → API）
@@ -1799,8 +1799,8 @@ Admin项目全面支持移动端访问，采用移动优先的响应式设计：
 - `table_key`：唯一标识，与 `data_ops.py` 的 `CLEARABLE_TABLES` 白名单对应
 - `api_prefix`：后端 API 前缀（如 `/income`），用于构造 `sync-async` 端点，**页面上的增量/全量同步按钮通过它调用**
 - `page_url`：对应前端数据页面 URL，支持点击跳转
-- `full_sync_strategy`：`'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'none'`；若有全量同步能力，**禁止填 `NULL` 或 `'none'`**——同步配置页面通过 `!!full_sync_task_name` 判断是否显示"全量"按钮，NULL 会导致按钮不显示
-- `full_sync_task_name`：对应 Celery 全量任务名（如 `tasks.sync_xxx_full_history`）；后端已实现全量接口但此字段为 NULL，会导致同步配置页面只有"增量"按钮
+- `full_sync_strategy`：`'by_ts_code' | 'by_date' | 'by_quarter' | 'snapshot' | 'by_month' | 'none'`；若有全量同步能力，**禁止填 `NULL` 或 `'none'`**——同步配置页面通过 `!!full_sync_task_name` 判断是否显示"全量"按钮，NULL 会导致按钮不显示
+- `full_sync_task_name`：对应 Celery 全量任务名（如 `tasks.sync_xxx_full_history`）；后端已实现全量接口但此字段为 NULL，会导致同步配置页面只有"增量"按钮。**共用任务模式**：若增量和全量调用同一接口（如基础数据类），将此字段填写为与 `incremental_task_name` 相同的值——前端检测到任务名相同时，自动以 `/sync-async + start_date` 替代 `/sync-full-history`，无需独立全量路由
 - `incremental_sync_strategy`：增量同步策略，`'by_date_range' | 'by_date' | 'by_week' | 'by_month' | 'by_ts_code' | 'snapshot' | 'none'`，NULL 表示使用接口默认逻辑
 - `api_limit`：接口单次请求上限（超出则分页继续），用于分页循环的 `limit` 参数
 - `max_requests_per_minute`：每分钟最大请求数（NULL = 继承全局设置；0 = 不限速；正整数 = 覆盖全局）

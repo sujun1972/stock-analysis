@@ -103,6 +103,8 @@ function SyncRow({
   const fullTask = item.last_full_sync
   const progress = item.redis_progress
   const hasFullSync = !!item.full_sync_task_name
+  // 增量和全量共用同一任务（基础数据类），没有独立全量路由
+  const isSharedTask = hasFullSync && item.full_sync_task_name === item.incremental_task_name
   const isIncrSyncing = item.incremental_task_name ? isTaskRunning(item.incremental_task_name) : false
   const isFullSyncing = item.full_sync_task_name ? isTaskRunning(item.full_sync_task_name) : false
 
@@ -140,11 +142,14 @@ function SyncRow({
       <div className="col-span-2 flex items-center gap-1.5 min-w-0">
         {hasFullSync ? (
           <>
-            <StatusDot status={fullTask?.status} />
-            <span className="text-gray-500 text-xs truncate">
-              {fullTask ? formatDate(fullTask.completed_at || fullTask.started_at) : '从未同步'}
+            <StatusDot status={isSharedTask ? incTask?.status : fullTask?.status} />
+            <span className="text-gray-500 text-xs truncate" title={isSharedTask ? '共用增量任务，以最早日期为起点全量同步' : undefined}>
+              {isSharedTask
+                ? (incTask ? formatDate(incTask.completed_at || incTask.started_at) : '从未同步')
+                : (fullTask ? formatDate(fullTask.completed_at || fullTask.started_at) : '从未同步')
+              }
             </span>
-            {progress && (
+            {!isSharedTask && progress && (
               <Badge
                 variant="outline"
                 className="text-xs py-0 px-1 text-orange-600 border-orange-300 cursor-default"
@@ -363,18 +368,29 @@ export default function SyncConfigPage() {
   const handleSync = useCallback(async (item: SyncOverviewItem, type: 'incremental' | 'full') => {
     if (!item.api_prefix) return
     try {
-      const endpoint = type === 'full'
+      // 若增量和全量共用同一 Celery 任务（没有独立的 /sync-full-history 路由），
+      // 全量同步直接调用 /sync-async 并传入 start_date，由后端以全量模式处理。
+      const isSharedTask = type === 'full' && item.full_sync_task_name === item.incremental_task_name
+      const endpoint = type === 'full' && !isSharedTask
         ? `/api${item.api_prefix}/sync-full-history`
         : `/api${item.api_prefix}/sync-async`
       const params: Record<string, string | number> = {}
       if (type === 'full') {
-        if (item.full_sync_concurrency) params.concurrency = item.full_sync_concurrency
-        // start_date 由后端从任务默认值读取，不从前端传入
-        // 全量同步前先清除 Redis 续继进度，确保从头开始而非续继上次
-        try {
-          await syncDashboardApi.clearProgress(item.table_key)
-        } catch {
-          // 清除失败不阻止全量同步（Redis 可能无进度记录）
+        if (!isSharedTask) {
+          if (item.full_sync_concurrency) params.concurrency = item.full_sync_concurrency
+          // 独立全量任务：start_date 由后端从任务默认值读取
+          // 全量同步前先清除 Redis 续继进度，确保从头开始而非续继上次
+          try {
+            await syncDashboardApi.clearProgress(item.table_key)
+          } catch {
+            // 清除失败不阻止全量同步（Redis 可能无进度记录）
+          }
+        } else {
+          // 共用任务（基础数据类）：传入 earliest_history_date 作为 start_date
+          const earliest = configData?.earliest_history_date
+          if (earliest) {
+            params.start_date = earliest.replace(/-/g, '')
+          }
         }
       }
       const resp = await apiClient.post(endpoint, null, { params })

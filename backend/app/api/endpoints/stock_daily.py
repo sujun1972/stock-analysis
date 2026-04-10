@@ -109,7 +109,7 @@ async def sync_single_stock(
 @router.post("/sync-async")
 @handle_api_errors
 async def sync_async(
-    request: SyncDailyRequest,
+    request: Optional[SyncDailyRequest] = None,
     current_user: User = Depends(require_admin)
 ):
     """
@@ -121,23 +121,25 @@ async def sync_async(
     """
     from app.tasks.sync_tasks import sync_daily_single_task
 
+    req = request or SyncDailyRequest()
+
     # 日期格式转换 (YYYY-MM-DD -> YYYYMMDD)
-    start_date_fmt = request.start_date.replace('-', '') if request.start_date else None
-    end_date_fmt = request.end_date.replace('-', '') if request.end_date else None
+    start_date_fmt = req.start_date.replace('-', '') if req.start_date else None
+    end_date_fmt = req.end_date.replace('-', '') if req.end_date else None
 
     # 提交 Celery 任务
     celery_task = sync_daily_single_task.apply_async(
         kwargs={
-            'code': request.code,  # 可以为 None，将在任务中处理
+            'code': req.code,  # 可以为 None，将在任务中处理
             'start_date': start_date_fmt,
             'end_date': end_date_fmt,
-            'years': request.years
+            'years': req.years
         }
     )
 
     # 任务显示名称
-    if request.code:
-        display_name = f'日线数据同步({request.code})'
+    if req.code:
+        display_name = f'日线数据同步({req.code})'
     else:
         display_name = '日线数据同步(全市场)'
 
@@ -150,10 +152,10 @@ async def sync_async(
         task_type='data_sync',
         user_id=current_user.id,
         task_params={
-            'code': request.code,
+            'code': req.code,
             'start_date': start_date_fmt,
             'end_date': end_date_fmt,
-            'years': request.years
+            'years': req.years
         },
         source='stock_daily_page'
     )

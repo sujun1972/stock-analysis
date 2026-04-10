@@ -58,25 +58,25 @@ INSERT INTO sync_configs (
 -- ============ 基础数据 ============
 ('stock_basic',  '股票列表',         '基础数据', 100,
  'sync.stock_list', 1,
- NULL, 'none', 1,
+ 'sync.stock_list', 'snapshot', 1,
  FALSE, NULL,
  '/data/stock-list', '/stocks/list', NULL, '全量同步即普通同步，同步全状态股票'),
 
 ('new_stocks',   'IPO新股列表',      '基础数据', 150,
  'sync.new_stocks', 90,
- NULL, 'none', 1,
+ 'sync.new_stocks', 'by_month', 1,
  FALSE, NULL,
  '/sync/new-stocks', '/new-stocks', NULL, '增量同步默认回看90天'),
 
 ('trade_cal',    '交易日历',         '基础数据', 120,
  'tasks.sync_trade_cal', 365,
- NULL, 'none', 1,
+ 'tasks.sync_trade_cal', 'by_month', 1,
  FALSE, NULL,
  '/data/trade-cal', '/trade-cal', 2000, '全量同步即普通同步'),
 
 ('stock_st',     'ST股票列表',       '基础数据', 140,
  'tasks.sync_stock_st', 30,
- NULL, 'none', 1,
+ 'tasks.sync_stock_st', 'by_month', 1,
  FALSE, NULL,
  '/data/stock-st', '/stock-st', 3000, '特殊：2交易日/批，10并发'),
 
