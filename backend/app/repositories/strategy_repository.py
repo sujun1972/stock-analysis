@@ -503,6 +503,7 @@ class StrategyRepository(BaseRepository):
                 validation_status,
                 risk_level
             FROM strategies
+            WHERE publish_status = 'approved'
             GROUP BY GROUPING SETS (
                 (),
                 (source_type),

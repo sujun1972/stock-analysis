@@ -156,6 +156,29 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 ---
 
+## 策略系统
+
+### 创建入口（两条路径）
+
+| 路径 | 说明 |
+|------|------|
+| `/strategies/create/ai` | AI 全自动生成：选类型 → 描述需求 → 提交异步任务 → 自动验证 → 自动保存 |
+| `/strategies/create` | 手动创建：选策略类型（入场/离场/选股）→ 填写代码 → 手动保存 |
+
+策略列表页（`/strategies`）有三个 Tab：入场策略、离场策略、选股策略。**选股策略卡片**不显示回测按钮和风险等级，替换为"查看选股结果"链接（跳转 `/stocks?stock_selection_strategy_id={id}`）。
+
+### AI 生成流程（`/strategies/create/ai`）
+
+`AIGenerationTaskContext` 管理后台异步任务状态。页面生命周期：
+1. 提交 → `apiClient.generateStrategyAsync({ strategy_type })` → 获得 `task_id`
+2. `addTask(task_id, provider)` 加入监控，`phase` 切换到 `generating`
+3. `currentTask.status === 'SUCCESS'` → `getTaskResult()` 取结果 → 自动 `validateStrategy()` → `phase: validating`
+4. 验证通过 → 自动 `createStrategy({ strategy_type })` → 跳转列表
+
+**策略类型** 在提交时必须传给后端（`strategy_type` 字段），后端据此选择对应的数据库 prompt 模板（见 admin CLAUDE.md "Prompt 模板管理"）。
+
+---
+
 ## 通知系统（用户侧）
 
 - **通知设置**：`/settings/notifications` — 用户配置订阅偏好、渠道（Email/Telegram）

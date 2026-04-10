@@ -144,10 +144,16 @@ export const BUSINESS_TYPES = {
   SENTIMENT_ANALYSIS: 'sentiment_analysis',
   PREMARKET_ANALYSIS: 'premarket_analysis',
   STRATEGY_GENERATION: 'strategy_generation',
+  STRATEGY_GENERATION_ENTRY: 'strategy_generation_entry',
+  STRATEGY_GENERATION_EXIT: 'strategy_generation_exit',
+  STRATEGY_GENERATION_STOCK_SELECTION: 'strategy_generation_stock_selection',
 } as const
 
 export const BUSINESS_TYPE_LABELS: Record<string, string> = {
   sentiment_analysis: '市场情绪分析',
   premarket_analysis: '盘前预期分析',
-  strategy_generation: '策略生成',
+  strategy_generation: '策略生成（通用）',
+  strategy_generation_entry: '策略生成 - 入场策略',
+  strategy_generation_exit: '策略生成 - 离场策略',
+  strategy_generation_stock_selection: '策略生成 - 选股策略',
 }

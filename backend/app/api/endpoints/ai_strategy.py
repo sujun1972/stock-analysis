@@ -411,6 +411,7 @@ async def async_generate_strategy(
         task = generate_strategy_async.delay(
             strategy_requirement=request.strategy_requirement,
             provider_config=provider_config,
+            strategy_type=request.strategy_type or "entry",
             custom_prompt_template=(
                 request.custom_prompt_template if request.use_custom_prompt else None
             )

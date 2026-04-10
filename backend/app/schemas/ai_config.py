@@ -72,6 +72,7 @@ class AIStrategyGenerateRequest(BaseModel):
     """AI策略生成请求模型"""
 
     strategy_requirement: str = Field(..., min_length=10, description="策略需求描述")
+    strategy_type: Optional[str] = Field("entry", description="策略类型：entry / exit / stock_selection")
     provider: Optional[str] = Field(None, description="指定AI提供商，不指定则使用默认")
     use_custom_prompt: bool = Field(False, description="是否使用自定义提示词模板")
     custom_prompt_template: Optional[str] = Field(None, description="自定义提示词模板")

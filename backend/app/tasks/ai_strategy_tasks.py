@@ -55,6 +55,7 @@ def generate_strategy_async(
     self,
     strategy_requirement: str,
     provider_config: Dict[str, Any],
+    strategy_type: str = "entry",
     custom_prompt_template: str = None
 ) -> Dict[str, Any]:
     """
@@ -71,6 +72,7 @@ def generate_strategy_async(
             - max_tokens: 最大token数
             - temperature: 温度参数
             - timeout: 超时时间
+        strategy_type: 策略类型（entry / exit / stock_selection）
         custom_prompt_template: 自定义提示词模板（可选）
 
     Returns:
@@ -99,6 +101,7 @@ def generate_strategy_async(
             ai_strategy_service.generate_strategy,
             strategy_requirement=strategy_requirement,
             provider_config=provider_config,
+            strategy_type=strategy_type,
             custom_prompt_template=custom_prompt_template
         )
 

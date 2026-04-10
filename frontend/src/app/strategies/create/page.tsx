@@ -1,6 +1,7 @@
 /**
- * 策略创建页面 (V2.0)
- * 支持三种创建方式：基于内置模板、AI生成、自定义代码
+ * 策略手动创建页面 (V2.1)
+ * 支持：基于内置模板、自定义代码，需手动选择策略类型
+ * AI生成策略请访问 /strategies/create/ai
  */
 
 'use client'
@@ -26,17 +27,18 @@ import {
 import {
   ArrowLeft,
   Building2,
-  Sparkles,
   Code,
   Save,
   CheckCircle,
   XCircle,
-  Loader2
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  Filter
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api-client'
 import { STRATEGY_CATEGORIES } from '@/types/strategy'
-import AIStrategyPromptHelperV2 from '@/components/strategies/AIStrategyPromptHelperV2'
 import { useAuthStore } from '@/stores/auth-store'
 
 // 动态导入 Monaco Editor (客户端组件)
@@ -71,32 +73,7 @@ function CreateStrategyContent() {
   const [code, setCode] = useState('')
   const [category, setCategory] = useState('')
   const [tags, setTags] = useState('')
-
-  // 处理AI生成的策略
-  const handleAIGenerated = (strategyCode: string, metadata: any) => {
-    setCode(strategyCode)
-
-    if (metadata) {
-      if (metadata.strategy_id) setName(metadata.strategy_id)
-      if (metadata.display_name) setDisplayName(metadata.display_name)
-      if (metadata.class_name) setClassName(metadata.class_name)
-      if (metadata.description) setDescription(metadata.description)
-      if (metadata.category) setCategory(metadata.category)
-      if (metadata.tags && Array.isArray(metadata.tags)) {
-        setTags(metadata.tags.join(', '))
-      }
-    }
-
-    toast({
-      title: '已填充表单',
-      description: '策略代码和元信息已自动填充，请检查并调整'
-    })
-
-    // 自动验证代码
-    setTimeout(() => {
-      handleValidate()
-    }, 500)
-  }
+  const [strategyType, setStrategyType] = useState<'entry' | 'exit' | 'stock_selection'>('entry')
 
   useEffect(() => {
     // 如果是克隆模式,加载原策略
@@ -117,6 +94,9 @@ function CreateStrategyContent() {
         setCode(original.code)
         setCategory(original.category || '')
         setTags(original.tags?.join(', ') || '')
+        if (original.strategy_type) {
+          setStrategyType(original.strategy_type as any)
+        }
       }
     } catch (error) {
       console.error('Failed to load strategy:', error)
@@ -190,11 +170,10 @@ function CreateStrategyContent() {
         class_name: className,
         code,
         source_type: source as any,
-        strategy_type: 'entry', // 默认为入场策略
+        strategy_type: strategyType,
         description,
         category: category || undefined,
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
-        user_id: user?.id  // 传递当前用户ID
       })
 
       if (response.data) {
@@ -216,28 +195,14 @@ function CreateStrategyContent() {
     }
   }
 
-  // 获取来源图标
   const getSourceIcon = () => {
-    switch (source) {
-      case 'builtin':
-        return <Building2 className="h-5 w-5" />
-      case 'ai':
-        return <Sparkles className="h-5 w-5" />
-      default:
-        return <Code className="h-5 w-5" />
-    }
+    if (source === 'builtin') return <Building2 className="h-5 w-5" />
+    return <Code className="h-5 w-5" />
   }
 
-  // 获取来源标题
   const getSourceTitle = () => {
-    switch (source) {
-      case 'builtin':
-        return '基于内置模板创建'
-      case 'ai':
-        return 'AI 生成策略'
-      default:
-        return '自定义代码策略'
-    }
+    if (source === 'builtin') return '基于内置模板创建'
+    return '自定义代码策略'
   }
 
   return (
@@ -266,11 +231,6 @@ function CreateStrategyContent() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* AI策略生成助手 - 仅在自定义策略模式下显示 */}
-        {source === 'custom' && (
-          <AIStrategyPromptHelperV2 onStrategyGenerated={handleAIGenerated} />
-        )}
-
         {/* 基本信息 */}
         <Card>
           <CardHeader>
@@ -280,6 +240,33 @@ function CreateStrategyContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* 策略类型选择 */}
+            <div className="space-y-2">
+              <Label>策略类型 *</Label>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { value: 'entry', label: '入场策略', desc: '决定何时买入', icon: <TrendingUp className="h-4 w-4" /> },
+                  { value: 'exit', label: '离场策略', desc: '决定何时卖出', icon: <TrendingDown className="h-4 w-4" /> },
+                  { value: 'stock_selection', label: '选股策略', desc: '筛选目标股票', icon: <Filter className="h-4 w-4" /> },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => { setStrategyType(opt.value); if (opt.value !== 'entry') setCategory('') }}
+                    className={`flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-sm transition-colors ${
+                      strategyType === opt.value
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-muted hover:border-muted-foreground/50'
+                    }`}
+                  >
+                    {opt.icon}
+                    <span className="font-medium">{opt.label}</span>
+                    <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">策略标识 *</Label>
@@ -320,8 +307,10 @@ function CreateStrategyContent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="category">策略类别</Label>
-                <Select value={category} onValueChange={setCategory}>
+                <Label htmlFor="category" className={strategyType !== 'entry' ? 'text-muted-foreground' : ''}>
+                  策略类别{strategyType !== 'entry' && <span className="ml-1 text-xs font-normal">(仅入场策略可选)</span>}
+                </Label>
+                <Select value={category} onValueChange={setCategory} disabled={strategyType !== 'entry'}>
                   <SelectTrigger id="category">
                     <SelectValue placeholder="请选择策略类别" />
                   </SelectTrigger>

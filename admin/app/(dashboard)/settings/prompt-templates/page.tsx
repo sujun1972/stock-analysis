@@ -162,9 +162,9 @@ export default function PromptTemplatesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部</SelectItem>
-                  <SelectItem value="sentiment_analysis">市场情绪分析</SelectItem>
-                  <SelectItem value="premarket_analysis">盘前预期分析</SelectItem>
-                  <SelectItem value="strategy_generation">策略生成</SelectItem>
+                  {Object.entries(BUSINESS_TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

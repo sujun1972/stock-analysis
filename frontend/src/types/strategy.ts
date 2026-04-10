@@ -36,8 +36,8 @@ export interface Strategy {
   // 来源分类
   source_type: 'ai' | 'custom'
 
-  // 策略类型（新增：区分入场策略和离场策略）
-  strategy_type: 'entry' | 'exit'
+  // 策略类型
+  strategy_type: 'entry' | 'exit' | 'stock_selection'
 
   // 策略元信息
   description?: string
@@ -89,12 +89,11 @@ export interface CreateStrategyRequest {
   code: string
   class_name: string
   source_type: 'ai' | 'custom'
-  strategy_type: 'entry' | 'exit'  // 新增：策略类型
+  strategy_type: 'entry' | 'exit' | 'stock_selection'
   description?: string
   category?: string
   tags?: string[]
   default_params?: Record<string, any>
-  user_id?: number  // 新增：创建者用户ID（可选，不传则为系统策略）
 }
 
 /**

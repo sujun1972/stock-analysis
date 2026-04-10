@@ -18,6 +18,7 @@
 - [同步配置页面（sync_configs 表）](#同步配置页面sync_configs-表)
 - [定时任务页面架构](#定时任务页面架构)
 - [新增数据同步功能前端开发流程](#新增数据同步功能前端开发流程)
+- [Prompt 模板管理（策略类型扩展）](#prompt-模板管理策略类型扩展)
 - [已移除的 Admin 功能](#已移除的-admin-功能)
 
 ---
@@ -632,3 +633,22 @@ export default function YourPage() {
 | 板块统计 | 无 | `limit_cpt_list` |
 
 **FastAPI 路由注意事项**：`/preview-prompt` 路由必须注册在 `/{date}` 通配符路由**之前**，否则会被拦截。
+
+---
+
+## Prompt 模板管理（策略类型扩展）
+
+Admin 的 `/settings/prompt-templates` 页面通过 `BUSINESS_TYPE_LABELS`（`admin/types/prompt-template.ts`）渲染业务类型下拉列表。**新增业务类型时必须同步更新该映射**，否则下拉列表显示 key 而非中文标签。
+
+当前支持的策略生成类型（`business_type`）：
+
+| business_type | 说明 |
+|---------------|------|
+| `strategy_generation` | AI 策略生成（通用，兼容旧版） |
+| `strategy_generation_entry` | 入场策略生成 |
+| `strategy_generation_exit` | 离场策略生成 |
+| `strategy_generation_stock_selection` | 选股策略生成 |
+
+**数据库初始化**：运行 `backend/scripts/migrate_strategy_prompt_templates.py` 向数据库写入上述三种策略类型的初始提示词模板。
+
+**后端查找逻辑**（`ai_service.py`）：`_STRATEGY_TYPE_BUSINESS_TYPE` 字典将 `strategy_type`（`entry`/`exit`/`stock_selection`）映射到 `business_type`，`AIStrategyService._load_db_prompt()` 据此加载对应模板；模板缺失时降级使用 `STRATEGY_TYPE_FRAMEWORKS` 硬编码片段。

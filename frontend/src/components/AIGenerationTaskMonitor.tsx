@@ -70,7 +70,7 @@ export function AIGenerationTaskMonitor() {
 
                 {/* 任务ID */}
                 <p className="text-[10px] text-muted-foreground/60 font-mono">
-                  任务ID: {task.taskId.slice(0, 16)}...
+                  任务ID: {task.taskId?.slice(0, 16)}...
                 </p>
               </div>
             </div>

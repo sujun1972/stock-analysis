@@ -22,6 +22,13 @@ from loguru import logger
 
 from app.core.exceptions import AIServiceError
 
+# 策略类型 → 数据库 business_type 映射
+_STRATEGY_TYPE_BUSINESS_TYPE = {
+    "entry": "strategy_generation_entry",
+    "exit": "strategy_generation_exit",
+    "stock_selection": "strategy_generation_stock_selection",
+}
+
 
 class AIProviderClient:
     """AI提供商客户端基类"""
@@ -226,6 +233,8 @@ class AIStrategyService:
 
 ## 代码框架要求
 
+{STRATEGY_TYPE_FRAMEWORK}
+
 ### 1. 必须的导入语句
 ```python
 from typing import Optional, Dict, Any
@@ -386,10 +395,61 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
 
         return client_class(**config)
 
+    def _load_db_prompt(self, strategy_type: str) -> Optional[str]:
+        """从数据库按策略类型加载 user_prompt_template，失败时返回 None"""
+        try:
+            from app.core.database import SessionLocal
+            from app.services.prompt_template_service import get_prompt_template_service
+
+            business_type = _STRATEGY_TYPE_BUSINESS_TYPE.get(strategy_type)
+            if not business_type:
+                return None
+
+            db = SessionLocal()
+            try:
+                svc = get_prompt_template_service()
+                template = svc.get_active_template(db, business_type)
+                return template.user_prompt_template
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"从数据库加载 prompt 模板失败，将降级使用硬编码: {e}")
+            return None
+
+    # 各策略类型的接口框架片段，注入到 prompt 的"代码框架要求"节（数据库模板缺失时的降级备用）
+    STRATEGY_TYPE_FRAMEWORKS = {
+        "entry": """\
+### 入场策略接口要求
+本次生成的是**入场策略**（决定何时买入），必须实现以下方法：
+- `calculate_scores(prices, features, date) -> pd.Series`：对每只股票打分，分数越高越优先买入
+- `generate_signals(prices, features, **kwargs) -> pd.DataFrame`：返回信号 DataFrame，列为股票代码，行为日期，值 1=买入 0=持有 -1=卖出
+
+**信号语义**：1 表示产生买入信号，策略框架将据此建仓。""",
+
+        "exit": """\
+### 离场策略接口要求
+本次生成的是**离场策略**（决定何时卖出/止损/止盈），必须实现以下方法：
+- `calculate_scores(prices, features, date) -> pd.Series`：对持仓股票打分，分数越低越优先卖出
+- `generate_signals(prices, features, **kwargs) -> pd.DataFrame`：返回信号 DataFrame，列为股票代码，行为日期，值 -1=卖出 0=继续持有
+
+**信号语义**：-1 表示产生卖出/止损信号，策略框架将据此平仓。
+**典型实现**：固定止损比例、trailing stop、技术指标死叉、持仓周期到期等。""",
+
+        "stock_selection": """\
+### 选股策略接口要求
+本次生成的是**选股策略**（从全市场筛选目标股票池），必须实现以下方法：
+- `calculate_scores(prices, features, date) -> pd.Series`：对每只股票打分，分数越高越入选
+- `generate_signals(prices, features, **kwargs) -> pd.DataFrame`：返回信号 DataFrame，列为股票代码，行为日期，值 1=入选 0=不入选
+
+**信号语义**：1 表示该股票进入候选股票池，后续由入场策略决定具体买入时机。
+**典型实现**：因子选股（动量、估值、质量）、量价筛选、财务指标排名、机器学习打分等。""",
+    }
+
     async def generate_strategy(
         self,
         strategy_requirement: str,
         provider_config: Dict[str, Any],
+        strategy_type: str = "entry",
         custom_prompt_template: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -398,6 +458,7 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
         Args:
             strategy_requirement: 策略需求描述
             provider_config: AI提供商配置
+            strategy_type: 策略类型（entry / exit / stock_selection）
             custom_prompt_template: 自定义提示词模板（可选）
 
         Returns:
@@ -410,9 +471,26 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
         """
         start_time = time.time()
 
-        # 构建提示词
-        prompt_template = custom_prompt_template or self.DEFAULT_PROMPT_TEMPLATE
-        prompt = prompt_template.replace("{STRATEGY_REQUIREMENT}", strategy_requirement)
+        # 构建提示词：优先使用 custom_prompt_template，其次从数据库按策略类型取，最后降级到硬编码
+        if custom_prompt_template:
+            prompt = custom_prompt_template.replace("{STRATEGY_REQUIREMENT}", strategy_requirement)
+        else:
+            db_template_text = self._load_db_prompt(strategy_type)
+            if db_template_text:
+                # 数据库模板使用 Jinja2 风格 {{ strategy_requirement }}，直接替换
+                prompt = db_template_text.replace("{{ strategy_requirement }}", strategy_requirement)
+                logger.info(f"使用数据库模板生成策略 (strategy_type={strategy_type})")
+            else:
+                # 降级：硬编码模板 + STRATEGY_TYPE_FRAMEWORKS 注入
+                type_framework = self.STRATEGY_TYPE_FRAMEWORKS.get(
+                    strategy_type, self.STRATEGY_TYPE_FRAMEWORKS["entry"]
+                )
+                prompt = (
+                    self.DEFAULT_PROMPT_TEMPLATE
+                    .replace("{STRATEGY_REQUIREMENT}", strategy_requirement)
+                    .replace("{STRATEGY_TYPE_FRAMEWORK}", type_framework)
+                )
+                logger.warning(f"数据库模板未找到，降级使用硬编码模板 (strategy_type={strategy_type})")
 
         # 创建客户端
         provider = provider_config.get("provider", "deepseek")

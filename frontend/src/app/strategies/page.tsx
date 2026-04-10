@@ -34,6 +34,13 @@ import {
   PaginationEllipsis
 } from '@/components/ui/pagination'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Plus,
   Search,
   Code,
@@ -43,7 +50,8 @@ import {
   TrendingUp,
   TrendingDown,
   Activity,
-  Filter
+  Filter,
+  ChevronDown,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -90,7 +98,7 @@ export default function StrategiesPage() {
 
       // 构建通用筛选参数
       const buildCommonParams = () => ({
-        strategy_type: strategyType,
+        strategy_type: strategyType as 'entry' | 'exit' | 'stock_selection',
         category: categoryFilter !== 'all' ? categoryFilter : undefined
       })
 
@@ -297,18 +305,38 @@ export default function StrategiesPage() {
           </p>
         </div>
 
-        {/* 创建策略按钮 */}
-        <Link href="/strategies/create">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            创建策略
-          </Button>
-        </Link>
+        {/* 创建策略下拉菜单 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              创建策略
+              <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={() => router.push('/strategies/create/ai')} className="gap-2 cursor-pointer">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <div>
+                <p className="font-medium">AI 自动生成</p>
+                <p className="text-xs text-muted-foreground">描述需求，全程自动化</p>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push('/strategies/create')} className="gap-2 cursor-pointer">
+              <Code className="h-4 w-4" />
+              <div>
+                <p className="font-medium">手动编写代码</p>
+                <p className="text-xs text-muted-foreground">完全自定义控制</p>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Tab 导航 */}
       <Tabs value={strategyType} onValueChange={handleTabChange} className="mb-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="entry" className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4" />
             入场策略
@@ -324,6 +352,15 @@ export default function StrategiesPage() {
             {statistics?.by_strategy_type?.exit && (
               <Badge variant="secondary" className="ml-1">
                 {statistics.by_strategy_type.exit}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="stock_selection" className="flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            选股策略
+            {statistics?.by_strategy_type?.stock_selection && (
+              <Badge variant="secondary" className="ml-1">
+                {statistics.by_strategy_type.stock_selection}
               </Badge>
             )}
           </TabsTrigger>
@@ -410,7 +447,7 @@ export default function StrategiesPage() {
               <p className="text-muted-foreground mb-6">
                 {searchQuery || userFilter !== 'all' || categoryFilter !== 'all'
                   ? '没有找到匹配的策略，请调整筛选条件'
-                  : `还没有创建任何${strategyType === 'entry' ? '入场' : '离场'}策略，立即创建您的第一个策略`}
+                  : `还没有创建任何${strategyType === 'entry' ? '入场' : strategyType === 'exit' ? '离场' : '选股'}策略，立即创建您的第一个策略`}
               </p>
               {!searchQuery && userFilter === 'all' && categoryFilter === 'all' && (
                 <Link href="/strategies/create">

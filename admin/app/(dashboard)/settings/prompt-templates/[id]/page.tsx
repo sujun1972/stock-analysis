@@ -30,7 +30,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ArrowLeft, Save, Eye, FileText, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { promptTemplateApi } from '@/lib/prompt-template-api'
-import { PromptTemplate, BUSINESS_TYPES } from '@/types/prompt-template'
+import { PromptTemplate, BUSINESS_TYPES, BUSINESS_TYPE_LABELS } from '@/types/prompt-template'
 import { useToast } from '@/hooks/use-toast'
 
 export default function PromptTemplateEditPage() {
@@ -283,9 +283,9 @@ export default function PromptTemplateEditPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={BUSINESS_TYPES.SENTIMENT_ANALYSIS}>市场情绪分析</SelectItem>
-                      <SelectItem value={BUSINESS_TYPES.PREMARKET_ANALYSIS}>盘前预期分析</SelectItem>
-                      <SelectItem value={BUSINESS_TYPES.STRATEGY_GENERATION}>AI策略生成</SelectItem>
+                      {Object.entries(BUSINESS_TYPE_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

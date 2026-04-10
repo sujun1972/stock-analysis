@@ -19,7 +19,9 @@ import {
   AlertCircle,
   Copy,
   Edit,
-  Trash2
+  Trash2,
+  Filter,
+  ExternalLink,
 } from 'lucide-react'
 import type { Strategy } from '@/types/strategy'
 
@@ -91,10 +93,9 @@ const StrategyCard = memo(function StrategyCard({
     return labels[strategy.risk_level] || strategy.risk_level
   }
 
-  // 判断是否为离场策略
   const isExitStrategy = strategy.strategy_type === 'exit'
+  const isStockSelectionStrategy = strategy.strategy_type === 'stock_selection'
 
-  // 判断当前用户是否有权限编辑/删除该策略
   const canModify = isAdmin || (currentUserId && strategy.user_id === currentUserId)
 
   return (
@@ -104,7 +105,11 @@ const StrategyCard = memo(function StrategyCard({
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <CardTitle className="text-lg">{strategy.display_name}</CardTitle>
-              {/* 离场策略标识 */}
+                {isStockSelectionStrategy && (
+                <Badge variant="secondary" className="text-xs">
+                  选股策略
+                </Badge>
+              )}
               {isExitStrategy && (
                 <Badge variant="secondary" className="text-xs">
                   离场策略
@@ -137,22 +142,24 @@ const StrategyCard = memo(function StrategyCard({
           ))}
         </div>
 
-        {/* 风险等级和统计信息 */}
+        {/* 风险等级和统计信息（选股策略不显示风险等级） */}
         <div className="grid grid-cols-2 gap-2 pt-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">风险等级:</span>
-            <Badge variant={getRiskBadgeVariant() as any}>
-              {getRiskLabel()}
-            </Badge>
-          </div>
+          {!isStockSelectionStrategy && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">风险等级:</span>
+              <Badge variant={getRiskBadgeVariant() as any}>
+                {getRiskLabel()}
+              </Badge>
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">使用次数:</span>
             <span className="font-medium">{strategy.usage_count || 0}</span>
           </div>
         </div>
 
-        {/* 性能指标（如果有） */}
-        {(strategy.avg_sharpe_ratio || strategy.avg_annual_return) && (
+        {/* 性能指标（选股策略不显示回测指标） */}
+        {!isStockSelectionStrategy && (strategy.avg_sharpe_ratio || strategy.avg_annual_return) && (
           <div className="bg-muted/50 rounded-lg p-3 space-y-1">
             <p className="text-xs font-medium text-muted-foreground">平均表现</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -203,20 +210,32 @@ const StrategyCard = memo(function StrategyCard({
           </Button>
         </Link>
 
-        {/* 回测按钮（离场策略不能单独回测） */}
-        {onBacktest && !isExitStrategy && (
-          <Link href={`/backtest?type=unified&id=${strategy.id}`} className="flex-1">
+        {/* 选股策略：查看选股结果 */}
+        {isStockSelectionStrategy ? (
+          <Link href={`/stocks?stock_selection_strategy_id=${strategy.id}`} className="flex-1">
             <Button size="sm" className="w-full">
-              <Play className="mr-1 h-3 w-3" />
-              回测
+              <ExternalLink className="mr-1 h-3 w-3" />
+              查看选股结果
             </Button>
           </Link>
-        )}
-        {onBacktest && isExitStrategy && (
-          <Button size="sm" className="w-full flex-1" disabled title="离场策略需要配合入场策略使用，不能单独回测">
-            <Play className="mr-1 h-3 w-3" />
-            不可回测
-          </Button>
+        ) : (
+          <>
+            {/* 回测按钮（入场策略） */}
+            {onBacktest && !isExitStrategy && (
+              <Link href={`/backtest?type=unified&id=${strategy.id}`} className="flex-1">
+                <Button size="sm" className="w-full">
+                  <Play className="mr-1 h-3 w-3" />
+                  回测
+                </Button>
+              </Link>
+            )}
+            {onBacktest && isExitStrategy && (
+              <Button size="sm" className="w-full flex-1" disabled title="离场策略需要配合入场策略使用，不能单独回测">
+                <Play className="mr-1 h-3 w-3" />
+                不可回测
+              </Button>
+            )}
+          </>
         )}
 
         {/* 克隆按钮 */}

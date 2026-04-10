@@ -31,7 +31,9 @@ import {
   Edit,
   Trash2,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Filter,
+  ExternalLink,
 } from 'lucide-react'
 import type { Strategy } from '@/types/strategy'
 
@@ -118,8 +120,9 @@ const StrategyListCard = memo(function StrategyListCard({
     return labels[strategy.risk_level] || strategy.risk_level
   }
 
-  // 判断是否为离场策略
+  // 策略类型判断
   const isExitStrategy = strategy.strategy_type === 'exit'
+  const isStockSelectionStrategy = strategy.strategy_type === 'stock_selection'
 
   // 判断当前用户是否有权限编辑/删除该策略
   const canModify = isAdmin || (currentUserId && strategy.user_id === currentUserId)
@@ -131,9 +134,15 @@ const StrategyListCard = memo(function StrategyListCard({
           {/* 左侧：策略类型图标 */}
           <div className="flex-shrink-0">
             <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-              isExitStrategy ? 'bg-red-100 dark:bg-red-950' : 'bg-green-100 dark:bg-green-950'
+              isStockSelectionStrategy
+                ? 'bg-blue-100 dark:bg-blue-950'
+                : isExitStrategy
+                ? 'bg-red-100 dark:bg-red-950'
+                : 'bg-green-100 dark:bg-green-950'
             }`}>
-              {isExitStrategy ? (
+              {isStockSelectionStrategy ? (
+                <Filter className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              ) : isExitStrategy ? (
                 <TrendingDown className="h-6 w-6 text-red-600 dark:text-red-400" />
               ) : (
                 <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
@@ -149,7 +158,7 @@ const StrategyListCard = memo(function StrategyListCard({
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="text-lg font-semibold truncate">{strategy.display_name}</h3>
                   <Badge variant="secondary" className="text-xs flex-shrink-0">
-                    {isExitStrategy ? '离场策略' : '入场策略'}
+                    {isStockSelectionStrategy ? '选股策略' : isExitStrategy ? '离场策略' : '入场策略'}
                   </Badge>
                   {strategy.version && (
                     <span className="text-xs text-muted-foreground flex-shrink-0">
@@ -181,10 +190,12 @@ const StrategyListCard = memo(function StrategyListCard({
                 <Badge variant="secondary">{strategy.category}</Badge>
               )}
 
-              {/* 风险等级 */}
-              <Badge variant={getRiskBadgeVariant() as any}>
-                {getRiskLabel()}
-              </Badge>
+              {/* 风险等级（选股策略不显示） */}
+              {!isStockSelectionStrategy && (
+                <Badge variant={getRiskBadgeVariant() as any}>
+                  {getRiskLabel()}
+                </Badge>
+              )}
 
               {/* 使用次数 */}
               <span className="text-xs text-muted-foreground">
@@ -204,8 +215,8 @@ const StrategyListCard = memo(function StrategyListCard({
               )}
             </div>
 
-            {/* 性能指标 */}
-            {(strategy.avg_sharpe_ratio || strategy.avg_annual_return) && (
+            {/* 性能指标（选股策略不显示回测类指标） */}
+            {!isStockSelectionStrategy && (strategy.avg_sharpe_ratio || strategy.avg_annual_return) && (
               <div className="flex items-center gap-6 text-sm">
                 {strategy.avg_sharpe_ratio !== null && strategy.avg_sharpe_ratio !== undefined && (
                   <div>
@@ -246,24 +257,32 @@ const StrategyListCard = memo(function StrategyListCard({
               </Button>
             </Link>
 
-            {/* 回测按钮 */}
-            {onBacktest && !isExitStrategy && (
-              <Link href={`/backtest?type=unified&id=${strategy.id}`}>
+            {/* 选股策略：跳转到股票列表 */}
+            {isStockSelectionStrategy ? (
+              <Link href={`/stocks?stock_selection_strategy_id=${strategy.id}`}>
                 <Button size="sm">
-                  <Play className="mr-1 h-4 w-4" />
-                  回测
+                  <ExternalLink className="mr-1 h-4 w-4" />
+                  查看选股结果
                 </Button>
               </Link>
-            )}
-            {onBacktest && isExitStrategy && (
-              <Button
-                size="sm"
-                disabled
-                title="离场策略需要配合入场策略使用，不能单独回测"
-              >
-                <Play className="mr-1 h-4 w-4" />
-                不可回测
-              </Button>
+            ) : (
+              <>
+                {/* 回测按钮（入场策略） */}
+                {onBacktest && !isExitStrategy && (
+                  <Link href={`/backtest?type=unified&id=${strategy.id}`}>
+                    <Button size="sm">
+                      <Play className="mr-1 h-4 w-4" />
+                      回测
+                    </Button>
+                  </Link>
+                )}
+                {onBacktest && isExitStrategy && (
+                  <Button size="sm" disabled title="离场策略需要配合入场策略使用，不能单独回测">
+                    <Play className="mr-1 h-4 w-4" />
+                    不可回测
+                  </Button>
+                )}
+              </>
             )}
 
             {/* 克隆 */}

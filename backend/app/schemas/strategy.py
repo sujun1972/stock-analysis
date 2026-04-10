@@ -35,7 +35,7 @@ class StrategyCreate(BaseModel):
     )
     strategy_type: str = Field(
         "entry",
-        description="策略类型: entry (入场策略), exit (离场策略)"
+        description="策略类型: entry (入场策略), exit (离场策略), stock_selection (选股策略)"
     )
 
     # 策略元信息
@@ -63,7 +63,7 @@ class StrategyCreate(BaseModel):
     @classmethod
     def validate_strategy_type(cls, v):
         """验证策略类型"""
-        allowed = ["entry", "exit"]
+        allowed = ["entry", "exit", "stock_selection"]
         if v not in allowed:
             raise ValueError(f"strategy_type 必须是以下之一: {', '.join(allowed)}")
         return v
