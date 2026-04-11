@@ -464,6 +464,7 @@ function StocksPageContent() {
       if (industryFilter !== 'all') params.industry = industryFilter
       if (conceptFilter !== 'all') params.concept_code = conceptFilter
       if (stockSelectionStrategyId) params.stock_selection_strategy_id = Number(stockSelectionStrategyId)
+      if (activeListId !== null) params.user_stock_list_id = activeListId
 
       const result = await apiClient.getStockCodes(params)
       const tsCodes = result.codes

@@ -197,6 +197,7 @@ async def get_stock_codes(
     stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
     list_status: Optional[str] = Query(None, description="上市状态: L-上市, D-退市, P-暂停上市"),
     exchange: Optional[str] = Query(None, description="交易所: SSE-上交所, SZSE-深交所, BSE-北交所"),
+    user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，只返回该列表中的股票"),
     limit: int = Query(500, ge=1, le=5000, description="最大返回数量，范围: 1-5000，默认 500"),
 ):
     """
@@ -294,6 +295,11 @@ async def get_stock_codes(
             placeholders = ",".join(["%s"] * len(selection_ts_codes))
             conditions.append(f"sb.ts_code IN ({placeholders})")
             params_list.extend(selection_ts_codes)
+
+    # 自选列表过滤
+    if user_stock_list_id is not None:
+        conditions.append("sb.ts_code IN (SELECT ts_code FROM user_stock_list_items WHERE list_id = %s)")
+        params_list.append(user_stock_list_id)
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 

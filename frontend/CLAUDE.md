@@ -156,6 +156,8 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 - `activeListId` 直接从 URL 读取，不存 Zustand store
 - 所有分页操作通过 `goToPage()` 同步 URL
 
+**⚠️ 两套参数必须保持同步**：`fetchStocks`（加载列表页）和 `handleSelectAllFiltered`（全选所有筛选结果）使用相同的筛选条件，任何新增筛选参数必须同时添加到两处。`handleSelectAllFiltered` 调用 `GET /api/stocks/codes/filtered`，该端点支持与 `/api/stocks/list` 相同的所有筛选参数（含 `user_stock_list_id`）。
+
 ### 东方财富板块筛选（LazyConceptSelect）
 
 组件位于 `frontend/src/components/stocks/LazyConceptSelect.tsx`，支持三种板块类型切换：

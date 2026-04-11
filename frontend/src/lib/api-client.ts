@@ -408,6 +408,7 @@ class ApiClient {
     concept_code?: string
     stock_selection_strategy_id?: number
     list_status?: string
+    user_stock_list_id?: number
     limit?: number
   }): Promise<{ codes: string[]; total: number }> {
     const response = await axiosInstance.get('/api/stocks/codes/filtered', { params })
