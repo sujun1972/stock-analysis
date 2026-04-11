@@ -980,7 +980,8 @@ function StocksPageContent() {
                                   { stock_name: stock.name, stock_code: stock.code }
                                 )
                                 if (res?.code === 200 && res.data?.user_prompt_template) {
-                                  setHotMoneyContent(res.data.user_prompt_template)
+                                  const parts = [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean)
+                                  setHotMoneyContent(parts.join('\n\n'))
                                 }
                               } catch {
                                 setHotMoneyContent('加载失败，请重试')
