@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import type { StockInfo, StockQuotePanel } from '@/types'
 import * as echarts from 'echarts'
+import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -295,7 +296,14 @@ function AnalysisContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // ── 游资观点弹窗 ──
+  const [hotMoneyOpen, setHotMoneyOpen] = useState(false)
+  const [hotMoneyContent, setHotMoneyContent] = useState('')
+  const [hotMoneyLoading, setHotMoneyLoading] = useState(false)
+  const [latestAnalysis, setLatestAnalysis] = useState<{ score: number | null; version: number } | null>(null)
+
   useEffect(() => {
+    setLatestAnalysis(null)
     if (code) {
       loadStockInfo()
     } else {
@@ -303,6 +311,13 @@ function AnalysisContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
+
+  const toTsCode = (c: string) => {
+    if (c.includes('.')) return c.toUpperCase()
+    if (c.startsWith('6')) return `${c}.SH`
+    if (c.startsWith('4') || c.startsWith('8')) return `${c}.BJ`
+    return `${c}.SZ`
+  }
 
   const loadStockInfo = async () => {
     if (!code) return
@@ -317,11 +332,44 @@ function AnalysisContent() {
       setStockInfo(stockInfoData)
       setBasicInfo(basicInfoData)
       setQuotePanel(quotePanelData)
+      // 加载最新游资分析摘要（非阻塞，不影响主加载流程）
+      const tsCode = stockInfoData?.ts_code || toTsCode(code)
+      refreshLatestAnalysis(tsCode)
     } catch (err: any) {
       setError(err.message || '加载股票数据失败')
       console.error('Failed to load stock data:', err)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const refreshLatestAnalysis = (ts: string) => {
+    apiClient.getLatestStockAnalysis(ts, 'hot_money_view')
+      .then((res) => {
+        setLatestAnalysis(res?.code === 200 && res.data
+          ? { score: res.data.score, version: res.data.version }
+          : null)
+      })
+      .catch(() => { setLatestAnalysis(null) })
+  }
+
+  const openHotMoneyDialog = async () => {
+    setHotMoneyContent('')
+    setHotMoneyLoading(true)
+    setHotMoneyOpen(true)
+    try {
+      const res = await apiClient.getPromptTemplateByKey(
+        'top_speculative_investor_v1',
+        { stock_name: stockInfo?.name ?? '', stock_code: code ?? '' }
+      )
+      if (res?.code === 200 && res.data?.user_prompt_template) {
+        const parts = [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean)
+        setHotMoneyContent(parts.join('\n\n'))
+      }
+    } catch {
+      setHotMoneyContent('加载失败，请重试')
+    } finally {
+      setHotMoneyLoading(false)
     }
   }
 
@@ -396,17 +444,49 @@ function AnalysisContent() {
     )
   }
 
+  const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : '')
+
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          {stockInfo?.name}（{stockInfo?.code}）
-        </h1>
-        {basicInfo?.fullname && basicInfo.fullname !== basicInfo?.name && (
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{basicInfo.fullname}</p>
-        )}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            {stockInfo?.name}（{stockInfo?.code}）
+          </h1>
+          {basicInfo?.fullname && basicInfo.fullname !== basicInfo?.name && (
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{basicInfo.fullname}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 pt-1">
+          {latestAnalysis?.score != null && (
+            <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+              latestAnalysis.score >= 8 ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+              : latestAnalysis.score >= 6 ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
+              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+            }`}>
+              游资 {latestAnalysis.score}
+            </span>
+          )}
+          <button
+            onClick={openHotMoneyDialog}
+            className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors"
+          >
+            游资观点
+          </button>
+        </div>
       </div>
+
+      <HotMoneyViewDialog
+        open={hotMoneyOpen}
+        onClose={() => setHotMoneyOpen(false)}
+        stockName={stockInfo?.name ?? ''}
+        stockCode={code ?? ''}
+        tsCode={tsCode}
+        promptContent={hotMoneyContent}
+        promptLoading={hotMoneyLoading}
+        onSaved={() => refreshLatestAnalysis(tsCode)}
+      />
 
       {/* 行情卡片 */}
       <Card>

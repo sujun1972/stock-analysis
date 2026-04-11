@@ -18,6 +18,7 @@ from app.models.user import User
 from app.models.api_response import ApiResponse
 from app.api.error_handler import handle_api_errors
 from app.services import TaskHistoryHelper
+from app.services.stock_ai_analysis_service import StockAiAnalysisService
 
 router = APIRouter()
 
@@ -117,6 +118,7 @@ async def get_stock_list(
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
     stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
     user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，仅返回该列表中的股票"),
+    include_analysis: bool = Query(False, description="是否附带每只股票的最新AI分析摘要（游资观点评分等）"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
     skip: int = Query(0, ge=0, description="偏移量（offset别名，兼容前端）"),
@@ -270,6 +272,9 @@ async def get_stock_list(
             'act_ent_type': row[16],
             'status': row[17]
         })
+
+    if include_analysis:
+        items = await StockAiAnalysisService().enrich_stock_list(items, 'hot_money_view')
 
     response_data: dict = {'items': items, 'total': total}
     if selection_strategy_name is not None:

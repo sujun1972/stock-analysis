@@ -158,6 +158,30 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **⚠️ 两套参数必须保持同步**：`fetchStocks`（加载列表页）和 `handleSelectAllFiltered`（全选所有筛选结果）使用相同的筛选条件，任何新增筛选参数必须同时添加到两处。`handleSelectAllFiltered` 调用 `GET /api/stocks/codes/filtered`，该端点支持与 `/api/stocks/list` 相同的所有筛选参数（含 `user_stock_list_id`）。
 
+### AI 分析摘要注入（`include_analysis`）
+
+`/api/stocks/list` 支持 `include_analysis=true` 参数，后端会批量查询每只股票的最新游资分析（`hot_money_view`），并将摘要注入每个股票对象的 `latest_analysis` 字段：
+
+```typescript
+// StockInfo.latest_analysis（无记录时为 null）
+{ id: number; score: number | null; version: number; created_at: string }
+```
+
+`stocks/page.tsx` 每次加载列表时固定传入此参数，`score` 着色规则：≥8 红色，≥6 黄色，其余灰色。
+
+### 游资观点弹窗（`HotMoneyViewDialog`）
+
+共享组件位于 `frontend/src/components/stocks/HotMoneyViewDialog.tsx`，在股票列表页（`/stocks`）和分析页（`/analysis`）复用。
+
+功能：查看/翻页历史分析记录、保存新记录、编辑/删除已有记录（仅记录创建者）、折叠展示提示词、复制提示词。
+
+后端 API（均需登录）：
+- `POST /api/stock-ai-analysis/` — 保存新记录（版本自动递增）
+- `GET  /api/stock-ai-analysis/latest` — 获取最新一条
+- `GET  /api/stock-ai-analysis/history` — 分页获取所有历史
+- `PUT  /api/stock-ai-analysis/{id}` — 修改（仅创建者，403 无权限）
+- `DELETE /api/stock-ai-analysis/{id}` — 删除（仅创建者，403 无权限）
+
 ### 东方财富板块筛选（LazyConceptSelect）
 
 组件位于 `frontend/src/components/stocks/LazyConceptSelect.tsx`，支持三种板块类型切换：

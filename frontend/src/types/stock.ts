@@ -41,6 +41,13 @@ export interface StockInfo {
   trade_time?: string
   // 概念标签
   concepts?: Concept[]
+  // AI分析摘要（include_analysis=true 时由后端注入）
+  latest_analysis?: {
+    id: number
+    score: number | null
+    version: number
+    created_at: string
+  } | null
 }
 
 // 行情面板数据类型（stock_realtime + daily_basic 合并）

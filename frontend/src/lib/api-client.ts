@@ -314,6 +314,7 @@ class ApiClient {
     sort_order?: string
     stock_selection_strategy_id?: number
     user_stock_list_id?: number
+    include_analysis?: boolean
   }): Promise<PaginatedResponse<StockInfo> & { strategy_name?: string }> {
     const response = await axiosInstance.get('/api/stocks/list', { params })
     const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
@@ -1478,6 +1479,58 @@ class ApiClient {
     params?: { stock_name?: string; stock_code?: string }
   ): Promise<any> {
     const response = await axiosInstance.get(`/api/prompt-templates/by-key/${templateKey}`, { params })
+    return response.data
+  }
+
+  // ========== 股票AI分析 ==========
+
+  /** 保存一条新的AI分析结果（每次调用为新版本） */
+  async saveStockAnalysis(params: {
+    ts_code: string
+    analysis_type: string
+    analysis_text: string
+    score?: number
+    prompt_text?: string
+    ai_provider?: string
+    ai_model?: string
+  }): Promise<any> {
+    const response = await axiosInstance.post('/api/stock-ai-analysis/', params)
+    return response.data
+  }
+
+  /** 获取指定股票+类型的最新一条分析结果 */
+  async getLatestStockAnalysis(tsCode: string, analysisType: string): Promise<any> {
+    const response = await axiosInstance.get('/api/stock-ai-analysis/latest', {
+      params: { ts_code: tsCode, analysis_type: analysisType },
+    })
+    return response.data
+  }
+
+  /** 获取指定股票+类型的所有版本历史（分页，最新在前） */
+  async getStockAnalysisHistory(
+    tsCode: string,
+    analysisType: string,
+    limit = 50,
+    offset = 0
+  ): Promise<any> {
+    const response = await axiosInstance.get('/api/stock-ai-analysis/history', {
+      params: { ts_code: tsCode, analysis_type: analysisType, limit, offset },
+    })
+    return response.data
+  }
+
+  /** 修改已保存的分析记录 */
+  async updateStockAnalysis(
+    recordId: number,
+    params: { analysis_text: string; score?: number }
+  ): Promise<any> {
+    const response = await axiosInstance.put(`/api/stock-ai-analysis/${recordId}`, params)
+    return response.data
+  }
+
+  /** 删除已保存的分析记录 */
+  async deleteStockAnalysis(recordId: number): Promise<any> {
+    const response = await axiosInstance.delete(`/api/stock-ai-analysis/${recordId}`)
     return response.data
   }
 }

@@ -44,11 +44,10 @@ import {
   X,
   ChevronDown,
   Filter,
-  Copy,
-  Check,
 } from 'lucide-react'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
+import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import type { StockList } from '@/types'
 import type { Strategy } from '@/types/strategy'
 
@@ -256,66 +255,6 @@ function RenameListDialog({ open, list, onClose }: RenameListDialogProps) {
   )
 }
 
-// ── 顶级游资观点 Dialog ──────────────────────────────────────
-interface HotMoneyViewDialogProps {
-  open: boolean
-  onClose: () => void
-  stockName: string
-  stockCode: string
-  content: string   // 已由后端完成占位符替换的最终文本
-  loading: boolean
-}
-
-function HotMoneyViewDialog({ open, onClose, stockName, stockCode, content, loading }: HotMoneyViewDialogProps) {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      const el = document.createElement('textarea')
-      el.value = content
-      document.body.appendChild(el)
-      el.select()
-      document.execCommand('copy')
-      document.body.removeChild(el)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[680px] max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>
-            顶级游资观点：{stockName}（{stockCode}）
-          </DialogTitle>
-          <DialogDescription>复制下方提示词到 AI 对话框，获取游资视角分析</DialogDescription>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12 text-gray-400 text-sm">加载中...</div>
-          ) : (
-            <pre className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded-lg p-4 leading-relaxed font-mono">
-              {content}
-            </pre>
-          )}
-        </div>
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose}>关闭</Button>
-          <Button onClick={handleCopy} disabled={loading || !content} className="gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? '已复制' : '复制全文'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 // ── 主页面 ────────────────────────────────────────────────────
 function StocksPageContent() {
   const searchParams = useSearchParams()
@@ -377,7 +316,7 @@ function StocksPageContent() {
 
   // ── 顶级游资观点弹窗 ──
   const [hotMoneyDialogOpen, setHotMoneyDialogOpen] = useState(false)
-  const [hotMoneyStock, setHotMoneyStock] = useState<{ name: string; code: string } | null>(null)
+  const [hotMoneyStock, setHotMoneyStock] = useState<{ name: string; code: string; tsCode: string } | null>(null)
   const [hotMoneyContent, setHotMoneyContent] = useState<string>('')
   const [hotMoneyLoading, setHotMoneyLoading] = useState(false)
 
@@ -436,6 +375,7 @@ function StocksPageContent() {
         sort_by: sortBy,
         sort_order: sortOrder,
         list_status: 'L',
+        include_analysis: true,
       }
       if (marketFilter === 'SSE') { params.market = '主板'; params.exchange = 'SSE' }
       else if (marketFilter === 'SZSE') { params.market = '主板'; params.exchange = 'SZSE' }
@@ -916,6 +856,7 @@ function StocksPageContent() {
                         )}
                       </button>
                     </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">游资评分</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>
                 </thead>
@@ -967,10 +908,24 @@ function StocksPageContent() {
                             </span>
                           ) : '-'}
                         </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                          {stock.latest_analysis?.score != null ? (
+                            <span className={`text-sm font-semibold ${
+                              stock.latest_analysis.score >= 8 ? 'text-red-600 dark:text-red-400'
+                              : stock.latest_analysis.score >= 6 ? 'text-yellow-600 dark:text-yellow-400'
+                              : 'text-gray-500 dark:text-gray-400'
+                            }`}>
+                              {stock.latest_analysis.score}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={async () => {
-                              setHotMoneyStock({ name: stock.name, code: stock.code })
+                              const ts = stock.ts_code ?? toTsCode(stock.code)
+                              setHotMoneyStock({ name: stock.name, code: stock.code, tsCode: ts })
                               setHotMoneyContent('')
                               setHotMoneyLoading(true)
                               setHotMoneyDialogOpen(true)
@@ -1097,8 +1052,10 @@ function StocksPageContent() {
         onClose={() => { setHotMoneyDialogOpen(false); setHotMoneyStock(null) }}
         stockName={hotMoneyStock?.name ?? ''}
         stockCode={hotMoneyStock?.code ?? ''}
-        content={hotMoneyContent}
-        loading={hotMoneyLoading}
+        tsCode={hotMoneyStock?.tsCode ?? ''}
+        promptContent={hotMoneyContent}
+        promptLoading={hotMoneyLoading}
+        onSaved={() => fetchStocks(true)}
       />
     </div>
   )
