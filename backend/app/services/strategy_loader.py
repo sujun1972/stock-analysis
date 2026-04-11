@@ -267,9 +267,11 @@ class StrategyDynamicLoader:
 
         流程：
         1. 加载策略实例
-        2. 从 stock_daily 获取近 lookback_days 天收盘价，构建 prices DataFrame
+        2. 从 stock_daily 获取近 lookback_days 天收盘价和成交量
         3. 系统层数据清洗（过滤非交易日、补齐停牌 NaN、剔除覆盖率不足的股票）
         4. 调用 strategy.calculate_scores(prices, features, {})
+           - prices : 收盘价矩阵（index=交易日, columns=ts_code）
+           - features: 成交量矩阵（同结构），供策略计算量价因子
         5. 过滤评分 <= 0 的股票，按评分降序返回
 
         Args:
@@ -304,13 +306,13 @@ class StrategyDynamicLoader:
         daily_repo = StockDailyRepository()
 
         def _fetch_prices() -> list:
-            """从 stock_daily 同步拉取全市场收盘价（在线程池中执行）"""
+            """从 stock_daily 同步拉取全市场收盘价和成交量（在线程池中执行）"""
             conn = daily_repo.db.get_connection()
             try:
                 cur = conn.cursor()
                 cur.execute(
                     """
-                    SELECT code, date, close
+                    SELECT code, date, close, volume
                     FROM stock_daily
                     WHERE date >= %s AND date <= %s
                       AND close IS NOT NULL AND close > 0
@@ -339,28 +341,32 @@ class StrategyDynamicLoader:
                 return f"{code}.BJ"
             return f"{code}.SZ"
 
-        # 构建 prices DataFrame: index=日期, columns=ts_code
-        df = pd.DataFrame(rows, columns=["code", "date", "close"])
+        # 构建 prices / volume DataFrame: index=交易日, columns=ts_code
+        df = pd.DataFrame(rows, columns=["code", "date", "close", "volume"])
         df["date"] = pd.to_datetime(df["date"].astype(str))
-        # psycopg2 返回 Decimal，需转 float 才能正确做 groupby/mean
         df["close"] = df["close"].astype(float)
+        df["volume"] = df["volume"].astype(float)
         df["ts_code"] = df["code"].apply(_code_to_ts_code)
-        # stock_daily 同一日期同一股票可能存在重复行，取均值去重
-        df = df.groupby(["date", "ts_code"], as_index=False)["close"].mean()
-        prices = df.pivot(index="date", columns="ts_code", values="close")
-        prices = prices.sort_index().tail(lookback_days)
+        # 同一日期同一股票可能存在重复行，取均值去重
+        df = df.groupby(["date", "ts_code"], as_index=False)[["close", "volume"]].mean()
+        prices = df.pivot(index="date", columns="ts_code", values="close").sort_index().tail(lookback_days)
+        volume = df.pivot(index="date", columns="ts_code", values="volume").sort_index().tail(lookback_days)
 
         # 系统层数据清洗——策略代码无需重复处理以下问题：
         # - 周末/节假日在 stock_daily 中可能存有少量测试数据，pivot 后产生几乎全 NaN 的行，
         #   导致分位数计算退化（threshold=0，所有股票都通过）
         # - 新股或长期停牌的股票覆盖率不足，不具备因子计算意义
         # - 短暂停牌产生的 NaN 用前向填充补齐，保持价格序列连续
-        prices = prices[prices.notna().sum(axis=1) >= max(10, len(prices.columns) * 0.1)]
-        prices = prices.loc[:, prices.notna().mean() >= 0.5]
-        prices = prices.ffill().dropna(axis=1)
+        trading_day_mask = prices.notna().sum(axis=1) >= max(10, len(prices.columns) * 0.1)
+        prices = prices[trading_day_mask]
+        volume = volume[trading_day_mask]
+        valid_cols = prices.notna().mean() >= 0.5
+        prices = prices.loc[:, valid_cols].ffill().dropna(axis=1)
+        volume = volume.loc[:, prices.columns].ffill().fillna(0)
 
-        # 调用策略打分（空 features，选股策略自行从 prices 计算因子）
-        features = pd.DataFrame(index=prices.columns)
+        # features 传入成交量矩阵，结构与 prices 相同（index=交易日, columns=ts_code）
+        # 策略可通过 features.iloc[-n:].mean() 等方式计算放量比等量价因子
+        features = volume
         try:
             scores = await asyncio.to_thread(
                 strategy.calculate_scores, prices, features, {}

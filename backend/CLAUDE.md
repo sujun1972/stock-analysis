@@ -53,9 +53,12 @@ ts_codes = await StrategyDynamicLoader.run_stock_selection(
 | psycopg2 Decimal 类型 | 构建 DataFrame 前统一 astype(float) |
 | 同日期重复行 | groupby mean 去重后再 pivot |
 
-策略代码只需关注因子计算逻辑，传入的 `prices` 保证：索引为连续交易日、列为 ts_code、值全为 float、无 NaN。
+策略代码只需关注因子计算逻辑。传入参数的保证：
 
-**评分约定**：`calculate_scores()` 返回的 `pd.Series` 中，评分 `> 0` 的股票才会被选入结果；评分 `<= 0` 或 `-inf` 的股票视为未通过筛选。
+- `prices`：收盘价矩阵，index=连续交易日，columns=ts_code，值全为 float，无 NaN
+- `features`：成交量矩阵，结构与 `prices` 相同，停牌日填 0；策略可用 `features.iloc[-n:].mean()` 计算放量比等量价因子
+
+**评分约定**：`calculate_scores()` 返回的 `pd.Series` 中，评分 `> 0` 的股票才会被选入结果；评分 `<= 0` 或 `-inf` 的股票视为未通过筛选。`top_n` 由策略自身的 `custom_params` 控制，系统层不做截断。
 
 ---
 
