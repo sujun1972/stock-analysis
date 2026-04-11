@@ -9,7 +9,8 @@
  * - 实时预览渲染结果
  * - 查看统计信息
  *
- * 路由: /settings/prompt-templates/[id]
+ * 路由: /settings/prompt-templates/[key]
+ * 通过 template_key 而非 id 识别模板，确保跨环境稳定引用
  *
  * @author Admin Team
  * @since 2026-03-11
@@ -28,16 +29,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ArrowLeft, Save, Eye, FileText, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Save, Eye, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { promptTemplateApi } from '@/lib/prompt-template-api'
-import { PromptTemplate, BUSINESS_TYPES, BUSINESS_TYPE_LABELS } from '@/types/prompt-template'
+import { PromptTemplate, BUSINESS_TYPE_LABELS } from '@/types/prompt-template'
 import { useToast } from '@/hooks/use-toast'
 
 export default function PromptTemplateEditPage() {
   const router = useRouter()
   const params = useParams()
   const { toast } = useToast()
-  const templateId = parseInt(params.id as string)
+  const templateKey = params.key as string
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -75,7 +76,7 @@ export default function PromptTemplateEditPage() {
   const loadTemplate = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await promptTemplateApi.get(templateId)
+      const data = await promptTemplateApi.getByKey(templateKey)
       setTemplate(data)
       setFormData({
         template_name: data.template_name,
@@ -107,7 +108,7 @@ export default function PromptTemplateEditPage() {
     } finally {
       setLoading(false)
     }
-  }, [templateId, toast])
+  }, [templateKey, toast])
 
   useEffect(() => {
     loadTemplate()
@@ -116,7 +117,7 @@ export default function PromptTemplateEditPage() {
   const handleSave = async () => {
     try {
       setSaving(true)
-      await promptTemplateApi.update(templateId, formData)
+      await promptTemplateApi.updateByKey(templateKey, formData)
       toast({
         title: '保存成功',
         description: '提示词模板已更新'
@@ -137,13 +138,12 @@ export default function PromptTemplateEditPage() {
   const handlePreview = async () => {
     try {
       setPreviewLoading(true)
-      // 构造测试变量
       const testVariables: Record<string, any> = {}
       Object.keys(formData.required_variables).forEach(key => {
         testVariables[key] = `<${key}_示例值>`
       })
 
-      const result = await promptTemplateApi.preview(templateId, testVariables)
+      const result = await promptTemplateApi.previewByKey(templateKey, testVariables)
       setPreviewResult(result)
       toast({
         title: '预览成功',
@@ -240,7 +240,7 @@ export default function PromptTemplateEditPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold">编辑提示词模板</h1>
-            <p className="text-sm text-muted-foreground">ID: {templateId}</p>
+            <p className="text-sm text-muted-foreground">Key: {templateKey}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -296,8 +296,6 @@ export default function PromptTemplateEditPage() {
                   <Label>模板Key *</Label>
                   <Input
                     value={formData.template_key}
-                    onChange={(e) => setFormData({ ...formData, template_key: e.target.value })}
-                    placeholder="soul_questioning_v1"
                     disabled
                   />
                   <p className="text-xs text-muted-foreground mt-1">模板Key创建后不可修改</p>

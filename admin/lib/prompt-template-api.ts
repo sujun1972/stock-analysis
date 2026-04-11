@@ -133,4 +133,89 @@ export const promptTemplateApi = {
     const response = await apiClient.get('/api/prompt-templates/business-types/all/')
     return response.data
   },
+
+  // ── by-key 方法（通过 template_key 操作，稳定引用系统内置模板）────────
+
+  /**
+   * 通过 template_key 获取模板详情
+   */
+  getByKey: async (key: string): Promise<PromptTemplate> => {
+    const response = await apiClient.get(`/api/prompt-templates/by-key/${key}`)
+    return response.data
+  },
+
+  /**
+   * 通过 template_key 更新模板
+   */
+  updateByKey: async (key: string, data: PromptTemplateUpdate): Promise<PromptTemplate> => {
+    const response = await apiClient.put(`/api/prompt-templates/by-key/${key}`, data)
+    return response.data
+  },
+
+  /**
+   * 通过 template_key 删除模板
+   */
+  deleteByKey: async (key: string): Promise<void> => {
+    await apiClient.delete(`/api/prompt-templates/by-key/${key}`)
+  },
+
+  /**
+   * 通过 template_key 激活模板
+   */
+  activateByKey: async (key: string, setAsDefault: boolean = false): Promise<PromptTemplate> => {
+    const response = await apiClient.post(
+      `/api/prompt-templates/by-key/${key}/activate`,
+      null,
+      { params: { set_as_default: setAsDefault } }
+    )
+    return response.data
+  },
+
+  /**
+   * 通过 template_key 停用模板
+   */
+  deactivateByKey: async (key: string): Promise<PromptTemplate> => {
+    const response = await apiClient.post(`/api/prompt-templates/by-key/${key}/deactivate`)
+    return response.data
+  },
+
+  /**
+   * 通过 template_key 创建新版本
+   */
+  createVersionByKey: async (
+    key: string,
+    data: PromptTemplateVersionCreate
+  ): Promise<PromptTemplate> => {
+    const response = await apiClient.post(`/api/prompt-templates/by-key/${key}/versions`, data)
+    return response.data
+  },
+
+  /**
+   * 通过 template_key 预览渲染后的提示词
+   */
+  previewByKey: async (
+    key: string,
+    variables: Record<string, any>
+  ): Promise<PromptTemplatePreviewResponse> => {
+    const response = await apiClient.post(`/api/prompt-templates/by-key/${key}/preview`, { variables })
+    return response.data
+  },
+
+  /**
+   * 通过 template_key 获取模板的性能统计
+   */
+  getStatisticsByKey: async (key: string): Promise<PromptTemplateStatistics> => {
+    const response = await apiClient.get(`/api/prompt-templates/by-key/${key}/statistics`)
+    return response.data
+  },
+
+  /**
+   * 通过 template_key 获取模板的修改历史
+   */
+  getHistoryByKey: async (key: string, limit: number = 50): Promise<PromptTemplateHistory[]> => {
+    const response = await apiClient.get(`/api/prompt-templates/by-key/${key}/history`, {
+      params: { limit }
+    })
+    return response.data
+  },
 }

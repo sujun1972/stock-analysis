@@ -1471,6 +1471,12 @@ class ApiClient {
     })
     return response.data
   }
+
+  /** 通过 template_key 获取 Prompt 模板 */
+  async getPromptTemplateByKey(templateKey: string): Promise<any> {
+    const response = await axiosInstance.get(`/api/prompt-templates/by-key/${templateKey}`)
+    return response.data
+  }
 }
 
 // 导出单例

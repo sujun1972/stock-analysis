@@ -44,6 +44,8 @@ import {
   X,
   ChevronDown,
   Filter,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
@@ -254,6 +256,64 @@ function RenameListDialog({ open, list, onClose }: RenameListDialogProps) {
   )
 }
 
+// ── 顶级游资观点 Dialog ──────────────────────────────────────
+interface HotMoneyViewDialogProps {
+  open: boolean
+  onClose: () => void
+  stockName: string
+  stockCode: string
+  template: string
+}
+
+function HotMoneyViewDialog({ open, onClose, stockName, stockCode, template }: HotMoneyViewDialogProps) {
+  const [copied, setCopied] = useState(false)
+
+  const filled = template.replace(/\{\{\s*stock_name_and_code\s*\}\}/g, `${stockName}(${stockCode})`)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(filled)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // fallback
+      const el = document.createElement('textarea')
+      el.value = filled
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[680px] max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>
+            顶级游资观点：{stockName}（{stockCode}）
+          </DialogTitle>
+          <DialogDescription>复制下方提示词到 AI 对话框，获取游资视角分析</DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <pre className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded-lg p-4 leading-relaxed font-mono">
+            {filled}
+          </pre>
+        </div>
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={onClose}>关闭</Button>
+          <Button onClick={handleCopy} className="gap-2">
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? '已复制' : '复制全文'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ── 主页面 ────────────────────────────────────────────────────
 function StocksPageContent() {
   const searchParams = useSearchParams()
@@ -313,11 +373,25 @@ function StocksPageContent() {
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
+  // ── 顶级游资观点模板 ──
+  const [hotMoneyTemplate, setHotMoneyTemplate] = useState<string>('')
+  const [hotMoneyDialogOpen, setHotMoneyDialogOpen] = useState(false)
+  const [hotMoneyStock, setHotMoneyStock] = useState<{ name: string; code: string } | null>(null)
+
   const user = useAuthStore((s) => s.user)
 
   // ── 加载行业列表 ──
   useEffect(() => {
     apiClient.getStockIndustries().then(setIndustries).catch(() => {})
+  }, [])
+
+  // ── 加载顶级游资观点模板 ──
+  useEffect(() => {
+    apiClient.getPromptTemplateByKey('top_speculative_investor_v1').then((res) => {
+      if (res?.code === 200 && res.data?.user_prompt_template) {
+        setHotMoneyTemplate(res.data.user_prompt_template)
+      }
+    }).catch(() => {})
   }, [])
 
   // ── 加载选股策略列表（已发布 + 当前用户自己的） ──
@@ -848,6 +922,9 @@ function StocksPageContent() {
                         )}
                       </button>
                     </th>
+                    {hotMoneyTemplate && (
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
@@ -898,6 +975,16 @@ function StocksPageContent() {
                             </span>
                           ) : '-'}
                         </td>
+                        {hotMoneyTemplate && (
+                          <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => { setHotMoneyStock({ name: stock.name, code: stock.code }); setHotMoneyDialogOpen(true) }}
+                              className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap"
+                            >
+                              游资观点
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -995,6 +1082,13 @@ function StocksPageContent() {
         open={renameDialogOpen}
         list={renameTarget}
         onClose={() => { setRenameDialogOpen(false); setRenameTarget(null) }}
+      />
+      <HotMoneyViewDialog
+        open={hotMoneyDialogOpen}
+        onClose={() => { setHotMoneyDialogOpen(false); setHotMoneyStock(null) }}
+        stockName={hotMoneyStock?.name ?? ''}
+        stockCode={hotMoneyStock?.code ?? ''}
+        template={hotMoneyTemplate}
       />
     </div>
   )

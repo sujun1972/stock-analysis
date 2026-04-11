@@ -147,6 +147,7 @@ export const BUSINESS_TYPES = {
   STRATEGY_GENERATION_ENTRY: 'strategy_generation_entry',
   STRATEGY_GENERATION_EXIT: 'strategy_generation_exit',
   STRATEGY_GENERATION_STOCK_SELECTION: 'strategy_generation_stock_selection',
+  STOCK_ANALYSIS: 'stock_analysis',
 } as const
 
 export const BUSINESS_TYPE_LABELS: Record<string, string> = {
@@ -156,4 +157,5 @@ export const BUSINESS_TYPE_LABELS: Record<string, string> = {
   strategy_generation_entry: '策略生成 - 入场策略',
   strategy_generation_exit: '策略生成 - 离场策略',
   strategy_generation_stock_selection: '策略生成 - 选股策略',
+  stock_analysis: '个股分析',
 }

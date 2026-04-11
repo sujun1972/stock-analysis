@@ -76,9 +76,9 @@ export default function PromptTemplatesPage() {
   }, [loadTemplates])
 
   // 激活模板
-  const handleActivate = async (id: number, setAsDefault: boolean = false) => {
+  const handleActivate = async (key: string, setAsDefault: boolean = false) => {
     try {
-      await promptTemplateApi.activate(id, setAsDefault)
+      await promptTemplateApi.activateByKey(key, setAsDefault)
       toast({
         title: '操作成功',
         description: setAsDefault ? '已激活并设为默认模板' : '已激活模板',
@@ -94,9 +94,9 @@ export default function PromptTemplatesPage() {
   }
 
   // 停用模板
-  const handleDeactivate = async (id: number) => {
+  const handleDeactivate = async (key: string) => {
     try {
-      await promptTemplateApi.deactivate(id)
+      await promptTemplateApi.deactivateByKey(key)
       toast({
         title: '操作成功',
         description: '已停用模板',
@@ -112,13 +112,13 @@ export default function PromptTemplatesPage() {
   }
 
   // 删除模板
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (key: string) => {
     if (!confirm('确定要删除此模板吗？此操作不可撤销。')) {
       return
     }
 
     try {
-      await promptTemplateApi.delete(id)
+      await promptTemplateApi.deleteByKey(key)
       toast({
         title: '删除成功',
         description: '模板已删除',
@@ -204,7 +204,7 @@ export default function PromptTemplatesPage() {
       ) : (
         <div className="grid gap-4">
           {templates.map((template) => (
-            <Card key={template.id} className={template.is_default ? 'border-primary' : ''}>
+            <Card key={template.template_key} className={template.is_default ? 'border-primary' : ''}>
               <CardHeader className="pb-3">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   <div className="flex-1">
@@ -224,7 +224,7 @@ export default function PromptTemplatesPage() {
                         </Badge>
                       )}
                       <Badge variant="secondary" className="text-xs">
-                        {BUSINESS_TYPE_LABELS[template.business_type]}
+                        {BUSINESS_TYPE_LABELS[template.business_type] ?? template.business_type}
                       </Badge>
                     </div>
                     <CardDescription className="text-xs sm:text-sm">
@@ -239,7 +239,7 @@ export default function PromptTemplatesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/settings/prompt-templates/${template.id}`)}
+                      onClick={() => router.push(`/settings/prompt-templates/${template.template_key}`)}
                     >
                       <Edit className="h-4 w-4 mr-1" />
                       编辑
@@ -249,7 +249,7 @@ export default function PromptTemplatesPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDeactivate(template.id)}
+                        onClick={() => handleDeactivate(template.template_key)}
                       >
                         <PowerOff className="h-4 w-4 mr-1" />
                         停用
@@ -258,7 +258,7 @@ export default function PromptTemplatesPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleActivate(template.id)}
+                        onClick={() => handleActivate(template.template_key)}
                       >
                         <Power className="h-4 w-4 mr-1" />
                         启用
@@ -269,7 +269,7 @@ export default function PromptTemplatesPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleActivate(template.id, true)}
+                        onClick={() => handleActivate(template.template_key, true)}
                       >
                         设为默认
                       </Button>
@@ -279,7 +279,7 @@ export default function PromptTemplatesPage() {
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        router.push(`/settings/prompt-templates/${template.id}/statistics`)
+                        router.push(`/settings/prompt-templates/${template.template_key}/statistics`)
                       }
                     >
                       <TrendingUp className="h-4 w-4 mr-1" />
@@ -290,7 +290,7 @@ export default function PromptTemplatesPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(template.id)}
+                        onClick={() => handleDelete(template.template_key)}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
@@ -308,33 +308,33 @@ export default function PromptTemplatesPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem
-                          onClick={() => router.push(`/settings/prompt-templates/${template.id}`)}
+                          onClick={() => router.push(`/settings/prompt-templates/${template.template_key}`)}
                         >
                           <Edit className="mr-2 h-4 w-4" />
                           编辑模板
                         </DropdownMenuItem>
 
                         {template.is_active ? (
-                          <DropdownMenuItem onClick={() => handleDeactivate(template.id)}>
+                          <DropdownMenuItem onClick={() => handleDeactivate(template.template_key)}>
                             <PowerOff className="mr-2 h-4 w-4" />
                             停用模板
                           </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem onClick={() => handleActivate(template.id)}>
+                          <DropdownMenuItem onClick={() => handleActivate(template.template_key)}>
                             <Power className="mr-2 h-4 w-4" />
                             启用模板
                           </DropdownMenuItem>
                         )}
 
                         {!template.is_default && (
-                          <DropdownMenuItem onClick={() => handleActivate(template.id, true)}>
+                          <DropdownMenuItem onClick={() => handleActivate(template.template_key, true)}>
                             <CheckCircle2 className="mr-2 h-4 w-4" />
                             设为默认
                           </DropdownMenuItem>
                         )}
 
                         <DropdownMenuItem
-                          onClick={() => router.push(`/settings/prompt-templates/${template.id}/statistics`)}
+                          onClick={() => router.push(`/settings/prompt-templates/${template.template_key}/statistics`)}
                         >
                           <TrendingUp className="mr-2 h-4 w-4" />
                           查看统计
@@ -344,7 +344,7 @@ export default function PromptTemplatesPage() {
                           <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => handleDelete(template.id)}
+                              onClick={() => handleDelete(template.template_key)}
                               className="text-red-600 focus:text-red-600"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
