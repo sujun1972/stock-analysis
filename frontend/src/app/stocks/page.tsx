@@ -39,18 +39,16 @@ import {
   ChevronLeft,
   ChevronRight,
   BookmarkPlus,
-  BookmarkCheck,
   Trash2,
   Pencil,
-  List,
   X,
   ChevronDown,
-  Plus,
   Filter,
 } from 'lucide-react'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
 import type { StockList } from '@/types'
+import type { Strategy } from '@/types/strategy'
 
 // ── 辅助函数 ──────────────────────────────────────────────────
 function toTsCode(code: string): string {
@@ -260,6 +258,8 @@ function RenameListDialog({ open, list, onClose }: RenameListDialogProps) {
 function StocksPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+
+  // ── 从 URL 初始化所有筛选 / 分页状态 ──
   const stockSelectionStrategyId = searchParams.get('stock_selection_strategy_id')
   const [selectionStrategyName, setSelectionStrategyName] = useState<string | null>(null)
 
@@ -267,27 +267,42 @@ function StocksPageContent() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const {
     lists,
-    activeListId,
-    activeListItems,
-    activeListCodes,
-    isLoadingLists,
     fetchLists,
-    setActiveList,
     deleteList,
     removeStocks,
   } = useStockListStore()
 
-  // ── 筛选 / 分页状态 ──
-  const [searchTerm, setSearchTerm] = useState('')
-  const [marketFilter, setMarketFilter] = useState<string>('all')
-  const [industryFilter, setIndustryFilter] = useState<string>('all')
-  const [conceptFilter, setConceptFilter] = useState<string>('all')
-  const [currentPage, setCurrentPage] = useState(1)
+  // activeListId 直接从 URL 读取，不依赖 store（列表作为筛选条件，后端处理过滤）
+  const activeListId = searchParams.get('list') ? Number(searchParams.get('list')) : null
+
+  // ── 筛选 / 分页状态（从 URL 初始化） ──
+  // marketFilter 编码：'SSE'=上海主板, 'SZSE'=深圳主板, '创业板'/'科创板'/'北交所' 直接匹配 market 字段, 'all'=全部
+  const [marketFilter, setMarketFilter] = useState<string>(() => searchParams.get('market') ?? 'all')
+
+  // ── 选股策略列表（已发布 + 当前用户自己的） ──
+  const [stockSelectionStrategies, setStockSelectionStrategies] = useState<Strategy[]>([])
+  const [industryFilter, setIndustryFilter] = useState<string>(() => searchParams.get('industry') ?? 'all')
+  const [conceptFilter, setConceptFilter] = useState<string>(() => searchParams.get('concept') ?? 'all')
+  const [currentPage, setCurrentPage] = useState(() => Number(searchParams.get('page') ?? '1'))
   const [totalStocks, setTotalStocks] = useState(0)
-  const [pageSize, setPageSize] = useState(20)
-  const [sortBy, setSortBy] = useState('pct_change')
-  const [sortOrder, setSortOrder] = useState('desc')
+  const [pageSize, setPageSize] = useState(() => Number(searchParams.get('pageSize') ?? '20'))
+  const [sortBy, setSortBy] = useState(() => searchParams.get('sortBy') ?? 'pct_change')
+  const [sortOrder, setSortOrder] = useState(() => searchParams.get('sortOrder') ?? 'desc')
   const [industries, setIndustries] = useState<{ value: string; label: string; count: number }[]>([])
+
+  // ── URL 同步：每次筛选/分页状态变化时更新地址栏 ──
+  const updateURL = useCallback((patch: Record<string, string | number | null>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    const defaults: Record<string, string | number> = { sortBy: 'pct_change', sortOrder: 'desc', pageSize: 20, page: 1 }
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === '' || value === 'all' || value === defaults[key]) {
+        params.delete(key)
+      } else {
+        params.set(key, String(value))
+      }
+    }
+    router.replace(`/stocks?${params.toString()}`, { scroll: false })
+  }, [searchParams, router])
 
   // ── 选股状态 ──
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set())
@@ -298,10 +313,34 @@ function StocksPageContent() {
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
+  const user = useAuthStore((s) => s.user)
+
   // ── 加载行业列表 ──
   useEffect(() => {
     apiClient.getStockIndustries().then(setIndustries).catch(() => {})
   }, [])
+
+  // ── 加载选股策略列表（已发布 + 当前用户自己的） ──
+  useEffect(() => {
+    const fetchStrategies = async () => {
+      try {
+        const [publishedRes, myRes] = await Promise.all([
+          apiClient.getStrategies({ strategy_type: 'stock_selection', publish_status: 'approved', is_enabled: true }),
+          user?.id ? apiClient.getStrategies({ strategy_type: 'stock_selection', user_id: user.id }) : Promise.resolve(null),
+        ])
+        const published: Strategy[] = (publishedRes?.data as any)?.items ?? publishedRes?.data ?? []
+        const mine: Strategy[] = (myRes?.data as any)?.items ?? myRes?.data ?? []
+        // 合并去重：我的策略优先，相同 id 保留一份
+        const merged = [...mine]
+        const myIds = new Set(mine.map((s) => s.id))
+        published.forEach((s) => { if (!myIds.has(s.id)) merged.push(s) })
+        setStockSelectionStrategies(merged)
+      } catch {
+        // 加载失败静默处理
+      }
+    }
+    fetchStrategies()
+  }, [user?.id])
 
   // ── 已登录时加载自选列表 ──
   useEffect(() => {
@@ -330,11 +369,13 @@ function StocksPageContent() {
         sort_order: sortOrder,
         list_status: 'L',
       }
-      if (marketFilter !== 'all') params.market = marketFilter
+      if (marketFilter === 'SSE') { params.market = '主板'; params.exchange = 'SSE' }
+      else if (marketFilter === 'SZSE') { params.market = '主板'; params.exchange = 'SZSE' }
+      else if (marketFilter !== 'all') { params.market = marketFilter }
       if (industryFilter !== 'all') params.industry = industryFilter
       if (conceptFilter !== 'all') params.concept_code = conceptFilter
-      if (searchTerm?.trim()) params.search = searchTerm.trim()
       if (stockSelectionStrategyId) params.stock_selection_strategy_id = Number(stockSelectionStrategyId)
+      if (activeListId !== null) params.user_stock_list_id = activeListId
 
       const response = await apiClient.getStockList(params)
       setStocks(response.items || [])
@@ -346,7 +387,7 @@ function StocksPageContent() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [currentPage, marketFilter, industryFilter, conceptFilter, searchTerm, pageSize, sortBy, sortOrder, stockSelectionStrategyId, setStocks, setLoading, setError])
+  }, [currentPage, marketFilter, industryFilter, conceptFilter, pageSize, sortBy, sortOrder, stockSelectionStrategyId, activeListId, setStocks, setLoading, setError])
 
   const loadStocks = useCallback(() => fetchStocks(false), [fetchStocks])
 
@@ -403,6 +444,42 @@ function StocksPageContent() {
     }
   }
 
+  const goToPage = useCallback((page: number) => {
+    setCurrentPage(page)
+    updateURL({ page })
+  }, [updateURL])
+
+  const [selectingAll, setSelectingAll] = useState(false)
+
+  const handleSelectAllFiltered = async () => {
+    setSelectingAll(true)
+    try {
+      const params: Parameters<typeof apiClient.getStockCodes>[0] = {
+        list_status: 'L',
+        limit: 5000,
+      }
+      if (marketFilter === 'SSE') { params.market = '主板'; params.exchange = 'SSE' }
+      else if (marketFilter === 'SZSE') { params.market = '主板'; params.exchange = 'SZSE' }
+      else if (marketFilter !== 'all') { params.market = marketFilter }
+      if (industryFilter !== 'all') params.industry = industryFilter
+      if (conceptFilter !== 'all') params.concept_code = conceptFilter
+      if (stockSelectionStrategyId) params.stock_selection_strategy_id = Number(stockSelectionStrategyId)
+
+      const result = await apiClient.getStockCodes(params)
+      const tsCodes = result.codes
+      setSelectedCodes((prev) => {
+        const next = new Set(prev)
+        tsCodes.forEach((c) => next.add(c))
+        return next
+      })
+      setToast({ msg: `已选中全部 ${tsCodes.length} 只股票`, type: 'success' })
+    } catch (err: any) {
+      setToast({ msg: err?.message || '获取全部股票失败', type: 'error' })
+    } finally {
+      setSelectingAll(false)
+    }
+  }
+
   const toggleStock = (tsCode: string) => {
     setSelectedCodes((prev) => {
       const next = new Set(prev)
@@ -437,35 +514,7 @@ function StocksPageContent() {
   }
 
   // ── 当前激活列表对象 ──
-  const activeList = useMemo(
-    () => lists.find((l) => l.id === activeListId) ?? null,
-    [lists, activeListId]
-  )
-
-  // ── 激活列表视图时，把表格股票过滤为列表成分股 ──
-  const visibleStocks = useMemo(() => {
-    const base = displayedStocks
-
-    if (activeListId === null) return base
-    // 列表视图：显示激活列表中在当前页也存在的股票；若搜索/筛选无结果，直接显示列表成分股
-    const listCodes = new Set(activeListItems.map((i) => i.code))
-    const filtered = base.filter((s) => listCodes.has(s.code))
-    // 如果当前筛选器有内容，用过滤后结果；否则直接展示列表成分股行情
-    if (searchTerm || marketFilter !== 'all' || industryFilter !== 'all' || conceptFilter !== 'all') {
-      return filtered
-    }
-    // 无筛选器：直接渲染列表成分股（带行情的 activeListItems）
-    return activeListItems.map((item) => ({
-      code: item.code,
-      ts_code: item.ts_code,
-      name: item.name,
-      market: item.market,
-      industry: item.industry,
-      latest_price: item.latest_price,
-      pct_change: item.pct_change,
-      change_amount: item.change_amount,
-    } as any))
-  }, [activeListId, displayedStocks, activeListItems, searchTerm, marketFilter, industryFilter, conceptFilter])
+  const visibleStocks = displayedStocks
 
   return (
     <div className="space-y-6">
@@ -477,90 +526,11 @@ function StocksPageContent() {
       )}
 
       {/* 页面标题行 */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">股票列表</h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-1">
-            {activeList
-              ? <span>自选列表：<strong>{activeList.name}</strong>（{activeList.stock_count} 只）</span>
-              : <span>共 {(totalStocks ?? 0).toLocaleString()} 只股票</span>
-            }
-          </p>
-        </div>
-
-        {/* 自选列表管理（仅已登录用户） */}
-        {isAuthenticated && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* 激活列表时显示退出按钮 */}
-            {activeList && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setActiveList(null); setSelectedCodes(new Set()) }}
-              >
-                <X className="h-4 w-4 mr-1" />
-                退出列表视图
-              </Button>
-            )}
-
-            {/* 列表选择下拉 */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant={activeList ? 'default' : 'outline'} size="sm" disabled={isLoadingLists}>
-                  <List className="h-4 w-4 mr-1" />
-                  {activeList ? activeList.name : '我的列表'}
-                  <ChevronDown className="h-3 w-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {lists.length === 0 && (
-                  <div className="px-3 py-2 text-sm text-gray-500">暂无列表</div>
-                )}
-                {lists.map((list) => (
-                  <DropdownMenuItem
-                    key={list.id}
-                    className="flex items-center justify-between group cursor-pointer"
-                    onSelect={(e) => {
-                      e.preventDefault()
-                      setActiveList(list.id === activeListId ? null : list.id)
-                      setSelectedCodes(new Set())
-                    }}
-                  >
-                    <span className={`truncate flex-1 ${list.id === activeListId ? 'font-semibold text-blue-600 dark:text-blue-400' : ''}`}>
-                      {list.name}
-                      <span className="ml-1 text-xs text-gray-400">({list.stock_count})</span>
-                    </span>
-                    <span className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100">
-                      <button
-                        title="重命名"
-                        onClick={(e) => { e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }}
-                        className="p-0.5 hover:text-blue-600 rounded"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                      <button
-                        title="删除"
-                        onClick={(e) => { e.stopPropagation(); handleDeleteList(list.id) }}
-                        className="p-0.5 hover:text-red-600 rounded"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); setAddDialogOpen(true) }}
-                  className="cursor-pointer"
-                  disabled={selectedCodes.size === 0}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  将选中股票添加到列表...
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">股票列表</h1>
+        <p className="text-gray-600 dark:text-gray-300 mt-1">
+          共 {(totalStocks ?? 0).toLocaleString()} 只股票
+        </p>
       </div>
 
       {/* 错误提示 */}
@@ -590,7 +560,7 @@ function StocksPageContent() {
             )}
           </div>
           <button
-            onClick={() => router.replace('/stocks')}
+            onClick={() => { setCurrentPage(1); updateURL({ stock_selection_strategy_id: null, page: null }) }}
             className="flex-shrink-0 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-200"
             title="清除策略筛选"
           >
@@ -636,24 +606,25 @@ function StocksPageContent() {
       {/* 搜索和筛选 */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label htmlFor="market-filter">市场筛选</Label>
-              <Select value={marketFilter} onValueChange={(v) => { setMarketFilter(v); setCurrentPage(1) }}>
+              <Select value={marketFilter} onValueChange={(v) => { setMarketFilter(v); setCurrentPage(1); updateURL({ market: v, page: null }) }}>
                 <SelectTrigger id="market-filter"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部市场</SelectItem>
-                  <SelectItem value="上海主板">上海主板</SelectItem>
-                  <SelectItem value="深圳主板">深圳主板</SelectItem>
+                  <SelectItem value="SSE">上海主板</SelectItem>
+                  <SelectItem value="SZSE">深圳主板</SelectItem>
                   <SelectItem value="创业板">创业板</SelectItem>
                   <SelectItem value="科创板">科创板</SelectItem>
+                  <SelectItem value="北交所">北交所</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="industry-filter">行业筛选</Label>
-              <Select value={industryFilter} onValueChange={(v) => { setIndustryFilter(v); setCurrentPage(1) }}>
+              <Select value={industryFilter} onValueChange={(v) => { setIndustryFilter(v); setCurrentPage(1); updateURL({ industry: v, page: null }) }}>
                 <SelectTrigger id="industry-filter"><SelectValue placeholder="选择行业..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部行业</SelectItem>
@@ -667,26 +638,122 @@ function StocksPageContent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="concept-filter">概念筛选</Label>
+              <Label htmlFor="concept-filter">东方财富板块</Label>
               <LazyConceptSelect
                 value={conceptFilter}
-                onSelect={(v) => { setConceptFilter(v); setCurrentPage(1) }}
+                onSelect={(v) => { setConceptFilter(v); setCurrentPage(1); updateURL({ concept: v, page: null }) }}
                 includeAllOption={true}
                 valueType="code"
-                placeholder="选择概念..."
+                placeholder="选择板块..."
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="search-input">搜索股票</Label>
-              <Input
-                id="search-input"
-                type="text"
-                placeholder="输入股票代码或名称..."
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }}
-              />
+              <Label htmlFor="strategy-filter">选股策略</Label>
+              <Select
+                value={stockSelectionStrategyId ?? 'all'}
+                onValueChange={(v) => {
+                  setCurrentPage(1)
+                  if (v === 'all') {
+                    updateURL({ stock_selection_strategy_id: null, page: null })
+                  } else {
+                    updateURL({ stock_selection_strategy_id: Number(v), page: null })
+                  }
+                }}
+              >
+                <SelectTrigger id="strategy-filter">
+                  <SelectValue placeholder="选择选股策略..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">不使用策略</SelectItem>
+                  {stockSelectionStrategies.length > 0 && (
+                    <>
+                      {/* 我的策略（未发布也显示） */}
+                      {stockSelectionStrategies.filter((s) => s.user_id === user?.id).length > 0 && (
+                        <>
+                          <div className="px-2 py-1 text-xs text-gray-400 font-medium">我的策略</div>
+                          {stockSelectionStrategies
+                            .filter((s) => s.user_id === user?.id)
+                            .map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.display_name}
+                                {s.publish_status !== 'approved' && (
+                                  <span className="ml-1 text-xs text-gray-400">（未发布）</span>
+                                )}
+                              </SelectItem>
+                            ))}
+                        </>
+                      )}
+                      {/* 已发布的其他策略 */}
+                      {stockSelectionStrategies.filter((s) => s.user_id !== user?.id && s.publish_status === 'approved').length > 0 && (
+                        <>
+                          <div className="px-2 py-1 text-xs text-gray-400 font-medium">已发布策略</div>
+                          {stockSelectionStrategies
+                            .filter((s) => s.user_id !== user?.id && s.publish_status === 'approved')
+                            .map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.display_name}
+                              </SelectItem>
+                            ))}
+                        </>
+                      )}
+                    </>
+                  )}
+                  {stockSelectionStrategies.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-gray-400">暂无选股策略</div>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
+
+            {/* 自选列表筛选（仅已登录用户） */}
+            {isAuthenticated && (
+              <div className="space-y-2">
+                <Label htmlFor="list-filter">自选列表</Label>
+                <Select
+                  value={activeListId !== null ? String(activeListId) : 'all'}
+                  onValueChange={(v) => {
+                    setCurrentPage(1)
+                    setSelectedCodes(new Set())
+                    updateURL({ list: v === 'all' ? null : Number(v), page: null })
+                  }}
+                >
+                  <SelectTrigger id="list-filter">
+                    <SelectValue placeholder="选择列表..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部股票</SelectItem>
+                    {lists.map((list) => (
+                      <div key={list.id} className="flex items-center group">
+                        <SelectItem value={String(list.id)} className="flex-1">
+                          {list.name}
+                          <span className="ml-1 text-xs text-gray-400">({list.stock_count})</span>
+                        </SelectItem>
+                        <span className="flex items-center gap-1 pr-2 opacity-0 group-hover:opacity-100">
+                          <button
+                            title="重命名"
+                            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }}
+                            className="p-0.5 hover:text-blue-600 rounded"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            title="删除"
+                            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteList(list.id) }}
+                            className="p-0.5 hover:text-red-600 rounded"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                    {lists.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-400">暂无列表</div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -721,12 +788,35 @@ function StocksPageContent() {
                     {/* 勾选列（仅已登录用户） */}
                     {isAuthenticated && (
                       <th className="px-4 py-3 w-10">
-                        {/* shadcn Checkbox 原生支持 "indeterminate" 作为 checked 值 */}
-                        <Checkbox
-                          checked={someCurrentPageSelected ? 'indeterminate' : allCurrentPageSelected}
-                          onCheckedChange={toggleSelectAll}
-                          aria-label="全选当前页"
-                        />
+                        <div className="flex items-center gap-0.5">
+                          <Checkbox
+                            checked={someCurrentPageSelected ? 'indeterminate' : allCurrentPageSelected}
+                            onCheckedChange={toggleSelectAll}
+                            aria-label="全选当前页"
+                          />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="h-4 w-4 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                aria-label="全选选项"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuItem onClick={toggleSelectAll}>
+                                全选当前页（{displayedTsCodes.length} 只）
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={handleSelectAllFiltered}
+                                disabled={selectingAll}
+                              >
+                                {selectingAll ? '加载中...' : `全选所有筛选结果（${totalStocks} 只）`}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </th>
                     )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">股票</th>
@@ -734,8 +824,15 @@ function StocksPageContent() {
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       <button
                         onClick={() => {
-                          if (sortBy === 'pct_change') setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')
-                          else { setSortBy('pct_change'); setSortOrder('desc') }
+                          if (sortBy === 'pct_change') {
+                            const next = sortOrder === 'desc' ? 'asc' : 'desc'
+                            setSortOrder(next)
+                            updateURL({ sortOrder: next })
+                          } else {
+                            setSortBy('pct_change')
+                            setSortOrder('desc')
+                            updateURL({ sortBy: null, sortOrder: null })
+                          }
                         }}
                         className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200"
                       >
@@ -750,17 +847,12 @@ function StocksPageContent() {
                         )}
                       </button>
                     </th>
-                    {/* 已登录时显示"是否在当前列表"标记列 */}
-                    {isAuthenticated && activeListId !== null && (
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-12">列表</th>
-                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
                   {visibleStocks.map((stock) => {
                     const tsCode = toTsCode(stock.code)
                     const isSelected = selectedCodes.has(tsCode)
-                    const inActiveList = activeListCodes.has(tsCode)
                     return (
                       <tr
                         key={stock.code}
@@ -805,13 +897,6 @@ function StocksPageContent() {
                             </span>
                           ) : '-'}
                         </td>
-                        {isAuthenticated && activeListId !== null && (
-                          <td className="px-4 py-4 text-center w-12">
-                            {inActiveList && (
-                              <BookmarkCheck className="h-4 w-4 text-blue-500 mx-auto" />
-                            )}
-                          </td>
-                        )}
                       </tr>
                     )
                   })}
@@ -820,8 +905,8 @@ function StocksPageContent() {
             </div>
           )}
 
-          {/* 分页工具栏（仅全局视图显示） */}
-          {activeListId === null && totalPages > 1 && (
+          {/* 分页工具栏 */}
+          {totalPages > 1 && (
             <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6">
@@ -834,7 +919,7 @@ function StocksPageContent() {
                   </p>
                   <div className="flex items-center gap-2">
                     <Label htmlFor="page-size" className="text-sm">每页</Label>
-                    <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1) }}>
+                    <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); updateURL({ pageSize: Number(v), page: null }) }}>
                       <SelectTrigger id="page-size" className="w-[80px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="10">10</SelectItem>
@@ -848,7 +933,7 @@ function StocksPageContent() {
                 <Pagination>
                   <PaginationContent>
                     <PaginationItem>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="gap-1">
+                      <Button variant="outline" size="sm" onClick={() => goToPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="gap-1">
                         <ChevronLeft className="h-4 w-4" />
                         <span className="hidden md:inline">上一页</span>
                       </Button>
@@ -856,7 +941,7 @@ function StocksPageContent() {
                     {currentPage - 2 > 1 && (
                       <>
                         <PaginationItem>
-                          <PaginationLink onClick={() => setCurrentPage(1)} isActive={false} className="cursor-pointer">1</PaginationLink>
+                          <PaginationLink onClick={() => goToPage(1)} isActive={false} className="cursor-pointer">1</PaginationLink>
                         </PaginationItem>
                         {currentPage - 2 > 2 && (
                           <PaginationItem className="hidden md:inline-flex"><PaginationEllipsis /></PaginationItem>
@@ -867,7 +952,7 @@ function StocksPageContent() {
                       .filter(page => page >= currentPage - 2 && page <= currentPage + 2)
                       .map(page => (
                         <PaginationItem key={page} className={page === currentPage ? '' : 'hidden md:inline-flex'}>
-                          <PaginationLink onClick={() => setCurrentPage(page)} isActive={currentPage === page} className="cursor-pointer">{page}</PaginationLink>
+                          <PaginationLink onClick={() => goToPage(page)} isActive={currentPage === page} className="cursor-pointer">{page}</PaginationLink>
                         </PaginationItem>
                       ))}
                     {currentPage + 2 < totalPages && (
@@ -876,12 +961,12 @@ function StocksPageContent() {
                           <PaginationItem className="hidden md:inline-flex"><PaginationEllipsis /></PaginationItem>
                         )}
                         <PaginationItem>
-                          <PaginationLink onClick={() => setCurrentPage(totalPages)} isActive={false} className="cursor-pointer">{totalPages}</PaginationLink>
+                          <PaginationLink onClick={() => goToPage(totalPages)} isActive={false} className="cursor-pointer">{totalPages}</PaginationLink>
                         </PaginationItem>
                       </>
                     )}
                     <PaginationItem>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="gap-1">
+                      <Button variant="outline" size="sm" onClick={() => goToPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="gap-1">
                         <span className="hidden md:inline">下一页</span>
                         <ChevronRight className="h-4 w-4" />
                       </Button>

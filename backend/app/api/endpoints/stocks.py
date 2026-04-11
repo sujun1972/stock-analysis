@@ -193,24 +193,27 @@ async def get_stock_codes(
     industry: Optional[str] = Query(None, description="行业筛选，如: 银行、医药、计算机"),
     status_filter: str = Query("正常", description="股票状态筛选，如: 正常、退市、暂停上市", alias="status"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
-    limit: int = Query(500, ge=1, le=1000, description="最大返回数量，范围: 1-1000，默认 500"),
+    concept_code: Optional[str] = Query(None, description="概念板块代码，如: BK0714.DC"),
+    stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
+    list_status: Optional[str] = Query(None, description="上市状态: L-上市, D-退市, P-暂停上市"),
+    exchange: Optional[str] = Query(None, description="交易所: SSE-上交所, SZSE-深交所, BSE-北交所"),
+    limit: int = Query(500, ge=1, le=5000, description="最大返回数量，范围: 1-5000，默认 500"),
 ):
     """
     获取符合筛选条件的股票代码列表
 
     ## 功能说明
-    - 专门用于批量选择股票场景（如回测股票池配置）
+    - 专门用于批量选择股票场景（如股票列表页"全选所有筛选结果"）
     - 只返回股票代码，不返回完整股票信息，性能更优
     - 支持与 /list 接口相同的筛选条件
-    - 最多支持一次性获取 1000 只股票代码
 
     ## 使用场景
-    1. 回测页面"全选所有筛选结果"功能
-    2. 批量导出股票代码
-    3. 快速获取特定市场/行业的所有股票代码
+    1. 股票列表页"全选所有筛选结果"功能
+    2. 回测页面股票池配置
+    3. 批量导出股票代码
 
     ## 返回格式
-    - codes: 股票代码列表（不带后缀，如 "000001"）
+    - codes: ts_code 列表（带后缀，如 "000001.SZ"）
     - total: 符合条件的股票总数
 
     ## 错误码说明
@@ -218,36 +221,90 @@ async def get_stock_codes(
     - 400: 参数错误
     - 500: 服务器内部错误
     """
-    # 1. 调用 Core Adapter 获取股票列表
-    stocks = await data_adapter.get_stock_list(market=market, status=status_filter)
+    from src.database.db_manager import DatabaseManager
 
-    # 2. 行业过滤
+    db = DatabaseManager()
+
+    params_list: List[Any] = []
+
+    # 概念板块筛选：JOIN dc_member 取最新一天成分股
+    if concept_code:
+        from_clause = """
+            FROM stock_basic sb
+            JOIN (
+                SELECT DISTINCT con_code
+                FROM dc_member
+                WHERE ts_code = %s
+                  AND trade_date = (SELECT MAX(trade_date) FROM dc_member WHERE ts_code = %s)
+            ) dm ON sb.ts_code = dm.con_code
+        """
+        params_list.append(concept_code)
+        params_list.append(concept_code)
+    else:
+        from_clause = "FROM stock_basic sb"
+
+    conditions = []
+
+    # 上市状态过滤（list_status 优先，否则用 status 映射）
+    if list_status:
+        conditions.append("sb.list_status = %s")
+        params_list.append(list_status)
+    elif status_filter and status_filter != "全部":
+        status_map = {"正常": "L", "退市": "D", "暂停上市": "P"}
+        mapped = status_map.get(status_filter)
+        if mapped:
+            conditions.append("sb.list_status = %s")
+            params_list.append(mapped)
+
+    if market:
+        conditions.append("sb.market = %s")
+        params_list.append(market)
+
+    if exchange:
+        conditions.append("sb.exchange = %s")
+        params_list.append(exchange)
+
     if industry:
-        stocks = [
-            stock
-            for stock in stocks
-            if stock.get("industry") == industry
-        ]
+        conditions.append("sb.industry = %s")
+        params_list.append(industry)
 
-    # 3. 搜索过滤
     if search:
-        search_lower = search.lower()
-        stocks = [
-            stock
-            for stock in stocks
-            if search_lower in stock.get("code", "").lower() or search_lower in stock.get("name", "").lower()
-        ]
+        conditions.append("(sb.code ILIKE %s OR sb.name ILIKE %s)")
+        params_list.append(f"%{search}%")
+        params_list.append(f"%{search}%")
 
-    # 4. 提取股票代码（去除后缀）并限制数量
-    codes = []
-    for stock in stocks[:limit]:
-        code = stock.get("code", "")
-        # 去除 .SZ .SH 等后缀
-        if "." in code:
-            code = code.split(".")[0]
-        codes.append(code)
+    # 选股策略过滤
+    selection_ts_codes: Optional[List[str]] = None
+    if stock_selection_strategy_id is not None:
+        from app.services.strategy_loader import StrategyDynamicLoader
+        from app.repositories.strategy_repository import StrategyRepository
+        strategy_repo = StrategyRepository()
+        strategy_record = strategy_repo.get_by_id(stock_selection_strategy_id)
+        if strategy_record and strategy_record.get("strategy_type") == "stock_selection":
+            try:
+                selection_ts_codes = await StrategyDynamicLoader.run_stock_selection(strategy_record)
+            except Exception as e:
+                logger.warning(f"选股策略 {stock_selection_strategy_id} 执行失败，返回全量: {e}")
+        if selection_ts_codes is not None:
+            if not selection_ts_codes:
+                return ApiResponse.success(
+                    data={"codes": [], "total": 0},
+                    message="获取股票代码列表成功"
+                ).to_dict()
+            placeholders = ",".join(["%s"] * len(selection_ts_codes))
+            conditions.append(f"sb.ts_code IN ({placeholders})")
+            params_list.extend(selection_ts_codes)
 
-    # 5. 返回结果
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    params_list.append(limit)
+    rows = db._execute_query(
+        f"SELECT sb.ts_code {from_clause} {where_clause} ORDER BY sb.code LIMIT %s",
+        tuple(params_list),
+    )
+
+    codes = [row[0] for row in rows] if rows else []
+
     return ApiResponse.success(
         data={
             "codes": codes,

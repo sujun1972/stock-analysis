@@ -134,6 +134,39 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 ---
 
+## `/stocks` 页面筛选架构
+
+### 筛选器与 URL 状态
+
+所有筛选条件、分页、排序均同步到 URL（`router.replace` + `{ scroll: false }`），刷新页面状态保留。
+
+| URL 参数 | 含义 | 说明 |
+|----------|------|------|
+| `market` | 市场筛选 | `SSE`=上海主板, `SZSE`=深圳主板，创业板/科创板/北交所直接对应 `stock_basic.market` |
+| `industry` | 行业筛选 | 对应 `stock_basic.industry` 字段 |
+| `concept` | 东方财富板块 | ts_code（如 `BK0714.DC`），通过 `dc_member` JOIN 筛选成分股 |
+| `stock_selection_strategy_id` | 选股策略 ID | 后端执行策略后 WHERE IN 过滤 |
+| `list` | 自选列表 ID | 后端 WHERE IN 子查询过滤，与其他条件可叠加 |
+| `page` / `pageSize` | 分页 | 默认 page=1, pageSize=20 |
+| `sortBy` / `sortOrder` | 排序 | 默认 pct_change desc |
+
+**关键约束**：
+- 市场筛选中，上海主板/深圳主板在 DB 中均存为 `market='主板'`，通过 `exchange` 字段区分（`SSE`/`SZSE`）
+- 自选列表作为普通筛选条件，走同一个 `/api/stocks/list` 端点，**不是**独立的列表视图
+- `activeListId` 直接从 URL 读取，不存 Zustand store
+- 所有分页操作通过 `goToPage()` 同步 URL
+
+### 东方财富板块筛选（LazyConceptSelect）
+
+组件位于 `frontend/src/components/stocks/LazyConceptSelect.tsx`，支持三种板块类型切换：
+- **概念板块**：东方财富概念（如"新能源车"）
+- **行业板块**：东方财富行业分类
+- **地域板块**：东方财富地域板块
+
+后端端点 `/api/stocks/list/concepts` 的 `idx_type` 参数控制板块类型，组件内部维护 Tab 状态，切换时重置列表和搜索框。
+
+---
+
 ## 已移除功能（2026-03-25）
 
 以下功能已从 frontend 中移除，勿再添加相关代码：
@@ -143,10 +176,9 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
    - 股票概念关联功能、概念筛选功能
    - 相关 API：`/api/concepts/*`、`/api/stocks/**/concepts`
 
-2. **股票管理页面**
-   - 股票列表管理页面（`/stocks`）— 已移除前端页面
+2. **股票详情页面**
    - 股票详情页面（`/stocks/[code]`）— 已移除前端页面
-   - 注：股票相关 API 和数据保留
+   - 注：股票列表页 `/stocks` 仍存在；股票相关 API 和数据保留
 
 3. **数据中心**
    - 数据初始化页面（`/sync/initialize`）

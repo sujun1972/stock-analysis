@@ -313,6 +313,7 @@ class ApiClient {
     sort_by?: string
     sort_order?: string
     stock_selection_strategy_id?: number
+    user_stock_list_id?: number
   }): Promise<PaginatedResponse<StockInfo> & { strategy_name?: string }> {
     const response = await axiosInstance.get('/api/stocks/list', { params })
     const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
@@ -327,9 +328,10 @@ class ApiClient {
     return result.data?.industries || []
   }
 
-  // 获取概念板块列表（懒加载+后端搜索，来自 dc_index，仅返回有成分股数据的板块）
+  // 获取板块列表（懒加载+后端搜索，来自 dc_index，仅返回有成分股数据的板块）
   async getConceptBoards(params?: {
     search?: string
+    idx_type?: string
     limit?: number
     offset?: number
   }): Promise<{ items: { ts_code: string; name: string; member_count: number }[]; total: number }> {
@@ -399,10 +401,13 @@ class ApiClient {
    */
   async getStockCodes(params?: {
     market?: string
+    exchange?: string
     industry?: string
     status?: string
     search?: string
-    concepts?: string
+    concept_code?: string
+    stock_selection_strategy_id?: number
+    list_status?: string
     limit?: number
   }): Promise<{ codes: string[]; total: number }> {
     const response = await axiosInstance.get('/api/stocks/codes/filtered', { params })

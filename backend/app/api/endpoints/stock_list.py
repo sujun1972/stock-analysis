@@ -51,30 +51,32 @@ async def get_industries():
 @handle_api_errors
 async def get_concepts(
     search: Optional[str] = Query(None, description="搜索关键词，模糊匹配概念名称"),
+    idx_type: str = Query('概念板块', description="板块类型：概念板块/行业板块/地域板块"),
     limit: int = Query(50, ge=1, le=200, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
 ):
     """
-    获取概念板块列表（来自 dc_index，用于前端懒加载筛选器）
+    获取板块列表（来自 dc_index，用于前端懒加载筛选器）
 
-    只返回 dc_member 中有成分股数据的概念板块，避免用户选到空数据。
+    支持概念板块/行业板块/地域板块三种类型。
+    只返回 dc_member 中有成分股数据的板块，避免用户选到空数据。
     成员数量通过子查询统计，不做跨表 JOIN。
     """
     db = DatabaseManager()
 
-    params: list = []
+    params: list = [idx_type, idx_type]
 
     search_clause = ""
     if search:
         search_clause = "AND di.name ILIKE %s"
         params.append(f"%{search}%")
 
-    # 只返回在 dc_member 中实际有成分股记录的概念板块
+    # 只返回在 dc_member 中实际有成分股记录的板块
     base_sql = f"""
         FROM dc_index di
-        WHERE di.idx_type = '概念板块'
+        WHERE di.idx_type = %s
           AND di.trade_date = (
-              SELECT MAX(trade_date) FROM dc_index WHERE idx_type = '概念板块'
+              SELECT MAX(trade_date) FROM dc_index WHERE idx_type = %s
           )
           AND EXISTS (SELECT 1 FROM dc_member dm WHERE dm.ts_code = di.ts_code)
           {search_clause}
@@ -114,6 +116,7 @@ async def get_stock_list(
     concept_code: Optional[str] = Query(None, description="概念板块代码，如: BK0714.DC"),
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
     stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
+    user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，仅返回该列表中的股票"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
     skip: int = Query(0, ge=0, description="偏移量（offset别名，兼容前端）"),
@@ -210,6 +213,15 @@ async def get_stock_list(
                 'total': 0,
                 'strategy_name': selection_strategy_name,
             }).to_dict()
+
+    # 自选列表过滤：JOIN user_stock_list_items
+    if user_stock_list_id is not None:
+        conditions.append(f"""
+            {col('ts_code')} IN (
+                SELECT ts_code FROM user_stock_list_items WHERE list_id = %s
+            )
+        """)
+        params.append(user_stock_list_id)
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
