@@ -35,15 +35,27 @@ strategy_record = repo.get_by_id(strategy_id)
 ts_codes = await StrategyDynamicLoader.run_stock_selection(
     strategy_record,
     lookback_days=60,   # 可选，默认 60 天
-    top_n=50,           # 可选，默认从 default_params.top_n 读取
+    top_n=None,         # 可选；None = 返回所有评分>0的股票；可传整数限制数量
 )
 ```
 
 **`GET /api/stocks/list` 支持 `stock_selection_strategy_id` 参数**，在数据库层（`WHERE ts_code IN (...)`）过滤选股结果，无需前端二次过滤。
 
-**psycopg2 Decimal 坑**：`stock_daily.close` 是 `numeric` 类型，psycopg2 返回 `decimal.Decimal`，在 pandas 中存为 `object` dtype。做 `groupby/mean` 或 `pivot` 前必须先 `df["close"] = df["close"].astype(float)`，否则抛 `Index contains duplicate entries` 或 `Invalid value` 错误。
+### 选股策略数据约定
 
-**重复行去重**：`stock_daily` 可能存在同日期同股票的重复行，pivot 前必须 `df.groupby(["date", "ts_code"], as_index=False)["close"].mean()`。
+`run_stock_selection()` 在调用 `calculate_scores()` 前已完成系统层数据清洗，**策略代码无需重复处理**：
+
+| 问题 | 系统处理方式 |
+|------|------------|
+| 周末/节假日行（pivot 后大量 NaN） | 过滤有效股票数 < 10% 的行 |
+| 新股/长期停牌覆盖率不足 | 剔除覆盖率 < 50% 的股票列 |
+| 短期停牌产生的 NaN | 前向填充（ffill），不引入未来信息 |
+| psycopg2 Decimal 类型 | 构建 DataFrame 前统一 astype(float) |
+| 同日期重复行 | groupby mean 去重后再 pivot |
+
+策略代码只需关注因子计算逻辑，传入的 `prices` 保证：索引为连续交易日、列为 ts_code、值全为 float、无 NaN。
+
+**评分约定**：`calculate_scores()` 返回的 `pd.Series` 中，评分 `> 0` 的股票才会被选入结果；评分 `<= 0` 或 `-inf` 的股票视为未通过筛选。
 
 ---
 

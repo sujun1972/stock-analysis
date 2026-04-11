@@ -268,13 +268,15 @@ class StrategyDynamicLoader:
         流程：
         1. 加载策略实例
         2. 从 stock_daily 获取近 lookback_days 天收盘价，构建 prices DataFrame
-        3. 调用 strategy.calculate_scores(prices, features, {})
-        4. 取前 top_n 只股票（默认从 strategy.default_params.top_n 读取，再兜底 50）
+        3. 系统层数据清洗（过滤非交易日、补齐停牌 NaN、剔除覆盖率不足的股票）
+        4. 调用 strategy.calculate_scores(prices, features, {})
+        5. 过滤评分 <= 0 的股票，按评分降序返回
 
         Args:
             strategy_record: 来自 StrategyRepository.get_by_id() 的策略字典
-            lookback_days: 价格回看天数（多取 10 天作为缓冲，保证实际可用天数足够）
-            top_n: 最多返回股票数量；None 时从 default_params.top_n 读取，默认 50
+            lookback_days: 价格回看天数（多取 10 天作为缓冲，保证实际可用交易日足够）
+            top_n: 最多返回股票数量；None 时从 default_params.top_n 读取；
+                   仍为 None 则返回所有评分 > 0 的股票（不限数量）
 
         Returns:
             ts_code 列表，如 ["000001.SZ", "600000.SH", ...]
@@ -348,6 +350,15 @@ class StrategyDynamicLoader:
         prices = df.pivot(index="date", columns="ts_code", values="close")
         prices = prices.sort_index().tail(lookback_days)
 
+        # 系统层数据清洗——策略代码无需重复处理以下问题：
+        # - 周末/节假日在 stock_daily 中可能存有少量测试数据，pivot 后产生几乎全 NaN 的行，
+        #   导致分位数计算退化（threshold=0，所有股票都通过）
+        # - 新股或长期停牌的股票覆盖率不足，不具备因子计算意义
+        # - 短暂停牌产生的 NaN 用前向填充补齐，保持价格序列连续
+        prices = prices[prices.notna().sum(axis=1) >= max(10, len(prices.columns) * 0.1)]
+        prices = prices.loc[:, prices.notna().mean() >= 0.5]
+        prices = prices.ffill().dropna(axis=1)
+
         # 调用策略打分（空 features，选股策略自行从 prices 计算因子）
         features = pd.DataFrame(index=prices.columns)
         try:
@@ -367,13 +378,14 @@ class StrategyDynamicLoader:
             errors="coerce",
         )
 
-        # 确定 top_n：优先参数 > default_params > 50
+        # top_n 优先级：调用参数 > default_params.top_n > 不限制
         if top_n is None:
             dp = strategy_record.get("default_params") or {}
-            top_n = dp.get("top_n", 50) if isinstance(dp, dict) else 50
+            top_n = dp.get("top_n") if isinstance(dp, dict) else None
 
-        valid_scores = scores[scores > -np.inf].dropna()
-        result = valid_scores.nlargest(top_n).index.tolist()
+        # 只保留评分 > 0 的股票（评分 = 0 表示所有因子均未满足，无选择意义）
+        valid_scores = scores[scores > 0].dropna()
+        result = (valid_scores.nlargest(top_n) if top_n else valid_scores.sort_values(ascending=False)).index.tolist()
 
         logger.info(
             f"选股策略执行完成: id={strategy_record.get('id')}, "
