@@ -1472,9 +1472,12 @@ class ApiClient {
     return response.data
   }
 
-  /** 通过 template_key 获取 Prompt 模板 */
-  async getPromptTemplateByKey(templateKey: string): Promise<any> {
-    const response = await axiosInstance.get(`/api/prompt-templates/by-key/${templateKey}`)
+  /** 通过 template_key 获取 Prompt 模板，可选传入股票名称/代码由后端完成占位符替换 */
+  async getPromptTemplateByKey(
+    templateKey: string,
+    params?: { stock_name?: string; stock_code?: string }
+  ): Promise<any> {
+    const response = await axiosInstance.get(`/api/prompt-templates/by-key/${templateKey}`, { params })
     return response.data
   }
 }

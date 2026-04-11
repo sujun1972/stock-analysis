@@ -5,6 +5,8 @@
 创建时间: 2026-03-11
 """
 
+import re
+from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -282,21 +284,63 @@ def get_business_types(
 # ── by-key 路由（通过 template_key 操作，供前端稳定引用）──────────────────
 
 
+def _render_template(text: str, variables: dict) -> str:
+    """将 {{ var }} 占位符替换为 variables 中对应的值，未匹配的占位符保留原样。"""
+    def replacer(m: re.Match) -> str:
+        key = m.group(1).strip()
+        return variables.get(key, m.group(0))
+    return re.sub(r'\{\{\s*(\w+)\s*\}\}', replacer, text)
+
+
 @router.get("/by-key/{template_key}")
 def get_template_by_key(
     template_key: str,
+    stock_name: Optional[str] = Query(None, description="股票名称，用于替换模板中的占位符"),
+    stock_code: Optional[str] = Query(None, description="股票代码，用于替换模板中的占位符"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """通过 template_key 获取模板详情"""
+    """通过 template_key 获取模板详情。
+
+    可选传入 stock_name / stock_code，后端会自动替换模板中的变量占位符，
+    包括当前日期、最近交易日、以及股票名称/代码。
+    """
     try:
         template = service.get_template_by_key(db, template_key)
         if not template:
             return ApiResponse.not_found(message=f"模板不存在 (key={template_key})").to_dict()
-        return ApiResponse.success(
-            data=PromptTemplateResponse.from_orm(template).model_dump(),
-            message="获取模板详情成功"
-        ).to_dict()
+
+        data = PromptTemplateResponse.from_orm(template).model_dump()
+
+        # 构建替换变量表：日期类由后端注入，股票类由调用方传入
+        if stock_name or stock_code:
+            from app.repositories.trading_calendar_repository import TradingCalendarRepository
+            calendar_repo = TradingCalendarRepository()
+            latest_trade_day_raw = calendar_repo.get_latest_trading_day()  # YYYYMMDD
+            if latest_trade_day_raw:
+                dt = datetime.strptime(latest_trade_day_raw, "%Y%m%d")
+                latest_trade_day = f"{dt.year}年{dt.month}月{dt.day}日"
+            else:
+                latest_trade_day = "未知"
+
+            today = datetime.now()
+            today_str = f"{today.year}年{today.month}月{today.day}日"
+            stock_name_and_code = f"{stock_name or ''} {stock_code or ''}".strip()
+
+            variables = {
+                "current_date": today_str,
+                "latest_trade_date": latest_trade_day,
+                "stock_name_and_code": stock_name_and_code,
+            }
+
+            if data.get("user_prompt_template"):
+                data["user_prompt_template"] = _render_template(
+                    data["user_prompt_template"], variables
+                )
+            if data.get("system_prompt"):
+                data["system_prompt"] = _render_template(data["system_prompt"], variables)
+
+        return ApiResponse.success(data=data, message="获取模板详情成功").to_dict()
     except Exception as e:
         return ApiResponse.error(message=str(e), code=500).to_dict()
 

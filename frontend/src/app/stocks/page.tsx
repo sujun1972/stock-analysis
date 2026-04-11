@@ -262,23 +262,21 @@ interface HotMoneyViewDialogProps {
   onClose: () => void
   stockName: string
   stockCode: string
-  template: string
+  content: string   // 已由后端完成占位符替换的最终文本
+  loading: boolean
 }
 
-function HotMoneyViewDialog({ open, onClose, stockName, stockCode, template }: HotMoneyViewDialogProps) {
+function HotMoneyViewDialog({ open, onClose, stockName, stockCode, content, loading }: HotMoneyViewDialogProps) {
   const [copied, setCopied] = useState(false)
-
-  const filled = template.replace(/\{\{\s*stock_name_and_code\s*\}\}/g, `${stockName}(${stockCode})`)
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(filled)
+      await navigator.clipboard.writeText(content)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // fallback
       const el = document.createElement('textarea')
-      el.value = filled
+      el.value = content
       document.body.appendChild(el)
       el.select()
       document.execCommand('copy')
@@ -298,13 +296,17 @@ function HotMoneyViewDialog({ open, onClose, stockName, stockCode, template }: H
           <DialogDescription>复制下方提示词到 AI 对话框，获取游资视角分析</DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto min-h-0">
-          <pre className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded-lg p-4 leading-relaxed font-mono">
-            {filled}
-          </pre>
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-gray-400 text-sm">加载中...</div>
+          ) : (
+            <pre className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded-lg p-4 leading-relaxed font-mono">
+              {content}
+            </pre>
+          )}
         </div>
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={onClose}>关闭</Button>
-          <Button onClick={handleCopy} className="gap-2">
+          <Button onClick={handleCopy} disabled={loading || !content} className="gap-2">
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             {copied ? '已复制' : '复制全文'}
           </Button>
@@ -373,25 +375,17 @@ function StocksPageContent() {
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
-  // ── 顶级游资观点模板 ──
-  const [hotMoneyTemplate, setHotMoneyTemplate] = useState<string>('')
+  // ── 顶级游资观点弹窗 ──
   const [hotMoneyDialogOpen, setHotMoneyDialogOpen] = useState(false)
   const [hotMoneyStock, setHotMoneyStock] = useState<{ name: string; code: string } | null>(null)
+  const [hotMoneyContent, setHotMoneyContent] = useState<string>('')
+  const [hotMoneyLoading, setHotMoneyLoading] = useState(false)
 
   const user = useAuthStore((s) => s.user)
 
   // ── 加载行业列表 ──
   useEffect(() => {
     apiClient.getStockIndustries().then(setIndustries).catch(() => {})
-  }, [])
-
-  // ── 加载顶级游资观点模板 ──
-  useEffect(() => {
-    apiClient.getPromptTemplateByKey('top_speculative_investor_v1').then((res) => {
-      if (res?.code === 200 && res.data?.user_prompt_template) {
-        setHotMoneyTemplate(res.data.user_prompt_template)
-      }
-    }).catch(() => {})
   }, [])
 
   // ── 加载选股策略列表（已发布 + 当前用户自己的） ──
@@ -922,9 +916,7 @@ function StocksPageContent() {
                         )}
                       </button>
                     </th>
-                    {hotMoneyTemplate && (
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
-                    )}
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
@@ -975,16 +967,32 @@ function StocksPageContent() {
                             </span>
                           ) : '-'}
                         </td>
-                        {hotMoneyTemplate && (
-                          <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => { setHotMoneyStock({ name: stock.name, code: stock.code }); setHotMoneyDialogOpen(true) }}
-                              className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap"
-                            >
-                              游资观点
-                            </button>
-                          </td>
-                        )}
+                        <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={async () => {
+                              setHotMoneyStock({ name: stock.name, code: stock.code })
+                              setHotMoneyContent('')
+                              setHotMoneyLoading(true)
+                              setHotMoneyDialogOpen(true)
+                              try {
+                                const res = await apiClient.getPromptTemplateByKey(
+                                  'top_speculative_investor_v1',
+                                  { stock_name: stock.name, stock_code: stock.code }
+                                )
+                                if (res?.code === 200 && res.data?.user_prompt_template) {
+                                  setHotMoneyContent(res.data.user_prompt_template)
+                                }
+                              } catch {
+                                setHotMoneyContent('加载失败，请重试')
+                              } finally {
+                                setHotMoneyLoading(false)
+                              }
+                            }}
+                            className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap"
+                          >
+                            游资观点
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -1088,7 +1096,8 @@ function StocksPageContent() {
         onClose={() => { setHotMoneyDialogOpen(false); setHotMoneyStock(null) }}
         stockName={hotMoneyStock?.name ?? ''}
         stockCode={hotMoneyStock?.code ?? ''}
-        template={hotMoneyTemplate}
+        content={hotMoneyContent}
+        loading={hotMoneyLoading}
       />
     </div>
   )
