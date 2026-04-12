@@ -153,6 +153,24 @@ class StockAiAnalysisRepository(BaseRepository):
             logger.error(f"查询AI分析历史总数失败: {e}")
             raise QueryError("查询AI分析历史总数失败", error_code="AI_ANALYSIS_COUNT_FAILED", reason=str(e))
 
+    def get_today(self, ts_code: str, analysis_type: str) -> Optional[Dict]:
+        """获取指定股票+类型今日（本地日期）的最新一条分析记录，无则返回 None"""
+        query = """
+            SELECT id, ts_code, analysis_type, analysis_text, score,
+                   prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+            FROM stock_ai_analysis
+            WHERE ts_code = %s AND analysis_type = %s
+              AND created_at >= CURRENT_DATE
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        try:
+            result = self.execute_query(query, (ts_code, analysis_type))
+            return self._row_to_dict(result[0]) if result else None
+        except Exception as e:
+            logger.error(f"查询今日AI分析失败: {e}")
+            raise QueryError("查询今日AI分析失败", error_code="AI_ANALYSIS_QUERY_FAILED", reason=str(e))
+
     def get_latest_batch(self, ts_codes: List[str], analysis_type: str) -> Dict[str, Dict]:
         """
         批量获取多只股票的最新分析摘要（DISTINCT ON，高效索引查询）。

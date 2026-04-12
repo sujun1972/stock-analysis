@@ -935,7 +935,7 @@ function StocksPageContent() {
                               setHotMoneyDialogOpen(true)
                               const vars = { stock_name: stock.name, stock_code: stock.code }
                               Promise.all([
-                                apiClient.getPromptTemplateByKey('top_speculative_investor_v1', vars),
+                                apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: ts }),
                                 apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
                               ]).then(([hotRes, dataRes]) => {
                                 if (hotRes?.code === 200 && hotRes.data?.user_prompt_template) {

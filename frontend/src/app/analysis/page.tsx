@@ -362,8 +362,9 @@ function AnalysisContent() {
     setDataCollectionLoading(true)
     setHotMoneyOpen(true)
     const vars = { stock_name: stockInfo?.name ?? '', stock_code: code ?? '' }
+    const currentTsCode = basicInfo?.ts_code || (code ? toTsCode(code) : '')
     Promise.all([
-      apiClient.getPromptTemplateByKey('top_speculative_investor_v1', vars),
+      apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: currentTsCode }),
       apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
     ]).then(([hotRes, dataRes]) => {
       if (hotRes?.code === 200 && hotRes.data?.user_prompt_template) {

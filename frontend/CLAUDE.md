@@ -181,6 +181,8 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 打开弹窗时，两个提示词通过 `Promise.all` 并发加载，互不阻塞。
 
+**游资观点模板的数据自动填充**：请求 `top_speculative_investor_v1` 时必须传入 `ts_code` 参数（完整格式如 `000703.SZ`）。后端会自动检查当天是否有 `stock_data_collection` 类型的分析记录：若已有则直接填入模板占位符 `{{ stock_data_collection }}`；若无则调用数据收集服务自动生成并保存后再填入。前端调用时写法：`apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: tsCode })`
+
 `stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**。
 
 后端 API（均需登录）：

@@ -5,10 +5,12 @@
 创建时间: 2026-03-11
 """
 
+import asyncio
 import re
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -293,10 +295,11 @@ def _render_template(text: str, variables: dict) -> str:
 
 
 @router.get("/by-key/{template_key}")
-def get_template_by_key(
+async def get_template_by_key(
     template_key: str,
     stock_name: Optional[str] = Query(None, description="股票名称，用于替换模板中的占位符"),
     stock_code: Optional[str] = Query(None, description="股票代码，用于替换模板中的占位符"),
+    ts_code: Optional[str] = Query(None, description="ts_code（如 000703.SZ），游资观点模板自动填充数据时使用"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -304,6 +307,9 @@ def get_template_by_key(
 
     可选传入 stock_name / stock_code，后端会自动替换模板中的变量占位符，
     包括当前日期、最近交易日、以及股票名称/代码。
+
+    对于 top_speculative_investor_v1 模板，还会自动填充 {{ stock_data_collection }}：
+    检查当天是否已有该股的数据收集分析，若无则自动生成并保存，再填入模板。
     """
     try:
         template = service.get_template_by_key(db, template_key)
@@ -316,7 +322,7 @@ def get_template_by_key(
         if stock_name or stock_code:
             from app.repositories.trading_calendar_repository import TradingCalendarRepository
             calendar_repo = TradingCalendarRepository()
-            latest_trade_day_raw = calendar_repo.get_latest_trading_day()  # YYYYMMDD
+            latest_trade_day_raw = await asyncio.to_thread(calendar_repo.get_latest_trading_day)
             if latest_trade_day_raw:
                 dt = datetime.strptime(latest_trade_day_raw, "%Y%m%d")
                 latest_trade_day = f"{dt.year}年{dt.month}月{dt.day}日"
@@ -333,6 +339,19 @@ def get_template_by_key(
                 "stock_name_and_code": stock_name_and_code,
             }
 
+            # 游资观点模板：自动填充 {{ stock_data_collection }} 占位符
+            if (
+                template_key == "top_speculative_investor_v1"
+                and ts_code
+                and "{{ stock_data_collection }}" in (data.get("user_prompt_template") or "")
+            ):
+                stock_data_text = await _get_or_generate_stock_data_collection(
+                    ts_code=ts_code,
+                    stock_name=stock_name or stock_code or "",
+                    created_by=current_user.id,
+                )
+                variables["stock_data_collection"] = stock_data_text
+
             if data.get("user_prompt_template"):
                 data["user_prompt_template"] = _render_template(
                     data["user_prompt_template"], variables
@@ -343,6 +362,49 @@ def get_template_by_key(
         return ApiResponse.success(data=data, message="获取模板详情成功").to_dict()
     except Exception as e:
         return ApiResponse.error(message=str(e), code=500).to_dict()
+
+
+async def _get_or_generate_stock_data_collection(
+    ts_code: str,
+    stock_name: str,
+    created_by: Optional[int],
+) -> str:
+    """
+    查询今天是否已有该股的 stock_data_collection 分析记录：
+    - 有 → 直接返回 analysis_text
+    - 无 → 调用 StockDataCollectionService 生成并保存，再返回
+    """
+    from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
+    from app.services.stock_data_collection_service import StockDataCollectionService
+    from app.services.stock_ai_analysis_service import StockAiAnalysisService
+
+    repo = StockAiAnalysisRepository()
+    existing = await asyncio.to_thread(repo.get_today, ts_code, "stock_data_collection")
+    if existing:
+        logger.info(f"[游资模板] 使用今日已有数据收集记录: {ts_code} (id={existing['id']})")
+        return existing["analysis_text"]
+
+    logger.info(f"[游资模板] 今日无数据收集记录，自动生成: {ts_code}")
+    try:
+        collection_service = StockDataCollectionService()
+        text = await collection_service.collect_and_format(ts_code, stock_name)
+
+        ai_analysis_service = StockAiAnalysisService()
+        await ai_analysis_service.save_analysis(
+            ts_code=ts_code,
+            analysis_type="stock_data_collection",
+            analysis_text=text,
+            score=None,
+            prompt_text=None,
+            ai_provider=None,
+            ai_model=None,
+            created_by=created_by,
+        )
+        logger.info(f"[游资模板] 数据收集已自动保存: {ts_code}")
+        return text
+    except Exception as e:
+        logger.error(f"[游资模板] 自动生成数据收集失败: {ts_code}, 错误: {e}")
+        return f"（数据自动收集失败，请手动点击生成分析按钮获取：{e}）"
 
 
 @router.put("/by-key/{template_key}")
