@@ -123,7 +123,7 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '行情数据',
         'display_order': 206,
         'points_consumption': 120,
-        'default_params': {'n_days': 7}
+        'default_params': {}
     },
 
     'tasks.sync_daily_full_history': {

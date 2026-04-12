@@ -326,7 +326,30 @@ Tushare 接口分三类，实现前必须验证：
 class YourService(TushareSyncBase):
     TABLE_KEY = 'your_table'
     FULL_HISTORY_START_DATE = '20180101'
-    FULL_HISTORY_PROGRESS_KEY = 'sync:your_table:full_history:progress'  # 类常量
+    FULL_HISTORY_PROGRESS_KEY = 'sync:your_table:full_history:progress'
+    FULL_HISTORY_LOCK_KEY = 'sync:your_table:full_history:lock'  # 分布式锁 key
+
+    async def sync_incremental(self, start_date=None, end_date=None,
+                                sync_strategy=None, max_requests_per_minute=None):
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 6000) if cfg else 6000
+        if sync_strategy is None:
+            sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        provider = self._get_provider(max_requests_per_minute)
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_your_data,
+            upsert_fn=self.your_repo.bulk_upsert,
+            clean_fn=None,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+        )
 
     async def sync_full_history(self, redis_client, start_date=None, concurrency=5,
                                  strategy='by_month', update_state_fn=None,
@@ -347,9 +370,23 @@ class YourService(TushareSyncBase):
             api_limit=api_limit,
             table_key=self.TABLE_KEY,
         )
+
+    async def get_suggested_start_date(self):
+        """增量同步建议起始：min(今天-default_days, 上次同步结束日)"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
 ```
 
 **`strategy` 由 API 端点从 `sync_configs.full_sync_strategy` 读取后传给 Celery task**，Service 层的默认值只作兜底。
+
+**增量同步 API 端点路由规则**：`POST /api/{table}/sync-async`（无 `code` 参数）从 `sync_configs.incremental_task_name` 读取任务名，通过 `celery_app.send_task(task_name)` 分发，而**不是**硬编码任务名。这确保同步配置页面的"增量同步"按钮执行正确的 Celery 任务。
+
+**`FULL_HISTORY_LOCK_KEY`**：各 Service 的类常量，全量同步任务通过 `redis_lock.acquire(YourService.FULL_HISTORY_LOCK_KEY, ...)` 引用，避免在任务文件中重复定义。
 
 ### 全量同步并发数
 
@@ -449,7 +486,9 @@ backend/app/scheduler/
 | `full_sync_strategy` | `by_month`/`by_ts_code`/`snapshot`/`by_date`/`by_quarter`；禁止填 `NULL` 或 `'none'` |
 | `api_limit` | 接口单次请求上限，用于分页循环 |
 | `max_requests_per_minute` | NULL=继承全局；0=不限速；正整数=覆盖全局 |
-| `incremental_sync_strategy` | NULL=接口默认逻辑 |
+| `incremental_task_name` | Celery 增量任务名；同步配置页"增量同步"按钮通过此字段路由，不得硬编码 |
+| `incremental_default_days` | 增量回看天数；`get_suggested_start_date()` 用此值计算候选起始日，默认 7 |
+| `incremental_sync_strategy` | `by_date_range`/`by_ts_code`/`by_date` 等；NULL=由 Service 使用默认值 |
 
 **`FULL_SYNC_REDIS_KEYS`（在 `sync_dashboard.py` 中维护）**：记录各表全量同步的 Redis Set key。新增支持全量续继的表时**必须**同步更新，否则同步配置页面无法查询/清除进度。
 
@@ -572,7 +611,10 @@ for item in items:
 - [ ] `sync_configs` 表登记（`105_create_sync_configs.sql` 追加并重新执行）
 - [ ] `FULL_SYNC_REDIS_KEYS` 更新（`sync_dashboard.py`）
 - [ ] `celery_worker` 重启并验证任务注册
-- [ ] 增量同步 API 端点处理 "无参数触发" 情况（`effective_start = await self.get_suggested_start_date()`）
+- [ ] 增量同步 API 端点路由：读 `sync_configs.incremental_task_name`，用 `celery_app.send_task(task_name)` 分发（不硬编码任务名）
+- [ ] Service 实现 `sync_incremental()`、`sync_full_history()`、`get_suggested_start_date()` 三个方法
+- [ ] Service 定义 `FULL_HISTORY_LOCK_KEY` 类常量，全量任务通过类引用（`YourService.FULL_HISTORY_LOCK_KEY`）
+- [ ] `sync_configs` 表填写 `incremental_task_name`、`incremental_default_days`、`incremental_sync_strategy`
 
 ---
 

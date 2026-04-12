@@ -116,47 +116,47 @@ async def sync_async(
     异步同步日线数据（使用 Celery）
 
     支持：
-    - 单只股票同步：指定 code 参数
-    - 全市场同步：不指定 code，使用最近交易日
+    - 单只股票同步：指定 code 参数 → 使用 sync_daily_single_task
+    - 全市场增量同步：不指定 code → 使用 sync_configs.incremental_task_name（默认 sync_daily_recent_all_task）
     """
-    from app.tasks.sync_tasks import sync_daily_single_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
     req = request or SyncDailyRequest()
 
-    # 日期格式转换 (YYYY-MM-DD -> YYYYMMDD)
-    start_date_fmt = req.start_date.replace('-', '') if req.start_date else None
-    end_date_fmt = req.end_date.replace('-', '') if req.end_date else None
-
-    # 提交 Celery 任务
-    celery_task = sync_daily_single_task.apply_async(
-        kwargs={
-            'code': req.code,  # 可以为 None，将在任务中处理
-            'start_date': start_date_fmt,
-            'end_date': end_date_fmt,
-            'years': req.years
-        }
-    )
-
-    # 任务显示名称
     if req.code:
+        # 单只股票同步
+        from app.tasks.sync_tasks import sync_daily_single_task
+        start_date_fmt = req.start_date.replace('-', '') if req.start_date else None
+        end_date_fmt = req.end_date.replace('-', '') if req.end_date else None
+        celery_task = sync_daily_single_task.apply_async(
+            kwargs={
+                'code': req.code,
+                'start_date': start_date_fmt,
+                'end_date': end_date_fmt,
+                'years': req.years
+            }
+        )
+        task_name = 'tasks.sync_daily_single'
         display_name = f'日线数据同步({req.code})'
+        task_params = {'code': req.code, 'start_date': start_date_fmt, 'end_date': end_date_fmt, 'years': req.years}
     else:
-        display_name = '日线数据同步(全市场)'
+        # 全市场增量同步：从 sync_configs 读取配置的任务名
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'stock_daily')
+        task_name = (cfg.get('incremental_task_name') or 'tasks.sync_daily_recent_all') if cfg else 'tasks.sync_daily_recent_all'
 
-    # 使用 TaskHistoryHelper 创建任务历史记录
+        from app.celery_app import celery_app
+        celery_task = celery_app.send_task(task_name)
+        display_name = '日线数据增量同步(全市场)'
+        task_params = {}
+
     helper = TaskHistoryHelper()
     task_data = await helper.create_task_record(
         celery_task_id=celery_task.id,
-        task_name='tasks.sync_daily_single',
+        task_name=task_name,
         display_name=display_name,
         task_type='data_sync',
         user_id=current_user.id,
-        task_params={
-            'code': req.code,
-            'start_date': start_date_fmt,
-            'end_date': end_date_fmt,
-            'years': req.years
-        },
+        task_params=task_params,
         source='stock_daily_page'
     )
 

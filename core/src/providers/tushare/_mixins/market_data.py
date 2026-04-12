@@ -114,6 +114,35 @@ class MarketDataMixin:
             logger.error(f"获取日线数据失败: {e}")
             return Response.error(error=f"获取日线数据失败: {str(e)}", error_code="TUSHARE_UNEXPECTED_ERROR", code=code or '', provider=self.provider_name)
 
+    def get_daily_data_range(
+        self,
+        ts_code: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 6000,
+        offset: int = 0,
+    ) -> pd.DataFrame:
+        """
+        获取日线数据（标准 DataFrame 返回，供 TushareSyncBase 使用）。
+
+        与 get_daily_data 的区别：
+          - 参数名为 ts_code（标准同步接口约定）
+          - 支持 limit / offset 翻页
+          - 直接返回 DataFrame（而非 Response 对象），与 run_incremental_sync / run_full_sync 约定一致
+          - 支持 start_date/end_date 日期范围（by_date_range 增量同步 / 全量同步）
+        """
+        params = self._build_params(
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+        )
+        df = self._query('daily', '日线数据', **params)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        return self.converter.convert_daily_data(df)
+
     def get_daily_batch(
         self,
         codes: List[str],

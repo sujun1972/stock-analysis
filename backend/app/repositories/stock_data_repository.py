@@ -488,6 +488,28 @@ class StockDataRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def bulk_upsert(self, df: pd.DataFrame) -> int:
+        """
+        批量写入日线数据（供 TushareSyncBase 使用）。
+
+        接受 convert_daily_data 输出的 DataFrame：含 ts_code + trade_date 列（trade_date 为 date 对象）。
+        按 ts_code 分组后调用 save_daily_data，返回写入总条数。
+        """
+        if df is None or df.empty:
+            return 0
+
+        if 'ts_code' not in df.columns or 'trade_date' not in df.columns:
+            raise ValueError("bulk_upsert 需要 ts_code 和 trade_date 列")
+
+        df = df.copy()
+        df['trade_date'] = pd.to_datetime(df['trade_date'])
+
+        total = 0
+        for ts_code, group in df.groupby('ts_code'):
+            stock_df = group.drop(columns=['ts_code']).set_index('trade_date')
+            total += self.save_daily_data(stock_df, ts_code)
+        return total
+
     def get_latest_date(self, code: str) -> Optional[datetime]:
         """
         获取股票最新数据日期
