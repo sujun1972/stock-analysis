@@ -296,10 +296,12 @@ function AnalysisContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // ── 游资观点弹窗 ──
+  // ── AI 分析弹窗 ──
   const [hotMoneyOpen, setHotMoneyOpen] = useState(false)
   const [hotMoneyContent, setHotMoneyContent] = useState('')
   const [hotMoneyLoading, setHotMoneyLoading] = useState(false)
+  const [dataCollectionContent, setDataCollectionContent] = useState('')
+  const [dataCollectionLoading, setDataCollectionLoading] = useState(false)
   const [latestAnalysis, setLatestAnalysis] = useState<{ score: number | null; version: number } | null>(null)
 
   useEffect(() => {
@@ -353,24 +355,36 @@ function AnalysisContent() {
       .catch(() => { setLatestAnalysis(null) })
   }
 
-  const openHotMoneyDialog = async () => {
+  const openHotMoneyDialog = () => {
     setHotMoneyContent('')
+    setDataCollectionContent('')
     setHotMoneyLoading(true)
+    setDataCollectionLoading(true)
     setHotMoneyOpen(true)
-    try {
-      const res = await apiClient.getPromptTemplateByKey(
-        'top_speculative_investor_v1',
-        { stock_name: stockInfo?.name ?? '', stock_code: code ?? '' }
-      )
-      if (res?.code === 200 && res.data?.user_prompt_template) {
-        const parts = [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean)
+    const vars = { stock_name: stockInfo?.name ?? '', stock_code: code ?? '' }
+    Promise.all([
+      apiClient.getPromptTemplateByKey('top_speculative_investor_v1', vars),
+      apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
+    ]).then(([hotRes, dataRes]) => {
+      if (hotRes?.code === 200 && hotRes.data?.user_prompt_template) {
+        const parts = [hotRes.data.system_prompt, hotRes.data.user_prompt_template].filter(Boolean)
         setHotMoneyContent(parts.join('\n\n'))
+      } else {
+        setHotMoneyContent('加载失败，请重试')
       }
-    } catch {
+      if (dataRes?.code === 200 && dataRes.data?.user_prompt_template) {
+        const parts = [dataRes.data.system_prompt, dataRes.data.user_prompt_template].filter(Boolean)
+        setDataCollectionContent(parts.join('\n\n'))
+      } else {
+        setDataCollectionContent('加载失败，请重试')
+      }
+    }).catch(() => {
       setHotMoneyContent('加载失败，请重试')
-    } finally {
+      setDataCollectionContent('加载失败，请重试')
+    }).finally(() => {
       setHotMoneyLoading(false)
-    }
+      setDataCollectionLoading(false)
+    })
   }
 
   // 使用 useMemo 稳定 codes 数组引用，避免重复触发刷新
@@ -472,7 +486,7 @@ function AnalysisContent() {
             onClick={openHotMoneyDialog}
             className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors"
           >
-            游资观点
+            AI 分析
           </button>
         </div>
       </div>
@@ -485,6 +499,8 @@ function AnalysisContent() {
         tsCode={tsCode}
         promptContent={hotMoneyContent}
         promptLoading={hotMoneyLoading}
+        dataCollectionPrompt={dataCollectionContent}
+        dataCollectionPromptLoading={dataCollectionLoading}
         onSaved={() => refreshLatestAnalysis(tsCode)}
       />
 

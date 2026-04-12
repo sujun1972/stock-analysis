@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
 
-ALLOWED_ANALYSIS_TYPES = {"hot_money_view"}
+ALLOWED_ANALYSIS_TYPES = {"hot_money_view", "stock_data_collection"}
 
 
 class StockAiAnalysisService:

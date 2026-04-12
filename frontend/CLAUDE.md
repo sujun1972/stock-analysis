@@ -169,11 +169,19 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 `stocks/page.tsx` 每次加载列表时固定传入此参数，`score` 着色规则：≥8 红色，≥6 黄色，其余灰色。
 
-### 游资观点弹窗（`HotMoneyViewDialog`）
+### AI 分析弹窗（`HotMoneyViewDialog`）
 
-共享组件位于 `frontend/src/components/stocks/HotMoneyViewDialog.tsx`，在股票列表页（`/stocks`）和分析页（`/analysis`）复用。
+共享组件位于 `frontend/src/components/stocks/HotMoneyViewDialog.tsx`，在股票列表页（`/stocks`）和分析页（`/analysis`）复用。通过"AI 分析"按钮触发。
 
-功能：查看/翻页历史分析记录、保存新记录、编辑/删除已有记录（仅记录创建者）、折叠展示提示词、复制提示词。
+弹窗内含两个 Tab，各自独立管理历史记录和状态：
+- **游资观点**：`analysis_type = hot_money_view`，提示词 key `top_speculative_investor_v1`
+- **数据收集**：`analysis_type = stock_data_collection`，提示词 key `stock_data_collection_v1`
+
+每个 Tab 功能：查看/翻页历史分析记录、保存新记录、编辑/删除已有记录（仅记录创建者）、折叠展示提示词（复制按钮在提示词区域内）。
+
+打开弹窗时，两个提示词通过 `Promise.all` 并发加载，互不阻塞。
+
+`stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**。
 
 后端 API（均需登录）：
 - `POST /api/stock-ai-analysis/` — 保存新记录（版本自动递增）

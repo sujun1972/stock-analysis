@@ -314,11 +314,13 @@ function StocksPageContent() {
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
-  // ── 顶级游资观点弹窗 ──
+  // ── 顶级 AI 分析弹窗 ──
   const [hotMoneyDialogOpen, setHotMoneyDialogOpen] = useState(false)
   const [hotMoneyStock, setHotMoneyStock] = useState<{ name: string; code: string; tsCode: string } | null>(null)
   const [hotMoneyContent, setHotMoneyContent] = useState<string>('')
   const [hotMoneyLoading, setHotMoneyLoading] = useState(false)
+  const [dataCollectionContent, setDataCollectionContent] = useState<string>('')
+  const [dataCollectionLoading, setDataCollectionLoading] = useState(false)
 
   const user = useAuthStore((s) => s.user)
 
@@ -923,30 +925,42 @@ function StocksPageContent() {
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={async () => {
+                            onClick={() => {
                               const ts = stock.ts_code ?? toTsCode(stock.code)
                               setHotMoneyStock({ name: stock.name, code: stock.code, tsCode: ts })
                               setHotMoneyContent('')
+                              setDataCollectionContent('')
                               setHotMoneyLoading(true)
+                              setDataCollectionLoading(true)
                               setHotMoneyDialogOpen(true)
-                              try {
-                                const res = await apiClient.getPromptTemplateByKey(
-                                  'top_speculative_investor_v1',
-                                  { stock_name: stock.name, stock_code: stock.code }
-                                )
-                                if (res?.code === 200 && res.data?.user_prompt_template) {
-                                  const parts = [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean)
+                              const vars = { stock_name: stock.name, stock_code: stock.code }
+                              Promise.all([
+                                apiClient.getPromptTemplateByKey('top_speculative_investor_v1', vars),
+                                apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
+                              ]).then(([hotRes, dataRes]) => {
+                                if (hotRes?.code === 200 && hotRes.data?.user_prompt_template) {
+                                  const parts = [hotRes.data.system_prompt, hotRes.data.user_prompt_template].filter(Boolean)
                                   setHotMoneyContent(parts.join('\n\n'))
+                                } else {
+                                  setHotMoneyContent('加载失败，请重试')
                                 }
-                              } catch {
+                                if (dataRes?.code === 200 && dataRes.data?.user_prompt_template) {
+                                  const parts = [dataRes.data.system_prompt, dataRes.data.user_prompt_template].filter(Boolean)
+                                  setDataCollectionContent(parts.join('\n\n'))
+                                } else {
+                                  setDataCollectionContent('加载失败，请重试')
+                                }
+                              }).catch(() => {
                                 setHotMoneyContent('加载失败，请重试')
-                              } finally {
+                                setDataCollectionContent('加载失败，请重试')
+                              }).finally(() => {
                                 setHotMoneyLoading(false)
-                              }
+                                setDataCollectionLoading(false)
+                              })
                             }}
                             className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap"
                           >
-                            游资观点
+                            AI 分析
                           </button>
                         </td>
                       </tr>
@@ -1055,6 +1069,8 @@ function StocksPageContent() {
         tsCode={hotMoneyStock?.tsCode ?? ''}
         promptContent={hotMoneyContent}
         promptLoading={hotMoneyLoading}
+        dataCollectionPrompt={dataCollectionContent}
+        dataCollectionPromptLoading={dataCollectionLoading}
         onSaved={() => fetchStocks(true)}
       />
     </div>
