@@ -102,6 +102,7 @@ from .endpoints import (
     data_ops,  # 通用数据操作（清空表）
     sync_dashboard,  # 同步任务管理仪表盘
     stock_ai_analysis,  # 股票AI分析结果
+    stock_data_collection,  # 个股多维度数据收集
 )
 
 # 创建主路由
@@ -113,6 +114,7 @@ router.include_router(users.router)
 router.include_router(profile.router)
 router.include_router(user_stock_lists.router, tags=["用户股票列表"])
 router.include_router(stock_ai_analysis.router)
+router.include_router(stock_data_collection.router)
 
 # 注册子路由
 router.include_router(stock_list.router, prefix="/stocks/list", tags=["股票列表管理"])  # 股票列表管理API

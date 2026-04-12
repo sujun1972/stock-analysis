@@ -23,6 +23,7 @@ import {
   Pencil,
   Trash2,
   X,
+  Sparkles,
 } from 'lucide-react'
 
 // ── 类型 ──────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ export interface HotMoneyViewDialogProps {
 
 interface AnalysisTabProps {
   tsCode: string
+  stockName?: string
   analysisType: string
   promptContent: string
   promptLoading: boolean
@@ -68,7 +70,7 @@ interface AnalysisTabProps {
 }
 
 function AnalysisTab({
-  tsCode, analysisType, promptContent, promptLoading, open, onSaved, placeholder,
+  tsCode, stockName, analysisType, promptContent, promptLoading, open, onSaved, placeholder,
 }: AnalysisTabProps) {
   const [copied, setCopied] = useState(false)
   const [promptExpanded, setPromptExpanded] = useState(false)
@@ -93,6 +95,10 @@ function AnalysisTab({
   // 删除确认
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // 生成分析（数据收集 tab 专用）
+  const [generating, setGenerating] = useState(false)
+  const [genMsg, setGenMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const currentRecord: AnalysisRecord | null = history[currentIndex] ?? null
 
@@ -150,6 +156,25 @@ function AnalysisTab({
     }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleGenerate = async () => {
+    if (!tsCode || !stockName) return
+    setGenerating(true)
+    setGenMsg(null)
+    try {
+      const res = await apiClient.collectStockData(tsCode, stockName)
+      if (res?.code === 200 && res.data?.text) {
+        setAnalysisText(res.data.text)
+        setGenMsg({ text: '数据收集完成，已填入下方文本框', type: 'success' })
+      } else {
+        setGenMsg({ text: res?.message || '数据收集失败', type: 'error' })
+      }
+    } catch (e: any) {
+      setGenMsg({ text: e?.response?.data?.message || '数据收集失败', type: 'error' })
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const handleSave = async () => {
@@ -413,6 +438,18 @@ function AnalysisTab({
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">保存新分析</span>
           <div className="flex items-center gap-2">
+            {analysisType === 'stock_data_collection' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="gap-1.5 h-7 text-xs"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {generating ? '收集中...' : '生成分析'}
+              </Button>
+            )}
             <span className="text-xs text-gray-400">评分（可选）</span>
             <input
               type="number"
@@ -426,6 +463,11 @@ function AnalysisTab({
             />
           </div>
         </div>
+        {genMsg && (
+          <p className={`text-xs ${genMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+            {genMsg.text}
+          </p>
+        )}
         <textarea
           value={analysisText}
           onChange={(e) => setAnalysisText(e.target.value)}
@@ -512,6 +554,7 @@ export function HotMoneyViewDialog({
             <TabsContent value="hot_money" className="mt-0">
               <AnalysisTab
                 tsCode={tsCode}
+                stockName={stockName}
                 analysisType="hot_money_view"
                 promptContent={promptContent}
                 promptLoading={promptLoading}
@@ -524,6 +567,7 @@ export function HotMoneyViewDialog({
             <TabsContent value="data_collection" className="mt-0">
               <AnalysisTab
                 tsCode={tsCode}
+                stockName={stockName}
                 analysisType="stock_data_collection"
                 promptContent={dataCollectionPrompt}
                 promptLoading={dataCollectionPromptLoading}

@@ -531,6 +531,19 @@ for item in items:
 
 ---
 
+## 数据表字段格式说明
+
+| 表 | 字段 | 格式 | 说明 |
+|----|------|------|------|
+| `stock_daily` | `code` | `000002.SZ` | ts_code 格式，非纯数字 |
+| `stock_daily` | `date` | `DATE`（YYYY-MM-DD） | Repository 日期参数须用 YYYY-MM-DD |
+| `stock_basic` | `code` | `000002` | 纯6位数字 |
+| `stock_basic` | `ts_code` | `000002.SZ` | 完整格式 |
+| `moneyflow_stock_dc` | `net_amount` | 万元 | 非元，格式化时注意换算 |
+| `stk_holdernumber` | `end_date` | YYYYMMDD | 同一季报可能有多条（精确日期不同），按 `end_date[:6]`（YYYYMM）去重 |
+
+---
+
 ## TimescaleDB 查询注意
 
 `stock_daily` 是 TimescaleDB hypertable（6M+ 行，557+ chunks），以下查询触发全表扫描（>10s），**禁止**：

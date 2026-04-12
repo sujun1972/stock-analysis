@@ -385,6 +385,32 @@ class DcMemberRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def get_industry_board_by_con_code(self, con_code: str) -> Optional[Dict]:
+        """
+        查询股票所属行业板块（idx_type='行业板块'）
+
+        Args:
+            con_code: 成分股 ts_code，如 '000002.SZ'
+
+        Returns:
+            {'ts_code': 'BK0xxx.DC', 'name': '房地产开发'} 或 None
+        """
+        try:
+            query = """
+                SELECT DISTINCT dm.ts_code, di.name
+                FROM dc_member dm
+                JOIN dc_index di ON dm.ts_code = di.ts_code
+                WHERE dm.con_code = %s AND di.idx_type = '行业板块'
+                LIMIT 1
+            """
+            result = self.execute_query(query, (con_code,))
+            if result:
+                return {'ts_code': result[0][0], 'name': result[0][1]}
+            return None
+        except Exception as e:
+            logger.warning(f"查询行业板块失败 ({con_code}): {e}")
+            return None
+
     def delete_by_date_range(
         self,
         start_date: str,

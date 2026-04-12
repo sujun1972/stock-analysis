@@ -1533,6 +1533,18 @@ class ApiClient {
     const response = await axiosInstance.delete(`/api/stock-ai-analysis/${recordId}`)
     return response.data
   }
+
+  // ========== 个股数据收集 ==========
+
+  /** 从本地数据库收集个股多维度数据，返回结构化文本供 AI 提示词使用 */
+  async collectStockData(tsCode: string, stockName: string): Promise<any> {
+    const response = await axiosInstance.post('/api/stock-data-collection/collect', {
+      ts_code: tsCode,
+      stock_name: stockName,
+      format: 'text',
+    })
+    return response.data
+  }
 }
 
 // 导出单例
