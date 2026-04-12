@@ -318,50 +318,99 @@ async def get_template_by_key(
 
         data = PromptTemplateResponse.from_orm(template).model_dump()
 
-        # 构建替换变量表：日期类由后端注入，股票类由调用方传入
         if stock_name or stock_code:
-            from app.repositories.trading_calendar_repository import TradingCalendarRepository
-            calendar_repo = TradingCalendarRepository()
-            latest_trade_day_raw = await asyncio.to_thread(calendar_repo.get_latest_trading_day)
-            if latest_trade_day_raw:
-                dt = datetime.strptime(latest_trade_day_raw, "%Y%m%d")
-                latest_trade_day = f"{dt.year}年{dt.month}月{dt.day}日"
-            else:
-                latest_trade_day = "未知"
-
-            today = datetime.now()
-            today_str = f"{today.year}年{today.month}月{today.day}日"
-            stock_name_and_code = f"{stock_name or ''} {stock_code or ''}".strip()
-
-            variables = {
-                "current_date": today_str,
-                "latest_trade_date": latest_trade_day,
-                "stock_name_and_code": stock_name_and_code,
-            }
-
-            # 游资观点模板：自动填充 {{ stock_data_collection }} 占位符
-            if (
-                template_key == "top_speculative_investor_v1"
-                and ts_code
-                and "{{ stock_data_collection }}" in (data.get("user_prompt_template") or "")
-            ):
-                stock_data_text = await _get_or_generate_stock_data_collection(
-                    ts_code=ts_code,
-                    stock_name=stock_name or stock_code or "",
-                    created_by=current_user.id,
-                )
-                variables["stock_data_collection"] = stock_data_text
-
-            if data.get("user_prompt_template"):
-                data["user_prompt_template"] = _render_template(
-                    data["user_prompt_template"], variables
-                )
-            if data.get("system_prompt"):
-                data["system_prompt"] = _render_template(data["system_prompt"], variables)
+            prompt_data = await build_stock_prompt(
+                template_key=template_key,
+                stock_name=stock_name,
+                stock_code=stock_code,
+                ts_code=ts_code,
+                created_by=current_user.id,
+                db=db,
+            )
+            data["system_prompt"] = prompt_data["system_prompt"]
+            data["user_prompt_template"] = prompt_data["user_prompt"]
 
         return ApiResponse.success(data=data, message="获取模板详情成功").to_dict()
     except Exception as e:
         return ApiResponse.error(message=str(e), code=500).to_dict()
+
+
+async def build_stock_prompt(
+    template_key: str,
+    stock_name: Optional[str],
+    stock_code: Optional[str],
+    ts_code: Optional[str],
+    created_by: Optional[int],
+    db,
+) -> dict:
+    """
+    构建股票分析完整提示词（供 get_template_by_key 端点和 generate 端点共用）。
+
+    返回：
+    {
+      "system_prompt": str,
+      "user_prompt": str,
+      "recommended_provider": str,
+      "recommended_model": str,
+      "recommended_temperature": float,
+      "recommended_max_tokens": int,
+    }
+    """
+    template = service.get_template_by_key(db, template_key)
+    if not template:
+        raise ValueError(f"模板不存在 (key={template_key})")
+
+    data = PromptTemplateResponse.from_orm(template).model_dump()
+
+    variables: dict = {}
+
+    if stock_name or stock_code:
+        from app.repositories.trading_calendar_repository import TradingCalendarRepository
+        calendar_repo = TradingCalendarRepository()
+        latest_trade_day_raw = await asyncio.to_thread(calendar_repo.get_latest_trading_day)
+        if latest_trade_day_raw:
+            dt = datetime.strptime(latest_trade_day_raw, "%Y%m%d")
+            latest_trade_day = f"{dt.year}年{dt.month}月{dt.day}日"
+        else:
+            latest_trade_day = "未知"
+
+        today = datetime.now()
+        today_str = f"{today.year}年{today.month}月{today.day}日"
+        stock_name_and_code = f"{stock_name or ''} {stock_code or ''}".strip()
+
+        variables = {
+            "current_date": today_str,
+            "latest_trade_date": latest_trade_day,
+            "stock_name_and_code": stock_name_and_code,
+        }
+
+        if (
+            template_key == "top_speculative_investor_v1"
+            and ts_code
+            and "{{ stock_data_collection }}" in (data.get("user_prompt_template") or "")
+        ):
+            stock_data_text = await _get_or_generate_stock_data_collection(
+                ts_code=ts_code,
+                stock_name=stock_name or stock_code or "",
+                created_by=created_by,
+            )
+            variables["stock_data_collection"] = stock_data_text
+
+    system_prompt = data.get("system_prompt") or ""
+    user_prompt = data.get("user_prompt_template") or ""
+
+    if variables:
+        system_prompt = _render_template(system_prompt, variables)
+        user_prompt = _render_template(user_prompt, variables)
+
+    return {
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+        "recommended_provider": data.get("recommended_provider") or "deepseek",
+        "recommended_model": data.get("recommended_model") or "deepseek-chat",
+        "recommended_temperature": data.get("recommended_temperature") or 0.4,
+        "recommended_max_tokens": data.get("recommended_max_tokens") or 3000,
+    }
 
 
 async def _get_or_generate_stock_data_collection(

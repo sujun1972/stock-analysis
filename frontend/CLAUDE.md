@@ -183,9 +183,12 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **游资观点模板的数据自动填充**：请求 `top_speculative_investor_v1` 时必须传入 `ts_code` 参数（完整格式如 `000703.SZ`）。后端会自动检查当天是否有 `stock_data_collection` 类型的分析记录：若已有则直接填入模板占位符 `{{ stock_data_collection }}`；若无则调用数据收集服务自动生成并保存后再填入。前端调用时写法：`apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: tsCode })`
 
+**AI 直接生成（游资观点 Tab）**：游资观点 Tab 有"AI 分析"按钮，点击后调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建与前端展示完全相同的提示词，调用 AI 服务生成结果后自动保存，返回 `analysis_text` 填入文本框并刷新历史。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 两个端点共用同一函数，确保一致性。
+
 `stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**。
 
 后端 API（均需登录）：
+- `POST /api/stock-ai-analysis/generate` — 后端 AI 生成并保存（返回含 `analysis_text`、`tokens_used`、`generation_time`）
 - `POST /api/stock-ai-analysis/` — 保存新记录（版本自动递增）
 - `GET  /api/stock-ai-analysis/latest` — 获取最新一条
 - `GET  /api/stock-ai-analysis/history` — 分页获取所有历史

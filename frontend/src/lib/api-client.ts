@@ -1534,6 +1534,18 @@ class ApiClient {
     return response.data
   }
 
+  /** 调用后端 AI 服务生成分析结果并保存（提示词与 getPromptTemplateByKey 完全一致） */
+  async generateStockAnalysis(params: {
+    ts_code: string
+    stock_name: string
+    stock_code: string
+    analysis_type: string
+    template_key: string
+  }): Promise<any> {
+    const response = await axiosInstance.post('/api/stock-ai-analysis/generate', params)
+    return response.data
+  }
+
   // ========== 个股数据收集 ==========
 
   /** 从本地数据库收集个股多维度数据，返回结构化文本供 AI 提示词使用 */

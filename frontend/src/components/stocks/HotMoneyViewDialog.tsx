@@ -61,7 +61,9 @@ export interface HotMoneyViewDialogProps {
 interface AnalysisTabProps {
   tsCode: string
   stockName?: string
+  stockCode?: string
   analysisType: string
+  templateKey?: string   // 用于 AI 直接生成，传入后显示"AI 分析"按钮
   promptContent: string
   promptLoading: boolean
   open: boolean
@@ -70,7 +72,7 @@ interface AnalysisTabProps {
 }
 
 function AnalysisTab({
-  tsCode, stockName, analysisType, promptContent, promptLoading, open, onSaved, placeholder,
+  tsCode, stockName, stockCode, analysisType, templateKey, promptContent, promptLoading, open, onSaved, placeholder,
 }: AnalysisTabProps) {
   const [copied, setCopied] = useState(false)
   const [promptExpanded, setPromptExpanded] = useState(false)
@@ -99,6 +101,10 @@ function AnalysisTab({
   // 生成分析（数据收集 tab 专用）
   const [generating, setGenerating] = useState(false)
   const [genMsg, setGenMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  // AI 直接生成（游资观点 tab 专用）
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiGenMsg, setAiGenMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const currentRecord: AnalysisRecord | null = history[currentIndex] ?? null
 
@@ -174,6 +180,33 @@ function AnalysisTab({
       setGenMsg({ text: e?.response?.data?.message || '数据收集失败', type: 'error' })
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const handleAiGenerate = async () => {
+    if (!tsCode || !stockName || !stockCode || !templateKey) return
+    setAiGenerating(true)
+    setAiGenMsg(null)
+    try {
+      const res = await apiClient.generateStockAnalysis({
+        ts_code: tsCode,
+        stock_name: stockName,
+        stock_code: stockCode,
+        analysis_type: analysisType,
+        template_key: templateKey,
+      })
+      if (res?.code === 200 && res.data?.analysis_text) {
+        setAnalysisText(res.data.analysis_text)
+        setAiGenMsg({ text: 'AI 分析完成，已自动保存，结果已填入下方', type: 'success' })
+        await reloadHistory()
+        onSaved?.()
+      } else {
+        setAiGenMsg({ text: res?.message || 'AI 分析失败', type: 'error' })
+      }
+    } catch (e: any) {
+      setAiGenMsg({ text: e?.response?.data?.message || 'AI 分析失败', type: 'error' })
+    } finally {
+      setAiGenerating(false)
     }
   }
 
@@ -468,6 +501,11 @@ function AnalysisTab({
             {genMsg.text}
           </p>
         )}
+        {aiGenMsg && (
+          <p className={`text-xs ${aiGenMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+            {aiGenMsg.text}
+          </p>
+        )}
         <textarea
           value={analysisText}
           onChange={(e) => setAnalysisText(e.target.value)}
@@ -480,15 +518,29 @@ function AnalysisTab({
             {saveMsg.text}
           </p>
         )}
-        <Button
-          onClick={handleSave}
-          disabled={saving || !analysisText.trim()}
-          size="sm"
-          className="gap-1.5"
-        >
-          <Save className="h-3.5 w-3.5" />
-          {saving ? '保存中...' : '保存分析结果'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {templateKey && (
+            <Button
+              onClick={handleAiGenerate}
+              disabled={aiGenerating}
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {aiGenerating ? 'AI 分析中...' : 'AI 分析'}
+            </Button>
+          )}
+          <Button
+            onClick={handleSave}
+            disabled={saving || !analysisText.trim()}
+            size="sm"
+            className="gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saving ? '保存中...' : '保存分析结果'}
+          </Button>
+        </div>
       </div>
 
       {/* 提示词（可折叠，复制按钮在内） */}
@@ -555,7 +607,9 @@ export function HotMoneyViewDialog({
               <AnalysisTab
                 tsCode={tsCode}
                 stockName={stockName}
+                stockCode={stockCode}
                 analysisType="hot_money_view"
+                templateKey="top_speculative_investor_v1"
                 promptContent={promptContent}
                 promptLoading={promptLoading}
                 open={open}
@@ -568,6 +622,7 @@ export function HotMoneyViewDialog({
               <AnalysisTab
                 tsCode={tsCode}
                 stockName={stockName}
+                stockCode={stockCode}
                 analysisType="stock_data_collection"
                 promptContent={dataCollectionPrompt}
                 promptLoading={dataCollectionPromptLoading}

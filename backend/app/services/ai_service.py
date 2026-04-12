@@ -14,6 +14,7 @@ AI策略生成服务
 """
 
 import json
+import os
 import re
 import time
 from typing import Dict, Any, Optional, Tuple
@@ -394,6 +395,57 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
             raise AIServiceError(f"不支持的AI提供商: {provider}")
 
         return client_class(**config)
+
+    def get_provider_config(self, provider: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
+        """从 ai_provider_configs 表获取指定提供商的配置；找不到时回退到 DEEPSEEK_API_KEY 环境变量。"""
+        _DEFAULT = {
+            "provider": "deepseek",
+            "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+            "api_base_url": "https://api.deepseek.com/v1",
+            "model_name": model or "deepseek-chat",
+            "max_tokens": 4000,
+            "temperature": 0.7,
+            "timeout": 60,
+        }
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                host=os.getenv("DATABASE_HOST", "timescaledb"),
+                port=int(os.getenv("DATABASE_PORT", "5432")),
+                dbname=os.getenv("DATABASE_NAME", "stock_analysis"),
+                user=os.getenv("DATABASE_USER", "stock_user"),
+                password=os.getenv("DATABASE_PASSWORD", "stock_password_123"),
+            )
+            cur = conn.cursor()
+            if provider:
+                cur.execute(
+                    "SELECT provider, api_key, api_base_url, model_name, max_tokens, temperature, timeout "
+                    "FROM ai_provider_configs WHERE provider = %s AND is_active = true LIMIT 1",
+                    (provider,),
+                )
+            else:
+                cur.execute(
+                    "SELECT provider, api_key, api_base_url, model_name, max_tokens, temperature, timeout "
+                    "FROM ai_provider_configs WHERE is_active = true AND is_default = true LIMIT 1"
+                )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if not row:
+                logger.warning(f"未找到 AI 提供商配置 (provider={provider})，使用默认配置")
+                return _DEFAULT
+            return {
+                "provider": row[0],
+                "api_key": row[1],
+                "api_base_url": row[2],
+                "model_name": model or row[3],
+                "max_tokens": row[4],
+                "temperature": float(row[5]),
+                "timeout": row[6],
+            }
+        except Exception as e:
+            logger.error(f"获取 AI 提供商配置失败: {e}")
+            return _DEFAULT
 
     def _load_db_prompt(self, strategy_type: str) -> Optional[str]:
         """从数据库按策略类型加载 user_prompt_template，失败时返回 None"""
