@@ -3,6 +3,8 @@
 支持保存分析结果（游资观点等多种类型）、查询最新版本、浏览历史版本
 """
 
+import json
+import re
 import time
 from typing import Optional
 
@@ -16,6 +18,35 @@ from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.services.stock_ai_analysis_service import StockAiAnalysisService
 from sqlalchemy.orm import Session
+
+
+def _extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
+    """
+    从 AI 返回文本中：
+    1. 去掉 ```json ... ``` 代码块标识，只保留纯 JSON 内容
+    2. 尝试从 final_score.score 提取评分
+
+    返回 (cleaned_text, score_or_None)
+    """
+    # 去掉 markdown 代码块标识
+    cleaned = re.sub(r'^```(?:json)?\s*\n?', '', ai_text.strip(), flags=re.MULTILINE)
+    cleaned = re.sub(r'\n?```\s*$', '', cleaned.strip(), flags=re.MULTILINE)
+    cleaned = cleaned.strip()
+
+    # 尝试提取 final_score.score
+    score: Optional[float] = None
+    try:
+        data = json.loads(cleaned)
+        raw_score = data.get("final_score", {}).get("score")
+        if raw_score is not None:
+            score = float(raw_score)
+            # 确保在合理范围内
+            if not (0 <= score <= 10):
+                score = None
+    except Exception:
+        pass
+
+    return cleaned, score
 
 router = APIRouter(prefix="/stock-ai-analysis", tags=["股票AI分析"])
 
@@ -106,13 +137,19 @@ async def generate_analysis(
         logger.error(f"[generate_analysis] AI 调用失败: {e}", exc_info=True)
         return ApiResponse.error(message=f"AI 调用失败: {e}", code=500).to_dict()
 
-    # 4. 保存分析结果（版本自动递增）
+    # 4. 清理 JSON 代码块标识并提取评分（仅对游资观点类型）
+    if body.analysis_type == "hot_money_view":
+        ai_text, extracted_score = _extract_json_and_score(ai_text)
+    else:
+        extracted_score = None
+
+    # 5. 保存分析结果（版本自动递增）
     try:
         result = await StockAiAnalysisService().save_analysis(
             ts_code=body.ts_code,
             analysis_type=body.analysis_type,
             analysis_text=ai_text,
-            score=None,
+            score=extracted_score,
             prompt_text=full_prompt,
             ai_provider=provider_name,
             ai_model=provider_config.get("model_name"),

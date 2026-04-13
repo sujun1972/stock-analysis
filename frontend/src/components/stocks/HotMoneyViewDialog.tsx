@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,6 +54,121 @@ export interface HotMoneyViewDialogProps {
   dataCollectionPrompt: string
   dataCollectionPromptLoading: boolean
   onSaved?: () => void
+}
+
+// ── 分析内容渲染 ──────────────────────────────────────────────
+
+/** 将 **加粗** 标记拆分为 [普通文本, 加粗文本, ...] 的 React 节点数组，避免 dangerouslySetInnerHTML */
+function renderBold(text: string): React.ReactNode {
+  const parts = text.split(/\*\*(.+?)\*\*/g)
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  )
+}
+
+/**
+ * 游资观点 JSON 结构化渲染。
+ * 当 analysis_type 为 hot_money_view 且 analysis_text 是合法 JSON 时，
+ * 将结构化字段渲染为带层级的阅读视图；否则降级为纯文本。
+ */
+function AnalysisContent({ text, analysisType }: { text: string; analysisType: string }) {
+  if (analysisType === 'hot_money_view') {
+    try {
+      const d = JSON.parse(text)
+      if (d && typeof d === 'object' && d.dimensions) {
+        const pm = d.probability_metrics
+        const ts = d.trading_strategy
+        const fs = d.final_score
+
+        return (
+          <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed space-y-3">
+            {/* 标题 */}
+            <div>
+              <h2 className="text-base font-bold">{d.expert_identity ?? '游资专家'} · {d.stock_target ?? ''}</h2>
+              <p className="text-xs text-gray-500 italic">{d.analysis_date ?? ''}</p>
+            </div>
+
+            {/* 明日概率 */}
+            {pm && (
+              <section>
+                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">明日涨幅概率</h3>
+                <ul className="space-y-0.5 pl-1">
+                  <li className="flex gap-1.5"><span className="text-gray-400 shrink-0">·</span><span>次日 +2% 概率：<strong>{pm.next_day_plus_2_percent_prob ?? '-'}</strong></span></li>
+                  <li className="flex gap-1.5"><span className="text-gray-400 shrink-0">·</span><span>置信度：{pm.confidence_level ?? '-'}</span></li>
+                  <li className="flex gap-1.5"><span className="text-gray-400 shrink-0">·</span><span>{renderBold(pm.key_observation_window ?? '')}</span></li>
+                </ul>
+              </section>
+            )}
+
+            {/* 三维度分析 */}
+            {Object.values(d.dimensions).map((dim: any, i: number) =>
+              dim?.title && dim?.content ? (
+                <section key={i}>
+                  <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">{dim.title}</h3>
+                  <p>{renderBold(dim.content)}</p>
+                </section>
+              ) : null
+            )}
+
+            {/* 交易策略 */}
+            {ts && (
+              <section>
+                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">交易策略</h3>
+                {ts.action_plan && (
+                  <div className="mb-1">
+                    <span className="font-semibold">操作方案　</span>
+                    <span>{renderBold(ts.action_plan)}</span>
+                  </div>
+                )}
+                {ts.risk_warning && (
+                  <div>
+                    <span className="font-semibold">风险提示　</span>
+                    <span>{renderBold(ts.risk_warning)}</span>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* 综合评分 */}
+            {fs && (
+              <section>
+                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">综合评分</h3>
+                <p className="font-bold">{fs.score} / 10 — {fs.rating ?? ''}</p>
+                {Array.isArray(fs.pros) && fs.pros.length > 0 && (
+                  <div className="mt-1">
+                    <span className="font-semibold">优势　</span>
+                    <ul className="mt-0.5 space-y-0.5 pl-1">
+                      {fs.pros.map((p: string, i: number) => (
+                        <li key={i} className="flex gap-1.5"><span className="text-green-500 shrink-0">+</span><span>{p}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(fs.cons) && fs.cons.length > 0 && (
+                  <div className="mt-1">
+                    <span className="font-semibold">劣势　</span>
+                    <ul className="mt-0.5 space-y-0.5 pl-1">
+                      {fs.cons.map((c: string, i: number) => (
+                        <li key={i} className="flex gap-1.5"><span className="text-red-400 shrink-0">−</span><span>{c}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        )
+      }
+    } catch {
+      // JSON 解析失败，降级为纯文本
+    }
+  }
+
+  return (
+    <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+      {text}
+    </div>
+  )
 }
 
 // ── 单个 Tab 内容（抽离为子组件） ──────────────────────────────
@@ -454,9 +569,7 @@ function AnalysisTab({
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {currentRecord.analysis_text}
-              </div>
+              <AnalysisContent text={currentRecord.analysis_text} analysisType={analysisType} />
             )}
           </div>
         ) : (

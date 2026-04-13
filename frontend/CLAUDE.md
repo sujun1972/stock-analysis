@@ -185,6 +185,8 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **AI 直接生成（游资观点 Tab）**：游资观点 Tab 有"AI 分析"按钮，点击后调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建与前端展示完全相同的提示词，调用 AI 服务生成结果后自动保存，返回 `analysis_text` 填入文本框并刷新历史。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 两个端点共用同一函数，确保一致性。
 
+**游资观点 JSON 格式约定**：`top_speculative_investor_v1` 模板要求 AI 返回 JSON 格式结果（含 `dimensions`、`probability_metrics`、`trading_strategy`、`final_score` 等字段）。后端 `_extract_json_and_score()` 负责：① 剥离 AI 可能包裹的 ` ```json ``` ` 代码块标识；② 从 `final_score.score` 提取评分自动写入 `score` 字段。前端 `AnalysisContent` 组件检测到 `analysis_type === 'hot_money_view'` 且内容为合法 JSON 时，直接将结构化字段渲染为带层级的阅读视图（标题 → 概率 → 三维度 → 策略 → 评分）；JSON 解析失败时降级为纯文本展示。
+
 `stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**。
 
 后端 API（均需登录）：
