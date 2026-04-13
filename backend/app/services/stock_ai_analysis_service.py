@@ -4,7 +4,13 @@ from typing import Dict, List, Optional
 from loguru import logger
 from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
 
-ALLOWED_ANALYSIS_TYPES = {"hot_money_view", "stock_data_collection"}
+ALLOWED_ANALYSIS_TYPES = {
+    "hot_money_view",
+    "stock_data_collection",
+    "midline_industry_expert",
+    "longterm_value_watcher",
+    "cio_directive",
+}
 
 
 class StockAiAnalysisService:
@@ -113,4 +119,43 @@ class StockAiAnalysisService:
                 }
             else:
                 item["latest_analysis"] = None
+        return items
+
+    async def enrich_stock_list_multi(self, items: List[Dict]) -> List[Dict]:
+        """
+        并发批量注入游资观点、中线专家、价值守望者三种类型的最新评分摘要。
+        各自注入字段：latest_analysis_hot_money / latest_analysis_midline / latest_analysis_longterm
+        """
+        ts_codes = [item["ts_code"] for item in items if item.get("ts_code")]
+        if not ts_codes:
+            return items
+
+        analysis_types = [
+            ("hot_money_view",        "latest_analysis_hot_money"),
+            ("midline_industry_expert","latest_analysis_midline"),
+            ("longterm_value_watcher", "latest_analysis_longterm"),
+        ]
+
+        try:
+            maps = await asyncio.gather(*[
+                asyncio.to_thread(self.repo.get_latest_batch, ts_codes, atype)
+                for atype, _ in analysis_types
+            ])
+        except Exception as e:
+            logger.warning(f"批量查询多类型AI分析摘要失败，跳过注入: {e}")
+            for item in items:
+                for _, field in analysis_types:
+                    item[field] = None
+            return items
+
+        for item in items:
+            ts = item.get("ts_code")
+            for (_, field), latest_map in zip(analysis_types, maps):
+                rec = latest_map.get(ts)
+                item[field] = {
+                    "id": rec["id"],
+                    "score": rec["score"],
+                    "version": rec["version"],
+                    "created_at": rec["created_at"],
+                } if rec else None
         return items

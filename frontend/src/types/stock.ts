@@ -42,7 +42,26 @@ export interface StockInfo {
   // 概念标签
   concepts?: Concept[]
   // AI分析摘要（include_analysis=true 时由后端注入）
+  /** @deprecated 旧字段，由 latest_analysis_hot_money 替代 */
   latest_analysis?: {
+    id: number
+    score: number | null
+    version: number
+    created_at: string
+  } | null
+  latest_analysis_hot_money?: {
+    id: number
+    score: number | null
+    version: number
+    created_at: string
+  } | null
+  latest_analysis_midline?: {
+    id: number
+    score: number | null
+    version: number
+    created_at: string
+  } | null
+  latest_analysis_longterm?: {
     id: number
     score: number | null
     version: number

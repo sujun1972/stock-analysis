@@ -53,12 +53,21 @@ export interface HotMoneyViewDialogProps {
   // 数据收集提示词
   dataCollectionPrompt: string
   dataCollectionPromptLoading: boolean
+  // 中线产业趋势专家观点
+  midlinePrompt: string
+  midlinePromptLoading: boolean
+  // 长线价值守望者观点
+  longtermPrompt: string
+  longtermPromptLoading: boolean
+  // 首席投资官（CIO）指令
+  cioPrompt: string
+  cioPromptLoading: boolean
   onSaved?: () => void
 }
 
 // ── 分析内容渲染 ──────────────────────────────────────────────
 
-/** 将 **加粗** 标记拆分为 [普通文本, 加粗文本, ...] 的 React 节点数组，避免 dangerouslySetInnerHTML */
+/** 将 **加粗** 标记拆分为带 <strong> 的 React 节点数组，避免 dangerouslySetInnerHTML */
 function renderBold(text: string): React.ReactNode {
   const parts = text.split(/\*\*(.+?)\*\*/g)
   return parts.map((part, i) =>
@@ -67,101 +76,265 @@ function renderBold(text: string): React.ReactNode {
 }
 
 /**
- * 游资观点 JSON 结构化渲染。
- * 当 analysis_type 为 hot_money_view 且 analysis_text 是合法 JSON 时，
- * 将结构化字段渲染为带层级的阅读视图；否则降级为纯文本。
+ * 通用 Markdown 渲染器（轻量级，无外部依赖）。
+ * 支持：## 标题、### 标题、**加粗**、- 列表、【标签】高亮、---分隔线、普通段落。
  */
+function MarkdownContent({ text }: { text: string }) {
+  const lines = text.split('\n')
+  const nodes: React.ReactNode[] = []
+  let listBuffer: string[] = []
+
+  const flushList = (key: string) => {
+    if (listBuffer.length === 0) return
+    nodes.push(
+      <ul key={key} className="space-y-0.5 pl-1 mb-1">
+        {listBuffer.map((item, i) => (
+          <li key={i} className="flex gap-1.5">
+            <span className="text-gray-400 shrink-0">·</span>
+            <span>{renderBold(item)}</span>
+          </li>
+        ))}
+      </ul>
+    )
+    listBuffer = []
+  }
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim()
+
+    if (trimmed.startsWith('## ')) {
+      flushList(`list-${idx}`)
+      nodes.push(
+        <h2 key={idx} className="text-base font-bold mt-3 mb-1 text-gray-900 dark:text-gray-100">
+          {renderBold(trimmed.slice(3))}
+        </h2>
+      )
+    } else if (trimmed.startsWith('### ')) {
+      flushList(`list-${idx}`)
+      nodes.push(
+        <h3 key={idx} className="text-sm font-semibold text-blue-700 dark:text-blue-400 mt-2 mb-1">
+          {renderBold(trimmed.slice(4))}
+        </h3>
+      )
+    } else if (trimmed === '---' || trimmed === '***') {
+      flushList(`list-${idx}`)
+      nodes.push(<hr key={idx} className="border-gray-200 dark:border-gray-700 my-2" />)
+    } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      listBuffer.push(trimmed.slice(2))
+    } else if (trimmed === '') {
+      flushList(`list-${idx}`)
+      // 空行不输出节点
+    } else {
+      flushList(`list-${idx}`)
+      // 普通段落：高亮【标签】
+      const parts = trimmed.split(/(【[^】]+】)/g)
+      nodes.push(
+        <p key={idx} className="mb-1">
+          {parts.map((part, i) =>
+            /^【[^】]+】$/.test(part)
+              ? <span key={i} className="font-semibold text-blue-700 dark:text-blue-400">{part}</span>
+              : renderBold(part)
+          )}
+        </p>
+      )
+    }
+  })
+  flushList('list-end')
+
+  return (
+    <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+      {nodes}
+    </div>
+  )
+}
+
+// ── probability_metrics 字段的中文标签映射 ──────────────────────
+// key: JSON 字段名 → label: 中文标签，valuePrefix/valueSuffix 包裹值
+const PM_FIELD_LABELS: Record<string, { label: string; prefix?: string }> = {
+  // 游资观点
+  next_day_plus_2_percent_prob: { label: '次日 +2% 概率' },
+  confidence_level:             { label: '置信度' },
+  key_observation_window:       { label: '观察窗口' },
+  // 中线专家
+  three_month_positive_return_prob: { label: '3 个月正收益概率' },
+  trend_stage:                  { label: '趋势阶段' },
+  key_catalyst:                 { label: '核心催化' },
+  // 长线价值守望者
+  one_year_intrinsic_return_prob:   { label: '1 年内在回报概率' },
+  valuation_level:              { label: '估值水位' },
+  safety_margin:                { label: '安全边际' },
+  // CIO 指令
+  short_term_signal:            { label: '短线信号' },
+  mid_term_signal:              { label: '中线信号' },
+  long_term_signal:             { label: '长线信号' },
+}
+
+// ── 共用子组件 ────────────────────────────────────────────────
+
+/** 评分色块 */
+function ScoreBadge({ score, rating }: { score: number; rating?: string }) {
+  const colorCls = score >= 8
+    ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+    : score >= 6
+    ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
+    : 'bg-gray-50 text-gray-500 dark:bg-gray-800'
+  return (
+    <span className="flex items-center gap-2 flex-wrap">
+      <span className={`font-bold px-2 py-0.5 rounded text-base ${colorCls}`}>
+        {score} / 10
+      </span>
+      {rating && <span className="text-sm text-gray-600 dark:text-gray-300">{rating}</span>}
+    </span>
+  )
+}
+
+/** 带 +/− 前缀的列表（优势/劣势） */
+function ProsConsList({ items, variant }: { items: string[]; variant: 'pros' | 'cons' }) {
+  if (!items.length) return null
+  const icon = variant === 'pros'
+    ? <span className="text-green-500 shrink-0">+</span>
+    : <span className="text-red-400 shrink-0">−</span>
+  return (
+    <ul className="mt-0.5 space-y-0.5 pl-1">
+      {items.map((item, i) => (
+        <li key={i} className="flex gap-1.5">{icon}<span>{renderBold(item)}</span></li>
+      ))}
+    </ul>
+  )
+}
+
+/** 一个分析维度节（蓝色标题 + 正文） */
+function DimensionSection({ title, content }: { title: string; content: string }) {
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">{title}</h3>
+      <div className="text-sm leading-relaxed">
+        {content.split('\n').map((line, i) => (
+          line.trim() ? <p key={i} className="mb-0.5">{renderBold(line)}</p> : null
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * 通用 JSON 结构化分析渲染器。
+ * 支持：游资观点 / 中线专家 / 长线价值守望者 / CIO 指令，
+ * 所有类型共用同一套骨架渲染逻辑，仅 probability_metrics 字段名通过映射表转换。
+ */
+function StructuredAnalysisContent({ d }: { d: Record<string, any> }) {
+  const pm  = d.probability_metrics as Record<string, any> | undefined
+  const ts  = d.trading_strategy    as Record<string, any> | undefined
+  const fs  = d.final_score         as Record<string, any> | undefined
+  const score = fs?.score != null ? parseFloat(String(fs.score)) : null
+
+  return (
+    <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed space-y-3">
+
+      {/* 标题行：专家身份 · 标的 · 日期 */}
+      <div className="pb-2 border-b border-gray-100 dark:border-gray-700">
+        <p className="font-bold text-base">
+          {d.expert_identity ?? '专家'}{d.stock_target ? ` · ${d.stock_target}` : ''}
+        </p>
+        {d.analysis_date && (
+          <p className="text-xs text-gray-400 mt-0.5">{d.analysis_date}</p>
+        )}
+      </div>
+
+      {/* 概率指标区 */}
+      {pm && Object.keys(pm).length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">核心指标</h3>
+          <ul className="space-y-0.5 pl-1">
+            {Object.entries(pm).map(([key, val], i) => {
+              const meta = PM_FIELD_LABELS[key]
+              const label = meta?.label ?? key.replace(/_/g, ' ')
+              return (
+                <li key={i} className="flex gap-1.5">
+                  <span className="text-gray-400 shrink-0">·</span>
+                  <span>
+                    <span className="text-gray-500 dark:text-gray-400">{label}：</span>
+                    <strong>{renderBold(String(val ?? '-'))}</strong>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* 维度分析（title + content 结构） */}
+      {d.dimensions && Object.values(d.dimensions).map((dim: any, i: number) =>
+        dim?.title && dim?.content
+          ? <DimensionSection key={i} title={dim.title} content={dim.content} />
+          : null
+      )}
+
+      {/* 交易策略（游资观点专属，其他类型若有则展示） */}
+      {ts && (ts.action_plan || ts.risk_warning) && (
+        <section>
+          <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">交易策略</h3>
+          {ts.action_plan && (
+            <div className="mb-1">
+              <span className="font-semibold text-gray-700 dark:text-gray-300">操作方案　</span>
+              <span>{renderBold(ts.action_plan)}</span>
+            </div>
+          )}
+          {ts.risk_warning && (
+            <div>
+              <span className="font-semibold text-gray-700 dark:text-gray-300">风险提示　</span>
+              <span>{renderBold(ts.risk_warning)}</span>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 综合评分区 */}
+      {fs && score != null && (
+        <section className="border-t border-gray-100 dark:border-gray-700 pt-3">
+          <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">综合评分</h3>
+          <ScoreBadge score={score} rating={fs.rating} />
+          {Array.isArray(fs.pros) && fs.pros.length > 0 && (
+            <div className="mt-2">
+              <span className="font-semibold text-gray-700 dark:text-gray-300">优势</span>
+              <ProsConsList items={fs.pros} variant="pros" />
+            </div>
+          )}
+          {Array.isArray(fs.cons) && fs.cons.length > 0 && (
+            <div className="mt-1.5">
+              <span className="font-semibold text-gray-700 dark:text-gray-300">劣势</span>
+              <ProsConsList items={fs.cons} variant="cons" />
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 分析内容渲染入口。
+ * 优先级：结构化 JSON 渲染 → Markdown 渲染 → 纯文本兜底
+ */
+const JSON_ANALYSIS_TYPES = new Set([
+  'hot_money_view', 'midline_industry_expert', 'longterm_value_watcher', 'cio_directive',
+])
+
 function AnalysisContent({ text, analysisType }: { text: string; analysisType: string }) {
-  if (analysisType === 'hot_money_view') {
+  if (JSON_ANALYSIS_TYPES.has(analysisType)) {
     try {
       const d = JSON.parse(text)
-      if (d && typeof d === 'object' && d.dimensions) {
-        const pm = d.probability_metrics
-        const ts = d.trading_strategy
-        const fs = d.final_score
-
-        return (
-          <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed space-y-3">
-            {/* 标题 */}
-            <div>
-              <h2 className="text-base font-bold">{d.expert_identity ?? '游资专家'} · {d.stock_target ?? ''}</h2>
-              <p className="text-xs text-gray-500 italic">{d.analysis_date ?? ''}</p>
-            </div>
-
-            {/* 明日概率 */}
-            {pm && (
-              <section>
-                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">明日涨幅概率</h3>
-                <ul className="space-y-0.5 pl-1">
-                  <li className="flex gap-1.5"><span className="text-gray-400 shrink-0">·</span><span>次日 +2% 概率：<strong>{pm.next_day_plus_2_percent_prob ?? '-'}</strong></span></li>
-                  <li className="flex gap-1.5"><span className="text-gray-400 shrink-0">·</span><span>置信度：{pm.confidence_level ?? '-'}</span></li>
-                  <li className="flex gap-1.5"><span className="text-gray-400 shrink-0">·</span><span>{renderBold(pm.key_observation_window ?? '')}</span></li>
-                </ul>
-              </section>
-            )}
-
-            {/* 三维度分析 */}
-            {Object.values(d.dimensions).map((dim: any, i: number) =>
-              dim?.title && dim?.content ? (
-                <section key={i}>
-                  <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">{dim.title}</h3>
-                  <p>{renderBold(dim.content)}</p>
-                </section>
-              ) : null
-            )}
-
-            {/* 交易策略 */}
-            {ts && (
-              <section>
-                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">交易策略</h3>
-                {ts.action_plan && (
-                  <div className="mb-1">
-                    <span className="font-semibold">操作方案　</span>
-                    <span>{renderBold(ts.action_plan)}</span>
-                  </div>
-                )}
-                {ts.risk_warning && (
-                  <div>
-                    <span className="font-semibold">风险提示　</span>
-                    <span>{renderBold(ts.risk_warning)}</span>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* 综合评分 */}
-            {fs && (
-              <section>
-                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">综合评分</h3>
-                <p className="font-bold">{fs.score} / 10 — {fs.rating ?? ''}</p>
-                {Array.isArray(fs.pros) && fs.pros.length > 0 && (
-                  <div className="mt-1">
-                    <span className="font-semibold">优势　</span>
-                    <ul className="mt-0.5 space-y-0.5 pl-1">
-                      {fs.pros.map((p: string, i: number) => (
-                        <li key={i} className="flex gap-1.5"><span className="text-green-500 shrink-0">+</span><span>{p}</span></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {Array.isArray(fs.cons) && fs.cons.length > 0 && (
-                  <div className="mt-1">
-                    <span className="font-semibold">劣势　</span>
-                    <ul className="mt-0.5 space-y-0.5 pl-1">
-                      {fs.cons.map((c: string, i: number) => (
-                        <li key={i} className="flex gap-1.5"><span className="text-red-400 shrink-0">−</span><span>{c}</span></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </section>
-            )}
-          </div>
-        )
+      if (d && typeof d === 'object' && !Array.isArray(d)) {
+        return <StructuredAnalysisContent d={d} />
       }
     } catch {
-      // JSON 解析失败，降级为纯文本
+      // JSON 解析失败，降级
     }
+  }
+
+  // Markdown 渲染（文本包含 # 或 - 等 Markdown 特征时更美观）
+  if (/^#{1,3} /m.test(text) || /^[-*] /m.test(text)) {
+    return <MarkdownContent text={text} />
   }
 
   return (
@@ -699,6 +872,9 @@ export function HotMoneyViewDialog({
   open, onClose, stockName, stockCode, tsCode,
   promptContent, promptLoading,
   dataCollectionPrompt, dataCollectionPromptLoading,
+  midlinePrompt, midlinePromptLoading,
+  longtermPrompt, longtermPromptLoading,
+  cioPrompt, cioPromptLoading,
   onSaved,
 }: HotMoneyViewDialogProps) {
   return (
@@ -710,9 +886,12 @@ export function HotMoneyViewDialog({
         </DialogHeader>
 
         <Tabs defaultValue="hot_money" className="flex-1 flex flex-col min-h-0">
-          <TabsList className="shrink-0 w-full grid grid-cols-2">
+          <TabsList className="shrink-0 w-full grid grid-cols-5">
             <TabsTrigger value="hot_money">游资观点</TabsTrigger>
             <TabsTrigger value="data_collection">数据收集</TabsTrigger>
+            <TabsTrigger value="midline">中线专家</TabsTrigger>
+            <TabsTrigger value="longterm">价值守望</TabsTrigger>
+            <TabsTrigger value="cio">CIO 指令</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-y-auto min-h-0 mt-4 pr-1">
@@ -742,6 +921,51 @@ export function HotMoneyViewDialog({
                 open={open}
                 onSaved={onSaved}
                 placeholder="将 AI 返回的数据收集结果粘贴到这里..."
+              />
+            </TabsContent>
+
+            <TabsContent value="midline" className="mt-0">
+              <AnalysisTab
+                tsCode={tsCode}
+                stockName={stockName}
+                stockCode={stockCode}
+                analysisType="midline_industry_expert"
+                templateKey="midline_industry_expert_v1"
+                promptContent={midlinePrompt}
+                promptLoading={midlinePromptLoading}
+                open={open}
+                onSaved={onSaved}
+                placeholder="将 AI 返回的中线产业趋势专家观点粘贴到这里..."
+              />
+            </TabsContent>
+
+            <TabsContent value="longterm" className="mt-0">
+              <AnalysisTab
+                tsCode={tsCode}
+                stockName={stockName}
+                stockCode={stockCode}
+                analysisType="longterm_value_watcher"
+                templateKey="longterm_value_watcher_v1"
+                promptContent={longtermPrompt}
+                promptLoading={longtermPromptLoading}
+                open={open}
+                onSaved={onSaved}
+                placeholder="将 AI 返回的长线价值守望者观点粘贴到这里..."
+              />
+            </TabsContent>
+
+            <TabsContent value="cio" className="mt-0">
+              <AnalysisTab
+                tsCode={tsCode}
+                stockName={stockName}
+                stockCode={stockCode}
+                analysisType="cio_directive"
+                templateKey="cio_directive_v1"
+                promptContent={cioPrompt}
+                promptLoading={cioPromptLoading}
+                open={open}
+                onSaved={onSaved}
+                placeholder="将 AI 返回的 CIO 综合评级指令粘贴到这里..."
               />
             </TabsContent>
           </div>

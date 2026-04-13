@@ -321,6 +321,12 @@ function StocksPageContent() {
   const [hotMoneyLoading, setHotMoneyLoading] = useState(false)
   const [dataCollectionContent, setDataCollectionContent] = useState<string>('')
   const [dataCollectionLoading, setDataCollectionLoading] = useState(false)
+  const [midlineContent, setMidlineContent] = useState<string>('')
+  const [midlineLoading, setMidlineLoading] = useState(false)
+  const [longtermContent, setLongtermContent] = useState<string>('')
+  const [longtermLoading, setLongtermLoading] = useState(false)
+  const [cioContent, setCioContent] = useState<string>('')
+  const [cioLoading, setCioLoading] = useState(false)
 
   const user = useAuthStore((s) => s.user)
 
@@ -858,7 +864,9 @@ function StocksPageContent() {
                         )}
                       </button>
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">游资评分</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">游资</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">中线</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">价值</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>
                 </thead>
@@ -910,19 +918,25 @@ function StocksPageContent() {
                             </span>
                           ) : '-'}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-                          {stock.latest_analysis?.score != null ? (
-                            <span className={`text-sm font-semibold ${
-                              stock.latest_analysis.score >= 8 ? 'text-red-600 dark:text-red-400'
-                              : stock.latest_analysis.score >= 6 ? 'text-yellow-600 dark:text-yellow-400'
-                              : 'text-gray-500 dark:text-gray-400'
-                            }`}>
-                              {stock.latest_analysis.score}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
-                          )}
-                        </td>
+                        {[
+                          stock.latest_analysis_hot_money,
+                          stock.latest_analysis_midline,
+                          stock.latest_analysis_longterm,
+                        ].map((analysis, idx) => (
+                          <td key={idx} className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                            {analysis?.score != null ? (
+                              <span className={`text-sm font-semibold ${
+                                analysis.score >= 8 ? 'text-red-600 dark:text-red-400'
+                                : analysis.score >= 6 ? 'text-yellow-600 dark:text-yellow-400'
+                                : 'text-gray-500 dark:text-gray-400'
+                              }`}>
+                                {analysis.score}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                            )}
+                          </td>
+                        ))}
                         <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => {
@@ -930,32 +944,46 @@ function StocksPageContent() {
                               setHotMoneyStock({ name: stock.name, code: stock.code, tsCode: ts })
                               setHotMoneyContent('')
                               setDataCollectionContent('')
+                              setMidlineContent('')
+                              setLongtermContent('')
+                              setCioContent('')
                               setHotMoneyLoading(true)
                               setDataCollectionLoading(true)
+                              setMidlineLoading(true)
+                              setLongtermLoading(true)
+                              setCioLoading(true)
                               setHotMoneyDialogOpen(true)
                               const vars = { stock_name: stock.name, stock_code: stock.code }
                               Promise.all([
                                 apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: ts }),
                                 apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
-                              ]).then(([hotRes, dataRes]) => {
-                                if (hotRes?.code === 200 && hotRes.data?.user_prompt_template) {
-                                  const parts = [hotRes.data.system_prompt, hotRes.data.user_prompt_template].filter(Boolean)
-                                  setHotMoneyContent(parts.join('\n\n'))
-                                } else {
-                                  setHotMoneyContent('加载失败，请重试')
+                                apiClient.getPromptTemplateByKey('midline_industry_expert_v1', { ...vars, ts_code: ts }),
+                                apiClient.getPromptTemplateByKey('longterm_value_watcher_v1', { ...vars, ts_code: ts }),
+                                apiClient.getPromptTemplateByKey('cio_directive_v1', { ...vars, ts_code: ts }),
+                              ]).then(([hotRes, dataRes, midRes, ltRes, cioRes]) => {
+                                const toPrompt = (res: any) => {
+                                  if (res?.code === 200 && res.data?.user_prompt_template) {
+                                    return [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean).join('\n\n')
+                                  }
+                                  return '加载失败，请重试'
                                 }
-                                if (dataRes?.code === 200 && dataRes.data?.user_prompt_template) {
-                                  const parts = [dataRes.data.system_prompt, dataRes.data.user_prompt_template].filter(Boolean)
-                                  setDataCollectionContent(parts.join('\n\n'))
-                                } else {
-                                  setDataCollectionContent('加载失败，请重试')
-                                }
+                                setHotMoneyContent(toPrompt(hotRes))
+                                setDataCollectionContent(toPrompt(dataRes))
+                                setMidlineContent(toPrompt(midRes))
+                                setLongtermContent(toPrompt(ltRes))
+                                setCioContent(toPrompt(cioRes))
                               }).catch(() => {
                                 setHotMoneyContent('加载失败，请重试')
                                 setDataCollectionContent('加载失败，请重试')
+                                setMidlineContent('加载失败，请重试')
+                                setLongtermContent('加载失败，请重试')
+                                setCioContent('加载失败，请重试')
                               }).finally(() => {
                                 setHotMoneyLoading(false)
                                 setDataCollectionLoading(false)
+                                setMidlineLoading(false)
+                                setLongtermLoading(false)
+                                setCioLoading(false)
                               })
                             }}
                             className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap"
@@ -1071,6 +1099,12 @@ function StocksPageContent() {
         promptLoading={hotMoneyLoading}
         dataCollectionPrompt={dataCollectionContent}
         dataCollectionPromptLoading={dataCollectionLoading}
+        midlinePrompt={midlineContent}
+        midlinePromptLoading={midlineLoading}
+        longtermPrompt={longtermContent}
+        longtermPromptLoading={longtermLoading}
+        cioPrompt={cioContent}
+        cioPromptLoading={cioLoading}
         onSaved={() => fetchStocks(true)}
       />
     </div>

@@ -173,21 +173,29 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 共享组件位于 `frontend/src/components/stocks/HotMoneyViewDialog.tsx`，在股票列表页（`/stocks`）和分析页（`/analysis`）复用。通过"AI 分析"按钮触发。
 
-弹窗内含两个 Tab，各自独立管理历史记录和状态：
-- **游资观点**：`analysis_type = hot_money_view`，提示词 key `top_speculative_investor_v1`
-- **数据收集**：`analysis_type = stock_data_collection`，提示词 key `stock_data_collection_v1`
+弹窗内含 **5 个 Tab**，各自独立管理历史记录和状态：
+
+| Tab | analysis_type | 提示词 key |
+|-----|--------------|------------|
+| 游资观点 | `hot_money_view` | `top_speculative_investor_v1` |
+| 数据收集 | `stock_data_collection` | `stock_data_collection_v1` |
+| 中线专家 | `midline_industry_expert` | `midline_industry_expert_v1` |
+| 价值守望 | `longterm_value_watcher` | `longterm_value_watcher_v1` |
+| CIO 指令 | `cio_directive` | `cio_directive_v1` |
 
 每个 Tab 功能：查看/翻页历史分析记录、保存新记录、编辑/删除已有记录（仅记录创建者）、折叠展示提示词（复制按钮在提示词区域内）。
 
-打开弹窗时，两个提示词通过 `Promise.all` 并发加载，互不阻塞。
+打开弹窗时，全部 5 个提示词通过 `Promise.all` 并发加载，互不阻塞。新增 Tab 后必须同步更新父页面（`/stocks/page.tsx`、`/analysis/page.tsx`）的 state 和 `HotMoneyViewDialog` props。
 
-**游资观点模板的数据自动填充**：请求 `top_speculative_investor_v1` 时必须传入 `ts_code` 参数（完整格式如 `000703.SZ`）。后端会自动检查当天是否有 `stock_data_collection` 类型的分析记录：若已有则直接填入模板占位符 `{{ stock_data_collection }}`；若无则调用数据收集服务自动生成并保存后再填入。前端调用时写法：`apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: tsCode })`
+**`{{ stock_data_collection }}` 占位符自动填充**：凡是模板中包含 `{{ stock_data_collection }}` 占位符且请求时传入了 `ts_code` 参数，后端 `build_stock_prompt()` 都会自动检查当天是否已有 `stock_data_collection` 类型记录：有则直接填入；无则调用数据收集服务自动生成保存后再填入。此逻辑对所有含该占位符的模板生效，不限于特定 template_key。
 
-**AI 直接生成（游资观点 Tab）**：游资观点 Tab 有"AI 分析"按钮，点击后调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建与前端展示完全相同的提示词，调用 AI 服务生成结果后自动保存，返回 `analysis_text` 填入文本框并刷新历史。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 两个端点共用同一函数，确保一致性。
+**AI 直接生成（各 Tab）**：各 Tab 可通过"AI 分析"按钮调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建提示词，调用 AI 服务生成并自动保存，返回 `analysis_text` 填入文本框并刷新历史。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 共用同一函数，确保一致性。
 
-**游资观点 JSON 格式约定**：`top_speculative_investor_v1` 模板要求 AI 返回 JSON 格式结果（含 `dimensions`、`probability_metrics`、`trading_strategy`、`final_score` 等字段）。后端 `_extract_json_and_score()` 负责：① 剥离 AI 可能包裹的 ` ```json ``` ` 代码块标识；② 从 `final_score.score` 提取评分自动写入 `score` 字段。前端 `AnalysisContent` 组件检测到 `analysis_type === 'hot_money_view'` 且内容为合法 JSON 时，直接将结构化字段渲染为带层级的阅读视图（标题 → 概率 → 三维度 → 策略 → 评分）；JSON 解析失败时降级为纯文本展示。
+**JSON 格式分析类型（4 种）**：`hot_money_view`、`midline_industry_expert`、`longterm_value_watcher`、`cio_directive` 均要求 AI 返回结构化 JSON（含 `expert_identity`、`probability_metrics`、`dimensions`、`final_score` 等字段）。后端 `_extract_json_and_score()` 统一处理：① 剥离 ` ```json ``` ` 代码块；② 按优先级路径提取评分（`final_score.score` → `comprehensive_score` → `score`）。前端 `StructuredAnalysisContent` 组件统一渲染所有 4 种 JSON 类型，`PM_FIELD_LABELS` 映射表将 `probability_metrics` 中的英文 key 转为中文标签；JSON 解析失败时降级为纯文本展示。
 
-`stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**。
+**股票列表评分列**：`/stocks` 页面表格显示三列 AI 评分：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）。后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询三种类型，一次注入到 `StockInfo` 对象。
+
+`stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**，以及 `_JSON_ANALYSIS_TYPES`（`stock_ai_analysis.py`）、`admin/types/prompt-template.ts` 中的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS`。
 
 后端 API（均需登录）：
 - `POST /api/stock-ai-analysis/generate` — 后端 AI 生成并保存（返回含 `analysis_text`、`tokens_used`、`generation_time`）

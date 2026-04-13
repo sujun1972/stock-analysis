@@ -640,7 +640,7 @@ export default function YourPage() {
 
 Admin 的 `/settings/prompt-templates` 页面通过 `BUSINESS_TYPE_LABELS`（`admin/types/prompt-template.ts`）渲染业务类型下拉列表。**新增业务类型时必须同步更新该映射**，否则下拉列表显示 key 而非中文标签。
 
-当前支持的策略生成类型（`business_type`）：
+当前支持的 `business_type`：
 
 | business_type | 说明 |
 |---------------|------|
@@ -648,7 +648,14 @@ Admin 的 `/settings/prompt-templates` 页面通过 `BUSINESS_TYPE_LABELS`（`ad
 | `strategy_generation_entry` | 入场策略生成 |
 | `strategy_generation_exit` | 离场策略生成 |
 | `strategy_generation_stock_selection` | 选股策略生成 |
+| `stock_data_collection` | 个股数据收集 |
+| `hot_money_view` | 顶级游资观点 |
+| `midline_industry_expert` | 中线产业趋势专家观点 |
+| `longterm_value_watcher` | 长线价值守望者观点 |
+| `cio_directive` | 首席投资官（CIO）指令 |
 
-**数据库初始化**：运行 `backend/scripts/migrate_strategy_prompt_templates.py` 向数据库写入上述三种策略类型的初始提示词模板。
+**数据库初始化**：
+- 策略类型模板：运行 `backend/scripts/migrate_strategy_prompt_templates.py`
+- 专家观点模板（后四种）：运行 `backend/scripts/migrate_expert_view_templates.py`
 
 **后端查找逻辑**（`ai_service.py`）：`_STRATEGY_TYPE_BUSINESS_TYPE` 字典将 `strategy_type`（`entry`/`exit`/`stock_selection`）映射到 `business_type`，`AIStrategyService._load_db_prompt()` 据此加载对应模板；模板缺失时降级使用 `STRATEGY_TYPE_FRAMEWORKS` 硬编码片段。

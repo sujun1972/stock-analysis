@@ -274,7 +274,7 @@ async def get_stock_list(
         })
 
     if include_analysis:
-        items = await StockAiAnalysisService().enrich_stock_list(items, 'hot_money_view')
+        items = await StockAiAnalysisService().enrich_stock_list_multi(items)
 
     response_data: dict = {'items': items, 'total': total}
     if selection_strategy_name is not None:

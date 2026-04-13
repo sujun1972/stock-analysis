@@ -149,6 +149,10 @@ export const BUSINESS_TYPES = {
   STRATEGY_GENERATION_STOCK_SELECTION: 'strategy_generation_stock_selection',
   STOCK_ANALYSIS: 'stock_analysis',
   STOCK_DATA_COLLECTION: 'stock_data_collection',
+  HOT_MONEY_VIEW: 'hot_money_view',
+  MIDLINE_INDUSTRY_EXPERT: 'midline_industry_expert',
+  LONGTERM_VALUE_WATCHER: 'longterm_value_watcher',
+  CIO_DIRECTIVE: 'cio_directive',
 } as const
 
 export const BUSINESS_TYPE_LABELS: Record<string, string> = {
@@ -160,4 +164,8 @@ export const BUSINESS_TYPE_LABELS: Record<string, string> = {
   strategy_generation_stock_selection: '策略生成 - 选股策略',
   stock_analysis: '个股分析',
   stock_data_collection: '个股数据收集',
+  hot_money_view: '顶级游资观点',
+  midline_industry_expert: '中线产业趋势专家观点',
+  longterm_value_watcher: '长线价值守望者观点',
+  cio_directive: '首席投资官（CIO）指令',
 }

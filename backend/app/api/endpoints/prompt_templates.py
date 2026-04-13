@@ -385,8 +385,7 @@ async def build_stock_prompt(
         }
 
         if (
-            template_key == "top_speculative_investor_v1"
-            and ts_code
+            ts_code
             and "{{ stock_data_collection }}" in (data.get("user_prompt_template") or "")
         ):
             stock_data_text = await _get_or_generate_stock_data_collection(
@@ -430,10 +429,10 @@ async def _get_or_generate_stock_data_collection(
     repo = StockAiAnalysisRepository()
     existing = await asyncio.to_thread(repo.get_today, ts_code, "stock_data_collection")
     if existing:
-        logger.info(f"[游资模板] 使用今日已有数据收集记录: {ts_code} (id={existing['id']})")
+        logger.info(f"[stock_data_collection] 使用今日已有数据收集记录: {ts_code} (id={existing['id']})")
         return existing["analysis_text"]
 
-    logger.info(f"[游资模板] 今日无数据收集记录，自动生成: {ts_code}")
+    logger.info(f"[stock_data_collection] 今日无数据收集记录，自动生成: {ts_code}")
     try:
         collection_service = StockDataCollectionService()
         text = await collection_service.collect_and_format(ts_code, stock_name)
@@ -449,10 +448,10 @@ async def _get_or_generate_stock_data_collection(
             ai_model=None,
             created_by=created_by,
         )
-        logger.info(f"[游资模板] 数据收集已自动保存: {ts_code}")
+        logger.info(f"[stock_data_collection] 数据收集已自动保存: {ts_code}")
         return text
     except Exception as e:
-        logger.error(f"[游资模板] 自动生成数据收集失败: {ts_code}, 错误: {e}")
+        logger.error(f"[stock_data_collection] 自动生成数据收集失败: {ts_code}, 错误: {e}")
         return f"（数据自动收集失败，请手动点击生成分析按钮获取：{e}）"
 
 

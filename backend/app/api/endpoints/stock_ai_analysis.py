@@ -24,7 +24,12 @@ def _extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
     """
     从 AI 返回文本中：
     1. 去掉 ```json ... ``` 代码块标识，只保留纯 JSON 内容
-    2. 尝试从 final_score.score 提取评分
+    2. 尝试从多个候选路径提取评分（按优先级依次尝试）
+
+    候选评分路径（.分隔的 key 路径）：
+      - final_score.score        游资观点
+      - comprehensive_score      中线专家、价值守望者、CIO 顶级 key
+      - score                    CIO 简单结构
 
     返回 (cleaned_text, score_or_None)
     """
@@ -33,20 +38,43 @@ def _extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
     cleaned = re.sub(r'\n?```\s*$', '', cleaned.strip(), flags=re.MULTILINE)
     cleaned = cleaned.strip()
 
-    # 尝试提取 final_score.score
+    _SCORE_PATHS = [
+        ["final_score", "score"],   # 游资观点
+        ["comprehensive_score"],    # 中线专家 / 价值守望者 / CIO
+        ["score"],                  # CIO 简单结构兜底
+    ]
+
     score: Optional[float] = None
     try:
         data = json.loads(cleaned)
-        raw_score = data.get("final_score", {}).get("score")
-        if raw_score is not None:
-            score = float(raw_score)
-            # 确保在合理范围内
-            if not (0 <= score <= 10):
-                score = None
+        for path in _SCORE_PATHS:
+            node = data
+            for key in path:
+                if not isinstance(node, dict):
+                    node = None
+                    break
+                node = node.get(key)
+            if node is not None:
+                try:
+                    candidate = float(node)
+                    if 0 <= candidate <= 10:
+                        score = candidate
+                        break
+                except (TypeError, ValueError):
+                    pass
     except Exception:
         pass
 
     return cleaned, score
+
+
+# 需要走 JSON 清洗 + 评分提取的分析类型集合
+_JSON_ANALYSIS_TYPES = {
+    "hot_money_view",
+    "midline_industry_expert",
+    "longterm_value_watcher",
+    "cio_directive",
+}
 
 router = APIRouter(prefix="/stock-ai-analysis", tags=["股票AI分析"])
 
@@ -137,8 +165,8 @@ async def generate_analysis(
         logger.error(f"[generate_analysis] AI 调用失败: {e}", exc_info=True)
         return ApiResponse.error(message=f"AI 调用失败: {e}", code=500).to_dict()
 
-    # 4. 清理 JSON 代码块标识并提取评分（仅对游资观点类型）
-    if body.analysis_type == "hot_money_view":
+    # 4. 清理 JSON 代码块标识并提取评分（对所有 JSON 格式分析类型）
+    if body.analysis_type in _JSON_ANALYSIS_TYPES:
         ai_text, extracted_score = _extract_json_and_score(ai_text)
     else:
         extracted_score = None

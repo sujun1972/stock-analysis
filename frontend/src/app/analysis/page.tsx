@@ -302,6 +302,12 @@ function AnalysisContent() {
   const [hotMoneyLoading, setHotMoneyLoading] = useState(false)
   const [dataCollectionContent, setDataCollectionContent] = useState('')
   const [dataCollectionLoading, setDataCollectionLoading] = useState(false)
+  const [midlineContent, setMidlineContent] = useState('')
+  const [midlineLoading, setMidlineLoading] = useState(false)
+  const [longtermContent, setLongtermContent] = useState('')
+  const [longtermLoading, setLongtermLoading] = useState(false)
+  const [cioContent, setCioContent] = useState('')
+  const [cioLoading, setCioLoading] = useState(false)
   const [latestAnalysis, setLatestAnalysis] = useState<{ score: number | null; version: number } | null>(null)
 
   useEffect(() => {
@@ -358,33 +364,47 @@ function AnalysisContent() {
   const openHotMoneyDialog = () => {
     setHotMoneyContent('')
     setDataCollectionContent('')
+    setMidlineContent('')
+    setLongtermContent('')
+    setCioContent('')
     setHotMoneyLoading(true)
     setDataCollectionLoading(true)
+    setMidlineLoading(true)
+    setLongtermLoading(true)
+    setCioLoading(true)
     setHotMoneyOpen(true)
     const vars = { stock_name: stockInfo?.name ?? '', stock_code: code ?? '' }
     const currentTsCode = basicInfo?.ts_code || (code ? toTsCode(code) : '')
     Promise.all([
       apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: currentTsCode }),
       apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
-    ]).then(([hotRes, dataRes]) => {
-      if (hotRes?.code === 200 && hotRes.data?.user_prompt_template) {
-        const parts = [hotRes.data.system_prompt, hotRes.data.user_prompt_template].filter(Boolean)
-        setHotMoneyContent(parts.join('\n\n'))
-      } else {
-        setHotMoneyContent('加载失败，请重试')
+      apiClient.getPromptTemplateByKey('midline_industry_expert_v1', { ...vars, ts_code: currentTsCode }),
+      apiClient.getPromptTemplateByKey('longterm_value_watcher_v1', { ...vars, ts_code: currentTsCode }),
+      apiClient.getPromptTemplateByKey('cio_directive_v1', { ...vars, ts_code: currentTsCode }),
+    ]).then(([hotRes, dataRes, midRes, ltRes, cioRes]) => {
+      const toPrompt = (res: any) => {
+        if (res?.code === 200 && res.data?.user_prompt_template) {
+          return [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean).join('\n\n')
+        }
+        return '加载失败，请重试'
       }
-      if (dataRes?.code === 200 && dataRes.data?.user_prompt_template) {
-        const parts = [dataRes.data.system_prompt, dataRes.data.user_prompt_template].filter(Boolean)
-        setDataCollectionContent(parts.join('\n\n'))
-      } else {
-        setDataCollectionContent('加载失败，请重试')
-      }
+      setHotMoneyContent(toPrompt(hotRes))
+      setDataCollectionContent(toPrompt(dataRes))
+      setMidlineContent(toPrompt(midRes))
+      setLongtermContent(toPrompt(ltRes))
+      setCioContent(toPrompt(cioRes))
     }).catch(() => {
       setHotMoneyContent('加载失败，请重试')
       setDataCollectionContent('加载失败，请重试')
+      setMidlineContent('加载失败，请重试')
+      setLongtermContent('加载失败，请重试')
+      setCioContent('加载失败，请重试')
     }).finally(() => {
       setHotMoneyLoading(false)
       setDataCollectionLoading(false)
+      setMidlineLoading(false)
+      setLongtermLoading(false)
+      setCioLoading(false)
     })
   }
 
@@ -502,6 +522,12 @@ function AnalysisContent() {
         promptLoading={hotMoneyLoading}
         dataCollectionPrompt={dataCollectionContent}
         dataCollectionPromptLoading={dataCollectionLoading}
+        midlinePrompt={midlineContent}
+        midlinePromptLoading={midlineLoading}
+        longtermPrompt={longtermContent}
+        longtermPromptLoading={longtermLoading}
+        cioPrompt={cioContent}
+        cioPromptLoading={cioLoading}
         onSaved={() => refreshLatestAnalysis(tsCode)}
       />
 
