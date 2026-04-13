@@ -43,20 +43,23 @@ def sync_forecast_task(
         logger.info(f"开始执行业绩预告同步任务: ann_date={ann_date}, start_date={start_date}, end_date={end_date}, period={period}, type={type_}")
 
         service = ForecastService()
-        result = run_async_in_celery(
-            service.sync_forecast,
-            ann_date=ann_date,
-            start_date=start_date,
-            end_date=end_date,
-            period=period,
-            type_=type_
-        )
 
-        if result["status"] == "success":
-            logger.info(f"业绩预告同步成功: {result['records']} 条")
+        if not ann_date and not start_date and not end_date and not period and not type_:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_forecast,
+                ann_date=ann_date,
+                start_date=start_date,
+                end_date=end_date,
+                period=period,
+                type_=type_
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"业绩预告同步成功: {result.get('records', 0)} 条")
             return result
         else:
-            logger.warning(f"业绩预告同步失败: {result}")
             error_msg = result.get('error', '未知错误')
             raise Exception(f"同步失败: {error_msg}")
 

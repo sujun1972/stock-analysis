@@ -1,133 +1,169 @@
 """
 每日涨跌停价格服务
 
-管理每日涨跌停价格数据的同步和查询
+管理每日涨跌停价格数据的同步和查询。
+继承 TushareSyncBase，增量与全量同步逻辑委托给基类。
 """
 
 import asyncio
-from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
+
+import pandas as pd
 from loguru import logger
 
 from app.repositories.stk_limit_d_repository import StkLimitDRepository
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class StkLimitDService:
-    """每日涨跌停价格服务"""
+class StkLimitDService(TushareSyncBase):
+    """
+    每日涨跌停价格服务
+
+    继承 TushareSyncBase，增量与全量同步逻辑全部委托给基类。
+    """
+
+    TABLE_KEY = 'stk_limit_d'
+    FULL_HISTORY_START_DATE = '20210101'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:stk_limit_d:full_history:progress'
+    FULL_HISTORY_LOCK_KEY = 'sync:stk_limit_d:full_history:lock'
 
     def __init__(self):
+        super().__init__()
         self.stk_limit_d_repo = StkLimitDRepository()
-        self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ StkLimitDService initialized")
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
-    async def sync_stk_limit_d(
+    async def sync_incremental(
         self,
-        ts_code: Optional[str] = None,
-        trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ) -> Dict[str, Any]:
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
         """
-        同步每日涨跌停价格数据
+        增量同步每日涨跌停价格数据。
 
-        Args:
-            ts_code: 股票代码（可选）
-            trade_date: 交易日期 YYYYMMDD（可选）
-            start_date: 开始日期 YYYYMMDD（可选）
-            end_date: 结束日期 YYYYMMDD（可选）
-
-        Returns:
-            同步结果
+        start_date / end_date 为 YYYYMMDD。未传时通过 get_suggested_start_date 自动计算。
+        sync_strategy 来自 sync_configs.incremental_sync_strategy（默认 by_date_range）。
         """
-        try:
-            logger.info(
-                f"开始同步每日涨跌停价格: ts_code={ts_code}, trade_date={trade_date}, "
-                f"start_date={start_date}, end_date={end_date}"
-            )
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        if sync_strategy is None:
+            sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
 
-            # 获取 Tushare Provider
-            provider = self._get_provider()
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
 
-            # 调用 Provider 获取数据
-            df = await asyncio.to_thread(
-                provider.get_stk_limit_d,
-                ts_code=ts_code,
-                trade_date=trade_date,
-                start_date=start_date,
-                end_date=end_date
-            )
+        provider = self._get_provider(max_requests_per_minute)
 
-            if df is None or df.empty:
-                logger.warning("未获取到每日涨跌停价格数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "未获取到数据"
-                }
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_stk_limit_d,
+            upsert_fn=self.stk_limit_d_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+        )
 
-            # 数据验证和清洗
-            df = self._validate_and_clean_data(df)
+    # ------------------------------------------------------------------
+    # 全量同步
+    # ------------------------------------------------------------------
 
-            # 批量插入数据库
-            records = await asyncio.to_thread(
-                self.stk_limit_d_repo.bulk_upsert,
-                df
-            )
-
-            logger.info(f"成功同步 {records} 条每日涨跌停价格记录")
-
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条记录"
-            }
-
-        except Exception as e:
-            logger.error(f"同步每日涨跌停价格失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {
-                "status": "error",
-                "records": 0,
-                "error": str(e)
-            }
-
-    def _validate_and_clean_data(self, df):
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 3,
+        strategy: str = 'by_ts_code',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
         """
-        数据验证和清洗
+        全量历史同步（支持 Redis 续继）。
 
-        Args:
-            df: 原始 DataFrame
-
-        Returns:
-            清洗后的 DataFrame
+        strategy 默认 by_ts_code（逐只股票拉取），与 sync_configs 配置一致。
         """
-        # 确保必需字段存在
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        provider = self._get_provider(max_requests_per_minute)
+
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_stk_limit_d,
+            upsert_fn=self.stk_limit_d_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
+
+    # ------------------------------------------------------------------
+    # 建议起始日期
+    # ------------------------------------------------------------------
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """
+        计算增量同步建议起始日期（YYYYMMDD）。
+
+        候选起始 = 今天 - incremental_default_days（sync_configs，默认 7 天）
+        上次结束 = sync_history 最近一次增量成功的 data_end_date
+        实际起始 = min(候选, 上次结束)，取更早者保证数据连续
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+
+        if last_end and last_end < candidate:
+            logger.debug(f"[stk_limit_d] 建议起始={last_end}（上次结束={last_end} < 候选={candidate}）")
+            return last_end
+
+        logger.debug(f"[stk_limit_d] 建议起始={candidate}（候选={candidate}，上次结束={last_end}）")
+        return candidate
+
+    # ------------------------------------------------------------------
+    # 数据清洗
+    # ------------------------------------------------------------------
+
+    def _validate_and_clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """数据验证和清洗"""
         required_columns = ['trade_date', 'ts_code']
         for col in required_columns:
             if col not in df.columns:
                 raise ValueError(f"缺少必需字段: {col}")
 
-        # 删除trade_date或ts_code为空的行
         df = df.dropna(subset=['trade_date', 'ts_code'])
 
-        # 转换日期格式（如果需要）
         if 'trade_date' in df.columns:
             df['trade_date'] = df['trade_date'].astype(str).str.replace('-', '')
 
         logger.info(f"数据验证完成，有效记录数: {len(df)}")
         return df
+
+    # ------------------------------------------------------------------
+    # 查询方法（保持不变）
+    # ------------------------------------------------------------------
 
     async def get_stk_limit_d_data(
         self,
@@ -137,21 +173,8 @@ class StkLimitDService:
         page: int = 1,
         page_size: int = 30
     ) -> Dict[str, Any]:
-        """
-        获取每日涨跌停价格数据（支持分页）
-
-        Args:
-            ts_code: 股票代码（可选）
-            start_date: 开始日期 YYYYMMDD（可选）
-            end_date: 结束日期 YYYYMMDD（可选）
-            page: 页码（从1开始）
-            page_size: 每页记录数
-
-        Returns:
-            数据、统计信息和总记录数
-        """
+        """获取每日涨跌停价格数据（支持分页）"""
         try:
-            # 如果没有指定日期范围，默认查询最近30天
             if not start_date and not end_date:
                 end_date_dt = datetime.now()
                 start_date_dt = end_date_dt - timedelta(days=30)
@@ -162,7 +185,6 @@ class StkLimitDService:
             effective_end = end_date or '29991231'
             offset = (page - 1) * page_size
 
-            # 并发查询数据、总数、统计信息
             items, total, statistics = await asyncio.gather(
                 asyncio.to_thread(
                     self.stk_limit_d_repo.get_by_date_range,
@@ -197,35 +219,20 @@ class StkLimitDService:
             raise
 
     async def get_latest_data(self, limit: int = 100) -> Dict[str, Any]:
-        """
-        获取最新的每日涨跌停价格数据
-
-        Args:
-            limit: 返回记录数限制
-
-        Returns:
-            最新数据
-        """
+        """获取最新的每日涨跌停价格数据"""
         try:
-            # 获取最新交易日期
             latest_date = await asyncio.to_thread(
                 self.stk_limit_d_repo.get_latest_trade_date
             )
 
             if not latest_date:
-                return {
-                    "items": [],
-                    "latest_date": None,
-                    "total": 0
-                }
+                return {"items": [], "latest_date": None, "total": 0}
 
-            # 查询该日期的数据
             items = await asyncio.to_thread(
                 self.stk_limit_d_repo.get_by_trade_date,
                 trade_date=latest_date
             )
 
-            # 限制返回数量
             items = items[:limit] if items else []
 
             return {
@@ -244,17 +251,7 @@ class StkLimitDService:
         end_date: Optional[str] = None,
         ts_code: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        获取统计信息
-
-        Args:
-            start_date: 开始日期 YYYYMMDD（可选）
-            end_date: 结束日期 YYYYMMDD（可选）
-            ts_code: 股票代码（可选）
-
-        Returns:
-            统计信息
-        """
+        """获取统计信息"""
         try:
             statistics = await asyncio.to_thread(
                 self.stk_limit_d_repo.get_statistics,
@@ -262,7 +259,6 @@ class StkLimitDService:
                 end_date=end_date,
                 ts_code=ts_code
             )
-
             return statistics
 
         except Exception as e:

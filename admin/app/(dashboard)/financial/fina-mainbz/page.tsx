@@ -20,9 +20,6 @@ import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-const toDateStrYYYYMMDD = (d: Date) =>
-  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-
 export default function FinaMainbzPage() {
   const [data, setData] = useState<FinaMainbzData[]>([])
   const [statistics, setStatistics] = useState<FinaMainbzStatistics | null>(null)
@@ -43,15 +40,12 @@ export default function FinaMainbzPage() {
 
   // 同步弹窗
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncTsCode, setSyncTsCode] = useState('')
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
   // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_fina_mainbz')
+  const syncing = isTaskRunning('tasks.sync_fina_mainbz') || isTaskRunning('tasks.sync_fina_mainbz_full_history')
 
   // 加载数据
   const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
@@ -113,12 +107,7 @@ export default function FinaMainbzPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = {}
-      if (syncTsCode) params.ts_code = syncTsCode
-      if (syncStartDate) params.start_date = toDateStrYYYYMMDD(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
-
-      const response = await financialDataApi.syncFinaMainbzAsync(params)
+      const response = await financialDataApi.syncFinaMainbzAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -378,29 +367,11 @@ export default function FinaMainbzPage() {
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>同步主营业务构成数据</DialogTitle>
+            <DialogTitle>同步主营业务构成</DialogTitle>
             <DialogDescription>
-              选择同步范围（留空则同步最新数据）。2000积分/次。
+              将从 Tushare 增量同步最新主营业务构成数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label className="mb-2 block">股票代码（可选）</Label>
-              <Input
-                placeholder="如: 000001.SZ，留空同步全量"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label className="mb-2 block">开始日期（可选）</Label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
-            </div>
-            <div>
-              <Label className="mb-2 block">结束日期（可选）</Label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>

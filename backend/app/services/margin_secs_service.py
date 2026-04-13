@@ -7,13 +7,14 @@
 import asyncio
 import calendar
 from typing import Dict, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from loguru import logger
 import pandas as pd
 
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 from app.repositories import MarginSecsRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 
 
 class MarginSecsService:
@@ -33,6 +34,27 @@ class MarginSecsService:
                 token=settings.TUSHARE_TOKEN
             )
         return self._provider
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
+
+    async def sync_incremental(self) -> Dict:
+        """
+        增量同步融资融券标的数据。
+
+        从 sync_configs 读取 incremental_default_days（默认 1），
+        计算日期范围后调用 sync_margin_secs。
+        margin_secs 接口支持 start_date/end_date，盘前每日更新。
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'margin_secs')
+        default_days = (cfg.get('incremental_default_days') or 1) if cfg else 1
+
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+        logger.info(f"[margin_secs] 增量同步 {start_date}~{end_date}（回看 {default_days} 天）")
+        return await self.sync_margin_secs(start_date=start_date, end_date=end_date)
 
     async def sync_margin_secs(
         self,

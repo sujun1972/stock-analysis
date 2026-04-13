@@ -163,7 +163,6 @@ export type {
   MarginSecsStatistics,
   MarginSecsData,
   LatestMarginSecsData,
-  SyncMarginSecsParams
 } from './margin-secs'
 
 // 重新导出转融资交易汇总 API
@@ -873,11 +872,9 @@ export type {
   DividendData,
   DividendStatistics,
   DividendParams,
-  DividendSyncParams,
   FinaMainbzData,
   FinaMainbzStatistics,
   FinaMainbzParams,
-  FinaMainbzSyncParams
 } from './financial-data'
 
 // 重新导出停复牌 API

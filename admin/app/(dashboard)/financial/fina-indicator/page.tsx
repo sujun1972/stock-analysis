@@ -38,15 +38,11 @@ export default function FinaIndicatorPage() {
 
   // 同步弹窗状态
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncTsCode, setSyncTsCode] = useState('')
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
-  const [syncPeriod, setSyncPeriod] = useState<Date | undefined>(undefined)
 
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  const syncing = isTaskRunning('tasks.sync_fina_indicator')
+  const syncing = isTaskRunning('tasks.sync_fina_indicator') || isTaskRunning('tasks.sync_fina_indicator_full_history')
 
   // 加载数据
   const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
@@ -103,13 +99,7 @@ export default function FinaIndicatorPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = {}
-      if (syncTsCode) params.ts_code = syncTsCode
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-      if (syncPeriod) params.period = toDateStr(syncPeriod)
-
-      const response = await financialDataApi.syncFinaIndicatorAsync(params)
+      const response = await financialDataApi.syncFinaIndicatorAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -460,45 +450,11 @@ export default function FinaIndicatorPage() {
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>同步财务指标数据</DialogTitle>
+            <DialogTitle>同步财务指标</DialogTitle>
             <DialogDescription>
-              选择同步条件（均可留空），留空时同步最新数据。每次最多100条记录（2000积分/次）。
+              将从 Tushare 增量同步最新财务指标数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">股票代码（可选）</label>
-              <Input
-                placeholder="如 600000.SH，留空同步全部"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">开始日期（可选）</label>
-              <DatePicker
-                date={syncStartDate}
-                onDateChange={setSyncStartDate}
-                placeholder="留空不限制"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">结束日期（可选）</label>
-              <DatePicker
-                date={syncEndDate}
-                onDateChange={setSyncEndDate}
-                placeholder="留空不限制"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">报告期（可选）</label>
-              <DatePicker
-                date={syncPeriod}
-                onDateChange={setSyncPeriod}
-                placeholder="留空不限制"
-              />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>

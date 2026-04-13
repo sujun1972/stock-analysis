@@ -1,12 +1,14 @@
 """
 财报披露计划 API 端点
+
+增量同步：从 sync_configs 读取任务名，动态分发
+全量同步：独立端点 /sync-full-history
 """
 
 import asyncio
 from typing import Optional
-from fastapi import APIRouter, Query, Depends, HTTPException
-from loguru import logger
-
+from fastapi import APIRouter, Query, Depends
+from app.api.error_handler import handle_api_errors
 from app.core.dependencies import require_admin
 from app.models.user import User
 from app.services.disclosure_date_service import DisclosureDateService
@@ -17,6 +19,7 @@ router = APIRouter()
 
 
 @router.get("")
+@handle_api_errors
 async def get_disclosure_date(
     ts_code: Optional[str] = Query(None, description="股票代码，格式：TSXXXXXX.XX"),
     start_date: Optional[str] = Query(None, description="报告期开始日期，格式：YYYY-MM-DD"),
@@ -24,199 +27,130 @@ async def get_disclosure_date(
     limit: int = Query(30, description="限制返回数量，默认30"),
     offset: int = Query(0, ge=0, description="偏移量")
 ):
-    """
-    查询财报披露计划数据
+    """查询财报披露计划数据"""
+    # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-    财报披露计划包括预计披露日期、实际披露日期等信息
-    """
-    try:
-        # 日期格式转换：YYYY-MM-DD -> YYYYMMDD
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    service = DisclosureDateService()
+    result = await service.get_disclosure_date_data(
+        ts_code=ts_code,
+        start_date=start_date_formatted,
+        end_date=end_date_formatted,
+        limit=limit,
+        offset=offset
+    )
 
-        service = DisclosureDateService()
-        result = await service.get_disclosure_date_data(
-            ts_code=ts_code,
-            start_date=start_date_formatted,
-            end_date=end_date_formatted,
-            limit=limit,
-            offset=offset
-        )
-
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"查询财报披露计划数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=result)
 
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_statistics(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     start_date: Optional[str] = Query(None, description="报告期开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="报告期结束日期，格式：YYYY-MM-DD")
 ):
-    """
-    获取财报披露计划统计信息
-    """
-    try:
-        # 日期格式转换
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    """获取财报披露计划统计信息"""
+    # 日期格式转换
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        service = DisclosureDateService()
-        from app.repositories.disclosure_date_repository import DisclosureDateRepository
-        repo = DisclosureDateRepository()
+    from app.repositories.disclosure_date_repository import DisclosureDateRepository
+    repo = DisclosureDateRepository()
 
-        statistics = await asyncio.to_thread(
-            repo.get_statistics,
-            start_date_formatted,
-            end_date_formatted
-        )
+    statistics = await asyncio.to_thread(
+        repo.get_statistics,
+        start_date_formatted,
+        end_date_formatted
+    )
 
-        return ApiResponse.success(data=statistics)
-
-    except Exception as e:
-        logger.error(f"获取财报披露计划统计信息失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=statistics)
 
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest_disclosure_date(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     limit: int = Query(30, description="限制返回数量")
 ):
-    """
-    获取最新财报披露计划数据（按报告期排序）
-    """
-    try:
-        service = DisclosureDateService()
-        result = await service.get_disclosure_date_data(
-            ts_code=ts_code,
-            limit=limit
-        )
+    """获取最新财报披露计划数据（按报告期排序）"""
+    service = DisclosureDateService()
+    result = await service.get_disclosure_date_data(
+        ts_code=ts_code,
+        limit=limit
+    )
 
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"获取最新财报披露计划数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=result)
 
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_disclosure_date_async(
-    ts_code: Optional[str] = Query(None, description="股票代码，格式：TSXXXXXX.XX"),
-    end_date: Optional[str] = Query(None, description="报告期，格式：YYYY-MM-DD（每个季度最后一天）"),
-    pre_date: Optional[str] = Query(None, description="计划披露日期，格式：YYYY-MM-DD"),
-    ann_date: Optional[str] = Query(None, description="最新披露公告日，格式：YYYY-MM-DD"),
-    actual_date: Optional[str] = Query(None, description="实际披露日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
 ):
     """
-    异步同步财报披露计划数据（通过Celery任务）
+    增量同步财报披露计划数据（通过Celery任务）
 
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    注意：
-    - 积分消耗：500分起
-    - 建议按报告期查询，如查询2024年报：end_date=2024-12-31
-
-    Args:
-        ts_code: 股票代码，格式：TSXXXXXX.XX
-        end_date: 报告期，格式：YYYY-MM-DD（如2024-12-31表示2024年年报）
-        pre_date: 计划披露日期，格式：YYYY-MM-DD
-        ann_date: 最新披露公告日，格式：YYYY-MM-DD
-        actual_date: 实际披露日期，格式：YYYY-MM-DD
-        current_user: 当前登录用户（管理员）
-
-    Returns:
-        包含Celery任务ID和任务信息的响应
+    从 sync_configs 读取 incremental_task_name，动态分发任务。
+    不传日期参数，由 Service 层的 sync_incremental() 自动计算。
     """
-    try:
-        from app.tasks.disclosure_date_tasks import sync_disclosure_date_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
-        end_date_formatted = end_date.replace('-', '') if end_date else None
-        pre_date_formatted = pre_date.replace('-', '') if pre_date else None
-        ann_date_formatted = ann_date.replace('-', '') if ann_date else None
-        actual_date_formatted = actual_date.replace('-', '') if actual_date else None
+    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'disclosure_date')
+    task_name = (cfg.get('incremental_task_name') or 'tasks.sync_disclosure_date') if cfg else 'tasks.sync_disclosure_date'
 
-        # 提交Celery任务（异步执行）
-        celery_task = sync_disclosure_date_task.apply_async(
-            kwargs={
-                'ts_code': ts_code,
-                'end_date': end_date_formatted,
-                'pre_date': pre_date_formatted,
-                'ann_date': ann_date_formatted,
-                'actual_date': actual_date_formatted
-            }
-        )
+    from app.celery_app import celery_app
+    celery_task = celery_app.send_task(task_name)
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_disclosure_date',
-            display_name='财报披露计划',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={
-                'ts_code': ts_code,
-                'end_date': end_date_formatted,
-                'pre_date': pre_date_formatted,
-                'ann_date': ann_date_formatted,
-                'actual_date': actual_date_formatted
-            },
-            source='disclosure_date_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name=task_name,
+        display_name='财报披露计划增量同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={},
+        source='disclosure_date_page'
+    )
 
-        logger.info(f"财报披露计划同步任务已提交: {celery_task.id}")
-
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
-
-    except Exception as e:
-        logger.error(f"提交财报披露计划同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(
+        data=task_data,
+        message="增量同步任务已提交，正在后台执行"
+    )
 
 
 @router.post("/sync-full-history")
+@handle_api_errors
 async def sync_disclosure_date_full_history_async(
-    start_date: Optional[str] = Query(None, description="起始日期，格式：YYYY-MM-DD"),
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
-    """
-    全量历史同步财报披露计划数据（按季度 period 切片，支持 Redis 续继）
-    """
-    try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'disclosure_date')
-        from app.tasks.disclosure_date_tasks import sync_disclosure_date_full_history_task
+    """触发全量历史财报披露计划同步（可中断续继）"""
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'disclosure_date')
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        start_date_formatted = start_date.replace('-', '') if start_date else None
+    if concurrency is None:
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'disclosure_date')
+        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
 
-        celery_task = sync_disclosure_date_full_history_task.apply_async(
-            kwargs={'start_date': start_date_formatted}
-        )
+    from app.celery_app import celery_app
+    celery_task = celery_app.send_task(
+        'tasks.sync_disclosure_date_full_history',
+        kwargs={'concurrency': concurrency}
+    )
 
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_disclosure_date_full_history',
-            display_name='财报披露计划（全量历史）',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={'start_date': start_date_formatted},
-            source='disclosure_date_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_disclosure_date_full_history',
+        display_name='财报披露计划全量同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'concurrency': concurrency},
+        source='disclosure_date_page'
+    )
 
-        logger.info(f"财报披露计划全量历史同步任务已提交: {celery_task.id}")
-
-        return ApiResponse.success(data=task_data, message="任务已提交，正在后台执行")
-
-    except Exception as e:
-        logger.error(f"提交财报披露计划全量历史同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

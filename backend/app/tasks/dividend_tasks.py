@@ -44,20 +44,23 @@ def sync_dividend_task(
         logger.info(f"开始执行分红送股同步任务: ts_code={ts_code}, ann_date={ann_date}, record_date={record_date}, ex_date={ex_date}, imp_ann_date={imp_ann_date}")
 
         service = DividendService()
-        result = run_async_in_celery(
-            service.sync_dividend,
-            ts_code=ts_code,
-            ann_date=ann_date,
-            record_date=record_date,
-            ex_date=ex_date,
-            imp_ann_date=imp_ann_date
-        )
 
-        if result["status"] == "success":
-            logger.info(f"分红送股同步成功: {result['records']} 条")
+        if not ts_code and not ann_date and not record_date and not ex_date and not imp_ann_date:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_dividend,
+                ts_code=ts_code,
+                ann_date=ann_date,
+                record_date=record_date,
+                ex_date=ex_date,
+                imp_ann_date=imp_ann_date
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"分红送股同步成功: {result.get('records', 0)} 条")
             return result
         else:
-            logger.warning(f"分红送股同步失败: {result}")
             error_msg = result.get('error', '未知错误')
             raise Exception(f"同步失败: {error_msg}")
 

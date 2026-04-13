@@ -375,7 +375,9 @@ class AdvancedMixin:
         ts_code: Optional[str] = None,
         trade_date: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         获取每日涨跌停价格（全市场含A/B股和基金）
@@ -386,6 +388,7 @@ class AdvancedMixin:
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 
@@ -461,7 +464,9 @@ class AdvancedMixin:
                      ts_code: Optional[str] = None,
                      trade_date: Optional[str] = None,
                      start_date: Optional[str] = None,
-                     end_date: Optional[str] = None) -> pd.DataFrame:
+                     end_date: Optional[str] = None,
+                     limit: Optional[int] = None,
+                     offset: Optional[int] = None) -> pd.DataFrame:
         """
         获取ST股票列表（历史每天数据）
         积分消耗：3000分起，数据从20160101开始，每天9:20更新
@@ -471,6 +476,7 @@ class AdvancedMixin:
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 

@@ -34,15 +34,12 @@ export default function IncomePage() {
 
   // 同步弹窗状态
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
-  const [syncTsCode, setSyncTsCode] = useState('')
 
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
   // 从 task store 实时派生，后台任务运行期间保持禁用
-  const syncing = isTaskRunning('tasks.sync_income')
+  const syncing = isTaskRunning('tasks.sync_income') || isTaskRunning('tasks.sync_income_full_history')
 
   useEffect(() => {
     loadData().catch(() => {})
@@ -120,12 +117,8 @@ export default function IncomePage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = {}
-      if (syncTsCode) params.ts_code = syncTsCode
-      if (syncStartDate) params.start_date = toDateStrYYYYMMDD(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
-
-      const response = await incomeApi.syncAsync(params)
+      // 不传日期参数，由后端从 sync_configs 自动计算增量起始日期
+      const response = await incomeApi.syncAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -178,10 +171,6 @@ export default function IncomePage() {
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
-
-  // 同步接口需要 YYYYMMDD 格式
-  const toDateStrYYYYMMDD = (d: Date): string =>
-    `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 
   const formatAmount = (amount: number | null | undefined): string => {
     if (amount === null || amount === undefined) return '-'
@@ -485,27 +474,11 @@ export default function IncomePage() {
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>同步利润表数据</DialogTitle>
-            <DialogDescription>选择同步参数（均为可选，留空则同步最新数据）。</DialogDescription>
+            <DialogTitle>同步利润表</DialogTitle>
+            <DialogDescription>
+              将从 Tushare 增量同步最新利润表数据，无需选择日期。
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">股票代码（可选）</label>
-              <Input
-                placeholder="如：600000.SH，留空同步全部"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">开始日期（可选）</label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">结束日期（可选）</label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>

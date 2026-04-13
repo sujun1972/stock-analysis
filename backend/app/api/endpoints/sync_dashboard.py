@@ -54,6 +54,8 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "stk_holdernumber": "sync:stk_holdernumber:full_history:progress",
     "block_trade":      "sync:block_trade:full_history:progress",
     "stk_holdertrade":  "sync:stk_holdertrade:full_history:progress",
+    # 基础数据
+    "stock_st":         "sync:stock_st:full_history:progress",
     # 两融及转融通
     "margin":                "sync:margin:full_history:progress",
     "margin_detail":         "sync:margin_detail:full_history:progress",

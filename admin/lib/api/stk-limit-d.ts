@@ -60,16 +60,16 @@ export class StkLimitDApiClient extends BaseApiClient {
   }
 
   /**
-   * 异步同步每日涨跌停价格数据
-   * 通过Celery任务异步执行，立即返回任务ID
+   * 增量同步每日涨跌停价格数据
+   * 不传日期参数，由后端从 sync_configs 自动计算
    */
-  async syncAsync(params?: { ts_code?: string; trade_date?: string; start_date?: string; end_date?: string }): Promise<ApiResponse<{
+  async syncAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/stk-limit-d/sync-async', null, { params })
+    return this.post('/api/stk-limit-d/sync-async')
   }
 
   /**

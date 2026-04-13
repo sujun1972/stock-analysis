@@ -66,23 +66,16 @@ export class StockStApiClient extends BaseApiClient {
   }
 
   /**
-   * 异步同步ST股票数据
-   * 通过Celery任务异步执行，立即返回任务ID
-   *
-   * 注意：st_type参数仅用于前端查询筛选，同步时会获取所有ST类型的股票
+   * 增量同步ST股票数据
+   * 通过Celery任务异步执行，不传日期参数，由后端从 sync_configs 自动计算
    */
-  async syncAsync(params?: {
-    ts_code?: string
-    trade_date?: string
-    start_date?: string
-    end_date?: string
-  }): Promise<ApiResponse<{
+  async syncAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/stock-st/sync-async', null, { params })
+    return this.post('/api/stock-st/sync-async')
   }
 }
 

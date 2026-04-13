@@ -5,12 +5,13 @@
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict
 from loguru import logger
 import pandas as pd
 
 from app.repositories.cashflow_repository import CashflowRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -21,6 +22,26 @@ class CashflowService:
     def __init__(self):
         self.cashflow_repo = CashflowRepository()
         self.provider_factory = DataProviderFactory()
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
+
+    async def sync_incremental(self) -> Dict:
+        """
+        增量同步现金流量表数据。
+
+        从 sync_configs 读取 incremental_default_days（默认 90），
+        计算最近公告期范围（start_date/end_date），拉取全市场数据。
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'cashflow')
+        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+        logger.info(f"[cashflow] 增量同步 start_date={start_date} end_date={end_date}（回看 {default_days} 天）")
+        return await self.sync_cashflow(start_date=start_date, end_date=end_date)
 
     async def get_cashflow_data(
         self,

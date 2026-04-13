@@ -42,20 +42,23 @@ def sync_disclosure_date_task(
                    f"pre_date={pre_date}, ann_date={ann_date}, actual_date={actual_date}")
 
         service = DisclosureDateService()
-        result = run_async_in_celery(
-            service.sync_disclosure_date,
-            ts_code=ts_code,
-            end_date=end_date,
-            pre_date=pre_date,
-            ann_date=ann_date,
-            actual_date=actual_date
-        )
 
-        if result["status"] == "success":
-            logger.info(f"财报披露计划同步成功: {result['records']} 条")
+        if not ts_code and not end_date and not pre_date and not ann_date and not actual_date:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_disclosure_date,
+                ts_code=ts_code,
+                end_date=end_date,
+                pre_date=pre_date,
+                ann_date=ann_date,
+                actual_date=actual_date
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"财报披露计划同步成功: {result.get('records', 0)} 条")
             return result
         else:
-            logger.warning(f"财报披露计划同步失败: {result}")
             error_msg = result.get('error', '未知错误')
             raise Exception(f"同步失败: {error_msg}")
 

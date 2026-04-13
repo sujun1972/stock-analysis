@@ -25,32 +25,34 @@ def sync_income_task(
     """
     同步利润表数据任务
 
-    Args:
-        ts_code: 股票代码
-        period: 报告期（YYYYMMDD格式）
-        start_date: 开始日期 YYYYMMDD
-        end_date: 结束日期 YYYYMMDD
-        report_type: 报告类型（1-12）
-
-    Returns:
-        同步结果字典
+    无参数调用时使用 sync_incremental（从 sync_configs 读取回看天数）。
+    有参数时使用原始 sync_income（直接传参给 Tushare）。
     """
     try:
         logger.info(f"开始执行利润表同步任务: ts_code={ts_code}, period={period}, "
                    f"start_date={start_date}, end_date={end_date}, report_type={report_type}")
 
         service = IncomeService()
-        result = run_async_in_celery(
-            service.sync_income,
-            ts_code=ts_code,
-            period=period,
-            start_date=start_date,
-            end_date=end_date,
-            report_type=report_type
-        )
 
-        logger.info(f"利润表同步任务完成: {result}")
-        return result
+        if not ts_code and not period and not start_date and not end_date and not report_type:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_income,
+                ts_code=ts_code,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+                report_type=report_type
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"利润表同步成功: {result.get('records', 0)} 条")
+            return result
+        else:
+            error_msg = result.get('error', '未知错误')
+            logger.warning(f"利润表同步失败: {result}")
+            raise Exception(f"同步失败: {error_msg}")
 
     except Exception as e:
         logger.error(f"利润表同步任务失败: {e}")

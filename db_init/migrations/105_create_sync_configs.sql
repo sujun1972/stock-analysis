@@ -75,10 +75,10 @@ INSERT INTO sync_configs (
  '/data/trade-cal', '/trade-cal', 2000, '全量同步即普通同步'),
 
 ('stock_st',     'ST股票列表',       '基础数据', 140,
- 'tasks.sync_stock_st', 30,
- 'tasks.sync_stock_st', 'by_month', 1,
+ 'tasks.sync_stock_st_incremental', 30,
+ 'tasks.sync_stock_st_full_history', 'by_month', 1,
  FALSE, NULL,
- '/data/stock-st', '/stock-st', 3000, '特殊：2交易日/批，10并发'),
+ '/data/stock-st', '/stock-st', 3000, '按月切片全量同步，支持Redis续继'),
 
 -- ============ 行情数据 ============
 ('stock_daily',  '股票日线数据',       '行情数据', 205,
@@ -94,13 +94,13 @@ INSERT INTO sync_configs (
  '/market/adj-factor', '/adj-factor', 2000, NULL),
 
 ('daily_basic',  '每日指标',           '行情数据', 207,
- 'tasks.sync_daily_basic', 7,
+ 'tasks.sync_daily_basic_incremental', 7,
  'tasks.sync_daily_basic_full_history', 'by_ts_code', 8,
  FALSE, NULL,
  '/market/daily-basic', '/daily-basic', 2000, NULL),
 
 ('stk_limit_d',  '每日涨跌停价格',     '行情数据', 208,
- 'tasks.sync_stk_limit_d', 7,
+ 'tasks.sync_stk_limit_d_incremental', 7,
  'tasks.sync_stk_limit_d_full_history', 'by_ts_code', 3,
  FALSE, NULL,
  '/market/stk-limit-d', '/stk-limit-d', 2000, NULL),

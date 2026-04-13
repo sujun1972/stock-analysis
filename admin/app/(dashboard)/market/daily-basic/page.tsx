@@ -65,9 +65,6 @@ export default function DailyBasicPage() {
 
   // 同步弹窗状态（与查询日期解耦）
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -78,8 +75,8 @@ export default function DailyBasicPage() {
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  // 从 task store 派生 syncing 状态（普通同步或全量同步任一在跑均禁用按钮）
-  const syncing = isTaskRunning('tasks.sync_daily_basic') || isTaskRunning('tasks.sync_daily_basic_full_history')
+  // 从 task store 派生 syncing 状态（增量同步或全量同步任一在跑均禁用按钮）
+  const syncing = isTaskRunning('tasks.sync_daily_basic_incremental') || isTaskRunning('tasks.sync_daily_basic_full_history')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -157,12 +154,8 @@ export default function DailyBasicPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = {}
-      if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await apiClient.post('/api/daily-basic/sync-async', null, { params })
+      // 不传日期参数，由后端从 sync_configs 自动计算增量起始日期
+      const response = await apiClient.post('/api/daily-basic/sync-async')
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -340,29 +333,15 @@ export default function DailyBasicPage() {
         }
       />
 
-      {/* 同步弹窗 */}
+      {/* 同步确认弹窗 */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[440px]">
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>同步数据</DialogTitle>
+            <DialogTitle>同步每日指标</DialogTitle>
             <DialogDescription>
-              选择同步日期范围（留空则同步最新交易日数据）。
+              将从 Tushare 增量同步最新每日指标数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>交易日期（可选）</Label>
-              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="留空同步最新交易日" />
-            </div>
-            <div className="space-y-2">
-              <Label>开始日期（可选）</Label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
-            </div>
-            <div className="space-y-2">
-              <Label>结束日期（可选）</Label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>

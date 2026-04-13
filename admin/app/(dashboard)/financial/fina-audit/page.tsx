@@ -39,9 +39,6 @@ export default function FinaAuditPage() {
 
   // 同步弹窗状态
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncTsCode, setSyncTsCode] = useState('')
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 存储活跃的任务回调
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
@@ -49,7 +46,7 @@ export default function FinaAuditPage() {
   // 任务存储Hook
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
 
-  const syncing = isTaskRunning('tasks.sync_fina_audit')
+  const syncing = isTaskRunning('tasks.sync_fina_audit') || isTaskRunning('tasks.sync_fina_audit_full_history')
 
   /**
    * 加载数据
@@ -92,18 +89,9 @@ export default function FinaAuditPage() {
    * 异步同步数据
    */
   const handleSyncConfirm = async () => {
-    if (!syncTsCode) {
-      toast.error('同步失败', { description: '请输入股票代码' })
-      return
-    }
     setSyncDialogOpen(false)
-
     try {
-      const params: any = { ts_code: syncTsCode }
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await financialDataApi.syncFinaAuditAsync(params)
+      const response = await financialDataApi.syncFinaAuditAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -543,42 +531,14 @@ export default function FinaAuditPage() {
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>同步财务审计意见数据</DialogTitle>
+            <DialogTitle>同步财务审计意见</DialogTitle>
             <DialogDescription>
-              请输入股票代码（必填），日期范围可选。每次500积分。
+              将从 Tushare 增量同步最新财务审计意见数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                股票代码 <span className="text-red-500">*</span>
-              </label>
-              <Input
-                placeholder="如 600000.SH（必填）"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">开始日期（可选）</label>
-              <DatePicker
-                date={syncStartDate}
-                onDateChange={setSyncStartDate}
-                placeholder="留空不限制"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">结束日期（可选）</label>
-              <DatePicker
-                date={syncEndDate}
-                onDateChange={setSyncEndDate}
-                placeholder="留空不限制"
-              />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing || !syncTsCode}>确认同步</Button>
+            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

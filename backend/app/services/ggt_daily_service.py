@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories import GgtDailyRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -24,6 +25,26 @@ class GgtDailyService:
     def __init__(self):
         self.ggt_daily_repo = GgtDailyRepository()
         self.provider_factory = DataProviderFactory()
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
+
+    async def sync_incremental(self) -> Dict:
+        """
+        增量同步港股通每日成交统计数据。
+
+        从 sync_configs 读取 incremental_default_days（默认 90），
+        自动计算日期范围后调用 sync_data。
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'ggt_daily')
+        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+        logger.info(f"[ggt_daily] 增量同步 {start_date}~{end_date}（回看 {default_days} 天）")
+        return await self.sync_data(start_date=start_date, end_date=end_date)
 
     async def sync_data(
         self,

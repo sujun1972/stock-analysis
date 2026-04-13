@@ -22,28 +22,32 @@ def sync_ggt_daily_task(
     """
     同步港股通每日成交统计数据
 
-    Args:
-        trade_date: 交易日期 YYYYMMDD，支持单日和多日输入（可选）
-        start_date: 开始日期 YYYYMMDD（可选）
-        end_date: 结束日期 YYYYMMDD（可选）
-
-    Returns:
-        同步结果字典
+    无参数调用时使用 sync_incremental（从 sync_configs 读取回看天数）。
+    有参数时使用原始 sync_data（直接传参给 Tushare）。
     """
     try:
         logger.info(f"开始执行港股通每日成交统计同步任务: "
                     f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
         service = GgtDailyService()
-        result = run_async_in_celery(
-            service.sync_data,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date
-        )
 
-        logger.info(f"港股通每日成交统计同步任务完成: {result}")
-        return result
+        if not trade_date and not start_date and not end_date:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_data,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"港股通每日成交统计同步成功: {result.get('records', 0)} 条")
+            return result
+        else:
+            error_msg = result.get('error', '未知错误')
+            logger.warning(f"港股通每日成交统计同步失败: {result}")
+            raise Exception(f"同步失败: {error_msg}")
 
     except Exception as e:
         logger.error(f"港股通每日成交统计同步任务失败: {e}")

@@ -19,9 +19,6 @@ import { useTaskStore } from '@/stores/task-store'
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-const toDateStrYYYYMMDD = (d: Date) =>
-  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-
 export default function DisclosureDatePage() {
   const [data, setData] = useState<DisclosureDateData[]>([])
   const [statistics, setStatistics] = useState<DisclosureDateStatistics | null>(null)
@@ -40,15 +37,13 @@ export default function DisclosureDatePage() {
 
   // 同步弹窗
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncTsCode, setSyncTsCode] = useState('')
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 任务回调存储
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
 
   // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_disclosure_date')
+  const syncing = isTaskRunning('tasks.sync_disclosure_date') || isTaskRunning('tasks.sync_disclosure_date_full_history')
 
   // 加载数据
   const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
@@ -117,11 +112,7 @@ export default function DisclosureDatePage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = {}
-      if (syncTsCode) params.ts_code = syncTsCode
-      if (syncEndDate) params.end_date = toDateStrYYYYMMDD(syncEndDate)
-
-      const response = await financialDataApi.syncDisclosureDateAsync(params)
+      const response = await financialDataApi.syncDisclosureDateAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -460,25 +451,11 @@ export default function DisclosureDatePage() {
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>同步财报披露计划数据</DialogTitle>
+            <DialogTitle>同步财报披露计划</DialogTitle>
             <DialogDescription>
-              选择同步范围（留空则同步最新数据）。500积分/次。
+              将从 Tushare 增量同步最新财报披露计划数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label className="mb-2 block">股票代码（可选）</Label>
-              <Input
-                placeholder="如: 600000.SH，留空同步全量"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label className="mb-2 block">结束日期（可选）</Label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>

@@ -53,12 +53,20 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'category': '基础数据',
         'display_order': 130
     },
-    'tasks.sync_stock_st': {
-        'task': 'tasks.sync_stock_st',
-        'name': 'ST股票列表',
-        'description': '获取ST股票列表，可根据交易日期获取历史上每天的ST列表',
+    'tasks.sync_stock_st_incremental': {
+        'task': 'tasks.sync_stock_st_incremental',
+        'name': 'ST股票列表(增量)',
+        'description': '增量同步ST股票列表，从 sync_configs 读取回看天数',
         'category': '基础数据',
         'display_order': 140,
+        'points_consumption': 3000
+    },
+    'tasks.sync_stock_st_full_history': {
+        'task': 'tasks.sync_stock_st_full_history',
+        'name': 'ST股票列表(全量)',
+        'description': '全量历史同步ST股票列表，按月切片，支持Redis续继',
+        'category': '基础数据',
+        'display_order': 141,
         'points_consumption': 3000
     },
     'tasks.sync_dc_member': {
@@ -154,42 +162,38 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'default_params': {}
     },
 
-    'tasks.sync_stk_limit_d': {
-        'task': 'tasks.sync_stk_limit_d',
-        'name': '每日涨跌停价格',
-        'description': '获取全市场每日涨跌停价格，包括涨停价格、跌停价格等（每交易日8:40更新，2000积分/次，单次最大5800条）',
+    'tasks.sync_stk_limit_d_incremental': {
+        'task': 'tasks.sync_stk_limit_d_incremental',
+        'name': '每日涨跌停价格(增量)',
+        'description': '增量同步每日涨跌停价格，从 sync_configs 读取回看天数',
         'category': '行情数据',
         'display_order': 220,
         'points_consumption': 2000,
-        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
     'tasks.sync_stk_limit_d_full_history': {
         'task': 'tasks.sync_stk_limit_d_full_history',
-        'name': '每日涨跌停价格（全量）',
-        'description': '逐只股票全量同步每日涨跌停价格历史数据，8并发，支持Redis中断续继，避免单次5800条上限',
+        'name': '每日涨跌停价格(全量)',
+        'description': '逐只股票全量同步每日涨跌停价格历史数据，支持Redis中断续继',
         'category': '行情数据',
         'display_order': 221,
         'points_consumption': 2000,
-        'default_params': {'start_date': None}
     },
 
-    'tasks.sync_daily_basic': {
-        'task': 'tasks.sync_daily_basic',
-        'name': '每日指标',
-        'description': '获取全部股票每日重要的基本面指标，可用于选股分析、报表展示等（2000积分/次，单次最大6000条）',
+    'tasks.sync_daily_basic_incremental': {
+        'task': 'tasks.sync_daily_basic_incremental',
+        'name': '每日指标(增量)',
+        'description': '增量同步每日指标，从 sync_configs 读取回看天数',
         'category': '行情数据',
         'display_order': 230,
         'points_consumption': 2000,
-        'default_params': {'ts_code': None, 'trade_date': None, 'start_date': None, 'end_date': None}
     },
     'tasks.sync_daily_basic_full_history': {
         'task': 'tasks.sync_daily_basic_full_history',
-        'name': '每日指标（全量）',
-        'description': '逐只股票全量同步每日指标历史数据，8并发，支持Redis中断续继，避免单次6000条上限',
+        'name': '每日指标(全量)',
+        'description': '逐只股票全量同步每日指标历史数据，支持Redis中断续继',
         'category': '行情数据',
         'display_order': 231,
         'points_consumption': 2000,
-        'default_params': {'start_date': None}
     },
     'tasks.sync_hsgt_top10': {
         'task': 'tasks.sync_hsgt_top10',

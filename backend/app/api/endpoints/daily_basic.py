@@ -1,14 +1,16 @@
 """
 每日指标数据API端点
 
-提供每日指标数据（换手率、市盈率、市净率等）的查询和同步功能
+增量同步：从 sync_configs 读取任务名，动态分发
+全量同步：独立端点 /sync-full-history，委托 TushareSyncBase
 """
 
 import asyncio
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from loguru import logger
 
+from app.api.error_handler import handle_api_errors
 from app.core.dependencies import get_current_user, require_admin
 from app.models.api_response import ApiResponse
 from app.models.user import User
@@ -19,6 +21,7 @@ router = APIRouter(tags=["daily_basic"])
 
 
 @router.get("")
+@handle_api_errors
 async def get_daily_basic_list(
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
@@ -27,211 +30,156 @@ async def get_daily_basic_list(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(30, ge=1, le=100, description="每页数量")
 ):
-    """
-    查询每日指标数据
+    """查询每日指标数据"""
+    service = DailyBasicService()
 
-    Args:
-        trade_date: 交易日期（单日查询）
-        ts_code: 股票代码（可选）
-        start_date: 开始日期
-        end_date: 结束日期
-        page: 页码
-        page_size: 每页数量
+    trade_date_formatted = trade_date.replace('-', '') if trade_date else None
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-    Returns:
-        每日指标数据列表
-    """
-    try:
-        service = DailyBasicService()
+    result = await service.get_daily_basic_list(
+        trade_date=trade_date_formatted,
+        ts_code=ts_code,
+        start_date=start_date_formatted,
+        end_date=end_date_formatted,
+        page=page,
+        page_size=page_size
+    )
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-        trade_date_formatted = trade_date.replace('-', '') if trade_date else None
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
-
-        # 查询数据
-        result = await service.get_daily_basic_list(
-            trade_date=trade_date_formatted,
-            ts_code=ts_code,
-            start_date=start_date_formatted,
-            end_date=end_date_formatted,
-            page=page,
-            page_size=page_size
-        )
-
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"查询每日指标数据失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=result)
 
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_daily_basic_statistics(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD")
 ):
-    """
-    获取每日指标统计信息
+    """获取每日指标统计信息"""
+    service = DailyBasicService()
 
-    Args:
-        start_date: 开始日期
-        end_date: 结束日期
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-    Returns:
-        统计信息
-    """
-    try:
-        service = DailyBasicService()
+    stats = await service.get_statistics(
+        start_date=start_date_formatted,
+        end_date=end_date_formatted
+    )
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
-
-        # 查询统计信息
-        stats = await service.get_statistics(
-            start_date=start_date_formatted,
-            end_date=end_date_formatted
-        )
-
-        return ApiResponse.success(data=stats)
-
-    except Exception as e:
-        logger.error(f"获取每日指标统计信息失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=stats)
 
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest_daily_basic():
-    """
-    获取最新交易日的每日指标数据
-
-    Returns:
-        最新交易日的数据
-    """
-    try:
-        service = DailyBasicService()
-        result = await service.get_latest_data()
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"获取最新每日指标数据失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """获取最新交易日的每日指标数据"""
+    service = DailyBasicService()
+    result = await service.get_latest_data()
+    return ApiResponse.success(data=result)
 
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_daily_basic_async(
-    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
-    ts_code: Optional[str] = Query(None, description="股票代码"),
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
 ):
     """
-    异步同步每日指标数据（通过Celery任务）
+    增量同步每日指标数据（通过Celery任务）
 
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    Args:
-        trade_date: 单个交易日期，格式：YYYY-MM-DD
-        ts_code: 股票代码（可选）
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        current_user: 当前登录用户（管理员）
-
-    Returns:
-        包含Celery任务ID和任务信息的响应
+    从 sync_configs 读取 incremental_task_name，动态分发任务。
+    不传日期参数，由 Service 层的 get_suggested_start_date() 自动计算。
     """
-    try:
-        from app.tasks.daily_basic_tasks import sync_daily_basic_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
-        trade_date_formatted = trade_date.replace('-', '') if trade_date else None
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'daily_basic')
+    task_name = (cfg.get('incremental_task_name') or 'tasks.sync_daily_basic_incremental') if cfg else 'tasks.sync_daily_basic_incremental'
 
-        # 提交Celery任务（异步执行）
-        celery_task = sync_daily_basic_task.apply_async(
-            kwargs={
-                'trade_date': trade_date_formatted,
-                'ts_code': ts_code,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted
-            }
-        )
+    from app.celery_app import celery_app
+    celery_task = celery_app.send_task(task_name)
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_daily_basic',
-            display_name='每日指标',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={
-                'trade_date': trade_date_formatted,
-                'ts_code': ts_code,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted
-            },
-            source='daily_basic_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name=task_name,
+        display_name='每日指标增量同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={},
+        source='daily_basic_page'
+    )
 
-        logger.info(f"每日指标同步任务已提交: {celery_task.id}")
+    logger.info(f"每日指标增量同步任务已提交: {celery_task.id}")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
+    return ApiResponse.success(
+        data=task_data,
+        message="增量同步任务已提交，正在后台执行"
+    )
 
-    except Exception as e:
-        logger.error(f"提交每日指标同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/full-history-progress")
+@handle_api_errors
+async def get_full_history_progress(
+    current_user: User = Depends(get_current_user)
+):
+    """查询全量历史同步进度"""
+    from app.core.redis_lock import redis_client
+    from app.repositories.stock_basic_repository import StockBasicRepository
+
+    completed = 0
+    total = 0
+    is_in_progress = False
+
+    if redis_client:
+        completed = redis_client.scard(DailyBasicService.FULL_HISTORY_PROGRESS_KEY) or 0
+        is_in_progress = bool(redis_client.exists(DailyBasicService.FULL_HISTORY_LOCK_KEY))
+
+    repo = StockBasicRepository()
+    total = await asyncio.to_thread(repo.count_by_status, 'L')
+
+    return ApiResponse.success(data={
+        "completed": completed,
+        "total": total,
+        "is_in_progress": is_in_progress,
+        "percent": round(completed / total * 100, 1) if total > 0 else 0
+    })
 
 
 @router.post("/sync-full-history")
+@handle_api_errors
 async def sync_daily_basic_full_history(
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYYMMDD，默认 20210101"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
 ):
     """
-    全量历史同步：逐只股票同步每日指标，8 并发，支持中断续继
+    触发全量历史每日指标同步（可中断续继）
 
-    每只股票单独请求 Tushare，避免单次返回上限 6000 条的问题。
-    支持 Redis 进度续继，任务中断后重新触发会自动跳过已完成股票。
+    从2021年1月1日起，逐只同步全部上市股票的每日指标数据。
+    中断后再次触发会自动从断点继续，跳过已同步完成的股票。
     """
-    try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'daily_basic')
-        from app.tasks.daily_basic_tasks import sync_daily_basic_full_history_task
-        from app.repositories.sync_config_repository import SyncConfigRepository
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'daily_basic')
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 未传并发数时，从 sync_configs 读取，兜底默认值
-        if concurrency is None:
-            sync_config_repo = SyncConfigRepository()
-            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'daily_basic')
-            concurrency = (cfg.get('full_sync_concurrency') or 8) if cfg else 8
+    if concurrency is None:
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'daily_basic')
+        concurrency = (cfg.get('full_sync_concurrency') or 8) if cfg else 8
 
-        celery_task = sync_daily_basic_full_history_task.apply_async(
-            kwargs={'start_date': start_date, 'concurrency': concurrency}
-        )
+    from app.celery_app import celery_app
+    celery_task = celery_app.send_task(
+        'tasks.sync_daily_basic_full_history',
+        kwargs={'concurrency': concurrency}
+    )
 
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_daily_basic_full_history',
-            display_name='每日指标（全量）',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={'start_date': start_date, 'concurrency': concurrency},
-            source='daily_basic_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_daily_basic_full_history',
+        display_name='每日指标全量历史同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'start_date': '20210101', 'scope': 'all_listed', 'concurrency': concurrency},
+        source='daily_basic_page'
+    )
 
-        logger.info(f"每日指标全量同步任务已提交: {celery_task.id}")
-        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
-
-    except Exception as e:
-        logger.error(f"提交每日指标全量同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

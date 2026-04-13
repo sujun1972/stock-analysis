@@ -1,127 +1,161 @@
 """
 每日指标服务
 
-提供每日指标数据（换手率、市盈率、市净率等）的同步和查询功能
+提供每日指标数据（换手率、市盈率、市净率等）的同步和查询功能。
+继承 TushareSyncBase，增量与全量同步逻辑委托给基类。
 数据来源：Tushare Pro daily_basic 接口
-积分消耗：2000分/次
 """
 
 import asyncio
-from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
+
 import pandas as pd
 from loguru import logger
 
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
 from app.repositories import DailyBasicRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class DailyBasicService:
-    """每日指标服务"""
+class DailyBasicService(TushareSyncBase):
+    """
+    每日指标服务
+
+    继承 TushareSyncBase，增量与全量同步逻辑全部委托给基类。
+    """
+
+    TABLE_KEY = 'daily_basic'
+    FULL_HISTORY_START_DATE = '20210101'
+    FULL_HISTORY_PROGRESS_KEY = 'sync:daily_basic:full_history:progress'
+    FULL_HISTORY_LOCK_KEY = 'sync:daily_basic:full_history:lock'
 
     def __init__(self):
+        super().__init__()
         self.daily_basic_repo = DailyBasicRepository()
-        self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
+        logger.info("✓ DailyBasicService initialized")
 
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
 
-    async def sync_daily_basic(
+    async def sync_incremental(
         self,
-        trade_date: Optional[str] = None,
-        ts_code: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ) -> Dict[str, Any]:
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
         """
-        同步每日指标数据
+        增量同步每日指标数据。
 
-        Args:
-            trade_date: 交易日期 YYYYMMDD
-            ts_code: 股票代码
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
-
-        Returns:
-            同步结果字典
+        start_date / end_date 为 YYYYMMDD。未传时通过 get_suggested_start_date 自动计算。
+        sync_strategy 来自 sync_configs.incremental_sync_strategy（默认 by_date_range）。
         """
-        try:
-            logger.info(f"开始同步每日指标: trade_date={trade_date}, ts_code={ts_code}, start_date={start_date}, end_date={end_date}")
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        if sync_strategy is None:
+            sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
 
-            # 如果没有指定任何日期，默认同步最近30天
-            if not trade_date and not start_date and not end_date:
-                end_date = datetime.now().strftime('%Y%m%d')
-                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
-                logger.info(f"未指定日期，默认同步最近30天: {start_date} ~ {end_date}")
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
 
-            # 获取数据提供者
-            provider = self._get_provider()
+        provider = self._get_provider(max_requests_per_minute)
 
-            # 从Tushare获取数据
-            df = await asyncio.to_thread(
-                provider.get_daily_basic,
-                trade_date=trade_date,
-                ts_code=ts_code,
-                start_date=start_date,
-                end_date=end_date
-            )
+        return await self.run_incremental_sync(
+            fetch_fn=provider.get_daily_basic,
+            upsert_fn=self.daily_basic_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
+        )
 
-            if df is None or len(df) == 0:
-                logger.warning("未获取到每日指标数据")
-                return {
-                    "status": "success",
-                    "records": 0,
-                    "message": "无数据需要同步"
-                }
+    # ------------------------------------------------------------------
+    # 全量同步
+    # ------------------------------------------------------------------
 
-            # 数据验证和清洗
-            df = self._validate_and_clean_data(df)
+    async def sync_full_history(
+        self,
+        redis_client,
+        start_date: Optional[str] = None,
+        concurrency: int = 8,
+        strategy: str = 'by_ts_code',
+        update_state_fn=None,
+        max_requests_per_minute: int = 0,
+    ) -> Dict:
+        """
+        全量历史同步（支持 Redis 续继）。
 
-            # 插入数据库
-            records = await self._insert_daily_basic_data(df)
+        strategy 默认 by_ts_code（逐只股票拉取），与 sync_configs 配置一致。
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        provider = self._get_provider(max_requests_per_minute)
 
-            logger.info(f"成功同步每日指标数据 {records} 条")
-            return {
-                "status": "success",
-                "records": records,
-                "message": f"成功同步 {records} 条每日指标数据"
-            }
+        return await self.run_full_sync(
+            redis_client=redis_client,
+            fetch_fn=provider.get_daily_basic,
+            upsert_fn=self.daily_basic_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            progress_key=self.FULL_HISTORY_PROGRESS_KEY,
+            strategy=strategy,
+            start_date=start_date,
+            full_history_start=self.FULL_HISTORY_START_DATE,
+            concurrency=concurrency,
+            api_limit=api_limit,
+            max_requests_per_minute=max_requests_per_minute,
+            update_state_fn=update_state_fn,
+            table_key=self.TABLE_KEY,
+        )
 
-        except Exception as e:
-            logger.error(f"同步每日指标失败: {str(e)}", exc_info=True)
-            return {
-                "status": "error",
-                "records": 0,
-                "error": str(e)
-            }
+    # ------------------------------------------------------------------
+    # 建议起始日期
+    # ------------------------------------------------------------------
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """
+        计算增量同步建议起始日期（YYYYMMDD）。
+
+        候选起始 = 今天 - incremental_default_days（sync_configs，默认 7 天）
+        上次结束 = sync_history 最近一次增量成功的 data_end_date
+        实际起始 = min(候选, 上次结束)，取更早者保证数据连续
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, self.TABLE_KEY, 'incremental'
+        )
+
+        if last_end and last_end < candidate:
+            logger.debug(f"[daily_basic] 建议起始={last_end}（上次结束={last_end} < 候选={candidate}）")
+            return last_end
+
+        logger.debug(f"[daily_basic] 建议起始={candidate}（候选={candidate}，上次结束={last_end}）")
+        return candidate
+
+    # ------------------------------------------------------------------
+    # 数据清洗
+    # ------------------------------------------------------------------
 
     def _validate_and_clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        验证和清洗数据
-
-        Args:
-            df: 原始数据
-
-        Returns:
-            清洗后的数据
-        """
-        # 移除空行
+        """验证和清洗每日指标数据"""
         df = df.dropna(subset=['trade_date', 'ts_code'])
 
-        # 确保必需字段存在
         required_columns = ['trade_date', 'ts_code']
         for col in required_columns:
             if col not in df.columns:
                 raise ValueError(f"缺少必需字段: {col}")
 
-        # 数值字段转换
         numeric_columns = [
             'close', 'turnover_rate', 'turnover_rate_f', 'volume_ratio',
             'pe', 'pe_ttm', 'pb', 'ps', 'ps_ttm',
@@ -135,22 +169,9 @@ class DailyBasicService:
         logger.info(f"数据清洗完成，有效数据 {len(df)} 条")
         return df
 
-    async def _insert_daily_basic_data(self, df: pd.DataFrame) -> int:
-        """
-        插入每日指标数据到数据库
-
-        Args:
-            df: 数据DataFrame
-
-        Returns:
-            插入的记录数
-        """
-        if len(df) == 0:
-            return 0
-
-        # 使用 Repository 批量插入
-        records = await asyncio.to_thread(self.daily_basic_repo.bulk_upsert, df)
-        return records
+    # ------------------------------------------------------------------
+    # 查询方法（保持不变）
+    # ------------------------------------------------------------------
 
     async def get_daily_basic_data(
         self,
@@ -159,24 +180,11 @@ class DailyBasicService:
         end_date: Optional[str] = None,
         limit: int = 100
     ) -> Dict[str, Any]:
-        """
-        查询每日指标数据
-
-        Args:
-            ts_code: 股票代码
-            start_date: 开始日期 YYYY-MM-DD
-            end_date: 结束日期 YYYY-MM-DD
-            limit: 返回记录数
-
-        Returns:
-            包含数据的字典
-        """
+        """查询每日指标数据"""
         try:
-            # 转换日期格式 YYYY-MM-DD -> YYYYMMDD
             start_date_fmt = start_date.replace('-', '') if start_date else None
             end_date_fmt = end_date.replace('-', '') if end_date else None
 
-            # 使用 Repository 查询数据
             items = await asyncio.to_thread(
                 self.daily_basic_repo.get_by_code_and_date_range,
                 ts_code=ts_code,
@@ -203,25 +211,10 @@ class DailyBasicService:
         page: int = 1,
         page_size: int = 30
     ) -> Dict[str, Any]:
-        """
-        查询每日指标数据列表（支持分页）
-
-        Args:
-            trade_date: 交易日期 YYYYMMDD
-            ts_code: 股票代码
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
-            page: 页码
-            page_size: 每页数量
-
-        Returns:
-            包含数据和分页信息的字典
-        """
+        """查询每日指标数据列表（支持分页）"""
         try:
-            # 计算偏移量
             offset = (page - 1) * page_size
 
-            # 如果指定了 trade_date，使用单日查询
             if trade_date:
                 items = await asyncio.to_thread(
                     self.daily_basic_repo.get_by_date_range,
@@ -237,7 +230,6 @@ class DailyBasicService:
                     end_date=trade_date
                 )
             else:
-                # 使用日期范围查询
                 if not start_date:
                     start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
                 if not end_date:
@@ -257,14 +249,12 @@ class DailyBasicService:
                     end_date=end_date
                 )
 
-            # 转换日期格式 YYYYMMDD -> YYYY-MM-DD
             for item in items:
                 if 'trade_date' in item and item['trade_date']:
                     date_obj = item['trade_date']
                     if hasattr(date_obj, 'strftime'):
                         item['trade_date'] = date_obj.strftime('%Y-%m-%d')
                     else:
-                        # 已经是字符串格式（YYYYMMDD）
                         item['trade_date'] = f"{str(date_obj)[:4]}-{str(date_obj)[4:6]}-{str(date_obj)[6:8]}"
 
             return {
@@ -283,25 +273,14 @@ class DailyBasicService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        获取每日指标统计数据
-
-        Args:
-            start_date: 开始日期 YYYYMMDD
-            end_date: 结束日期 YYYYMMDD
-
-        Returns:
-            统计数据字典
-        """
+        """获取每日指标统计数据"""
         try:
-            # 使用 Repository 获取统计数据
             stats = await asyncio.to_thread(
                 self.daily_basic_repo.get_statistics,
                 start_date=start_date,
                 end_date=end_date
             )
 
-            # 转换日期格式：YYYYMMDD -> YYYY-MM-DD
             if stats.get('date_range'):
                 earliest = stats['date_range'].get('earliest_date', '')
                 latest = stats['date_range'].get('latest_date', '')
@@ -311,7 +290,6 @@ class DailyBasicService:
                 if latest and len(latest) == 8 and latest.isdigit():
                     stats['date_range']['latest_date'] = f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
 
-            # 处理null值
             if stats.get('avg_pe_ttm') is None:
                 stats['avg_pe_ttm'] = 0.0
 
@@ -322,14 +300,8 @@ class DailyBasicService:
             raise
 
     async def get_latest_data(self) -> Dict[str, Any]:
-        """
-        获取最新交易日的每日指标数据
-
-        Returns:
-            最新数据字典
-        """
+        """获取最新交易日的每日指标数据"""
         try:
-            # 获取最新交易日期
             latest_date = await asyncio.to_thread(
                 self.daily_basic_repo.get_latest_trade_date
             )
@@ -340,7 +312,6 @@ class DailyBasicService:
                     "trade_date": None
                 }
 
-            # 查询该交易日的数据
             items = await asyncio.to_thread(
                 self.daily_basic_repo.get_by_date_range,
                 start_date=latest_date,
@@ -348,14 +319,11 @@ class DailyBasicService:
                 limit=100
             )
 
-            # 转换日期格式：YYYYMMDD -> YYYY-MM-DD
             for item in items:
                 if 'trade_date' in item and item['trade_date']:
                     date_str = item['trade_date']
-                    # 如果是日期对象，转换为字符串
                     if hasattr(date_str, 'strftime'):
                         date_str = date_str.strftime('%Y%m%d')
-                    # 如果是YYYYMMDD格式，转换为YYYY-MM-DD
                     if isinstance(date_str, str) and len(date_str) == 8 and date_str.isdigit():
                         item['trade_date'] = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
 

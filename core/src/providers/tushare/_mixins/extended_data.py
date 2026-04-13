@@ -19,7 +19,9 @@ class ExtendedDataMixin:
     def get_daily_basic(self, ts_code: Optional[str] = None,
                         trade_date: Optional[str] = None,
                         start_date: Optional[str] = None,
-                        end_date: Optional[str] = None) -> pd.DataFrame:
+                        end_date: Optional[str] = None,
+                        limit: Optional[int] = None,
+                        offset: Optional[int] = None) -> pd.DataFrame:
         """
         获取每日指标数据
         积分消耗：120分
@@ -29,6 +31,7 @@ class ExtendedDataMixin:
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 

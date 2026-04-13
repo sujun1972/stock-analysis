@@ -78,32 +78,27 @@ export class CashflowApiClient extends BaseApiClient {
   }
 
   /**
-   * 异步同步现金流量表数据
+   * 增量同步现金流量表数据
    */
-  async syncAsync(params?: {
-    ts_code?: string
-    period?: string
-    start_date?: string
-    end_date?: string
-    report_type?: string
-  }): Promise<ApiResponse<{
+  async syncAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/cashflow/sync-async', null, { params })
+    return this.post('/api/cashflow/sync-async')
   }
 
   async syncFullHistoryAsync(params?: {
     start_date?: string
+    concurrency?: number
   }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/cashflow/sync-full-history-async', null, { params })
+    return this.post('/api/cashflow/sync-full-history', null, { params })
   }
 }
 

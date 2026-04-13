@@ -386,6 +386,14 @@ class YourService(TushareSyncBase):
 
 **增量同步 API 端点路由规则**：`POST /api/{table}/sync-async`（无 `code` 参数）从 `sync_configs.incremental_task_name` 读取任务名，通过 `celery_app.send_task(task_name)` 分发，而**不是**硬编码任务名。这确保同步配置页面的"增量同步"按钮执行正确的 Celery 任务。
 
+**增量同步 Celery 任务的无参数处理**：Celery 增量任务被无参数调用时（来自同步配置页面或定时调度），必须调用 `service.sync_incremental()` 而非原始 sync 方法。`sync_incremental()` 从 `sync_configs.incremental_default_days` 读取回看天数，自动计算日期范围。对于特殊接口：
+
+| Tushare 接口约束 | sync_incremental 实现方式 |
+|-----------------|------------------------|
+| 支持 `start_date`/`end_date` | 直接传日期范围调用原始 sync 方法 |
+| 仅支持 `trade_date`（如 ggt_top10） | 从 TradingCalendarRepository 获取交易日列表，逐日请求 |
+| `ts_code` 必填（如 fina_audit） | 遍历全部上市股票，逐只请求（5 并发） |
+
 **`FULL_HISTORY_LOCK_KEY`**：各 Service 的类常量，全量同步任务通过 `redis_lock.acquire(YourService.FULL_HISTORY_LOCK_KEY, ...)` 引用，避免在任务文件中重复定义。
 
 ### 全量同步并发数

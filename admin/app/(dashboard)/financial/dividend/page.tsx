@@ -33,14 +33,11 @@ export default function DividendPage() {
 
   // 同步弹窗状态
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncTsCode, setSyncTsCode] = useState('')
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
-  const syncing = isTaskRunning('tasks.sync_dividend')
+  const syncing = isTaskRunning('tasks.sync_dividend') || isTaskRunning('tasks.sync_dividend_full_history')
 
   const loadData = useCallback(async (pg = currentPage, ps = pageSize) => {
     try {
@@ -96,12 +93,7 @@ export default function DividendPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = {}
-      if (syncTsCode) params.ts_code = syncTsCode
-      if (syncStartDate) params.ann_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await financialDataApi.syncDividendAsync(params)
+      const response = await financialDataApi.syncDividendAsync()
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
         addTask({
@@ -338,37 +330,11 @@ export default function DividendPage() {
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>同步分红送股数据</DialogTitle>
+            <DialogTitle>同步分红送股</DialogTitle>
             <DialogDescription>
-              选择同步条件（均可留空），留空时同步最新数据。
+              将从 Tushare 增量同步最新分红送股数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">股票代码（可选）</label>
-              <Input
-                placeholder="如 600848.SH，留空同步全部"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">开始公告日期（可选）</label>
-              <DatePicker
-                date={syncStartDate}
-                onDateChange={setSyncStartDate}
-                placeholder="留空不限制"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">结束日期（可选）</label>
-              <DatePicker
-                date={syncEndDate}
-                onDateChange={setSyncEndDate}
-                placeholder="留空不限制"
-              />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>

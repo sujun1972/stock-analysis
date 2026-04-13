@@ -419,28 +419,39 @@ def sync_margin_secs_task(self,
                          start_date: Optional[str] = None,
                          end_date: Optional[str] = None):
     """
-    同步融资融券标的任务（盘前更新）
-    积分消耗：2000
-    建议执行时间：每日8:00（盘前）
+    同步融资融券标的任务
+
+    无参数调用时使用 sync_incremental（从 sync_configs 读取回看天数）。
+    有参数时使用原始 sync_margin_secs（直接传参给 Tushare）。
     """
     try:
-        logger.info(f"[Celery] 开始执行融资融券标的同步任务: trade_date={trade_date}, exchange={exchange}")
+        logger.info(f"[Celery] 开始执行融资融券标的同步任务: trade_date={trade_date}, exchange={exchange}, "
+                   f"start_date={start_date}, end_date={end_date}")
 
         service = MarginSecsService()
-        result = run_async_in_celery(
-            service.sync_margin_secs,
-            trade_date=trade_date,
-            exchange=exchange,
-            start_date=start_date,
-            end_date=end_date
-        )
 
-        logger.info(f"[Celery] 融资融券标的同步任务完成: {result}")
-        return result
+        if not trade_date and not exchange and not start_date and not end_date:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_margin_secs,
+                trade_date=trade_date,
+                exchange=exchange,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"[Celery] 融资融券标的同步成功: {result.get('records', 0)} 条")
+            return result
+        else:
+            error_msg = result.get('error') or result.get('message', '未知错误')
+            logger.warning(f"[Celery] 融资融券标的同步失败: {result}")
+            raise Exception(f"同步失败: {error_msg}")
 
     except Exception as e:
         logger.error(f"[Celery] 融资融券标的同步任务失败: {str(e)}")
-        self.retry(countdown=60, exc=e)
+        raise
 
 
 @celery_app.task(

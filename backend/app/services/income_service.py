@@ -5,16 +5,16 @@
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict
 from loguru import logger
 import pandas as pd
 
 from app.repositories.income_repository import IncomeRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
-# 全量同步 Redis key / 并发数
 
 class IncomeService:
     """利润表数据服务"""
@@ -22,6 +22,27 @@ class IncomeService:
     def __init__(self):
         self.income_repo = IncomeRepository()
         self.provider_factory = DataProviderFactory()
+
+    # ------------------------------------------------------------------
+    # 增量同步
+    # ------------------------------------------------------------------
+
+    async def sync_incremental(self) -> Dict:
+        """
+        增量同步利润表数据。
+
+        从 sync_configs 读取 incremental_default_days（默认 90），
+        计算最近公告期范围（start_date/end_date），不传 ts_code 拉取全市场数据。
+        Tushare income_vip 接口支持 start_date/end_date（公告日范围查询）。
+        """
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'income')
+        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+        logger.info(f"[income] 增量同步 start_date={start_date} end_date={end_date}（回看 {default_days} 天）")
+        return await self.sync_income(start_date=start_date, end_date=end_date)
 
     async def get_income_data(
         self,

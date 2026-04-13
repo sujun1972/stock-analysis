@@ -102,19 +102,13 @@ export class ExpressApiClient extends BaseApiClient {
   /**
    * 异步同步数据
    */
-  async syncAsync(params?: {
-    ann_date?: string
-    start_date?: string
-    end_date?: string
-    period?: string
-    ts_code?: string
-  }): Promise<ApiResponse<{
+  async syncAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/express/sync-async', {}, { params })
+    return this.post('/api/express/sync-async')
   }
 
   /**
@@ -122,13 +116,14 @@ export class ExpressApiClient extends BaseApiClient {
    */
   async syncFullHistoryAsync(params?: {
     start_date?: string
+    concurrency?: number
   }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/express/sync-full-history-async', {}, { params })
+    return this.post('/api/express/sync-full-history', {}, { params })
   }
 }
 

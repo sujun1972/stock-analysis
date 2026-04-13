@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories.ggt_top10_repository import GgtTop10Repository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -30,6 +32,64 @@ class GgtTop10Service:
                 token=settings.TUSHARE_TOKEN
             )
         return self._provider
+
+    # ------------------------------------------------------------------
+    # 增量同步（逐交易日）
+    # ------------------------------------------------------------------
+
+    async def sync_incremental(self) -> Dict[str, Any]:
+        """
+        增量同步港股通十大成交股数据。
+
+        ggt_top10 仅支持 trade_date 单日查询，不支持 start_date/end_date。
+        从 sync_configs 读取 incremental_default_days（默认 30），
+        获取该范围内的交易日列表，逐日请求并写库。
+        """
+        try:
+            cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'ggt_top10')
+            default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+
+            cal_repo = TradingCalendarRepository()
+            trading_days = await asyncio.to_thread(
+                cal_repo.get_trading_days_between, start_date, end_date
+            )
+
+            if not trading_days:
+                return {"status": "success", "records": 0, "message": "无需同步的交易日"}
+
+            logger.info(f"[ggt_top10] 增量同步 {len(trading_days)} 个交易日 ({start_date}~{end_date})")
+
+            provider = self._get_provider()
+            total_records = 0
+            errors = 0
+
+            for trade_date in trading_days:
+                try:
+                    df = await asyncio.to_thread(
+                        provider.get_ggt_top10,
+                        trade_date=trade_date
+                    )
+                    if df is not None and not df.empty:
+                        df = self._validate_and_clean_data(df)
+                        records = await asyncio.to_thread(self.ggt_top10_repo.bulk_upsert, df)
+                        total_records += records
+                except Exception as e:
+                    errors += 1
+                    logger.error(f"[ggt_top10] {trade_date} 同步失败: {e}")
+
+            logger.info(f"[ggt_top10] 增量同步完成: {total_records} 条, 失败 {errors} 个交易日")
+            return {
+                "status": "success",
+                "records": total_records,
+                "message": f"成功同步 {total_records} 条记录（{len(trading_days)} 个交易日，失败 {errors}）"
+            }
+
+        except Exception as e:
+            logger.error(f"[ggt_top10] 增量同步失败: {e}")
+            return {"status": "error", "records": 0, "error": str(e)}
 
     async def sync_ggt_top10(
         self,

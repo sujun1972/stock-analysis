@@ -38,7 +38,7 @@ export default function StockStPage() {
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
   // 从 task store 实时派生——不要用本地 useState(false)
-  const syncing = isTaskRunning('tasks.sync_stock_st')
+  const syncing = isTaskRunning('tasks.sync_stock_st_incremental')
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -89,8 +89,8 @@ export default function StockStPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'stock_st',
-    syncFn: (params) => apiClient.post('/api/stock-st/sync-async', null, { params }),
-    taskName: 'tasks.sync_stock_st',
+    syncFn: (params) => apiClient.post('/api/stock-st/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_stock_st_full_history',
     onSuccess: loadData,
   })
 
@@ -107,7 +107,7 @@ export default function StockStPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const response = await stockStApi.syncAsync({})
+      const response = await stockStApi.syncAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id

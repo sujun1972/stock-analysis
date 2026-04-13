@@ -64,13 +64,7 @@ export interface FinaIndicatorParams {
   offset?: number
 }
 
-export interface FinaIndicatorSyncParams {
-  ts_code?: string
-  ann_date?: string     // YYYY-MM-DD
-  start_date?: string   // YYYY-MM-DD
-  end_date?: string     // YYYY-MM-DD
-  period?: string       // YYYY-MM-DD
-}
+
 
 // ============================================
 // 分红送股数据类型定义
@@ -110,14 +104,6 @@ export interface DividendParams {
   limit?: number
 }
 
-export interface DividendSyncParams {
-  ts_code?: string
-  ann_date?: string       // YYYY-MM-DD
-  record_date?: string    // YYYY-MM-DD
-  ex_date?: string        // YYYY-MM-DD
-  imp_ann_date?: string   // YYYY-MM-DD
-}
-
 // ============================================
 // 财务审计意见数据类型定义
 // ============================================
@@ -151,13 +137,7 @@ export interface FinaAuditParams {
   limit?: number
 }
 
-export interface FinaAuditSyncParams {
-  ts_code: string       // 必填
-  ann_date?: string     // YYYY-MM-DD
-  start_date?: string   // YYYY-MM-DD
-  end_date?: string     // YYYY-MM-DD
-  period?: string       // YYYY-MM-DD
-}
+
 
 // ============================================
 // 主营业务构成数据类型定义
@@ -194,13 +174,7 @@ export interface FinaMainbzParams {
   offset?: number
 }
 
-export interface FinaMainbzSyncParams {
-  ts_code?: string
-  period?: string       // YYYY-MM-DD
-  type?: string         // P按产品 D按地区 I按行业
-  start_date?: string   // YYYY-MM-DD
-  end_date?: string     // YYYY-MM-DD
-}
+
 
 // ============================================
 // 财报披露计划数据类型定义
@@ -230,13 +204,7 @@ export interface DisclosureDateParams {
   offset?: number
 }
 
-export interface DisclosureDateSyncParams {
-  ts_code?: string
-  end_date?: string     // YYYY-MM-DD（报告期）
-  pre_date?: string     // YYYY-MM-DD
-  ann_date?: string     // YYYY-MM-DD
-  actual_date?: string  // YYYY-MM-DD
-}
+
 
 export class FinancialDataApiClient extends BaseApiClient {
   // ============================================
@@ -269,22 +237,22 @@ export class FinancialDataApiClient extends BaseApiClient {
    * 异步同步财务指标数据
    * 通过Celery任务异步执行，立即返回任务ID
    */
-  async syncFinaIndicatorAsync(params?: FinaIndicatorSyncParams): Promise<ApiResponse<{
+  async syncFinaIndicatorAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/fina-indicator/sync-async', null, { params })
+    return this.post('/api/fina-indicator/sync-async')
   }
 
-  async syncFinaIndicatorFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+  async syncFinaIndicatorFullHistoryAsync(params?: { start_date?: string; concurrency?: number }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/fina-indicator/sync-full-history-async', null, { params })
+    return this.post('/api/fina-indicator/sync-full-history', null, { params })
   }
 
   // ============================================
@@ -317,22 +285,22 @@ export class FinancialDataApiClient extends BaseApiClient {
    * 异步同步分红送股数据
    * 通过Celery任务异步执行，立即返回任务ID
    */
-  async syncDividendAsync(params?: DividendSyncParams): Promise<ApiResponse<{
+  async syncDividendAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/dividend/sync-async', null, { params })
+    return this.post('/api/dividend/sync-async')
   }
 
-  async syncDividendFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+  async syncDividendFullHistoryAsync(params?: { start_date?: string; concurrency?: number }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/dividend/sync-full-history-async', null, { params })
+    return this.post('/api/dividend/sync-full-history', null, { params })
   }
 
   // ============================================
@@ -371,22 +339,22 @@ export class FinancialDataApiClient extends BaseApiClient {
    * 异步同步财务审计意见数据
    * 通过Celery任务异步执行，立即返回任务ID
    */
-  async syncFinaAuditAsync(params: FinaAuditSyncParams): Promise<ApiResponse<{
+  async syncFinaAuditAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/fina-audit/sync-async', null, { params })
+    return this.post('/api/fina-audit/sync-async')
   }
 
-  async syncFinaAuditFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+  async syncFinaAuditFullHistoryAsync(params?: { start_date?: string; concurrency?: number }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/fina-audit/sync-full-history-async', null, { params })
+    return this.post('/api/fina-audit/sync-full-history', null, { params })
   }
 
   // ============================================
@@ -411,22 +379,22 @@ export class FinancialDataApiClient extends BaseApiClient {
    * 异步同步主营业务构成数据
    * 通过Celery任务异步执行，立即返回任务ID
    */
-  async syncFinaMainbzAsync(params: FinaMainbzSyncParams): Promise<ApiResponse<{
+  async syncFinaMainbzAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/fina-mainbz/sync-async', null, { params })
+    return this.post('/api/fina-mainbz/sync-async')
   }
 
-  async syncFinaMainbzFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+  async syncFinaMainbzFullHistoryAsync(params?: { start_date?: string; concurrency?: number }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/fina-mainbz/sync-full-history-async', null, { params })
+    return this.post('/api/fina-mainbz/sync-full-history', null, { params })
   }
 
   // ============================================
@@ -459,22 +427,22 @@ export class FinancialDataApiClient extends BaseApiClient {
    * 异步同步财报披露计划数据
    * 通过Celery任务异步执行，立即返回任务ID
    */
-  async syncDisclosureDateAsync(params?: DisclosureDateSyncParams): Promise<ApiResponse<{
+  async syncDisclosureDateAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/disclosure-date/sync-async', null, { params })
+    return this.post('/api/disclosure-date/sync-async')
   }
 
-  async syncDisclosureDateFullHistoryAsync(params?: { start_date?: string }): Promise<ApiResponse<{
+  async syncDisclosureDateFullHistoryAsync(params?: { start_date?: string; concurrency?: number }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/disclosure-date/sync-full-history-async', null, { params })
+    return this.post('/api/disclosure-date/sync-full-history', null, { params })
   }
 }
 

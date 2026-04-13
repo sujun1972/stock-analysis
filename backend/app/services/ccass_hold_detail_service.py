@@ -45,41 +45,106 @@ class CcassHoldDetailService(TushareSyncBase):
     ) -> Dict:
         """增量同步中央结算系统持股明细数据。
 
-        ccass_hold_detail 接口要求 ts_code 或 trade_date 至少传一个。
-        当两者都为 None 且 start_date 也为 None 时（例如定时任务以空参数触发），
-        自动从 sync_history 计算建议起始日期，确保切片策略能被正确触发。
+        ccass_hold_detail 接口要求 ts_code 或 trade_date 至少传一个，
+        不支持 start_date/end_date 范围查询。
+
+        有 ts_code 或 trade_date 时：单次请求（支持翻页）。
+        无参数时：从 sync_configs 读取回看天数，逐交易日请求（与全量的 by_date 策略一致）。
         """
+        from app.repositories.trading_calendar_repository import TradingCalendarRepository
+
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
         api_limit = (cfg.get('api_limit') or 6000) if cfg else 6000
-        effective_strategy = sync_strategy or (cfg.get('incremental_sync_strategy') or 'by_date') if cfg else 'by_date'
         provider = self._get_provider(max_requests_per_minute)
 
-        effective_start = start_date
-        if not ts_code and not trade_date and not effective_start:
-            # 无任何过滤参数，自动计算起始日期以触发切片策略（by_date/by_month/...）
-            effective_start = await self.get_suggested_start_date()
-            logger.info(
-                f"ccass_hold_detail 增量同步：未传 ts_code/trade_date/start_date，"
-                f"自动使用建议起始日期 {effective_start}"
-            )
+        # 有明确的 ts_code 或 trade_date 时，单次请求 + 翻页
+        if ts_code or trade_date:
+            all_dfs = []
+            offset = 0
+            while True:
+                df = await asyncio.to_thread(
+                    provider.get_ccass_hold_detail,
+                    ts_code=ts_code, hk_code=hk_code, trade_date=trade_date,
+                    limit=api_limit, offset=offset,
+                )
+                if df is None or df.empty:
+                    break
+                all_dfs.append(df)
+                if len(df) < api_limit:
+                    break
+                offset += api_limit
 
-        return await self.run_incremental_sync(
-            fetch_fn=provider.get_ccass_hold_detail,
-            upsert_fn=self.ccass_hold_detail_repo.bulk_upsert,
-            clean_fn=self._validate_and_clean_data,
-            table_key=self.TABLE_KEY,
-            date_col='trade_date',
-            sync_strategy=effective_strategy,
-            start_date=effective_start,
-            end_date=end_date,
-            max_requests_per_minute=max_requests_per_minute,
-            api_limit=api_limit,
-            extra_fetch_kwargs={
-                'ts_code': ts_code,
-                'hk_code': hk_code,
-                'trade_date': trade_date,
-            },
+            if not all_dfs:
+                return {"status": "success", "records": 0, "message": "未获取到数据"}
+
+            import pandas as pd
+            combined = pd.concat(all_dfs, ignore_index=True) if len(all_dfs) > 1 else all_dfs[0]
+            combined = self._validate_and_clean_data(combined)
+            records = await asyncio.to_thread(self.ccass_hold_detail_repo.bulk_upsert, combined)
+            return {"status": "success", "records": records, "message": f"成功同步 {records} 条记录"}
+
+        # 无参数：逐交易日遍历（by_date + trade_date 参数）
+        effective_start = start_date or await self.get_suggested_start_date()
+        effective_end = end_date or datetime.now().strftime('%Y%m%d')
+
+        cal_repo = TradingCalendarRepository()
+        trading_days = await asyncio.to_thread(
+            cal_repo.get_trading_days_between, effective_start, effective_end
         )
+
+        if not trading_days:
+            return {"status": "success", "records": 0, "message": "无需同步的交易日"}
+
+        logger.info(f"[ccass_hold_detail] 增量同步 {len(trading_days)} 个交易日 ({effective_start}~{effective_end})")
+
+        total_records = 0
+        errors = 0
+        sem = asyncio.Semaphore(3)
+
+        async def sync_day(day: str):
+            async with sem:
+                try:
+                    day_dfs = []
+                    offset = 0
+                    while True:
+                        df = await asyncio.to_thread(
+                            provider.get_ccass_hold_detail,
+                            trade_date=day, limit=api_limit, offset=offset,
+                        )
+                        if df is None or df.empty:
+                            break
+                        day_dfs.append(df)
+                        if len(df) < api_limit:
+                            break
+                        offset += api_limit
+                    if not day_dfs:
+                        return 0, None
+                    import pandas as pd
+                    combined = pd.concat(day_dfs, ignore_index=True) if len(day_dfs) > 1 else day_dfs[0]
+                    combined = self._validate_and_clean_data(combined)
+                    records = await asyncio.to_thread(self.ccass_hold_detail_repo.bulk_upsert, combined)
+                    return records, None
+                except Exception as e:
+                    return 0, str(e)
+
+        BATCH_SIZE = 15
+        for batch_start in range(0, len(trading_days), BATCH_SIZE):
+            batch = trading_days[batch_start:batch_start + BATCH_SIZE]
+            results = await asyncio.gather(*[sync_day(d) for d in batch])
+            for records, err in results:
+                if err:
+                    errors += 1
+                    logger.error(f"[ccass_hold_detail] 同步失败: {err}")
+                else:
+                    total_records += records
+            done = min(batch_start + BATCH_SIZE, len(trading_days))
+            logger.info(f"[ccass_hold_detail] 进度: {done}/{len(trading_days)} 入库={total_records} 失败={errors}")
+
+        return {
+            "status": "success",
+            "records": total_records,
+            "message": f"增量同步完成 {total_records} 条（{len(trading_days)} 个交易日，失败 {errors}）"
+        }
 
     # ------------------------------------------------------------------
     # 全量历史同步

@@ -41,20 +41,23 @@ def sync_fina_mainbz_task(
         logger.info(f"开始执行主营业务构成同步任务: ts_code={ts_code}, period={period}, type={type}, start_date={start_date}, end_date={end_date}")
 
         service = FinaMainbzService()
-        result = run_async_in_celery(
-            service.sync_fina_mainbz,
-            ts_code=ts_code,
-            period=period,
-            type=type,
-            start_date=start_date,
-            end_date=end_date
-        )
 
-        if result["status"] == "success":
-            logger.info(f"主营业务构成同步成功: {result['records']} 条")
+        if not ts_code and not period and not type and not start_date and not end_date:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_fina_mainbz,
+                ts_code=ts_code,
+                period=period,
+                type=type,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"主营业务构成同步成功: {result.get('records', 0)} 条")
             return result
         else:
-            logger.warning(f"主营业务构成同步失败: {result}")
             error_msg = result.get('error', '未知错误')
             raise Exception(f"同步失败: {error_msg}")
 

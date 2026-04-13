@@ -52,11 +52,6 @@ export interface LatestMarginSecsData {
   trade_date: string
 }
 
-export interface SyncMarginSecsParams {
-  trade_date?: string   // YYYYMMDD
-  exchange?: string     // 交易所代码（SSE/SZSE/BSE）
-}
-
 export interface SyncTaskResponse {
   celery_task_id: string
   task_name: string
@@ -88,10 +83,11 @@ export class MarginSecsApi extends BaseApiClient {
   }
 
   /**
-   * 异步同步融资融券标的数据
+   * 增量同步融资融券标的数据
+   * 不传参数，由后端从 sync_configs 自动计算
    */
-  async syncMarginSecsAsync(params?: SyncMarginSecsParams): Promise<ApiResponse<SyncTaskResponse>> {
-    return this.post<ApiResponse<SyncTaskResponse>>('/api/margin-secs/sync-async', params)
+  async syncMarginSecsAsync(): Promise<ApiResponse<SyncTaskResponse>> {
+    return this.post<ApiResponse<SyncTaskResponse>>('/api/margin-secs/sync-async')
   }
 }
 

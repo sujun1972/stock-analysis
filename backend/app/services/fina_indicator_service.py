@@ -6,10 +6,11 @@
 
 import asyncio
 from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories.fina_indicator_repository import FinaIndicatorRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -21,6 +22,15 @@ class FinaIndicatorService:
         self.fina_indicator_repo = FinaIndicatorRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ FinaIndicatorService initialized")
+
+    async def sync_incremental(self) -> Dict:
+        """增量同步：从 sync_configs 读取回看天数，自动计算日期范围。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'fina_indicator')
+        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        logger.info(f"[fina_indicator] 增量同步 start_date={start_date} end_date={end_date}（回看 {default_days} 天）")
+        return await self.sync_fina_indicator(start_date=start_date, end_date=end_date)
 
     def _get_provider(self):
         """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""

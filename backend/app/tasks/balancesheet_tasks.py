@@ -24,40 +24,36 @@ def sync_balancesheet_task(
     period: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    report_type: str = '1',
+    report_type: Optional[str] = None,
     comp_type: Optional[str] = None
 ):
     """
     同步资产负债表数据
 
-    Args:
-        ts_code: 股票代码 XXXXXX.XX
-        period: 报告期 YYYYMMDD (如 20231231表示年报)
-        start_date: 开始日期 YYYYMMDD
-        end_date: 结束日期 YYYYMMDD
-        report_type: 报告类型（默认1-合并报表）
-        comp_type: 公司类型（1一般工商业2银行3保险4证券）
-
-    Returns:
-        同步结果
+    无参数调用时使用 sync_incremental（从 sync_configs 读取回看天数）。
+    有参数时使用原始 sync_balancesheet（直接传参给 Tushare）。
     """
     try:
         logger.info(f"开始执行资产负债表同步任务: ts_code={ts_code}, period={period}, "
                    f"start_date={start_date}, end_date={end_date}")
 
         service = BalancesheetService()
-        result = run_async_in_celery(
-            service.sync_balancesheet,
-            ts_code=ts_code,
-            period=period,
-            start_date=start_date,
-            end_date=end_date,
-            report_type=report_type,
-            comp_type=comp_type
-        )
 
-        if result["status"] == "success":
-            logger.info(f"资产负债表同步成功: {result['records']} 条")
+        if not ts_code and not period and not start_date and not end_date and not report_type and not comp_type:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_balancesheet,
+                ts_code=ts_code,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+                report_type=report_type or '1',
+                comp_type=comp_type
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"资产负债表同步成功: {result.get('records', 0)} 条")
             return result
         else:
             logger.warning(f"资产负债表同步失败: {result}")

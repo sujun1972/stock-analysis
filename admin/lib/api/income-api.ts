@@ -65,30 +65,25 @@ export class IncomeApiClient extends BaseApiClient {
     return this.get('/api/income/latest', { params: { ts_code } })
   }
 
-  async syncAsync(params?: {
-    ts_code?: string
-    period?: string
-    start_date?: string
-    end_date?: string
-    report_type?: string
-  }): Promise<ApiResponse<{
+  async syncAsync(): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/income/sync-async', {}, { params })
+    return this.post('/api/income/sync-async')
   }
 
   async syncFullHistoryAsync(params?: {
     start_date?: string
+    concurrency?: number
   }): Promise<ApiResponse<{
     celery_task_id: string
     task_name: string
     display_name: string
     status: string
   }>> {
-    return this.post('/api/income/sync-full-history-async', {}, { params })
+    return this.post('/api/income/sync-full-history', {}, { params })
   }
 }
 

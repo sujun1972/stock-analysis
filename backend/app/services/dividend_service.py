@@ -6,10 +6,11 @@
 
 import asyncio
 from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories.dividend_repository import DividendRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from app.repositories.stock_daily_repository import StockDailyRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
@@ -22,6 +23,15 @@ class DividendService:
         self.dividend_repo = DividendRepository()
         self.stock_daily_repo = StockDailyRepository()
         self.provider_factory = DataProviderFactory()
+
+    async def sync_incremental(self) -> Dict:
+        """增量同步：从 sync_configs 读取回看天数，自动计算日期范围。"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'dividend')
+        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        logger.info(f"[dividend] 增量同步 start_date={start_date} end_date={end_date}（回看 {default_days} 天）")
+        return await self.sync_dividend()
 
     async def sync_full_history(self, redis_client, start_date: str = None, update_state_fn=None, concurrency: int = 5) -> dict:
         """

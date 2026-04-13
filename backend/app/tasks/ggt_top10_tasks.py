@@ -24,34 +24,35 @@ def sync_ggt_top10_task(
     """
     同步港股通十大成交股数据
 
-    Args:
-        ts_code: 股票代码（可选）
-        trade_date: 交易日期 YYYYMMDD（可选）
-        start_date: 开始日期 YYYYMMDD（可选）
-        end_date: 结束日期 YYYYMMDD（可选）
-        market_type: 市场类型 2:港股通(沪) 4:港股通(深)（可选）
-
-    Returns:
-        同步结果字典
+    无参数调用时使用 sync_incremental（从 sync_configs 读取回看天数，逐交易日同步）。
+    有参数时使用原始 sync_ggt_top10（直接传参给 Tushare）。
     """
     try:
-        logger.info(f"开始执行港股通十大成交股同步任务")
-        logger.info(f"参数: ts_code={ts_code}, trade_date={trade_date}, "
+        logger.info(f"开始执行港股通十大成交股同步任务: ts_code={ts_code}, trade_date={trade_date}, "
                    f"start_date={start_date}, end_date={end_date}, market_type={market_type}")
 
-        # 使用辅助函数运行异步代码
         service = GgtTop10Service()
-        result = run_async_in_celery(
-            service.sync_ggt_top10,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            market_type=market_type
-        )
 
-        logger.info(f"港股通十大成交股同步任务完成: {result}")
-        return result
+        # 无参数时走增量同步（从 sync_configs 读取配置，逐交易日）
+        if not ts_code and not trade_date and not start_date and not end_date and not market_type:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_ggt_top10,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                market_type=market_type
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"港股通十大成交股同步成功: {result.get('records', 0)} 条")
+            return result
+        else:
+            error_msg = result.get('error', '未知错误')
+            logger.warning(f"港股通十大成交股同步失败: {result}")
+            raise Exception(f"同步失败: {error_msg}")
 
     except Exception as e:
         logger.error(f"港股通十大成交股同步任务失败: {e}")

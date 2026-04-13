@@ -1,23 +1,27 @@
 """
 ST股票信息 API 端点
+
+增量同步：从 sync_configs 读取任务名，动态分发
+全量同步：独立端点 /sync-full-history，支持 Redis 续继
 """
 
 import asyncio
-import json
 from typing import Optional
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends
 from loguru import logger
 
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.services.stock_st_service import StockStService
 from app.services import TaskHistoryHelper
-from app.core.dependencies import require_admin
+from app.core.dependencies import require_admin, get_current_user
 from app.models.user import User
 
 router = APIRouter()
 
 
 @router.get("")
+@handle_api_errors
 async def get_stock_st_data(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
@@ -26,164 +30,148 @@ async def get_stock_st_data(
     page: int = Query(1, ge=1, description="页码，从1开始"),
     page_size: int = Query(30, ge=1, le=100, description="每页记录数，最大100")
 ):
-    """
-    查询ST股票数据（支持分页）
+    """查询ST股票数据（支持分页）"""
+    service = StockStService()
 
-    Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        ts_code: 股票代码
-        st_type: ST类型，S-ST，*S-*ST，R-解除ST
-        page: 页码，从1开始
-        page_size: 每页记录数，最大100
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-    Returns:
-        ST股票数据列表（包含分页信息）
-    """
-    try:
-        service = StockStService()
+    result = await service.get_stock_st_data(
+        start_date=start_date_formatted,
+        end_date=end_date_formatted,
+        ts_code=ts_code,
+        st_type=st_type,
+        page=page,
+        page_size=page_size
+    )
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
-
-        result = await service.get_stock_st_data(
-            start_date=start_date_formatted,
-            end_date=end_date_formatted,
-            ts_code=ts_code,
-            st_type=st_type,
-            page=page,
-            page_size=page_size
-        )
-
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"查询ST股票数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=result)
 
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_statistics(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD")
 ):
-    """
-    获取ST股票统计信息
+    """获取ST股票统计信息"""
+    service = StockStService()
 
-    Args:
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-    Returns:
-        统计信息
-    """
-    try:
-        service = StockStService()
+    stats = await service.get_statistics(
+        start_date=start_date_formatted,
+        end_date=end_date_formatted
+    )
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
-
-        stats = await service.get_statistics(
-            start_date=start_date_formatted,
-            end_date=end_date_formatted
-        )
-
-        return ApiResponse.success(data=stats)
-
-    except Exception as e:
-        logger.error(f"获取ST股票统计信息失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=stats)
 
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest():
-    """
-    获取最新的交易日期
-
-    Returns:
-        最新交易日期
-    """
-    try:
-        service = StockStService()
-        latest = await service.get_latest_trade_date()
-
-        return ApiResponse.success(data={"latest_trade_date": latest})
-
-    except Exception as e:
-        logger.error(f"获取最新交易日期失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """获取最新的交易日期"""
+    service = StockStService()
+    latest = await service.get_latest_data()
+    return ApiResponse.success(data=latest)
 
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_stock_st_async(
-    ts_code: Optional[str] = Query(None, description="股票代码"),
-    trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     current_user: User = Depends(require_admin)
 ):
     """
-    异步同步ST股票数据（通过Celery任务）
+    增量同步ST股票数据（通过Celery任务）
 
-    该接口立即返回Celery任务ID，不等待任务完成。
-    前端可以通过任务面板查看进度和结果。
-
-    注意：st_type参数仅用于前端查询筛选，Tushare stock_st接口不支持按类型同步
-
-    Args:
-        ts_code: 股票代码
-        trade_date: 交易日期，格式：YYYY-MM-DD
-        start_date: 开始日期，格式：YYYY-MM-DD
-        end_date: 结束日期，格式：YYYY-MM-DD
-        current_user: 当前登录用户（管理员）
-
-    Returns:
-        包含Celery任务ID和任务信息的响应
+    从 sync_configs 读取 incremental_task_name，动态分发任务。
+    不传日期参数，由 Service 层的 get_suggested_start_date() 自动计算。
     """
-    try:
-        from app.tasks.stock_st_tasks import sync_stock_st_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
-        trade_date_formatted = trade_date.replace('-', '') if trade_date else None
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'stock_st')
+    task_name = (cfg.get('incremental_task_name') or 'tasks.sync_stock_st_incremental') if cfg else 'tasks.sync_stock_st_incremental'
 
-        # 提交Celery任务（异步执行）
-        celery_task = sync_stock_st_task.apply_async(
-            kwargs={
-                'ts_code': ts_code,
-                'trade_date': trade_date_formatted,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted
-            }
-        )
+    from app.celery_app import celery_app
+    celery_task = celery_app.send_task(task_name)
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_stock_st',
-            display_name='ST股票列表',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={
-                'ts_code': ts_code,
-                'trade_date': trade_date_formatted,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted
-            },
-            source='stock_st_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name=task_name,
+        display_name='ST股票列表增量同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={},
+        source='stock_st_page'
+    )
 
-        logger.info(f"ST股票信息同步任务已提交: {celery_task.id}")
+    logger.info(f"ST股票列表增量同步任务已提交: {celery_task.id}")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
+    return ApiResponse.success(
+        data=task_data,
+        message="增量同步任务已提交，正在后台执行"
+    )
 
-    except Exception as e:
-        logger.error(f"提交ST股票信息同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/full-history-progress")
+@handle_api_errors
+async def get_full_history_progress(
+    current_user: User = Depends(get_current_user)
+):
+    """查询全量历史同步进度"""
+    from app.core.redis_lock import redis_client
+
+    completed = 0
+    is_in_progress = False
+
+    if redis_client:
+        completed = redis_client.scard(StockStService.FULL_HISTORY_PROGRESS_KEY) or 0
+        is_in_progress = bool(redis_client.exists(StockStService.FULL_HISTORY_LOCK_KEY))
+
+    return ApiResponse.success(data={
+        "completed": completed,
+        "is_in_progress": is_in_progress,
+    })
+
+
+@router.post("/sync-full-history")
+@handle_api_errors
+async def sync_full_history(
+    concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    触发全量历史ST股票同步（可中断续继）
+
+    从2016年1月1日起，按月切片同步全部ST股票数据。
+    中断后再次触发会自动从断点继续，跳过已同步完成的月份。
+    """
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'stock_st')
+    from app.repositories.sync_config_repository import SyncConfigRepository
+
+    if concurrency is None:
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'stock_st')
+        concurrency = (cfg.get('full_sync_concurrency') or 1) if cfg else 1
+
+    from app.celery_app import celery_app
+    celery_task = celery_app.send_task(
+        'tasks.sync_stock_st_full_history',
+        kwargs={'concurrency': concurrency}
+    )
+
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_stock_st_full_history',
+        display_name='ST股票列表全量历史同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'start_date': '20160101', 'scope': 'all', 'concurrency': concurrency},
+        source='stock_st_page'
+    )
+
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

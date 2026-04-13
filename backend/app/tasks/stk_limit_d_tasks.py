@@ -1,71 +1,66 @@
 """
 每日涨跌停价格同步任务
 
+- sync_stk_limit_d_incremental_task：增量同步（委托 StkLimitDService.sync_incremental）
+- sync_stk_limit_d_full_history_task：全量历史（委托 StkLimitDService.sync_full_history，支持 Redis 续继）
+
 使用 run_async_in_celery 处理 Celery fork pool 中的事件循环冲突问题
 """
 
 import asyncio
-import traceback
-from datetime import datetime
 from typing import Optional
 from loguru import logger
 
 from app.celery_app import celery_app
-from app.services.stk_limit_d_service import StkLimitDService
 from app.tasks.extended_sync_tasks import run_async_in_celery
-
-# 全量同步进度 Redis key（Set，存储已完成的 ts_code，支持中断续继）
-STK_LIMIT_D_FULL_HISTORY_PROGRESS_KEY = "sync:stk_limit_d:full_history:progress"
+from app.tasks.sync_tasks import _DummyContext
 
 
-@celery_app.task(bind=True, name="tasks.sync_stk_limit_d")
-def sync_stk_limit_d_task(
+# ==================== 增量同步 ====================
+
+@celery_app.task(
+    bind=True,
+    name="tasks.sync_stk_limit_d_incremental",
+    max_retries=2,
+    retry_backoff=180,
+    retry_jitter=True,
+)
+def sync_stk_limit_d_incremental_task(
     self,
-    ts_code: Optional[str] = None,
-    trade_date: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    sync_strategy: Optional[str] = None,
+    max_requests_per_minute: Optional[int] = None,
 ):
     """
-    同步每日涨跌停价格数据
+    每日涨跌停价格增量同步（委托给 StkLimitDService.sync_incremental）。
 
-    Args:
-        ts_code: 股票代码 (可选)
-        trade_date: 交易日期 YYYYMMDD (可选)
-        start_date: 开始日期 YYYYMMDD (可选)
-        end_date: 结束日期 YYYYMMDD (可选)
-
-    Returns:
-        同步结果
+    start_date / sync_strategy 均从 sync_configs 读取，
+    也可由调用方显式传入覆盖。
     """
-    try:
-        logger.info(
-            f"开始执行每日涨跌停价格同步任务: ts_code={ts_code}, trade_date={trade_date}, "
-            f"start_date={start_date}, end_date={end_date}"
-        )
+    from app.services.stk_limit_d_service import StkLimitDService
 
-        service = StkLimitDService()
-        result = run_async_in_celery(
-            service.sync_stk_limit_d,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date
-        )
+    logger.info(f"开始执行每日涨跌停价格增量同步任务: strategy={sync_strategy} start_date={start_date} end_date={end_date}")
 
-        if result["status"] == "success":
-            logger.info(f"每日涨跌停价格同步成功: {result['records']} 条")
-            return result
-        else:
-            logger.warning(f"每日涨跌停价格同步失败: {result}")
-            error_msg = result.get('error', '未知错误')
-            raise Exception(f"同步失败: {error_msg}")
+    service = StkLimitDService()
+    result = run_async_in_celery(
+        service.sync_incremental,
+        start_date=start_date,
+        end_date=end_date,
+        sync_strategy=sync_strategy,
+        max_requests_per_minute=max_requests_per_minute,
+    )
 
-    except Exception as e:
-        logger.error(f"执行每日涨跌停价格同步任务失败: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise
+    if result.get("status") == "success":
+        logger.info(f"每日涨跌停价格增量同步成功: {result.get('records', 0)} 条")
+        return result
+    else:
+        error_msg = result.get('error', '未知错误')
+        logger.warning(f"每日涨跌停价格增量同步失败: {result}")
+        raise Exception(f"同步失败: {error_msg}")
 
+
+# ==================== 全量历史同步（续继） ====================
 
 @celery_app.task(
     bind=True,
@@ -73,123 +68,45 @@ def sync_stk_limit_d_task(
     max_retries=0,
     soft_time_limit=28800,
     time_limit=32400,
-    acks_late=False,  # 支持续继，worker 重启后不自动重新入队
+    acks_late=False,
 )
-def sync_stk_limit_d_full_history_task(self, start_date: Optional[str] = None, concurrency: int = 3):
-    """
-    逐只股票全量同步每日涨跌停价格历史数据
+def sync_stk_limit_d_full_history_task(
+    self,
+    start_date: Optional[str] = None,
+    concurrency: int = 3,
+    strategy: str = 'by_ts_code',
+    max_requests_per_minute: Optional[int] = None,
+):
+    """全量历史每日涨跌停价格同步（支持 Redis 续继，委托给 StkLimitDService）"""
+    from app.core.redis_lock import redis_client, redis_lock
+    from app.services.stk_limit_d_service import StkLimitDService
 
-    每只股票单独请求 Tushare，3 并发执行（约 3 req/s，低于 400次/分钟限额），
-    支持 Redis 中断续继。
-    进度存储：Redis Set key = sync:stk_limit_d:full_history:progress
-
-    Args:
-        start_date: 开始日期 YYYYMMDD（可选，默认 20210101）
-    """
-    from app.core.redis_lock import redis_client
-    from app.repositories.stock_basic_repository import StockBasicRepository
-
-    effective_start = start_date or "20210101"
-    today = datetime.now().strftime("%Y%m%d")
-
-    logger.info(f"========== [Celery] 开始每日涨跌停价格全量历史同步 start_date={effective_start} ==========")
+    logger.info(f"========== [Celery] 开始全量历史每日涨跌停价格同步任务 strategy={strategy} concurrency={concurrency} ==========")
 
     if redis_client is None:
-        logger.error("Redis 不可用，无法执行全量同步任务")
         return {"status": "error", "message": "Redis 不可用"}
 
-    # 获取全部上市股票
-    repo = StockBasicRepository()
-    all_ts_codes = repo.get_listed_ts_codes(status='L')
-    total = len(all_ts_codes)
-    logger.info(f"共 {total} 只上市股票需要同步")
+    with redis_lock.acquire(StkLimitDService.FULL_HISTORY_LOCK_KEY, timeout=28800, blocking=False) if redis_lock else _DummyContext() as acquired:
+        if not acquired and redis_lock:
+            logger.warning("已有全量同步任务正在执行中，跳过本次执行")
+            return {"status": "locked", "message": "已有全量同步任务正在进行"}
 
-    if total == 0:
-        return {"status": "success", "message": "无上市股票", "count": 0}
-
-    # 读取已完成的进度
-    completed_set = redis_client.smembers(STK_LIMIT_D_FULL_HISTORY_PROGRESS_KEY)
-    logger.info(f"已完成 {len(completed_set)} 只，剩余 {total - len(completed_set)} 只")
-
-    pending_codes = [c for c in all_ts_codes if c not in completed_set]
-
-    service = StkLimitDService()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    success_count = 0
-    skip_count = len(completed_set)
-    error_count = 0
-
-    CONCURRENCY = max(1, concurrency)
-    BATCH_SIZE = 50
-
-    async def sync_one(ts_code: str, sem: asyncio.Semaphore):
-        async with sem:
-            try:
-                result = await service.sync_stk_limit_d(
-                    ts_code=ts_code,
-                    start_date=effective_start,
-                    end_date=today
+        service = StkLimitDService()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                service.sync_full_history(
+                    redis_client=redis_client,
+                    start_date=start_date,
+                    concurrency=concurrency,
+                    strategy=strategy,
+                    update_state_fn=self.update_state,
+                    max_requests_per_minute=max_requests_per_minute or 0,
                 )
-                if result.get("status") == "error":
-                    return ts_code, False, result.get("error", "未知错误")
-                return ts_code, True, None
-            except Exception as e:
-                return ts_code, False, str(e)
-
-    async def run_concurrent():
-        nonlocal success_count, error_count
-        sem = asyncio.Semaphore(CONCURRENCY)
-
-        for batch_start in range(0, len(pending_codes), BATCH_SIZE):
-            batch = pending_codes[batch_start:batch_start + BATCH_SIZE]
-            results = await asyncio.gather(*[sync_one(c, sem) for c in batch])
-
-            for ts_code, ok, err in results:
-                if ok:
-                    redis_client.sadd(STK_LIMIT_D_FULL_HISTORY_PROGRESS_KEY, ts_code)
-                    success_count += 1
-                else:
-                    error_count += 1
-                    if err:
-                        logger.error(f"同步 {ts_code} 失败（下次续继）: {err}")
-
-            done = skip_count + success_count
-            self.update_state(
-                state='PROGRESS',
-                meta={
-                    'current': done,
-                    'total': total,
-                    'percent': round(done / total * 100, 1),
-                    'success': success_count,
-                    'errors': error_count
-                }
             )
-            logger.info(
-                f"进度: {done}/{total} ({round(done / total * 100, 1)}%) "
-                f"| 本次成功={success_count} 失败={error_count}"
-            )
+        finally:
+            loop.close()
 
-    try:
-        loop.run_until_complete(run_concurrent())
-    finally:
-        loop.close()
-
-    final_done = len(redis_client.smembers(STK_LIMIT_D_FULL_HISTORY_PROGRESS_KEY))
-    if final_done >= total:
-        redis_client.delete(STK_LIMIT_D_FULL_HISTORY_PROGRESS_KEY)
-        logger.info("✅ 每日涨跌停价格全量历史同步完成，进度已清除")
-
-    logger.info(
-        f"========== [Celery] 每日涨跌停全量同步结束: "
-        f"本次成功={success_count}, 跳过={skip_count}, 失败={error_count} =========="
-    )
-    return {
-        "status": "success",
-        "total": total,
-        "success": success_count,
-        "skipped": skip_count,
-        "errors": error_count,
-        "message": f"同步完成 {success_count} 只，跳过 {skip_count} 只，失败 {error_count} 只"
-    }
+    logger.info(f"========== [Celery] 全量历史每日涨跌停价格同步结束: {result} ==========")
+    return result

@@ -32,8 +32,6 @@ export default function StkLimitDPage() {
 
   // 同步弹窗状态（与查询日期解耦）
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -45,7 +43,7 @@ export default function StkLimitDPage() {
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
 
   // 从 task store 派生 syncing 状态（普通同步或全量同步任一在跑均禁用按钮）
-  const syncing = isTaskRunning('tasks.sync_stk_limit_d') || isTaskRunning('tasks.sync_stk_limit_d_full_history')
+  const syncing = isTaskRunning('tasks.sync_stk_limit_d_incremental') || isTaskRunning('tasks.sync_stk_limit_d_full_history')
 
   // 加载数据（targetPage/targetPageSize 直接传入，绕过 setState 异步延迟）
   const loadData = useCallback(async (targetPage = 1, targetPageSize = pageSize) => {
@@ -113,11 +111,8 @@ export default function StkLimitDPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const params: any = {}
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await stkLimitDApi.syncAsync(params)
+      // 不传日期参数，由后端从 sync_configs 自动计算增量起始日期
+      const response = await stkLimitDApi.syncAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -277,25 +272,15 @@ export default function StkLimitDPage() {
         }
       />
 
-      {/* 同步弹窗 */}
+      {/* 同步确认弹窗 */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>同步数据</DialogTitle>
+            <DialogTitle>同步每日涨跌停价格</DialogTitle>
             <DialogDescription>
-              选择同步日期范围（留空则同步最新交易日数据）。
+              将从 Tushare 增量同步最新涨跌停价格数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>开始日期（可选）</Label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
-            </div>
-            <div className="space-y-2">
-              <Label>结束日期（可选）</Label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
-            </div>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
             <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>

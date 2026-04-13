@@ -65,14 +65,13 @@ export default function MarginSecsPage() {
 
   // 同步弹窗
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncDate, setSyncDate] = useState<Date | undefined>(undefined)
 
   const activeCallbacksRef = useRef<Map<string, any>>(new Map())
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const { config } = useSystemConfig()
 
   // 从 task store 实时派生——不用本地 useState
-  const syncing = isTaskRunning('tasks.sync_margin_secs')
+  const syncing = isTaskRunning('extended.sync_margin_secs') || isTaskRunning('tasks.sync_margin_secs_full_history')
 
   // 判断是否为股票（ETF/基金/债券不跳转）
   // 5xxxxx = 上海ETF/基金，1xxxxx = 深圳ETF/基金，821xxx = 北交所债券
@@ -148,8 +147,8 @@ export default function MarginSecsPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'margin_secs',
-    syncFn: (params) => apiClient.post('/api/margin-secs/sync-async', null, { params }),
-    taskName: 'tasks.sync_margin_secs',
+    syncFn: (params) => apiClient.post('/api/margin-secs/sync-full-history', null, { params }),
+    taskName: 'tasks.sync_margin_secs_full_history',
     onSuccess: loadData,
   })
 
@@ -167,10 +166,8 @@ export default function MarginSecsPage() {
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
     try {
-      const syncDateStr = syncDate ? toDateStr(syncDate).replace(/-/g, '') : undefined
-      const response = await marginSecsApi.syncMarginSecsAsync(
-        syncDateStr ? { trade_date: syncDateStr } : {}
-      )
+      // 不传日期参数，由后端从 sync_configs 自动计算
+      const response = await marginSecsApi.syncMarginSecsAsync()
 
       if (response.code === 200 && response.data) {
         const taskId = response.data.celery_task_id
@@ -468,17 +465,9 @@ export default function MarginSecsPage() {
           <DialogHeader>
             <DialogTitle>同步融资融券标的</DialogTitle>
             <DialogDescription>
-              选择同步日期（留空则同步最新交易日数据）。
+              将从 Tushare 增量同步最新融资融券标的数据，无需选择日期。
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <label className="text-sm font-medium mb-2 block">交易日期（可选）</label>
-            <DatePicker
-              date={syncDate}
-              onDateChange={setSyncDate}
-              placeholder="留空同步最新交易日"
-            />
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>
               取消

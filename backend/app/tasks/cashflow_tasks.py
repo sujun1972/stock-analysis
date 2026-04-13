@@ -29,31 +29,28 @@ def sync_cashflow_task(
     """
     同步现金流量表数据
 
-    Args:
-        ts_code: 股票代码 (可选)
-        start_date: 开始日期 YYYYMMDD
-        end_date: 结束日期 YYYYMMDD
-        period: 报告期 YYYYMMDD
-        report_type: 报告类型 (1-12)
-
-    Returns:
-        同步结果
+    无参数调用时使用 sync_incremental（从 sync_configs 读取回看天数）。
+    有参数时使用原始 sync_cashflow（直接传参给 Tushare）。
     """
     try:
         logger.info(f"开始执行现金流量表同步任务: ts_code={ts_code}, period={period}, start_date={start_date}, end_date={end_date}, report_type={report_type}")
 
         service = CashflowService()
-        result = run_async_in_celery(
-            service.sync_cashflow,
-            ts_code=ts_code,
-            start_date=start_date,
-            end_date=end_date,
-            period=period,
-            report_type=report_type
-        )
 
-        if result["status"] == "success":
-            logger.info(f"现金流量表同步成功: {result['records']} 条")
+        if not ts_code and not start_date and not end_date and not period and not report_type:
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_cashflow,
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date,
+                period=period,
+                report_type=report_type
+            )
+
+        if result.get("status") == "success":
+            logger.info(f"现金流量表同步成功: {result.get('records', 0)} 条")
             return result
         else:
             logger.warning(f"现金流量表同步失败: {result}")
