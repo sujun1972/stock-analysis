@@ -153,6 +153,7 @@ export const BUSINESS_TYPES = {
   MIDLINE_INDUSTRY_EXPERT: 'midline_industry_expert',
   LONGTERM_VALUE_WATCHER: 'longterm_value_watcher',
   CIO_DIRECTIVE: 'cio_directive',
+  MACRO_RISK_EXPERT: 'macro_risk_expert',
 } as const
 
 export const BUSINESS_TYPE_LABELS: Record<string, string> = {
@@ -168,4 +169,5 @@ export const BUSINESS_TYPE_LABELS: Record<string, string> = {
   midline_industry_expert: '中线产业趋势专家观点',
   longterm_value_watcher: '长线价值守望者观点',
   cio_directive: '首席投资官（CIO）指令',
+  macro_risk_expert: '天眼宏观风险专家',
 }

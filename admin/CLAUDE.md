@@ -653,9 +653,11 @@ Admin 的 `/settings/prompt-templates` 页面通过 `BUSINESS_TYPE_LABELS`（`ad
 | `midline_industry_expert` | 中线产业趋势专家观点 |
 | `longterm_value_watcher` | 长线价值守望者观点 |
 | `cio_directive` | 首席投资官（CIO）指令 |
+| `macro_risk_expert` | 天眼宏观风险专家 |
 
 **数据库初始化**：
 - 策略类型模板：运行 `backend/scripts/migrate_strategy_prompt_templates.py`
-- 专家观点模板（后四种）：运行 `backend/scripts/migrate_expert_view_templates.py`
+- 专家观点模板（游资/中线/长线/CIO）：运行 `backend/scripts/migrate_expert_view_templates.py`
+- 宏观风险专家模板：运行 `backend/scripts/migrate_macro_risk_expert_template.py`
 
 **后端查找逻辑**（`ai_service.py`）：`_STRATEGY_TYPE_BUSINESS_TYPE` 字典将 `strategy_type`（`entry`/`exit`/`stock_selection`）映射到 `business_type`，`AIStrategyService._load_db_prompt()` 据此加载对应模板；模板缺失时降级使用 `STRATEGY_TYPE_FRAMEWORKS` 硬编码片段。
