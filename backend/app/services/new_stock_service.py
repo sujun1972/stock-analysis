@@ -15,6 +15,7 @@ import pandas as pd
 from loguru import logger
 
 from app.repositories.new_stocks_repository import NewStocksRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -29,6 +30,7 @@ class NewStockService:
 
     def __init__(self):
         self.repo = NewStocksRepository()
+        self.sync_history_repo = SyncHistoryRepository()
 
     def _get_provider(self):
         return DataProviderFactory.create_provider('tushare', token=settings.TUSHARE_TOKEN)
@@ -65,6 +67,13 @@ class NewStockService:
         - 增量同步（不传 start_date）：按 days 天范围一次性拉取
         - 全量同步（传入 start_date）：按 CHUNK_DAYS 天切片，CONCURRENCY 并发
         """
+        sd_for_history = start_date or (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+        sync_type = 'full' if start_date else 'incremental'
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'new_stocks', sync_type, None, sd_for_history,
+        )
+
         try:
             ed = end_date or datetime.now().strftime('%Y%m%d')
 
@@ -77,10 +86,18 @@ class NewStockService:
                 total_records = await self._fetch_and_save(sd, ed)
 
             logger.info(f"new_stocks 同步完成：共写入 {total_records} 条")
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', total_records, ed, None,
+            )
             return {"status": "success", "records": total_records}
 
         except Exception as e:
             logger.error(f"new_stocks 同步失败: {e}")
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
             raise
 
     # ── 内部 ──────────────────────────────────────────────────

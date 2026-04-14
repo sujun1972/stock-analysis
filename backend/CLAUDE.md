@@ -623,6 +623,42 @@ for item in items:
 - [ ] Service 实现 `sync_incremental()`、`sync_full_history()`、`get_suggested_start_date()` 三个方法
 - [ ] Service 定义 `FULL_HISTORY_LOCK_KEY` 类常量，全量任务通过类引用（`YourService.FULL_HISTORY_LOCK_KEY`）
 - [ ] `sync_configs` 表填写 `incremental_task_name`、`incremental_default_days`、`incremental_sync_strategy`
+- [ ] 同步完成后必须记录 `sync_history`（TushareSyncBase 自动记录；其他 Service 手动调用 `sync_history_repo.create()` / `.complete()`）
+- [ ] 若新表被分析功能依赖，在 `analysis_cache_service.py` 的 `ANALYSIS_DEPENDENCIES` 中注册
+
+---
+
+## 分析结果缓存（AnalysisCacheService）
+
+基于 `sync_history` 的依赖检测，避免底层数据未变时重复计算分析结果。
+
+**核心文件**：`services/analysis_cache_service.py`
+
+**原理**：
+1. 缓存写入时，记录依赖表的 `MAX(completed_at)` 时间戳
+2. 缓存读取时，比较当前依赖表时间戳与缓存中的时间戳
+3. 一致 → 命中缓存；不一致 → 重新计算
+
+**使用方式**：
+
+```python
+from app.services.analysis_cache_service import get_analysis_cache_service
+
+cache = get_analysis_cache_service()
+
+# 读取缓存（依赖表未变更则返回数据，否则返回 None）
+result = await cache.get_cached('features', {'code': '000001.SZ', ...})
+
+# 写入缓存
+await cache.set_cached('features', {'code': '000001.SZ', ...}, result_data)
+```
+
+**依赖映射**（`ANALYSIS_DEPENDENCIES`）：每个分析类型声明依赖的 `sync_configs.table_key` 列表，新增同步表时须同步更新。
+
+**`sync_history` 覆盖要求**：所有 61 个同步表的同步操作必须记录 `sync_history`，否则缓存失效检测不准确。当前覆盖方式：
+- `TushareSyncBase.run_incremental_sync()` — 自动记录（需 Service 定义 `self.sync_history_repo`）
+- `BaseSyncService._sync_data_template()` — 自动记录（当 Service 没有 `sync_history_repo` 属性时）
+- 独立 Service（`StockListSyncService`、`NewStockService`、`TradingCalendarService`）— 手动记录
 
 ---
 

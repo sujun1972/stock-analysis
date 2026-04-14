@@ -4,6 +4,7 @@
 提供模板方法模式的基础类，所有同步服务继承此类。
 """
 
+import asyncio
 from typing import Optional, Dict, Any, Callable, Tuple
 from datetime import datetime
 import pandas as pd
@@ -14,6 +15,7 @@ from core.src.providers import DataProviderFactory
 from core.src.data.validators.extended_validator import ExtendedDataValidator
 from app.services.trading_calendar_service import trading_calendar_service
 from app.services.data_availability_config import DataAvailabilityConfig
+from app.repositories.sync_history_repository import SyncHistoryRepository
 
 from .common import DataType, SyncResult, generate_task_id
 
@@ -151,6 +153,17 @@ class BaseSyncService:
         """
         task_id = generate_task_id(data_type.value)
 
+        # 写 sync_history running 记录（如果上层 TushareSyncBase 尚未记录）
+        history_id = None
+        sync_history_repo = getattr(self, 'sync_history_repo', None)
+        if sync_history_repo is None:
+            sync_history_repo = SyncHistoryRepository()
+            history_id = await asyncio.to_thread(
+                sync_history_repo.create,
+                data_type.value, 'incremental', None,
+                fetch_params.get('start_date') or fetch_params.get('trade_date'),
+            )
+
         try:
             logger.info(f"开始同步{data_type.value}: {fetch_params}")
             provider = self._get_provider()
@@ -160,6 +173,10 @@ class BaseSyncService:
 
             if df is None or len(df) == 0:
                 logger.warning(f"{data_type.value}无可用数据")
+                if history_id is not None:
+                    await asyncio.to_thread(
+                        sync_history_repo.complete, history_id, 'success', 0, None, None
+                    )
                 return SyncResult(
                     task_id=task_id,
                     status="success",
@@ -178,6 +195,21 @@ class BaseSyncService:
             # 步骤3: 插入数据库
             await insert_method(df)
 
+            # 完成 sync_history 记录
+            if history_id is not None:
+                # 尝试从数据中提取最大日期作为 data_end_date
+                data_end_date = None
+                for col in ('trade_date', 'end_date', 'ann_date', 'suspend_date'):
+                    if col in df.columns:
+                        raw_max = str(df[col].dropna().max()) if not df[col].dropna().empty else None
+                        if raw_max:
+                            data_end_date = raw_max.replace('-', '')[:8]
+                        break
+                await asyncio.to_thread(
+                    sync_history_repo.complete,
+                    history_id, 'success', len(df), data_end_date, None,
+                )
+
             logger.info(f"成功同步{data_type.value}: {len(df)}条记录")
             return SyncResult(
                 task_id=task_id,
@@ -190,6 +222,10 @@ class BaseSyncService:
 
         except Exception as e:
             logger.error(f"同步{data_type.value}失败: {str(e)}", exc_info=True)
+            if history_id is not None:
+                await asyncio.to_thread(
+                    sync_history_repo.complete, history_id, 'failure', 0, None, str(e)
+                )
             return SyncResult(
                 task_id=task_id,
                 status="error",

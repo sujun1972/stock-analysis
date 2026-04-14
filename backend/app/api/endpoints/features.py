@@ -25,6 +25,7 @@ from app.core_adapters.feature_adapter import FeatureAdapter
 from app.core.cache import cache
 from app.models.api_response import ApiResponse
 from app.repositories.trading_calendar_repository import TradingCalendarRepository
+from app.services.analysis_cache_service import get_analysis_cache_service
 from app.services.stock_daily_service import StockDailyService
 from app.services.stock_quote_cache import stock_quote_cache
 
@@ -33,6 +34,7 @@ router = APIRouter()
 # 全局适配器实例
 feature_adapter = FeatureAdapter()
 data_adapter = DataAdapter()
+analysis_cache = get_analysis_cache_service()
 
 
 @router.get("/{code}")
@@ -87,10 +89,20 @@ async def get_features(
     if not ts_code:
         ts_code = code  # 降级：原样使用（含 '.' 的完整代码直接使用）
 
-    # 2.1 调用 Core Adapter 获取日线数据（使用完整 ts_code 查询）
+    # 2.1 尝试从分析缓存获取（依赖表未变更则命中）
+    cache_analysis_type = {'technical': 'features_technical', 'alpha': 'features_alpha'}.get(
+        feature_type, 'features'
+    )
+    cache_params = {'code': ts_code, 'start_date': start_date, 'end_date': end_date,
+                    'feature_type': feature_type, 'limit': limit}
+    cached_result = await analysis_cache.get_cached(cache_analysis_type, cache_params)
+    if cached_result is not None:
+        return ApiResponse.success(data=cached_result, message="获取特征数据成功（缓存）").to_dict()
+
+    # 2.2 调用 Core Adapter 获取日线数据（使用完整 ts_code 查询）
     df = await data_adapter.get_daily_data(code=ts_code, start_date=start_dt, end_date=end_dt)
 
-    # 2.2 自动同步逻辑
+    # 2.3 自动同步逻辑
     today = datetime.now().date()
     is_requesting_latest = end_dt is None or (today - end_dt).days <= 30
 
@@ -186,16 +198,21 @@ async def get_features(
     ]
 
     # 5. Backend 职责：响应格式化
+    response_data = {
+        "code": code,
+        "feature_type": feature_type or "all",
+        "total": total_count,
+        "returned": len(data_list),
+        "has_more": total_count > limit,
+        "columns": list(df_with_features.columns),
+        "data": data_list,
+    }
+
+    # 6. 写入分析缓存（依赖表同步时间戳自动关联）
+    await analysis_cache.set_cached(cache_analysis_type, cache_params, response_data)
+
     return ApiResponse.success(
-        data={
-            "code": code,
-            "feature_type": feature_type or "all",
-            "total": total_count,
-            "returned": len(data_list),
-            "has_more": total_count > limit,
-            "columns": list(df_with_features.columns),
-            "data": data_list,
-        },
+        data=response_data,
         message="获取特征数据成功",
     ).to_dict()
 

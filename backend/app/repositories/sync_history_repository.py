@@ -150,6 +150,39 @@ class SyncHistoryRepository(BaseRepository):
             return None
         return rows[0][0]
 
+    def get_max_completed_at(
+        self,
+        table_keys: List[str],
+    ) -> Optional[str]:
+        """
+        获取指定表集合中最近一次成功同步的 completed_at 时间戳（ISO 格式）。
+
+        用于分析缓存失效判断：如果依赖的数据表在缓存生成后有过新的成功同步，
+        说明底层数据已变更，缓存需要重新生成。
+
+        Args:
+            table_keys: 数据表标识列表（sync_configs.table_key）
+
+        Returns:
+            最大 completed_at 的 ISO 字符串（如 '2026-04-14T15:30:00Z'），
+            或 None（如果这些表从未成功同步过）
+        """
+        if not table_keys:
+            return None
+        placeholders = ", ".join(["%s"] * len(table_keys))
+        rows = self.execute_query(
+            f"""
+            SELECT MAX(completed_at)
+            FROM sync_history
+            WHERE table_key IN ({placeholders})
+              AND status = 'success'
+            """,
+            tuple(table_keys),
+        )
+        if not rows or not rows[0][0]:
+            return None
+        return rows[0][0].isoformat() + 'Z'
+
     def get_recent(
         self,
         table_key: str,

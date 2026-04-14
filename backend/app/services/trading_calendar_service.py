@@ -16,6 +16,7 @@ import pandas as pd
 from loguru import logger
 
 from app.repositories.trading_calendar_repository import TradingCalendarRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -27,6 +28,7 @@ class TradingCalendarService:
         """初始化服务"""
         self.calendar_repo = TradingCalendarRepository()
         self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ TradingCalendarService initialized")
 
     # ==================== 数据查询方法 ====================
@@ -157,6 +159,12 @@ class TradingCalendarService:
 
         total_records = 0
 
+        # 记录 sync_history
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'trade_cal', 'incremental', None, start_date,
+        )
+
         try:
             provider = self._get_provider()
 
@@ -189,6 +197,10 @@ class TradingCalendarService:
                 logger.info(f"✓ 交易日历同步完成 [{exch}]: {records} 条记录")
 
             logger.info(f"✓ 交易日历全部同步完成: {total_records} 条记录")
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', total_records, end_date, None,
+            )
             return {
                 "status": "success",
                 "message": f"成功同步 {total_records} 条交易日历记录",
@@ -198,6 +210,10 @@ class TradingCalendarService:
 
         except Exception as e:
             logger.error(f"同步交易日历数据失败: {e}")
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
             return {
                 "status": "error",
                 "message": f"同步失败: {str(e)}",

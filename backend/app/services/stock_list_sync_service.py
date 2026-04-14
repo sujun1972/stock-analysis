@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Dict
 
 from app.core.exceptions import DatabaseError, DataSyncError, ExternalAPIError
+from app.repositories.sync_history_repository import SyncHistoryRepository
 from app.services.base_sync_service import BaseSyncService
 
 
@@ -23,6 +24,10 @@ class StockListSyncService(BaseSyncService):
     - 重试逻辑管理
     """
 
+    def __init__(self):
+        super().__init__()
+        self.sync_history_repo = SyncHistoryRepository()
+
     async def sync_stock_list(self) -> Dict:
         """
         同步股票列表
@@ -31,6 +36,10 @@ class StockListSyncService(BaseSyncService):
             同步结果字典
         """
         task_id = self.generate_task_id("stock_list")
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'stock_basic', 'incremental', 'snapshot', None,
+        )
 
         try:
             # 获取数据源配置
@@ -85,20 +94,20 @@ class StockListSyncService(BaseSyncService):
             )
 
             self.log_success(f"股票列表同步完成: {count} 只")
-
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', count, None, None,
+            )
             return {"total": count}
 
         except ExternalAPIError as e:
-            # API调用失败
             error_msg = str(e)
             self.log_error(f"同步股票列表失败: {error_msg}")
-
-            # 更新任务状态为失败
             await self.fail_task(task_id=task_id, error_message=error_msg)
-
-            # 同时更新全局状态（兼容旧接口）
             await self.update_global_status(status="failed")
-
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'failure', 0, None, error_msg,
+            )
             raise DataSyncError(
                 "股票列表同步失败: 数据源API调用失败",
                 error_code="STOCK_LIST_SYNC_API_FAILED",
@@ -106,24 +115,22 @@ class StockListSyncService(BaseSyncService):
                 data_source=config["data_source"],
                 reason=error_msg
             )
-        except DatabaseError:
-            # 数据库错误向上传播
+        except DatabaseError as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'failure', 0, None, str(e),
+            )
             raise
         except Exception as e:
             error_msg = str(e)
             self.log_error(f"同步股票列表失败: {error_msg}")
-
-            # 更新任务状态为失败
             await self.fail_task(task_id=task_id, error_message=error_msg)
-
-            # 同时更新全局状态（兼容旧接口）
             await self.update_global_status(status="failed")
-
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'failure', 0, None, error_msg,
+            )
             raise DataSyncError(
                 "股票列表同步失败",
                 error_code="STOCK_LIST_SYNC_FAILED",
                 task_id=task_id,
                 reason=error_msg
             )
-
-
