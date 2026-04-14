@@ -90,6 +90,30 @@ class StockAiAnalysisService:
         )
         return {"items": items, "total": total}
 
+    async def list_all(
+        self,
+        ts_code: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        ai_provider: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Dict:
+        """查询所有分析记录（分页），返回 {'items': [...], 'total': N}"""
+        items, total = await asyncio.gather(
+            asyncio.to_thread(
+                self.repo.list_all,
+                ts_code, analysis_type, ai_provider,
+                sort_by, sort_order, limit, offset,
+            ),
+            asyncio.to_thread(
+                self.repo.count_all,
+                ts_code, analysis_type, ai_provider,
+            ),
+        )
+        return {"items": items, "total": total}
+
     async def enrich_stock_list(self, items: List[Dict], analysis_type: str) -> List[Dict]:
         """
         批量注入最新分析摘要到股票列表数据。

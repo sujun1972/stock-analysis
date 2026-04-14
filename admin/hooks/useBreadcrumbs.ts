@@ -80,6 +80,7 @@ const routeLabelMap: Record<string, string> = {
   'limit-up': '涨停板池',
   'ai-analysis': 'AI分析',
   'premarket': '盘前预期',
+  'stock-ai-analysis': 'AI分析记录',
 
   // 资金流向子路由
   'stock': '个股资金流向',
@@ -214,6 +215,7 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   // 市场情绪子路由
   'ai-analysis': Sparkles,
   'premarket': Clock,
+  'stock-ai-analysis': Brain,
 
   // 系统设置子路由
   'system': Wrench,

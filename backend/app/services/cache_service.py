@@ -15,7 +15,7 @@ import redis.asyncio as redis
 from redis.asyncio import ConnectionPool
 import pandas as pd
 
-from app.core.config import get_settings
+from app.core.config import settings as _settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class CacheService:
     """缓存服务"""
 
     def __init__(self):
-        self.settings = get_settings()
+        self.settings = _settings
         self._init_redis()
         self._init_cache_config()
 

@@ -193,6 +193,78 @@ class StockAiAnalysisRepository(BaseRepository):
             logger.error(f"批量查询AI分析摘要失败: {e}")
             raise QueryError("批量查询AI分析摘要失败", error_code="AI_ANALYSIS_BATCH_FAILED", reason=str(e))
 
+    _ALLOWED_SORT_COLUMNS = {"created_at", "score", "version", "ts_code", "analysis_type"}
+
+    @staticmethod
+    def _build_filters(
+        ts_code: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        ai_provider: Optional[str] = None,
+    ) -> tuple:
+        """构建 WHERE 子句和参数，供 list_all / count_all 共用"""
+        conditions: List[str] = []
+        params: list = []
+        if ts_code:
+            conditions.append("ts_code = %s")
+            params.append(ts_code)
+        if analysis_type:
+            conditions.append("analysis_type = %s")
+            params.append(analysis_type)
+        if ai_provider:
+            conditions.append("ai_provider = %s")
+            params.append(ai_provider)
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+        return where_clause, params
+
+    def list_all(
+        self,
+        ts_code: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        ai_provider: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict]:
+        """查询所有分析记录（支持过滤、排序、分页）"""
+        where_clause, params = self._build_filters(ts_code, analysis_type, ai_provider)
+
+        if sort_by not in self._ALLOWED_SORT_COLUMNS:
+            sort_by = "created_at"
+        order_dir = "ASC" if sort_order.lower() == "asc" else "DESC"
+
+        query = f"""
+            SELECT id, ts_code, analysis_type, analysis_text, score,
+                   prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+            FROM stock_ai_analysis
+            {where_clause}
+            ORDER BY {sort_by} {order_dir}
+            LIMIT %s OFFSET %s
+        """
+        params.extend([limit, offset])
+        try:
+            result = self.execute_query(query, tuple(params))
+            return [self._row_to_dict(row) for row in result]
+        except Exception as e:
+            logger.error(f"查询AI分析列表失败: {e}")
+            raise QueryError("查询AI分析列表失败", error_code="AI_ANALYSIS_LIST_FAILED", reason=str(e))
+
+    def count_all(
+        self,
+        ts_code: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        ai_provider: Optional[str] = None,
+    ) -> int:
+        """统计分析记录总数（支持过滤）"""
+        where_clause, params = self._build_filters(ts_code, analysis_type, ai_provider)
+        query = f"SELECT COUNT(*) FROM stock_ai_analysis {where_clause}"
+        try:
+            result = self.execute_query(query, tuple(params))
+            return result[0][0] if result else 0
+        except Exception as e:
+            logger.error(f"统计AI分析记录总数失败: {e}")
+            raise QueryError("统计AI分析记录总数失败", error_code="AI_ANALYSIS_COUNT_FAILED", reason=str(e))
+
     def _row_to_dict(self, row: tuple) -> Dict:
         return {
             "id": row[0],

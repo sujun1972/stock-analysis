@@ -460,6 +460,11 @@ const navItems: NavItem[] = [
         name: '盘前预期',
         href: '/sentiment/premarket',
         icon: Clock
+      },
+      {
+        name: 'AI分析记录',
+        href: '/sentiment/stock-ai-analysis',
+        icon: Brain
       }
     ]
   },

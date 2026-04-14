@@ -110,6 +110,31 @@ class GenerateAnalysisRequest(BaseModel):
 # 端点
 # ------------------------------------------------------------------
 
+@router.get("/list")
+async def list_analyses(
+    ts_code: Optional[str] = Query(None, description="股票代码过滤"),
+    analysis_type: Optional[str] = Query(None, description="分析类型过滤"),
+    ai_provider: Optional[str] = Query(None, description="AI提供商过滤"),
+    sort_by: Optional[str] = Query("created_at", description="排序字段"),
+    sort_order: Optional[str] = Query("desc", description="排序方向: asc/desc"),
+    limit: int = Query(20, ge=1, le=100, description="每页记录数"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+    _: User = Depends(get_current_active_user),
+):
+    """查询所有股票AI分析记录（支持过滤、排序、分页）"""
+    service = StockAiAnalysisService()
+    result = await service.list_all(
+        ts_code=ts_code,
+        analysis_type=analysis_type,
+        ai_provider=ai_provider,
+        sort_by=sort_by or "created_at",
+        sort_order=sort_order or "desc",
+        limit=limit,
+        offset=offset,
+    )
+    return ApiResponse.success(data=result).to_dict()
+
+
 @router.post("/generate")
 async def generate_analysis(
     body: GenerateAnalysisRequest,

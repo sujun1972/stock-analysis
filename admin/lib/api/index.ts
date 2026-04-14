@@ -70,6 +70,7 @@ import { StockListApiClient, stockListApi as stockListApiInst } from './stock-li
 import { StockStApiClient, stockStApi as stockStApiInst } from './stock-st-api'
 import { TradeCalApiClient, tradeCalApi as tradeCalApiInst } from './trade-cal-api'
 import { SyncDashboardApiClient, syncDashboardApi as syncDashboardApiInst } from './sync-dashboard'
+import { StockAiAnalysisApiClient, stockAiAnalysisApi as stockAiAnalysisApiInst } from './stock-ai-analysis'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -957,6 +958,14 @@ export type {
   RedisProgress,
   CategoryStat,
 } from './sync-dashboard'
+
+// 重新导出股票AI分析 API
+export { StockAiAnalysisApiClient }
+export const stockAiAnalysisApi = stockAiAnalysisApiInst
+export type {
+  StockAiAnalysisParams,
+  StockAiAnalysisData,
+} from './stock-ai-analysis'
 
 // 导出默认实例
 export default apiClient
