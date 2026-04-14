@@ -42,14 +42,18 @@ def sync_hsgt_top10_task(
                    f"start_date={start_date}, end_date={end_date}, market_type={market_type}")
 
         service = HsgtTop10Service()
-        result = run_async_in_celery(
-            service.sync_hsgt_top10,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            market_type=market_type
-        )
+
+        if not any([ts_code, trade_date, start_date, end_date, market_type]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_hsgt_top10,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                market_type=market_type
+            )
 
         if result["status"] == "success":
             logger.info(f"沪深股通十大成交股同步成功: {result['records']} 条")

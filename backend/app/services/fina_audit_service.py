@@ -13,6 +13,7 @@ import pandas as pd
 
 from app.repositories.fina_audit_repository import FinaAuditRepository
 from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -23,60 +24,84 @@ class FinaAuditService:
     def __init__(self):
         self.fina_audit_repo = FinaAuditRepository()
         self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
 
-    async def sync_incremental(self) -> Dict:
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'fina_audit')
+        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'fina_audit', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def sync_incremental(self, start_date=None, end_date=None, sync_strategy=None, max_requests_per_minute=None) -> Dict:
         """
-        增量同步财务审计意见数据。
+        增量同步财务审计意见数据（自动计算日期范围并记录 sync_history）。
 
         fina_audit 接口要求 ts_code 为必填参数，不能只传 start_date/end_date。
-        从 sync_configs 读取 incremental_default_days（默认 90），
         遍历全部上市股票，逐只请求最近 N 天内的数据。
         """
         from app.repositories.stock_basic_repository import StockBasicRepository
 
-        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'fina_audit')
-        default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
 
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        logger.info(f"[fina_audit] 增量同步 start_date={start_date} end_date={end_date}")
 
-        all_ts_codes = await asyncio.to_thread(
-            StockBasicRepository().get_listed_ts_codes, status='L'
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create, 'fina_audit', 'incremental', sync_strategy or 'by_ts_code', start_date,
         )
-        logger.info(f"[fina_audit] 增量同步 {len(all_ts_codes)} 只股票 {start_date}~{end_date}（回看 {default_days} 天）")
+        try:
+            all_ts_codes = await asyncio.to_thread(
+                StockBasicRepository().get_listed_ts_codes, status='L'
+            )
+            logger.info(f"[fina_audit] 增量同步 {len(all_ts_codes)} 只股票 {start_date}~{end_date}")
 
-        total_records = 0
-        errors = 0
-        sem = asyncio.Semaphore(5)
+            total_records = 0
+            errors = 0
+            sem = asyncio.Semaphore(5)
 
-        async def sync_one(ts_code: str):
-            async with sem:
-                try:
-                    result = await self.sync_fina_audit(
-                        ts_code=ts_code, start_date=start_date, end_date=end_date
-                    )
-                    return result.get('records', 0), None
-                except Exception as e:
-                    return 0, str(e)
+            async def sync_one(ts_code: str):
+                async with sem:
+                    try:
+                        result = await self.sync_fina_audit(
+                            ts_code=ts_code, start_date=start_date, end_date=end_date
+                        )
+                        return result.get('records', 0), None
+                    except Exception as e:
+                        return 0, str(e)
 
-        BATCH_SIZE = 50
-        for batch_start in range(0, len(all_ts_codes), BATCH_SIZE):
-            batch = all_ts_codes[batch_start:batch_start + BATCH_SIZE]
-            results = await asyncio.gather(*[sync_one(c) for c in batch])
-            for records, err in results:
-                if err:
-                    errors += 1
-                else:
-                    total_records += records
+            BATCH_SIZE = 50
+            for batch_start in range(0, len(all_ts_codes), BATCH_SIZE):
+                batch = all_ts_codes[batch_start:batch_start + BATCH_SIZE]
+                results = await asyncio.gather(*[sync_one(c) for c in batch])
+                for records, err in results:
+                    if err:
+                        errors += 1
+                    else:
+                        total_records += records
 
-            done = min(batch_start + BATCH_SIZE, len(all_ts_codes))
-            logger.info(f"[fina_audit] 增量进度: {done}/{len(all_ts_codes)} 入库={total_records} 失败={errors}")
+                done = min(batch_start + BATCH_SIZE, len(all_ts_codes))
+                logger.info(f"[fina_audit] 增量进度: {done}/{len(all_ts_codes)} 入库={total_records} 失败={errors}")
 
-        return {
-            "status": "success",
-            "records": total_records,
-            "message": f"增量同步完成 {total_records} 条（{len(all_ts_codes)} 只股票，失败 {errors}）"
-        }
+            result = {
+                "status": "success",
+                "records": total_records,
+                "message": f"增量同步完成 {total_records} 条（{len(all_ts_codes)} 只股票，失败 {errors}）"
+            }
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'success', total_records, end_date, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     def _get_provider(self):
         """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""

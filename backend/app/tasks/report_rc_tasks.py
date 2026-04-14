@@ -32,15 +32,23 @@ def sync_report_rc_task(
 
         from app.services.report_rc_service import ReportRcService
         service = ReportRcService()
-        result = run_async_in_celery(
-            service.sync_report_rc,
-            ts_code=ts_code,
-            report_date=report_date,
-            start_date=start_date,
-            end_date=end_date,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([ts_code, report_date, start_date, end_date]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_report_rc,
+                ts_code=ts_code,
+                report_date=report_date,
+                start_date=start_date,
+                end_date=end_date,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"卖方盈利预测数据同步成功: {result['records']} 条")

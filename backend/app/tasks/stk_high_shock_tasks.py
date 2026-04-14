@@ -33,15 +33,23 @@ def sync_stk_high_shock_task(
         )
 
         service = StkHighShockService()
-        result = run_async_in_celery(
-            service.sync_stk_high_shock,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            ts_code=ts_code,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([trade_date, start_date, end_date, ts_code]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_stk_high_shock,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                ts_code=ts_code,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"个股严重异常波动同步成功: {result['records']} 条")

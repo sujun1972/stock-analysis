@@ -59,6 +59,26 @@ class PledgeStatService(TushareSyncBase):
             table_key=self.TABLE_KEY,
         )
 
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """标准增量同步入口（无参数时自动从 sync_configs 读取配置）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        if sync_strategy is None:
+            sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_ts_code') if cfg else 'by_ts_code'
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        return await self.sync_pledge_stat(
+            start_date=start_date,
+            end_date=end_date,
+            sync_strategy=sync_strategy,
+            max_requests_per_minute=max_requests_per_minute,
+        )
+
     async def sync_pledge_stat(
         self,
         trade_date: Optional[str] = None,

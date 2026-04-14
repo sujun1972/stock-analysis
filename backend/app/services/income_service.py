@@ -12,6 +12,7 @@ import pandas as pd
 
 from app.repositories.income_repository import IncomeRepository
 from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -22,27 +23,55 @@ class IncomeService:
     def __init__(self):
         self.income_repo = IncomeRepository()
         self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
 
     # ------------------------------------------------------------------
     # 增量同步
     # ------------------------------------------------------------------
 
-    async def sync_incremental(self) -> Dict:
-        """
-        增量同步利润表数据。
-
-        从 sync_configs 读取 incremental_default_days（默认 90），
-        计算最近公告期范围（start_date/end_date），不传 ts_code 拉取全市场数据。
-        Tushare income_vip 接口支持 start_date/end_date（公告日范围查询）。
-        """
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'income')
         default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'income', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
 
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """增量同步（标准入口，自动计算日期范围并记录 sync_history）"""
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
 
-        logger.info(f"[income] 增量同步 start_date={start_date} end_date={end_date}（回看 {default_days} 天）")
-        return await self.sync_income(start_date=start_date, end_date=end_date)
+        logger.info(f"[income] 增量同步 start_date={start_date} end_date={end_date}")
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'income', 'incremental', sync_strategy or 'by_date_range', start_date,
+        )
+
+        try:
+            result = await self.sync_income(start_date=start_date, end_date=end_date)
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', result.get('records', 0), end_date, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     async def get_income_data(
         self,

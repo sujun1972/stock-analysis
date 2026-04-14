@@ -30,11 +30,14 @@ def sync_top_inst_task(
 
         # 使用辅助函数运行异步代码
         service = TopInstService()
-        result = run_async_in_celery(
-            service.sync_top_inst,
-            trade_date=trade_date,
-            ts_code=ts_code
-        )
+        if not any([trade_date, ts_code]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_top_inst,
+                trade_date=trade_date,
+                ts_code=ts_code
+            )
 
         logger.info(f"龙虎榜机构明细同步任务完成: {result}")
         return result

@@ -39,16 +39,22 @@ def sync_moneyflow_ind_dc_task(
         logger.info(f"开始执行板块资金流向同步任务: ts_code={ts_code}, trade_date={trade_date}, start_date={start_date}, end_date={end_date}, content_type={content_type}")
 
         # 延迟导入，避免模块级单例在 fork 前被初始化导致连接池损坏
-        from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
-        service = MoneyflowSyncService()
-        result = run_async_in_celery(
-            service.sync_moneyflow_ind_dc,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            content_type=content_type
-        )
+        from app.services.moneyflow_ind_dc_service import MoneyflowIndDcService
+        service = MoneyflowIndDcService()
+
+        if not any([ts_code, trade_date, start_date, end_date, content_type]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
+            sync_service = MoneyflowSyncService()
+            result = run_async_in_celery(
+                sync_service.sync_moneyflow_ind_dc,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                content_type=content_type
+            )
 
         if result["status"] == "success":
             logger.info(f"板块资金流向同步成功: {result['records']} 条")

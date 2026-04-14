@@ -30,8 +30,44 @@ class CcassHoldDetailService(TushareSyncBase):
         logger.debug("✓ CcassHoldDetailService initialized")
 
     # ------------------------------------------------------------------
-    # 增量同步
+    # 增量同步（标准入口）
     # ------------------------------------------------------------------
+
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """标准增量同步入口（无参数时自动从 sync_configs 读取配置，手动记录 sync_history）"""
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+
+        # 记录 sync_history
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            self.TABLE_KEY, 'incremental', 'by_date', start_date,
+        )
+
+        try:
+            result = await self.sync_ccass_hold_detail(
+                start_date=start_date,
+                end_date=end_date,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+            data_end = end_date or datetime.now().strftime('%Y%m%d')
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', result.get('records', 0), data_end, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     async def sync_ccass_hold_detail(
         self,

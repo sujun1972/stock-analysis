@@ -17,6 +17,8 @@ from loguru import logger
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 from app.repositories import SlbLenRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 
 
 class SlbLenService:
@@ -24,6 +26,7 @@ class SlbLenService:
 
     def __init__(self):
         self.slb_len_repo = SlbLenRepository()
+        self.sync_history_repo = SyncHistoryRepository()
         self.provider_factory = DataProviderFactory()
 
     def _get_provider(self):
@@ -34,6 +37,49 @@ class SlbLenService:
                 token=settings.TUSHARE_TOKEN
             )
         return self._provider
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'slb_len')
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'slb_len', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """增量同步（标准入口，自动计算日期范围并记录 sync_history）"""
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        logger.info(f"[slb_len] 增量同步 start_date={start_date} end_date={end_date}")
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'slb_len', 'incremental', sync_strategy or 'by_date_range', start_date,
+        )
+        try:
+            result = await self.sync_slb_len(start_date=start_date, end_date=end_date)
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', result.get('records', 0), end_date, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     async def sync_slb_len(
         self,

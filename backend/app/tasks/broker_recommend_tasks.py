@@ -33,11 +33,18 @@ def sync_broker_recommend_task(
 
         from app.services.broker_recommend_service import BrokerRecommendService
         service = BrokerRecommendService()
-        result = run_async_in_celery(
-            service.sync_broker_recommend,
-            month=month,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not month:
+            result = run_async_in_celery(
+                service.sync_incremental,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_broker_recommend,
+                month=month,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"券商荐股同步成功: {result['records']} 条")

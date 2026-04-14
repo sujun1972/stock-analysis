@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from app.repositories import GgtMonthlyRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -24,6 +26,52 @@ class GgtMonthlyService:
     def __init__(self):
         self.ggt_monthly_repo = GgtMonthlyRepository()
         self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始月份（YYYYMM）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'ggt_monthly')
+        default_days = (cfg.get('incremental_default_days') or 365) if cfg else 365
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'ggt_monthly', 'incremental'
+        )
+        # last_end 可能是 YYYYMMDD 格式，截取月份部分
+        if last_end:
+            last_end_month = last_end[:6]
+            if last_end_month < candidate:
+                return last_end_month
+        return candidate
+
+    async def sync_incremental(self, start_date=None, end_date=None, sync_strategy=None, max_requests_per_minute=None) -> Dict:
+        """增量同步（用 start_month/end_month 指定范围，记录 sync_history）
+
+        ggt_monthly 接口只接受 month/start_month/end_month（YYYYMM 格式），
+        增量同步用建议起始月份到当前月份的范围请求数据。
+        """
+        if start_date is not None:
+            start_month = start_date[:6]
+        else:
+            start_month = await self.get_suggested_start_date()
+        end_month = datetime.now().strftime('%Y%m') if end_date is None else end_date[:6]
+
+        logger.info(f"[ggt_monthly] 增量同步 start_month={start_month} end_month={end_month}")
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create, 'ggt_monthly', 'incremental', 'by_month', start_month + '01',
+        )
+        try:
+            result = await self.sync_data(start_month=start_month, end_month=end_month)
+            data_end = end_month + '01'  # 转为 YYYYMMDD 格式存储
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'success', result.get('records', 0), data_end, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     async def sync_data(
         self,
@@ -217,23 +265,36 @@ class GgtMonthlyService:
 
     async def sync_full_history(
         self,
-        update_state_fn=None
+        update_state_fn=None,
+        start_date: Optional[str] = None,
+        **kwargs,
     ) -> Dict:
         """
-        全量同步港股通每月成交历史数据（snapshot 策略）
+        全量同步港股通每月成交历史数据
 
-        ggt_monthly 接口不传日期参数时直接返回全部约 74 条历史数据，
-        无需分片，一次请求即可获取全量。与其他全量同步不同，
-        此方法不需要 Redis 客户端（无续继需求）。
+        ggt_monthly 接口不传日期参数时只返回部分历史数据（约至 202012），
+        因此全量同步必须传 start_month/end_month 确保完整覆盖。
+        start_month 从 sync_configs 的同步配置起始日期截取月份部分。
 
         Args:
             update_state_fn: Celery update_state 回调（可选）
+            start_date: 起始日期 YYYYMMDD（可选，从 Celery 任务传入）
 
         Returns:
             同步结果字典，含 status、message、records
         """
         try:
-            logger.info("开始全量同步港股通每月成交数据（snapshot 策略）")
+            # 从 sync_configs 读取起始日期，截取月份
+            if start_date:
+                start_month = start_date[:6]
+            else:
+                cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'ggt_monthly')
+                # sync_configs 没有专门的起始日期字段，用配置的回看天数兜底
+                # 默认从 201411 开始（Tushare 数据最早月份）
+                start_month = '201411'
+            end_month = datetime.now().strftime('%Y%m')
+
+            logger.info(f"开始全量同步港股通每月成交数据: start_month={start_month} end_month={end_month}")
 
             if update_state_fn:
                 update_state_fn(state='PROGRESS', meta={'progress': 10, 'message': '正在获取数据...'})
@@ -241,9 +302,8 @@ class GgtMonthlyService:
             provider = self._get_provider()
             df = await asyncio.to_thread(
                 provider.get_ggt_monthly,
-                month=None,
-                start_month=None,
-                end_month=None
+                start_month=start_month,
+                end_month=end_month,
             )
 
             if df is None or df.empty:

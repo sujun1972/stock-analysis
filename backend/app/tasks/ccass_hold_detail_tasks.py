@@ -44,16 +44,24 @@ def sync_ccass_hold_detail_task(
 
         from app.services.ccass_hold_detail_service import CcassHoldDetailService
         service = CcassHoldDetailService()
-        result = run_async_in_celery(
-            service.sync_ccass_hold_detail,
-            ts_code=ts_code,
-            hk_code=hk_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([ts_code, hk_code, trade_date, start_date, end_date]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_ccass_hold_detail,
+                ts_code=ts_code,
+                hk_code=hk_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"中央结算系统持股明细同步成功: {result['records']} 条")

@@ -41,15 +41,23 @@ def sync_stk_auction_c_task(
 
         from app.services.stk_auction_c_service import StkAuctionCService
         service = StkAuctionCService()
-        result = run_async_in_celery(
-            service.sync_stk_auction_c,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([ts_code, trade_date, start_date, end_date]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_stk_auction_c,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"收盘集合竞价同步成功: {result['records']} 条")

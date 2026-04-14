@@ -12,6 +12,7 @@ from loguru import logger
 
 from app.repositories.ggt_top10_repository import GgtTop10Repository
 from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
 from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
@@ -23,6 +24,7 @@ class GgtTop10Service:
     def __init__(self):
         self.ggt_top10_repo = GgtTop10Repository()
         self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
 
     def _get_provider(self):
         """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
@@ -37,27 +39,43 @@ class GgtTop10Service:
     # 增量同步（逐交易日）
     # ------------------------------------------------------------------
 
-    async def sync_incremental(self) -> Dict[str, Any]:
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'ggt_top10')
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'ggt_top10', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def sync_incremental(self, start_date=None, end_date=None, sync_strategy=None, max_requests_per_minute=None) -> Dict[str, Any]:
         """
-        增量同步港股通十大成交股数据。
+        增量同步港股通十大成交股数据（自动计算日期范围并记录 sync_history）。
 
         ggt_top10 仅支持 trade_date 单日查询，不支持 start_date/end_date。
-        从 sync_configs 读取 incremental_default_days（默认 30），
         获取该范围内的交易日列表，逐日请求并写库。
         """
-        try:
-            cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'ggt_top10')
-            default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
-
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        if end_date is None:
             end_date = datetime.now().strftime('%Y%m%d')
-            start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
 
+        logger.info(f"[ggt_top10] 增量同步 start_date={start_date} end_date={end_date}")
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create, 'ggt_top10', 'incremental', sync_strategy or 'by_date', start_date,
+        )
+        try:
             cal_repo = TradingCalendarRepository()
             trading_days = await asyncio.to_thread(
                 cal_repo.get_trading_days_between, start_date, end_date
             )
 
             if not trading_days:
+                await asyncio.to_thread(
+                    self.sync_history_repo.complete, history_id, 'success', 0, end_date, None,
+                )
                 return {"status": "success", "records": 0, "message": "无需同步的交易日"}
 
             logger.info(f"[ggt_top10] 增量同步 {len(trading_days)} 个交易日 ({start_date}~{end_date})")
@@ -81,15 +99,22 @@ class GgtTop10Service:
                     logger.error(f"[ggt_top10] {trade_date} 同步失败: {e}")
 
             logger.info(f"[ggt_top10] 增量同步完成: {total_records} 条, 失败 {errors} 个交易日")
-            return {
+            result = {
                 "status": "success",
                 "records": total_records,
                 "message": f"成功同步 {total_records} 条记录（{len(trading_days)} 个交易日，失败 {errors}）"
             }
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'success', total_records, end_date, None,
+            )
+            return result
 
         except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'failure', 0, None, str(e),
+            )
             logger.error(f"[ggt_top10] 增量同步失败: {e}")
-            return {"status": "error", "records": 0, "error": str(e)}
+            raise
 
     async def sync_ggt_top10(
         self,

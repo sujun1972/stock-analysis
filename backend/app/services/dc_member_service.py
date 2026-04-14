@@ -7,12 +7,14 @@
 import asyncio
 import calendar
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional, Dict, List
 from loguru import logger
 
 from app.repositories.dc_member_repository import DcMemberRepository
 from app.repositories.dc_index_repository import DcIndexRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -24,6 +26,7 @@ class DcMemberService:
         self.dc_member_repo = DcMemberRepository()
         self.dc_index_repo = DcIndexRepository()
         self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ DcMemberService initialized")
 
     @staticmethod
@@ -43,6 +46,36 @@ class DcMemberService:
             else:
                 cur = date(cur.year, cur.month + 1, 1)
         return segments
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'dc_member')
+        default_days = (cfg.get('incremental_default_days') or 1) if cfg else 1
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'dc_member', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def sync_incremental(self, start_date=None, end_date=None, sync_strategy=None, max_requests_per_minute=None) -> Dict:
+        """增量同步（快照接口，全量拉取并记录 sync_history）"""
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create, 'dc_member', 'incremental', 'snapshot', None,
+        )
+        try:
+            result = await self.sync_dc_member()
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'success', result.get('records', 0), end_date, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete, history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     async def sync_full_history(
         self,

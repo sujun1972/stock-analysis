@@ -12,6 +12,9 @@ from datetime import datetime, timedelta, date
 from loguru import logger
 
 from app.repositories import LimitStepRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -22,6 +25,8 @@ class LimitStepService:
     def __init__(self):
         """初始化连板天梯服务"""
         self.limit_step_repo = LimitStepRepository()
+        self.sync_history_repo = SyncHistoryRepository()
+        self.calendar_repo = TradingCalendarRepository()
         self.provider_factory = DataProviderFactory()
         logger.debug("✓ LimitStepService initialized")
 
@@ -154,6 +159,60 @@ class LimitStepService:
                 token=settings.TUSHARE_TOKEN
             )
         return self._provider
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'limit_step')
+        default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'limit_step', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """增量同步（标准入口，逐交易日同步并记录 sync_history）"""
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        trading_days = await asyncio.to_thread(
+            self.calendar_repo.get_trading_days_between, start_date, end_date
+        )
+
+        logger.info(f"[limit_step] 增量同步 {len(trading_days)} 个交易日 ({start_date}~{end_date})")
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'limit_step', 'incremental', 'by_date', start_date,
+        )
+        try:
+            total_records = 0
+            for trade_date in trading_days:
+                try:
+                    result = await self.sync_limit_step(trade_date=trade_date)
+                    total_records += result.get('records', 0)
+                except Exception as e:
+                    logger.error(f"[limit_step] {trade_date} 同步失败: {e}")
+
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', total_records, end_date, None,
+            )
+            return {"status": "success", "records": total_records}
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     async def sync_limit_step(
         self,

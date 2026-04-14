@@ -1,5 +1,6 @@
 """个股资金流向业务逻辑层（东方财富DC）"""
 
+import asyncio
 from datetime import datetime
 from typing import Dict, Optional
 from loguru import logger

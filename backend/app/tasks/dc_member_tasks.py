@@ -40,14 +40,17 @@ def sync_dc_member_task(
                    f"trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
         service = DcMemberService()
-        result = run_async_in_celery(
-            service.sync_dc_member,
-            ts_code=ts_code,
-            con_code=con_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date
-        )
+        if not any([ts_code, con_code, trade_date, start_date, end_date]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_dc_member,
+                ts_code=ts_code,
+                con_code=con_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
 
         if result["status"] == "success":
             logger.info(f"东方财富板块成分同步成功: {result['records']} 条")

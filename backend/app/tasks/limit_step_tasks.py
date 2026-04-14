@@ -39,14 +39,17 @@ def sync_limit_step_task(
         logger.info(f"开始执行连板天梯同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, nums={nums}")
 
         service = LimitStepService()
-        result = run_async_in_celery(
-            service.sync_limit_step,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            ts_code=ts_code,
-            nums=nums
-        )
+        if not any([trade_date, start_date, end_date, ts_code, nums]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_limit_step,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                ts_code=ts_code,
+                nums=nums
+            )
 
         if result["status"] == "success":
             logger.info(f"连板天梯同步成功: {result['records']} 条")

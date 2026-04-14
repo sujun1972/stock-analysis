@@ -37,13 +37,17 @@ def sync_margin_detail_task(
         logger.info(f"开始执行融资融券交易明细同步任务: trade_date={trade_date}, ts_code={ts_code}, start_date={start_date}, end_date={end_date}")
 
         service = MarginDetailService()
-        result = run_async_in_celery(
-            service.sync_margin_detail,
-            trade_date=trade_date,
-            ts_code=ts_code,
-            start_date=start_date,
-            end_date=end_date
-        )
+
+        if not any([trade_date, ts_code, start_date, end_date]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_margin_detail,
+                trade_date=trade_date,
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date
+            )
 
         if result["status"] == "success":
             logger.info(f"融资融券交易明细同步成功: {result['records']} 条")

@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.repositories.express_repository import ExpressRepository
 from app.repositories.sync_config_repository import SyncConfigRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -21,16 +22,52 @@ class ExpressService:
     def __init__(self):
         self.express_repo = ExpressRepository()
         self.provider_factory = DataProviderFactory()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ ExpressService initialized")
 
-    async def sync_incremental(self) -> Dict:
-        """增量同步：从 sync_configs 读取回看天数，自动计算日期范围。"""
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'express')
         default_days = (cfg.get('incremental_default_days') or 90) if cfg else 90
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
-        logger.info(f"[express] 增量同步 start_date={start_date} end_date={end_date}（回看 {default_days} 天）")
-        return await self.sync_express(start_date=start_date, end_date=end_date)
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'express', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """增量同步（标准入口，自动计算日期范围并记录 sync_history）"""
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        logger.info(f"[express] 增量同步 start_date={start_date} end_date={end_date}")
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'express', 'incremental', sync_strategy or 'by_date_range', start_date,
+        )
+
+        try:
+            result = await self.sync_express(start_date=start_date, end_date=end_date)
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', result.get('records', 0), end_date, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     @staticmethod
     def _generate_quarters(start_date: str) -> list:

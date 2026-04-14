@@ -35,12 +35,16 @@ def sync_slb_len_task(
         logger.info(f"开始执行转融资交易汇总同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
         service = SlbLenService()
-        result = run_async_in_celery(
-            service.sync_slb_len,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date
-        )
+
+        if not any([trade_date, start_date, end_date]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_slb_len,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
 
         if result["status"] == "success":
             logger.info(f"转融资交易汇总同步成功: {result['records']} 条")

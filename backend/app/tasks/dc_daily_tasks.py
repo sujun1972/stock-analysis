@@ -32,14 +32,17 @@ def sync_dc_daily_task(
     try:
         logger.info(f"开始执行东方财富概念板块行情同步任务: trade_date={trade_date}")
         service = DcDailyService()
-        result = run_async_in_celery(
-            service.sync_dc_daily,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            idx_type=idx_type
-        )
+        if not any([ts_code, trade_date, start_date, end_date, idx_type]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_dc_daily,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                idx_type=idx_type
+            )
         if result["status"] == "success":
             logger.info(f"东方财富概念板块行情同步成功: {result['records']} 条")
             return result

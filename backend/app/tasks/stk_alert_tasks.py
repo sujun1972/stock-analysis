@@ -33,15 +33,23 @@ def sync_stk_alert_task(
         )
 
         service = StkAlertService()
-        result = run_async_in_celery(
-            service.sync_stk_alert,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            ts_code=ts_code,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([trade_date, start_date, end_date, ts_code]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_stk_alert,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                ts_code=ts_code,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"交易所重点提示证券同步成功: {result['records']} 条")

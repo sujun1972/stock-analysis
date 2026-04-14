@@ -30,8 +30,28 @@ class StkNineturnService(TushareSyncBase):
         self.sync_history_repo = SyncHistoryRepository()
 
     # ------------------------------------------------------------------
-    # 增量同步
+    # 增量同步（标准入口）
     # ------------------------------------------------------------------
+
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """标准增量同步入口（无参数时自动从 sync_configs 读取配置）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        if sync_strategy is None:
+            sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        return await self.sync_stk_nineturn(
+            start_date=start_date,
+            end_date=end_date,
+            sync_strategy=sync_strategy,
+            max_requests_per_minute=max_requests_per_minute,
+        )
 
     async def sync_stk_nineturn(
         self,
@@ -51,7 +71,7 @@ class StkNineturnService(TushareSyncBase):
         """
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
         api_limit = (cfg.get('api_limit') or 8000) if cfg else 8000
-        effective_strategy = sync_strategy or (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
+        effective_strategy = sync_strategy or ((cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range')
         provider = self._get_provider(max_requests_per_minute)
 
         effective_start = start_date

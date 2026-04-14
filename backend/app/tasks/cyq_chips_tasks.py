@@ -42,15 +42,23 @@ def sync_cyq_chips_task(
 
         from app.services.cyq_chips_service import CyqChipsService
         service = CyqChipsService()
-        result = run_async_in_celery(
-            service.sync_cyq_chips,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([ts_code, trade_date, start_date, end_date]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_cyq_chips,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"筹码分布同步成功: {result['records']} 条")

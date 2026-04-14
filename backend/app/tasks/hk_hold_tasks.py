@@ -46,17 +46,25 @@ def sync_hk_hold_task(
 
         from app.services.hk_hold_service import HkHoldService
         service = HkHoldService()
-        result = run_async_in_celery(
-            service.sync_hk_hold,
-            code=code,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            exchange=exchange,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([code, ts_code, trade_date, start_date, end_date, exchange]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_hk_hold,
+                code=code,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                exchange=exchange,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"沪深港股通持股明细数据同步成功: {result['records']} 条")

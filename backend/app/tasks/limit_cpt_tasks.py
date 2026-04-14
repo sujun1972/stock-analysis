@@ -34,13 +34,16 @@ def sync_limit_cpt_task(
 
         # 使用辅助函数运行异步代码
         service = LimitCptService()
-        result = run_async_in_celery(
-            service.sync_limit_cpt,
-            trade_date=trade_date,
-            ts_code=ts_code,
-            start_date=start_date,
-            end_date=end_date
-        )
+        if not any([trade_date, ts_code, start_date, end_date]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_limit_cpt,
+                trade_date=trade_date,
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date
+            )
 
         logger.info(f"最强板块统计同步任务完成: {result}")
         return result

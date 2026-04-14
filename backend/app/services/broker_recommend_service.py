@@ -30,8 +30,74 @@ class BrokerRecommendService(TushareSyncBase):
         self.sync_history_repo = SyncHistoryRepository()
 
     # ------------------------------------------------------------------
-    # 增量同步
+    # 增量同步（标准入口）
     # ------------------------------------------------------------------
+
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """标准增量同步入口（从 sync_configs 读取配置，逐月同步，手动记录 sync_history）"""
+        from datetime import date as date_cls
+
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        default_days = (cfg.get('incremental_default_days') or 30) if cfg else 30
+
+        # 计算需要同步的月份列表
+        if start_date is None:
+            suggested = await self.get_suggested_start_date()
+            start_date = suggested
+
+        start_ym = start_date[:6] if start_date else datetime.now().strftime('%Y%m')
+        end_ym = end_date[:6] if end_date else datetime.now().strftime('%Y%m')
+
+        months = []
+        y, m = int(start_ym[:4]), int(start_ym[4:6])
+        ey, em = int(end_ym[:4]), int(end_ym[4:6])
+        while (y, m) <= (ey, em):
+            months.append(f"{y:04d}{m:02d}")
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+
+        if not months:
+            months = [datetime.now().strftime('%Y%m')]
+
+        # 记录 sync_history
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            self.TABLE_KEY, 'incremental', 'by_month', start_date,
+        )
+
+        total_records = 0
+        last_month = None
+        try:
+            for month_str in months:
+                result = await self.sync_broker_recommend(
+                    month=month_str,
+                    max_requests_per_minute=max_requests_per_minute,
+                )
+                total_records += result.get('records', 0)
+                if result.get('records', 0) > 0:
+                    last_month = month_str
+
+            data_end = f"{last_month}01" if last_month else None
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', total_records, data_end, None,
+            )
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', total_records, None, str(e),
+            )
+            raise
+
+        return {"status": "success", "records": total_records, "months": len(months)}
 
     async def sync_broker_recommend(
         self,

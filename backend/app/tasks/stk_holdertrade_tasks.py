@@ -35,17 +35,25 @@ def sync_stk_holdertrade_task(
 
         from app.services.stk_holdertrade_service import StkHoldertradeService
         service = StkHoldertradeService()
-        result = run_async_in_celery(
-            service.sync_stk_holdertrade,
-            ts_code=ts_code,
-            ann_date=ann_date,
-            start_date=start_date,
-            end_date=end_date,
-            trade_type=trade_type,
-            holder_type=holder_type,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([ts_code, ann_date, start_date, end_date, trade_type, holder_type]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_stk_holdertrade,
+                ts_code=ts_code,
+                ann_date=ann_date,
+                start_date=start_date,
+                end_date=end_date,
+                trade_type=trade_type,
+                holder_type=holder_type,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"股东增减持同步成功: {result['records']} 条")

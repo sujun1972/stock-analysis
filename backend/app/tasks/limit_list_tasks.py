@@ -39,14 +39,17 @@ def sync_limit_list_task(
         logger.info(f"开始执行涨跌停列表同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}, limit_type={limit_type}")
 
         service = LimitListService()
-        result = run_async_in_celery(
-            service.sync_limit_list,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            ts_code=ts_code,
-            limit_type=limit_type
-        )
+        if not any([trade_date, start_date, end_date, ts_code, limit_type]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_limit_list,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                ts_code=ts_code,
+                limit_type=limit_type
+            )
 
         if result["status"] == "success":
             logger.info(f"涨跌停列表同步成功: {result['records']} 条")

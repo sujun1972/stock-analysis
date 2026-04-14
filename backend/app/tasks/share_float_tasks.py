@@ -34,16 +34,24 @@ def sync_share_float_task(
         )
 
         service = ShareFloatService()
-        result = run_async_in_celery(
-            service.sync_share_float,
-            ts_code=ts_code,
-            ann_date=ann_date,
-            float_date=float_date,
-            start_date=start_date,
-            end_date=end_date,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([ts_code, ann_date, float_date, start_date, end_date]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_share_float,
+                ts_code=ts_code,
+                ann_date=ann_date,
+                float_date=float_date,
+                start_date=start_date,
+                end_date=end_date,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"限售股解禁同步成功: {result['records']} 条")

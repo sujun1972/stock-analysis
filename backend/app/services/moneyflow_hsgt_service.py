@@ -9,11 +9,13 @@
 
 import asyncio
 import calendar
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional
 from loguru import logger
 
 from app.repositories.moneyflow_hsgt_repository import MoneyflowHsgtRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.repositories.sync_config_repository import SyncConfigRepository
 from core.src.providers import DataProviderFactory
 from app.core.config import settings
 
@@ -32,7 +34,64 @@ class MoneyflowHsgtService:
     def __init__(self):
         """初始化Service，注入Repository依赖"""
         self.repo = MoneyflowHsgtRepository()
+        self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ MoneyflowHsgtService initialized")
+
+    async def get_suggested_start_date(self) -> Optional[str]:
+        """计算增量同步的建议起始日期（YYYYMMDD）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'moneyflow_hsgt')
+        default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            self.sync_history_repo.get_last_end_date, 'moneyflow_hsgt', 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def sync_incremental(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sync_strategy: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict:
+        """增量同步（标准入口，自动计算日期范围并记录 sync_history）"""
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        logger.info(f"[moneyflow_hsgt] 增量同步 start_date={start_date} end_date={end_date}")
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            'moneyflow_hsgt', 'incremental', sync_strategy or 'by_date_range', start_date,
+        )
+        try:
+            provider = self._get_provider()
+            df = await asyncio.to_thread(
+                provider.get_moneyflow_hsgt,
+                start_date=start_date,
+                end_date=end_date
+            )
+            records = 0
+            if df is not None and not df.empty:
+                records = await asyncio.to_thread(self.repo.bulk_upsert, df)
+            result = {
+                "status": "success",
+                "records": records,
+                "message": f"成功同步 {records} 条沪深港通资金流向数据"
+            }
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'success', records, end_date, None,
+            )
+            return result
+        except Exception as e:
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     def get_moneyflow_data(
         self,

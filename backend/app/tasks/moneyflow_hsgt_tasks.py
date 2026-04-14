@@ -35,14 +35,20 @@ def sync_moneyflow_hsgt_task(
         logger.info(f"开始执行沪深港通资金流向同步任务: trade_date={trade_date}, start_date={start_date}, end_date={end_date}")
 
         # 延迟导入，避免模块级单例在 fork 前被初始化导致连接池损坏
-        from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
-        service = MoneyflowSyncService()
-        result = run_async_in_celery(
-            service.sync_moneyflow_hsgt,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date
-        )
+        from app.services.moneyflow_hsgt_service import MoneyflowHsgtService
+        service = MoneyflowHsgtService()
+
+        if not any([trade_date, start_date, end_date]):
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
+            sync_service = MoneyflowSyncService()
+            result = run_async_in_celery(
+                sync_service.sync_moneyflow_hsgt,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
 
         if result["status"] == "success":
             logger.info(f"沪深港通资金流向同步成功: {result['records']} 条")

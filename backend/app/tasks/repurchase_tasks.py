@@ -32,14 +32,22 @@ def sync_repurchase_task(
 
         from app.services.repurchase_service import RepurchaseService
         service = RepurchaseService()
-        result = run_async_in_celery(
-            service.sync_repurchase,
-            ann_date=ann_date,
-            start_date=start_date,
-            end_date=end_date,
-            sync_strategy=sync_strategy,
-            max_requests_per_minute=max_requests_per_minute,
-        )
+
+        if not any([ann_date, start_date, end_date]):
+            result = run_async_in_celery(
+                service.sync_incremental,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+        else:
+            result = run_async_in_celery(
+                service.sync_repurchase,
+                ann_date=ann_date,
+                start_date=start_date,
+                end_date=end_date,
+                sync_strategy=sync_strategy,
+                max_requests_per_minute=max_requests_per_minute,
+            )
 
         if result["status"] == "success":
             logger.info(f"股票回购同步成功: {result['records']} 条")
