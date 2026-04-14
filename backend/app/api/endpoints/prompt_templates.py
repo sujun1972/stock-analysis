@@ -342,9 +342,14 @@ async def build_stock_prompt(
     ts_code: Optional[str],
     created_by: Optional[int],
     db,
+    allow_generate_data_collection: bool = False,
 ) -> dict:
     """
     构建股票分析完整提示词（供 get_template_by_key 端点和 generate 端点共用）。
+
+    allow_generate_data_collection:
+      - False（默认）：获取模板预览时，仅读取已有数据收集记录填充占位符，无则留空
+      - True：生成分析时，若无今日数据收集记录则自动触发生成
 
     返回：
     {
@@ -388,11 +393,14 @@ async def build_stock_prompt(
             ts_code
             and "{{ stock_data_collection }}" in (data.get("user_prompt_template") or "")
         ):
-            stock_data_text = await _get_or_generate_stock_data_collection(
-                ts_code=ts_code,
-                stock_name=stock_name or stock_code or "",
-                created_by=created_by,
-            )
+            if allow_generate_data_collection:
+                stock_data_text = await _get_or_generate_stock_data_collection(
+                    ts_code=ts_code,
+                    stock_name=stock_name or stock_code or "",
+                    created_by=created_by,
+                )
+            else:
+                stock_data_text = await _get_existing_stock_data_collection(ts_code)
             variables["stock_data_collection"] = stock_data_text
 
     system_prompt = data.get("system_prompt") or ""
@@ -412,6 +420,21 @@ async def build_stock_prompt(
     }
 
 
+async def _get_existing_stock_data_collection(ts_code: str) -> str:
+    """只读取今日已有的 stock_data_collection 记录，不触发生成。"""
+    from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
+
+    repo = StockAiAnalysisRepository()
+    existing = await asyncio.to_thread(repo.get_today, ts_code, "stock_data_collection")
+    if existing:
+        return existing["analysis_text"]
+    return "（今日尚无数据收集记录，请先在「数据收集」标签页生成）"
+
+
+# 防止并发请求对同一只股票重复生成 stock_data_collection 记录
+_data_collection_locks: dict[str, asyncio.Lock] = {}
+
+
 async def _get_or_generate_stock_data_collection(
     ts_code: str,
     stock_name: str,
@@ -421,38 +444,46 @@ async def _get_or_generate_stock_data_collection(
     查询今天是否已有该股的 stock_data_collection 分析记录：
     - 有 → 直接返回 analysis_text
     - 无 → 调用 StockDataCollectionService 生成并保存，再返回
+
+    使用 asyncio.Lock 防止并发请求对同一 ts_code 重复生成。
     """
     from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
     from app.services.stock_data_collection_service import StockDataCollectionService
     from app.services.stock_ai_analysis_service import StockAiAnalysisService
 
-    repo = StockAiAnalysisRepository()
-    existing = await asyncio.to_thread(repo.get_today, ts_code, "stock_data_collection")
-    if existing:
-        logger.info(f"[stock_data_collection] 使用今日已有数据收集记录: {ts_code} (id={existing['id']})")
-        return existing["analysis_text"]
+    # 获取或创建该股票的锁
+    if ts_code not in _data_collection_locks:
+        _data_collection_locks[ts_code] = asyncio.Lock()
+    lock = _data_collection_locks[ts_code]
 
-    logger.info(f"[stock_data_collection] 今日无数据收集记录，自动生成: {ts_code}")
-    try:
-        collection_service = StockDataCollectionService()
-        text = await collection_service.collect_and_format(ts_code, stock_name)
+    async with lock:
+        repo = StockAiAnalysisRepository()
+        existing = await asyncio.to_thread(repo.get_today, ts_code, "stock_data_collection")
+        if existing:
+            logger.info(f"[stock_data_collection] 使用今日已有数据收集记录: {ts_code} (id={existing['id']})")
+            return existing["analysis_text"]
 
-        ai_analysis_service = StockAiAnalysisService()
-        await ai_analysis_service.save_analysis(
-            ts_code=ts_code,
-            analysis_type="stock_data_collection",
-            analysis_text=text,
-            score=None,
-            prompt_text=None,
-            ai_provider=None,
-            ai_model=None,
-            created_by=created_by,
-        )
-        logger.info(f"[stock_data_collection] 数据收集已自动保存: {ts_code}")
-        return text
-    except Exception as e:
-        logger.error(f"[stock_data_collection] 自动生成数据收集失败: {ts_code}, 错误: {e}")
-        return f"（数据自动收集失败，请手动点击生成分析按钮获取：{e}）"
+        logger.info(f"[stock_data_collection] 今日无数据收集记录，自动生成: {ts_code}")
+        try:
+            collection_service = StockDataCollectionService()
+            text = await collection_service.collect_and_format(ts_code, stock_name)
+
+            ai_analysis_service = StockAiAnalysisService()
+            await ai_analysis_service.save_analysis(
+                ts_code=ts_code,
+                analysis_type="stock_data_collection",
+                analysis_text=text,
+                score=None,
+                prompt_text=None,
+                ai_provider=None,
+                ai_model=None,
+                created_by=created_by,
+            )
+            logger.info(f"[stock_data_collection] 数据收集已自动保存: {ts_code}")
+            return text
+        except Exception as e:
+            logger.error(f"[stock_data_collection] 自动生成数据收集失败: {ts_code}, 错误: {e}")
+            return f"（数据自动收集失败，请手动点击生成分析按钮获取：{e}）"
 
 
 @router.put("/by-key/{template_key}")

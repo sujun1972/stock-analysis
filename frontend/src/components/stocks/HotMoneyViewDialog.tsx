@@ -356,11 +356,10 @@ interface AnalysisTabProps {
   promptLoading: boolean
   open: boolean
   onSaved?: () => void
-  placeholder: string
 }
 
 function AnalysisTab({
-  tsCode, stockName, stockCode, analysisType, templateKey, promptContent, promptLoading, open, onSaved, placeholder,
+  tsCode, stockName, stockCode, analysisType, templateKey, promptContent, promptLoading, open, onSaved,
 }: AnalysisTabProps) {
   const [copied, setCopied] = useState(false)
   const [promptExpanded, setPromptExpanded] = useState(false)
@@ -369,11 +368,6 @@ function AnalysisTab({
   const [historyTotal, setHistoryTotal] = useState(0)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
-
-  const [analysisText, setAnalysisText] = useState('')
-  const [scoreInput, setScoreInput] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveMsg, setSaveMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   // 编辑状态
   const [editMode, setEditMode] = useState(false)
@@ -401,13 +395,12 @@ function AnalysisTab({
     setHistory([])
     setHistoryTotal(0)
     setCurrentIndex(0)
-    setAnalysisText('')
-    setScoreInput('')
-    setSaveMsg(null)
     setPromptExpanded(false)
     setCopied(false)
     setEditMode(false)
     setDeleteConfirm(false)
+    setGenMsg(null)
+    setAiGenMsg(null)
 
     setHistoryLoading(true)
     apiClient.getStockAnalysisHistory(tsCode, analysisType, 50, 0)
@@ -459,8 +452,9 @@ function AnalysisTab({
     try {
       const res = await apiClient.collectStockData(tsCode, stockName)
       if (res?.code === 200 && res.data?.text) {
-        setAnalysisText(res.data.text)
-        setGenMsg({ text: '数据收集完成，已填入下方文本框', type: 'success' })
+        setGenMsg({ text: '数据收集完成', type: 'success' })
+        await reloadHistory()
+        onSaved?.()
       } else {
         setGenMsg({ text: res?.message || '数据收集失败', type: 'error' })
       }
@@ -484,8 +478,7 @@ function AnalysisTab({
         template_key: templateKey,
       })
       if (res?.code === 200 && res.data?.analysis_text) {
-        setAnalysisText(res.data.analysis_text)
-        setAiGenMsg({ text: 'AI 分析完成，已自动保存，结果已填入下方', type: 'success' })
+        setAiGenMsg({ text: 'AI 分析完成，已自动保存', type: 'success' })
         await reloadHistory()
         onSaved?.()
       } else {
@@ -495,42 +488,6 @@ function AnalysisTab({
       setAiGenMsg({ text: e?.response?.data?.message || 'AI 分析失败', type: 'error' })
     } finally {
       setAiGenerating(false)
-    }
-  }
-
-  const handleSave = async () => {
-    if (!analysisText.trim()) {
-      setSaveMsg({ text: '请输入分析内容', type: 'error' })
-      return
-    }
-    const score = scoreInput.trim() ? parseFloat(scoreInput) : undefined
-    if (score !== undefined && (isNaN(score) || score < 0 || score > 10)) {
-      setSaveMsg({ text: '评分需在 0-10 之间', type: 'error' })
-      return
-    }
-    setSaving(true)
-    setSaveMsg(null)
-    try {
-      const res = await apiClient.saveStockAnalysis({
-        ts_code: tsCode,
-        analysis_type: analysisType,
-        analysis_text: analysisText.trim(),
-        score,
-        prompt_text: promptContent || undefined,
-      })
-      if (res?.code === 201 || res?.code === 200) {
-        setSaveMsg({ text: '保存成功', type: 'success' })
-        setAnalysisText('')
-        setScoreInput('')
-        await reloadHistory()
-        onSaved?.()
-      } else {
-        setSaveMsg({ text: res?.message || '保存失败', type: 'error' })
-      }
-    } catch (e: any) {
-      setSaveMsg({ text: e?.response?.data?.message || '保存失败', type: 'error' })
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -607,30 +564,66 @@ function AnalysisTab({
               <span className="ml-1.5 text-xs text-gray-400">（共 {historyTotal} 条）</span>
             )}
           </span>
-          {history.length > 1 && (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setCurrentIndex((i) => Math.min(i + 1, history.length - 1))}
-                disabled={currentIndex >= history.length - 1}
-                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
-                title="更早版本"
+          <div className="flex items-center gap-2">
+            {analysisType === 'stock_data_collection' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="gap-1.5 h-7 text-xs"
               >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-xs text-gray-500 min-w-[60px] text-center">
-                第 {currentIndex + 1} / {history.length} 条
-              </span>
-              <button
-                onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
-                disabled={currentIndex <= 0}
-                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
-                title="更新版本"
+                <Sparkles className="h-3.5 w-3.5" />
+                {generating ? '收集中...' : '生成分析'}
+              </Button>
+            )}
+            {templateKey && (
+              <Button
+                onClick={handleAiGenerate}
+                disabled={aiGenerating}
+                size="sm"
+                variant="outline"
+                className="gap-1.5 h-7 text-xs"
               >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+                <Sparkles className="h-3.5 w-3.5" />
+                {aiGenerating ? 'AI 分析中...' : 'AI 分析'}
+              </Button>
+            )}
+            {history.length > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentIndex((i) => Math.min(i + 1, history.length - 1))}
+                  disabled={currentIndex >= history.length - 1}
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
+                  title="更早版本"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs text-gray-500 min-w-[60px] text-center">
+                  第 {currentIndex + 1} / {history.length} 条
+                </span>
+                <button
+                  onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
+                  disabled={currentIndex <= 0}
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
+                  title="更新版本"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+        {genMsg && (
+          <p className={`text-xs mb-2 ${genMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+            {genMsg.text}
+          </p>
+        )}
+        {aiGenMsg && (
+          <p className={`text-xs mb-2 ${aiGenMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+            {aiGenMsg.text}
+          </p>
+        )}
 
         {historyLoading ? (
           <div className="text-center py-6 text-gray-400 text-sm">加载中...</div>
@@ -747,86 +740,9 @@ function AnalysisTab({
           </div>
         ) : (
           <div className="text-center py-6 text-gray-400 text-sm border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
-            暂无保存记录，在下方输入 AI 分析结果后保存
+            暂无保存记录，点击上方按钮生成分析
           </div>
         )}
-      </div>
-
-      {/* 保存新记录区 */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">保存新分析</span>
-          <div className="flex items-center gap-2">
-            {analysisType === 'stock_data_collection' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGenerate}
-                disabled={generating}
-                className="gap-1.5 h-7 text-xs"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                {generating ? '收集中...' : '生成分析'}
-              </Button>
-            )}
-            <span className="text-xs text-gray-400">评分（可选）</span>
-            <input
-              type="number"
-              min={0}
-              max={10}
-              step={0.1}
-              value={scoreInput}
-              onChange={(e) => setScoreInput(e.target.value)}
-              placeholder="0-10"
-              className="w-20 h-7 text-xs border border-gray-200 dark:border-gray-600 rounded px-2 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
-            />
-          </div>
-        </div>
-        {genMsg && (
-          <p className={`text-xs ${genMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
-            {genMsg.text}
-          </p>
-        )}
-        {aiGenMsg && (
-          <p className={`text-xs ${aiGenMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
-            {aiGenMsg.text}
-          </p>
-        )}
-        <textarea
-          value={analysisText}
-          onChange={(e) => setAnalysisText(e.target.value)}
-          placeholder={placeholder}
-          rows={6}
-          className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg p-3 resize-none bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        {saveMsg && (
-          <p className={`text-xs ${saveMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
-            {saveMsg.text}
-          </p>
-        )}
-        <div className="flex items-center gap-2">
-          {templateKey && (
-            <Button
-              onClick={handleAiGenerate}
-              disabled={aiGenerating}
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              {aiGenerating ? 'AI 分析中...' : 'AI 分析'}
-            </Button>
-          )}
-          <Button
-            onClick={handleSave}
-            disabled={saving || !analysisText.trim()}
-            size="sm"
-            className="gap-1.5"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {saving ? '保存中...' : '保存分析结果'}
-          </Button>
-        </div>
       </div>
 
       {/* 提示词（可折叠，复制按钮在内） */}
@@ -906,7 +822,6 @@ export function HotMoneyViewDialog({
                 promptLoading={promptLoading}
                 open={open}
                 onSaved={onSaved}
-                placeholder="将 AI 返回的游资观点分析粘贴到这里..."
               />
             </TabsContent>
 
@@ -920,7 +835,6 @@ export function HotMoneyViewDialog({
                 promptLoading={dataCollectionPromptLoading}
                 open={open}
                 onSaved={onSaved}
-                placeholder="将 AI 返回的数据收集结果粘贴到这里..."
               />
             </TabsContent>
 
@@ -935,7 +849,6 @@ export function HotMoneyViewDialog({
                 promptLoading={midlinePromptLoading}
                 open={open}
                 onSaved={onSaved}
-                placeholder="将 AI 返回的中线产业趋势专家观点粘贴到这里..."
               />
             </TabsContent>
 
@@ -950,7 +863,6 @@ export function HotMoneyViewDialog({
                 promptLoading={longtermPromptLoading}
                 open={open}
                 onSaved={onSaved}
-                placeholder="将 AI 返回的长线价值守望者观点粘贴到这里..."
               />
             </TabsContent>
 
@@ -965,7 +877,6 @@ export function HotMoneyViewDialog({
                 promptLoading={cioPromptLoading}
                 open={open}
                 onSaved={onSaved}
-                placeholder="将 AI 返回的 CIO 综合评级指令粘贴到这里..."
               />
             </TabsContent>
           </div>

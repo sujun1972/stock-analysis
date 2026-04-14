@@ -244,7 +244,7 @@ export function StockSearch({
                           </span>
                         </div>
                       </div>
-                      {stock.latest_price !== undefined && (
+                      {stock.latest_price != null && (
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <span className={cn('text-sm font-medium', getPriceColorClass(stock.pct_change))}>
                             {stock.latest_price.toFixed(2)}

@@ -864,9 +864,34 @@ function StocksPageContent() {
                         )}
                       </button>
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">游资</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">中线</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">价值</th>
+                    {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值']] as const).map(([key, label]) => (
+                      <th key={key} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        <button
+                          onClick={() => {
+                            if (sortBy === key) {
+                              const next = sortOrder === 'desc' ? 'asc' : 'desc'
+                              setSortOrder(next)
+                              updateURL({ sortBy: key, sortOrder: next })
+                            } else {
+                              setSortBy(key)
+                              setSortOrder('desc')
+                              updateURL({ sortBy: key, sortOrder: 'desc' })
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200"
+                        >
+                          {label}
+                          {sortBy === key && (
+                            <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                              {sortOrder === 'desc'
+                                ? <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                : <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                              }
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                    ))}
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>
                 </thead>

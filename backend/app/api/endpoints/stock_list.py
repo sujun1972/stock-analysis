@@ -19,6 +19,7 @@ from app.models.api_response import ApiResponse
 from app.api.error_handler import handle_api_errors
 from app.services import TaskHistoryHelper
 from app.services.stock_ai_analysis_service import StockAiAnalysisService
+from app.services.stock_quote_cache import stock_quote_cache
 
 router = APIRouter()
 
@@ -106,6 +107,14 @@ async def get_concepts(
     return ApiResponse.success(data={'items': items, 'total': total}).to_dict()
 
 
+# sort_by 参数值 → stock_ai_analysis.analysis_type 映射
+ANALYSIS_SORT_MAP = {
+    "score_hot_money": "hot_money_view",
+    "score_midline": "midline_industry_expert",
+    "score_longterm": "longterm_value_watcher",
+}
+
+
 @router.get("")
 @handle_api_errors
 async def get_stock_list(
@@ -119,6 +128,8 @@ async def get_stock_list(
     stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
     user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，仅返回该列表中的股票"),
     include_analysis: bool = Query(False, description="是否附带每只股票的最新AI分析摘要（游资观点评分等）"),
+    sort_by: Optional[str] = Query(None, description="排序字段: code, pct_change, score_hot_money, score_midline, score_longterm"),
+    sort_order: Optional[str] = Query(None, description="排序方向: asc, desc"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
     skip: int = Query(0, ge=0, description="偏移量（offset别名，兼容前端）"),
@@ -234,8 +245,38 @@ async def get_stock_list(
     )
     total = count_result[0][0] if count_result else 0
 
-    # 查询数据
-    params.extend([limit, effective_offset])
+    # 排序逻辑
+    order_dir = "ASC" if sort_order == "asc" else "DESC"
+    analysis_type_for_sort = ANALYSIS_SORT_MAP.get(sort_by) if sort_by else None
+    sort_join = ""
+    sort_join_params: list = []
+    if analysis_type_for_sort:
+        # LEFT JOIN 最新评分子查询用于排序
+        sort_join = """
+            LEFT JOIN (
+                SELECT DISTINCT ON (ts_code) ts_code, score
+                FROM stock_ai_analysis
+                WHERE analysis_type = %s
+                ORDER BY ts_code, created_at DESC
+            ) sort_score ON sort_score.ts_code = sb.ts_code
+        """
+        sort_join_params.append(analysis_type_for_sort)
+        order_clause = f"ORDER BY sort_score.score {order_dir} NULLS LAST, sb.code"
+    elif sort_by == "pct_change":
+        sort_join = "LEFT JOIN stock_realtime sr ON sr.code = sb.code"
+        order_clause = f"ORDER BY sr.pct_change {order_dir} NULLS LAST, sb.code"
+    else:
+        order_clause = "ORDER BY sb.code"
+
+    # 组装查询参数：SQL 结构为 FROM(+sort_join) WHERE LIMIT，需按出现顺序排列
+    if concept_code:
+        from_params = params[:2]
+        where_params = params[2:]
+    else:
+        from_params = []
+        where_params = params[:]
+
+    query_params = from_params + sort_join_params + where_params + [limit, effective_offset]
     result = db._execute_query(
         f"""
         SELECT sb.code, sb.name, sb.ts_code, sb.fullname, sb.enname, sb.cnspell,
@@ -243,11 +284,12 @@ async def get_stock_list(
                sb.list_status, sb.list_date, sb.delist_date, sb.is_hs,
                sb.act_name, sb.act_ent_type, sb.status
         {from_clause}
+        {sort_join}
         {where_clause}
-        ORDER BY sb.code
+        {order_clause}
         LIMIT %s OFFSET %s
         """,
-        tuple(params),
+        tuple(query_params),
     )
 
     items = []
@@ -272,6 +314,15 @@ async def get_stock_list(
             'act_ent_type': row[16],
             'status': row[17]
         })
+
+    # 注入实时行情（latest_price, pct_change 等）
+    if items:
+        ts_codes = [item['ts_code'] for item in items if item.get('ts_code')]
+        quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
+        for item in items:
+            quote = quotes.get(item['ts_code'], {})
+            item['latest_price'] = quote.get('latest_price')
+            item['pct_change'] = quote.get('pct_change')
 
     if include_analysis:
         items = await StockAiAnalysisService().enrich_stock_list_multi(items)

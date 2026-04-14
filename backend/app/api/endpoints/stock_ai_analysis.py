@@ -123,7 +123,7 @@ async def generate_analysis(
     from app.api.endpoints.prompt_templates import build_stock_prompt
     from app.services.ai_service import AIStrategyService
 
-    # 1. 构建提示词（与 GET /by-key/{template_key} 完全相同的逻辑）
+    # 1. 构建提示词（生成分析时允许自动触发数据收集）
     try:
         prompt_data = await build_stock_prompt(
             template_key=body.template_key,
@@ -132,6 +132,7 @@ async def generate_analysis(
             ts_code=body.ts_code,
             created_by=current_user.id,
             db=db,
+            allow_generate_data_collection=True,
         )
     except ValueError as e:
         return ApiResponse.bad_request(message=str(e)).to_dict()
@@ -187,7 +188,13 @@ async def generate_analysis(
         return ApiResponse.bad_request(message=str(e)).to_dict()
 
     return ApiResponse.success(
-        data={**result, "tokens_used": tokens_used, "generation_time": round(generation_time, 2)},
+        data={
+            **result,
+            "analysis_text": ai_text,
+            "score": extracted_score,
+            "tokens_used": tokens_used,
+            "generation_time": round(generation_time, 2),
+        },
         message="AI 分析生成并保存成功",
     ).to_dict()
 
