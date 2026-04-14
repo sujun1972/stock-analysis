@@ -111,16 +111,23 @@ function SyncRow({
   return (
     <div className="grid grid-cols-12 gap-2 items-center py-2.5 px-3 border-b border-gray-100 hover:bg-gray-50 text-sm">
       {/* 名称 */}
-      <div className="col-span-3 flex items-center gap-1.5 min-w-0">
-        {item.page_url ? (
-          <Link href={item.page_url} className="font-medium text-blue-600 hover:underline truncate">
-            {item.display_name}
-          </Link>
-        ) : (
-          <span className="font-medium truncate">{item.display_name}</span>
-        )}
-        {item.passive_sync_enabled && (
-          <Zap className="w-3 h-3 text-yellow-500 flex-shrink-0" aria-label="已启用被动同步" />
+      <div className="col-span-3 min-w-0">
+        <div className="flex items-center gap-1.5">
+          {item.page_url ? (
+            <Link href={item.page_url} className="font-medium text-blue-600 hover:underline truncate">
+              {item.display_name}
+            </Link>
+          ) : (
+            <span className="font-medium truncate">{item.display_name}</span>
+          )}
+          {item.passive_sync_enabled && (
+            <Zap className="w-3 h-3 text-yellow-500 flex-shrink-0" aria-label="已启用被动同步" />
+          )}
+        </div>
+        {item.last_data_date && (
+          <div className="text-xs text-gray-400 mt-0.5">
+            数据至 {item.last_data_date.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3')}
+          </div>
         )}
       </div>
 

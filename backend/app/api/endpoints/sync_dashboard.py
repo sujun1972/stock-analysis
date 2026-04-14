@@ -23,6 +23,7 @@ from app.models.user import User
 from app.repositories.sync_config_repository import SyncConfigRepository
 from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
 from app.repositories.scheduled_task_repository import ScheduledTaskRepository
+from app.repositories.sync_history_repository import SyncHistoryRepository
 
 router = APIRouter()
 
@@ -284,7 +285,33 @@ async def get_overview(
                 }
         return result
 
-    last_tasks, schedules = await asyncio.gather(_batch_last_tasks(), _batch_schedules())
+    # 批量查询各表最近一次成功同步的数据截止日期
+    async def _batch_last_data_dates():
+        sync_hist_repo = SyncHistoryRepository()
+        table_keys = [cfg['table_key'] for cfg in configs]
+        if not table_keys:
+            return {}
+        try:
+            placeholders = ','.join(['%s'] * len(table_keys))
+            rows = await asyncio.to_thread(
+                sync_hist_repo.execute_query,
+                f"""
+                SELECT DISTINCT ON (table_key) table_key, data_end_date
+                FROM sync_history
+                WHERE table_key IN ({placeholders})
+                  AND status = 'success'
+                  AND data_end_date IS NOT NULL
+                ORDER BY table_key, started_at DESC
+                """,
+                tuple(table_keys),
+            )
+            return {r[0]: r[1] for r in rows} if rows else {}
+        except Exception:
+            return {}
+
+    last_tasks, schedules, last_data_dates = await asyncio.gather(
+        _batch_last_tasks(), _batch_schedules(), _batch_last_data_dates()
+    )
 
     # 组合结果
     items = []
@@ -294,6 +321,7 @@ async def get_overview(
         item['last_full_sync'] = last_tasks.get(cfg['full_sync_task_name'])
         item['redis_progress'] = _get_redis_progress(cfg['table_key'])
         item['incremental_schedule'] = schedules.get(cfg['incremental_task_name'])
+        item['last_data_date'] = last_data_dates.get(cfg['table_key'])
         items.append(item)
 
     # 分类汇总

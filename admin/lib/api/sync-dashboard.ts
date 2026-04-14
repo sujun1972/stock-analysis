@@ -59,6 +59,8 @@ export interface SyncOverviewItem extends SyncConfig {
   last_full_sync: LastTaskRecord | null
   redis_progress: RedisProgress | null
   incremental_schedule: IncrementalSchedule | null
+  /** 最近一次成功同步的数据截止交易日（YYYYMMDD 格式） */
+  last_data_date: string | null
 }
 
 /** 分类统计 */
