@@ -173,18 +173,39 @@ function SyncRow({
         )}
       </div>
 
-      {/* 策略 */}
+      {/* 策略 + 接口参数 */}
       <div className="col-span-2 text-xs text-gray-400">
         {item.full_sync_strategy && item.full_sync_strategy !== 'none'
           ? STRATEGY_LABELS[item.full_sync_strategy] : ''}
         {item.api_name ? (
           <div className="text-gray-300 truncate" title={item.api_name}>{item.api_name}</div>
         ) : null}
-        {item.data_source && (
-          <div className={`font-medium mt-0.5 ${
-            item.data_source === 'tushare' ? 'text-blue-500' : 'text-gray-400'
-          }`}>
-            {item.data_source}
+        {item.api_params && (
+          <div className="flex flex-wrap gap-0.5 mt-0.5">
+            {item.api_params.ts_code !== 'none' && (
+              <span className={`px-1 rounded text-[10px] ${
+                item.api_params.ts_code === 'required' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
+              }`} title={item.api_params.ts_code === 'required' ? 'ts_code 必填或至少传一个' : 'ts_code 可选'}>
+                code{item.api_params.ts_code === 'required' ? '*' : ''}
+              </span>
+            )}
+            {item.api_params.trade_date !== 'none' && (
+              <span className={`px-1 rounded text-[10px] ${
+                item.api_params.trade_date === 'required' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
+              }`} title={item.api_params.trade_date === 'required' ? 'trade_date 必填' : 'trade_date 可选'}>
+                日期{item.api_params.trade_date === 'required' ? '*' : ''}
+              </span>
+            )}
+            {item.api_params.start_date && (
+              <span className="px-1 rounded text-[10px] bg-green-50 text-green-600" title="支持 start_date/end_date 日期范围查询">
+                范围
+              </span>
+            )}
+            {item.api_params.special_params?.month && (
+              <span className="px-1 rounded text-[10px] bg-purple-100 text-purple-600" title="month 必填 (YYYYMM)">
+                月*
+              </span>
+            )}
           </div>
         )}
       </div>

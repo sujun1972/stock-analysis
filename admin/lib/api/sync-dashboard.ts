@@ -44,6 +44,14 @@ export interface SyncConfig {
   api_limit: number | null
   max_requests_per_minute: number | null
   updated_at: string | null
+  /** 接口参数约束（通过实际调用 Tushare 验证） */
+  api_params: {
+    ts_code: 'optional' | 'required' | 'none'
+    trade_date: 'optional' | 'required' | 'none'
+    start_date: boolean
+    end_date: boolean
+    special_params?: Record<string, string>
+  } | null
 }
 
 /** 增量任务的定时调度配置 */

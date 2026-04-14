@@ -22,7 +22,7 @@ class SyncConfigRepository(BaseRepository):
                    page_url, api_prefix, notes,
                    api_name, description, doc_url, data_source, api_limit,
                    incremental_sync_strategy, max_requests_per_minute,
-                   updated_at
+                   updated_at, api_params
             FROM sync_configs
             ORDER BY category, display_order
         """
@@ -38,7 +38,7 @@ class SyncConfigRepository(BaseRepository):
                    page_url, api_prefix, notes,
                    api_name, description, doc_url, data_source, api_limit,
                    incremental_sync_strategy, max_requests_per_minute,
-                   updated_at
+                   updated_at, api_params
             FROM sync_configs
             WHERE table_key = %s
         """
@@ -88,4 +88,5 @@ class SyncConfigRepository(BaseRepository):
             'incremental_sync_strategy': row[20],
             'max_requests_per_minute': row[21],
             'updated_at': row[22].isoformat() + 'Z' if row[22] else None,
+            'api_params': row[23] if len(row) > 23 else None,
         }
