@@ -65,12 +65,15 @@ class StockAiAnalysisService:
             raise PermissionError("无权修改他人的分析记录")
         return await asyncio.to_thread(self.repo.update, record_id, analysis_text.strip(), score)
 
-    async def delete_analysis(self, record_id: int, current_user_id: int) -> bool:
-        """校验权限后删除记录"""
+    async def delete_analysis(
+        self, record_id: int, current_user_id: int, user_role: str = ""
+    ) -> bool:
+        """校验权限后删除记录（管理员可删除任意记录）"""
         rec = await asyncio.to_thread(self.repo.get_by_id, record_id)
         if rec is None:
             return False
-        if rec.get("created_by") != current_user_id:
+        is_admin = user_role in ("admin", "super_admin")
+        if not is_admin and rec.get("created_by") != current_user_id:
             raise PermissionError("无权删除他人的分析记录")
         return await asyncio.to_thread(self.repo.delete, record_id)
 

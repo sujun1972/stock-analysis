@@ -311,12 +311,13 @@ async def delete_analysis(
     record_id: int,
     current_user: User = Depends(get_current_active_user),
 ):
-    """删除已保存的分析记录（仅限记录创建者）"""
+    """删除已保存的分析记录（创建者或管理员）"""
     service = StockAiAnalysisService()
     try:
         deleted = await service.delete_analysis(
             record_id=record_id,
             current_user_id=current_user.id,
+            user_role=current_user.role,
         )
     except PermissionError as e:
         return ApiResponse.bad_request(message=str(e)).to_dict()
