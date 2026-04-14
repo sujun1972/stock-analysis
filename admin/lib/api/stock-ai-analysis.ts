@@ -51,6 +51,16 @@ export class StockAiAnalysisApiClient extends BaseApiClient {
   }>> {
     return this.get('/api/stock-ai-analysis/list', { params })
   }
+
+  /** 删除单条分析记录 */
+  async deleteRecord(recordId: number): Promise<ApiResponse<null>> {
+    return this.delete(`/api/stock-ai-analysis/${recordId}`)
+  }
+
+  /** 清空全部分析记录 */
+  async clearAll(): Promise<ApiResponse<any>> {
+    return this.post('/api/data/clear/stock_ai_analysis')
+  }
 }
 
 // 导出单例实例

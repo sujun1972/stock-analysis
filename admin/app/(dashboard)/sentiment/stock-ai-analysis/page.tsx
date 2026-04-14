@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { stockAiAnalysisApi } from '@/lib/api'
 import type { StockAiAnalysisData } from '@/lib/api'
 import { toast } from 'sonner'
-import { Brain, ListFilter, RefreshCw, FileText, Eye } from 'lucide-react'
+import { Brain, ListFilter, RefreshCw, FileText, Eye, Trash2 } from 'lucide-react'
 
 const PAGE_SIZE = 20
 
@@ -75,6 +75,10 @@ export default function StockAiAnalysisPage() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailItem, setDetailItem] = useState<StockAiAnalysisData | null>(null)
 
+  // Clear dialog
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
+
   const loadData = useCallback(async (targetPage: number = 1) => {
     setIsLoading(true)
     try {
@@ -113,6 +117,38 @@ export default function StockAiAnalysisPage() {
   const handleViewDetail = (item: StockAiAnalysisData) => {
     setDetailItem(item)
     setDetailOpen(true)
+  }
+
+  const handleDelete = async (item: StockAiAnalysisData) => {
+    try {
+      const response = await stockAiAnalysisApi.deleteRecord(item.id)
+      if (response.code === 200) {
+        toast.success('删除成功')
+        loadData(page)
+      } else {
+        toast.error(response.message || '删除失败')
+      }
+    } catch (err: any) {
+      toast.error('删除失败', { description: err.message })
+    }
+  }
+
+  const handleClearAll = async () => {
+    setIsClearing(true)
+    try {
+      const response = await stockAiAnalysisApi.clearAll()
+      if (response.code === 200) {
+        toast.success('清空成功')
+        setClearDialogOpen(false)
+        loadData(1)
+      } else {
+        toast.error(response.message || '清空失败')
+      }
+    } catch (err: any) {
+      toast.error('清空失败', { description: err.message })
+    } finally {
+      setIsClearing(false)
+    }
   }
 
   const columns: Column<StockAiAnalysisData>[] = useMemo(() => [
@@ -197,12 +233,17 @@ export default function StockAiAnalysisPage() {
     {
       key: 'actions',
       header: '操作',
-      width: 60,
+      width: 90,
       cellClassName: 'text-center',
       accessor: (row) => (
-        <Button variant="ghost" size="sm" onClick={() => handleViewDetail(row)}>
-          <Eye className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center justify-center gap-0">
+          <Button variant="ghost" size="sm" onClick={() => handleViewDetail(row)}>
+            <Eye className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => handleDelete(row)} className="text-red-500 hover:text-red-700">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       ),
     },
   ], []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -241,10 +282,16 @@ export default function StockAiAnalysisPage() {
         title="股票AI分析记录"
         description="查看AI助手生成的股票分析结果，包括游资观点、数据采集、中线专家、长线价值和CIO指令等"
         actions={
-          <Button variant="outline" onClick={() => loadData(page)} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
-            刷新
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => loadData(page)} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+              刷新
+            </Button>
+            <Button variant="destructive" onClick={() => setClearDialogOpen(true)} disabled={isClearing || total === 0}>
+              <Trash2 className="h-4 w-4 mr-1" />
+              清空
+            </Button>
+          </div>
         }
       />
 
@@ -349,6 +396,24 @@ export default function StockAiAnalysisPage() {
           />
         </CardContent>
       </Card>
+
+      {/* 清空确认弹窗 */}
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认清空</DialogTitle>
+            <DialogDescription>
+              确定要清空全部 {total} 条AI分析记录吗？此操作不可恢复。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDialogOpen(false)} disabled={isClearing}>取消</Button>
+            <Button variant="destructive" onClick={handleClearAll} disabled={isClearing}>
+              {isClearing ? '清空中...' : '确认清空'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 分析详情弹窗 */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>

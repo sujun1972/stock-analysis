@@ -91,6 +91,8 @@ CLEARABLE_TABLES: dict[str, str] = {
     "dc_index":         "dc_index",
     "dc_member":        "dc_member",
     "dc_daily":         "dc_daily",
+    # AI分析
+    "stock_ai_analysis":"stock_ai_analysis",
 }
 
 
