@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate, type ScheduleUpdate, type SyncStrategy } from '@/lib/api/sync-dashboard'
+import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate, type ScheduleUpdate, type SyncStrategy, type ApiParams } from '@/lib/api/sync-dashboard'
 import { apiClient } from '@/lib/api-client'
 import { useTaskStore } from '@/stores/task-store'
 import { useConfigStore } from '@/stores/config-store'
@@ -483,6 +483,7 @@ export default function SyncConfigPage() {
       data_source: item.data_source ?? 'tushare',
       api_limit: item.api_limit ?? 2000,
       max_requests_per_minute: item.max_requests_per_minute ?? null,
+      api_params: item.api_params ?? { ts_code: 'none', trade_date: 'none', start_date: false, end_date: false },
     })
     setScheduleForm({
       enabled: item.incremental_schedule?.enabled ?? undefined,
@@ -785,6 +786,68 @@ export default function SyncConfigPage() {
                 <span className="text-xs text-gray-400">条/次，超出自动分页（默认 2000）</span>
               </div>
             </div>
+
+            {/* 接口参数约束 */}
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide border-b pb-1 pt-2">接口参数约束</div>
+            <div className="grid grid-cols-3 items-center gap-4">
+              <Label className="text-right text-sm">ts_code</Label>
+              <Select
+                value={editForm.api_params?.ts_code ?? 'none'}
+                onValueChange={v => setEditForm(prev => ({
+                  ...prev,
+                  api_params: { ...prev.api_params!, ts_code: v as ApiParams['ts_code'] }
+                }))}
+              >
+                <SelectTrigger className="col-span-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">不支持</SelectItem>
+                  <SelectItem value="optional">可选</SelectItem>
+                  <SelectItem value="required">必填（或至少传一个）</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 items-center gap-4">
+              <Label className="text-right text-sm">trade_date</Label>
+              <Select
+                value={editForm.api_params?.trade_date ?? 'none'}
+                onValueChange={v => setEditForm(prev => ({
+                  ...prev,
+                  api_params: { ...prev.api_params!, trade_date: v as ApiParams['trade_date'] }
+                }))}
+              >
+                <SelectTrigger className="col-span-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">不支持</SelectItem>
+                  <SelectItem value="optional">可选</SelectItem>
+                  <SelectItem value="required">必填</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 items-center gap-4">
+              <Label className="text-right text-sm">日期范围</Label>
+              <div className="col-span-2 flex items-center gap-2">
+                <Switch
+                  checked={editForm.api_params?.start_date ?? false}
+                  onCheckedChange={v => setEditForm(prev => ({
+                    ...prev,
+                    api_params: { ...prev.api_params!, start_date: v, end_date: v }
+                  }))}
+                />
+                <span className="text-sm text-gray-500">
+                  {editForm.api_params?.start_date ? '支持 start_date / end_date' : '不支持'}
+                </span>
+              </div>
+            </div>
+            {editForm.api_params?.special_params && Object.keys(editForm.api_params.special_params).length > 0 && (
+              <div className="grid grid-cols-3 items-start gap-4">
+                <Label className="text-right text-sm pt-1">特殊参数</Label>
+                <div className="col-span-2 text-xs text-gray-500 space-y-0.5">
+                  {Object.entries(editForm.api_params.special_params).map(([k, v]) => (
+                    <div key={k}><span className="font-mono text-gray-600">{k}</span>: {v}</div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 同步参数 */}
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide border-b pb-1 pt-2">同步参数</div>

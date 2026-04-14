@@ -46,19 +46,30 @@ class SyncConfigRepository(BaseRepository):
         return self._row_to_dict(rows[0]) if rows else None
 
     def update(self, table_key: str, data: Dict) -> bool:
+        import json as _json
+
         allowed = {
             'incremental_default_days', 'incremental_sync_strategy',
             'full_sync_strategy', 'full_sync_concurrency',
             'passive_sync_enabled', 'passive_sync_task_name', 'notes',
             'api_name', 'description', 'doc_url', 'data_source', 'api_limit',
-            'max_requests_per_minute',
+            'max_requests_per_minute', 'api_params',
         }
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return False
-        set_clause = ', '.join(f"{k} = %s" for k in fields)
-        values = list(fields.values()) + [table_key]
-        query = f"UPDATE sync_configs SET {set_clause}, updated_at = NOW() WHERE table_key = %s"
+        # api_params 是 JSONB 字段，需要用 psycopg2 的 Json 适配器
+        set_parts = []
+        values = []
+        for k, v in fields.items():
+            if k == 'api_params' and v is not None:
+                set_parts.append(f"{k} = %s::jsonb")
+                values.append(_json.dumps(v, ensure_ascii=False))
+            else:
+                set_parts.append(f"{k} = %s")
+                values.append(v)
+        values.append(table_key)
+        query = f"UPDATE sync_configs SET {', '.join(set_parts)}, updated_at = NOW() WHERE table_key = %s"
         self.execute_update(query, tuple(values))
         return True
 

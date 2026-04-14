@@ -45,13 +45,7 @@ export interface SyncConfig {
   max_requests_per_minute: number | null
   updated_at: string | null
   /** 接口参数约束（通过实际调用 Tushare 验证） */
-  api_params: {
-    ts_code: 'optional' | 'required' | 'none'
-    trade_date: 'optional' | 'required' | 'none'
-    start_date: boolean
-    end_date: boolean
-    special_params?: Record<string, string>
-  } | null
+  api_params: ApiParams | null
 }
 
 /** 增量任务的定时调度配置 */
@@ -83,6 +77,15 @@ export interface SyncOverviewResponse {
   categories: CategoryStat[]
 }
 
+/** 接口参数约束 */
+export interface ApiParams {
+  ts_code: 'optional' | 'required' | 'none'
+  trade_date: 'optional' | 'required' | 'none'
+  start_date: boolean
+  end_date: boolean
+  special_params?: Record<string, string>
+}
+
 export interface SyncConfigUpdate {
   incremental_default_days?: number
   incremental_sync_strategy?: SyncStrategy | null
@@ -97,6 +100,7 @@ export interface SyncConfigUpdate {
   data_source?: string | null
   api_limit?: number | null
   max_requests_per_minute?: number | null
+  api_params?: ApiParams | null
 }
 
 export interface ScheduleUpdate {

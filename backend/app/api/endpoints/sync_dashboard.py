@@ -218,6 +218,7 @@ class SyncConfigUpdate(BaseModel):
     data_source: Optional[str] = None  # 'tushare' 或 'akshare'，None 表示不修改
     api_limit: Optional[int] = None    # 接口单次请求上限（超出则分页继续）
     max_requests_per_minute: Optional[int] = None  # 每分钟最大请求数（None=不修改，0=不限速，正整数=覆盖全局）
+    api_params: Optional[dict] = None  # 接口参数约束（JSONB）
 
 
 class ScheduleUpdate(BaseModel):
