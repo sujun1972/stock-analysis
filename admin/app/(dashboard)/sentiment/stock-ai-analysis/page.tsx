@@ -69,6 +69,7 @@ export default function StockAiAnalysisPage() {
   const [tsCode, setTsCode] = useState('')
   const [analysisType, setAnalysisType] = useState('')
   const [aiProvider, setAiProvider] = useState('')
+  const [tradeDate, setTradeDate] = useState('')
 
   // Detail dialog
   const [detailOpen, setDetailOpen] = useState(false)
@@ -84,6 +85,7 @@ export default function StockAiAnalysisPage() {
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (analysisType && analysisType !== '__all__') params.analysis_type = analysisType
       if (aiProvider.trim()) params.ai_provider = aiProvider.trim()
+      if (tradeDate.trim()) params.trade_date = tradeDate.trim()
 
       const response = await stockAiAnalysisApi.getList(params)
       if (response.code === 200 && response.data) {
@@ -98,7 +100,7 @@ export default function StockAiAnalysisPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [tsCode, analysisType, aiProvider])
+  }, [tsCode, analysisType, aiProvider, tradeDate])
 
   useEffect(() => {
     loadData(1)
@@ -141,6 +143,17 @@ export default function StockAiAnalysisPage() {
         if (row.score === null || row.score === undefined) return <span className="text-gray-400">-</span>
         const color = row.score >= 7 ? 'text-red-600 font-semibold' : row.score >= 4 ? 'text-amber-600' : 'text-green-600'
         return <span className={color}>{row.score.toFixed(1)}</span>
+      },
+    },
+    {
+      key: 'trade_date',
+      header: '交易日',
+      width: 100,
+      cellClassName: 'whitespace-nowrap text-sm',
+      accessor: (row) => {
+        if (!row.trade_date) return <span className="text-gray-400">-</span>
+        const d = row.trade_date
+        return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
       },
     },
     {
@@ -215,7 +228,7 @@ export default function StockAiAnalysisPage() {
           {truncateText(item.analysis_text, 100)}
         </div>
         <div className="flex justify-between text-xs text-gray-500">
-          <span>{item.ai_provider} / {item.ai_model}</span>
+          <span>{item.trade_date ? `${item.trade_date.slice(0, 4)}-${item.trade_date.slice(4, 6)}-${item.trade_date.slice(6, 8)}` : ''} | {item.ai_provider}</span>
           <span>{formatDate(item.created_at)}</span>
         </div>
       </div>
@@ -295,6 +308,15 @@ export default function StockAiAnalysisPage() {
               </Select>
             </div>
             <div className="space-y-1 w-full sm:w-36">
+              <Label>交易日</Label>
+              <Input
+                placeholder="20260414"
+                value={tradeDate}
+                onChange={(e) => setTradeDate(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
+              />
+            </div>
+            <div className="space-y-1 w-full sm:w-36">
               <Label>AI提供商</Label>
               <Input
                 placeholder="如 deepseek"
@@ -344,7 +366,11 @@ export default function StockAiAnalysisPage() {
           </DialogHeader>
           {detailItem && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">交易日</span>
+                  <p className="font-semibold">{detailItem.trade_date ? `${detailItem.trade_date.slice(0, 4)}-${detailItem.trade_date.slice(4, 6)}-${detailItem.trade_date.slice(6, 8)}` : '-'}</p>
+                </div>
                 <div>
                   <span className="text-gray-500">评分</span>
                   <p className="font-semibold">{detailItem.score !== null ? detailItem.score.toFixed(1) : '-'}</p>

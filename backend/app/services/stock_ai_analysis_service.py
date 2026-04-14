@@ -27,6 +27,7 @@ class StockAiAnalysisService:
         ai_provider: Optional[str],
         ai_model: Optional[str],
         created_by: Optional[int],
+        trade_date: Optional[str] = None,
     ) -> Dict:
         """校验并保存一条新的分析记录（每次保存都是新版本）"""
         if not ts_code or not ts_code.strip():
@@ -42,6 +43,7 @@ class StockAiAnalysisService:
             self.repo.save,
             ts_code.strip(), analysis_type, analysis_text.strip(),
             score, prompt_text, ai_provider, ai_model, created_by,
+            trade_date,
         )
 
     async def update_analysis(
@@ -95,6 +97,7 @@ class StockAiAnalysisService:
         ts_code: Optional[str] = None,
         analysis_type: Optional[str] = None,
         ai_provider: Optional[str] = None,
+        trade_date: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
         limit: int = 20,
@@ -104,12 +107,12 @@ class StockAiAnalysisService:
         items, total = await asyncio.gather(
             asyncio.to_thread(
                 self.repo.list_all,
-                ts_code, analysis_type, ai_provider,
+                ts_code, analysis_type, ai_provider, trade_date,
                 sort_by, sort_order, limit, offset,
             ),
             asyncio.to_thread(
                 self.repo.count_all,
-                ts_code, analysis_type, ai_provider,
+                ts_code, analysis_type, ai_provider, trade_date,
             ),
         )
         return {"items": items, "total": total}

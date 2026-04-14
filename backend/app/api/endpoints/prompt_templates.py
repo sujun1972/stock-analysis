@@ -389,19 +389,27 @@ async def build_stock_prompt(
             "stock_name_and_code": stock_name_and_code,
         }
 
+        # 解析 YYYYMMDD 格式的交易日，供数据采集去重和分析关联
+        latest_trade_date_yyyymmdd = latest_trade_day_raw  # YYYYMMDD
+
         if (
             ts_code
             and "{{ stock_data_collection }}" in (data.get("user_prompt_template") or "")
         ):
             if allow_generate_data_collection:
-                stock_data_text = await _get_or_generate_stock_data_collection(
+                stock_data_text, dc_trade_date = await _get_or_generate_stock_data_collection(
                     ts_code=ts_code,
                     stock_name=stock_name or stock_code or "",
                     created_by=created_by,
+                    latest_trade_date=latest_trade_date_yyyymmdd,
                 )
             else:
-                stock_data_text = await _get_existing_stock_data_collection(ts_code)
+                stock_data_text, dc_trade_date = await _get_existing_stock_data_collection(
+                    ts_code, latest_trade_date_yyyymmdd,
+                )
             variables["stock_data_collection"] = stock_data_text
+            # 记录数据采集对应的交易日，供 generate 端点使用
+            variables["_dc_trade_date"] = dc_trade_date
 
     system_prompt = data.get("system_prompt") or ""
     user_prompt = data.get("user_prompt_template") or ""
@@ -417,18 +425,29 @@ async def build_stock_prompt(
         "recommended_model": data.get("recommended_model") or "deepseek-chat",
         "recommended_temperature": data.get("recommended_temperature") or 0.4,
         "recommended_max_tokens": data.get("recommended_max_tokens") or 3000,
+        "trade_date": variables.get("_dc_trade_date"),
     }
 
 
-async def _get_existing_stock_data_collection(ts_code: str) -> str:
-    """只读取今日已有的 stock_data_collection 记录，不触发生成。"""
+async def _get_existing_stock_data_collection(
+    ts_code: str,
+    latest_trade_date: Optional[str],
+) -> tuple:
+    """只读取已有的 stock_data_collection 记录（按交易日），不触发生成。
+
+    Returns:
+        (analysis_text, trade_date)
+    """
     from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
 
     repo = StockAiAnalysisRepository()
-    existing = await asyncio.to_thread(repo.get_today, ts_code, "stock_data_collection")
-    if existing:
-        return existing["analysis_text"]
-    return "（今日尚无数据收集记录，请先在「数据收集」标签页生成）"
+    if latest_trade_date:
+        existing = await asyncio.to_thread(
+            repo.get_by_trade_date, ts_code, "stock_data_collection", latest_trade_date
+        )
+        if existing:
+            return existing["analysis_text"], existing.get("trade_date")
+    return "（尚无该交易日的数据收集记录，请先在「数据收集」标签页生成）", None
 
 
 # 防止并发请求对同一只股票重复生成 stock_data_collection 记录
@@ -439,13 +458,17 @@ async def _get_or_generate_stock_data_collection(
     ts_code: str,
     stock_name: str,
     created_by: Optional[int],
-) -> str:
+    latest_trade_date: Optional[str] = None,
+) -> tuple:
     """
-    查询今天是否已有该股的 stock_data_collection 分析记录：
-    - 有 → 直接返回 analysis_text
+    查询是否已有该股在指定交易日的 stock_data_collection 分析记录：
+    - 有 → 直接返回 (analysis_text, trade_date)
     - 无 → 调用 StockDataCollectionService 生成并保存，再返回
 
     使用 asyncio.Lock 防止并发请求对同一 ts_code 重复生成。
+
+    Returns:
+        (analysis_text, trade_date)
     """
     from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
     from app.services.stock_data_collection_service import StockDataCollectionService
@@ -458,15 +481,22 @@ async def _get_or_generate_stock_data_collection(
 
     async with lock:
         repo = StockAiAnalysisRepository()
-        existing = await asyncio.to_thread(repo.get_today, ts_code, "stock_data_collection")
-        if existing:
-            logger.info(f"[stock_data_collection] 使用今日已有数据收集记录: {ts_code} (id={existing['id']})")
-            return existing["analysis_text"]
+        # 按交易日查询已有记录
+        if latest_trade_date:
+            existing = await asyncio.to_thread(
+                repo.get_by_trade_date, ts_code, "stock_data_collection", latest_trade_date
+            )
+            if existing:
+                logger.info(
+                    f"[stock_data_collection] 使用已有数据收集记录: {ts_code} "
+                    f"trade_date={latest_trade_date} (id={existing['id']})"
+                )
+                return existing["analysis_text"], existing.get("trade_date")
 
-        logger.info(f"[stock_data_collection] 今日无数据收集记录，自动生成: {ts_code}")
+        logger.info(f"[stock_data_collection] 交易日 {latest_trade_date} 无数据收集记录，自动生成: {ts_code}")
         try:
             collection_service = StockDataCollectionService()
-            text = await collection_service.collect_and_format(ts_code, stock_name)
+            text, actual_trade_date = await collection_service.collect_and_format(ts_code, stock_name)
 
             ai_analysis_service = StockAiAnalysisService()
             await ai_analysis_service.save_analysis(
@@ -478,12 +508,16 @@ async def _get_or_generate_stock_data_collection(
                 ai_provider=None,
                 ai_model=None,
                 created_by=created_by,
+                trade_date=actual_trade_date,
             )
-            logger.info(f"[stock_data_collection] 数据收集已自动保存: {ts_code}")
-            return text
+            logger.info(
+                f"[stock_data_collection] 数据收集已自动保存: {ts_code} "
+                f"trade_date={actual_trade_date}"
+            )
+            return text, actual_trade_date
         except Exception as e:
             logger.error(f"[stock_data_collection] 自动生成数据收集失败: {ts_code}, 错误: {e}")
-            return f"（数据自动收集失败，请手动点击生成分析按钮获取：{e}）"
+            return f"（数据自动收集失败，请手动点击生成分析按钮获取：{e}）", None
 
 
 @router.put("/by-key/{template_key}")

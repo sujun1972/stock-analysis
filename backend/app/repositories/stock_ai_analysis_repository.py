@@ -8,6 +8,13 @@ from app.core.exceptions import QueryError
 class StockAiAnalysisRepository(BaseRepository):
     TABLE_NAME = "stock_ai_analysis"
 
+    # 所有 SELECT 查询共用的列列表，保持与 _row_to_dict 索引一致
+    _SELECT_COLS = (
+        "id, ts_code, analysis_type, analysis_text, score, "
+        "prompt_text, ai_provider, ai_model, version, created_by, "
+        "created_at, updated_at, trade_date"
+    )
+
     def __init__(self, db=None):
         super().__init__(db)
 
@@ -21,27 +28,28 @@ class StockAiAnalysisRepository(BaseRepository):
         ai_provider: Optional[str],
         ai_model: Optional[str],
         created_by: Optional[int],
+        trade_date: Optional[str] = None,
     ) -> Dict:
         """插入一条新的分析记录，版本号自动递增（同一 ts_code + analysis_type 下 MAX(version)+1）"""
         query = """
             INSERT INTO stock_ai_analysis
                 (ts_code, analysis_type, analysis_text, score, prompt_text,
-                 ai_provider, ai_model, version, created_by)
+                 ai_provider, ai_model, version, created_by, trade_date)
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
                 COALESCE((
                     SELECT MAX(version) FROM stock_ai_analysis
                     WHERE ts_code = %s AND analysis_type = %s
                 ), 0) + 1,
-                %s
+                %s, %s
             )
-            RETURNING id, version, created_at
+            RETURNING id, version, created_at, trade_date
         """
         params = (
             ts_code, analysis_type, analysis_text, score, prompt_text,
             ai_provider, ai_model,
             ts_code, analysis_type,  # for subquery
-            created_by,
+            created_by, trade_date,
         )
         try:
             result = self.execute_query_returning(query, params)
@@ -52,6 +60,7 @@ class StockAiAnalysisRepository(BaseRepository):
                 "id": row[0],
                 "version": row[1],
                 "created_at": row[2],
+                "trade_date": row[3],
                 "ts_code": ts_code,
                 "analysis_type": analysis_type,
             }
@@ -63,12 +72,11 @@ class StockAiAnalysisRepository(BaseRepository):
 
     def update(self, record_id: int, analysis_text: str, score: Optional[float]) -> Optional[Dict]:
         """更新指定记录的分析文本和评分，返回更新后的记录"""
-        query = """
+        query = f"""
             UPDATE stock_ai_analysis
             SET analysis_text = %s, score = %s, updated_at = NOW()
             WHERE id = %s
-            RETURNING id, ts_code, analysis_type, analysis_text, score,
-                      prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+            RETURNING {self._SELECT_COLS}
         """
         try:
             result = self.execute_query_returning(query, (analysis_text, score, record_id))
@@ -89,11 +97,7 @@ class StockAiAnalysisRepository(BaseRepository):
 
     def get_by_id(self, record_id: int) -> Optional[Dict]:
         """按 id 查单条记录（用于权限校验）"""
-        query = """
-            SELECT id, ts_code, analysis_type, analysis_text, score,
-                   prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
-            FROM stock_ai_analysis WHERE id = %s
-        """
+        query = f"SELECT {self._SELECT_COLS} FROM stock_ai_analysis WHERE id = %s"
         try:
             result = self.execute_query(query, (record_id,))
             return self._row_to_dict(result[0]) if result else None
@@ -102,9 +106,8 @@ class StockAiAnalysisRepository(BaseRepository):
 
     def get_latest(self, ts_code: str, analysis_type: str) -> Optional[Dict]:
         """获取指定股票+类型的最新一条分析记录"""
-        query = """
-            SELECT id, ts_code, analysis_type, analysis_text, score,
-                   prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+        query = f"""
+            SELECT {self._SELECT_COLS}
             FROM stock_ai_analysis
             WHERE ts_code = %s AND analysis_type = %s
             ORDER BY created_at DESC
@@ -125,9 +128,8 @@ class StockAiAnalysisRepository(BaseRepository):
         offset: int = 0,
     ) -> List[Dict]:
         """获取指定股票+类型的所有版本（按时间倒序，分页）"""
-        query = """
-            SELECT id, ts_code, analysis_type, analysis_text, score,
-                   prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+        query = f"""
+            SELECT {self._SELECT_COLS}
             FROM stock_ai_analysis
             WHERE ts_code = %s AND analysis_type = %s
             ORDER BY created_at DESC
@@ -153,23 +155,21 @@ class StockAiAnalysisRepository(BaseRepository):
             logger.error(f"查询AI分析历史总数失败: {e}")
             raise QueryError("查询AI分析历史总数失败", error_code="AI_ANALYSIS_COUNT_FAILED", reason=str(e))
 
-    def get_today(self, ts_code: str, analysis_type: str) -> Optional[Dict]:
-        """获取指定股票+类型今日（本地日期）的最新一条分析记录，无则返回 None"""
-        query = """
-            SELECT id, ts_code, analysis_type, analysis_text, score,
-                   prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+    def get_by_trade_date(self, ts_code: str, analysis_type: str, trade_date: str) -> Optional[Dict]:
+        """获取指定股票+类型+交易日的最新一条分析记录，无则返回 None"""
+        query = f"""
+            SELECT {self._SELECT_COLS}
             FROM stock_ai_analysis
-            WHERE ts_code = %s AND analysis_type = %s
-              AND created_at >= CURRENT_DATE
+            WHERE ts_code = %s AND analysis_type = %s AND trade_date = %s
             ORDER BY created_at DESC
             LIMIT 1
         """
         try:
-            result = self.execute_query(query, (ts_code, analysis_type))
+            result = self.execute_query(query, (ts_code, analysis_type, trade_date))
             return self._row_to_dict(result[0]) if result else None
         except Exception as e:
-            logger.error(f"查询今日AI分析失败: {e}")
-            raise QueryError("查询今日AI分析失败", error_code="AI_ANALYSIS_QUERY_FAILED", reason=str(e))
+            logger.error(f"按交易日查询AI分析失败: {e}")
+            raise QueryError("按交易日查询AI分析失败", error_code="AI_ANALYSIS_QUERY_FAILED", reason=str(e))
 
     def get_latest_batch(self, ts_codes: List[str], analysis_type: str) -> Dict[str, Dict]:
         """
@@ -178,10 +178,9 @@ class StockAiAnalysisRepository(BaseRepository):
         """
         if not ts_codes:
             return {}
-        query = """
+        query = f"""
             SELECT DISTINCT ON (ts_code)
-                id, ts_code, analysis_type, analysis_text, score,
-                prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+                {self._SELECT_COLS}
             FROM stock_ai_analysis
             WHERE ts_code = ANY(%s) AND analysis_type = %s
             ORDER BY ts_code, created_at DESC
@@ -193,13 +192,14 @@ class StockAiAnalysisRepository(BaseRepository):
             logger.error(f"批量查询AI分析摘要失败: {e}")
             raise QueryError("批量查询AI分析摘要失败", error_code="AI_ANALYSIS_BATCH_FAILED", reason=str(e))
 
-    _ALLOWED_SORT_COLUMNS = {"created_at", "score", "version", "ts_code", "analysis_type"}
+    _ALLOWED_SORT_COLUMNS = {"created_at", "score", "version", "ts_code", "analysis_type", "trade_date"}
 
     @staticmethod
     def _build_filters(
         ts_code: Optional[str] = None,
         analysis_type: Optional[str] = None,
         ai_provider: Optional[str] = None,
+        trade_date: Optional[str] = None,
     ) -> tuple:
         """构建 WHERE 子句和参数，供 list_all / count_all 共用"""
         conditions: List[str] = []
@@ -213,6 +213,9 @@ class StockAiAnalysisRepository(BaseRepository):
         if ai_provider:
             conditions.append("ai_provider = %s")
             params.append(ai_provider)
+        if trade_date:
+            conditions.append("trade_date = %s")
+            params.append(trade_date)
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         return where_clause, params
 
@@ -221,21 +224,21 @@ class StockAiAnalysisRepository(BaseRepository):
         ts_code: Optional[str] = None,
         analysis_type: Optional[str] = None,
         ai_provider: Optional[str] = None,
+        trade_date: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
         limit: int = 20,
         offset: int = 0,
     ) -> List[Dict]:
         """查询所有分析记录（支持过滤、排序、分页）"""
-        where_clause, params = self._build_filters(ts_code, analysis_type, ai_provider)
+        where_clause, params = self._build_filters(ts_code, analysis_type, ai_provider, trade_date)
 
         if sort_by not in self._ALLOWED_SORT_COLUMNS:
             sort_by = "created_at"
         order_dir = "ASC" if sort_order.lower() == "asc" else "DESC"
 
         query = f"""
-            SELECT id, ts_code, analysis_type, analysis_text, score,
-                   prompt_text, ai_provider, ai_model, version, created_by, created_at, updated_at
+            SELECT {self._SELECT_COLS}
             FROM stock_ai_analysis
             {where_clause}
             ORDER BY {sort_by} {order_dir}
@@ -254,9 +257,10 @@ class StockAiAnalysisRepository(BaseRepository):
         ts_code: Optional[str] = None,
         analysis_type: Optional[str] = None,
         ai_provider: Optional[str] = None,
+        trade_date: Optional[str] = None,
     ) -> int:
         """统计分析记录总数（支持过滤）"""
-        where_clause, params = self._build_filters(ts_code, analysis_type, ai_provider)
+        where_clause, params = self._build_filters(ts_code, analysis_type, ai_provider, trade_date)
         query = f"SELECT COUNT(*) FROM stock_ai_analysis {where_clause}"
         try:
             result = self.execute_query(query, tuple(params))
@@ -279,4 +283,5 @@ class StockAiAnalysisRepository(BaseRepository):
             "created_by": row[9],
             "created_at": row[10].isoformat() if hasattr(row[10], 'isoformat') else row[10],
             "updated_at": row[11].isoformat() if hasattr(row[11], 'isoformat') else row[11],
+            "trade_date": row[12] if len(row) > 12 else None,
         }

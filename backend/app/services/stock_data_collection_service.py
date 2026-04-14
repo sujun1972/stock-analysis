@@ -67,10 +67,19 @@ class StockDataCollectionService:
             "risk": risk,
         }
 
-    async def collect_and_format(self, ts_code: str, stock_name: str) -> str:
-        """收集数据并格式化为 Markdown 结构化文本，供 AI 提示词直接使用。"""
+    async def collect_and_format(self, ts_code: str, stock_name: str) -> tuple:
+        """收集数据并格式化为 Markdown 结构化文本。
+
+        Returns:
+            (formatted_text, trade_date) — trade_date 为 YYYYMMDD 格式，
+            来自最新交易日行情数据；无行情数据时为 None。
+        """
         data = await self.collect(ts_code, stock_name)
-        return self._format_as_text(data)
+        text = self._format_as_text(data)
+        # basic_market.trade_date 格式为 YYYY-MM-DD，转为 YYYYMMDD
+        raw_date = data.get("basic_market", {}).get("trade_date")
+        trade_date = raw_date.replace("-", "") if raw_date else None
+        return text, trade_date
 
     @staticmethod
     def _unwrap(val: Any, label: str) -> Dict:

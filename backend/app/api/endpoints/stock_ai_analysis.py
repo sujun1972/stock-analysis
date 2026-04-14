@@ -91,6 +91,7 @@ class SaveAnalysisRequest(BaseModel):
     prompt_text: Optional[str] = Field(None, description="生成本次分析所用的完整提示词快照")
     ai_provider: Optional[str] = Field(None, description="AI提供商，如 deepseek")
     ai_model: Optional[str] = Field(None, description="AI模型名称，如 deepseek-chat")
+    trade_date: Optional[str] = Field(None, description="交易日，YYYYMMDD 格式")
 
 
 class UpdateAnalysisRequest(BaseModel):
@@ -115,6 +116,7 @@ async def list_analyses(
     ts_code: Optional[str] = Query(None, description="股票代码过滤"),
     analysis_type: Optional[str] = Query(None, description="分析类型过滤"),
     ai_provider: Optional[str] = Query(None, description="AI提供商过滤"),
+    trade_date: Optional[str] = Query(None, description="交易日过滤，YYYYMMDD"),
     sort_by: Optional[str] = Query("created_at", description="排序字段"),
     sort_order: Optional[str] = Query("desc", description="排序方向: asc/desc"),
     limit: int = Query(20, ge=1, le=100, description="每页记录数"),
@@ -127,6 +129,7 @@ async def list_analyses(
         ts_code=ts_code,
         analysis_type=analysis_type,
         ai_provider=ai_provider,
+        trade_date=trade_date,
         sort_by=sort_by or "created_at",
         sort_order=sort_order or "desc",
         limit=limit,
@@ -198,6 +201,8 @@ async def generate_analysis(
         extracted_score = None
 
     # 5. 保存分析结果（版本自动递增）
+    #    trade_date 来自数据采集记录，确保分析结果与采集数据对应同一交易日
+    trade_date = prompt_data.get("trade_date")
     try:
         result = await StockAiAnalysisService().save_analysis(
             ts_code=body.ts_code,
@@ -208,6 +213,7 @@ async def generate_analysis(
             ai_provider=provider_name,
             ai_model=provider_config.get("model_name"),
             created_by=current_user.id,
+            trade_date=trade_date,
         )
     except ValueError as e:
         return ApiResponse.bad_request(message=str(e)).to_dict()
@@ -241,6 +247,7 @@ async def save_analysis(
             ai_provider=body.ai_provider,
             ai_model=body.ai_model,
             created_by=current_user.id,
+            trade_date=body.trade_date,
         )
     except ValueError as e:
         return ApiResponse.bad_request(message=str(e)).to_dict()

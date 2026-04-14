@@ -12,6 +12,7 @@ export interface StockAiAnalysisParams {
   ts_code?: string
   analysis_type?: string
   ai_provider?: string
+  trade_date?: string
   sort_by?: string
   sort_order?: string
   limit?: number
@@ -34,6 +35,7 @@ export interface StockAiAnalysisData {
   created_by: number | null
   created_at: string
   updated_at: string
+  trade_date: string | null
 }
 
 /**
