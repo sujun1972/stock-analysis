@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   RefreshCw, Database, ChevronDown, ChevronRight,
-  XCircle, Loader2, RotateCcw, Zap, Settings, KeyRound
+  XCircle, Loader2, RotateCcw, Zap, Settings, KeyRound, Clock
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/common/PageHeader'
@@ -132,16 +132,24 @@ function SyncRow({
       </div>
 
       {/* 增量同步状态 */}
-      <div className="col-span-3 flex items-center gap-1.5 min-w-0">
-        <StatusDot status={incTask?.status} />
-        <span className="text-gray-500 text-xs truncate">
-          {incTask ? formatDate(incTask.completed_at || incTask.started_at) : '从未同步'}
-          {incTask?.duration_ms && (
-            <span className="ml-1 text-gray-400">({formatDuration(incTask.duration_ms)})</span>
+      <div className="col-span-3 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <StatusDot status={incTask?.status} />
+          <span className="text-gray-500 text-xs truncate">
+            {incTask ? formatDate(incTask.completed_at || incTask.started_at) : '从未同步'}
+            {incTask?.duration_ms && (
+              <span className="ml-1 text-gray-400">({formatDuration(incTask.duration_ms)})</span>
+            )}
+          </span>
+          {incTask?.status === 'failure' && (
+            <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" aria-label={incTask.error || '未知错误'} />
           )}
-        </span>
-        {incTask?.status === 'failure' && (
-          <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" aria-label={incTask.error || '未知错误'} />
+        </div>
+        {item.incremental_schedule?.enabled && item.incremental_schedule.cron_expression && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <Clock className="w-3 h-3 text-blue-400 flex-shrink-0" />
+            <span className="text-[11px] text-blue-500 font-mono">{item.incremental_schedule.cron_expression}</span>
+          </div>
         )}
       </div>
 
