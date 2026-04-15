@@ -4,7 +4,8 @@
 从本地数据库收集股票分析所需的全维度数据，包括：
 - 基础盘面：收盘价、涨跌幅、成交额、换手率、PE-TTM、行业位置、筹码获利比
 - 资金流向：主力净流入(1/5/10日)、北向资金持股、股东人数、大股东减持、解禁预告
-- 技术指标：MA5/10/20/60/120、RSI7/14/21、量价异动
+- 技术指标：MA5/10/20/60/120、RSI7/14/21、MACD(12,26,9)、量价异动
+- 神奇九转：上涨/下跌连续计数、见顶/见底信号（来源 stk_nineturn 表）
 - 财报公告：披露日期、风险警示、质押冻结
 
 数据库表格式说明：
@@ -47,11 +48,12 @@ class StockDataCollectionService:
             self._get_technical_indicators(ts_code),
             self._get_financial_reports(ts_code),
             self._get_risk_alerts(ts_code),
+            self._get_nine_turn(ts_code),
             return_exceptions=True,
         )
 
-        labels = ['basic', 'capital', 'shareholder', 'technical', 'financial', 'risk']
-        basic, capital, shareholder, technical, financial, risk = [
+        labels = ['basic', 'capital', 'shareholder', 'technical', 'financial', 'risk', 'nine_turn']
+        basic, capital, shareholder, technical, financial, risk, nine_turn = [
             self._unwrap(v, label) for v, label in zip(results, labels)
         ]
 
@@ -65,6 +67,7 @@ class StockDataCollectionService:
             "technical": technical,
             "financial": financial,
             "risk": risk,
+            "nine_turn": nine_turn,
         }
 
     async def collect_and_format(self, ts_code: str, stock_name: str) -> tuple:
@@ -368,6 +371,26 @@ class StockDataCollectionService:
             for n in [7, 14, 21]
         }
 
+        # MACD（12, 26, 9）— 需至少 26+9=35 根 K 线
+        if len(close) >= 35:
+            ema12 = close.ewm(span=12, adjust=False).mean()
+            ema26 = close.ewm(span=26, adjust=False).mean()
+            dif = ema12 - ema26
+            dea = dif.ewm(span=9, adjust=False).mean()
+            macd_bar = (dif - dea) * 2
+
+            def _round_last(series):
+                v = series.iloc[-1]
+                return round(float(v), 3) if not self._is_nan(v) else None
+
+            result['macd'] = {
+                'dif': _round_last(dif),
+                'dea': _round_last(dea),
+                'macd': _round_last(macd_bar),
+            }
+        else:
+            result['macd'] = None
+
         # 量价异动（近5日 vs 前5日均量对比）
         if len(df) >= 10:
             recent5 = df.tail(5)
@@ -408,6 +431,55 @@ class StockDataCollectionService:
         if last_loss == 0:
             return 100.0
         return round(100 - 100 / (1 + last_gain / last_loss), 2)
+
+    # ------------------------------------------------------------------
+    # 神奇九转指标（基于 stk_nineturn 表）
+    # ------------------------------------------------------------------
+
+    async def _get_nine_turn(self, ts_code: str) -> Dict:
+        from app.repositories.stk_nineturn_repository import StkNineturnRepository
+
+        today = datetime.now()
+        start_dash = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+        end_dash = today.strftime('%Y-%m-%d')
+
+        rows = await asyncio.to_thread(
+            StkNineturnRepository().get_by_date_range,
+            start_date=start_dash,
+            end_date=end_dash,
+            ts_code=ts_code,
+            sort_by='trade_date',
+            sort_order='desc',
+            limit=10,
+        )
+
+        if not rows:
+            return {}
+
+        result: Dict[str, Any] = {}
+
+        # 最新一条的计数
+        latest = rows[0]
+        result['latest_date'] = latest.get('trade_date', '')[:10]
+        result['up_count'] = latest.get('up_count')
+        result['down_count'] = latest.get('down_count')
+        result['nine_up_turn'] = latest.get('nine_up_turn')
+        result['nine_down_turn'] = latest.get('nine_down_turn')
+
+        # 近期出现的信号（+9 或 -9）
+        signals = [
+            r for r in rows
+            if r.get('nine_up_turn') == '+9' or r.get('nine_down_turn') == '-9'
+        ]
+        result['recent_signals'] = [
+            {
+                'date': r.get('trade_date', '')[:10],
+                'type': '九转见顶' if r.get('nine_up_turn') == '+9' else '九转见底',
+            }
+            for r in signals
+        ]
+
+        return result
 
     # ------------------------------------------------------------------
     # 四、财报与敏感公告
@@ -607,6 +679,14 @@ class StockDataCollectionService:
                 f"  RSI21={self._fmt(rsi.get('rsi21'))}"
             )
 
+        macd = technical.get('macd')
+        if macd:
+            lines.append(
+                f"- MACD：DIF={self._fmt(macd.get('dif'), 3)}"
+                f"  DEA={self._fmt(macd.get('dea'), 3)}"
+                f"  MACD柱={self._fmt(macd.get('macd'), 3)}"
+            )
+
         anomaly = technical.get('anomaly', [])
         if anomaly:
             lines.append(f"- 量价异动：{'、'.join(anomaly)}")
@@ -616,9 +696,41 @@ class StockDataCollectionService:
             lines.append("- 近5日量价：")
             for r in vol_5d:
                 lines.append(
-                    f"  {r.get('date', '')}  量 {self._fmt(r.get('volume'), 0)} 手"
+                    f"  {r.get('date', '')}  量 {self._fmt(r.get('volume'), 0)} 股"
                     f"  涨跌 {self._fmt(r.get('pct_change'))}%"
                 )
+
+        # 神奇九转指标
+        nine_turn = data.get('nine_turn', {})
+        if nine_turn:
+            lines.append(f"- 神奇九转（{nine_turn.get('latest_date', '')}）：")
+            up_c = nine_turn.get('up_count')
+            down_c = nine_turn.get('down_count')
+            up_signal = nine_turn.get('nine_up_turn')
+            down_signal = nine_turn.get('nine_down_turn')
+            parts = []
+            if up_c is not None and up_c > 0:
+                s = f"上涨计数={int(up_c)}"
+                if up_signal == '+9':
+                    s += "（已触发九转见顶信号）"
+                parts.append(s)
+            if down_c is not None and down_c > 0:
+                s = f"下跌计数={int(down_c)}"
+                if down_signal == '-9':
+                    s += "（已触发九转见底信号）"
+                parts.append(s)
+            if parts:
+                lines.append(f"  当前状态：{'，'.join(parts)}")
+            else:
+                lines.append("  当前状态：无连续计数")
+
+            signals = nine_turn.get('recent_signals', [])
+            if signals:
+                lines.append("  近30日信号：")
+                for s in signals:
+                    lines.append(f"    {s.get('date', '')}  {s.get('type', '')}")
+        else:
+            lines.append("- 神奇九转：暂无数据")
         lines.append("")
 
         # 四、财报与公告
