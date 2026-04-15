@@ -390,7 +390,9 @@ class YourService(TushareSyncBase):
 
 | Tushare 接口约束 | sync_incremental 实现方式 |
 |-----------------|------------------------|
-| 支持 `start_date`/`end_date` | 直接传日期范围调用原始 sync 方法 |
+| 支持 `start_date`/`end_date` | `run_incremental_sync(sync_strategy='by_date_range')` 自动切片+翻页 |
+| 仅支持 `trade_date`（如 cyq_perf） | `run_incremental_sync(sync_strategy='by_date', date_param='trade_date')` 逐日切片 |
+| 仅支持 `ann_date`（如 dividend, disclosure_date） | 手动按 ann_date 逐日循环调用底层 sync 方法 |
 | 仅支持 `trade_date`（如 ggt_top10） | 从 TradingCalendarRepository 获取交易日列表，逐日请求 |
 | `ts_code` 必填（如 fina_audit） | 遍历全部上市股票，逐只请求（5 并发） |
 
@@ -615,7 +617,7 @@ for item in items:
 - [ ] 任务元数据添加到 `task_metadata.py`
 - [ ] API 端点包含查询、统计、异步同步（至少3个）
 - [ ] 全量同步端点提交前调用 `release_stale_lock(table_key)`
-- [ ] Tushare Provider 添加 `get_your_data()` 方法（用 `_query` + `_build_params`）
+- [ ] Tushare Provider 添加 `get_your_data()` 方法（用 `_query` + `_build_params`，**必须包含 `limit`/`offset` 参数**以支持 `run_incremental_sync` 翻页）
 - [ ] `sync_configs` 表登记（`105_create_sync_configs.sql` 追加并重新执行）
 - [ ] `FULL_SYNC_REDIS_KEYS` 更新（`sync_dashboard.py`）
 - [ ] `celery_worker` 重启并验证任务注册

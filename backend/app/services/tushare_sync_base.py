@@ -528,6 +528,7 @@ class TushareSyncBase(BaseSyncService):
         max_requests_per_minute: Optional[int] = None,
         api_limit: int = 6000,
         extra_fetch_kwargs: Optional[Dict] = None,
+        date_param: Optional[str] = None,
     ) -> Dict:
         """
         通用增量同步。
@@ -544,6 +545,9 @@ class TushareSyncBase(BaseSyncService):
             max_requests_per_minute: Tushare 限速
             api_limit:              单次请求上限
             extra_fetch_kwargs:     额外参数（ts_code / ann_date 等），仅在单次请求分支中传入
+            date_param:             日期切片时用的参数名，如 'trade_date'；
+                                    None 时切片使用 start_date/end_date，
+                                    设为 'trade_date' 时切片使用 trade_date=单日（适用于只接受 trade_date 的接口）
 
         Returns:
             {"status", "records", "data_end_date", "message"} 或
@@ -665,12 +669,14 @@ class TushareSyncBase(BaseSyncService):
                                 f"[{table_key}] {ms}~{me} offset={offset} 达上限 {MAX_OFFSET}，停止翻页"
                             )
                             break
+                        if date_param:
+                            # 只接受单日参数的接口（如 trade_date）
+                            date_kwargs = {date_param: ms, 'limit': api_limit, 'offset': offset}
+                        else:
+                            date_kwargs = {'start_date': ms, 'end_date': me, 'limit': api_limit, 'offset': offset}
                         df = await asyncio.to_thread(
                             fetch_fn,
-                            start_date=ms,
-                            end_date=me,             # 切片端点，始终有值
-                            limit=api_limit,
-                            offset=offset,
+                            **date_kwargs,
                         )
                         if df is None or df.empty:
                             break

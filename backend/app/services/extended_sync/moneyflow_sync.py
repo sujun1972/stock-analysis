@@ -27,10 +27,13 @@ from app.repositories.trading_calendar_repository import TradingCalendarReposito
 from app.repositories.stock_basic_repository import StockBasicRepository
 from .base_sync_service import BaseSyncService
 from .common import DataType
+from app.repositories.sync_config_repository import SyncConfigRepository
 
 
 class MoneyflowSyncService(BaseSyncService):
     """资金流向同步服务"""
+
+    TABLE_KEY = 'moneyflow'
 
     def __init__(self):
         super().__init__()
@@ -41,6 +44,70 @@ class MoneyflowSyncService(BaseSyncService):
         self.moneyflow_ind_dc_repo = MoneyflowIndDcRepository()
         self.moneyflow_stock_dc_repo = MoneyflowStockDcRepository()
         self.calendar_repo = TradingCalendarRepository()
+
+    # ========== 增量同步（标准入口）==========
+    #
+    # MoneyflowSyncService 继承 BaseSyncService 而非 TushareSyncBase，
+    # 因为 TushareSyncBase 导入 BaseSyncService → __init__.py 导入本模块，形成循环。
+    # 增量同步通过延迟导入 + unbound 调用 TushareSyncBase.run_incremental_sync 解决。
+
+    async def _calc_suggested_start(self, table_key: str) -> str:
+        """计算增量同步的建议起始日期（YYYYMMDD），取 sync_configs.incremental_default_days 回看"""
+        from datetime import timedelta
+        from app.repositories.sync_history_repository import SyncHistoryRepository
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, table_key)
+        default_days = (cfg.get('incremental_default_days') or 7) if cfg else 7
+        candidate = (datetime.now() - timedelta(days=default_days)).strftime('%Y%m%d')
+        last_end = await asyncio.to_thread(
+            SyncHistoryRepository().get_last_end_date, table_key, 'incremental'
+        )
+        return last_end if (last_end and last_end < candidate) else candidate
+
+    async def _run_incremental(
+        self, table_key: str, fetch_fn, upsert_fn,
+        start_date=None, end_date=None, sync_strategy=None, max_requests_per_minute=None,
+    ) -> Dict[str, Any]:
+        """通用增量同步：读取 sync_configs 配置，委托 TushareSyncBase.run_incremental_sync 执行"""
+        from app.services.tushare_sync_base import TushareSyncBase
+
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, table_key)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        if sync_strategy is None:
+            sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
+        if start_date is None:
+            start_date = await self._calc_suggested_start(table_key)
+
+        # 绑定 TushareSyncBase 的类属性到 self，使 unbound 调用可正常工作
+        if not hasattr(self, 'MAX_OFFSET'):
+            self.MAX_OFFSET = TushareSyncBase.MAX_OFFSET
+        if not hasattr(self, '_generate_segments'):
+            self._generate_segments = TushareSyncBase._generate_segments.__get__(self)
+
+        return await TushareSyncBase.run_incremental_sync(
+            self,
+            fetch_fn=fetch_fn, upsert_fn=upsert_fn, clean_fn=None,
+            table_key=table_key, date_col='trade_date',
+            sync_strategy=sync_strategy, start_date=start_date, end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute, api_limit=api_limit,
+        )
+
+    async def sync_incremental(self, start_date=None, end_date=None,
+                               sync_strategy=None, max_requests_per_minute=None) -> Dict[str, Any]:
+        """增量同步个股资金流向（Tushare 标准接口 moneyflow）"""
+        provider = self._get_provider(max_requests_per_minute)
+        return await self._run_incremental(
+            self.TABLE_KEY, provider.get_moneyflow, self.moneyflow_repo.bulk_upsert,
+            start_date, end_date, sync_strategy, max_requests_per_minute,
+        )
+
+    async def sync_moneyflow_stock_dc_incremental(self, start_date=None, end_date=None,
+                                                  sync_strategy=None, max_requests_per_minute=None) -> Dict[str, Any]:
+        """增量同步个股资金流向（东方财富 DC 接口 moneyflow_dc）"""
+        provider = self._get_provider(max_requests_per_minute)
+        return await self._run_incremental(
+            'moneyflow_stock_dc', provider.get_moneyflow_stock_dc, self.moneyflow_stock_dc_repo.bulk_upsert,
+            start_date, end_date, sync_strategy, max_requests_per_minute,
+        )
 
     # ========== 公共同步方法 ==========
 

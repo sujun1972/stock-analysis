@@ -64,13 +64,12 @@ class CyqPerfService(TushareSyncBase):
     ) -> Dict:
         """增量同步筹码及胜率数据。
 
-        cyq_perf 接口服务端要求 ts_code 或 trade_date 至少传一个，
-        不支持纯按日期范围全市场查询，只能使用 by_ts_code 策略。
+        cyq_perf 接口要求 ts_code 或 trade_date 至少传一个，
+        支持 by_ts_code（逐只股票）和 by_date（按 trade_date 逐日切片）策略。
         """
-        if sync_strategy and sync_strategy not in ('by_ts_code', 'none'):
+        if sync_strategy and sync_strategy not in ('by_ts_code', 'by_date', 'none'):
             logger.warning(
-                f"[cyq_perf] 接口不支持按日期范围全市场查询，"
-                f"忽略 sync_strategy={sync_strategy}，强制使用 by_ts_code"
+                f"[cyq_perf] 不支持 sync_strategy={sync_strategy}，强制使用 by_ts_code"
             )
             sync_strategy = 'by_ts_code'
 
@@ -93,6 +92,7 @@ class CyqPerfService(TushareSyncBase):
                 'ts_code': ts_code,
                 'trade_date': trade_date,
             },
+            date_param='trade_date' if sync_strategy == 'by_date' else None,
         )
 
     # ------------------------------------------------------------------

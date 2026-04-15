@@ -11,31 +11,23 @@ from datetime import datetime, date, timedelta
 from loguru import logger
 import pandas as pd
 
-from core.src.providers import DataProviderFactory
-from app.core.config import settings
 from app.repositories import MarginSecsRepository
 from app.repositories.sync_config_repository import SyncConfigRepository
 from app.repositories.sync_history_repository import SyncHistoryRepository
+from app.services.tushare_sync_base import TushareSyncBase
 
 
-class MarginSecsService:
+class MarginSecsService(TushareSyncBase):
     """融资融券标的服务"""
+
+    TABLE_KEY = 'margin_secs'
 
     def __init__(self):
         """初始化服务"""
+        super().__init__()
         self.margin_secs_repo = MarginSecsRepository()
-        self.provider_factory = DataProviderFactory()
         self.sync_history_repo = SyncHistoryRepository()
         logger.debug("✓ MarginSecsService initialized")
-
-    def _get_provider(self):
-        """获取Tushare数据提供者（缓存，每个实例只初始化一次）"""
-        if not hasattr(self, '_provider') or self._provider is None:
-            self._provider = self.provider_factory.create_provider(
-                source='tushare',
-                token=settings.TUSHARE_TOKEN
-            )
-        return self._provider
 
     # ------------------------------------------------------------------
     # 增量同步
@@ -52,28 +44,30 @@ class MarginSecsService:
         return last_end if (last_end and last_end < candidate) else candidate
 
     async def sync_incremental(self, start_date=None, end_date=None, sync_strategy=None, max_requests_per_minute=None) -> Dict:
-        """增量同步（标准入口，自动计算日期范围并记录 sync_history）"""
+        """增量同步（通过基类 run_incremental_sync 实现自动切片+翻页）"""
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        if sync_strategy is None:
+            sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_date_range') if cfg else 'by_date_range'
         if start_date is None:
             start_date = await self.get_suggested_start_date()
-        if end_date is None:
-            end_date = datetime.now().strftime('%Y%m%d')
 
-        logger.info(f"[margin_secs] 增量同步 start_date={start_date} end_date={end_date}")
+        provider = self._get_provider(max_requests_per_minute)
+        # margin_secs 没有 provider 封装方法，直接用 pro API
+        fetch_fn = provider.api_client.pro.margin_secs
 
-        history_id = await asyncio.to_thread(
-            self.sync_history_repo.create, 'margin_secs', 'incremental', sync_strategy or 'by_date_range', start_date,
+        return await self.run_incremental_sync(
+            fetch_fn=fetch_fn,
+            upsert_fn=self.margin_secs_repo.bulk_upsert,
+            clean_fn=self._validate_and_clean_data,
+            table_key=self.TABLE_KEY,
+            date_col='trade_date',
+            sync_strategy=sync_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            max_requests_per_minute=max_requests_per_minute,
+            api_limit=api_limit,
         )
-        try:
-            result = await self.sync_margin_secs(start_date=start_date, end_date=end_date)
-            await asyncio.to_thread(
-                self.sync_history_repo.complete, history_id, 'success', result.get('records', 0), end_date, None,
-            )
-            return result
-        except Exception as e:
-            await asyncio.to_thread(
-                self.sync_history_repo.complete, history_id, 'failure', 0, None, str(e),
-            )
-            raise
 
     async def sync_margin_secs(
         self,

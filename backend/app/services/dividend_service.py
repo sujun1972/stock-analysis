@@ -37,19 +37,32 @@ class DividendService:
         return last_end if (last_end and last_end < candidate) else candidate
 
     async def sync_incremental(self, start_date=None, end_date=None, sync_strategy=None, max_requests_per_minute=None) -> Dict:
-        """增量同步（标准入口，自动计算日期范围并记录 sync_history）"""
+        """增量同步（按 ann_date 回看 N 天，逐日调用 Tushare 接口）"""
+        if start_date is None:
+            start_date = await self.get_suggested_start_date()
         if end_date is None:
             end_date = datetime.now().strftime('%Y%m%d')
 
         history_id = await asyncio.to_thread(
-            self.sync_history_repo.create, 'dividend', 'incremental', 'snapshot', start_date,
+            self.sync_history_repo.create, 'dividend', 'incremental', 'by_date', start_date,
         )
         try:
-            result = await self.sync_dividend()
+            # 生成日期列表，逐日按 ann_date 拉取
+            from datetime import date
+            d_start = date(int(start_date[:4]), int(start_date[4:6]), int(start_date[6:8]))
+            d_end = date(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+            total_records = 0
+            cur = d_start
+            while cur <= d_end:
+                date_str = cur.strftime('%Y%m%d')
+                result = await self.sync_dividend(ann_date=date_str)
+                total_records += result.get('records', 0)
+                cur += timedelta(days=1)
+
             await asyncio.to_thread(
-                self.sync_history_repo.complete, history_id, 'success', result.get('records', 0), end_date, None,
+                self.sync_history_repo.complete, history_id, 'success', total_records, end_date, None,
             )
-            return result
+            return {'status': 'success', 'records': total_records, 'start_date': start_date, 'end_date': end_date}
         except Exception as e:
             await asyncio.to_thread(
                 self.sync_history_repo.complete, history_id, 'failure', 0, None, str(e),

@@ -87,7 +87,9 @@ class FundFlowMixin:
                                 ts_code: Optional[str] = None,
                                 trade_date: Optional[str] = None,
                                 start_date: Optional[str] = None,
-                                end_date: Optional[str] = None) -> pd.DataFrame:
+                                end_date: Optional[str] = None,
+                                limit: int = 6000,
+                                offset: int = 0) -> pd.DataFrame:
         """
         获取个股资金流向数据（东方财富DC）
         积分消耗：5000分，单次最大6000条，数据开始时间：20230911
@@ -97,6 +99,7 @@ class FundFlowMixin:
             **self._build_params(
                 ts_code=ts_code, trade_date=trade_date,
                 start_date=start_date, end_date=end_date,
+                limit=limit, offset=offset,
             )
         )
 

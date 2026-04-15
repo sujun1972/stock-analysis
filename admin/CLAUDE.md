@@ -507,6 +507,15 @@ your-page/
 | `lib/api/sync-dashboard.ts` | 前端 API 客户端 |
 | `app/(dashboard)/settings/sync-config/page.tsx` | 页面 |
 
+### 数据源测试弹窗
+
+每行操作列的 ▶ 按钮打开「数据源配置与测试」弹窗（需 `api_name` 非空），包含两个 Tab：
+
+- **接口配置**：编辑接口名称、文档链接、描述、请求限量、参数约束（ts_code/trade_date/日期范围/特殊参数），保存按钮更新 `sync_configs`
+- **接口测试**：显示远程接口 URL（`POST http://api.tushare.pro`），填写测试参数 + limit/offset，发送请求，响应以 JSON 文本显示在终端风格文本框中
+
+后端端点：`POST /api/sync-dashboard/test-datasource`（管理员权限）
+
 ### CATEGORY_ORDER 排序
 
 ```typescript

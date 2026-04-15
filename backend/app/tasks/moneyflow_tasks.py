@@ -48,14 +48,19 @@ def sync_moneyflow_task(
 
         from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
         service = MoneyflowSyncService()
-        result = run_async_in_celery(
-            service.sync_moneyflow,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date,
-            stock_list=stock_list
-        )
+
+        if not any([ts_code, trade_date, start_date, end_date, stock_list]):
+            # 无参数时走标准增量同步（自动切片+翻页）
+            result = run_async_in_celery(service.sync_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_moneyflow,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date,
+                stock_list=stock_list
+            )
 
         if result["status"] == "success":
             logger.info(f"个股资金流向同步成功: {result['records']} 条")

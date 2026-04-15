@@ -38,13 +38,17 @@ def sync_moneyflow_stock_dc_task(
         # 每次在任务内部创建新实例，避免复用 fork 前建立的全局单例中已损坏的连接池
         from app.services.extended_sync.moneyflow_sync import MoneyflowSyncService
         service = MoneyflowSyncService()
-        result = run_async_in_celery(
-            service.sync_moneyflow_stock_dc,
-            ts_code=ts_code,
-            trade_date=trade_date,
-            start_date=start_date,
-            end_date=end_date
-        )
+
+        if not any([ts_code, trade_date, start_date, end_date]):
+            result = run_async_in_celery(service.sync_moneyflow_stock_dc_incremental)
+        else:
+            result = run_async_in_celery(
+                service.sync_moneyflow_stock_dc,
+                ts_code=ts_code,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
 
         if result["status"] == "success":
             logger.info(f"个股资金流向同步成功: {result['records']} 条")

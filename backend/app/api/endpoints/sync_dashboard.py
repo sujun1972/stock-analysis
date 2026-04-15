@@ -7,10 +7,11 @@
 3. GET  /sync-dashboard/configs           - 获取所有同步配置（可编辑）
 4. PUT  /sync-dashboard/configs/{table_key} - 更新单条同步配置
 5. POST /sync-dashboard/{table_key}/clear-progress - 清除 Redis 进度（重置全量同步）
+6. POST /sync-dashboard/test-datasource   - 测试数据源接口（直接调用 Tushare/AkShare API）
 """
 
 import asyncio
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from loguru import logger
@@ -224,6 +225,13 @@ class SyncConfigUpdate(BaseModel):
 class ScheduleUpdate(BaseModel):
     enabled: Optional[bool] = None
     cron_expression: Optional[str] = None
+
+
+class TestDatasourceRequest(BaseModel):
+    api_name: str  # Tushare 接口名称，如 'income_vip'
+    params: Dict[str, Any] = {}  # 接口参数（ts_code, trade_date, start_date 等）
+    limit: int = 5  # 返回条数上限
+    offset: int = 0  # 偏移量
 
 
 # ==================== 路由 ====================
@@ -454,3 +462,66 @@ async def clear_progress(
         }, message="进度已清除，锁已释放，下次全量同步将从头开始")
     except Exception as e:
         return ApiResponse.error(message=f"清除失败: {e}", code=500)
+
+
+@router.post("/test-datasource")
+@handle_api_errors
+async def test_datasource(
+    body: TestDatasourceRequest,
+    current_user: User = Depends(require_admin),
+):
+    """
+    测试数据源接口：直接调用 Tushare API 并返回样本数据。
+
+    用于在同步配置页面验证接口名称和参数是否正确。
+    """
+    from core.src.providers import DataProviderFactory
+    from app.core.config import settings
+
+    if not settings.TUSHARE_TOKEN:
+        return ApiResponse.error(message="Tushare Token 未配置，请先在全局配置中设置", code=400)
+
+    api_name = body.api_name.strip()
+    if not api_name:
+        return ApiResponse.error(message="接口名称不能为空", code=400)
+
+    # 构建查询参数，过滤空值
+    query_params: Dict[str, Any] = {}
+    for k, v in body.params.items():
+        if v is not None and v != '':
+            query_params[k] = v
+    # limit / offset
+    query_params['limit'] = body.limit
+    if body.offset > 0:
+        query_params['offset'] = body.offset
+
+    try:
+        provider = DataProviderFactory.create_provider(
+            'tushare', token=settings.TUSHARE_TOKEN
+        )
+        df = await asyncio.to_thread(
+            provider.api_client.query, api_name, **query_params
+        )
+
+        if df is None or df.empty:
+            return ApiResponse.success(data={
+                "api_name": api_name,
+                "params": query_params,
+                "columns": [],
+                "rows": [],
+                "total": 0,
+            }, message="查询成功，但无数据返回")
+
+        columns = df.columns.tolist()
+        rows = df.to_dict(orient='records')
+        return ApiResponse.success(data={
+            "api_name": api_name,
+            "params": query_params,
+            "columns": columns,
+            "rows": rows,
+            "total": len(df),
+        }, message=f"查询成功，共 {len(df)} 条记录")
+    except Exception as e:
+        error_msg = str(e)
+        logger.warning(f"[test-datasource] 测试 {api_name} 失败: {error_msg}")
+        return ApiResponse.error(message=f"接口调用失败: {error_msg}", code=400)

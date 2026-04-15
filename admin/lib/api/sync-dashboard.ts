@@ -108,6 +108,23 @@ export interface ScheduleUpdate {
   cron_expression?: string | null
 }
 
+/** 测试数据源请求 */
+export interface TestDatasourceRequest {
+  api_name: string
+  params: Record<string, string>
+  limit?: number
+  offset?: number
+}
+
+/** 测试数据源响应 */
+export interface TestDatasourceResponse {
+  api_name: string
+  params: Record<string, string>
+  columns: string[]
+  rows: Record<string, any>[]
+  total: number
+}
+
 export class SyncDashboardApiClient extends BaseApiClient {
   /** 获取所有数据表同步状态概览 */
   async getOverview(category?: string): Promise<ApiResponse<SyncOverviewResponse>> {
@@ -151,6 +168,11 @@ export class SyncDashboardApiClient extends BaseApiClient {
   /** 获取指定表增量同步的建议起始日期（YYYYMMDD） */
   async getSuggestStartDate(apiPrefix: string): Promise<ApiResponse<{ suggested_start_date: string | null }>> {
     return this.get(`/api${apiPrefix}/suggest-start-date`)
+  }
+
+  /** 测试数据源接口（直接调用 Tushare API 返回样本数据） */
+  async testDatasource(data: TestDatasourceRequest): Promise<ApiResponse<TestDatasourceResponse>> {
+    return this.post('/api/sync-dashboard/test-datasource', data)
   }
 }
 
