@@ -139,6 +139,88 @@ class GenerateMultiRequest(BaseModel):
 
 
 # ------------------------------------------------------------------
+# CIO Agent 辅助函数
+# ------------------------------------------------------------------
+
+async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
+    """当 /generate 端点的 analysis_type == "cio_directive" 时走 Agent 路径。"""
+    from app.api.endpoints.prompt_templates import build_stock_prompt
+    from app.services.cio_agent_service import CIOAgentService
+
+    # 获取 CIO 推荐的 provider 配置
+    cio_template_key = _DEFAULT_TEMPLATE_KEYS.get("cio_directive", "cio_directive_v1")
+    try:
+        cio_prompt_data = await build_stock_prompt(
+            template_key=cio_template_key,
+            stock_name=body.stock_name,
+            stock_code=body.stock_code,
+            ts_code=body.ts_code,
+            created_by=current_user.id,
+            db=db,
+            allow_generate_data_collection=False,
+        )
+    except Exception as e:
+        logger.error(f"[generate_analysis/cio_agent] 获取模板配置失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"获取 CIO 模板配置失败: {e}", code=500).to_dict()
+
+    provider_name = cio_prompt_data["recommended_provider"]
+    provider_config = ai_service.get_provider_config(provider_name)
+    provider_config["temperature"] = cio_prompt_data["recommended_temperature"]
+    provider_config["max_tokens"] = cio_prompt_data["recommended_max_tokens"]
+
+    # 运行 CIO Agent（无专家摘要，Agent 自主查询全部数据）
+    try:
+        cio_agent = CIOAgentService()
+        agent_result = await cio_agent.run_agent(
+            ts_code=body.ts_code,
+            stock_name=body.stock_name,
+            expert_summaries=None,
+            provider=provider_name,
+            provider_config=provider_config,
+        )
+    except Exception as e:
+        logger.error(f"[generate_analysis/cio_agent] Agent 执行失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"CIO Agent 执行失败: {e}", code=500).to_dict()
+
+    ai_text = agent_result["content"]
+    tokens_used = agent_result["tokens_used"]
+    generation_time = agent_result["generation_time"]
+
+    # 清理 JSON + 提取评分
+    ai_text, extracted_score = _extract_json_and_score(ai_text)
+
+    # 保存
+    trade_date = cio_prompt_data.get("trade_date")
+    try:
+        result = await StockAiAnalysisService().save_analysis(
+            ts_code=body.ts_code,
+            analysis_type="cio_directive",
+            analysis_text=ai_text,
+            score=extracted_score,
+            prompt_text=f"[CIO Agent] tools={[t['tool'] for t in agent_result.get('tool_calls', [])]}",
+            ai_provider=provider_name,
+            ai_model=provider_config.get("model_name"),
+            created_by=current_user.id,
+            trade_date=trade_date,
+        )
+    except ValueError as e:
+        return ApiResponse.bad_request(message=str(e)).to_dict()
+
+    return ApiResponse.success(
+        data={
+            **result,
+            "analysis_text": ai_text,
+            "score": extracted_score,
+            "tokens_used": tokens_used,
+            "generation_time": round(generation_time, 2),
+            "agent_tool_calls": agent_result.get("tool_calls", []),
+            "agent_iterations": agent_result.get("iterations", 0),
+        },
+        message="CIO Agent 分析生成并保存成功",
+    ).to_dict()
+
+
+# ------------------------------------------------------------------
 # 端点
 # ------------------------------------------------------------------
 
@@ -182,6 +264,23 @@ async def generate_analysis(
     from app.api.endpoints.prompt_templates import build_stock_prompt
     from app.services.ai_service import AIStrategyService
 
+    ai_service = AIStrategyService()
+
+    # ----------------------------------------------------------
+    # CIO Agent 路径：analysis_type == "cio_directive" 走 Agent
+    # ----------------------------------------------------------
+    if body.analysis_type == "cio_directive":
+        return await _run_cio_agent_single(
+            body=body,
+            current_user=current_user,
+            db=db,
+            ai_service=ai_service,
+        )
+
+    # ----------------------------------------------------------
+    # 普通专家路径（非 CIO）
+    # ----------------------------------------------------------
+
     # 1. 构建提示词（生成分析时允许自动触发数据收集）
     try:
         prompt_data = await build_stock_prompt(
@@ -205,7 +304,6 @@ async def generate_analysis(
     full_prompt = f"{system_prompt}\n\n{user_prompt}".strip() if system_prompt else user_prompt
 
     # 2. 获取 AI 提供商配置，用模板推荐参数覆盖 temperature / max_tokens
-    ai_service = AIStrategyService()
     provider_name = prompt_data["recommended_provider"]
     provider_config = ai_service.get_provider_config(provider_name)
     provider_config["temperature"] = prompt_data["recommended_temperature"]
@@ -412,10 +510,23 @@ async def generate_multi_analysis(
         else:
             results.append(r)
 
-    # 4. 可选：CIO 综合决策（串联步骤，将前面专家的输出作为输入）
+    # 4. 可选：CIO Agent 综合决策（Agent 自主查询数据 + 参考前面专家结论）
     cio_result = None
     if body.include_cio and results:
         try:
+            from app.services.cio_agent_service import CIOAgentService
+
+            # 构建专家摘要供 Agent 参考
+            expert_summaries = [
+                {
+                    "analysis_type": r["analysis_type"],
+                    "score": r.get("score"),
+                    "text_preview": r.get("analysis_text", "")[:500],
+                }
+                for r in results
+            ]
+
+            # 获取 CIO 推荐的 provider 配置
             cio_template_key = _DEFAULT_TEMPLATE_KEYS["cio_directive"]
             cio_prompt_data = await build_stock_prompt(
                 template_key=cio_template_key,
@@ -424,37 +535,27 @@ async def generate_multi_analysis(
                 ts_code=body.ts_code,
                 created_by=current_user.id,
                 db=db,
-                allow_generate_data_collection=True,
+                allow_generate_data_collection=False,
             )
-
-            # 将前面专家的结论摘要注入 CIO prompt
-            expert_summary_lines = []
-            for r in results:
-                score_str = f"（评分: {r['score']}）" if r.get("score") is not None else ""
-                # 截取前 500 字作为摘要
-                text_preview = r.get("analysis_text", "")[:500]
-                expert_summary_lines.append(
-                    f"### {r['analysis_type']}{score_str}\n{text_preview}\n"
-                )
-            expert_summary = "\n".join(expert_summary_lines)
-
-            system_prompt = cio_prompt_data["system_prompt"]
-            user_prompt = cio_prompt_data["user_prompt"]
-            full_cio_prompt = (
-                f"{system_prompt}\n\n"
-                f"【其他专家分析结论（供 CIO 参考）】\n{expert_summary}\n\n"
-                f"{user_prompt}"
-            ).strip()
 
             provider_name = cio_prompt_data["recommended_provider"]
             provider_config = ai_service.get_provider_config(provider_name)
             provider_config["temperature"] = cio_prompt_data["recommended_temperature"]
             provider_config["max_tokens"] = cio_prompt_data["recommended_max_tokens"]
 
-            client = ai_service.create_client(provider_name, provider_config)
-            start_time = time.time()
-            cio_text, cio_tokens = await client.generate_strategy(full_cio_prompt)
-            cio_gen_time = time.time() - start_time
+            # 运行 CIO Agent
+            cio_agent = CIOAgentService()
+            agent_result = await cio_agent.run_agent(
+                ts_code=body.ts_code,
+                stock_name=body.stock_name,
+                expert_summaries=expert_summaries,
+                provider=provider_name,
+                provider_config=provider_config,
+            )
+
+            cio_text = agent_result["content"]
+            cio_tokens = agent_result["tokens_used"]
+            cio_gen_time = agent_result["generation_time"]
 
             cio_text, cio_score = _extract_json_and_score(cio_text)
 
@@ -463,7 +564,7 @@ async def generate_multi_analysis(
                 analysis_type="cio_directive",
                 analysis_text=cio_text,
                 score=cio_score,
-                prompt_text=full_cio_prompt,
+                prompt_text=f"[CIO Agent] tools={[t['tool'] for t in agent_result.get('tool_calls', [])]}",
                 ai_provider=provider_name,
                 ai_model=provider_config.get("model_name"),
                 created_by=current_user.id,
@@ -477,9 +578,11 @@ async def generate_multi_analysis(
                 "score": cio_score,
                 "tokens_used": cio_tokens,
                 "generation_time": round(cio_gen_time, 2),
+                "agent_tool_calls": agent_result.get("tool_calls", []),
+                "agent_iterations": agent_result.get("iterations", 0),
             }
         except Exception as e:
-            logger.error(f"[generate_multi] CIO 综合决策失败: {e}", exc_info=True)
+            logger.error(f"[generate_multi] CIO Agent 综合决策失败: {e}", exc_info=True)
             errors.append({"analysis_type": "cio_directive", "error": str(e)})
 
     total_tokens = sum(r.get("tokens_used", 0) for r in results)

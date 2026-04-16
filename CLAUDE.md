@@ -83,7 +83,32 @@ ChatOpenAI (deepseek/openai)    或  ChatGoogleGenerativeAI (gemini)
 - **新增 Provider**：在 `langchain_client.py` 的 `_MODEL_FACTORIES` 注册工厂函数，数据库 `ai_provider_configs` 添加配置行
 - **Prompt 模板**：数据库驱动（`llm_prompt_template` 表），通过 `PromptTemplateService` 管理
 - **调用日志**：`llm_call_logs` 表 + `LLMCallLogger` 单例，手动 `create_log_entry` / `update_log_success`
-- **依赖包**：`langchain-core`、`langchain-openai`、`langchain-google-genai`
+- **依赖包**：`langchain`、`langchain-core`、`langchain-openai`、`langchain-google-genai`
+
+### CIO Agent 架构（Phase 3）
+
+CIO（首席投资官）专家使用 LangChain Agent 模式，可自主决定查询哪些数据维度：
+
+```
+CIOAgentService                      ← backend/app/services/cio_agent_service.py
+    ↓
+create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（LangGraph）
+    ↓
+7 个 LangChain Tool                  ← backend/app/services/langchain_tools.py
+    ├── get_basic_market             基础盘面（价格、估值、行业、筹码）
+    ├── get_capital_flow             资金流向（主力净流入、北向资金）
+    ├── get_shareholder_info         股东信息（人数变化、减持、解禁）
+    ├── get_technical_indicators     技术指标（MA、RSI、MACD、量价异动）
+    ├── get_financial_reports        财报披露日期
+    ├── get_risk_alerts              风险警示（ST、质押）
+    └── get_nine_turn                神奇九转指标
+```
+
+- **触发方式**：`analysis_type == "cio_directive"` 时自动走 Agent 路径（`/generate` 和 `/generate-multi` 端点）
+- **非 CIO 类型**不走 Agent，保持现有直接调用方式
+- **max_iterations**：5 轮（通过 LangGraph `recursion_limit` 控制）
+- **超时**：120 秒
+- **Expert Summaries**：`/generate-multi` 的 `include_cio=true` 时，前面专家的输出摘要会注入 Agent 的用户消息
 
 ### Celery 任务架构
 
