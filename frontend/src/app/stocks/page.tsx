@@ -327,8 +327,6 @@ function StocksPageContent() {
   const [longtermLoading, setLongtermLoading] = useState(false)
   const [cioContent, setCioContent] = useState<string>('')
   const [cioLoading, setCioLoading] = useState(false)
-  // 并行生成中的股票 ts_code（用于按钮 loading 状态）
-  const [multiGeneratingTsCode, setMultiGeneratingTsCode] = useState<string | null>(null)
 
   const user = useAuthStore((s) => s.user)
 
@@ -966,65 +964,56 @@ function StocksPageContent() {
                         ))}
                         <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <button
-                            disabled={multiGeneratingTsCode === (stock.ts_code ?? toTsCode(stock.code))}
-                            onClick={async () => {
+                            onClick={() => {
                               const ts = stock.ts_code ?? toTsCode(stock.code)
                               setHotMoneyStock({ name: stock.name, code: stock.code, tsCode: ts })
-                              setMultiGeneratingTsCode(ts)
-
-                              // 并行：AI 生成 + 提示词加载
-                              const vars = { stock_name: stock.name, stock_code: stock.code }
-                              const [multiRes] = await Promise.all([
-                                apiClient.generateMultiAnalysis({
-                                  ts_code: ts,
-                                  stock_name: stock.name,
-                                  stock_code: stock.code,
-                                  analysis_types: ['hot_money_view', 'midline_industry_expert', 'longterm_value_watcher'],
-                                  include_cio: true,
-                                }).catch(() => null),
-                                // 同时加载提示词（弹窗内展示用）
-                                (async () => {
-                                  setHotMoneyContent(''); setDataCollectionContent(''); setMidlineContent(''); setLongtermContent(''); setCioContent('')
-                                  setHotMoneyLoading(true); setDataCollectionLoading(true); setMidlineLoading(true); setLongtermLoading(true); setCioLoading(true)
-                                  try {
-                                    const [hotRes, dataRes, midRes, ltRes, cioRes] = await Promise.all([
-                                      apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: ts }),
-                                      apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
-                                      apiClient.getPromptTemplateByKey('midline_industry_expert_v1', { ...vars, ts_code: ts }),
-                                      apiClient.getPromptTemplateByKey('longterm_value_watcher_v1', { ...vars, ts_code: ts }),
-                                      apiClient.getPromptTemplateByKey('cio_directive_v1', { ...vars, ts_code: ts }),
-                                    ])
-                                    const toPrompt = (res: any) => {
-                                      if (res?.code === 200 && res.data?.user_prompt_template) {
-                                        return [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean).join('\n\n')
-                                      }
-                                      return '加载失败，请重试'
-                                    }
-                                    setHotMoneyContent(toPrompt(hotRes)); setDataCollectionContent(toPrompt(dataRes))
-                                    setMidlineContent(toPrompt(midRes)); setLongtermContent(toPrompt(ltRes)); setCioContent(toPrompt(cioRes))
-                                  } catch {
-                                    setHotMoneyContent('加载失败，请重试'); setDataCollectionContent('加载失败，请重试')
-                                    setMidlineContent('加载失败，请重试'); setLongtermContent('加载失败，请重试'); setCioContent('加载失败，请重试')
-                                  } finally {
-                                    setHotMoneyLoading(false); setDataCollectionLoading(false); setMidlineLoading(false); setLongtermLoading(false); setCioLoading(false)
-                                  }
-                                })(),
-                              ])
-
-                              setMultiGeneratingTsCode(null)
-                              if (multiRes?.code === 200) {
-                                fetchStocks(true)  // 刷新列表评分
-                              }
+                              setHotMoneyContent('')
+                              setDataCollectionContent('')
+                              setMidlineContent('')
+                              setLongtermContent('')
+                              setCioContent('')
+                              setHotMoneyLoading(true)
+                              setDataCollectionLoading(true)
+                              setMidlineLoading(true)
+                              setLongtermLoading(true)
+                              setCioLoading(true)
                               setHotMoneyDialogOpen(true)
+                              const vars = { stock_name: stock.name, stock_code: stock.code }
+                              Promise.all([
+                                apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: ts }),
+                                apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
+                                apiClient.getPromptTemplateByKey('midline_industry_expert_v1', { ...vars, ts_code: ts }),
+                                apiClient.getPromptTemplateByKey('longterm_value_watcher_v1', { ...vars, ts_code: ts }),
+                                apiClient.getPromptTemplateByKey('cio_directive_v1', { ...vars, ts_code: ts }),
+                              ]).then(([hotRes, dataRes, midRes, ltRes, cioRes]) => {
+                                const toPrompt = (res: any) => {
+                                  if (res?.code === 200 && res.data?.user_prompt_template) {
+                                    return [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean).join('\n\n')
+                                  }
+                                  return '加载失败，请重试'
+                                }
+                                setHotMoneyContent(toPrompt(hotRes))
+                                setDataCollectionContent(toPrompt(dataRes))
+                                setMidlineContent(toPrompt(midRes))
+                                setLongtermContent(toPrompt(ltRes))
+                                setCioContent(toPrompt(cioRes))
+                              }).catch(() => {
+                                setHotMoneyContent('加载失败，请重试')
+                                setDataCollectionContent('加载失败，请重试')
+                                setMidlineContent('加载失败，请重试')
+                                setLongtermContent('加载失败，请重试')
+                                setCioContent('加载失败，请重试')
+                              }).finally(() => {
+                                setHotMoneyLoading(false)
+                                setDataCollectionLoading(false)
+                                setMidlineLoading(false)
+                                setLongtermLoading(false)
+                                setCioLoading(false)
+                              })
                             }}
-                            className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap"
                           >
-                            {multiGeneratingTsCode === (stock.ts_code ?? toTsCode(stock.code)) ? (
-                              <span className="flex items-center gap-1">
-                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                                分析中
-                              </span>
-                            ) : 'AI 分析'}
+                            AI 分析
                           </button>
                         </td>
                       </tr>

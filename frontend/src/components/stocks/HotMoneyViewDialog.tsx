@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import {
@@ -355,11 +355,12 @@ interface AnalysisTabProps {
   promptContent: string
   promptLoading: boolean
   open: boolean
+  refreshKey?: number    // 外部触发刷新（如一键分析完成后 +1）
   onSaved?: () => void
 }
 
 function AnalysisTab({
-  tsCode, stockName, stockCode, analysisType, templateKey, promptContent, promptLoading, open, onSaved,
+  tsCode, stockName, stockCode, analysisType, templateKey, promptContent, promptLoading, open, refreshKey, onSaved,
 }: AnalysisTabProps) {
   const [copied, setCopied] = useState(false)
   const [promptExpanded, setPromptExpanded] = useState(false)
@@ -412,7 +413,7 @@ function AnalysisTab({
       })
       .catch(() => {})
       .finally(() => setHistoryLoading(false))
-  }, [open, tsCode, analysisType])
+  }, [open, tsCode, analysisType, refreshKey])
 
   // 切换记录时退出编辑模式
   useEffect(() => {
@@ -793,12 +794,75 @@ export function HotMoneyViewDialog({
   cioPrompt, cioPromptLoading,
   onSaved,
 }: HotMoneyViewDialogProps) {
+  const [multiGenerating, setMultiGenerating] = useState(false)
+  const [multiMsg, setMultiMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  // 弹窗关闭时重置状态
+  useEffect(() => {
+    if (!open) {
+      setMultiGenerating(false)
+      setMultiMsg(null)
+    }
+  }, [open])
+
+  const handleMultiGenerate = useCallback(async () => {
+    if (!tsCode || !stockName || !stockCode) return
+    setMultiGenerating(true)
+    setMultiMsg(null)
+    try {
+      const res = await apiClient.generateMultiAnalysis({
+        ts_code: tsCode,
+        stock_name: stockName,
+        stock_code: stockCode,
+        analysis_types: ['hot_money_view', 'midline_industry_expert', 'longterm_value_watcher'],
+        include_cio: true,
+      })
+      if (res?.code === 200) {
+        const data = res.data
+        const count = data?.expert_count ?? 0
+        const errors = data?.errors?.length ?? 0
+        const time = data?.total_generation_time ?? 0
+        setMultiMsg({
+          text: `${count} 个专家分析完成（${time}s）` + (errors ? `，${errors} 个失败` : ''),
+          type: errors ? 'error' : 'success',
+        })
+        setRefreshKey((k) => k + 1)
+        onSaved?.()
+      } else {
+        setMultiMsg({ text: res?.message || '一键分析失败', type: 'error' })
+      }
+    } catch (e: any) {
+      setMultiMsg({ text: e?.response?.data?.message || '一键分析失败', type: 'error' })
+    } finally {
+      setMultiGenerating(false)
+    }
+  }, [tsCode, stockName, stockCode, onSaved])
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>AI 分析：{stockName}（{stockCode}）</DialogTitle>
-          <DialogDescription>保存并回顾每次 AI 分析结果</DialogDescription>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <DialogTitle>AI 分析：{stockName}（{stockCode}）</DialogTitle>
+              <DialogDescription>保存并回顾每次 AI 分析结果</DialogDescription>
+            </div>
+            <Button
+              onClick={handleMultiGenerate}
+              disabled={multiGenerating}
+              size="sm"
+              className="gap-1.5 shrink-0"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {multiGenerating ? '分析中...' : '一键分析'}
+            </Button>
+          </div>
+          {multiMsg && (
+            <p className={`text-xs mt-1 ${multiMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+              {multiMsg.text}
+            </p>
+          )}
         </DialogHeader>
 
         <Tabs defaultValue="hot_money" className="flex-1 flex flex-col min-h-0">
@@ -821,6 +885,7 @@ export function HotMoneyViewDialog({
                 promptContent={promptContent}
                 promptLoading={promptLoading}
                 open={open}
+                refreshKey={refreshKey}
                 onSaved={onSaved}
               />
             </TabsContent>
@@ -834,6 +899,7 @@ export function HotMoneyViewDialog({
                 promptContent={dataCollectionPrompt}
                 promptLoading={dataCollectionPromptLoading}
                 open={open}
+                refreshKey={refreshKey}
                 onSaved={onSaved}
               />
             </TabsContent>
@@ -848,6 +914,7 @@ export function HotMoneyViewDialog({
                 promptContent={midlinePrompt}
                 promptLoading={midlinePromptLoading}
                 open={open}
+                refreshKey={refreshKey}
                 onSaved={onSaved}
               />
             </TabsContent>
@@ -862,6 +929,7 @@ export function HotMoneyViewDialog({
                 promptContent={longtermPrompt}
                 promptLoading={longtermPromptLoading}
                 open={open}
+                refreshKey={refreshKey}
                 onSaved={onSaved}
               />
             </TabsContent>
@@ -876,6 +944,7 @@ export function HotMoneyViewDialog({
                 promptContent={cioPrompt}
                 promptLoading={cioPromptLoading}
                 open={open}
+                refreshKey={refreshKey}
                 onSaved={onSaved}
               />
             </TabsContent>
