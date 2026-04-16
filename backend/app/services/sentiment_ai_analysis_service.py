@@ -556,7 +556,7 @@ class SentimentAIAnalysisService:
             }
 
     def _parse_ai_response(self, ai_response: str) -> Dict[str, Any]:
-        """解析AI返回的JSON"""
+        """解析AI返回的JSON，优先使用 Pydantic 结构化解析，失败降级为原始 JSON"""
         try:
             if ai_response is None:
                 raise ValueError("AI响应内容为None")
@@ -564,23 +564,31 @@ class SentimentAIAnalysisService:
             if not isinstance(ai_response, str):
                 raise ValueError(f"AI响应内容类型错误，期望str，实际{type(ai_response)}")
 
-            # 尝试提取JSON代码块
-            json_pattern = r'```json\s*(\{[\s\S]*?\})\s*```'
-            matches = re.findall(json_pattern, ai_response)
+            # 优先：Pydantic 结构化解析
+            from app.schemas.ai_analysis_result import SentimentAnalysisResult
+            from app.services.ai_output_parser import parse_ai_json, parse_ai_json_or_dict
 
-            if matches:
-                analysis = json.loads(matches[0])
-                logger.info("成功解析AI返回的JSON代码块")
-                return analysis
+            parsed = parse_ai_json(ai_response, SentimentAnalysisResult)
+            if parsed is not None:
+                logger.info("通过 Pydantic 模型成功解析情绪分析 JSON")
+                return parsed.model_dump()
 
-            # 如果没有代码块，尝试直接解析
-            analysis = json.loads(ai_response)
-            logger.info("成功直接解析AI返回的JSON")
-            return analysis
+            # 降级：提取 JSON dict（无 Pydantic 校验）
+            raw_dict = parse_ai_json_or_dict(ai_response)
+            if raw_dict is not None:
+                logger.info("降级为原始 JSON dict 解析成功")
+                return raw_dict
 
-        except json.JSONDecodeError as e:
+            # 最终降级：返回解析失败标记
+            logger.warning("所有 JSON 解析策略均失败")
+            return {
+                "parse_failed": True,
+                "raw_response": ai_response,
+                "error": "无法从 AI 响应中提取有效 JSON"
+            }
+
+        except Exception as e:
             logger.error(f"JSON解析失败: {str(e)}")
-            # 返回原始文本作为降级方案
             return {
                 "parse_failed": True,
                 "raw_response": ai_response,

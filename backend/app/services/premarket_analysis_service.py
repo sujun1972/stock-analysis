@@ -457,23 +457,31 @@ class PremarketAnalysisService:
         return prompt
 
     def _parse_collision_response(self, ai_response: str) -> Dict:
-        """解析AI返回的碰撞分析JSON"""
+        """解析AI返回的碰撞分析JSON，优先使用 Pydantic 结构化解析，失败降级为原始 JSON"""
         try:
-            # 提取JSON代码块
-            json_pattern = r'```json\s*(\{[\s\S]*?\})\s*```'
-            matches = re.findall(json_pattern, ai_response)
+            from app.schemas.ai_analysis_result import CollisionAnalysisResult
+            from app.services.ai_output_parser import parse_ai_json, parse_ai_json_or_dict
 
-            if matches:
-                result = json.loads(matches[0])
-                logger.info("成功解析AI返回的JSON代码块")
-                return result
+            # 优先：Pydantic 结构化解析
+            parsed = parse_ai_json(ai_response, CollisionAnalysisResult)
+            if parsed is not None:
+                logger.info("通过 Pydantic 模型成功解析碰撞分析 JSON")
+                return parsed.model_dump()
 
-            # 尝试直接解析
-            result = json.loads(ai_response)
-            logger.info("成功直接解析AI返回的JSON")
-            return result
+            # 降级：提取 JSON dict（无 Pydantic 校验）
+            raw_dict = parse_ai_json_or_dict(ai_response)
+            if raw_dict is not None:
+                logger.info("降级为原始 JSON dict 解析成功")
+                return raw_dict
 
-        except json.JSONDecodeError as e:
+            logger.warning("所有 JSON 解析策略均失败")
+            return {
+                "parse_failed": True,
+                "raw_response": ai_response,
+                "error": "无法从 AI 响应中提取有效 JSON"
+            }
+
+        except Exception as e:
             logger.error(f"JSON解析失败: {e}")
             return {
                 "parse_failed": True,

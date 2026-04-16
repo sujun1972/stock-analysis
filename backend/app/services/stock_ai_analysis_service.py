@@ -10,6 +10,7 @@ ALLOWED_ANALYSIS_TYPES = {
     "midline_industry_expert",
     "longterm_value_watcher",
     "cio_directive",
+    "macro_risk_expert",
 }
 
 

@@ -4,7 +4,6 @@
 """
 
 import json
-import re
 import time
 from typing import Optional
 
@@ -24,20 +23,25 @@ def _extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
     """
     从 AI 返回文本中：
     1. 去掉 ```json ... ``` 代码块标识，只保留纯 JSON 内容
-    2. 尝试从多个候选路径提取评分（按优先级依次尝试）
-
-    候选评分路径（.分隔的 key 路径）：
-      - final_score.score        游资观点
-      - comprehensive_score      中线专家、价值守望者、CIO 顶级 key
-      - score                    CIO 简单结构
+    2. 尝试用 Pydantic 模型提取评分，失败降级为手动路径查找
 
     返回 (cleaned_text, score_or_None)
     """
-    # 去掉 markdown 代码块标识
-    cleaned = re.sub(r'^```(?:json)?\s*\n?', '', ai_text.strip(), flags=re.MULTILINE)
-    cleaned = re.sub(r'\n?```\s*$', '', cleaned.strip(), flags=re.MULTILINE)
-    cleaned = cleaned.strip()
+    from app.schemas.ai_analysis_result import StockExpertAnalysisResult
+    from app.services.ai_output_parser import extract_json_text, parse_ai_json
 
+    # 提取纯 JSON 文本
+    json_text = extract_json_text(ai_text)
+    cleaned = json_text if json_text else ai_text.strip()
+
+    # 优先：Pydantic 结构化解析 + 评分提取
+    parsed = parse_ai_json(ai_text, StockExpertAnalysisResult)
+    if parsed is not None:
+        score = parsed.extract_score()
+        if score is not None:
+            return cleaned, score
+
+    # 降级：手动路径查找
     _SCORE_PATHS = [
         ["final_score", "score"],   # 游资观点
         ["comprehensive_score"],    # 中线专家 / 价值守望者 / CIO
@@ -74,6 +78,7 @@ _JSON_ANALYSIS_TYPES = {
     "midline_industry_expert",
     "longterm_value_watcher",
     "cio_directive",
+    "macro_risk_expert",
 }
 
 router = APIRouter(prefix="/stock-ai-analysis", tags=["股票AI分析"])
@@ -105,6 +110,32 @@ class GenerateAnalysisRequest(BaseModel):
     stock_code: str = Field(..., description="股票纯代码，如 000001")
     analysis_type: str = Field(..., description="分析类型，hot_money_view 或 stock_data_collection")
     template_key: str = Field(..., description="提示词模板 key，如 top_speculative_investor_v1")
+
+
+# analysis_type → 默认 template_key 映射
+_DEFAULT_TEMPLATE_KEYS = {
+    "hot_money_view": "top_speculative_investor_v1",
+    "midline_industry_expert": "midline_industry_expert_v1",
+    "longterm_value_watcher": "longterm_value_watcher_v1",
+    "cio_directive": "cio_directive_v1",
+    "macro_risk_expert": "macro_risk_expert_v1",
+}
+
+
+class GenerateMultiRequest(BaseModel):
+    ts_code: str = Field(..., description="股票代码，如 000001.SZ")
+    stock_name: str = Field(..., description="股票名称")
+    stock_code: str = Field(..., description="股票纯代码，如 000001")
+    analysis_types: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description="分析类型列表，如 ['hot_money_view', 'midline_industry_expert']",
+    )
+    include_cio: bool = Field(
+        False,
+        description="是否在所有专家完成后追加 CIO 综合决策（将前面专家的输出作为 CIO 输入）",
+    )
 
 
 # ------------------------------------------------------------------
@@ -227,6 +258,248 @@ async def generate_analysis(
             "generation_time": round(generation_time, 2),
         },
         message="AI 分析生成并保存成功",
+    ).to_dict()
+
+
+@router.post("/generate-multi")
+async def generate_multi_analysis(
+    body: GenerateMultiRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """并行调用多个 AI 专家分析同一只股票，数据收集只做一次。
+
+    使用 LCEL RunnableParallel 并行编排多个专家。
+    可选：所有专家完成后追加 CIO 综合决策步骤。
+    """
+    import asyncio
+    from app.api.endpoints.prompt_templates import build_stock_prompt
+    from app.services.ai_service import AIStrategyService
+
+    # 校验 analysis_types
+    invalid_types = [t for t in body.analysis_types if t not in _JSON_ANALYSIS_TYPES and t != "stock_data_collection"]
+    if invalid_types:
+        return ApiResponse.bad_request(
+            message=f"不支持的分析类型: {invalid_types}，允许值: {list(_JSON_ANALYSIS_TYPES)}"
+        ).to_dict()
+
+    # 去重，移除 cio_directive（如果 include_cio=True 则最后单独处理）
+    expert_types = list(dict.fromkeys(
+        t for t in body.analysis_types if t != "cio_directive"
+    ))
+    if not expert_types and not body.include_cio:
+        return ApiResponse.bad_request(message="至少需要一个非 CIO 分析类型").to_dict()
+
+    ai_service = AIStrategyService()
+
+    # 1. 构建第一个专家的提示词（触发数据收集，后续专家共享）
+    #    所有专家模板都引用 {{ stock_data_collection }}，第一次调用会生成并缓存
+    first_type = expert_types[0] if expert_types else "cio_directive"
+    first_template_key = _DEFAULT_TEMPLATE_KEYS.get(first_type)
+    if not first_template_key:
+        return ApiResponse.bad_request(message=f"分析类型 {first_type} 无默认模板").to_dict()
+
+    try:
+        first_prompt_data = await build_stock_prompt(
+            template_key=first_template_key,
+            stock_name=body.stock_name,
+            stock_code=body.stock_code,
+            ts_code=body.ts_code,
+            created_by=current_user.id,
+            db=db,
+            allow_generate_data_collection=True,
+        )
+    except Exception as e:
+        logger.error(f"[generate_multi] 构建提示词失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"构建提示词失败: {e}", code=500).to_dict()
+
+    trade_date = first_prompt_data.get("trade_date")
+
+    # 2. 并行构建所有专家的提示词（数据收集已缓存，此步很快）
+    async def build_expert_prompt(analysis_type: str) -> dict:
+        template_key = _DEFAULT_TEMPLATE_KEYS.get(analysis_type)
+        if not template_key:
+            raise ValueError(f"分析类型 {analysis_type} 无默认模板")
+        return await build_stock_prompt(
+            template_key=template_key,
+            stock_name=body.stock_name,
+            stock_code=body.stock_code,
+            ts_code=body.ts_code,
+            created_by=current_user.id,
+            db=db,
+            allow_generate_data_collection=True,
+        )
+
+    # 第一个已构建，其余并行构建
+    remaining_types = expert_types[1:]
+    try:
+        remaining_prompts = await asyncio.gather(*[
+            build_expert_prompt(t) for t in remaining_types
+        ])
+    except Exception as e:
+        logger.error(f"[generate_multi] 并行构建提示词失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"构建提示词失败: {e}", code=500).to_dict()
+
+    all_prompt_data = {expert_types[0]: first_prompt_data}
+    for t, pd_item in zip(remaining_types, remaining_prompts):
+        all_prompt_data[t] = pd_item
+
+    # 3. 并行调用 AI 生成
+    async def run_expert(analysis_type: str) -> dict:
+        prompt_data = all_prompt_data[analysis_type]
+        system_prompt = prompt_data["system_prompt"]
+        user_prompt = prompt_data["user_prompt"]
+        full_prompt = f"{system_prompt}\n\n{user_prompt}".strip() if system_prompt else user_prompt
+
+        provider_name = prompt_data["recommended_provider"]
+        provider_config = ai_service.get_provider_config(provider_name)
+        provider_config["temperature"] = prompt_data["recommended_temperature"]
+        provider_config["max_tokens"] = prompt_data["recommended_max_tokens"]
+
+        client = ai_service.create_client(provider_name, provider_config)
+        start_time = time.time()
+        ai_text, tokens_used = await client.generate_strategy(full_prompt)
+        generation_time = time.time() - start_time
+
+        logger.info(
+            f"[generate_multi] {body.ts_code} {analysis_type} "
+            f"生成完成: {len(ai_text)}字 / {tokens_used} tokens / {generation_time:.2f}s"
+        )
+
+        # 清理 JSON + 提取评分
+        if analysis_type in _JSON_ANALYSIS_TYPES:
+            ai_text, extracted_score = _extract_json_and_score(ai_text)
+        else:
+            extracted_score = None
+
+        # 保存
+        result = await StockAiAnalysisService().save_analysis(
+            ts_code=body.ts_code,
+            analysis_type=analysis_type,
+            analysis_text=ai_text,
+            score=extracted_score,
+            prompt_text=full_prompt,
+            ai_provider=provider_name,
+            ai_model=provider_config.get("model_name"),
+            created_by=current_user.id,
+            trade_date=trade_date,
+        )
+
+        return {
+            "analysis_type": analysis_type,
+            **result,
+            "analysis_text": ai_text,
+            "score": extracted_score,
+            "tokens_used": tokens_used,
+            "generation_time": round(generation_time, 2),
+        }
+
+    try:
+        expert_results = await asyncio.gather(*[
+            run_expert(t) for t in expert_types
+        ], return_exceptions=True)
+    except Exception as e:
+        logger.error(f"[generate_multi] 并行生成失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"并行生成失败: {e}", code=500).to_dict()
+
+    # 分离成功和失败的结果
+    results = []
+    errors = []
+    for i, r in enumerate(expert_results):
+        if isinstance(r, Exception):
+            errors.append({"analysis_type": expert_types[i], "error": str(r)})
+            logger.error(f"[generate_multi] {expert_types[i]} 失败: {r}")
+        else:
+            results.append(r)
+
+    # 4. 可选：CIO 综合决策（串联步骤，将前面专家的输出作为输入）
+    cio_result = None
+    if body.include_cio and results:
+        try:
+            cio_template_key = _DEFAULT_TEMPLATE_KEYS["cio_directive"]
+            cio_prompt_data = await build_stock_prompt(
+                template_key=cio_template_key,
+                stock_name=body.stock_name,
+                stock_code=body.stock_code,
+                ts_code=body.ts_code,
+                created_by=current_user.id,
+                db=db,
+                allow_generate_data_collection=True,
+            )
+
+            # 将前面专家的结论摘要注入 CIO prompt
+            expert_summary_lines = []
+            for r in results:
+                score_str = f"（评分: {r['score']}）" if r.get("score") is not None else ""
+                # 截取前 500 字作为摘要
+                text_preview = r.get("analysis_text", "")[:500]
+                expert_summary_lines.append(
+                    f"### {r['analysis_type']}{score_str}\n{text_preview}\n"
+                )
+            expert_summary = "\n".join(expert_summary_lines)
+
+            system_prompt = cio_prompt_data["system_prompt"]
+            user_prompt = cio_prompt_data["user_prompt"]
+            full_cio_prompt = (
+                f"{system_prompt}\n\n"
+                f"【其他专家分析结论（供 CIO 参考）】\n{expert_summary}\n\n"
+                f"{user_prompt}"
+            ).strip()
+
+            provider_name = cio_prompt_data["recommended_provider"]
+            provider_config = ai_service.get_provider_config(provider_name)
+            provider_config["temperature"] = cio_prompt_data["recommended_temperature"]
+            provider_config["max_tokens"] = cio_prompt_data["recommended_max_tokens"]
+
+            client = ai_service.create_client(provider_name, provider_config)
+            start_time = time.time()
+            cio_text, cio_tokens = await client.generate_strategy(full_cio_prompt)
+            cio_gen_time = time.time() - start_time
+
+            cio_text, cio_score = _extract_json_and_score(cio_text)
+
+            cio_saved = await StockAiAnalysisService().save_analysis(
+                ts_code=body.ts_code,
+                analysis_type="cio_directive",
+                analysis_text=cio_text,
+                score=cio_score,
+                prompt_text=full_cio_prompt,
+                ai_provider=provider_name,
+                ai_model=provider_config.get("model_name"),
+                created_by=current_user.id,
+                trade_date=trade_date,
+            )
+
+            cio_result = {
+                "analysis_type": "cio_directive",
+                **cio_saved,
+                "analysis_text": cio_text,
+                "score": cio_score,
+                "tokens_used": cio_tokens,
+                "generation_time": round(cio_gen_time, 2),
+            }
+        except Exception as e:
+            logger.error(f"[generate_multi] CIO 综合决策失败: {e}", exc_info=True)
+            errors.append({"analysis_type": "cio_directive", "error": str(e)})
+
+    total_tokens = sum(r.get("tokens_used", 0) for r in results)
+    total_time = sum(r.get("generation_time", 0) for r in results)
+    if cio_result:
+        total_tokens += cio_result.get("tokens_used", 0)
+        total_time += cio_result.get("generation_time", 0)
+
+    return ApiResponse.success(
+        data={
+            "expert_results": results,
+            "cio_result": cio_result,
+            "errors": errors if errors else None,
+            "total_tokens": total_tokens,
+            "total_generation_time": round(total_time, 2),
+            "expert_count": len(results) + (1 if cio_result else 0),
+        },
+        message=f"多专家分析完成：{len(results)} 个专家成功"
+        + (f"，{len(errors)} 个失败" if errors else "")
+        + ("，含 CIO 综合决策" if cio_result else ""),
     ).to_dict()
 
 
