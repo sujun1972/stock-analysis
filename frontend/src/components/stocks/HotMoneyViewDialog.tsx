@@ -843,26 +843,8 @@ export function HotMoneyViewDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <DialogTitle>AI 分析：{stockName}（{stockCode}）</DialogTitle>
-              <DialogDescription>保存并回顾每次 AI 分析结果</DialogDescription>
-            </div>
-            <Button
-              onClick={handleMultiGenerate}
-              disabled={multiGenerating}
-              size="sm"
-              className="gap-1.5 shrink-0"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              {multiGenerating ? '分析中...' : '一键分析'}
-            </Button>
-          </div>
-          {multiMsg && (
-            <p className={`text-xs mt-1 ${multiMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
-              {multiMsg.text}
-            </p>
-          )}
+          <DialogTitle>AI 分析：{stockName}（{stockCode}）</DialogTitle>
+          <DialogDescription>保存并回顾每次 AI 分析结果</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="hot_money" className="flex-1 flex flex-col min-h-0">
@@ -952,6 +934,20 @@ export function HotMoneyViewDialog({
         </Tabs>
 
         <DialogFooter className="mt-4">
+          {multiMsg && (
+            <p className={`text-xs mr-auto self-center ${multiMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+              {multiMsg.text}
+            </p>
+          )}
+          <Button
+            onClick={handleMultiGenerate}
+            disabled={multiGenerating}
+            size="sm"
+            className="gap-1.5"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {multiGenerating ? '分析中...' : '一键分析'}
+          </Button>
           <Button variant="outline" onClick={onClose}>关闭</Button>
         </DialogFooter>
       </DialogContent>
