@@ -309,6 +309,7 @@ function AnalysisContent() {
   const [cioContent, setCioContent] = useState('')
   const [cioLoading, setCioLoading] = useState(false)
   const [latestAnalysis, setLatestAnalysis] = useState<{ score: number | null; version: number } | null>(null)
+  const [multiGenerating, setMultiGenerating] = useState(false)
 
   useEffect(() => {
     setLatestAnalysis(null)
@@ -361,51 +362,59 @@ function AnalysisContent() {
       .catch(() => { setLatestAnalysis(null) })
   }
 
-  const openHotMoneyDialog = () => {
-    setHotMoneyContent('')
-    setDataCollectionContent('')
-    setMidlineContent('')
-    setLongtermContent('')
-    setCioContent('')
-    setHotMoneyLoading(true)
-    setDataCollectionLoading(true)
-    setMidlineLoading(true)
-    setLongtermLoading(true)
-    setCioLoading(true)
-    setHotMoneyOpen(true)
-    const vars = { stock_name: stockInfo?.name ?? '', stock_code: code ?? '' }
+  const openHotMoneyDialog = async () => {
     const currentTsCode = basicInfo?.ts_code || (code ? toTsCode(code) : '')
-    Promise.all([
-      apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: currentTsCode }),
-      apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
-      apiClient.getPromptTemplateByKey('midline_industry_expert_v1', { ...vars, ts_code: currentTsCode }),
-      apiClient.getPromptTemplateByKey('longterm_value_watcher_v1', { ...vars, ts_code: currentTsCode }),
-      apiClient.getPromptTemplateByKey('cio_directive_v1', { ...vars, ts_code: currentTsCode }),
-    ]).then(([hotRes, dataRes, midRes, ltRes, cioRes]) => {
-      const toPrompt = (res: any) => {
-        if (res?.code === 200 && res.data?.user_prompt_template) {
-          return [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean).join('\n\n')
+    const stockName = stockInfo?.name ?? ''
+    const stockCode = code ?? ''
+    if (!currentTsCode) return
+
+    setMultiGenerating(true)
+
+    // 并行：AI 生成 + 提示词加载
+    const vars = { stock_name: stockName, stock_code: stockCode }
+    setHotMoneyContent(''); setDataCollectionContent(''); setMidlineContent(''); setLongtermContent(''); setCioContent('')
+    setHotMoneyLoading(true); setDataCollectionLoading(true); setMidlineLoading(true); setLongtermLoading(true); setCioLoading(true)
+
+    const [multiRes] = await Promise.all([
+      apiClient.generateMultiAnalysis({
+        ts_code: currentTsCode,
+        stock_name: stockName,
+        stock_code: stockCode,
+        analysis_types: ['hot_money_view', 'midline_industry_expert', 'longterm_value_watcher'],
+        include_cio: true,
+      }).catch(() => null),
+      // 同时加载提示词
+      (async () => {
+        try {
+          const [hotRes, dataRes, midRes, ltRes, cioRes] = await Promise.all([
+            apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: currentTsCode }),
+            apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
+            apiClient.getPromptTemplateByKey('midline_industry_expert_v1', { ...vars, ts_code: currentTsCode }),
+            apiClient.getPromptTemplateByKey('longterm_value_watcher_v1', { ...vars, ts_code: currentTsCode }),
+            apiClient.getPromptTemplateByKey('cio_directive_v1', { ...vars, ts_code: currentTsCode }),
+          ])
+          const toPrompt = (res: any) => {
+            if (res?.code === 200 && res.data?.user_prompt_template) {
+              return [res.data.system_prompt, res.data.user_prompt_template].filter(Boolean).join('\n\n')
+            }
+            return '加载失败，请重试'
+          }
+          setHotMoneyContent(toPrompt(hotRes)); setDataCollectionContent(toPrompt(dataRes))
+          setMidlineContent(toPrompt(midRes)); setLongtermContent(toPrompt(ltRes)); setCioContent(toPrompt(cioRes))
+        } catch {
+          setHotMoneyContent('加载失败，请重试'); setDataCollectionContent('加载失败，请重试')
+          setMidlineContent('加载失败，请重试'); setLongtermContent('加载失败，请重试'); setCioContent('加载失败，请重试')
+        } finally {
+          setHotMoneyLoading(false); setDataCollectionLoading(false); setMidlineLoading(false); setLongtermLoading(false); setCioLoading(false)
         }
-        return '加载失败，请重试'
-      }
-      setHotMoneyContent(toPrompt(hotRes))
-      setDataCollectionContent(toPrompt(dataRes))
-      setMidlineContent(toPrompt(midRes))
-      setLongtermContent(toPrompt(ltRes))
-      setCioContent(toPrompt(cioRes))
-    }).catch(() => {
-      setHotMoneyContent('加载失败，请重试')
-      setDataCollectionContent('加载失败，请重试')
-      setMidlineContent('加载失败，请重试')
-      setLongtermContent('加载失败，请重试')
-      setCioContent('加载失败，请重试')
-    }).finally(() => {
-      setHotMoneyLoading(false)
-      setDataCollectionLoading(false)
-      setMidlineLoading(false)
-      setLongtermLoading(false)
-      setCioLoading(false)
-    })
+      })(),
+    ])
+
+    setMultiGenerating(false)
+    if (multiRes?.code === 200) {
+      refreshLatestAnalysis(currentTsCode)
+    }
+    setHotMoneyOpen(true)
   }
 
   // 使用 useMemo 稳定 codes 数组引用，避免重复触发刷新
@@ -505,9 +514,15 @@ function AnalysisContent() {
           )}
           <button
             onClick={openHotMoneyDialog}
-            className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors"
+            disabled={multiGenerating}
+            className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors disabled:opacity-50"
           >
-            AI 分析
+            {multiGenerating ? (
+              <span className="flex items-center gap-1">
+                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                分析中
+              </span>
+            ) : 'AI 分析'}
           </button>
         </div>
       </div>

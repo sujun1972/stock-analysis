@@ -1546,6 +1546,18 @@ class ApiClient {
     return response.data
   }
 
+  /** 并行调用多个 AI 专家分析同一只股票，可选追加 CIO 综合决策 */
+  async generateMultiAnalysis(params: {
+    ts_code: string
+    stock_name: string
+    stock_code: string
+    analysis_types: string[]
+    include_cio?: boolean
+  }): Promise<any> {
+    const response = await axiosInstance.post('/api/stock-ai-analysis/generate-multi', params)
+    return response.data
+  }
+
   // ========== 个股数据收集 ==========
 
   /** 从本地数据库收集个股多维度数据，返回结构化文本供 AI 提示词使用 */

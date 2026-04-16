@@ -317,7 +317,7 @@ function StructuredAnalysisContent({ d }: { d: Record<string, any> }) {
  * 优先级：结构化 JSON 渲染 → Markdown 渲染 → 纯文本兜底
  */
 const JSON_ANALYSIS_TYPES = new Set([
-  'hot_money_view', 'midline_industry_expert', 'longterm_value_watcher', 'cio_directive',
+  'hot_money_view', 'midline_industry_expert', 'longterm_value_watcher', 'cio_directive', 'macro_risk_expert',
 ])
 
 function AnalysisContent({ text, analysisType }: { text: string; analysisType: string }) {
