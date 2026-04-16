@@ -133,8 +133,6 @@ def get_format_instructions(model_class: Type[BaseModel]) -> str:
         格式指令文本
     """
     schema = model_class.model_json_schema()
-
-    # 简化 schema，移除 $defs 引用并内联
     schema_str = json.dumps(schema, ensure_ascii=False, indent=2)
 
     return (

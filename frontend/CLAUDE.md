@@ -185,6 +185,8 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 每个 Tab 功能：通过"AI 分析"按钮一键生成并自动保存、查看/翻页历史分析记录、编辑/删除已有记录（仅记录创建者）、折叠展示提示词（复制按钮在提示词区域内）。弹窗内无手动输入/保存区域，所有分析均通过后端 AI 生成。
 
+**一键分析按钮**：弹窗底部 Footer 的「一键分析」按钮调用 `POST /api/stock-ai-analysis/generate-multi`，并行生成游资/中线/价值 3 个专家 + CIO 综合决策。完成后通过 `refreshKey` 机制触发所有 Tab 自动刷新历史。各 Tab 内的单独"AI 分析"按钮仍保留，可单独重新生成某个专家。
+
 打开弹窗时，全部 5 个提示词通过 `Promise.all` 并发加载，互不阻塞。新增 Tab 后必须同步更新父页面（`/stocks/page.tsx`、`/analysis/page.tsx`）的 state 和 `HotMoneyViewDialog` props。
 
 **`{{ stock_data_collection }}` 占位符填充**：`build_stock_prompt()` 通过 `allow_generate_data_collection` 参数区分行为：
@@ -193,14 +195,15 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **AI 直接生成（各 Tab）**：各 Tab 可通过"AI 分析"按钮调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建提示词，调用 AI 服务生成并自动保存，返回 `analysis_text` + `score` 并刷新历史列表。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 共用同一函数，确保一致性。
 
-**JSON 格式分析类型（4 种）**：`hot_money_view`、`midline_industry_expert`、`longterm_value_watcher`、`cio_directive` 均要求 AI 返回结构化 JSON（含 `expert_identity`、`probability_metrics`、`dimensions`、`final_score` 等字段）。后端 `_extract_json_and_score()` 统一处理：① 剥离 ` ```json ``` ` 代码块；② 按优先级路径提取评分（`final_score.score` → `comprehensive_score` → `score`）。前端 `StructuredAnalysisContent` 组件统一渲染所有 4 种 JSON 类型，`PM_FIELD_LABELS` 映射表将 `probability_metrics` 中的英文 key 转为中文标签；JSON 解析失败时降级为纯文本展示。
+**JSON 格式分析类型（5 种）**：`hot_money_view`、`midline_industry_expert`、`longterm_value_watcher`、`cio_directive`、`macro_risk_expert` 均要求 AI 返回结构化 JSON。后端通过 `ai_output_parser.parse_ai_json()` + Pydantic 模型（`schemas/ai_analysis_result.py`）解析，失败降级为原始 JSON dict。评分提取优先级：`final_score.score` → `comprehensive_score` → `score`。前端 `StructuredAnalysisContent` 组件统一渲染所有 JSON 类型，`PM_FIELD_LABELS` 映射表将 `probability_metrics` 中的英文 key 转为中文标签；JSON 解析失败时降级为纯文本展示。
 
 **股票列表评分列**：`/stocks` 页面表格显示三列 AI 评分：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）。后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询三种类型，一次注入到 `StockInfo` 对象。
 
 `stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**，以及 `_JSON_ANALYSIS_TYPES`（`stock_ai_analysis.py`）、`admin/types/prompt-template.ts` 中的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS`。
 
 后端 API（均需登录）：
-- `POST /api/stock-ai-analysis/generate` — 后端 AI 生成并保存（返回含 `analysis_text`、`tokens_used`、`generation_time`）
+- `POST /api/stock-ai-analysis/generate` — 单个专家 AI 生成并保存
+- `POST /api/stock-ai-analysis/generate-multi` — 多专家并行生成（`analysis_types` 列表 + `include_cio` 可选 CIO 综合决策）
 - `POST /api/stock-ai-analysis/` — 保存新记录（版本自动递增）
 - `GET  /api/stock-ai-analysis/latest` — 获取最新一条
 - `GET  /api/stock-ai-analysis/history` — 分页获取所有历史

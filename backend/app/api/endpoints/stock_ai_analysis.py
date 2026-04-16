@@ -269,8 +269,8 @@ async def generate_multi_analysis(
 ):
     """并行调用多个 AI 专家分析同一只股票，数据收集只做一次。
 
-    使用 LCEL RunnableParallel 并行编排多个专家。
-    可选：所有专家完成后追加 CIO 综合决策步骤。
+    通过 asyncio.gather 并行编排多个专家，每个专家独立保存结果。
+    可选：所有专家完成后串联 CIO 综合决策步骤（将前面专家的输出摘要注入 CIO prompt）。
     """
     import asyncio
     from app.api.endpoints.prompt_templates import build_stock_prompt

@@ -1,11 +1,13 @@
 """
 AI 分析结果的 Pydantic 结构化输出模型
 
-用于 LangChain JsonOutputParser，将 AI 返回的 JSON 解析为强类型对象。
+将 AI 返回的 JSON 解析为强类型对象，替代各 Service 中分散的正则 JSON 提取。
+配合 ai_output_parser.parse_ai_json() 使用，解析失败时自动降级为原始 dict。
+
 三类分析场景：
-  - SentimentAnalysisResult: 市场情绪 AI 分析
-  - CollisionAnalysisResult: 盘前碰撞分析
-  - StockExpertAnalysisResult: 个股专家分析（游资/中线/长线/CIO/宏观风险）
+  - SentimentAnalysisResult: 市场情绪 AI 分析（sentiment_ai_analysis_service）
+  - CollisionAnalysisResult: 盘前碰撞分析（premarket_analysis_service）
+  - StockExpertAnalysisResult: 个股专家分析（stock_ai_analysis 端点，游资/中线/长线/CIO/宏观风险）
 """
 
 from typing import List, Optional

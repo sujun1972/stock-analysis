@@ -630,6 +630,26 @@ for item in items:
 
 ---
 
+## AI 分析输出解析（ai_output_parser + Pydantic 模型）
+
+AI 返回的 JSON 通过统一的解析管道处理，替代各 Service 中分散的正则提取。
+
+**解析流程**：`ai_output_parser.parse_ai_json(response, ModelClass)` → 提取 JSON 文本 → Pydantic 校验 → 失败降级为 `parse_ai_json_or_dict()` 原始 dict。
+
+**Pydantic 模型**（`schemas/ai_analysis_result.py`）：
+
+| 模型 | 使用场景 | 调用位置 |
+|------|---------|---------|
+| `SentimentAnalysisResult` | 市场情绪分析 | `sentiment_ai_analysis_service._parse_ai_response()` |
+| `CollisionAnalysisResult` | 盘前碰撞分析 | `premarket_analysis_service._parse_collision_response()` |
+| `StockExpertAnalysisResult` | 个股专家（游资/中线/长线/CIO/宏观风险） | `stock_ai_analysis._extract_json_and_score()` |
+
+**评分提取**：`StockExpertAnalysisResult.extract_score()` 按优先级查找 `final_score.score` → `comprehensive_score` → `score`。
+
+**多专家并行分析**：`POST /api/stock-ai-analysis/generate-multi` 通过 `asyncio.gather` 并行调用多个专家，数据收集只做一次（`build_stock_prompt` 缓存）。可选 `include_cio=true` 串联 CIO 综合决策（将前面专家输出摘要注入 CIO prompt）。`_DEFAULT_TEMPLATE_KEYS`（`stock_ai_analysis.py`）维护 `analysis_type → template_key` 映射。
+
+---
+
 ## 分析结果缓存（AnalysisCacheService）
 
 基于 `sync_history` 的依赖检测，避免底层数据未变时重复计算分析结果。
