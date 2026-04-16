@@ -215,10 +215,10 @@ class StockDataCollectionService:
         start_10d = (today - timedelta(days=20)).strftime('%Y%m%d')
         end_today = today.strftime('%Y%m%d')
 
-        # hk_hold.code 是纯6位数字
+        # hk_hold.code 是港交所原始代码（如 90000），不是 A 股代码；用 ts_code 查询
         flow_data, hk_data = await asyncio.gather(
             asyncio.to_thread(MoneyflowStockDcRepository().get_by_date_range, start_10d, end_today, ts_code, 10),
-            asyncio.to_thread(HkHoldRepository().get_by_code, pure_code, None, None, 10),
+            asyncio.to_thread(HkHoldRepository().get_paged, None, ts_code, None, None, 'trade_date', 'desc', 1, 10),
         )
 
         result: Dict[str, Any] = {}
@@ -845,8 +845,8 @@ class StockDataCollectionService:
                 return 'N/A'
         except (TypeError, ValueError):
             return 'N/A'
-        if v >= 1e8:
-            return f"{v / 1e8:.2f} 亿元"
+        if v >= 1e4:
+            return f"{v / 1e4:.2f} 亿元"
         return f"{v:,.0f} 万元"
 
     @staticmethod

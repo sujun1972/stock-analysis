@@ -59,7 +59,7 @@ export class StockAiAnalysisApiClient extends BaseApiClient {
 
   /** 清空全部分析记录 */
   async clearAll(): Promise<ApiResponse<any>> {
-    return this.post('/api/data/clear/stock_ai_analysis')
+    return this.post('/api/data-ops/clear/stock_ai_analysis')
   }
 }
 

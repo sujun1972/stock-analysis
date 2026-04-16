@@ -32,6 +32,21 @@ def _safe_fmt(val, decimals: int = 2) -> str:
         return str(val)
 
 
+def _fmt_wan(val) -> str:
+    """格式化万元单位的数值（市值等），自动换算亿元。"""
+    if val is None:
+        return "N/A"
+    try:
+        v = float(val)
+        if math.isnan(v) or math.isinf(v):
+            return "N/A"
+    except (TypeError, ValueError):
+        return "N/A"
+    if v >= 1e4:
+        return f"{v / 1e4:.2f} 亿元"
+    return f"{v:,.0f} 万元"
+
+
 def _fmt_flow(val) -> str:
     if val is None:
         return "N/A"
@@ -77,7 +92,7 @@ async def get_basic_market(ts_code: str) -> str:
         f"换手率: {_safe_fmt(data.get('turnover_rate'))}%",
         f"PE-TTM: {_safe_fmt(data.get('pe_ttm'))}",
         f"PB: {_safe_fmt(data.get('pb'))}",
-        f"总市值: {_safe_fmt(data.get('total_mv'))} 万元",
+        f"总市值: {_fmt_wan(data.get('total_mv'))}",
         f"行业(Tushare): {data.get('industry', 'N/A')}",
     ]
     board = data.get("industry_board_name")

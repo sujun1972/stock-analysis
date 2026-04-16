@@ -590,6 +590,8 @@ for item in items:
 | `stock_basic` | `ts_code` | `000002.SZ` | 完整格式 |
 | `moneyflow_stock_dc` | `net_amount` | 万元 | 非元，格式化时注意换算 |
 | `stk_holdernumber` | `end_date` | YYYYMMDD | 同一季报可能有多条（精确日期不同），按 `end_date[:6]`（YYYYMM）去重 |
+| `hk_hold` | `code` | `90000` | 港交所原始代码，**不是** A 股代码；按 A 股查询须用 `ts_code` 字段 |
+| `daily_basic` | `total_mv` | 万元 | 市值单位为万元，≥1万万即≥1亿，格式化用 `_fmt_wan` |
 
 ---
 
