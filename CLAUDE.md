@@ -66,6 +66,25 @@ backend/app/api/       ← FastAPI 端点
 admin/ 或 frontend/    ← 前端页面
 ```
 
+### LLM 调用架构
+
+所有 AI 分析（个股专家、市场情绪、盘前碰撞、策略生成）统一通过 LangChain 调用 LLM：
+
+```
+ai_provider_configs 表          ← 数据库驱动的 Provider 配置（api_key、model、temperature 等）
+    ↓
+AIStrategyService.create_client(provider, config)
+    ↓
+LangChainClient                 ← backend/app/services/langchain_client.py
+    ↓
+ChatOpenAI (deepseek/openai)    或  ChatGoogleGenerativeAI (gemini)
+```
+
+- **新增 Provider**：在 `langchain_client.py` 的 `_MODEL_FACTORIES` 注册工厂函数，数据库 `ai_provider_configs` 添加配置行
+- **Prompt 模板**：数据库驱动（`llm_prompt_template` 表），通过 `PromptTemplateService` 管理
+- **调用日志**：`llm_call_logs` 表 + `LLMCallLogger` 单例，手动 `create_log_entry` / `update_log_success`
+- **依赖包**：`langchain-core`、`langchain-openai`、`langchain-google-genai`
+
 ### Celery 任务架构
 
 - Worker：`celery_worker` 容器

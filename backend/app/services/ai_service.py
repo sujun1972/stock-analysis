@@ -1,16 +1,17 @@
 """
 AI策略生成服务
 
-支持多个AI提供商（DeepSeek、Gemini、OpenAI等）通过API调用生成量化交易策略代码。
+支持多个AI提供商（DeepSeek、Gemini、OpenAI等）通过 LangChain 统一接口调用 LLM。
 
 主要功能：
-- 多AI提供商支持（DeepSeek、Gemini、OpenAI）
-- 统一的客户端接口
+- 多AI提供商支持（DeepSeek、Gemini、OpenAI），通过 LangChain ChatModel
+- 统一的客户端接口（LangChainClient）
 - 自动解析生成的策略代码和元信息
 - 完善的错误处理和日志记录
 
 作者: Backend Team
 创建日期: 2026-03-01
+更新日期: 2026-04-15（迁移至 LangChain）
 """
 
 import json
@@ -18,10 +19,10 @@ import os
 import re
 import time
 from typing import Dict, Any, Optional, Tuple
-import httpx
 from loguru import logger
 
 from app.core.exceptions import AIServiceError
+from app.services.langchain_client import LangChainClient
 
 # 策略类型 → 数据库 business_type 映射
 _STRATEGY_TYPE_BUSINESS_TYPE = {
@@ -29,198 +30,6 @@ _STRATEGY_TYPE_BUSINESS_TYPE = {
     "exit": "strategy_generation_exit",
     "stock_selection": "strategy_generation_stock_selection",
 }
-
-
-class AIProviderClient:
-    """AI提供商客户端基类"""
-
-    def __init__(self, api_key: str, api_base_url: str, model_name: str, max_tokens: int, temperature: float, timeout: int):
-        self.api_key = api_key
-        self.api_base_url = api_base_url
-        self.model_name = model_name
-        self.max_tokens = max_tokens
-        self.temperature = temperature
-        self.timeout = timeout
-
-    async def generate_strategy(self, prompt: str) -> Tuple[str, int]:
-        """
-        生成策略代码
-
-        Args:
-            prompt: 提示词
-
-        Returns:
-            (生成的内容, 使用的token数)
-        """
-        raise NotImplementedError
-
-
-class DeepSeekClient(AIProviderClient):
-    """DeepSeek AI客户端"""
-
-    def __init__(self, api_key: str, model_name: str = "deepseek-chat", **kwargs):
-        super().__init__(
-            api_key=api_key,
-            api_base_url=kwargs.get("api_base_url", "https://api.deepseek.com/v1"),
-            model_name=model_name,
-            max_tokens=kwargs.get("max_tokens", 8000),
-            temperature=kwargs.get("temperature", 0.7),
-            timeout=kwargs.get("timeout", 60)
-        )
-
-    async def generate_strategy(self, prompt: str) -> Tuple[str, int]:
-        """使用DeepSeek API生成策略"""
-        url = f"{self.api_base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": self.model_name,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "你是一个专业的量化交易策略开发专家，精通Python和量化金融。请严格按照用户提供的模板和要求生成完整的策略代码。"
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
-            "stream": False
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                result = response.json()
-
-                content = result["choices"][0]["message"]["content"]
-                tokens_used = result.get("usage", {}).get("total_tokens", 0)
-
-                return content, tokens_used
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"DeepSeek API请求失败: {e.response.status_code} - {e.response.text}")
-            raise AIServiceError(f"DeepSeek API请求失败: {e.response.status_code}")
-        except KeyError as e:
-            logger.error(f"DeepSeek响应格式错误，缺少字段: {str(e)}", exc_info=True)
-            raise AIServiceError(f"DeepSeek响应格式错误: {str(e)}")
-        except Exception as e:
-            logger.error(f"DeepSeek调用异常: {str(e)}", exc_info=True)
-            raise AIServiceError(f"DeepSeek调用失败: {str(e)}")
-
-
-class GeminiClient(AIProviderClient):
-    """Google Gemini AI客户端"""
-
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-flash", **kwargs):
-        super().__init__(
-            api_key=api_key,
-            api_base_url=kwargs.get("api_base_url", "https://generativelanguage.googleapis.com/v1beta"),
-            model_name=model_name,
-            max_tokens=kwargs.get("max_tokens", 8000),
-            temperature=kwargs.get("temperature", 0.7),
-            timeout=kwargs.get("timeout", 60)
-        )
-
-    async def generate_strategy(self, prompt: str) -> Tuple[str, int]:
-        """使用Gemini API生成策略"""
-        url = f"{self.api_base_url}/models/{self.model_name}:generateContent?key={self.api_key}"
-        headers = {
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": f"你是一个专业的量化交易策略开发专家，精通Python和量化金融。请严格按照用户提供的模板和要求生成完整的策略代码。\n\n{prompt}"
-                        }
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "temperature": self.temperature,
-                "maxOutputTokens": self.max_tokens,
-            }
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                result = response.json()
-
-                content = result["candidates"][0]["content"]["parts"][0]["text"]
-                tokens_used = result.get("usageMetadata", {}).get("totalTokenCount", 0)
-
-                return content, tokens_used
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Gemini API请求失败: {e.response.status_code} - {e.response.text}")
-            raise AIServiceError(f"Gemini API请求失败: {e.response.status_code}")
-        except Exception as e:
-            logger.error(f"Gemini调用异常: {str(e)}")
-            raise AIServiceError(f"Gemini调用失败: {str(e)}")
-
-
-class OpenAIClient(AIProviderClient):
-    """OpenAI兼容客户端（支持OpenAI、Azure OpenAI等）"""
-
-    def __init__(self, api_key: str, model_name: str = "gpt-4o", **kwargs):
-        super().__init__(
-            api_key=api_key,
-            api_base_url=kwargs.get("api_base_url", "https://api.openai.com/v1"),
-            model_name=model_name,
-            max_tokens=kwargs.get("max_tokens", 8000),
-            temperature=kwargs.get("temperature", 0.7),
-            timeout=kwargs.get("timeout", 60)
-        )
-
-    async def generate_strategy(self, prompt: str) -> Tuple[str, int]:
-        """使用OpenAI API生成策略"""
-        url = f"{self.api_base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": self.model_name,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "你是一个专业的量化交易策略开发专家，精通Python和量化金融。请严格按照用户提供的模板和要求生成完整的策略代码。"
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                result = response.json()
-
-                content = result["choices"][0]["message"]["content"]
-                tokens_used = result.get("usage", {}).get("total_tokens", 0)
-
-                return content, tokens_used
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenAI API请求失败: {e.response.status_code} - {e.response.text}")
-            raise AIServiceError(f"OpenAI API请求失败: {e.response.status_code}")
-        except Exception as e:
-            logger.error(f"OpenAI调用异常: {str(e)}")
-            raise AIServiceError(f"OpenAI调用失败: {str(e)}")
 
 
 class AIStrategyService:
@@ -381,20 +190,9 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
 
 **现在请根据以上模板和我的策略需求，生成完整的策略代码和元信息。**"""
 
-    def __init__(self):
-        self.client_factory = {
-            "deepseek": DeepSeekClient,
-            "gemini": GeminiClient,
-            "openai": OpenAIClient,
-        }
-
-    def create_client(self, provider: str, config: Dict[str, Any]) -> AIProviderClient:
-        """创建AI客户端"""
-        client_class = self.client_factory.get(provider.lower())
-        if not client_class:
-            raise AIServiceError(f"不支持的AI提供商: {provider}")
-
-        return client_class(**config)
+    def create_client(self, provider: str, config: Dict[str, Any]) -> LangChainClient:
+        """创建 LangChain 统一 AI 客户端"""
+        return LangChainClient(provider=provider, config=config)
 
     def get_provider_config(self, provider: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
         """从 ai_provider_configs 表获取指定提供商的配置；找不到时回退到 DEEPSEEK_API_KEY 环境变量。"""

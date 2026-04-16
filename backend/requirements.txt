@@ -78,3 +78,8 @@ aiosmtplib>=3.0.0  # 异步SMTP客户端
 email-validator>=2.1.0  # 邮箱验证
 jinja2>=3.1.0  # Phase 2: 模板渲染引擎
 requests>=2.31.0  # Phase 2: Telegram Bot HTTP 请求
+
+# LangChain（Phase 1: 统一LLM客户端层）
+langchain-core>=0.3.0
+langchain-openai>=0.3.0          # OpenAI + DeepSeek（OpenAI兼容）
+langchain-google-genai>=2.1.0    # Google Gemini
