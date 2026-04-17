@@ -195,7 +195,9 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **AI 直接生成（各 Tab）**：各 Tab 可通过"AI 分析"按钮调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建提示词，调用 AI 服务生成并自动保存，返回 `analysis_text` + `score` 并刷新历史列表。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 共用同一函数，确保一致性。
 
-**JSON 格式分析类型（5 种）**：`hot_money_view`、`midline_industry_expert`、`longterm_value_watcher`、`cio_directive`、`macro_risk_expert` 均要求 AI 返回结构化 JSON。后端通过 `ai_output_parser.parse_ai_json()` + Pydantic 模型（`schemas/ai_analysis_result.py`）解析，失败降级为原始 JSON dict。评分提取优先级：`final_score.score` → `comprehensive_score` → `score`。前端 `StructuredAnalysisContent` 组件统一渲染所有 JSON 类型，`PM_FIELD_LABELS` 映射表将 `probability_metrics` 中的英文 key 转为中文标签；JSON 解析失败时降级为纯文本展示。
+**JSON 格式分析类型（5 种）**：`hot_money_view`、`midline_industry_expert`、`longterm_value_watcher`、`cio_directive`、`macro_risk_expert` 均要求 AI 返回结构化 JSON。后端通过 `ai_output_parser.parse_ai_json()` + Pydantic 模型（`schemas/ai_analysis_result.py`）解析，失败降级为原始 JSON dict。评分提取优先级：`final_score.score` → `comprehensive_score` → `score`。前端 `StructuredAnalysisContent` 组件统一渲染所有 JSON 类型，`PM_FIELD_LABELS` 映射表将 `probability_metrics` 中的英文 key 转为中文标签；JSON 解析失败时降级为 Markdown 渲染。
+
+**Markdown 渲染**：`HotMoneyViewDialog.tsx` 使用 `react-markdown` + `remark-gfm` 渲染非 JSON 分析文本（如数据收集结果），支持 GFM 表格、标题、列表、代码块等完整 Markdown 语法。`markdownComponents` 常量定义自定义样式，`p` 和 `li` 中额外处理【标签】高亮。
 
 **股票列表评分列**：`/stocks` 页面表格显示三列 AI 评分：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）。后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询三种类型，一次注入到 `StockInfo` 对象。
 

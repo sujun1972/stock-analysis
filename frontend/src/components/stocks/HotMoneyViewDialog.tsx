@@ -1,6 +1,9 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import type { Components } from 'react-markdown'
 import { apiClient } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import {
@@ -75,75 +78,119 @@ function renderBold(text: string): React.ReactNode {
   )
 }
 
-/**
- * 通用 Markdown 渲染器（轻量级，无外部依赖）。
- * 支持：## 标题、### 标题、**加粗**、- 列表、【标签】高亮、---分隔线、普通段落。
- */
-function MarkdownContent({ text }: { text: string }) {
-  const lines = text.split('\n')
-  const nodes: React.ReactNode[] = []
-  let listBuffer: string[] = []
+/** 高亮【标签】为蓝色粗体 */
+function highlightTags(text: string): React.ReactNode {
+  const parts = text.split(/(【[^】]+】)/g)
+  if (parts.length === 1) return text
+  return parts.map((part, i) =>
+    /^【[^】]+】$/.test(part)
+      ? <span key={i} className="font-semibold text-blue-700 dark:text-blue-400">{part}</span>
+      : part
+  )
+}
 
-  const flushList = (key: string) => {
-    if (listBuffer.length === 0) return
-    nodes.push(
-      <ul key={key} className="space-y-0.5 pl-1 mb-1">
-        {listBuffer.map((item, i) => (
-          <li key={i} className="flex gap-1.5">
-            <span className="text-gray-400 shrink-0">·</span>
-            <span>{renderBold(item)}</span>
-          </li>
-        ))}
-      </ul>
+/** react-markdown 自定义组件，保留【标签】高亮 + 表格样式 */
+const markdownComponents: Components = {
+  h1: ({ children }) => (
+    <h1 className="text-lg font-bold mt-4 mb-2 text-gray-900 dark:text-gray-100">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-base font-bold mt-3 mb-1 text-gray-900 dark:text-gray-100">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mt-2 mb-1">{children}</h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="text-sm font-semibold mt-2 mb-1 text-gray-800 dark:text-gray-200">{children}</h4>
+  ),
+  p: ({ children }) => {
+    // 对纯文本子节点做【标签】高亮
+    const processed = React.Children.map(children, child =>
+      typeof child === 'string' ? highlightTags(child) : child
     )
-    listBuffer = []
-  }
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim()
-
-    if (trimmed.startsWith('## ')) {
-      flushList(`list-${idx}`)
-      nodes.push(
-        <h2 key={idx} className="text-base font-bold mt-3 mb-1 text-gray-900 dark:text-gray-100">
-          {renderBold(trimmed.slice(3))}
-        </h2>
-      )
-    } else if (trimmed.startsWith('### ')) {
-      flushList(`list-${idx}`)
-      nodes.push(
-        <h3 key={idx} className="text-sm font-semibold text-blue-700 dark:text-blue-400 mt-2 mb-1">
-          {renderBold(trimmed.slice(4))}
-        </h3>
-      )
-    } else if (trimmed === '---' || trimmed === '***') {
-      flushList(`list-${idx}`)
-      nodes.push(<hr key={idx} className="border-gray-200 dark:border-gray-700 my-2" />)
-    } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-      listBuffer.push(trimmed.slice(2))
-    } else if (trimmed === '') {
-      flushList(`list-${idx}`)
-      // 空行不输出节点
-    } else {
-      flushList(`list-${idx}`)
-      // 普通段落：高亮【标签】
-      const parts = trimmed.split(/(【[^】]+】)/g)
-      nodes.push(
-        <p key={idx} className="mb-1">
-          {parts.map((part, i) =>
-            /^【[^】]+】$/.test(part)
-              ? <span key={i} className="font-semibold text-blue-700 dark:text-blue-400">{part}</span>
-              : renderBold(part)
-          )}
-        </p>
+    return <p className="mb-1.5 leading-relaxed">{processed}</p>
+  },
+  strong: ({ children }) => (
+    <strong className="font-semibold text-gray-900 dark:text-gray-100">{children}</strong>
+  ),
+  ul: ({ children }) => (
+    <ul className="list-disc list-inside space-y-0.5 mb-2 pl-1">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="list-decimal list-inside space-y-0.5 mb-2 pl-1">{children}</ol>
+  ),
+  li: ({ children }) => {
+    const processed = React.Children.map(children, child =>
+      typeof child === 'string' ? highlightTags(child) : child
+    )
+    return <li className="leading-relaxed">{processed}</li>
+  },
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-blue-300 dark:border-blue-600 pl-3 py-1 my-2 text-gray-600 dark:text-gray-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-r">
+      {children}
+    </blockquote>
+  ),
+  hr: () => (
+    <hr className="border-gray-200 dark:border-gray-700 my-2" />
+  ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full text-sm border-collapse border border-gray-200 dark:border-gray-700">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-gray-100 dark:bg-gray-800">{children}</thead>
+  ),
+  tbody: ({ children }) => (
+    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">{children}</tbody>
+  ),
+  tr: ({ children }) => (
+    <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50">{children}</tr>
+  ),
+  th: ({ children }) => (
+    <th className="px-3 py-1.5 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 whitespace-nowrap">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+      {children}
+    </td>
+  ),
+  code: ({ children, className }) => {
+    const isBlock = className?.includes('language-')
+    if (isBlock) {
+      return (
+        <code className="block bg-gray-100 dark:bg-gray-800 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2">
+          {children}
+        </code>
       )
     }
-  })
-  flushList('list-end')
+    return (
+      <code className="bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 text-xs font-mono">
+        {children}
+      </code>
+    )
+  },
+  pre: ({ children }) => (
+    <pre className="my-2">{children}</pre>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+      {children}
+    </a>
+  ),
+}
 
+/** 完整 Markdown 渲染（react-markdown + GFM 表格支持） */
+function MarkdownContent({ text }: { text: string }) {
   return (
     <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
-      {nodes}
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {text}
+      </ReactMarkdown>
     </div>
   )
 }
@@ -314,7 +361,8 @@ function StructuredAnalysisContent({ d }: { d: Record<string, any> }) {
 
 /**
  * 分析内容渲染入口。
- * 优先级：结构化 JSON 渲染 → Markdown 渲染 → 纯文本兜底
+ * JSON 类型 → StructuredAnalysisContent（结构化卡片渲染）
+ * 其他类型 → MarkdownContent（react-markdown + GFM 表格）
  */
 const JSON_ANALYSIS_TYPES = new Set([
   'hot_money_view', 'midline_industry_expert', 'longterm_value_watcher', 'cio_directive', 'macro_risk_expert',
@@ -328,20 +376,11 @@ function AnalysisContent({ text, analysisType }: { text: string; analysisType: s
         return <StructuredAnalysisContent d={d} />
       }
     } catch {
-      // JSON 解析失败，降级
+      // JSON 解析失败，降级为 Markdown 渲染
     }
   }
 
-  // Markdown 渲染（文本包含 # 或 - 等 Markdown 特征时更美观）
-  if (/^#{1,3} /m.test(text) || /^[-*] /m.test(text)) {
-    return <MarkdownContent text={text} />
-  }
-
-  return (
-    <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-      {text}
-    </div>
-  )
+  return <MarkdownContent text={text} />
 }
 
 // ── 单个 Tab 内容（抽离为子组件） ──────────────────────────────

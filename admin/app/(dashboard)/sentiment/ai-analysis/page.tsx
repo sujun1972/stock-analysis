@@ -18,6 +18,7 @@ import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
 import { addTaskToQueue } from "@/hooks/use-task-polling"
 import logger from "@/lib/logger"
+import { MarkdownRenderer } from "@/components/common/MarkdownRenderer"
 
 interface AIProvider {
   id: number
@@ -582,9 +583,7 @@ export default function SentimentAIAnalysisPage() {
                         <TrendingUpIcon className="h-4 w-4 text-blue-500" />
                         AI分析
                       </div>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                        {analysisData.space_analysis.analysis || '暂无分析'}
-                      </p>
+                      <MarkdownRenderer content={analysisData.space_analysis.analysis || '暂无分析'} />
                     </div>
                   </>
                 ) : (
@@ -627,9 +626,7 @@ export default function SentimentAIAnalysisPage() {
                         <TrendingDownIcon className="h-4 w-4 text-orange-500" />
                         推理分析
                       </div>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                        {analysisData.sentiment_analysis.reasoning || '暂无推理'}
-                      </p>
+                      <MarkdownRenderer content={analysisData.sentiment_analysis.reasoning || '暂无推理'} />
                     </div>
                   </>
                 ) : (
@@ -707,9 +704,7 @@ export default function SentimentAIAnalysisPage() {
                     {/* 详细分析 */}
                     <div className="bg-purple-50 dark:bg-purple-900/10 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
                       <div className="font-medium mb-2">详细分析</div>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                        {analysisData.capital_flow_analysis.analysis || '暂无分析'}
-                      </p>
+                      <MarkdownRenderer content={analysisData.capital_flow_analysis.analysis || '暂无分析'} />
                     </div>
                   </>
                 ) : (

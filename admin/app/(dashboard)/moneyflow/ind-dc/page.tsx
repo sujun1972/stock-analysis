@@ -581,7 +581,7 @@ export default function MoneyflowIndDcPage() {
           <DialogHeader>
             <DialogTitle>同步板块资金流向数据</DialogTitle>
             <DialogDescription>
-              选择同步日期和板块类型（日期留空则同步最新交易日；"全部"将依次提交行业/概念/地域三个任务，共消耗约 18000 积分）。
+              选择同步日期和板块类型（日期留空则同步最新交易日；&ldquo;全部&rdquo;将依次提交行业/概念/地域三个任务，共消耗约 18000 积分）。
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">

@@ -13,6 +13,7 @@ import { stockAiAnalysisApi } from '@/lib/api'
 import type { StockAiAnalysisData } from '@/lib/api'
 import { toast } from 'sonner'
 import { Brain, ListFilter, RefreshCw, FileText, Eye, Trash2 } from 'lucide-react'
+import { MarkdownRenderer } from '@/components/common/MarkdownRenderer'
 
 const PAGE_SIZE = 20
 
@@ -47,6 +48,17 @@ function formatDate(dateStr: string | null | undefined): string {
 function truncateText(text: string | null | undefined, maxLen: number = 80): string {
   if (!text) return '-'
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
+}
+
+/** 判断文本是否为 JSON */
+function isJsonText(text: string | null | undefined): boolean {
+  if (!text) return false
+  try {
+    const parsed = JSON.parse(text)
+    return typeof parsed === 'object' && parsed !== null
+  } catch {
+    return false
+  }
 }
 
 /** JSON 文本尝试格式化，非 JSON 原样返回 */
@@ -457,9 +469,13 @@ export default function StockAiAnalysisPage() {
                 <span className="text-sm text-gray-500">创建时间: {formatDate(detailItem.created_at)}</span>
               </div>
               <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
-                <pre className="whitespace-pre-wrap text-sm font-mono break-words">
-                  {formatAnalysisText(detailItem.analysis_text)}
-                </pre>
+                {isJsonText(detailItem.analysis_text) ? (
+                  <pre className="whitespace-pre-wrap text-sm font-mono break-words">
+                    {formatAnalysisText(detailItem.analysis_text)}
+                  </pre>
+                ) : (
+                  <MarkdownRenderer content={detailItem.analysis_text || ''} />
+                )}
               </div>
             </div>
           )}

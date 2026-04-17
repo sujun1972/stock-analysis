@@ -31,6 +31,7 @@
 - **HTTP 客户端**：axios（封装在 `lib/api/`）
 - **图表**：Recharts（折线图）、ECharts（K线等复杂图表）
 - **表格**：自定义 `DataTable` 组件
+- **Markdown 渲染**：`react-markdown` + `remark-gfm`（`components/common/MarkdownRenderer.tsx`），用于 AI 分析结果展示
 
 ---
 
