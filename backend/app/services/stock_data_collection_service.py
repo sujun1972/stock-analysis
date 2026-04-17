@@ -378,6 +378,10 @@ class StockDataCollectionService:
         from app.services.macd_analysis_service import MacdAnalysisService
         result['macd_multi'] = MacdAnalysisService.analyze_multi_level(df)
 
+        # ---- 布林线多级别分析 ----
+        from app.services.boll_analysis_service import BollAnalysisService
+        result['boll_multi'] = BollAnalysisService.analyze_multi_level(df)
+
         # ---- 量价动能分析 ----
         from app.services.volume_price_analysis_service import VolumePriceAnalysisService
         ma_trend = (result.get('ma_analysis') or {}).get('structure', {}).get('trend', '')
@@ -743,6 +747,39 @@ class StockDataCollectionService:
                     f"| DIF={self._fmt(lv.get('dif'), 2)}, DEA={self._fmt(lv.get('dea'), 2)} |"
                 )
             cross = macd_multi.get('cross_level', {})
+            if cross:
+                lines.append("")
+                lines.append("**【2. 跨级别核心逻辑提取】**")
+                lines.append(f"- **共振状态：** {cross.get('resonance_state', '')}")
+                if cross.get('battle_analysis'):
+                    lines.append(f"- **长短博弈：** {cross['battle_analysis']}")
+                prompt = cross.get('analysis_prompt', '')
+                if prompt:
+                    lines.append("")
+                    lines.append("**【3. 分析提示】**")
+                    lines.append(f"> {prompt}")
+
+        # ---- 布林线多级别分析 ----
+        boll_multi = technical.get('boll_multi')
+        if boll_multi:
+            lines.append("")
+            lines.append("### 布林线多级别通道与趋势分析")
+            lines.append("")
+            lines.append("**【1. 各级别布林线状态切片】**")
+            lines.append("")
+            lines.append("| 级别 | 通道宽度 (波动率) | 价格位置 (%B) | 中轨方向 (趋势) | 突破/回踩信号 | 布林形态 | 关键数值 |")
+            lines.append("|------|------------------|--------------|----------------|--------------|---------|---------|")
+            for key in ['monthly', 'weekly', 'daily']:
+                lv = boll_multi.get(key)
+                if not lv:
+                    continue
+                lines.append(
+                    f"| {lv['level']} | {lv['channel_width']} | {lv['price_position']} "
+                    f"| {lv['mid_direction']} | {lv['signal']} "
+                    f"| {lv['pattern']} "
+                    f"| 上={self._fmt(lv.get('upper'), 2)} 中={self._fmt(lv.get('middle'), 2)} 下={self._fmt(lv.get('lower'), 2)} |"
+                )
+            cross = boll_multi.get('cross_level', {})
             if cross:
                 lines.append("")
                 lines.append("**【2. 跨级别核心逻辑提取】**")

@@ -225,8 +225,8 @@ async def get_shareholder_info(ts_code: str) -> str:
 
 @tool
 async def get_technical_indicators(ts_code: str) -> str:
-    """获取技术指标：均线多周期结构分析(排列形态/支撑阻力/趋势方向/核心博弈点)、RSI多周期分析(超买超卖/趋势/背离/跨周期共振)、多级别MACD分析(零轴/交叉/柱体/背离/跨级别共振)、量价异动。
-    适用场景：分析均线多空排列与支撑阻力、RSI超买超卖与背离信号、MACD多级别趋势共振、顶底背离信号。"""
+    """获取技术指标：均线多周期结构分析(排列形态/支撑阻力/趋势方向/核心博弈点)、RSI多周期分析(超买超卖/趋势/背离/跨周期共振)、多级别MACD分析(零轴/交叉/柱体/背离/跨级别共振)、布林线多级别分析(通道宽度/价格位置/中轨方向/突破信号/跨级别共振)、量价异动。
+    适用场景：分析均线多空排列与支撑阻力、RSI超买超卖与背离信号、MACD多级别趋势共振、顶底背离信号、布林通道波动率与趋势方向。"""
     from app.services.stock_data_collection_service import StockDataCollectionService
 
     svc = StockDataCollectionService()
@@ -310,6 +310,32 @@ async def get_technical_indicators(ts_code: str) -> str:
             lines.append(f"**共振状态:** {cross.get('resonance_state', '')}")
             if cross.get('battle_analysis'):
                 lines.append(f"**长短博弈:** {cross['battle_analysis']}")
+
+    # ---- 布林线多级别分析 ----
+    boll_multi = data.get("boll_multi")
+    if boll_multi:
+        lines.append("")
+        lines.append("**布林线多级别通道与趋势分析**")
+        lines.append("")
+        lines.append("| 级别 | 通道宽度 (波动率) | 价格位置 (%B) | 中轨方向 (趋势) | 突破/回踩信号 | 布林形态 | 关键数值 |")
+        lines.append("|------|------------------|--------------|----------------|--------------|---------|---------|")
+        for key in ['monthly', 'weekly', 'daily']:
+            lv = boll_multi.get(key)
+            if not lv:
+                continue
+            lines.append(
+                f"| {lv['level']} | {lv['channel_width']} | {lv['price_position']} "
+                f"| {lv['mid_direction']} | {lv['signal']} "
+                f"| {lv['pattern']} "
+                f"| 上={_safe_fmt(lv.get('upper'), 2)} 中={_safe_fmt(lv.get('middle'), 2)} 下={_safe_fmt(lv.get('lower'), 2)} |"
+            )
+        cross = boll_multi.get('cross_level', {})
+        if cross:
+            lines.append("")
+            lines.append(f"**共振状态:** {cross.get('resonance_state', '')}")
+            if cross.get('battle_analysis'):
+                lines.append(f"**长短博弈:** {cross['battle_analysis']}")
+    lines.append("")
 
     # ---- 量价动能分析 ----
     vp = data.get("volume_price")
