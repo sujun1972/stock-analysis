@@ -14,6 +14,7 @@ class BusinessType(str, Enum):
     SENTIMENT_ANALYSIS = "sentiment_analysis"
     PREMARKET_ANALYSIS = "premarket_analysis"
     STRATEGY_GENERATION = "strategy_generation"
+    STOCK_EXPERT_ANALYSIS = "stock_expert_analysis"
 
 
 class CallStatus(str, Enum):

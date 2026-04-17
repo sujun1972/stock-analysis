@@ -16,6 +16,8 @@ from app.core.database import get_db
 from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.services.stock_ai_analysis_service import StockAiAnalysisService
+from app.services.llm_call_logger import llm_call_logger
+from app.schemas.llm_call_log import BusinessType, CallStatus
 from sqlalchemy.orm import Session
 
 
@@ -82,6 +84,78 @@ _JSON_ANALYSIS_TYPES = {
 }
 
 router = APIRouter(prefix="/stock-ai-analysis", tags=["股票AI分析"])
+
+
+# ------------------------------------------------------------------
+# LLM 调用日志辅助（日志失败不阻塞主流程）
+# ------------------------------------------------------------------
+
+def _log_llm_start(
+    db: Session,
+    provider: str,
+    provider_config: dict,
+    prompt_text: str,
+    caller_function: str,
+    ts_code: str,
+    user_id: int,
+    *,
+    analysis_type: str | None = None,
+    agent_mode: bool = False,
+) -> tuple[str | None, object]:
+    """创建 LLM 调用日志，返回 (call_id, start_time)。失败返回 (None, None)。"""
+    try:
+        params = {
+            "temperature": provider_config.get("temperature"),
+            "max_tokens": provider_config.get("max_tokens"),
+        }
+        if analysis_type:
+            params["analysis_type"] = analysis_type
+        if agent_mode:
+            params["mode"] = "agent"
+
+        return llm_call_logger.create_log_entry(
+            db=db,
+            business_type=BusinessType.STOCK_EXPERT_ANALYSIS,
+            provider=provider,
+            model_name=provider_config.get("model_name", ""),
+            call_parameters=params,
+            prompt_text=prompt_text,
+            caller_service="CIOAgentService" if agent_mode else "StockAiAnalysis",
+            caller_function=caller_function,
+            business_id=ts_code,
+            user_id=str(user_id),
+        )
+    except Exception as e:
+        logger.warning(f"[{caller_function}] 创建LLM调用日志失败: {e}")
+        return None, None
+
+
+def _log_llm_success(db: Session, call_id: str | None, start_time, response_text: str, tokens_total: int):
+    """更新 LLM 调用日志为成功。"""
+    if not call_id:
+        return
+    try:
+        llm_call_logger.update_log_success(
+            db=db, call_id=call_id, start_time=start_time,
+            response_text=response_text[:2000],
+            tokens_total=tokens_total,
+        )
+    except Exception as e:
+        logger.warning(f"更新LLM调用日志失败: {e}")
+
+
+def _log_llm_failure(db: Session, call_id: str | None, start_time, error: Exception):
+    """更新 LLM 调用日志为失败。"""
+    if not call_id:
+        return
+    try:
+        llm_call_logger.update_log_failure(
+            db=db, call_id=call_id, start_time=start_time,
+            status=CallStatus.FAILED,
+            error_code=type(error).__name__, error_message=str(error)[:500],
+        )
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------
@@ -168,6 +242,15 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
     provider_config["temperature"] = cio_prompt_data["recommended_temperature"]
     provider_config["max_tokens"] = cio_prompt_data["recommended_max_tokens"]
 
+    # LLM 调用日志
+    call_id, start_time_log = _log_llm_start(
+        db, provider_name, provider_config,
+        prompt_text=f"[CIO Agent] ts_code={body.ts_code}, standalone=true",
+        caller_function="generate_analysis",
+        ts_code=body.ts_code, user_id=current_user.id,
+        analysis_type="cio_directive", agent_mode=True,
+    )
+
     # 运行 CIO Agent（无专家摘要，Agent 自主查询全部数据）
     try:
         cio_agent = CIOAgentService()
@@ -180,11 +263,13 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
         )
     except Exception as e:
         logger.error(f"[generate_analysis/cio_agent] Agent 执行失败: {e}", exc_info=True)
+        _log_llm_failure(db, call_id, start_time_log, e)
         return ApiResponse.error(message=f"CIO Agent 执行失败: {e}", code=500).to_dict()
 
     ai_text = agent_result["content"]
     tokens_used = agent_result["tokens_used"]
     generation_time = agent_result["generation_time"]
+    _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
     # 清理 JSON + 提取评分
     ai_text, extracted_score = _extract_json_and_score(ai_text)
@@ -309,7 +394,14 @@ async def generate_analysis(
     provider_config["temperature"] = prompt_data["recommended_temperature"]
     provider_config["max_tokens"] = prompt_data["recommended_max_tokens"]
 
-    # 3. 调用 AI 生成
+    # 3. 创建 LLM 调用日志 + 调用 AI 生成
+    call_id, start_time_log = _log_llm_start(
+        db, provider_name, provider_config,
+        prompt_text=full_prompt,
+        caller_function="generate_analysis",
+        ts_code=body.ts_code, user_id=current_user.id,
+    )
+
     try:
         client = ai_service.create_client(provider_name, provider_config)
         start_time = time.time()
@@ -321,7 +413,10 @@ async def generate_analysis(
         )
     except Exception as e:
         logger.error(f"[generate_analysis] AI 调用失败: {e}", exc_info=True)
+        _log_llm_failure(db, call_id, start_time_log, e)
         return ApiResponse.error(message=f"AI 调用失败: {e}", code=500).to_dict()
+
+    _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
     # 4. 清理 JSON 代码块标识并提取评分（对所有 JSON 格式分析类型）
     if body.analysis_type in _JSON_ANALYSIS_TYPES:
@@ -454,15 +549,28 @@ async def generate_multi_analysis(
         provider_config["temperature"] = prompt_data["recommended_temperature"]
         provider_config["max_tokens"] = prompt_data["recommended_max_tokens"]
 
-        client = ai_service.create_client(provider_name, provider_config)
-        start_time = time.time()
-        ai_text, tokens_used = await client.generate_strategy(full_prompt)
-        generation_time = time.time() - start_time
+        call_id, start_time_log = _log_llm_start(
+            db, provider_name, provider_config,
+            prompt_text=full_prompt,
+            caller_function="generate_multi_analysis",
+            ts_code=body.ts_code, user_id=current_user.id,
+            analysis_type=analysis_type,
+        )
+
+        try:
+            client = ai_service.create_client(provider_name, provider_config)
+            start_time = time.time()
+            ai_text, tokens_used = await client.generate_strategy(full_prompt)
+            generation_time = time.time() - start_time
+        except Exception as e:
+            _log_llm_failure(db, call_id, start_time_log, e)
+            raise
 
         logger.info(
             f"[generate_multi] {body.ts_code} {analysis_type} "
             f"生成完成: {len(ai_text)}字 / {tokens_used} tokens / {generation_time:.2f}s"
         )
+        _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
         # 清理 JSON + 提取评分
         if analysis_type in _JSON_ANALYSIS_TYPES:
@@ -512,6 +620,8 @@ async def generate_multi_analysis(
 
     # 4. 可选：CIO Agent 综合决策（Agent 自主查询数据 + 参考前面专家结论）
     cio_result = None
+    cio_call_id = None
+    cio_start_time_log = None
     if body.include_cio and results:
         try:
             from app.services.cio_agent_service import CIOAgentService
@@ -543,6 +653,14 @@ async def generate_multi_analysis(
             provider_config["temperature"] = cio_prompt_data["recommended_temperature"]
             provider_config["max_tokens"] = cio_prompt_data["recommended_max_tokens"]
 
+            cio_call_id, cio_start_time_log = _log_llm_start(
+                db, provider_name, provider_config,
+                prompt_text=f"[CIO Agent] ts_code={body.ts_code}, experts={[r['analysis_type'] for r in results]}",
+                caller_function="generate_multi_analysis",
+                ts_code=body.ts_code, user_id=current_user.id,
+                analysis_type="cio_directive", agent_mode=True,
+            )
+
             # 运行 CIO Agent
             cio_agent = CIOAgentService()
             agent_result = await cio_agent.run_agent(
@@ -556,6 +674,7 @@ async def generate_multi_analysis(
             cio_text = agent_result["content"]
             cio_tokens = agent_result["tokens_used"]
             cio_gen_time = agent_result["generation_time"]
+            _log_llm_success(db, cio_call_id, cio_start_time_log, cio_text, cio_tokens)
 
             cio_text, cio_score = _extract_json_and_score(cio_text)
 
@@ -583,6 +702,7 @@ async def generate_multi_analysis(
             }
         except Exception as e:
             logger.error(f"[generate_multi] CIO Agent 综合决策失败: {e}", exc_info=True)
+            _log_llm_failure(db, cio_call_id, cio_start_time_log, e)
             errors.append({"analysis_type": "cio_directive", "error": str(e)})
 
     total_tokens = sum(r.get("tokens_used", 0) for r in results)

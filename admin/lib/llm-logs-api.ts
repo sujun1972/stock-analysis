@@ -45,7 +45,7 @@ export interface LLMCallLog {
 }
 
 export interface LLMCallLogQuery {
-  business_type?: 'sentiment_analysis' | 'premarket_analysis' | 'strategy_generation'
+  business_type?: 'sentiment_analysis' | 'premarket_analysis' | 'strategy_generation' | 'stock_expert_analysis'
   provider?: string
   status?: 'success' | 'failed' | 'timeout' | 'rate_limited'
   start_date?: string
@@ -258,7 +258,8 @@ export async function getCostAnalysis(params: {
 export const businessTypeMap: Record<string, string> = {
   sentiment_analysis: '市场情绪分析',
   premarket_analysis: '盘前碰撞分析',
-  strategy_generation: '策略代码生成'
+  strategy_generation: '策略代码生成',
+  stock_expert_analysis: '个股专家分析'
 }
 
 /**
