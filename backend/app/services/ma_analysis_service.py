@@ -65,6 +65,9 @@ class MaAnalysisService:
         # ---- 跨周期空间结构 ----
         result['structure'] = cls._analyze_structure(ma_values, close)
 
+        # ---- 均线收敛度与乖离率 ----
+        result['convergence'] = cls._analyze_convergence(ma_values, close)
+
         return result
 
     # ------------------------------------------------------------------
@@ -325,3 +328,59 @@ class MaAnalysisService:
                 '请结合上述均线结构，分析当前趋势方向的明确程度，'
                 '并给出操作建议（区间操作、等待方向选择后再介入等）。'
             )
+
+    # ------------------------------------------------------------------
+    # 均线收敛度与乖离率
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _analyze_convergence(ma_vals: Dict[str, Optional[float]],
+                             close: float) -> Dict[str, Any]:
+        """分析短中期均线收敛程度和价格乖离率。
+
+        收敛度 = MA5/MA10/MA20 三条均线的极差 / MA20，衡量均线是否高度纠缠。
+        乖离率 = (close - MA20) / MA20 * 100，衡量价格偏离均线的程度。
+        """
+        result: Dict[str, Any] = {}
+
+        ma5 = ma_vals.get('ma5')
+        ma10 = ma_vals.get('ma10')
+        ma20 = ma_vals.get('ma20')
+
+        # 乖离率（BIAS20）
+        if ma20 is not None and ma20 != 0:
+            bias20 = round((close - ma20) / ma20 * 100, 2)
+            result['bias20'] = bias20
+            if bias20 > 8:
+                result['bias_desc'] = f'价格大幅偏离 MA20（乖离率 +{bias20}%），存在技术性回调需求'
+            elif bias20 > 4:
+                result['bias_desc'] = f'价格偏离 MA20 较多（乖离率 +{bias20}%），关注回踩风险'
+            elif bias20 < -8:
+                result['bias_desc'] = f'价格大幅偏离 MA20（乖离率 {bias20}%），存在超跌反弹需求'
+            elif bias20 < -4:
+                result['bias_desc'] = f'价格偏离 MA20 较多（乖离率 {bias20}%），关注反弹机会'
+            else:
+                result['bias_desc'] = f'价格围绕 MA20 运行（乖离率 {bias20}%），处于正常水平'
+
+        # 收敛度
+        if all(v is not None for v in [ma5, ma10, ma20]):
+            ma_max = max(ma5, ma10, ma20)
+            ma_min = min(ma5, ma10, ma20)
+            spread = ma_max - ma_min
+            convergence = round(spread / ma20 * 100, 2) if ma20 != 0 else 0
+            result['convergence_pct'] = convergence
+            if convergence < 1.0:
+                result['convergence_desc'] = (
+                    f'MA5/MA10/MA20 高度黏合（极差仅 {convergence}%），均线纠缠蓄势，'
+                    f'一旦放量突破将引发大级别方向选择'
+                )
+            elif convergence < 2.5:
+                result['convergence_desc'] = f'MA5/MA10/MA20 较为收敛（极差 {convergence}%），方向待选择'
+            elif convergence > 8:
+                result['convergence_desc'] = f'MA5/MA10/MA20 大幅发散（极差 {convergence}%），趋势强烈运行中'
+            elif convergence > 5:
+                result['convergence_desc'] = f'MA5/MA10/MA20 明显发散（极差 {convergence}%），趋势明确'
+            else:
+                result['convergence_desc'] = f'MA5/MA10/MA20 正常展开（极差 {convergence}%）'
+
+        return result

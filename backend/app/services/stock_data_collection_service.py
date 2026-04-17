@@ -382,13 +382,208 @@ class StockDataCollectionService:
         from app.services.boll_analysis_service import BollAnalysisService
         result['boll_multi'] = BollAnalysisService.analyze_multi_level(df)
 
+        # ---- K 线形态识别 ----
+        from app.services.candlestick_analysis_service import CandlestickAnalysisService
+        result['candlestick'] = CandlestickAnalysisService.analyze(df)
+
+        # ---- ATR 波动率 ----
+        result['atr'] = cls._compute_atr(df)
+
         # ---- 量价动能分析 ----
         from app.services.volume_price_analysis_service import VolumePriceAnalysisService
         ma_trend = (result.get('ma_analysis') or {}).get('structure', {}).get('trend', '')
         result['volume_price'] = VolumePriceAnalysisService.analyze(df, trend_context=ma_trend)
 
+        # ---- 跨指标冲突与共振验证 ----
+        result['cross_verification'] = cls._build_cross_verification(result)
+
         return result
 
+    @staticmethod
+    def _compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[Dict[str, Any]]:
+        """计算 ATR（平均真实波幅）及其历史分位数。"""
+        if len(df) < period + 20:
+            return None
+
+        high = df['high'].astype(float)
+        low = df['low'].astype(float)
+        close = df['close'].astype(float)
+
+        # True Range
+        prev_close = close.shift(1)
+        tr = pd.concat([
+            high - low,
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ], axis=1).max(axis=1)
+
+        atr = tr.rolling(period).mean()
+        last_atr = float(atr.iloc[-1])
+        last_close = float(close.iloc[-1])
+
+        # ATR 占价格的百分比
+        atr_pct = round(last_atr / last_close * 100, 2) if last_close > 0 else 0
+
+        # 历史分位数（近 120 日 ATR 的百分位）
+        n = min(120, len(atr.dropna()))
+        atr_history = atr.dropna().iloc[-n:]
+        percentile = round(float((atr_history < last_atr).sum() / len(atr_history) * 100))
+
+        # 定性
+        if percentile >= 80:
+            desc = f'波动率处于历史高位（{percentile}%分位），市场情绪剧烈，注意设宽止损'
+        elif percentile >= 60:
+            desc = f'波动率偏高（{percentile}%分位），波动活跃'
+        elif percentile <= 20:
+            desc = f'波动率处于历史低位（{percentile}%分位），市场交投清淡，可能酝酿变盘'
+        elif percentile <= 40:
+            desc = f'波动率偏低（{percentile}%分位），波动收敛'
+        else:
+            desc = f'波动率处于正常水平（{percentile}%分位）'
+
+        return {
+            'atr': round(last_atr, 2),
+            'atr_pct': atr_pct,
+            'percentile': percentile,
+            'desc': desc,
+        }
+
+
+    @staticmethod
+    def _build_cross_verification(technical: Dict) -> Optional[Dict[str, Any]]:
+        """综合各技术指标，提取跨指标矛盾点、共振确认和风险因素。"""
+        ma_analysis = technical.get('ma_analysis')
+        rsi_analysis = technical.get('rsi_analysis')
+        macd_multi = technical.get('macd_multi')
+        boll_multi = technical.get('boll_multi')
+        vp = technical.get('volume_price')
+        candle = technical.get('candlestick')
+        atr = technical.get('atr')
+
+        if not any([ma_analysis, macd_multi, boll_multi]):
+            return None
+
+        conflicts = []
+        confirmations = []
+        risks = []
+
+        # 提取各指标方向判断
+        ma_trend = (ma_analysis or {}).get('structure', {}).get('trend', '')
+        ma_bullish = '多头' in ma_trend
+        ma_bearish = '空头' in ma_trend
+
+        # MACD 日线方向
+        daily_macd = (macd_multi or {}).get('daily', {})
+        macd_bullish = '上方' in daily_macd.get('zero_axis', '') or '金叉' in daily_macd.get('cross_state', '')
+        macd_bearish = '下方' in daily_macd.get('zero_axis', '') or '死叉' in daily_macd.get('cross_state', '')
+
+        # MACD 周线方向
+        weekly_macd = (macd_multi or {}).get('weekly', {})
+        weekly_macd_bearish = '下方' in weekly_macd.get('zero_axis', '')
+        weekly_macd_bullish = '上方' in weekly_macd.get('zero_axis', '')
+
+        # Boll 日线方向
+        daily_boll = (boll_multi or {}).get('daily', {})
+        boll_bullish = daily_boll.get('percent_b', 0.5) > 0.6
+        boll_bearish = daily_boll.get('percent_b', 0.5) < 0.4
+
+        # RSI 短线
+        rsi_slices = (rsi_analysis or {}).get('slices', [])
+        rsi_short = next((s for s in rsi_slices if s.get('period') == 7), {})
+        rsi_overbought = rsi_short.get('rsi_value', 50) > 70
+        rsi_oversold = rsi_short.get('rsi_value', 50) < 30
+
+        # ---- 矛盾点 ----
+        # 日线看多 vs 周线看空
+        if macd_bullish and weekly_macd_bearish:
+            conflicts.append(
+                f"日线 MACD {daily_macd.get('cross_state', '').split('（')[0]}（偏多），"
+                f"但周线 MACD 仍处于零轴下方（弱势），短线反弹可能受长线趋势压制"
+            )
+
+        # Boll 贴上轨 + RSI 超买
+        if boll_bullish and rsi_overbought:
+            rsi_val = rsi_short.get('rsi_value', 0)
+            conflicts.append(
+                f"价格贴近布林上轨且 RSI7={rsi_val:.0f} 进入超买区，"
+                f"属于「加速上涨」还是「诱多衰竭」需量价验证"
+            )
+
+        # 均线空头 + 短线看多信号
+        if ma_bearish and (macd_bullish or boll_bullish):
+            conflicts.append(
+                '均线系统处于空头排列，但短线指标出现看多信号，'
+                '可能是下跌中继反弹而非趋势反转'
+            )
+
+        # ---- 共振确认 ----
+        bullish_signals = sum([ma_bullish, macd_bullish, boll_bullish])
+        bearish_signals = sum([ma_bearish, macd_bearish, boll_bearish])
+
+        if bullish_signals >= 3:
+            confirmations.append('均线、MACD、布林线多维共振看多，趋势信号较强')
+        elif bearish_signals >= 3:
+            confirmations.append('均线、MACD、布林线多维共振看空，趋势信号较强')
+
+        if macd_bullish and boll_bullish and not rsi_overbought:
+            confirmations.append('MACD 看多 + 布林上半通道 + RSI 未超买，上涨空间尚可')
+
+        # 量价确认
+        if vp:
+            daily_detail = vp.get('daily_detail', [])
+            if daily_detail:
+                last_d = daily_detail[-1]
+                vol_ratio = last_d.get('vol_ratio', 1)
+                pct = last_d.get('pct_change', 0)
+                if pct > 1 and vol_ratio >= 1.3:
+                    confirmations.append(f"最近一日放量上涨（量比 {vol_ratio}x），资金进场确认")
+                elif pct < -1 and vol_ratio >= 1.3:
+                    risks.append(f"最近一日放量下跌（量比 {vol_ratio}x），资金出逃信号")
+
+        # ---- 风险因素 ----
+        # MA120 压制
+        if ma_analysis:
+            battle = (ma_analysis.get('structure') or {}).get('battle_point', '')
+            if 'MA120' in battle and '阻力' in battle:
+                risks.append(f"MA120 形成上方阻力，{battle.split('；')[0]}")
+
+        # 周线级别空头
+        if weekly_macd_bearish:
+            risks.append(f"周线 MACD 处于零轴下方（{weekly_macd.get('zero_axis', '')}），中线趋势偏空")
+
+        # RSI 超买风险
+        if rsi_overbought:
+            risks.append(f"RSI7 进入超买区（{rsi_short.get('rsi_value', 0):.0f}），短线存在回调压力")
+
+        # 布林收口
+        if '收窄' in daily_boll.get('channel_width', '') or '收口' in daily_boll.get('pattern', ''):
+            risks.append('日线布林通道收口，波动率即将放大，需关注变盘方向')
+
+        # ATR 异常
+        if atr and atr.get('percentile', 50) >= 80:
+            risks.append(f"波动率处于历史高位（{atr['percentile']}%分位），注意设宽止损")
+
+        if not conflicts and not confirmations and not risks:
+            return None
+
+        # ---- 综合推理指令 ----
+        prompt_parts = []
+        if conflicts:
+            prompt_parts.append('请评估上述矛盾点中，哪个信号的权重更高')
+        if bullish_signals >= 2 and bearish_signals >= 1:
+            prompt_parts.append('判断当前看多/看空的确定性（1-10 分）')
+        if risks:
+            prompt_parts.append('评估各风险因素的实际威胁程度')
+        prompt_parts.append('给出综合操作建议')
+
+        prompt = '，'.join(prompt_parts) + '。'
+
+        return {
+            'conflicts': conflicts,
+            'confirmations': confirmations,
+            'risks': risks,
+            'prompt': prompt,
+        }
 
     # ------------------------------------------------------------------
     # 神奇九转指标（基于 stk_nineturn 表）
@@ -690,6 +885,15 @@ class StockDataCollectionService:
                     lines.append("")
                     lines.append("**【3. 分析提示】**")
                     lines.append(f"> {prompt}")
+
+            convergence = ma_analysis.get('convergence', {})
+            if convergence:
+                lines.append("")
+                lines.append("**【均线形态补充】**")
+                if convergence.get('convergence_desc'):
+                    lines.append(f"- {convergence['convergence_desc']}")
+                if convergence.get('bias_desc'):
+                    lines.append(f"- {convergence['bias_desc']}")
         lines.append("")
 
         # RSI 多周期分析
@@ -774,7 +978,8 @@ class StockDataCollectionService:
                 if not lv:
                     continue
                 lines.append(
-                    f"| {lv['level']} | {lv['channel_width']} | {lv['price_position']} "
+                    f"| {lv['level']} | {lv['channel_width']}(BW={self._fmt(lv.get('bandwidth'), 1)}%) "
+                    f"| {lv['price_position']}(%B={self._fmt(lv.get('percent_b'), 2)}) "
                     f"| {lv['mid_direction']} | {lv['signal']} "
                     f"| {lv['pattern']} "
                     f"| 上={self._fmt(lv.get('upper'), 2)} 中={self._fmt(lv.get('middle'), 2)} 下={self._fmt(lv.get('lower'), 2)} |"
@@ -792,6 +997,40 @@ class StockDataCollectionService:
                     lines.append("**【3. 分析提示】**")
                     lines.append(f"> {prompt}")
 
+        # ---- K 线形态识别 ----
+        candle = technical.get('candlestick')
+        if candle:
+            lines.append("")
+            lines.append("### K 线形态识别（Price Action）")
+            lines.append("")
+            daily_p = candle.get('daily_patterns', [])
+            if daily_p:
+                lines.append("**【1. 近期逐日 K 线形态】**")
+                lines.append("")
+                lines.append("| 日期 | 涨跌幅 | K 线形态 |")
+                lines.append("|------|--------|---------|")
+                for d in daily_p:
+                    lines.append(
+                        f"| {d['date']} | {self._fmt(d['pct_change'])}% | {d['pattern']} |"
+                    )
+            combo = candle.get('combo_patterns', [])
+            if combo and combo != ['无显著组合形态']:
+                lines.append("")
+                lines.append("**【2. 组合形态信号】**")
+                for c in combo:
+                    lines.append(f"- {c}")
+            gravity = candle.get('gravity_trend', '')
+            if gravity:
+                lines.append("")
+                lines.append(f"**【K 线重心趋势】** {gravity}")
+
+        # ---- ATR 波动率 ----
+        atr = technical.get('atr')
+        if atr:
+            lines.append("")
+            lines.append(f"**【波动率参考（ATR{14}）】** ATR={self._fmt(atr.get('atr'), 2)}（"
+                         f"占股价 {self._fmt(atr.get('atr_pct'), 2)}%）{atr.get('desc', '')}")
+
         # ---- 量价动能分析 ----
         vp = technical.get('volume_price')
         if vp:
@@ -804,19 +1043,19 @@ class StockDataCollectionService:
             if turnover is not None:
                 lines.append(f"- 当前流通盘换手率：{self._fmt(turnover)}%")
             if vol_mean is not None:
-                lines.append(f"- 5日均量线基准：{self._fmt(vol_mean, 0)} 股")
+                lines.append(f"- 5日均量线基准：{self._fmt_vol(vol_mean)}")
             lines.append("")
 
             daily = vp.get('daily_detail', [])
             if daily:
                 lines.append("**【1. 短线视角：近5日量价动态推演】**")
                 lines.append("")
-                lines.append("| 日期 | 涨跌幅 | 成交量 (股) | 量价相对表现 | 形态定性 |")
-                lines.append("|------|--------|------------|------------|---------|")
+                lines.append("| 日期 | 涨跌幅 | 成交量 | 量比 | 形态定性 |")
+                lines.append("|------|--------|--------|------|---------|")
                 for d in daily:
                     lines.append(
                         f"| {d['date']} | {self._fmt(d['pct_change'])}% "
-                        f"| {self._fmt(d['volume'], 0)} "
+                        f"| {self._fmt_vol(d['volume'])} "
                         f"| {d['vol_desc']} | {d['pattern']} |"
                     )
 
@@ -837,6 +1076,36 @@ class StockDataCollectionService:
                 lines.append("")
                 lines.append("**【3. 分析提示】**")
                 lines.append(f"> {prompt}")
+
+        # ---- 多维指标冲突与共振验证 ----
+        cross_verification = technical.get('cross_verification')
+        if cross_verification:
+            lines.append("")
+            lines.append("### 多维指标冲突与共振验证（重点分析项）")
+            lines.append("")
+            conflicts = cross_verification.get('conflicts', [])
+            if conflicts:
+                lines.append("**【矛盾点提取】**")
+                for c in conflicts:
+                    lines.append(f"- {c}")
+            confirmations = cross_verification.get('confirmations', [])
+            if confirmations:
+                lines.append("")
+                lines.append("**【共振确认】**")
+                for c in confirmations:
+                    lines.append(f"- {c}")
+            risks = cross_verification.get('risks', [])
+            if risks:
+                lines.append("")
+                lines.append("**【潜在风险/压制因素】**")
+                for r in risks:
+                    lines.append(f"- ⚠ {r}")
+            verify_prompt = cross_verification.get('prompt', '')
+            if verify_prompt:
+                lines.append("")
+                lines.append("**【综合推理指令】**")
+                lines.append(f"> {verify_prompt}")
+        lines.append("")
 
         # 神奇九转指标
         nine_turn = data.get('nine_turn', {})
@@ -1018,3 +1287,20 @@ class StockDataCollectionService:
         if abs(v) >= 10000:
             return f"{sign}{v / 10000:.2f} 亿元"
         return f"{sign}{v:.2f} 万元"
+
+    @staticmethod
+    def _fmt_vol(val) -> str:
+        """格式化成交量（输入为股数），自动换算万股/亿股。"""
+        if val is None:
+            return 'N/A'
+        try:
+            v = float(val)
+            if math.isnan(v):
+                return 'N/A'
+        except (TypeError, ValueError):
+            return 'N/A'
+        if v >= 1e8:
+            return f"{v / 1e8:.2f}亿股"
+        if v >= 1e4:
+            return f"{v / 1e4:.0f}万股"
+        return f"{v:.0f}股"

@@ -45,6 +45,23 @@ def _fmt_wan(val) -> str:
     return f"{v:,.0f} 万元"
 
 
+def _fmt_vol(val) -> str:
+    """格式化成交量（输入为股数），自动换算万股/亿股。"""
+    if val is None:
+        return "N/A"
+    try:
+        v = float(val)
+        if math.isnan(v) or math.isinf(v):
+            return "N/A"
+    except (TypeError, ValueError):
+        return "N/A"
+    if v >= 1e8:
+        return f"{v / 1e8:.2f}亿股"
+    if v >= 1e4:
+        return f"{v / 1e4:.0f}万股"
+    return f"{v:.0f}股"
+
+
 def _fmt_flow(val) -> str:
     if val is None:
         return "N/A"
@@ -225,8 +242,8 @@ async def get_shareholder_info(ts_code: str) -> str:
 
 @tool
 async def get_technical_indicators(ts_code: str) -> str:
-    """获取技术指标：均线多周期结构分析(排列形态/支撑阻力/趋势方向/核心博弈点)、RSI多周期分析(超买超卖/趋势/背离/跨周期共振)、多级别MACD分析(零轴/交叉/柱体/背离/跨级别共振)、布林线多级别分析(通道宽度/价格位置/中轨方向/突破信号/跨级别共振)、量价异动。
-    适用场景：分析均线多空排列与支撑阻力、RSI超买超卖与背离信号、MACD多级别趋势共振、顶底背离信号、布林通道波动率与趋势方向。"""
+    """获取技术指标：均线多周期结构分析(排列形态/支撑阻力/趋势方向/核心博弈点/收敛度/乖离率)、RSI多周期分析(超买超卖/趋势/背离/跨周期共振)、多级别MACD分析(零轴/交叉/柱体/背离/跨级别共振)、布林线多级别分析(通道宽度/价格位置/%B/Bandwidth/中轨方向/突破信号/跨级别共振)、K线形态识别(单根形态/组合形态/重心趋势)、ATR波动率(历史分位数)、量价异动。
+    适用场景：分析均线多空排列与支撑阻力、RSI超买超卖与背离信号、MACD多级别趋势共振、顶底背离信号、布林通道波动率与趋势方向、K线Price Action形态、波动率异常。"""
     from app.services.stock_data_collection_service import StockDataCollectionService
 
     svc = StockDataCollectionService()
@@ -261,6 +278,15 @@ async def get_technical_indicators(ts_code: str) -> str:
                 lines.append(f"**短期异动:** {structure['short_signal']}")
             if structure.get('battle_point'):
                 lines.append(f"**博弈点:** {structure['battle_point']}")
+        convergence = ma_analysis.get('convergence', {})
+        if convergence:
+            parts = []
+            if convergence.get('convergence_desc'):
+                parts.append(convergence['convergence_desc'])
+            if convergence.get('bias_desc'):
+                parts.append(convergence['bias_desc'])
+            if parts:
+                lines.append(f"**均线形态:** {'；'.join(parts)}")
     lines.append("")
 
     rsi_analysis = data.get("rsi_analysis")
@@ -324,7 +350,8 @@ async def get_technical_indicators(ts_code: str) -> str:
             if not lv:
                 continue
             lines.append(
-                f"| {lv['level']} | {lv['channel_width']} | {lv['price_position']} "
+                f"| {lv['level']} | {lv['channel_width']}(BW={_safe_fmt(lv.get('bandwidth'), 1)}%) "
+                f"| {lv['price_position']}(%B={_safe_fmt(lv.get('percent_b'), 2)}) "
                 f"| {lv['mid_direction']} | {lv['signal']} "
                 f"| {lv['pattern']} "
                 f"| 上={_safe_fmt(lv.get('upper'), 2)} 中={_safe_fmt(lv.get('middle'), 2)} 下={_safe_fmt(lv.get('lower'), 2)} |"
@@ -335,6 +362,33 @@ async def get_technical_indicators(ts_code: str) -> str:
             lines.append(f"**共振状态:** {cross.get('resonance_state', '')}")
             if cross.get('battle_analysis'):
                 lines.append(f"**长短博弈:** {cross['battle_analysis']}")
+    # ---- K 线形态 ----
+    candle = data.get("candlestick")
+    if candle:
+        lines.append("")
+        lines.append("**K 线形态识别**")
+        lines.append("")
+        daily_p = candle.get('daily_patterns', [])
+        if daily_p:
+            lines.append("| 日期 | 涨跌幅 | K 线形态 |")
+            lines.append("|------|--------|---------|")
+            for d in daily_p:
+                lines.append(
+                    f"| {d['date']} | {_safe_fmt(d['pct_change'])}% | {d['pattern']} |"
+                )
+        combo = candle.get('combo_patterns', [])
+        if combo and combo != ['无显著组合形态']:
+            lines.append(f"**组合形态:** {'；'.join(combo)}")
+        gravity = candle.get('gravity_trend', '')
+        if gravity:
+            lines.append(f"**重心趋势:** {gravity}")
+
+    # ---- ATR 波动率 ----
+    atr = data.get("atr")
+    if atr:
+        lines.append("")
+        lines.append(f"**波动率(ATR14):** ATR={_safe_fmt(atr.get('atr'), 2)}"
+                     f"(占股价{_safe_fmt(atr.get('atr_pct'), 2)}%) {atr.get('desc', '')}")
     lines.append("")
 
     # ---- 量价动能分析 ----
@@ -348,7 +402,7 @@ async def get_technical_indicators(ts_code: str) -> str:
         if turnover is not None:
             refs.append(f"换手率: {_safe_fmt(turnover)}%")
         if vol_mean is not None:
-            refs.append(f"5日均量: {_safe_fmt(vol_mean, 0)} 股")
+            refs.append(f"5日均量: {_fmt_vol(vol_mean)}")
         if refs:
             lines.append(' | '.join(refs))
         lines.append("")
@@ -360,7 +414,7 @@ async def get_technical_indicators(ts_code: str) -> str:
             for d in daily:
                 lines.append(
                     f"| {d['date']} | {_safe_fmt(d['pct_change'])}% "
-                    f"| {_safe_fmt(d['volume'], 0)} "
+                    f"| {_fmt_vol(d['volume'])} "
                     f"| {d['vol_desc']} | {d['pattern']} |"
                 )
 
@@ -378,6 +432,22 @@ async def get_technical_indicators(ts_code: str) -> str:
         if prompt:
             lines.append("")
             lines.append(f"**分析提示:** {prompt}")
+
+    # ---- 多维指标冲突与共振验证 ----
+    cv = data.get("cross_verification")
+    if cv:
+        lines.append("")
+        lines.append("**多维指标冲突与共振验证**")
+        conflicts = cv.get('conflicts', [])
+        if conflicts:
+            lines.append("矛盾点: " + '；'.join(conflicts))
+        confirmations = cv.get('confirmations', [])
+        if confirmations:
+            lines.append("共振确认: " + '；'.join(confirmations))
+        risks = cv.get('risks', [])
+        if risks:
+            lines.append("风险因素: " + '；'.join(risks))
+
     return "\n".join(lines) if lines else "暂无技术指标"
 
 
