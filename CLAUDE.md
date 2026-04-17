@@ -98,11 +98,21 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
     ├── get_basic_market             基础盘面（价格、估值、行业、筹码）
     ├── get_capital_flow             资金流向（主力净流入、北向资金）
     ├── get_shareholder_info         股东信息（人数变化、减持、解禁）
-    ├── get_technical_indicators     技术指标（MA、RSI、MACD、量价异动）
+    ├── get_technical_indicators     技术指标（均线结构、RSI、多级别MACD、量价动能）
     ├── get_financial_reports        财报披露日期
     ├── get_risk_alerts              风险警示（ST、质押）
     └── get_nine_turn                神奇九转指标
 ```
+
+`get_technical_indicators` 内部委托三个独立分析服务（纯计算，无 IO）：
+
+| 服务 | 文件 | 职责 |
+|------|------|------|
+| `MaAnalysisService` | `ma_analysis_service.py` | 均线多周期结构（排列形态、支撑阻力、核心博弈点） |
+| `MacdAnalysisService` | `macd_analysis_service.py` | MACD 多级别分析（零轴、交叉、动能、背离、跨级别共振） |
+| `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测） |
+
+所有 Tool 输出均为 **Markdown 表格**格式，便于 LLM 结构化解析。
 
 - **触发方式**：`analysis_type == "cio_directive"` 时自动走 Agent 路径（`/generate` 和 `/generate-multi` 端点）
 - **非 CIO 类型**不走 Agent，保持现有直接调用方式

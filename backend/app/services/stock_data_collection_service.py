@@ -340,8 +340,8 @@ class StockDataCollectionService:
         from app.repositories.stock_daily_repository import StockDailyRepository
 
         today = datetime.now()
-        # 取约150个交易日（~210日历天），满足 MA120 计算需要
-        start_dash = (today - timedelta(days=210)).strftime('%Y-%m-%d')
+        # 取约3年日线数据（~900日历天），满足月线 MACD 稳定性需要
+        start_dash = (today - timedelta(days=900)).strftime('%Y-%m-%d')
         end_dash = today.strftime('%Y-%m-%d')
 
         df = await asyncio.to_thread(
@@ -365,57 +365,24 @@ class StockDataCollectionService:
                 mas[f'ma{n}'] = None
         result['ma'] = mas
 
+        # ---- 均线多周期结构分析 ----
+        from app.services.ma_analysis_service import MaAnalysisService
+        last_close = self._safe_float(close.iloc[-1]) if len(close) > 0 else None
+        result['ma_analysis'] = MaAnalysisService.analyze(mas, last_close)
+
         # RSI
         result['rsi'] = {
             f'rsi{n}': self._calc_rsi(close, n)
             for n in [7, 14, 21]
         }
 
-        # MACD（12, 26, 9）— 需至少 26+9=35 根 K 线
-        if len(close) >= 35:
-            ema12 = close.ewm(span=12, adjust=False).mean()
-            ema26 = close.ewm(span=26, adjust=False).mean()
-            dif = ema12 - ema26
-            dea = dif.ewm(span=9, adjust=False).mean()
-            macd_bar = (dif - dea) * 2
+        # ---- 多级别 MACD 分析 ----
+        from app.services.macd_analysis_service import MacdAnalysisService
+        result['macd_multi'] = MacdAnalysisService.analyze_multi_level(df)
 
-            def _round_last(series):
-                v = series.iloc[-1]
-                return round(float(v), 3) if not self._is_nan(v) else None
-
-            result['macd'] = {
-                'dif': _round_last(dif),
-                'dea': _round_last(dea),
-                'macd': _round_last(macd_bar),
-            }
-        else:
-            result['macd'] = None
-
-        # 量价异动（近5日 vs 前5日均量对比）
-        if len(df) >= 10:
-            recent5 = df.tail(5)
-            prev_vol_mean = float(volume.iloc[-10:-5].mean())
-            recent_vol_avg = float(recent5['volume'].mean())
-            recent_pct_avg = abs(float(recent5['pct_change'].mean()))
-
-            anomaly = []
-            if prev_vol_mean > 0:
-                if recent_vol_avg > prev_vol_mean * 1.5 and recent_pct_avg < 0.8:
-                    anomaly.append('放量滞涨')
-                if recent_vol_avg < prev_vol_mean * 0.6:
-                    close_list = recent5['close'].tolist()
-                    if len(close_list) >= 2 and close_list[-1] < close_list[0]:
-                        anomaly.append('缩量回调')
-            result['anomaly'] = anomaly if anomaly else ['无明显量价异动']
-
-            result['recent_5d_vol'] = [
-                {
-                    'date': str(idx)[:10],
-                    'volume': float(row.get('volume', 0) or 0),
-                    'pct_change': float(row.get('pct_change', 0) or 0),
-                }
-                for idx, row in recent5.iterrows()
-            ]
+        # ---- 量价动能分析 ----
+        from app.services.volume_price_analysis_service import VolumePriceAnalysisService
+        result['volume_price'] = VolumePriceAnalysisService.analyze(df)
 
         return result
 
@@ -555,155 +522,278 @@ class StockDataCollectionService:
         lines.append(f"数据收集时间：{data.get('collected_at', '')}")
         lines.append("")
 
+        # ================================================================
         # 一、基础盘面
+        # ================================================================
         basic = data.get('basic_market', {})
         lines.append("## 一、基础盘面与行业位置")
-        lines.append(f"- 交易日期：{basic.get('trade_date', 'N/A')}")
-        lines.append(f"- 收盘价：{self._fmt(basic.get('close'))} 元")
-        lines.append(f"- 涨跌幅：{self._fmt(basic.get('pct_change'))} %")
-        lines.append(f"- 成交额：{self._fmt_amount(basic.get('amount'))}")
-        lines.append(f"- 换手率：{self._fmt(basic.get('turnover_rate'))} %")
-        lines.append(f"- PE-TTM：{self._fmt_pe(basic.get('pe_ttm'))}")
-        lines.append(f"- PB：{self._fmt(basic.get('pb'))}")
-        lines.append(f"- 总市值：{self._fmt_wan(basic.get('total_mv'))}")
-        lines.append(f"- 所属行业（Tushare）：{basic.get('industry') or 'N/A'} / 地区：{basic.get('area') or 'N/A'}")
+        lines.append("")
+        lines.append("| 指标 | 数值 |")
+        lines.append("|------|------|")
+        lines.append(f"| 交易日期 | {basic.get('trade_date', 'N/A')} |")
+        lines.append(f"| 收盘价 | {self._fmt(basic.get('close'))} 元 |")
+        lines.append(f"| 涨跌幅 | {self._fmt(basic.get('pct_change'))}% |")
+        lines.append(f"| 成交额 | {self._fmt_amount(basic.get('amount'))} |")
+        lines.append(f"| 换手率 | {self._fmt(basic.get('turnover_rate'))}% |")
+        lines.append(f"| PE-TTM | {self._fmt_pe(basic.get('pe_ttm'))} |")
+        lines.append(f"| PB | {self._fmt(basic.get('pb'))} |")
+        lines.append(f"| 总市值 | {self._fmt_wan(basic.get('total_mv'))} |")
+        lines.append(f"| 行业(Tushare) | {basic.get('industry') or 'N/A'} |")
+        lines.append(f"| 地区 | {basic.get('area') or 'N/A'} |")
 
         board_name = basic.get('industry_board_name', '')
-        ind_5d = basic.get('industry_5d', [])
         if board_name:
-            lines.append(f"- 东财行业板块：{board_name}")
-        if ind_5d:
-            lines.append("- 行业板块近5交易日涨跌幅：")
-            for r in ind_5d:
-                lines.append(f"  {r.get('trade_date', '')}  {self._fmt(r.get('pct_change'))}%")
-        elif board_name:
-            lines.append("- 行业板块近期数据：暂无")
+            lines.append(f"| 东财行业板块 | {board_name} |")
 
         chip = basic.get('chip', {})
         if chip:
-            lines.append(f"- 筹码获利比（winner_rate）：{self._fmt(chip.get('winner_rate'))} %")
+            lines.append(f"| 筹码获利比 | {self._fmt(chip.get('winner_rate'))}% |")
             lines.append(
-                f"  成本分布：15%={self._fmt(chip.get('cost_15pct'))} /"
-                f" 50%={self._fmt(chip.get('cost_50pct'))} /"
-                f" 85%={self._fmt(chip.get('cost_85pct'))} 元"
+                f"| 成本分布 (15%/50%/85%) | "
+                f"{self._fmt(chip.get('cost_15pct'))} / "
+                f"{self._fmt(chip.get('cost_50pct'))} / "
+                f"{self._fmt(chip.get('cost_85pct'))} 元 |"
             )
-            lines.append(f"  加权平均成本：{self._fmt(chip.get('weight_avg'))} 元")
-        else:
-            lines.append("- 筹码数据：暂无")
+            lines.append(f"| 加权平均成本 | {self._fmt(chip.get('weight_avg'))} 元 |")
+
+        # 行业板块近5日涨跌幅
+        ind_5d = basic.get('industry_5d', [])
+        if ind_5d:
+            lines.append("")
+            lines.append("**行业板块近5日涨跌幅：**")
+            lines.append("")
+            lines.append("| 日期 | 涨跌幅 |")
+            lines.append("|------|--------|")
+            for r in ind_5d:
+                lines.append(f"| {r.get('trade_date', '')} | {self._fmt(r.get('pct_change'))}% |")
         lines.append("")
 
+        # ================================================================
         # 二、资金流向
+        # ================================================================
         capital = data.get('capital_flow', {})
         lines.append("## 二、资金流向与筹码变动")
-        lines.append(f"- 主力净流入 近1日：{self._fmt_flow(capital.get('net_1d'))}")
-        lines.append(f"- 主力净流入 近5日：{self._fmt_flow(capital.get('net_5d'))}")
-        lines.append(f"- 主力净流入 近10日：{self._fmt_flow(capital.get('net_10d'))}")
-
-        flow_detail = capital.get('flow_detail', [])
-        if flow_detail:
-            lines.append("- 近5日资金流向明细：")
-            for r in flow_detail:
-                lines.append(
-                    f"  {r.get('trade_date', '')}  净流入 {self._fmt_flow(r.get('net_amount'))}"
-                    f"  涨跌 {self._fmt(r.get('pct_change'))}%"
-                )
+        lines.append("")
+        lines.append("| 指标 | 数值 |")
+        lines.append("|------|------|")
+        lines.append(f"| 主力净流入 近1日 | {self._fmt_flow(capital.get('net_1d'))} |")
+        lines.append(f"| 主力净流入 近5日 | {self._fmt_flow(capital.get('net_5d'))} |")
+        lines.append(f"| 主力净流入 近10日 | {self._fmt_flow(capital.get('net_10d'))} |")
 
         hk = capital.get('hk_hold', {})
         if hk:
             lines.append(
-                f"- 北向资金持股（{hk.get('trade_date', '')}）："
-                f"{self._fmt(hk.get('vol'), 0)} 股，占流通 {self._fmt(hk.get('ratio'))}%"
+                f"| 北向持股({hk.get('trade_date', '')}) | "
+                f"{self._fmt(hk.get('vol'), 0)} 股，占流通 {self._fmt(hk.get('ratio'))}% |"
             )
             if hk.get('vol_change_pct') is not None:
-                lines.append(f"  较历史变动：{self._fmt(hk.get('vol_change_pct'))}%")
+                lines.append(f"| 北向较历史变动 | {self._fmt(hk.get('vol_change_pct'))}% |")
         else:
-            lines.append("- 北向资金：本地无持股数据")
+            lines.append("| 北向资金 | 本地无持股数据 |")
+
+        flow_detail = capital.get('flow_detail', [])
+        if flow_detail:
+            lines.append("")
+            lines.append("**近5日资金流向明细：**")
+            lines.append("")
+            lines.append("| 日期 | 净流入 | 涨跌幅 |")
+            lines.append("|------|--------|--------|")
+            for r in flow_detail:
+                lines.append(
+                    f"| {r.get('trade_date', '')} "
+                    f"| {self._fmt_flow(r.get('net_amount'))} "
+                    f"| {self._fmt(r.get('pct_change'))}% |"
+                )
         lines.append("")
 
-        # 股东信息
+        # ================================================================
+        # 股东变化
+        # ================================================================
         shareholder = data.get('shareholder', {})
-        lines.append("## 股东变化")
+        lines.append("## 三、股东变化")
+        lines.append("")
+
         holder_nums = shareholder.get('holder_nums', [])
         if holder_nums:
-            lines.append("- 股东人数（近4季，最新在前）：")
+            lines.append("**股东人数（近4季，最新在前）：**")
+            lines.append("")
+            lines.append("| 报告期 | 股东人数 | 环比变化 |")
+            lines.append("|--------|---------|---------|")
             for r in holder_nums:
-                qoq = f"  环比 {r['qoq_pct']}%" if r.get('qoq_pct') is not None else ''
-                lines.append(f"  报告期 {r.get('end_date', '')}：{r.get('holder_num', 'N/A')} 户{qoq}")
+                qoq = f"{r['qoq_pct']}%" if r.get('qoq_pct') is not None else '-'
+                lines.append(f"| {r.get('end_date', '')} | {r.get('holder_num', 'N/A')} 户 | {qoq} |")
         else:
-            lines.append("- 股东人数：暂无数据")
+            lines.append("股东人数：暂无数据")
 
         reductions = shareholder.get('reductions', [])
         if reductions:
-            lines.append("- 近3个月大股东减持明细：")
+            lines.append("")
+            lines.append("**近3个月大股东减持明细：**")
+            lines.append("")
+            lines.append("| 公告日 | 股东名称 | 减持股数 | 变动比例 | 均价 |")
+            lines.append("|--------|---------|---------|---------|------|")
             for r in reductions:
                 lines.append(
-                    f"  {r.get('ann_date', '')} {r.get('holder_name', '')} "
-                    f"减持 {self._fmt(r.get('change_vol'), 0)} 股"
-                    f"（{self._fmt(r.get('change_ratio'))}%），均价 {self._fmt(r.get('avg_price'))} 元"
+                    f"| {r.get('ann_date', '')} | {r.get('holder_name', '')} "
+                    f"| {self._fmt(r.get('change_vol'), 0)} 股 "
+                    f"| {self._fmt(r.get('change_ratio'))}% "
+                    f"| {self._fmt(r.get('avg_price'))} 元 |"
                 )
         else:
-            lines.append("- 近3个月：无大股东减持公告")
+            lines.append("")
+            lines.append("近3个月：无大股东减持公告")
 
         upcoming = shareholder.get('upcoming_floats', [])
         if upcoming:
-            lines.append("- 未来1个月解禁预告：")
+            lines.append("")
+            lines.append("**未来1个月解禁预告：**")
+            lines.append("")
+            lines.append("| 解禁日期 | 解禁股数 | 股份类型 | 占比 |")
+            lines.append("|---------|---------|---------|------|")
             for r in upcoming:
                 lines.append(
-                    f"  {r.get('float_date', '')} 解禁 {self._fmt(r.get('float_share'), 0)} 万股"
-                    f"（{r.get('share_type', '')}），占比 {self._fmt(r.get('float_ratio'))}%"
+                    f"| {r.get('float_date', '')} "
+                    f"| {self._fmt(r.get('float_share'), 0)} 万股 "
+                    f"| {r.get('share_type', '')} "
+                    f"| {self._fmt(r.get('float_ratio'))}% |"
                 )
         else:
-            lines.append("- 未来1个月：无解禁计划")
+            lines.append("")
+            lines.append("未来1个月：无解禁计划")
         lines.append("")
 
-        # 三、技术指标
+        # ================================================================
+        # 四、技术指标
+        # ================================================================
         technical = data.get('technical', {})
-        lines.append("## 三、技术指标详情")
-        ma = technical.get('ma', {})
-        if ma:
-            lines.append(
-                f"- 均线：MA5={self._fmt(ma.get('ma5'))}"
-                f"  MA10={self._fmt(ma.get('ma10'))}"
-                f"  MA20={self._fmt(ma.get('ma20'))}"
-                f"  MA60={self._fmt(ma.get('ma60'))}"
-                f"  MA120={self._fmt(ma.get('ma120'))}"
-            )
-        else:
-            lines.append("- 均线：暂无数据")
+        lines.append("## 四、技术指标详情")
+        lines.append("")
+
+        # --- 均线系统分析 ---
+        ma_analysis = technical.get('ma_analysis')
+        if ma_analysis:
+            lines.append("### 均线系统（MA）结构与趋势分析")
+            lines.append("")
+            lines.append(f"**【当前价格基准】** 最新收盘价：{self._fmt(ma_analysis.get('close'))}")
+            lines.append("")
+            lines.append("**【1. 各周期均线状态切片】**")
+            lines.append("")
+            lines.append("| 周期级别 | 均线组合 | 排列形态 (趋势方向) | 价格相对位置 (支撑/阻力) | 关键数值 |")
+            lines.append("|---------|---------|-------------------|----------------------|---------|")
+            for s in ma_analysis.get('slices', []):
+                lines.append(
+                    f"| {s['level']} | {s['names']} | {s['arrangement']} "
+                    f"| {s['position']} | {s['values']} |"
+                )
+            structure = ma_analysis.get('structure', {})
+            if structure:
+                lines.append("")
+                lines.append("**【2. 均线核心空间结构提取】**")
+                lines.append(f"- **整体趋势：** {structure.get('trend', '')}")
+                if structure.get('short_signal'):
+                    lines.append(f"- **短期异动：** {structure['short_signal']}")
+                if structure.get('battle_point'):
+                    lines.append(f"- **核心博弈点：** {structure['battle_point']}")
+                prompt = structure.get('analysis_prompt', '')
+                if prompt:
+                    lines.append("")
+                    lines.append("**【3. 分析提示】**")
+                    lines.append(f"> {prompt}")
+        lines.append("")
 
         rsi = technical.get('rsi', {})
         if rsi:
             lines.append(
-                f"- RSI：RSI7={self._fmt(rsi.get('rsi7'))}"
-                f"  RSI14={self._fmt(rsi.get('rsi14'))}"
-                f"  RSI21={self._fmt(rsi.get('rsi21'))}"
+                f"**RSI：** RSI7={self._fmt(rsi.get('rsi7'))}, "
+                f"RSI14={self._fmt(rsi.get('rsi14'))}, "
+                f"RSI21={self._fmt(rsi.get('rsi21'))}"
             )
+            lines.append("")
 
-        macd = technical.get('macd')
-        if macd:
-            lines.append(
-                f"- MACD：DIF={self._fmt(macd.get('dif'), 3)}"
-                f"  DEA={self._fmt(macd.get('dea'), 3)}"
-                f"  MACD柱={self._fmt(macd.get('macd'), 3)}"
-            )
-
-        anomaly = technical.get('anomaly', [])
-        if anomaly:
-            lines.append(f"- 量价异动：{'、'.join(anomaly)}")
-
-        vol_5d = technical.get('recent_5d_vol', [])
-        if vol_5d:
-            lines.append("- 近5日量价：")
-            for r in vol_5d:
+        # MACD 多级别分析
+        macd_multi = technical.get('macd_multi')
+        if macd_multi:
+            lines.append("")
+            lines.append("### MACD 多级别动能与趋势分析")
+            lines.append("")
+            lines.append("**【1. 各级别 MACD 状态切片】**")
+            lines.append("")
+            lines.append("| 级别 | 零轴位置 (大势) | 交叉状态 (短期方向) | 柱体动能 (力度) | 背离信号 | 关键数值 |")
+            lines.append("|------|----------------|-------------------|----------------|---------|---------|")
+            for key in ['monthly', 'weekly', 'daily']:
+                lv = macd_multi.get(key)
+                if not lv:
+                    continue
+                div_text = lv['divergence'] if '背离' in lv['divergence'] else '无'
                 lines.append(
-                    f"  {r.get('date', '')}  量 {self._fmt(r.get('volume'), 0)} 股"
-                    f"  涨跌 {self._fmt(r.get('pct_change'))}%"
+                    f"| {lv['level']} | {lv['zero_axis']} | {lv['cross_state']} "
+                    f"| {lv['bar_momentum']} | {div_text} "
+                    f"| DIF={self._fmt(lv.get('dif'), 2)}, DEA={self._fmt(lv.get('dea'), 2)} |"
                 )
+            cross = macd_multi.get('cross_level', {})
+            if cross:
+                lines.append("")
+                lines.append("**【2. 跨级别核心逻辑提取】**")
+                lines.append(f"- **共振状态：** {cross.get('resonance_state', '')}")
+                if cross.get('battle_analysis'):
+                    lines.append(f"- **长短博弈：** {cross['battle_analysis']}")
+                prompt = cross.get('analysis_prompt', '')
+                if prompt:
+                    lines.append("")
+                    lines.append("**【3. 分析提示】**")
+                    lines.append(f"> {prompt}")
+
+        # ---- 量价动能分析 ----
+        vp = technical.get('volume_price')
+        if vp:
+            lines.append("")
+            lines.append("### 量价动能与筹码结构分析")
+            lines.append("")
+            lines.append("**【量价基础参考系】**")
+            turnover = vp.get('turnover')
+            vol_mean = vp.get('vol_5d_mean')
+            if turnover is not None:
+                lines.append(f"- 当前流通盘换手率：{self._fmt(turnover)}%")
+            if vol_mean is not None:
+                lines.append(f"- 5日均量线基准：{self._fmt(vol_mean, 0)} 股")
+            lines.append("")
+
+            daily = vp.get('daily_detail', [])
+            if daily:
+                lines.append("**【1. 短线视角：近5日量价动态推演】**")
+                lines.append("")
+                lines.append("| 日期 | 涨跌幅 | 成交量 (股) | 量价相对表现 | 形态定性 |")
+                lines.append("|------|--------|------------|------------|---------|")
+                for d in daily:
+                    lines.append(
+                        f"| {d['date']} | {self._fmt(d['pct_change'])}% "
+                        f"| {self._fmt(d['volume'], 0)} "
+                        f"| {d['vol_desc']} | {d['pattern']} |"
+                    )
+
+            mid_long = vp.get('mid_long', {})
+            if mid_long:
+                lines.append("")
+                lines.append("**【2. 中长线视角：全局筹码与资金行为结构】**")
+                if mid_long.get('mid_structure'):
+                    lines.append(f"- **中线结构 (近60日)：** {mid_long['mid_structure']}")
+                if mid_long.get('volume_pressure'):
+                    lines.append(f"- **长线压力预警：** {mid_long['volume_pressure']}")
+                anomalies = mid_long.get('key_anomalies', [])
+                if anomalies:
+                    lines.append(f"- **核心量价异动：** {'；'.join(anomalies)}")
+
+            prompt = vp.get('analysis_prompt', '')
+            if prompt:
+                lines.append("")
+                lines.append("**【3. 分析提示】**")
+                lines.append(f"> {prompt}")
 
         # 神奇九转指标
         nine_turn = data.get('nine_turn', {})
         if nine_turn:
-            lines.append(f"- 神奇九转（{nine_turn.get('latest_date', '')}）：")
+            lines.append("")
+            lines.append(f"**神奇九转（{nine_turn.get('latest_date', '')}）：**")
             up_c = nine_turn.get('up_count')
             down_c = nine_turn.get('down_count')
             up_signal = nine_turn.get('nine_up_turn')
@@ -719,53 +809,62 @@ class StockDataCollectionService:
                 if down_signal == '-9':
                     s += "（已触发九转见底信号）"
                 parts.append(s)
-            if parts:
-                lines.append(f"  当前状态：{'，'.join(parts)}")
-            else:
-                lines.append("  当前状态：无连续计数")
+            lines.append(f"当前状态：{'，'.join(parts)}" if parts else "当前状态：无连续计数")
 
             signals = nine_turn.get('recent_signals', [])
             if signals:
-                lines.append("  近30日信号：")
+                lines.append("")
+                lines.append("| 日期 | 信号 |")
+                lines.append("|------|------|")
                 for s in signals:
-                    lines.append(f"    {s.get('date', '')}  {s.get('type', '')}")
-        else:
-            lines.append("- 神奇九转：暂无数据")
+                    lines.append(f"| {s.get('date', '')} | {s.get('type', '')} |")
         lines.append("")
 
-        # 四、财报与公告
+        # ================================================================
+        # 五、财报与公告
+        # ================================================================
         financial = data.get('financial', {})
-        lines.append("## 四、财报与敏感公告")
+        lines.append("## 五、财报与敏感公告")
+        lines.append("")
+
         disclosures = financial.get('disclosures', [])
         if disclosures:
-            lines.append("- 财报预约披露日期：")
+            lines.append("**财报预约披露日期：**")
+            lines.append("")
+            lines.append("| 报告期 | 预约披露日 |")
+            lines.append("|--------|----------|")
             for r in disclosures:
                 actual = r.get('actual_date', '')
                 pre = r.get('pre_date', '')
                 date_str = actual if (actual and actual not in ('None', '')) else pre
-                lines.append(f"  报告期 {r.get('end_date', '')}：预约披露 {date_str}")
+                lines.append(f"| {r.get('end_date', '')} | {date_str} |")
         else:
-            lines.append("- 暂无近期财报披露计划")
+            lines.append("暂无近期财报披露计划")
 
         risk = data.get('risk', {})
         alerts = risk.get('alerts', [])
         if alerts:
-            lines.append("- 风险警示：")
+            lines.append("")
+            lines.append("**风险警示：**")
+            lines.append("")
+            lines.append("| 起始日期 | 结束日期 | 类型 |")
+            lines.append("|---------|---------|------|")
             for r in alerts:
-                lines.append(f"  {r.get('start_date', '')} ~ {r.get('end_date', '')}  {r.get('type', '')}")
+                lines.append(f"| {r.get('start_date', '')} | {r.get('end_date', '')} | {r.get('type', '')} |")
         else:
-            lines.append("- 近期无风险警示公告")
+            lines.append("")
+            lines.append("近期无风险警示公告")
 
         pledge = risk.get('pledge', {})
         if pledge:
-            lines.append(
-                f"- 质押情况（{pledge.get('end_date', '')}）："
-                f"质押笔数 {pledge.get('pledge_count', 'N/A')} 笔，"
-                f"质押比例 {self._fmt(pledge.get('pledge_ratio'))}%，"
-                f"未解押股份 {self._fmt(pledge.get('unrest_pledge'), 0)} 万股"
-            )
-        else:
-            lines.append("- 暂无质押数据")
+            lines.append("")
+            lines.append(f"**质押情况（{pledge.get('end_date', '')}）：**")
+            lines.append("")
+            lines.append("| 指标 | 数值 |")
+            lines.append("|------|------|")
+            lines.append(f"| 质押笔数 | {pledge.get('pledge_count', 'N/A')} 笔 |")
+            lines.append(f"| 质押比例 | {self._fmt(pledge.get('pledge_ratio'))}% |")
+            lines.append(f"| 未解押股份 | {self._fmt(pledge.get('unrest_pledge'), 0)} 万股 |")
 
         return '\n'.join(lines)
 
