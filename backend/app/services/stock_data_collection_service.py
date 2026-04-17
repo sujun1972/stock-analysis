@@ -387,7 +387,7 @@ class StockDataCollectionService:
         result['candlestick'] = CandlestickAnalysisService.analyze(df)
 
         # ---- ATR 波动率 ----
-        result['atr'] = cls._compute_atr(df)
+        result['atr'] = self._compute_atr(df)
 
         # ---- 量价动能分析 ----
         from app.services.volume_price_analysis_service import VolumePriceAnalysisService
@@ -395,7 +395,7 @@ class StockDataCollectionService:
         result['volume_price'] = VolumePriceAnalysisService.analyze(df, trend_context=ma_trend)
 
         # ---- 跨指标冲突与共振验证 ----
-        result['cross_verification'] = cls._build_cross_verification(result)
+        result['cross_verification'] = self._build_cross_verification(result)
 
         return result
 
