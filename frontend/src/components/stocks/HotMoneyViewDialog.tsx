@@ -27,6 +27,8 @@ import {
   Trash2,
   X,
   Sparkles,
+  Code,
+  BookOpen,
 } from 'lucide-react'
 
 // ── 类型 ──────────────────────────────────────────────────────
@@ -409,6 +411,9 @@ function AnalysisTab({
   const [historyLoading, setHistoryLoading] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
 
+  // 源文本/渲染视图切换
+  const [showRawText, setShowRawText] = useState(false)
+
   // 编辑状态
   const [editMode, setEditMode] = useState(false)
   const [editText, setEditText] = useState('')
@@ -459,6 +464,7 @@ function AnalysisTab({
     setEditMode(false)
     setDeleteConfirm(false)
     setEditMsg(null)
+    setShowRawText(false)
   }, [currentIndex])
 
   const reloadHistory = async () => {
@@ -687,6 +693,13 @@ function AnalysisTab({
                 {!editMode && !deleteConfirm && (
                   <>
                     <button
+                      onClick={() => setShowRawText(!showRawText)}
+                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-purple-500"
+                      title={showRawText ? '渲染视图' : '源文本'}
+                    >
+                      {showRawText ? <BookOpen className="h-3.5 w-3.5" /> : <Code className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
                       onClick={handleEditStart}
                       className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-blue-500"
                       title="编辑"
@@ -774,6 +787,10 @@ function AnalysisTab({
                   </Button>
                 </div>
               </div>
+            ) : showRawText ? (
+              <pre className="whitespace-pre-wrap text-sm font-mono break-words text-gray-800 dark:text-gray-200 leading-relaxed">
+                {currentRecord.analysis_text}
+              </pre>
             ) : (
               <AnalysisContent text={currentRecord.analysis_text} analysisType={analysisType} />
             )}
