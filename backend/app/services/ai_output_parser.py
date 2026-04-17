@@ -70,7 +70,66 @@ def extract_json_text(ai_response: str) -> Optional[str]:
     except (json.JSONDecodeError, ValueError):
         pass
 
+    # 策略4: 修复 AI 常见的不完整 JSON（缺少闭合花括号/方括号）
+    repaired = _try_repair_json(cleaned)
+    if repaired is not None:
+        return repaired
+
     return None
+
+
+def _try_repair_json(text: str) -> Optional[str]:
+    """尝试修复 AI 输出中缺少闭合花括号/方括号的不完整 JSON。
+
+    AI 模型（尤其长输出时）经常截断最后的 } 或 ]，
+    导致花括号/方括号不配对。此函数通过补全缺失的闭合符号来修复。
+    """
+    if not text or not text.strip().startswith('{'):
+        return None
+
+    # 计算结构性花括号/方括号的嵌套深度（跳过字符串内部的）
+    open_stack = []  # 记录未闭合的开括号类型
+    in_string = False
+    escape_next = False
+
+    for ch in text:
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\' and in_string:
+            escape_next = True
+            continue
+        if ch == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if not in_string:
+            if ch == '{':
+                open_stack.append('}')
+            elif ch == '[':
+                open_stack.append(']')
+            elif ch in ('}', ']'):
+                if open_stack and open_stack[-1] == ch:
+                    open_stack.pop()
+
+    if not open_stack:
+        return None  # 已经配对完整，无需修复
+
+    # 最多补 3 个闭合符号（避免对完全损坏的文本做大手术）
+    if len(open_stack) > 3:
+        logger.warning(f"JSON 缺失 {len(open_stack)} 个闭合符号，超过修复阈值，跳过")
+        return None
+
+    # 补全缺失的闭合符号（逆序：最内层先关闭）
+    suffix = '\n' + '\n'.join(reversed(open_stack))
+    repaired = text + suffix
+
+    try:
+        json.loads(repaired)
+        logger.info(f"JSON 自动修复成功：补全了 {len(open_stack)} 个闭合符号 {''.join(reversed(open_stack))}")
+        return repaired
+    except (json.JSONDecodeError, ValueError):
+        logger.debug(f"JSON 修复后仍无法解析，放弃")
+        return None
 
 
 def parse_ai_json(

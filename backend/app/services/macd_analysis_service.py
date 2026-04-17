@@ -144,12 +144,17 @@ class MacdAnalysisService:
         if last_diff < 0 and prev_diff >= 0:
             return '死叉（DIF 下穿 DEA）'
 
-        # 检查近5根K线是否趋于黏合
+        # 检查近5根K线是否趋于黏合（DIF 与 DEA 差值极小）
         recent_diffs = [abs(float(diff.iloc[i])) for i in range(-5, 0)]
         avg_abs_diff = sum(recent_diffs) / len(recent_diffs)
         abs_dif_mean = max(abs(float(dif.iloc[-5:].mean())), 0.01)
         if avg_abs_diff < abs_dif_mean * 0.15:
-            return '趋于黏合（方向不明）'
+            # 黏合状态需标注当前 DIF/DEA 的实际多空关系，避免与数值矛盾
+            if last_diff > 0:
+                return '高位黏合偏多（DIF 略高于 DEA，多头优势微弱，方向待选择）'
+            elif last_diff < 0:
+                return '高位黏合偏空（DIF 略低于 DEA，空头小幅占优，方向待选择）'
+            return '趋于黏合（DIF≈DEA，方向不明）'
 
         # 拒绝死叉（老鸭头）：DIF 向下接近 DEA 但未穿越后重新发散向上
         recent_8 = diff.iloc[-8:]
@@ -247,6 +252,9 @@ class MacdAnalysisService:
         min_gap = 5  # 两个极值点最小间距（K 线数）
         min_pct = 0.01  # 价格变化最小幅度（1%）
 
+        # 日期索引，用于输出历史锚点
+        dates = close.iloc[-60:].index
+
         # 顶背离检测
         if check_top:
             # 寻找局部极大值（价格高点）
@@ -266,7 +274,14 @@ class MacdAnalysisService:
                     if c[h1] > 0 and abs(c[h2] - c[h1]) / c[h1] < min_pct:
                         continue
                     if c[h2] > c[h1] and d[h2] < d[h1]:
-                        return '顶背离（价格新高但 DIF 走低，警惕见顶回落）'
+                        d1_date = str(dates[h1])[:10]
+                        d2_date = str(dates[h2])[:10]
+                        gap = h2 - h1
+                        return (
+                            f'顶背离（前高 {d1_date} 价格{c[h1]:.2f}/DIF{d[h1]:.3f} → '
+                            f'近高 {d2_date} 价格{c[h2]:.2f}/DIF{d[h2]:.3f}，'
+                            f'间隔{gap}日，价格新高但 DIF 走低，警惕见顶回落）'
+                        )
                     break  # 只检查最近一组有效高点
 
         # 底背离检测
@@ -286,7 +301,14 @@ class MacdAnalysisService:
                     if c[l1] > 0 and abs(c[l2] - c[l1]) / c[l1] < min_pct:
                         continue
                     if c[l2] < c[l1] and d[l2] > d[l1]:
-                        return '底背离（价格新低但 DIF 走高，关注见底反弹）'
+                        d1_date = str(dates[l1])[:10]
+                        d2_date = str(dates[l2])[:10]
+                        gap = l2 - l1
+                        return (
+                            f'底背离（前低 {d1_date} 价格{c[l1]:.2f}/DIF{d[l1]:.3f} → '
+                            f'近低 {d2_date} 价格{c[l2]:.2f}/DIF{d[l2]:.3f}，'
+                            f'间隔{gap}日，价格新低但 DIF 走高，关注见底反弹）'
+                        )
                     break
 
         return '无背离信号'

@@ -394,6 +394,26 @@ class StockDataCollectionService:
         ma_trend = (result.get('ma_analysis') or {}).get('structure', {}).get('trend', '')
         result['volume_price'] = VolumePriceAnalysisService.analyze(df, trend_context=ma_trend)
 
+        # ---- 近20日价格空间定位 ----
+        if len(df) >= 20:
+            recent_20 = df.tail(20)
+            high_20 = float(recent_20['high'].max())
+            low_20 = float(recent_20['low'].min())
+            last_close = float(close.iloc[-1])
+            price_range = high_20 - low_20
+            percentile_20d = round((last_close - low_20) / price_range * 100) if price_range > 0 else 50
+            # 阻力距离（距20日高点）和支撑距离（距20日低点）
+            resist_pct = round((high_20 - last_close) / last_close * 100, 1) if last_close > 0 else 0
+            support_pct = round((last_close - low_20) / last_close * 100, 1) if last_close > 0 else 0
+            result['price_position'] = {
+                'high_20d': round(high_20, 2),
+                'low_20d': round(low_20, 2),
+                'percentile_20d': percentile_20d,
+                'close': round(last_close, 2),
+                'resist_pct': resist_pct,
+                'support_pct': support_pct,
+            }
+
         # ---- 跨指标冲突与共振验证 ----
         result['cross_verification'] = self._build_cross_verification(result)
 
@@ -472,10 +492,13 @@ class StockDataCollectionService:
         ma_bullish = '多头' in ma_trend
         ma_bearish = '空头' in ma_trend
 
-        # MACD 日线方向
+        # MACD 日线方向（区分大势和短期方向，避免"零轴上方但黏合偏空"被标记为看多）
         daily_macd = (macd_multi or {}).get('daily', {})
-        macd_bullish = '上方' in daily_macd.get('zero_axis', '') or '金叉' in daily_macd.get('cross_state', '')
-        macd_bearish = '下方' in daily_macd.get('zero_axis', '') or '死叉' in daily_macd.get('cross_state', '')
+        macd_zero_bullish = '上方' in daily_macd.get('zero_axis', '')
+        macd_cross_bearish = '死叉' in daily_macd.get('cross_state', '') or '偏空' in daily_macd.get('cross_state', '')
+        macd_bullish = macd_zero_bullish and not macd_cross_bearish
+        macd_bearish = '下方' in daily_macd.get('zero_axis', '') or macd_cross_bearish
+        macd_diverging = macd_zero_bullish and macd_cross_bearish
 
         # MACD 周线方向
         weekly_macd = (macd_multi or {}).get('weekly', {})
@@ -494,6 +517,14 @@ class StockDataCollectionService:
         rsi_oversold = rsi_short.get('rsi_value', 50) < 30
 
         # ---- 矛盾点 ----
+        # 周线强势 + 日线 MACD 高位偏空分化
+        if weekly_macd_bullish and macd_diverging:
+            cross_desc = daily_macd.get('cross_state', '').split('（')[0]
+            conflicts.append(
+                f"周线 MACD 处于零轴上方强势区，但日线 MACD {cross_desc}，"
+                f"长短周期出现分化，需关注日线动能是否进一步衰减"
+            )
+
         # 日线看多 vs 周线看空
         if macd_bullish and weekly_macd_bearish:
             conflicts.append(
@@ -516,7 +547,7 @@ class StockDataCollectionService:
                 '可能是下跌中继反弹而非趋势反转'
             )
 
-        # ---- 共振确认 ----
+        # ---- 共振确认（区分周线大势和日线短线方向） ----
         bullish_signals = sum([ma_bullish, macd_bullish, boll_bullish])
         bearish_signals = sum([ma_bearish, macd_bearish, boll_bearish])
 
@@ -524,9 +555,17 @@ class StockDataCollectionService:
             confirmations.append('均线、MACD、布林线多维共振看多，趋势信号较强')
         elif bearish_signals >= 3:
             confirmations.append('均线、MACD、布林线多维共振看空，趋势信号较强')
+        elif ma_bullish and boll_bullish and macd_diverging:
+            # 大势看多但 MACD 日线出现偏空分化 — 精确描述而非笼统说"共振看多"
+            confirmations.append(
+                '周线级别（均线、布林线）大势看多；但日线 MACD 高位黏合偏空，长短周期出现分化'
+            )
 
         if macd_bullish and boll_bullish and not rsi_overbought:
             confirmations.append('MACD 看多 + 布林上半通道 + RSI 未超买，上涨空间尚可')
+        elif macd_diverging and boll_bullish and not rsi_overbought:
+            # MACD 偏空但布林和 RSI 尚好 — 不能说"上涨空间尚可"，而应标注分化
+            confirmations.append('布林上半通道 + RSI 未超买，但日线 MACD 动能减弱，上行需量能配合')
 
         # 量价确认
         if vp:
@@ -563,25 +602,145 @@ class StockDataCollectionService:
         if atr and atr.get('percentile', 50) >= 80:
             risks.append(f"波动率处于历史高位（{atr['percentile']}%分位），注意设宽止损")
 
+        # ---- 支撑/阻力阶梯 ----
+        price_pos = technical.get('price_position', {})
+        current_price = price_pos.get('close')
+        support_ladder = []
+        resistance_ladder = []
+        if current_price and current_price > 0:
+            # 收集所有关键价位
+            key_levels = []
+            # MA 均线
+            ma = technical.get('ma', {})
+            for name, val in [('MA5', ma.get('ma5')), ('MA10', ma.get('ma10')),
+                              ('MA20', ma.get('ma20')), ('MA60', ma.get('ma60')),
+                              ('MA120', ma.get('ma120'))]:
+                if val:
+                    key_levels.append((name, float(val)))
+            # 布林带
+            if boll_multi:
+                d_boll = boll_multi.get('daily', {})
+                for name, val in [('布林上轨', d_boll.get('upper')),
+                                  ('布林中轨', d_boll.get('middle')),
+                                  ('布林下轨', d_boll.get('lower'))]:
+                    if val:
+                        key_levels.append((name, float(val)))
+            # 20日高低点
+            if price_pos.get('high_20d'):
+                key_levels.append(('20日高点', float(price_pos['high_20d'])))
+            if price_pos.get('low_20d'):
+                key_levels.append(('20日低点', float(price_pos['low_20d'])))
+
+            for name, val in key_levels:
+                pct = round((val - current_price) / current_price * 100, 1)
+                if val >= current_price:
+                    resistance_ladder.append((name, val, pct))
+                else:
+                    support_ladder.append((name, val, pct))
+            # 支撑从近到远（价格从高到低），阻力从近到远（价格从低到高）
+            support_ladder.sort(key=lambda x: x[1], reverse=True)
+            resistance_ladder.sort(key=lambda x: x[1])
+
         if not conflicts and not confirmations and not risks:
             return None
 
-        # ---- 综合推理指令 ----
-        prompt_parts = []
-        if conflicts:
-            prompt_parts.append('请评估上述矛盾点中，哪个信号的权重更高')
-        if bullish_signals >= 2 and bearish_signals >= 1:
-            prompt_parts.append('判断当前看多/看空的确定性（1-10 分）')
-        if risks:
-            prompt_parts.append('评估各风险因素的实际威胁程度')
-        prompt_parts.append('给出综合操作建议')
+        # ---- 综合推理任务（统一替代各子模块散落的分析提示） ----
+        prompt_parts = ['请作为资深策略分析师，基于上述全部技术指标数据，完成以下交叉验证推理：']
+        task_num = 1
 
-        prompt = '，'.join(prompt_parts) + '。'
+        if conflicts:
+            prompt_parts.append(f'{task_num}. 处理上述指标矛盾点：判断哪个信号的权重更高，给出依据')
+            task_num += 1
+
+        # RSI/MACD 背离信号验证（严格匹配"顶背离"或"底背离"，排除"数据不足无法判断背离"等干扰）
+        has_divergence = False
+        for s in rsi_slices:
+            div_text = s.get('divergence', '')
+            if '顶背离' in div_text or '底背离' in div_text:
+                has_divergence = True
+                break
+        if not has_divergence:
+            macd_div = daily_macd.get('divergence', '')
+            if '顶背离' in macd_div or '底背离' in macd_div:
+                has_divergence = True
+            # 周线背离也检查
+            weekly_div = weekly_macd.get('divergence', '')
+            if '顶背离' in weekly_div or '底背离' in weekly_div:
+                has_divergence = True
+        if has_divergence:
+            prompt_parts.append(
+                f'{task_num}. 评估背离信号的有效性：结合提供的历史锚点（前次极值价格 vs 当前极值价格），'
+                f'判断背离是否可靠、反转概率多大'
+            )
+            task_num += 1
+        else:
+            # 无背离时，引导 AI 分析动能延续性而非寻找不存在的背离
+            prompt_parts.append(
+                f'{task_num}. 当前各指标均未检测到背离信号，请分析当前趋势动能的延续概率和潜在衰竭迹象'
+            )
+            task_num += 1
+
+        if bullish_signals >= 2 and bearish_signals >= 1:
+            prompt_parts.append(f'{task_num}. 判断当前看多/看空的确定性（1-10 分），说明核心理由')
+            task_num += 1
+
+        if risks:
+            prompt_parts.append(f'{task_num}. 评估各风险因素的实际威胁程度和触发条件')
+            task_num += 1
+
+        # K线形态与阻力位联动提示（高位出现见顶形态时自动引导）
+        if candle and resistance_ladder and price_pos.get('percentile_20d', 0) >= 70:
+            nearest_resist = resistance_ladder[0] if resistance_ladder else None
+            candle_patterns = candle.get('daily_patterns', [])
+            combo_patterns = candle.get('combo_patterns', [])
+            # 检查是否有高位危险形态
+            danger_keywords = ['墓碑', '长上影', '看跌吞没', '高位孕线', '高位看跌']
+            has_danger_pattern = False
+            for p in candle_patterns:
+                if any(kw in p.get('pattern', '') for kw in danger_keywords):
+                    has_danger_pattern = True
+                    break
+            if not has_danger_pattern:
+                for c_pat in (combo_patterns or []):
+                    if any(kw in c_pat for kw in danger_keywords):
+                        has_danger_pattern = True
+                        break
+            if has_danger_pattern and nearest_resist:
+                prompt_parts.append(
+                    f'{task_num}. 形态与空间共振：结合近期 K 线高位见顶形态与距离上方阻力位'
+                    f'（{nearest_resist[0]} {nearest_resist[1]:.2f}，仅 +{abs(nearest_resist[2]):.1f}%）'
+                    f'的距离，评估短线见顶回调的实际威胁程度'
+                )
+                task_num += 1
+
+        # 盈亏比计算指令（乖离率较大时自动生成）
+        convergence = (ma_analysis or {}).get('convergence', {})
+        bias_val = convergence.get('bias20')
+        if (bias_val is not None and abs(bias_val) >= 5
+                and resistance_ladder and support_ladder):
+            nearest_r = resistance_ladder[0]
+            nearest_s = support_ladder[0]
+            prompt_parts.append(
+                f'{task_num}. 风盈比计算：当前乖离率 {bias_val:+.1f}%，'
+                f'上方阻力空间 +{abs(nearest_r[2]):.1f}%（{nearest_r[0]}），'
+                f'下方支撑空间 {nearest_s[2]:.1f}%（{nearest_s[0]}），'
+                f'请结合此风盈比评估当前追高/加仓的合理性，并给出仓位建议'
+            )
+            task_num += 1
+
+        prompt_parts.append(
+            f'{task_num}. 给出明确的综合操作建议：'
+            f'包含具体的止损价位（跌破哪里应离场）和加仓条件（突破哪里可加仓）'
+        )
+
+        prompt = '\n'.join(prompt_parts)
 
         return {
             'conflicts': conflicts,
             'confirmations': confirmations,
             'risks': risks,
+            'support_ladder': support_ladder,
+            'resistance_ladder': resistance_ladder,
             'prompt': prompt,
         }
 
@@ -849,274 +1008,238 @@ class StockDataCollectionService:
         lines.append("")
 
         # ================================================================
-        # 四、技术指标
+        # 四、技术指标（YAML 格式，便于 LLM 结构化解析）
         # ================================================================
         technical = data.get('technical', {})
         lines.append("## 四、技术指标详情")
         lines.append("")
+        lines.append("```yaml")
 
-        # --- 均线系统分析 ---
+        pp = technical.get('price_position')
+        atr = technical.get('atr')
         ma_analysis = technical.get('ma_analysis')
+        rsi_analysis = technical.get('rsi_analysis')
+        macd_multi = technical.get('macd_multi')
+        boll_multi = technical.get('boll_multi')
+        candle = technical.get('candlestick')
+        vp = technical.get('volume_price')
+        cross_verification = technical.get('cross_verification')
+        nine_turn = data.get('nine_turn', {})
+
+        # --- 价格行为观测 ---
+        if pp:
+            lines.append("价格行为观测:")
+            lines.append(f"  当前价: {self._fmt(pp.get('close'))}")
+            lines.append(f"  20日波动区间: [{self._fmt(pp.get('low_20d'))}, {self._fmt(pp.get('high_20d'))}]")
+            lines.append(f"  区间分位: {pp.get('percentile_20d')}%")
+            lines.append(f"  距上方阻力: +{self._fmt(pp.get('resist_pct', 0), 1)}% ({self._fmt(pp.get('high_20d'))})")
+            lines.append(f"  距下方支撑: -{self._fmt(pp.get('support_pct', 0), 1)}% ({self._fmt(pp.get('low_20d'))})")
+            if atr:
+                lines.append(f"  波动率:")
+                lines.append(f"    ATR14: {self._fmt(atr.get('atr'), 2)}")
+                lines.append(f"    占股价: {self._fmt(atr.get('atr_pct'), 2)}%")
+                lines.append(f"    历史分位: {atr.get('percentile')}%")
+                lines.append(f"    定性: {atr.get('desc', '')}")
+
+        # --- 均线系统 ---
         if ma_analysis:
-            lines.append("### 均线系统（MA）结构与趋势分析")
             lines.append("")
-            lines.append(f"**【当前价格基准】** 最新收盘价：{self._fmt(ma_analysis.get('close'))}")
-            lines.append("")
-            lines.append("**【1. 各周期均线状态切片】**")
-            lines.append("")
-            lines.append("| 周期级别 | 均线组合 | 排列形态 (趋势方向) | 价格相对位置 (支撑/阻力) | 关键数值 |")
-            lines.append("|---------|---------|-------------------|----------------------|---------|")
+            lines.append("均线系统:")
+            lines.append(f"  最新收盘价: {self._fmt(ma_analysis.get('close'))}")
+            lines.append("  各周期状态:")
             for s in ma_analysis.get('slices', []):
-                lines.append(
-                    f"| {s['level']} | {s['names']} | {s['arrangement']} "
-                    f"| {s['position']} | {s['values']} |"
-                )
+                lines.append(f"    - 级别: {s['level']}")
+                lines.append(f"      均线: {s['names']}")
+                lines.append(f"      排列: {s['arrangement']}")
+                lines.append(f"      价格位置: {s['position']}")
+                lines.append(f"      数值: {s['values']}")
             structure = ma_analysis.get('structure', {})
             if structure:
-                lines.append("")
-                lines.append("**【2. 均线核心空间结构提取】**")
-                lines.append(f"- **整体趋势：** {structure.get('trend', '')}")
+                lines.append("  核心结构:")
+                lines.append(f"    整体趋势: {structure.get('trend', '')}")
                 if structure.get('short_signal'):
-                    lines.append(f"- **短期异动：** {structure['short_signal']}")
+                    lines.append(f"    短期异动: {structure['short_signal']}")
                 if structure.get('battle_point'):
-                    lines.append(f"- **核心博弈点：** {structure['battle_point']}")
-                prompt = structure.get('analysis_prompt', '')
-                if prompt:
-                    lines.append("")
-                    lines.append("**【3. 分析提示】**")
-                    lines.append(f"> {prompt}")
-
+                    lines.append(f"    核心博弈点: {structure['battle_point']}")
             convergence = ma_analysis.get('convergence', {})
             if convergence:
-                lines.append("")
-                lines.append("**【均线形态补充】**")
                 if convergence.get('convergence_desc'):
-                    lines.append(f"- {convergence['convergence_desc']}")
+                    lines.append(f"  收敛度: {convergence['convergence_desc']}")
                 if convergence.get('bias_desc'):
-                    lines.append(f"- {convergence['bias_desc']}")
-        lines.append("")
+                    lines.append(f"  乖离率: {convergence['bias_desc']}")
 
-        # RSI 多周期分析
-        rsi_analysis = technical.get('rsi_analysis')
+        # --- RSI ---
         if rsi_analysis:
             lines.append("")
-            lines.append("### RSI 多周期超买超卖与背离分析")
-            lines.append("")
-            lines.append("**【1. 各周期 RSI 状态切片】**")
-            lines.append("")
-            lines.append("| 周期 | RSI值 | 超买超卖区间 | 趋势方向 | 背离信号 |")
-            lines.append("|------|-------|------------|---------|---------|")
+            lines.append("RSI多周期分析:")
+            lines.append("  各周期状态:")
             for s in rsi_analysis.get('slices', []):
                 div_text = s['divergence'] if '背离' in s['divergence'] else '无'
-                lines.append(
-                    f"| RSI{s['period']} ({s['label']}) | {self._fmt(s['rsi_value'], 1)} "
-                    f"| {s['zone']} | {s['trend']} | {div_text} |"
-                )
+                lines.append(f"    - 周期: RSI{s['period']} ({s['label']})")
+                lines.append(f"      值: {self._fmt(s['rsi_value'], 1)}")
+                lines.append(f"      区间: {s['zone']}")
+                lines.append(f"      趋势: {s['trend']}")
+                lines.append(f"      背离: {div_text}")
             cross = rsi_analysis.get('cross_period', {})
             if cross:
-                lines.append("")
-                lines.append("**【2. 跨周期核心逻辑提取】**")
-                lines.append(f"- **多周期共振：** {cross.get('resonance', '')}")
+                lines.append("  跨周期逻辑:")
+                lines.append(f"    多周期共振: {cross.get('resonance', '')}")
                 if cross.get('divergence_analysis'):
-                    lines.append(f"- **长短分歧：** {cross['divergence_analysis']}")
+                    lines.append(f"    长短分歧: {cross['divergence_analysis']}")
                 if cross.get('extreme_warning'):
-                    lines.append(f"- **极值预警：** {cross['extreme_warning']}")
+                    lines.append(f"    极值预警: {cross['extreme_warning']}")
                 if cross.get('divergence_signals'):
-                    lines.append(f"- **背离汇总：** {cross['divergence_signals']}")
-            prompt = rsi_analysis.get('analysis_prompt', '')
-            if prompt:
-                lines.append("")
-                lines.append("**【3. 分析提示】**")
-                lines.append(f"> {prompt}")
-        lines.append("")
+                    lines.append(f"    背离汇总: {cross['divergence_signals']}")
 
-        # MACD 多级别分析
-        macd_multi = technical.get('macd_multi')
+        # --- MACD ---
         if macd_multi:
             lines.append("")
-            lines.append("### MACD 多级别动能与趋势分析")
-            lines.append("")
-            lines.append("**【1. 各级别 MACD 状态切片】**")
-            lines.append("")
-            lines.append("| 级别 | 零轴位置 (大势) | 交叉状态 (短期方向) | 柱体动能 (力度) | 背离信号 | 关键数值 |")
-            lines.append("|------|----------------|-------------------|----------------|---------|---------|")
+            lines.append("MACD多级别分析:")
+            lines.append("  各级别状态:")
             for key in ['monthly', 'weekly', 'daily']:
                 lv = macd_multi.get(key)
                 if not lv:
                     continue
-                div_text = lv['divergence'] if '背离' in lv['divergence'] else '无'
-                lines.append(
-                    f"| {lv['level']} | {lv['zero_axis']} | {lv['cross_state']} "
-                    f"| {lv['bar_momentum']} | {div_text} "
-                    f"| DIF={self._fmt(lv.get('dif'), 2)}, DEA={self._fmt(lv.get('dea'), 2)} |"
-                )
+                div_text = lv['divergence'] if '背离' in lv['divergence'] else '无背离信号'
+                lines.append(f"    - 级别: {lv['level']}")
+                lines.append(f"      零轴: {lv['zero_axis']}")
+                lines.append(f"      交叉: {lv['cross_state']}")
+                lines.append(f"      动能: {lv['bar_momentum']}")
+                lines.append(f"      背离: {div_text}")
+                lines.append(f"      DIF: {self._fmt(lv.get('dif'), 2)}")
+                lines.append(f"      DEA: {self._fmt(lv.get('dea'), 2)}")
             cross = macd_multi.get('cross_level', {})
             if cross:
-                lines.append("")
-                lines.append("**【2. 跨级别核心逻辑提取】**")
-                lines.append(f"- **共振状态：** {cross.get('resonance_state', '')}")
+                lines.append("  跨级别逻辑:")
+                lines.append(f"    共振状态: {cross.get('resonance_state', '')}")
                 if cross.get('battle_analysis'):
-                    lines.append(f"- **长短博弈：** {cross['battle_analysis']}")
-                prompt = cross.get('analysis_prompt', '')
-                if prompt:
-                    lines.append("")
-                    lines.append("**【3. 分析提示】**")
-                    lines.append(f"> {prompt}")
+                    lines.append(f"    长短博弈: {cross['battle_analysis']}")
 
-        # ---- 布林线多级别分析 ----
-        boll_multi = technical.get('boll_multi')
+        # --- 布林线 ---
         if boll_multi:
             lines.append("")
-            lines.append("### 布林线多级别通道与趋势分析")
-            lines.append("")
-            lines.append("**【1. 各级别布林线状态切片】**")
-            lines.append("")
-            lines.append("| 级别 | 通道宽度 (波动率) | 价格位置 (%B) | 中轨方向 (趋势) | 突破/回踩信号 | 布林形态 | 关键数值 |")
-            lines.append("|------|------------------|--------------|----------------|--------------|---------|---------|")
+            lines.append("布林线多级别分析:")
+            lines.append("  各级别状态:")
             for key in ['monthly', 'weekly', 'daily']:
                 lv = boll_multi.get(key)
                 if not lv:
                     continue
-                lines.append(
-                    f"| {lv['level']} | {lv['channel_width']}(BW={self._fmt(lv.get('bandwidth'), 1)}%) "
-                    f"| {lv['price_position']}(%B={self._fmt(lv.get('percent_b'), 2)}) "
-                    f"| {lv['mid_direction']} | {lv['signal']} "
-                    f"| {lv['pattern']} "
-                    f"| 上={self._fmt(lv.get('upper'), 2)} 中={self._fmt(lv.get('middle'), 2)} 下={self._fmt(lv.get('lower'), 2)} |"
-                )
+                lines.append(f"    - 级别: {lv['level']}")
+                lines.append(f"      通道宽度: {lv['channel_width']} (BW={self._fmt(lv.get('bandwidth'), 1)}%)")
+                lines.append(f"      价格位置: {lv['price_position']} (%B={self._fmt(lv.get('percent_b'), 2)})")
+                lines.append(f"      中轨方向: {lv['mid_direction']}")
+                lines.append(f"      信号: {lv['signal']}")
+                lines.append(f"      形态: {lv['pattern']}")
+                lines.append(f"      上轨: {self._fmt(lv.get('upper'), 2)}")
+                lines.append(f"      中轨: {self._fmt(lv.get('middle'), 2)}")
+                lines.append(f"      下轨: {self._fmt(lv.get('lower'), 2)}")
             cross = boll_multi.get('cross_level', {})
             if cross:
-                lines.append("")
-                lines.append("**【2. 跨级别核心逻辑提取】**")
-                lines.append(f"- **共振状态：** {cross.get('resonance_state', '')}")
+                lines.append("  跨级别逻辑:")
+                lines.append(f"    共振状态: {cross.get('resonance_state', '')}")
                 if cross.get('battle_analysis'):
-                    lines.append(f"- **长短博弈：** {cross['battle_analysis']}")
-                prompt = cross.get('analysis_prompt', '')
-                if prompt:
-                    lines.append("")
-                    lines.append("**【3. 分析提示】**")
-                    lines.append(f"> {prompt}")
+                    lines.append(f"    长短博弈: {cross['battle_analysis']}")
 
-        # ---- K 线形态识别 ----
-        candle = technical.get('candlestick')
+        # --- K 线形态 ---
         if candle:
             lines.append("")
-            lines.append("### K 线形态识别（Price Action）")
-            lines.append("")
+            lines.append("K线形态:")
             daily_p = candle.get('daily_patterns', [])
             if daily_p:
-                lines.append("**【1. 近期逐日 K 线形态】**")
-                lines.append("")
-                lines.append("| 日期 | 涨跌幅 | K 线形态 |")
-                lines.append("|------|--------|---------|")
+                lines.append("  逐日形态:")
                 for d in daily_p:
-                    lines.append(
-                        f"| {d['date']} | {self._fmt(d['pct_change'])}% | {d['pattern']} |"
-                    )
+                    lines.append(f"    - 日期: {d['date']}")
+                    lines.append(f"      涨跌幅: {self._fmt(d['pct_change'])}%")
+                    lines.append(f"      形态: {d['pattern']}")
             combo = candle.get('combo_patterns', [])
             if combo and combo != ['无显著组合形态']:
-                lines.append("")
-                lines.append("**【2. 组合形态信号】**")
+                lines.append("  组合形态:")
                 for c in combo:
-                    lines.append(f"- {c}")
+                    lines.append(f"    - {c}")
             gravity = candle.get('gravity_trend', '')
             if gravity:
-                lines.append("")
-                lines.append(f"**【K 线重心趋势】** {gravity}")
+                lines.append(f"  重心趋势: {gravity}")
 
-        # ---- ATR 波动率 ----
-        atr = technical.get('atr')
-        if atr:
+        # --- ATR（若未在价格行为观测中展示） ---
+        if not pp and atr:
             lines.append("")
-            lines.append(f"**【波动率参考（ATR{14}）】** ATR={self._fmt(atr.get('atr'), 2)}（"
-                         f"占股价 {self._fmt(atr.get('atr_pct'), 2)}%）{atr.get('desc', '')}")
+            lines.append("波动率:")
+            lines.append(f"  ATR14: {self._fmt(atr.get('atr'), 2)}")
+            lines.append(f"  占股价: {self._fmt(atr.get('atr_pct'), 2)}%")
+            lines.append(f"  定性: {atr.get('desc', '')}")
 
-        # ---- 量价动能分析 ----
-        vp = technical.get('volume_price')
+        # --- 量价动能 ---
         if vp:
             lines.append("")
-            lines.append("### 量价动能与筹码结构分析")
-            lines.append("")
-            lines.append("**【量价基础参考系】**")
+            lines.append("量价动能分析:")
             turnover = vp.get('turnover')
             vol_mean = vp.get('vol_5d_mean')
             if turnover is not None:
-                lines.append(f"- 当前流通盘换手率：{self._fmt(turnover)}%")
+                lines.append(f"  换手率: {self._fmt(turnover)}%")
             if vol_mean is not None:
-                lines.append(f"- 5日均量线基准：{self._fmt_vol(vol_mean)}")
-            lines.append("")
-
+                lines.append(f"  5日均量: {self._fmt_vol(vol_mean)}")
             daily = vp.get('daily_detail', [])
             if daily:
-                lines.append("**【1. 短线视角：近5日量价动态推演】**")
-                lines.append("")
-                lines.append("| 日期 | 涨跌幅 | 成交量 | 量比 | 形态定性 |")
-                lines.append("|------|--------|--------|------|---------|")
+                lines.append("  近5日量价推演:")
                 for d in daily:
-                    lines.append(
-                        f"| {d['date']} | {self._fmt(d['pct_change'])}% "
-                        f"| {self._fmt_vol(d['volume'])} "
-                        f"| {d['vol_desc']} | {d['pattern']} |"
-                    )
-
+                    lines.append(f"    - 日期: {d['date']}")
+                    lines.append(f"      涨跌幅: {self._fmt(d['pct_change'])}%")
+                    lines.append(f"      成交量: {self._fmt_vol(d['volume'])}")
+                    lines.append(f"      量比: {d['vol_desc']}")
+                    lines.append(f"      形态: {d['pattern']}")
+            vp_ratio_desc = vp.get('vp_ratio_desc')
+            if vp_ratio_desc:
+                lines.append(f"  量价背离系数: {vp_ratio_desc}")
             mid_long = vp.get('mid_long', {})
             if mid_long:
-                lines.append("")
-                lines.append("**【2. 中长线视角：全局筹码与资金行为结构】**")
+                lines.append("  中长线结构:")
                 if mid_long.get('mid_structure'):
-                    lines.append(f"- **中线结构 (近60日)：** {mid_long['mid_structure']}")
+                    lines.append(f"    中线(60日): {mid_long['mid_structure']}")
                 if mid_long.get('volume_pressure'):
-                    lines.append(f"- **长线压力预警：** {mid_long['volume_pressure']}")
+                    lines.append(f"    长线压力: {mid_long['volume_pressure']}")
                 anomalies = mid_long.get('key_anomalies', [])
                 if anomalies:
-                    lines.append(f"- **核心量价异动：** {'；'.join(anomalies)}")
+                    lines.append(f"    异动: {'; '.join(anomalies)}")
 
-            prompt = vp.get('analysis_prompt', '')
-            if prompt:
-                lines.append("")
-                lines.append("**【3. 分析提示】**")
-                lines.append(f"> {prompt}")
-
-        # ---- 多维指标冲突与共振验证 ----
-        cross_verification = technical.get('cross_verification')
+        # --- 多维指标交叉验证 ---
         if cross_verification:
             lines.append("")
-            lines.append("### 多维指标冲突与共振验证（重点分析项）")
-            lines.append("")
+            lines.append("多维指标交叉验证:")
             conflicts = cross_verification.get('conflicts', [])
             if conflicts:
-                lines.append("**【矛盾点提取】**")
+                lines.append("  矛盾点:")
                 for c in conflicts:
-                    lines.append(f"- {c}")
+                    lines.append(f"    - {c}")
             confirmations = cross_verification.get('confirmations', [])
             if confirmations:
-                lines.append("")
-                lines.append("**【共振确认】**")
+                lines.append("  共振确认:")
                 for c in confirmations:
-                    lines.append(f"- {c}")
+                    lines.append(f"    - {c}")
             risks = cross_verification.get('risks', [])
             if risks:
-                lines.append("")
-                lines.append("**【潜在风险/压制因素】**")
+                lines.append("  风险因素:")
                 for r in risks:
-                    lines.append(f"- ⚠ {r}")
-            verify_prompt = cross_verification.get('prompt', '')
-            if verify_prompt:
-                lines.append("")
-                lines.append("**【综合推理指令】**")
-                lines.append(f"> {verify_prompt}")
-        lines.append("")
+                    lines.append(f"    - {r}")
+            support_ladder = cross_verification.get('support_ladder', [])
+            resistance_ladder = cross_verification.get('resistance_ladder', [])
+            if resistance_ladder:
+                lines.append("  阻力位阶梯:")
+                for name, val, pct in resistance_ladder[:3]:
+                    lines.append(f"    - {name}: {val:.2f} (+{abs(pct):.1f}%)")
+            if support_ladder:
+                lines.append("  支撑位阶梯:")
+                for name, val, pct in support_ladder[:4]:
+                    lines.append(f"    - {name}: {val:.2f} ({pct:.1f}%)")
 
-        # 神奇九转指标
-        nine_turn = data.get('nine_turn', {})
+        # --- 神奇九转 ---
         if nine_turn:
             lines.append("")
-            lines.append(f"**神奇九转（{nine_turn.get('latest_date', '')}）：**")
+            lines.append("神奇九转:")
+            lines.append(f"  日期: {nine_turn.get('latest_date', '')}")
             up_c = nine_turn.get('up_count')
             down_c = nine_turn.get('down_count')
             up_signal = nine_turn.get('nine_up_turn')
             down_signal = nine_turn.get('nine_down_turn')
-            parts = []
             for cnt_val, signal_val, direction, signal_label in [
                 (up_c, up_signal, '上涨', '见顶'),
                 (down_c, down_signal, '下跌', '见底'),
@@ -1125,24 +1248,36 @@ class StockDataCollectionService:
                     count = int(cnt_val)
                     triggered = (signal_val == '+9') if direction == '上涨' else (signal_val == '-9')
                     if triggered:
-                        qualifier = f"⚠️ 已触发九转{signal_label}信号，日线级别存在短线反转风险"
+                        qualifier = f"已触发九转{signal_label}信号，日线级别存在短线反转风险"
                     elif count >= 7:
                         qualifier = f"接近九转阈值，关注后续1-2日是否触发{signal_label}信号"
                     elif count >= 4:
                         qualifier = f"处于{direction}序列中段，序列延续中"
                     else:
-                        qualifier = f"处于{direction}序列初期，未触发极值反转信号，暂无操作指导意义"
-                    parts.append(f"{direction}计数={count}（{qualifier}）")
-            lines.append(f"当前状态：{'，'.join(parts)}" if parts else "当前状态：无连续计数（多空交替频繁，暂无趋势性信号）")
-
+                        qualifier = f"处于{direction}序列初期，未触发极值反转信号"
+                    lines.append(f"  {direction}计数: {count}")
+                    lines.append(f"  {direction}状态: {qualifier}")
             signals = nine_turn.get('recent_signals', [])
             if signals:
-                lines.append("")
-                lines.append("| 日期 | 信号 |")
-                lines.append("|------|------|")
+                lines.append("  近期信号:")
                 for s in signals:
-                    lines.append(f"| {s.get('date', '')} | {s.get('type', '')} |")
+                    lines.append(f"    - 日期: {s.get('date', '')}")
+                    lines.append(f"      类型: {s.get('type', '')}")
+            if not up_c and not down_c:
+                lines.append("  状态: 无连续计数（多空交替频繁，暂无趋势性信号）")
+
+        lines.append("```")
         lines.append("")
+
+        # ---- 综合推理任务（YAML 代码块之外，作为自然语言指令） ----
+        if cross_verification:
+            verify_prompt = cross_verification.get('prompt', '')
+            if verify_prompt:
+                lines.append("**【综合推理任务】**")
+                lines.append("")
+                for prompt_line in verify_prompt.split('\n'):
+                    lines.append(f"> {prompt_line}")
+                lines.append("")
 
         # ================================================================
         # 五、财报与公告

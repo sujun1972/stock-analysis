@@ -112,10 +112,16 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 | `MacdAnalysisService` | `macd_analysis_service.py` | MACD 多级别分析（零轴、交叉、动能、背离、跨级别共振） |
 | `RsiAnalysisService` | `rsi_analysis_service.py` | RSI 多周期分析（超买超卖、趋势方向、背离、跨周期共振） |
 | `BollAnalysisService` | `boll_analysis_service.py` | 布林线多级别分析（通道宽度、价格位置/%B、中轨方向、突破信号、跨级别共振） |
-| `CandlestickAnalysisService` | `candlestick_analysis_service.py` | K 线形态识别（单根形态、组合形态、重心趋势） |
-| `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测） |
+| `CandlestickAnalysisService` | `candlestick_analysis_service.py` | K 线形态识别（单根形态基于真实涨跌幅分档、组合形态含高低位语境、重心趋势） |
+| `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测、近5日量价背离系数） |
 
-所有 Tool 输出均为 **Markdown 表格**格式，便于 LLM 结构化解析。
+**两套输出格式**：
+- **LangChain Tool 输出**（CIO Agent 调用）：Markdown 表格格式
+- **`collect_and_format()` 输出**（个股专家分析）：技术指标部分使用 YAML 代码块（```` ```yaml ````），其余章节保持 Markdown；综合推理任务在 YAML 外作为自然语言指令
+
+**`_build_cross_verification` 综合推理任务**为动态生成：根据实际检测到的信号（矛盾点、背离、K线危险形态、乖离率盈亏比）自动组装编号任务列表，无背离时不生成背离评估指令，避免 AI 幻觉。输出包含支撑/阻力位阶梯（从 MA、布林带、20日极值自动聚合）。
+
+**`ai_output_parser.extract_json_text` 含 JSON 自动修复**：AI 输出截断导致缺少 1-3 个闭合 `}` / `]` 时，自动补全后再存储，避免前端解析失败降级为原始文本。
 
 - **触发方式**：`analysis_type == "cio_directive"` 时自动走 Agent 路径（`/generate` 和 `/generate-multi` 端点）
 - **非 CIO 类型**不走 Agent，保持现有直接调用方式

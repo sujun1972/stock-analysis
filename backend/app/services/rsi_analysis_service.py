@@ -165,7 +165,7 @@ class RsiAnalysisService:
     @classmethod
     def _detect_divergence(cls, close: pd.Series, rsi: pd.Series,
                            last_rsi: float) -> str:
-        """检测 RSI 顶背离/底背离信号。
+        """检测 RSI 顶背离/底背离信号，并附带历史锚点价格供 AI 校验。
 
         约束：
         - 顶背离仅在 RSI > 40 时检测（弱势区不可能出现有效顶背离）
@@ -184,6 +184,7 @@ class RsiAnalysisService:
 
         c = close.iloc[-60:].values
         r = rsi.iloc[-60:].values
+        dates = close.iloc[-60:].index
 
         min_gap = 5
         min_pct = 0.01
@@ -208,7 +209,14 @@ class RsiAnalysisService:
                     if pd.isna(r1) or pd.isna(r2):
                         continue
                     if c[h2] > c[h1] and r2 < r1:
-                        return '顶背离（价格新高但 RSI 走低）'
+                        d1 = str(dates[h1])[:10]
+                        d2 = str(dates[h2])[:10]
+                        gap = h2 - h1
+                        return (
+                            f'顶背离（前高 {d1} 价格{c[h1]:.2f}/RSI{r1:.1f} → '
+                            f'近高 {d2} 价格{c[h2]:.2f}/RSI{r2:.1f}，'
+                            f'间隔{gap}日，价格新高但 RSI 走低）'
+                        )
                     break
 
         # 底背离：价格创新低但 RSI 未创新低
@@ -231,7 +239,14 @@ class RsiAnalysisService:
                     if pd.isna(r1) or pd.isna(r2):
                         continue
                     if c[l2] < c[l1] and r2 > r1:
-                        return '底背离（价格新低但 RSI 走高）'
+                        d1 = str(dates[l1])[:10]
+                        d2 = str(dates[l2])[:10]
+                        gap = l2 - l1
+                        return (
+                            f'底背离（前低 {d1} 价格{c[l1]:.2f}/RSI{r1:.1f} → '
+                            f'近低 {d2} 价格{c[l2]:.2f}/RSI{r2:.1f}，'
+                            f'间隔{gap}日，价格新低但 RSI 走高）'
+                        )
                     break
 
         return '无'

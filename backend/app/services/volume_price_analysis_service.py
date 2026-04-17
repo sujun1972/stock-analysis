@@ -65,6 +65,31 @@ class VolumePriceAnalysisService:
         daily_detail = cls._build_daily_detail(df, vol_5d_mean)
         result['daily_detail'] = daily_detail
 
+        # ---- 近5日量价背离系数 ----
+        recent_5 = df.tail(5)
+        up_vol = 0.0
+        down_vol = 0.0
+        for _, row in recent_5.iterrows():
+            pct_val = float(row.get('pct_change', 0) or 0)
+            vol_val = float(row.get('volume', 0) or 0)
+            if pct_val > 0.3:
+                up_vol += vol_val
+            elif pct_val < -0.3:
+                down_vol += vol_val
+        if down_vol > 0:
+            vp_ratio = round(up_vol / down_vol, 2)
+            if vp_ratio > 1.3:
+                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（多头量能占优，反攻覆盖抛压）'
+            elif vp_ratio < 0.7:
+                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（空头量能占优，下跌动能更强）'
+            else:
+                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（多空量能接近，势均力敌）'
+        elif up_vol > 0:
+            vp_ratio_desc = '近5日仅有上涨放量，无下跌对手盘'
+        else:
+            vp_ratio_desc = None
+        result['vp_ratio_desc'] = vp_ratio_desc
+
         # ---- 中长线视角 ----
         mid_long = cls._analyze_mid_long(df, vol_5d_mean)
         result['mid_long'] = mid_long
@@ -129,37 +154,78 @@ class VolumePriceAnalysisService:
 
     @staticmethod
     def _classify_pattern(pct: float, vol_ratio: Optional[float]) -> str:
-        """根据涨跌幅和量比进行量价形态定性。"""
+        """根据涨跌幅和量比进行量价形态定性。
+
+        使用涨跌幅分档 + 量比分档的组合，输出精确的复合标签。
+        """
         if vol_ratio is None:
             return '数据不足'
 
-        up = pct > 0.3
-        down = pct < -0.3
-        flat = not up and not down
+        # 涨跌幅分档
+        big_up = pct > 5
+        mid_up = 2 < pct <= 5
+        small_up = 0.3 < pct <= 2
+        small_down = -2 <= pct < -0.3
+        mid_down = -5 <= pct < -2
+        big_down = pct < -5
+        flat = -0.3 <= pct <= 0.3
+
+        # 量比分档
         heavy = vol_ratio >= 1.5
         light = vol_ratio < 0.7
         normal = not heavy and not light
 
-        if up and heavy:
-            return '显著放量上涨（资金强势介入）'
-        if up and normal:
-            return '温和放量上涨（量价配合健康）'
-        if up and light:
-            if vol_ratio < 0.5:
-                return '地量微涨（抛压枯竭）'
+        # 大涨 (>5%)
+        if big_up:
+            if heavy:
+                return f'放量突破长阳（涨{pct:.1f}%量比{vol_ratio}x，多头强攻）'
+            if normal:
+                return f'温和放量长阳（涨{pct:.1f}%，量价配合健康）'
+            return f'缩量长阳（涨{pct:.1f}%，上方压力有限但追涨需谨慎）'
+        # 中涨 (2%-5%)
+        if mid_up:
+            if heavy:
+                return '显著放量上涨（资金强势介入）'
+            if normal:
+                return '温和放量上涨（量价配合健康）'
             return '缩量上涨（上方压力有限但动能不足）'
-        if down and heavy:
-            return '放量下跌（警示：回调动能偏大）'
-        if down and normal:
-            if vol_ratio >= 1.1:
+        # 小涨 (0.3%-2%)
+        if small_up:
+            if heavy:
+                return '放量微涨（多空换手充分，关注后续方向）'
+            if light:
+                if vol_ratio < 0.5:
+                    return '地量微涨（抛压枯竭）'
+                return '缩量微涨（惜售格局）'
+            return '温和换手上涨（平稳过渡）'
+        # 大跌 (<-5%)
+        if big_down:
+            if heavy:
+                return f'放量长阴（跌{pct:.1f}%量比{vol_ratio}x，恐慌性抛售）'
+            if normal:
+                return f'温和放量长阴（跌{pct:.1f}%，空头主导）'
+            return f'缩量长阴（跌{pct:.1f}%，阴跌格局）'
+        # 中跌 (-5%~-2%)
+        if mid_down:
+            if heavy:
+                return '放量下跌（警示：回调动能偏大）'
+            if normal:
                 return '温和放量下跌（抛压释放）'
             return '缩量下跌（正常调整）'
-        if down and light:
-            return '缩量下跌（寻底阶段）'
-        if flat and heavy:
-            return '放量滞涨（多空分歧严重）'
-        if flat and light:
-            return '缩量横盘（多空观望）'
+        # 小跌 (-2%~-0.3%)
+        if small_down:
+            if heavy:
+                return '放量微跌（多空分歧，量大但跌幅有限）'
+            if light:
+                return '缩量下跌（寻底阶段）'
+            return '缩量下跌（正常调整）'
+        # 平盘
+        if flat:
+            if heavy:
+                return '放量滞涨（多空分歧严重）'
+            if light:
+                return '缩量横盘（多空观望）'
+            return '温和换手（平稳过渡）'
         return '温和换手（平稳过渡）'
 
     # ------------------------------------------------------------------

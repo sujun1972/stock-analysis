@@ -54,7 +54,7 @@ class CandlestickAnalysisService:
             lower_shadow = min(o, c) - l
 
             pattern = cls._classify_single(o, h, l, c, body, total,
-                                           upper_shadow, lower_shadow)
+                                           upper_shadow, lower_shadow, pct)
             patterns.append({
                 'date': date_str,
                 'pct_change': round(pct, 2),
@@ -63,8 +63,19 @@ class CandlestickAnalysisService:
 
         result['daily_patterns'] = patterns
 
+        # 计算当前价在近20日的分位数（用于组合形态的高低位语境）
+        price_percentile = None
+        if len(df) >= 20:
+            recent_20 = df.tail(20)
+            h20 = float(recent_20['high'].max())
+            l20 = float(recent_20['low'].min())
+            last_c = float(df.iloc[-1]['close'])
+            rng = h20 - l20
+            if rng > 0:
+                price_percentile = round((last_c - l20) / rng * 100)
+
         # 组合形态检测（近 2-3 日）
-        combo = cls._detect_combo_patterns(df.tail(n + 1))
+        combo = cls._detect_combo_patterns(df.tail(n + 1), price_percentile)
         result['combo_patterns'] = combo
 
         # K 线重心趋势
@@ -79,8 +90,13 @@ class CandlestickAnalysisService:
     @staticmethod
     def _classify_single(o: float, h: float, l: float, c: float,
                          body: float, total: float,
-                         upper_shadow: float, lower_shadow: float) -> str:
+                         upper_shadow: float, lower_shadow: float,
+                         pct_change: float = 0) -> str:
         body_ratio = body / total
+        # 使用真实涨跌幅（前收→收盘），而非仅实体（开盘→收盘），避免跳空缺口导致标签偏差
+        pct_abs = round(abs(pct_change), 1) if pct_change != 0 else (
+            round(body / o * 100, 1) if o > 0 else 0
+        )
 
         # 十字星：实体极小
         if body_ratio < 0.1:
@@ -104,23 +120,19 @@ class CandlestickAnalysisService:
                 return '长下影阳线（探底回升，下方有支撑）'
             return '长下影阴线（下方有买盘但多头力度不足）'
 
-        # 大阳线/大阴线：实体 > 振幅 70%
-        if body_ratio > 0.7:
-            if c > o:
-                pct_body = round(body / o * 100, 1) if o > 0 else 0
-                if pct_body > 5:
-                    return f'大阳线（涨幅 {pct_body}%，多头强势进攻）'
-                return '中阳线（多头占优）'
-            else:
-                pct_body = round(body / o * 100, 1) if o > 0 else 0
-                if pct_body > 5:
-                    return f'大阴线（跌幅 {pct_body}%，空头强势打压）'
-                return '中阴线（空头占优）'
-
-        # 普通 K 线
+        # 基于实体占比和涨跌幅综合判断K线大小
+        # 优先级：涨跌幅 > 实体占比（解决有影线但振幅大的K线被误标为"小阳/阴线"的问题）
         if c > o:
+            if pct_abs > 5 or (body_ratio > 0.7 and pct_abs > 3):
+                return f'大阳线（涨幅 {pct_abs}%，多头强势进攻）'
+            if pct_abs > 2 or body_ratio > 0.7:
+                return f'中阳线（涨幅 {pct_abs}%，多头占优）'
             return '小阳线（温和上涨）'
         elif c < o:
+            if pct_abs > 5 or (body_ratio > 0.7 and pct_abs > 3):
+                return f'大阴线（跌幅 {pct_abs}%，空头强势打压）'
+            if pct_abs > 2 or body_ratio > 0.7:
+                return f'中阴线（跌幅 {pct_abs}%，空头占优）'
             return '小阴线（温和下跌）'
         return '平盘线'
 
@@ -129,10 +141,22 @@ class CandlestickAnalysisService:
     # ------------------------------------------------------------------
 
     @classmethod
-    def _detect_combo_patterns(cls, df: pd.DataFrame) -> List[str]:
-        """检测近 2-3 日的组合 K 线形态。"""
+    def _detect_combo_patterns(cls, df: pd.DataFrame,
+                               price_percentile: Optional[int] = None) -> List[str]:
+        """检测近 2-3 日的组合 K 线形态，并标注高低位语境。
+
+        Args:
+            df: 近 n+1 日 OHLCV DataFrame。
+            price_percentile: 当前价在近20日区间的百分位（0-100），
+                              用于区分高位/低位形态的不同含义。
+        """
         if len(df) < 2:
             return []
+
+        # 高低位判断
+        at_high = price_percentile is not None and price_percentile >= 70
+        at_low = price_percentile is not None and price_percentile <= 30
+        pos_tag = '高位' if at_high else ('低位' if at_low else '中位')
 
         combos = []
         rows = list(df.iterrows())
@@ -152,12 +176,22 @@ class CandlestickAnalysisService:
             # 看涨吞没：前阴后阳，阳线实体包含阴线实体
             if not prev_bullish and curr_bullish:
                 if co <= pc and cc >= po and curr_body > prev_body:
-                    combos.append('看涨吞没（多头强势反包，可能反转上行）')
+                    if at_low:
+                        combos.append(f'{pos_tag}看涨吞没（底部强反转信号，多头强势反包）')
+                    elif at_high:
+                        combos.append(f'{pos_tag}看涨吞没（多头反包，但高位追涨风险较大）')
+                    else:
+                        combos.append('看涨吞没（多头强势反包，可能反转上行）')
 
             # 看跌吞没：前阳后阴，阴线实体包含阳线实体
             if prev_bullish and not curr_bullish:
                 if co >= pc and cc <= po and curr_body > prev_body:
-                    combos.append('看跌吞没（空头强势反包，可能反转下行）')
+                    if at_high:
+                        combos.append(f'{pos_tag}看跌吞没（强烈见顶信号，空头强势反包）')
+                    elif at_low:
+                        combos.append(f'{pos_tag}看跌吞没（空头反包，但低位杀跌动能可能有限）')
+                    else:
+                        combos.append('看跌吞没（空头强势反包，可能反转下行）')
 
             # 孕线（母子线）：当日 K 线实体完全在前一日实体内
             if curr_body < prev_body * 0.5:
@@ -167,9 +201,15 @@ class CandlestickAnalysisService:
                 prev_low_body = min(po, pc)
                 if curr_high_body <= prev_high_body and curr_low_body >= prev_low_body:
                     if prev_bullish:
-                        combos.append('孕线（上涨后出现犹豫，关注变盘方向）')
+                        if at_high:
+                            combos.append(f'{pos_tag}孕线（上涨动能衰竭，高位犹豫是危险信号，关注见顶回落）')
+                        else:
+                            combos.append('孕线（上涨后出现犹豫，关注变盘方向）')
                     else:
-                        combos.append('孕线（下跌后出现犹豫，关注反转可能）')
+                        if at_low:
+                            combos.append(f'{pos_tag}孕线（下跌动能衰竭，低位犹豫可能酝酿反弹）')
+                        else:
+                            combos.append('孕线（下跌后出现犹豫，关注反转可能）')
 
         # 去重
         return list(dict.fromkeys(combos)) if combos else ['无显著组合形态']
