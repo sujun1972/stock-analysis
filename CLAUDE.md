@@ -110,6 +110,7 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 |------|------|------|
 | `MaAnalysisService` | `ma_analysis_service.py` | 均线多周期结构（排列形态、支撑阻力、核心博弈点） |
 | `MacdAnalysisService` | `macd_analysis_service.py` | MACD 多级别分析（零轴、交叉、动能、背离、跨级别共振） |
+| `RsiAnalysisService` | `rsi_analysis_service.py` | RSI 多周期分析（超买超卖、趋势方向、背离、跨周期共振） |
 | `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测） |
 
 所有 Tool 输出均为 **Markdown 表格**格式，便于 LLM 结构化解析。

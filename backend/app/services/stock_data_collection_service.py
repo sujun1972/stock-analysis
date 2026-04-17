@@ -4,7 +4,7 @@
 从本地数据库收集股票分析所需的全维度数据，包括：
 - 基础盘面：收盘价、涨跌幅、成交额、换手率、PE-TTM、行业位置、筹码获利比
 - 资金流向：主力净流入(1/5/10日)、北向资金持股、股东人数、大股东减持、解禁预告
-- 技术指标：MA5/10/20/60/120、RSI7/14/21、MACD(12,26,9)、量价异动
+- 技术指标：MA5/10/20/60/120、RSI多周期分析(7/14/21)、MACD(12,26,9)、量价异动
 - 神奇九转：上涨/下跌连续计数、见顶/见底信号（来源 stk_nineturn 表）
 - 财报公告：披露日期、风险警示、质押冻结
 
@@ -370,11 +370,9 @@ class StockDataCollectionService:
         last_close = self._safe_float(close.iloc[-1]) if len(close) > 0 else None
         result['ma_analysis'] = MaAnalysisService.analyze(mas, last_close)
 
-        # RSI
-        result['rsi'] = {
-            f'rsi{n}': self._calc_rsi(close, n)
-            for n in [7, 14, 21]
-        }
+        # ---- RSI 多周期分析 ----
+        from app.services.rsi_analysis_service import RsiAnalysisService
+        result['rsi_analysis'] = RsiAnalysisService.analyze(df)
 
         # ---- 多级别 MACD 分析 ----
         from app.services.macd_analysis_service import MacdAnalysisService
@@ -386,18 +384,6 @@ class StockDataCollectionService:
 
         return result
 
-    @staticmethod
-    def _calc_rsi(close: pd.Series, period: int) -> Optional[float]:
-        if len(close) < period + 1:
-            return None
-        delta = close.diff()
-        gain = delta.clip(lower=0).rolling(period).mean()
-        loss = (-delta.clip(upper=0)).rolling(period).mean()
-        last_loss = float(loss.iloc[-1]) if not StockDataCollectionService._is_nan(loss.iloc[-1]) else 0
-        last_gain = float(gain.iloc[-1]) if not StockDataCollectionService._is_nan(gain.iloc[-1]) else 0
-        if last_loss == 0:
-            return 100.0
-        return round(100 - 100 / (1 + last_gain / last_loss), 2)
 
     # ------------------------------------------------------------------
     # 神奇九转指标（基于 stk_nineturn 表）
@@ -701,14 +687,39 @@ class StockDataCollectionService:
                     lines.append(f"> {prompt}")
         lines.append("")
 
-        rsi = technical.get('rsi', {})
-        if rsi:
-            lines.append(
-                f"**RSI：** RSI7={self._fmt(rsi.get('rsi7'))}, "
-                f"RSI14={self._fmt(rsi.get('rsi14'))}, "
-                f"RSI21={self._fmt(rsi.get('rsi21'))}"
-            )
+        # RSI 多周期分析
+        rsi_analysis = technical.get('rsi_analysis')
+        if rsi_analysis:
             lines.append("")
+            lines.append("### RSI 多周期超买超卖与背离分析")
+            lines.append("")
+            lines.append("**【1. 各周期 RSI 状态切片】**")
+            lines.append("")
+            lines.append("| 周期 | RSI值 | 超买超卖区间 | 趋势方向 | 背离信号 |")
+            lines.append("|------|-------|------------|---------|---------|")
+            for s in rsi_analysis.get('slices', []):
+                div_text = s['divergence'] if '背离' in s['divergence'] else '无'
+                lines.append(
+                    f"| RSI{s['period']} ({s['label']}) | {self._fmt(s['rsi_value'], 1)} "
+                    f"| {s['zone']} | {s['trend']} | {div_text} |"
+                )
+            cross = rsi_analysis.get('cross_period', {})
+            if cross:
+                lines.append("")
+                lines.append("**【2. 跨周期核心逻辑提取】**")
+                lines.append(f"- **多周期共振：** {cross.get('resonance', '')}")
+                if cross.get('divergence_analysis'):
+                    lines.append(f"- **长短分歧：** {cross['divergence_analysis']}")
+                if cross.get('extreme_warning'):
+                    lines.append(f"- **极值预警：** {cross['extreme_warning']}")
+                if cross.get('divergence_signals'):
+                    lines.append(f"- **背离汇总：** {cross['divergence_signals']}")
+            prompt = rsi_analysis.get('analysis_prompt', '')
+            if prompt:
+                lines.append("")
+                lines.append("**【3. 分析提示】**")
+                lines.append(f"> {prompt}")
+        lines.append("")
 
         # MACD 多级别分析
         macd_multi = technical.get('macd_multi')

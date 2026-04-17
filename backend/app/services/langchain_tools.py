@@ -225,8 +225,8 @@ async def get_shareholder_info(ts_code: str) -> str:
 
 @tool
 async def get_technical_indicators(ts_code: str) -> str:
-    """获取技术指标：均线多周期结构分析(排列形态/支撑阻力/趋势方向/核心博弈点)、RSI、多级别MACD分析(零轴/交叉/柱体/背离/跨级别共振)、量价异动。
-    适用场景：分析均线多空排列与支撑阻力、MACD多级别趋势共振、超买超卖、顶底背离信号。"""
+    """获取技术指标：均线多周期结构分析(排列形态/支撑阻力/趋势方向/核心博弈点)、RSI多周期分析(超买超卖/趋势/背离/跨周期共振)、多级别MACD分析(零轴/交叉/柱体/背离/跨级别共振)、量价异动。
+    适用场景：分析均线多空排列与支撑阻力、RSI超买超卖与背离信号、MACD多级别趋势共振、顶底背离信号。"""
     from app.services.stock_data_collection_service import StockDataCollectionService
 
     svc = StockDataCollectionService()
@@ -263,13 +263,28 @@ async def get_technical_indicators(ts_code: str) -> str:
                 lines.append(f"**博弈点:** {structure['battle_point']}")
     lines.append("")
 
-    rsi = data.get("rsi", {})
-    if rsi:
-        lines.append(
-            f"**RSI:** RSI7={_safe_fmt(rsi.get('rsi7'))}, "
-            f"RSI14={_safe_fmt(rsi.get('rsi14'))}, "
-            f"RSI21={_safe_fmt(rsi.get('rsi21'))}"
-        )
+    rsi_analysis = data.get("rsi_analysis")
+    if rsi_analysis:
+        lines.append("**RSI 多周期分析**")
+        lines.append("")
+        lines.append("| 周期 | RSI值 | 超买超卖区间 | 趋势方向 | 背离信号 |")
+        lines.append("|------|-------|------------|---------|---------|")
+        for s in rsi_analysis.get('slices', []):
+            div_text = s['divergence'] if '背离' in s['divergence'] else '无'
+            lines.append(
+                f"| RSI{s['period']} ({s['label']}) | {_safe_fmt(s['rsi_value'], 1)} "
+                f"| {s['zone']} | {s['trend']} | {div_text} |"
+            )
+        cross = rsi_analysis.get('cross_period', {})
+        if cross:
+            lines.append("")
+            lines.append(f"**共振状态:** {cross.get('resonance', '')}")
+            if cross.get('divergence_analysis'):
+                lines.append(f"**长短分歧:** {cross['divergence_analysis']}")
+            if cross.get('extreme_warning'):
+                lines.append(f"**极值预警:** {cross['extreme_warning']}")
+            if cross.get('divergence_signals'):
+                lines.append(f"**背离汇总:** {cross['divergence_signals']}")
         lines.append("")
 
     macd_multi = data.get("macd_multi")
