@@ -365,7 +365,20 @@ class MacdAnalysisService:
             short_bar_full = short_lv['bar_momentum']
 
             if long_dir == short_dir == 'bullish':
-                if '放大' in short_bar_full:
+                long_weakening = '缩短' in long_bar_full or '衰减' in long_bar_full
+                short_strengthening = '放大' in short_bar_full or '增强' in short_bar_full
+                if long_weakening and short_strengthening:
+                    battle_parts.append(
+                        f"长短分化：{long_lv['level']}上涨动能出现衰减迹象（{long_bar}），"
+                        f"但{short_lv['level']}级别多头再次发力（{short_bar}），"
+                        f"短线可能带动{long_lv['level']}指标二次修复，需警惕冲高回落"
+                    )
+                elif long_weakening:
+                    battle_parts.append(
+                        f"多头格局延续，但{long_lv['level']}动能衰减（{long_bar}），"
+                        f"{short_lv['level']}暂未有效接力，关注趋势延续性"
+                    )
+                elif short_strengthening:
                     battle_parts.append(f"{long_lv['level']}与{short_lv['level']}同步走强，多头趋势加速")
                 else:
                     battle_parts.append(f"多头格局延续，但{short_lv['level']}动能有衰减迹象")

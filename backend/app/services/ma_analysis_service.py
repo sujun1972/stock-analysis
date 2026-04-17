@@ -23,6 +23,13 @@ class MaAnalysisService:
         ('long', '长期', [120]),
     ]
 
+    # 各周期级别的排列形态描述词
+    _LEVEL_DESC = {
+        '短期': {'bullish': '短线反弹', 'bearish': '短线走弱'},
+        '中期': {'bullish': '中线走强', 'bearish': '中线弱势'},
+        '长期': {'bullish': '长线多头确认', 'bearish': '长线空头格局'},
+    }
+
     @classmethod
     def analyze(cls, ma_values: Dict[str, Optional[float]],
                 last_close: Optional[float]) -> Optional[Dict[str, Any]]:
@@ -73,7 +80,7 @@ class MaAnalysisService:
         valid = {p: v for p, v in vals.items() if v is not None}
 
         # 排列形态
-        arrangement = cls._detect_arrangement(periods, vals, close)
+        arrangement = cls._detect_arrangement(periods, vals, close, level)
 
         # 价格相对位置
         position = cls._detect_position(periods, vals, close)
@@ -93,7 +100,7 @@ class MaAnalysisService:
 
     @staticmethod
     def _detect_arrangement(periods: List[int], vals: Dict[int, Optional[float]],
-                            close: float) -> str:
+                            close: float, level: str = '短期') -> str:
         """检测均线排列形态。"""
         valid = [(p, vals[p]) for p in periods if vals.get(p) is not None]
         if not valid:
@@ -106,14 +113,16 @@ class MaAnalysisService:
             else:
                 return f'价格低于 MA{p}（偏空）'
 
+        desc = MaAnalysisService._LEVEL_DESC.get(level, MaAnalysisService._LEVEL_DESC['短期'])
+
         # 两条均线的情况
         p1, v1 = valid[0]  # 短周期
         p2, v2 = valid[1]  # 长周期
 
         if v1 > v2:
-            return '金叉向上（短线反弹）' if close > v1 else '金叉但价格未站稳'
+            return f'金叉向上（{desc["bullish"]}）' if close > v1 else '金叉但价格未站稳'
         elif v1 < v2:
-            return '空头排列（中线弱势）' if close < v1 else '死叉但价格尚在上方'
+            return f'空头排列（{desc["bearish"]}）' if close < v1 else '死叉但价格尚在上方'
         else:
             return '均线黏合（方向待选择）'
 

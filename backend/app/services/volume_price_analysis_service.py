@@ -19,12 +19,13 @@ class VolumePriceAnalysisService:
     """量价动能分析服务（纯计算，无 IO）。"""
 
     @classmethod
-    def analyze(cls, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+    def analyze(cls, df: pd.DataFrame, trend_context: str = '') -> Optional[Dict[str, Any]]:
         """对日线 DataFrame 进行量价结构分析。
 
         Args:
             df: 日线 DataFrame，需含 close/volume/pct_change/turnover/high/low，
                 index 为日期，按时间升序排列。
+            trend_context: MA 趋势上下文（如"多头趋势"），用于动态调整分析提示话术。
 
         Returns:
             量价分析结果字典，数据不足时返回 None。
@@ -69,7 +70,7 @@ class VolumePriceAnalysisService:
         result['mid_long'] = mid_long
 
         # ---- 动态分析提示 ----
-        result['analysis_prompt'] = cls._generate_prompt(daily_detail, mid_long)
+        result['analysis_prompt'] = cls._generate_prompt(daily_detail, mid_long, trend_context)
 
         return result
 
@@ -150,7 +151,9 @@ class VolumePriceAnalysisService:
         if down and heavy:
             return '放量下跌（警示：回调动能偏大）'
         if down and normal:
-            return '温和缩量下跌（正常调整）'
+            if vol_ratio >= 1.1:
+                return '温和放量下跌（抛压释放）'
+            return '缩量下跌（正常调整）'
         if down and light:
             return '缩量下跌（寻底阶段）'
         if flat and heavy:
@@ -304,10 +307,15 @@ class VolumePriceAnalysisService:
 
     @classmethod
     def _generate_prompt(cls, daily_detail: List[Dict[str, Any]],
-                         mid_long: Dict[str, Any]) -> str:
+                         mid_long: Dict[str, Any],
+                         trend_context: str = '') -> str:
         """根据量价特征动态生成分析提示。"""
         if not daily_detail:
             return '请结合量价数据，分析当前资金动向。'
+
+        # 判断 MA 趋势环境
+        is_bullish = '多头' in trend_context
+        is_bearish = '空头' in trend_context
 
         # 找近5日中最显著的事件（量比最大的那天）
         notable = sorted(daily_detail, key=lambda d: d.get('vol_ratio') or 0, reverse=True)
@@ -324,18 +332,25 @@ class VolumePriceAnalysisService:
             top1_down = top1['pct_change'] < -0.3
             last_up = last['pct_change'] > 0.3
 
+            top1_label = top1["pattern"].split("（")[0]
+            last_label = last["pattern"].split("（")[0]
+
             if top1_up and last_down and top1['date'] != last['date']:
-                prompt_parts.append(
-                    f'请分析 {top1["date"]} 的"{top1["pattern"].split("（")[0]}"'
-                    f'与 {last["date"]} 的"{last["pattern"].split("（")[0]}"之间的博弈关系。'
-                    f'这究竟是主力资金的"拉高出货"，还是底部启动初期的"暴力洗盘"？'
-                )
+                prefix = f'请分析 {top1["date"]} 的"{top1_label}"与 {last["date"]} 的"{last_label}"之间的博弈关系。'
+                if is_bullish:
+                    suffix = '在当前多头趋势中，这是上涨途中的正常获利回吐，还是主力资金的高位出货？'
+                else:
+                    suffix = '这究竟是主力资金的"拉高出货"，还是底部启动初期的"暴力洗盘"？'
+                prompt_parts.append(prefix + suffix)
             elif top1_down and last_up and top1['date'] != last['date']:
-                prompt_parts.append(
-                    f'请分析 {top1["date"]} 的"{top1["pattern"].split("（")[0]}"'
-                    f'后 {last["date"]} 出现反弹的含义。'
-                    f'这是恐慌释放后的超跌反弹，还是新一轮下跌的中继？'
-                )
+                prefix = f'请分析 {top1["date"]} 的"{top1_label}"后 {last["date"]} 出现反弹的含义。'
+                if is_bullish:
+                    suffix = '在当前多头趋势中，这是上升途中的良性洗盘，还是主力资金的高位出货信号？'
+                elif is_bearish:
+                    suffix = '在当前空头趋势中，这是恐慌释放后的超跌反弹，还是新一轮下跌的中继？'
+                else:
+                    suffix = '这是阶段性底部确认，还是下行趋势中的中继反弹？'
+                prompt_parts.append(prefix + suffix)
             elif top1_up:
                 prompt_parts.append(
                     f'请评估 {top1["date"]} 的放量上涨（量比{top1["vol_ratio"]}x）的持续性，'

@@ -380,7 +380,8 @@ class StockDataCollectionService:
 
         # ---- 量价动能分析 ----
         from app.services.volume_price_analysis_service import VolumePriceAnalysisService
-        result['volume_price'] = VolumePriceAnalysisService.analyze(df)
+        ma_trend = (result.get('ma_analysis') or {}).get('structure', {}).get('trend', '')
+        result['volume_price'] = VolumePriceAnalysisService.analyze(df, trend_context=ma_trend)
 
         return result
 
@@ -810,17 +811,23 @@ class StockDataCollectionService:
             up_signal = nine_turn.get('nine_up_turn')
             down_signal = nine_turn.get('nine_down_turn')
             parts = []
-            if up_c is not None and up_c > 0:
-                s = f"上涨计数={int(up_c)}"
-                if up_signal == '+9':
-                    s += "（已触发九转见顶信号）"
-                parts.append(s)
-            if down_c is not None and down_c > 0:
-                s = f"下跌计数={int(down_c)}"
-                if down_signal == '-9':
-                    s += "（已触发九转见底信号）"
-                parts.append(s)
-            lines.append(f"当前状态：{'，'.join(parts)}" if parts else "当前状态：无连续计数")
+            for cnt_val, signal_val, direction, signal_label in [
+                (up_c, up_signal, '上涨', '见顶'),
+                (down_c, down_signal, '下跌', '见底'),
+            ]:
+                if cnt_val is not None and cnt_val > 0:
+                    count = int(cnt_val)
+                    triggered = (signal_val == '+9') if direction == '上涨' else (signal_val == '-9')
+                    if triggered:
+                        qualifier = f"⚠️ 已触发九转{signal_label}信号，日线级别存在短线反转风险"
+                    elif count >= 7:
+                        qualifier = f"接近九转阈值，关注后续1-2日是否触发{signal_label}信号"
+                    elif count >= 4:
+                        qualifier = f"处于{direction}序列中段，序列延续中"
+                    else:
+                        qualifier = f"处于{direction}序列初期，未触发极值反转信号，暂无操作指导意义"
+                    parts.append(f"{direction}计数={count}（{qualifier}）")
+            lines.append(f"当前状态：{'，'.join(parts)}" if parts else "当前状态：无连续计数（多空交替频繁，暂无趋势性信号）")
 
             signals = nine_turn.get('recent_signals', [])
             if signals:

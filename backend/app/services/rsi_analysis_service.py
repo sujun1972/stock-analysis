@@ -263,7 +263,23 @@ class RsiAnalysisService:
         elif all_oversold:
             resonance = '多周期共振偏弱（RSI 均<40），空头格局延续'
         else:
-            resonance = '各周期 RSI 方向分歧，多空博弈中'
+            # 检查是否有单个周期处于极端值
+            any_extreme_ob = any(s['rsi_value'] > 80 for s in slices)
+            any_extreme_os = any(s['rsi_value'] < 20 for s in slices)
+            if any_extreme_ob:
+                extreme_items = [f"RSI{s['period']}({s['rsi_value']})" for s in slices if s['rsi_value'] > 80]
+                resonance = (
+                    f"各周期 RSI 方向分歧，多空博弈中。"
+                    f"⚠️ 短线风险提示：{'/'.join(extreme_items)} 已进入超买区，短线有技术性回调诉求"
+                )
+            elif any_extreme_os:
+                extreme_items = [f"RSI{s['period']}({s['rsi_value']})" for s in slices if s['rsi_value'] < 20]
+                resonance = (
+                    f"各周期 RSI 方向分歧，多空博弈中。"
+                    f"短线机会提示：{'/'.join(extreme_items)} 已进入超卖区，短线存在技术性反弹需求"
+                )
+            else:
+                resonance = '各周期 RSI 方向分歧，多空博弈中'
         result['resonance'] = resonance
 
         # ---- 长短分歧 ----
@@ -293,13 +309,23 @@ class RsiAnalysisService:
         for s in slices:
             if s['rsi_value'] > 85:
                 extreme_parts.append(
-                    f"RSI{s['period']}={s['rsi_value']} 进入极端超买区(>85)，"
-                    f"历史上回归概率极高"
+                    f"⚠️ RSI{s['period']}({s['rsi_value']}) 进入极端超买区(>85)，"
+                    f"短线有强烈的技术性回调诉求"
+                )
+            elif s['rsi_value'] > 80:
+                extreme_parts.append(
+                    f"⚠️ RSI{s['period']}({s['rsi_value']}) 已进入超买区(>80)，"
+                    f"短线面临技术性回调压力"
                 )
             elif s['rsi_value'] < 15:
                 extreme_parts.append(
-                    f"RSI{s['period']}={s['rsi_value']} 进入极端超卖区(<15)，"
+                    f"RSI{s['period']}({s['rsi_value']}) 进入极端超卖区(<15)，"
                     f"历史上反弹概率极高"
+                )
+            elif s['rsi_value'] < 20:
+                extreme_parts.append(
+                    f"RSI{s['period']}({s['rsi_value']}) 已进入超卖区(<20)，"
+                    f"短线存在技术性反弹需求"
                 )
         if extreme_parts:
             result['extreme_warning'] = '；'.join(extreme_parts)
