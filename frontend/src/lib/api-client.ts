@@ -1027,6 +1027,7 @@ class ApiClient {
   async getBacktestStatus(taskId: string): Promise<{
     task_id: string
     status: 'PENDING' | 'PROGRESS' | 'SUCCESS' | 'FAILURE'
+    execution_id?: number
     result?: any
     error?: string
     progress?: { current: number; total: number; status: string }
@@ -1061,6 +1062,7 @@ class ApiClient {
   }): Promise<ApiResponse<any>> {
     // 转换为新格式，调用统一回测接口
     return this.runUnifiedBacktest({
+      strategy_id: 0,
       strategy_type: 'predefined',
       strategy_name: params.strategy_id || 'momentum',
       strategy_config: params.strategy_params || {},

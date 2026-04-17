@@ -649,12 +649,9 @@ class MyCustomStrategy(BaseStrategy):
             {filteredStrategies.map(strategy => (
               <StrategyCard
                 key={strategy.id}
-                type="dynamic"
-                data={strategy}
+                strategy={strategy as any}
                 onEdit={() => handleOpenEditDialog(strategy)}
                 onDelete={() => handleOpenDeleteDialog(strategy)}
-                onTest={() => handleTestStrategy(strategy.id)}
-                onView={() => handleOpenViewCodeDialog(strategy)}
               />
             ))}
           </div>

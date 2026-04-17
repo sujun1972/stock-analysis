@@ -58,7 +58,7 @@ export default function AIStrategyPromptHelperV2({ onStrategyGenerated }: AIStra
 
   // 获取当前活跃任务
   const currentTask = activeTasks.size > 0 ? Array.from(activeTasks.values())[0] : null
-  const isGenerating = currentTask && ['PENDING', 'PROGRESS'].includes(currentTask.status)
+  const isGenerating = !!(currentTask && ['PENDING', 'PROGRESS'].includes(currentTask.status))
 
   // 检测到生成完成时，自动填充表单
   useEffect(() => {

@@ -471,11 +471,9 @@ export default function StrategyConfigsPage() {
             {filteredConfigs.map(config => (
               <StrategyCard
                 key={config.id}
-                type="config"
-                data={config}
+                strategy={config as any}
                 onEdit={() => handleOpenEditDialog(config)}
                 onDelete={() => handleOpenDeleteDialog(config)}
-                onTest={() => handleTestConfig(config.id)}
               />
             ))}
           </div>

@@ -290,10 +290,10 @@ export function AIGenerationTaskProvider({ children }: { children: React.ReactNo
     if (savedTasks) {
       try {
         const tasksArray = JSON.parse(savedTasks)
-        const restoredTasks = new Map(tasksArray)
+        const restoredTasks = new Map<string, AITask>(tasksArray)
 
         // 过滤掉超时的任务
-        const validTasks = new Map()
+        const validTasks = new Map<string, AITask>()
         const now = Date.now()
 
         restoredTasks.forEach((task, taskId) => {

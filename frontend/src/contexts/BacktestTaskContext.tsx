@@ -178,7 +178,7 @@ export function BacktestTaskProvider({ children }: { children: React.ReactNode }
     if (savedTasks) {
       try {
         const tasksArray = JSON.parse(savedTasks)
-        const restoredTasks = new Map(tasksArray)
+        const restoredTasks = new Map<string, BacktestTask>(tasksArray)
         setActiveTasks(restoredTasks)
       } catch (error) {
         console.error('恢复任务失败:', error)

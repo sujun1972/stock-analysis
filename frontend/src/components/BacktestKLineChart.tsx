@@ -314,7 +314,7 @@ export default function BacktestKLineChart({
           return result
         }
       },
-      series: [
+      series: ([
         // K线
         {
           name: 'K线',
@@ -409,7 +409,7 @@ export default function BacktestKLineChart({
           xAxisIndex: 1,
           yAxisIndex: 1
         }
-      ]
+      ] as any)
     }
 
     chart.setOption(option)

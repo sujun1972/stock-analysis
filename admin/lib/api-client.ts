@@ -627,6 +627,7 @@ class ApiClient {
   async updateDataSourceConfig(params: {
     tushare_token?: string
     earliest_history_date?: string
+    max_requests_per_minute?: number
   }): Promise<ApiResponse<any>> {
     const response = await axiosInstance.post('/api/config/source', params)
     return response.data

@@ -42,6 +42,7 @@ interface KLineData {
   MA5?: number | null
   MA20?: number | null
   MA60?: number | null
+  [key: string]: number | string | null | undefined
 }
 
 // 单个股票的信号数据（包含K线数据）

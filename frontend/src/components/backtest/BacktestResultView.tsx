@@ -143,7 +143,7 @@ export const TradesTable = memo(function TradesTable({ result }: { result: any }
 
   // 提取所有唯一的股票代码用于过滤器
   const allStocks = Array.from(
-    new Set(
+    new Set<string>(
       result.trades?.map((t: any) => t.stock_code || t.code || t.symbol).filter(Boolean) || []
     )
   ).sort()
@@ -193,7 +193,7 @@ export const TradesTable = memo(function TradesTable({ result }: { result: any }
 
   // 提取所有唯一的交易原因
   const allReasons = Array.from(
-    new Set(
+    new Set<string>(
       result.trades?.map((t: any) => {
         const direction = t.direction || t.action
         if (direction === 'buy') {

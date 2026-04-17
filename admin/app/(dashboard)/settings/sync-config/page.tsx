@@ -976,7 +976,7 @@ export default function SyncConfigPage() {
               <KeyRound className="h-4 w-4 mr-1" />
               配置
             </Button>
-            <Button size="sm" onClick={loadData} disabled={isLoading}>
+            <Button size="sm" onClick={() => loadData()} disabled={isLoading}>
               {isLoading
                 ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 : <RefreshCw className="h-4 w-4 mr-1" />}

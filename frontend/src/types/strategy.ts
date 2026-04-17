@@ -100,9 +100,12 @@ export interface CreateStrategyRequest {
  * 策略更新请求
  */
 export interface UpdateStrategyRequest {
+  name?: string
   display_name?: string
+  class_name?: string
   code?: string
   description?: string
+  category?: string
   tags?: string[]
   default_params?: Record<string, any>
   is_enabled?: boolean
