@@ -1,185 +1,118 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
 import { stkAuctionCApi } from '@/lib/api/stk-auction-c'
 import type { StkAuctionCData, StkAuctionCStatistics } from '@/lib/api/stk-auction-c'
 import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, BarChart3, DollarSign, Activity } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+
+// ============== 工具函数 ==============
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr || dateStr.length !== 8) return dateStr
+  return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+}
+
+const formatNumber = (value: number | null | undefined, decimals: number = 2): string => {
+  if (value === null || value === undefined) return '-'
+  return value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
+// ============== 页面组件 ==============
 
 export default function StkAuctionCPage() {
-  const [data, setData] = useState<StkAuctionCData[]>([])
-  const [statistics, setStatistics] = useState<StkAuctionCStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  // 查询筛选状态
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
 
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 同步弹窗状态
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  // 同步弹窗额外字段
   const [syncTsCode, setSyncTsCode] = useState('')
   const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-
-  // 从 task store 实时派生——不用本地 useState
-  const syncing = isTaskRunning('tasks.sync_stk_auction_c')
-
-  // 时区安全的日期字符串构建
-  const toDateStr = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-  // 加载数据
-  const loadData = async (targetPage: number = page) => {
-    try {
-      setIsLoading(true)
-
-      const params: any = {
-        page: targetPage,
-        page_size: pageSize
-      }
+  const dp = useDataPage<StkAuctionCData, StkAuctionCStatistics>({
+    apiCall: (params) => stkAuctionCApi.getData(params),
+    syncFn: (params) => stkAuctionCApi.syncAsync(params),
+    taskName: 'tasks.sync_stk_auction_c',
+    bulkOps: {
+      tableKey: 'stk_auction_c',
+      syncFn: (params) => apiClient.post('/api/stk-auction-c/sync-async', null, { params }),
+      taskName: 'tasks.sync_stk_auction_c',
+    },
+    paginationMode: 'page',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (tradeDate) params.trade_date = toDateStr(tradeDate)
-
-      const response = await stkAuctionCApi.getData(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics || null)
-        setTotal(response.data.total || 0)
-        setPage(targetPage)
-        // 回填默认日期
-        if (!tradeDate && response.data.trade_date) {
-          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
-        }
-      } else {
-        toast.error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      toast.error('加载失败', { description: err.message || '加载数据失败' })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'stk_auction_c',
-    syncFn: (params) => apiClient.post('/api/stk-auction-c/sync-async', null, { params }),
-    taskName: 'tasks.sync_stk_auction_c',
-    onSuccess: loadData,
+      return params
+    },
+    onBackfillDate: (dateStr) => {
+      if (!tradeDate) setTradeDate(new Date(dateStr + 'T00:00:00'))
+    },
+    syncSuccessMessage: '收盘集合竞价数据同步完成',
   })
 
-  // 初始加载：只跑一次
-  useEffect(() => {
-    loadData(1).catch(() => {})
-  }, [])
-
-  // 同步确认
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      const params: any = {}
-      if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
-      if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await stkAuctionCApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            toast.success('数据同步完成', { description: '收盘集合竞价数据已更新' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-        toast.success(response.message || '同步任务已提交')
-      } else {
-        toast.error(response.message || '提交同步任务失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
+  // 覆盖同步确认：需要额外传 syncTsCode / syncTradeDate
+  const handleCustomSyncConfirm = async () => {
+    dp.setSyncDialogOpen(false)
+    const params: Record<string, unknown> = {}
+    if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
+    if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
+    if (dp.syncStartDate) params.start_date = toDateStr(dp.syncStartDate)
+    if (dp.syncEndDate) params.end_date = toDateStr(dp.syncEndDate)
+    await dp.handleSyncDirect(params)
   }
 
-  // 组件卸载清理
-  useEffect(() => {
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
-
-  // 格式化日期
-  const formatDate = (dateStr: string) => {
-    if (!dateStr || dateStr.length !== 8) return dateStr
-    return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-  }
-
-  // 格式化数字
-  const formatNumber = (value: number | null | undefined, decimals: number = 2): string => {
-    if (value === null || value === undefined) return '-'
-    return value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
-  }
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '股票数量',
+        value: (s.stock_count ?? 0).toLocaleString(),
+        subValue: '只',
+        icon: Activity,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '平均成交量',
+        value: formatNumber(s.avg_vol),
+        subValue: '手',
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '最大成交量',
+        value: formatNumber(s.max_vol),
+        subValue: '手',
+        icon: BarChart3,
+        iconColor: 'text-orange-600',
+      },
+      {
+        label: '最大成交额',
+        value: formatNumber(s.max_amount),
+        subValue: '万元',
+        icon: DollarSign,
+        iconColor: 'text-purple-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 移动端卡片
-  const mobileCard = (item: StkAuctionCData) => (
+  const mobileCard = useCallback((item: StkAuctionCData) => (
     <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
       <div className="flex justify-between items-start mb-2">
         <div>
@@ -212,7 +145,7 @@ export default function StkAuctionCPage() {
         )}
       </div>
     </div>
-  )
+  ), [])
 
   // 桌面端表格列定义
   const columns: Column<StkAuctionCData>[] = useMemo(() => [
@@ -291,83 +224,28 @@ export default function StkAuctionCPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="收盘集合竞价"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 — 左文字右图标 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">股票数量</p>
-                  <p className="text-xl sm:text-2xl font-bold">{(statistics.stock_count ?? 0).toLocaleString()}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">只</p>
-                </div>
-                <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">平均成交量</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_vol)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">手</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大成交量</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.max_vol)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">手</p>
-                </div>
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大成交额</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.max_amount)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">万元</p>
-                </div>
-                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选区域 */}
       <Card>
@@ -377,7 +255,7 @@ export default function StkAuctionCPage() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="text-sm font-medium mb-2 block">股票代码</label>
+              <Label className="mb-2 block">股票代码</Label>
               <Input
                 placeholder="如 000001 或 000001.SZ"
                 value={tsCode}
@@ -385,13 +263,13 @@ export default function StkAuctionCPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2 block">交易日期</label>
+              <Label className="mb-2 block">交易日期</Label>
               <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="留空默认最近有数据日期" />
             </div>
           </div>
           <div className="mt-4">
-            <Button onClick={() => loadData(1).catch(() => {})} disabled={isLoading}>
-              {isLoading ? '查询中...' : '查询'}
+            <Button onClick={dp.handleQuery} disabled={dp.isLoading}>
+              {dp.isLoading ? '查询中...' : '查询'}
             </Button>
           </div>
         </CardContent>
@@ -402,64 +280,52 @@ export default function StkAuctionCPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             mobileCard={mobileCard}
             emptyMessage="暂无收盘集合竞价数据"
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => loadData(newPage),
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                loadData(1)
-              },
-              pageSizeOptions: [10, 20, 30, 50, 100]
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
 
       {/* 同步弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle>同步收盘集合竞价数据</DialogTitle>
-            <DialogDescription>
-              所有参数均为可选，不填写将同步最近交易日数据（需开通股票分钟权限）。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">股票代码（可选）</label>
-              <Input
-                placeholder="如 600000.SH，留空同步全市场"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">交易日期（可选）</label>
-              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="留空同步最新交易日" />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="日期范围起始" />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="日期范围结束" />
-            </div>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={handleCustomSyncConfirm}
+        title="同步收盘集合竞价数据"
+        description="所有参数均为可选，不填写将同步最近交易日数据（需开通股票分钟权限）。"
+        disabled={dp.syncing}
+      >
+        <div className="py-4 space-y-4">
+          <div>
+            <Label className="mb-2 block">股票代码（可选）</Label>
+            <Input
+              placeholder="如 600000.SH，留空同步全市场"
+              value={syncTsCode}
+              onChange={(e) => setSyncTsCode(e.target.value)}
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>
-              {syncing ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</> : '确认同步'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div>
+            <Label className="mb-2 block">交易日期（可选）</Label>
+            <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="留空同步最新交易日" />
+          </div>
+          <div>
+            <Label className="mb-2 block">开始日期（可选）</Label>
+            <DatePicker date={dp.syncStartDate} onDateChange={dp.setSyncStartDate} placeholder="日期范围起始" />
+          </div>
+          <div>
+            <Label className="mb-2 block">结束日期（可选）</Label>
+            <DatePicker date={dp.syncEndDate} onDateChange={dp.setSyncEndDate} placeholder="日期范围结束" />
+          </div>
+        </div>
+      </SyncDialog>
     </div>
   )
 }

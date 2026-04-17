@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, Column } from '@/components/common/DataTable'
@@ -8,176 +8,117 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
 import { stkAhComparisonApi } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, TrendingDown, BarChart3, Activity } from 'lucide-react'
 import type { StkAhComparisonData, StkAhComparisonStatistics } from '@/lib/api/stk-ah-comparison'
 
-const toDateStr = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// ============== 工具函数 ==============
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr || dateStr.length !== 8) return dateStr
+  return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`
+}
+
+const formatNumber = (num: number | null | undefined, decimals: number = 2) => {
+  if (num === null || num === undefined) return '-'
+  return num.toFixed(decimals)
+}
+
+const formatPercent = (num: number | null | undefined) => {
+  if (num === null || num === undefined) return '-'
+  const sign = num >= 0 ? '+' : ''
+  return `${sign}${num.toFixed(2)}%`
+}
+
+// ============== 页面组件 ==============
 
 export default function StkAhComparisonPage() {
-  const [data, setData] = useState<StkAhComparisonData[]>([])
-  const [statistics, setStatistics] = useState<StkAhComparisonStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
+  // 查询筛选状态
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
 
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 同步对话框状态
-  const [showSyncDialog, setShowSyncDialog] = useState(false)
+  // 同步弹窗额外字段
   const [syncHkCode, setSyncHkCode] = useState('')
   const [syncTsCode, setSyncTsCode] = useState('')
   const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-
-  // 从 task store 实时派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_stk_ah_comparison')
-
-  const loadData = useCallback(async (targetPage: number = 1) => {
-    try {
-      setLoading(true)
-
-      const params: any = {
-        page: targetPage,
-        page_size: pageSize
-      }
-      if (tradeDate) params.trade_date = toDateStr(tradeDate)
-
-      const response = await stkAhComparisonApi.getData(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics || null)
-        setTotal(response.data.total || 0)
-        setPage(targetPage)
-
-        // 未传日期时，用返回的最近有数据日期回填
-        if (!tradeDate && response.data.resolved_date) {
-          setTradeDate(new Date(response.data.resolved_date + 'T00:00:00'))
-        }
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      toast.error('加载失败', { description: err.message || '无法加载AH股比价数据' })
-    } finally {
-      setLoading(false)
-    }
-  }, [tradeDate, pageSize])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'stk_ah_comparison',
-    syncFn: (params) => apiClient.post('/api/stk-ah-comparison/sync-async', null, { params }),
+  const dp = useDataPage<StkAhComparisonData, StkAhComparisonStatistics>({
+    apiCall: (params) => stkAhComparisonApi.getData(params),
+    syncFn: (params) => stkAhComparisonApi.syncAsync(params),
     taskName: 'tasks.sync_stk_ah_comparison',
-    onSuccess: loadData,
+    bulkOps: {
+      tableKey: 'stk_ah_comparison',
+      syncFn: (params) => apiClient.post('/api/stk-ah-comparison/sync-async', null, { params }),
+      taskName: 'tasks.sync_stk_ah_comparison',
+    },
+    paginationMode: 'page',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      return params
+    },
+    backfillDateField: 'resolved_date',
+    onBackfillDate: (dateStr) => {
+      if (!tradeDate) setTradeDate(new Date(dateStr + 'T00:00:00'))
+    },
+    syncSuccessMessage: 'AH股比价数据同步完成',
   })
 
-  useEffect(() => {
-    loadData(1).catch(() => {})
-  }, [])
-
-  // 组件卸载时清理回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleSyncConfirm = async () => {
-    setShowSyncDialog(false)
-
-    try {
-      const params: any = {}
-      if (syncHkCode.trim()) params.hk_code = syncHkCode.trim()
-      if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
-      if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await stkAhComparisonApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            toast.success('数据同步完成', { description: 'AH股比价数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
+  // 覆盖同步确认：需要额外传 syncHkCode / syncTsCode / syncTradeDate
+  const handleCustomSyncConfirm = async () => {
+    dp.setSyncDialogOpen(false)
+    const params: Record<string, unknown> = {}
+    if (syncHkCode.trim()) params.hk_code = syncHkCode.trim()
+    if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
+    if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
+    if (dp.syncStartDate) params.start_date = toDateStr(dp.syncStartDate)
+    if (dp.syncEndDate) params.end_date = toDateStr(dp.syncEndDate)
+    await dp.handleSyncDirect(params)
   }
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr || dateStr.length !== 8) return dateStr
-    return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`
-  }
-
-  const formatNumber = (num: number | null | undefined, decimals: number = 2) => {
-    if (num === null || num === undefined) return '-'
-    return num.toFixed(decimals)
-  }
-
-  const formatPercent = (num: number | null | undefined) => {
-    if (num === null || num === undefined) return '-'
-    const sign = num >= 0 ? '+' : ''
-    return `${sign}${num.toFixed(2)}%`
-  }
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '股票数量',
+        value: String(s.stock_count),
+        subValue: 'AH同时上市',
+        icon: BarChart3,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '平均溢价率',
+        value: <span className={`${(s.avg_premium ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+          {formatPercent(s.avg_premium)}
+        </span>,
+        subValue: 'A股相对港股溢价',
+        icon: Activity,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '最高溢价率',
+        value: <span className="text-red-600">{formatPercent(s.max_premium)}</span>,
+        subValue: '溢价最大的股票',
+        icon: TrendingUp,
+        iconColor: 'text-red-400',
+      },
+      {
+        label: '最低溢价率',
+        value: <span className="text-green-600">{formatPercent(s.min_premium)}</span>,
+        subValue: '溢价最小的股票',
+        icon: TrendingDown,
+        iconColor: 'text-green-400',
+      },
+    ]
+  }, [dp.statistics])
 
   const columns: Column<StkAhComparisonData>[] = useMemo(() => [
     {
@@ -302,85 +243,28 @@ export default function StkAhComparisonPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setShowSyncDialog(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="AH股比价"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">股票数量</p>
-                  <p className="text-2xl font-bold mt-1">{statistics.stock_count}</p>
-                  <p className="text-xs text-muted-foreground mt-1">AH同时上市</p>
-                </div>
-                <BarChart3 className="h-8 w-8 text-muted-foreground shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">平均溢价率</p>
-                  <p className={`text-2xl font-bold mt-1 ${(statistics.avg_premium ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatPercent(statistics.avg_premium)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">A股相对港股溢价</p>
-                </div>
-                <Activity className="h-8 w-8 text-muted-foreground shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">最高溢价率</p>
-                  <p className="text-2xl font-bold mt-1 text-red-600">{formatPercent(statistics.max_premium)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">溢价最大的股票</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-red-400 shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">最低溢价率</p>
-                  <p className="text-2xl font-bold mt-1 text-green-600">{formatPercent(statistics.min_premium)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">溢价最小的股票</p>
-                </div>
-                <TrendingDown className="h-8 w-8 text-green-400 shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选区域 */}
       <Card>
@@ -393,8 +277,8 @@ export default function StkAhComparisonPage() {
               <Label>交易日期</Label>
               <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="留空默认最近有数据日期" />
             </div>
-            <Button onClick={() => loadData(1)} disabled={loading} className="w-full sm:w-auto">
-              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="w-full sm:w-auto">
+              <RefreshCw className={`h-4 w-4 mr-1 ${dp.isLoading ? 'animate-spin' : ''}`} />
               查询
             </Button>
           </div>
@@ -406,86 +290,71 @@ export default function StkAhComparisonPage() {
         <CardContent className="p-0">
           <DataTable
             columns={columns}
-            data={data}
-            loading={loading}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无数据"
             mobileCard={mobileCard}
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => loadData(newPage),
-              onPageSizeChange: () => {},
-              pageSizeOptions: [30]
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
 
       {/* 同步对话框 */}
-      <Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>同步AH股比价数据</DialogTitle>
-            <DialogDescription>
-              所有参数均为可选，不填写参数将同步最近30天数据
-            </DialogDescription>
-          </DialogHeader>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={handleCustomSyncConfirm}
+        title="同步AH股比价数据"
+        description="所有参数均为可选，不填写参数将同步最近30天数据"
+        disabled={dp.syncing}
+      >
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="sync-hk-code">港股代码</Label>
+            <Input
+              id="sync-hk-code"
+              placeholder="如：02068.HK"
+              value={syncHkCode}
+              onChange={(e) => setSyncHkCode(e.target.value)}
+            />
+          </div>
 
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="sync-hk-code">港股代码</Label>
-              <Input
-                id="sync-hk-code"
-                placeholder="如：02068.HK"
-                value={syncHkCode}
-                onChange={(e) => setSyncHkCode(e.target.value)}
-              />
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="sync-ts-code">A股代码</Label>
+            <Input
+              id="sync-ts-code"
+              placeholder="如：601068.SH"
+              value={syncTsCode}
+              onChange={(e) => setSyncTsCode(e.target.value)}
+            />
+          </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="sync-ts-code">A股代码</Label>
-              <Input
-                id="sync-ts-code"
-                placeholder="如：601068.SH"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
+          <div className="grid gap-2">
+            <Label>交易日期</Label>
+            <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择交易日期" />
+          </div>
 
-            <div className="grid gap-2">
-              <Label>交易日期</Label>
-              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择交易日期" />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>日期范围（可选）</Label>
-              <div className="flex gap-2 items-center">
-                <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="开始日期" />
-                <span className="text-muted-foreground">至</span>
-                <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="结束日期" />
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 border border-amber-200 dark:border-amber-800">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>注意：</strong>此接口消耗 5000 积分起，单次最大返回 1000 条数据。数据从2025年8月12日开始，每天盘后17:00更新。
-              </p>
+          <div className="grid gap-2">
+            <Label>日期范围（可选）</Label>
+            <div className="flex gap-2 items-center">
+              <DatePicker date={dp.syncStartDate} onDateChange={dp.setSyncStartDate} placeholder="开始日期" />
+              <span className="text-muted-foreground">至</span>
+              <DatePicker date={dp.syncEndDate} onDateChange={dp.setSyncEndDate} placeholder="结束日期" />
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSyncDialog(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>
-              {syncing ? (
-                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-              ) : (
-                <><RefreshCw className="h-4 w-4 mr-1" />开始同步</>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 border border-amber-200 dark:border-amber-800">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              <strong>注意：</strong>此接口消耗 5000 积分起，单次最大返回 1000 条数据。数据从2025年8月12日开始，每天盘后17:00更新。
+            </p>
+          </div>
+        </div>
+      </SyncDialog>
     </div>
   )
 }

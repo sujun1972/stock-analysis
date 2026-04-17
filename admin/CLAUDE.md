@@ -122,143 +122,75 @@ triggerPoll()  // Header 图标即时更新
 
 ---
 
-## 数据同步页面异步任务集成模式
+## 数据同步页面异步任务集成模式（useDataPage）
 
-**所有数据同步页面必须使用异步任务模式**，不使用同步阻塞模式。
+**所有数据同步页面必须使用 `useDataPage` Hook**，它封装了加载、分页、排序、同步、清空、回调清理的全部公共逻辑。
+
+### 关键文件
+
+| 文件 | 说明 |
+|------|------|
+| `hooks/useDataPage.ts` | 数据页面通用 Hook |
+| `components/common/SyncDialog.tsx` | 同步确认弹窗（支持日期范围/自定义内容/无参数） |
+| `components/common/StatisticsCards.tsx` | 统计卡片网格（左文字右图标布局） |
+| `hooks/useDataBulkOps.ts` | 全量同步 + 清空逻辑（被 useDataPage 内部调用） |
 
 ### 标准实现
 
 ```typescript
-const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-const activeCallbacksRef = useRef<Map<string, any>>(new Map())
+'use client'
 
-// ✅ 从 task store 实时派生——不要用本地 useState(false)
-const syncing = isTaskRunning('tasks.your_celery_task_name')
+import { useState, useMemo } from 'react'
+import { useDataPage } from '@/hooks/useDataPage'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { toDateStr } from '@/lib/date-utils'
 
-const handleSync = async () => {
-  const response = await yourApi.syncAsync(params)
+export default function YourPage() {
+  // 查询筛选状态（页面个性化，保留为 local state）
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [tsCode, setTsCode] = useState('')
 
-  if (response.code === 200 && response.data) {
-    const taskId = response.data.celery_task_id
+  const dp = useDataPage<YourData, YourStats>({
+    apiCall: (params) => yourApi.getData(params),
+    syncFn: (params) => yourApi.syncAsync(params),
+    taskName: 'tasks.sync_your_table',
+    bulkOps: {
+      tableKey: 'your_table',
+      syncFn: (p) => yourApi.syncFullHistory(p),
+      taskName: 'tasks.sync_your_table_full_history',
+    },
+    paginationMode: 'offset',  // 或 'page'
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (tsCode) params.ts_code = tsCode
+      return params
+    },
+  })
 
-    addTask({
-      taskId,
-      taskName: response.data.task_name,
-      displayName: response.data.display_name,
-      taskType: 'data_sync',
-      status: 'running',
-      progress: 0,
-      startTime: Date.now()
-    })
-
-    const completionCallback = (task: any) => {
-      if (task.status === 'success') {
-        loadData().catch(() => {})
-        toast.success('数据同步完成')
-      }
-      unregisterCompletionCallback(taskId, completionCallback)
-      activeCallbacksRef.current.delete(taskId)
-    }
-    activeCallbacksRef.current.set(taskId, completionCallback)
-    registerCompletionCallback(taskId, completionCallback)
-
-    triggerPoll()
-  }
-}
-
-// 组件卸载时清理未完成的回调
-useEffect(() => {
-  return () => {
-    const callbacks = activeCallbacksRef.current
-    callbacks.forEach((callback, taskId) => {
-      unregisterCompletionCallback(taskId, callback)
-    })
-    callbacks.clear()
-  }
-}, [])
-```
-
-### 同步弹窗选日期模式
-
-当同步需要用户指定日期时，同步按钮先打开 Dialog：
-
-```typescript
-const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-const [syncDate, setSyncDate] = useState<Date | undefined>(undefined)
-
-// 按钮只负责打开弹窗
-<Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>同步数据</Button>
-
-// 弹窗内确认后才提交
-const handleSyncConfirm = async () => {
-  setSyncDialogOpen(false)
-  const syncDateStr = syncDate
-    ? `${syncDate.getFullYear()}-${String(syncDate.getMonth() + 1).padStart(2, '0')}-${String(syncDate.getDate()).padStart(2, '0')}`
-    : undefined
-  const response = await api.syncAsync(syncDateStr ? { trade_date: syncDateStr } : {})
-  // ... 提交任务逻辑
+  // 页面只需定义：统计卡片、列、mobileCard、筛选 UI
+  // dp 提供：data, statistics, isLoading, total, page, pageSize,
+  //   syncing, handleQuery, handlePageChange, handleSort, sortKey, sortDirection,
+  //   syncDialogOpen/setSyncDialogOpen, handleSyncConfirm, handleSyncDirect,
+  //   handleFullSync, handleClear, fullSyncing, isClearing, ...
 }
 ```
+
+### useDataPage 支持的模式
+
+- **分页**：`paginationMode: 'offset'`（offset/limit）或 `'page'`（page/page_size）
+- **排序**：自动注入 sort_by + sort_order，页面用 `dp.handleSort`
+- **独立统计 API**：`statisticsCall` 与主数据并行调用
+- **同步弹窗**：`dp.handleSyncConfirm`（弹窗确认） / `dp.handleSyncDirect()`（无弹窗）
+- **日期回填**：`onBackfillDate` 处理后端返回的默认日期
+- **多任务名**：`taskName` 支持 `string | string[]`
 
 ### ⚠️ 不得将查询筛选日期传入同步接口
 
-```typescript
-// ❌ 错误：把查询日期传给同步接口
-const handleSync = async () => {
-  const params: any = {}
-  if (tradeDate) params.trade_date = toDateStr(tradeDate)  // ❌
-  await yourApi.syncAsync(params)
-}
-
-// ✅ 正确：不传日期，让后端从 trading_calendar 自动取最新交易日
-const handleSync = async () => {
-  const params: any = {}
-  if (tsCode) params.ts_code = tsCode  // 可选
-  await yourApi.syncAsync(params)
-}
-```
-
-### 已实现的异步同步页面
-
-所有页面遵循以下标准实践：同步弹窗与查询日期解耦、`isTaskRunning` 派生 `syncing`、`DataTable mobileCard`、左文字右图标统计卡片、`toDateStr` 本地时间安全。
-
-| 页面 | 路由 |
-|------|------|
-| 定时任务配置 | `/settings/scheduler` |
-| 沪深港通资金流向 | `/moneyflow/hsgt` |
-| 大盘资金流向 | `/moneyflow/mkt-dc` |
-| 板块资金流向 | `/moneyflow/ind-dc` |
-| 个股资金流向（Tushare） | `/moneyflow/stock` |
-| 个股资金流向（DC） | `/moneyflow/stock-dc` |
-| 融资融券交易汇总 | `/margin/summary` |
-| 融资融券交易明细 | `/margin/detail` |
-| 融资融券标的 | `/margin/secs` |
-| 转融资交易汇总 | `/margin/slb-len` |
-| 龙虎榜每日明细 | `/boardgame/top-list` |
-| 龙虎榜机构明细 | `/boardgame/top-inst` |
-| 涨跌停列表 | `/boardgame/limit-list` |
-| 连板天梯 | `/boardgame/limit-step` |
-| 最强板块统计 | `/boardgame/limit-cpt` |
-| 卖方盈利预测 | `/features/report-rc` |
-| 个股异常波动 | `/reference-data/stk-shock` |
-| 个股严重异常波动 | `/reference-data/stk-high-shock` |
-| 交易所重点提示证券 | `/reference-data/stk-alert` |
-| 股权质押统计 | `/reference-data/pledge-stat` |
-| 股票回购 | `/reference-data/repurchase` |
-| 限售股解禁 | `/reference-data/share-float` |
-| 股东人数 | `/reference-data/stk-holdernumber` |
-| 大宗交易 | `/reference-data/block-trade` |
-| 股东增减持 | `/reference-data/stk-holdertrade` |
-| 利润表 | `/financial/income` |
-| 资产负债表 | `/financial/balancesheet` |
-| 现金流量表 | `/financial/cashflow` |
-| 业绩预告 | `/financial/forecast` |
-| 业绩快报 | `/financial/express` |
-| 分红送股 | `/financial/dividend` |
-| 财务指标 | `/financial/fina-indicator` |
-| 财务审计意见 | `/financial/fina-audit` |
-| 主营业务构成 | `/financial/fina-mainbz` |
-| 财报披露计划 | `/financial/disclosure-date` |
+同步弹窗的日期（`dp.syncStartDate`/`dp.syncEndDate`）与查询筛选日期完全独立。`buildParams` 只影响数据查询，不影响同步参数。
 
 ---
 
@@ -363,11 +295,15 @@ import { apiClient } from '@/lib/api-client'
 
 **日期字符串构建（时区安全）**：
 ```typescript
-// ✅ 正确：使用本地时间，别名 toDateStr
-const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+// ✅ 正确：使用 toDateStr（lib/date-utils.ts），基于本地时间
+import { toDateStr } from '@/lib/date-utils'
+const dateStr = toDateStr(date)  // YYYY-MM-DD
 
 // ❌ 错误：UTC 转换在 UTC+8 时区会偏移 -1 天
 const dateStr = date.toISOString().split('T')[0]
+
+// ❌ 错误：在页面文件中重复定义 toDateStr
+const toDateStr = (d: Date) => `${d.getFullYear()}-...`
 ```
 
 **ECharts 初始化时序问题**（"Can't get DOM width or height"）：
@@ -587,31 +523,37 @@ export const yourApi = new YourApiClient()
 
 ### 前端页面标准结构
 
+使用 `useDataPage` Hook（见上方"数据同步页面异步任务集成模式"），页面只需定义个性化部分：
+
 ```typescript
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { PageHeader } from '@/components/common/PageHeader'
-import { useTaskStore } from '@/stores/task-store'
+import { useState, useMemo } from 'react'
+import { useDataPage } from '@/hooks/useDataPage'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { toDateStr } from '@/lib/date-utils'
+import { yourApi } from '@/lib/api'
 
 export default function YourPage() {
-  // 从 task store 实时派生——不要用 useState(false)
-  const syncing = isTaskRunning('tasks.your_celery_task_name')
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
 
-  // ... 标准异步任务集成（见上方"数据同步页面异步任务集成模式"）
+  const dp = useDataPage<YourData, YourStats>({
+    apiCall: (params) => yourApi.getData(params),
+    syncFn: (params) => yourApi.syncAsync(params),
+    taskName: 'tasks.sync_your_table',
+    bulkOps: { tableKey: 'your_table', syncFn: (p) => yourApi.syncFullHistory(p), taskName: 'tasks.sync_your_table_full_history' },
+    buildParams: () => startDate ? { start_date: toDateStr(startDate) } : {},
+  })
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="页面标题"
-        actions={
-          // 同步按钮放在 PageHeader actions，不放在查询 Card 里
-          <Button onClick={handleSync} disabled={syncing}>...</Button>
-        }
-      />
-      {/* 统计卡片 */}
+      <PageHeader title="页面标题" actions={/* 同步按钮 + BulkOpsButtons */} />
+      <StatisticsCards items={/* useMemo 构建 */} />
       {/* 查询筛选 Card */}
-      {/* 数据表格 Card */}
+      {/* DataTable Card（dp.data, dp.isLoading, dp.handlePageChange 等） */}
+      <SyncDialog open={dp.syncDialogOpen} onOpenChange={dp.setSyncDialogOpen} onConfirm={dp.handleSyncConfirm} title="同步数据" />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -22,16 +22,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { useDataPage } from '@/hooks/useDataPage'
 import { dcDailyApi, type DcDailyData, type DcDailyStatistics } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
+import { toDateStr } from '@/lib/date-utils'
 import { pctChangeColor } from '@/lib/utils'
-import { useTaskStore, type Task } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
 import { RefreshCw, Database, Calendar, Layers, TrendingUp, AlertTriangle, ListFilter } from 'lucide-react'
-
-const PAGE_SIZE = 100
 
 const IDX_TYPE_OPTIONS = [
   { value: '概念板块', label: '概念板块' },
@@ -40,16 +38,9 @@ const IDX_TYPE_OPTIONS = [
 ]
 
 export default function DcDailyPage() {
-  const [data, setData] = useState<DcDailyData[]>([])
-  const [statistics, setStatistics] = useState<DcDailyStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
 
-  // 同步对话框状态
+  // 同步对话框状态（自定义，不使用 SyncDialog）
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [syncTsCode, setSyncTsCode] = useState<string>('')
   const [syncIdxType, setSyncIdxType] = useState<string>('')
@@ -57,138 +48,42 @@ export default function DcDailyPage() {
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
   const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const syncing = isTaskRunning('tasks.sync_dc_daily')
-
-  useEffect(() => {
-    loadData(1).catch(() => {})
-  }, [])
-
-  const toDateStr = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  const loadData = async (
-    targetPage: number = page,
-    overrideSortKey?: string | null,
-    overrideSortDir?: 'asc' | 'desc' | null
-  ) => {
-    setIsLoading(true)
-    try {
-      const tradeDateStr = tradeDate ? toDateStr(tradeDate) : undefined
-      const params = {
-        trade_date: tradeDateStr,
-        page: targetPage,
-        page_size: PAGE_SIZE,
-        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
-        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined
-      }
-
-      const [dataResponse, statsResponse] = await Promise.all([
-        dcDailyApi.getData(params),
-        dcDailyApi.getStatistics({ trade_date: tradeDateStr })
-      ])
-
-      if (dataResponse.code === 200 && dataResponse.data) {
-        setData(dataResponse.data.items)
-        setTotal(dataResponse.data.total)
-        setPage(targetPage)
-        // 回填后端解析的实际日期
-        if (!tradeDate && dataResponse.data.trade_date) {
-          setTradeDate(new Date(dataResponse.data.trade_date + 'T00:00:00'))
-        }
-      }
-
-      if (statsResponse.code === 200 && statsResponse.data) {
-        setStatistics(statsResponse.data)
-      }
-    } catch (error: any) {
-      toast.error(error.message || '加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'dc_daily',
-    syncFn: (params) => apiClient.post('/api/dc-daily/sync-async', null, { params }),
+  const dp = useDataPage<DcDailyData, DcDailyStatistics>({
+    apiCall: (params) => dcDailyApi.getData(params),
+    statisticsCall: (params) => dcDailyApi.getStatistics(params),
+    syncFn: (params) => dcDailyApi.syncAsync(params),
     taskName: 'tasks.sync_dc_daily',
-    onSuccess: loadData,
+    bulkOps: {
+      tableKey: 'dc_daily',
+      syncFn: (params) => apiClient.post('/api/dc-daily/sync-async', null, { params }),
+      taskName: 'tasks.sync_dc_daily',
+    },
+    paginationMode: 'page',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      return params
+    },
+    onBackfillDate: (dateStr) => setTradeDate(new Date(dateStr + 'T00:00:00')),
   })
 
-  const handleQuery = () => {
-    loadData(1).catch(() => {})
-  }
-
+  // 自定义同步处理（弹窗有额外字段 ts_code, idx_type 等）
   const handleSync = async () => {
+    setSyncDialogOpen(false)
     try {
-      setSyncDialogOpen(false)
-
-      const params: any = {}
+      const params: Record<string, unknown> = {}
       if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
       if (syncIdxType) params.idx_type = syncIdxType
       if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
       if (syncStartDate) params.start_date = toDateStr(syncStartDate)
       if (syncEndDate) params.end_date = toDateStr(syncEndDate)
 
-      const response = await dcDailyApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: Task) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            toast.success('数据同步完成')
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('同步任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
+      await dp.handleSyncDirect(params)
     } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
+      // handleSyncDirect already handles errors via toast
     }
   }
-
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const formatPct = (value: number | null | undefined) => {
     if (value === null || value === undefined) return '-'
@@ -200,6 +95,24 @@ export default function DcDailyPage() {
 
   const formatVol = (value: number | null | undefined) =>
     value == null ? '-' : (value / 10000).toFixed(0) + '万手'
+
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      { label: '总记录数', value: (s.total_records ?? 0).toLocaleString(), icon: Database, iconColor: 'text-blue-600' },
+      { label: '板块数量', value: (s.board_count ?? 0).toLocaleString(), icon: Layers, iconColor: 'text-purple-600' },
+      { label: '交易日数', value: (s.date_count ?? 0).toLocaleString(), icon: Calendar, iconColor: 'text-orange-600' },
+      {
+        label: '平均涨跌幅',
+        value: <span className={pctChangeColor(s.avg_pct_change)}>{s.avg_pct_change != null ? formatPct(s.avg_pct_change) : '-'}</span>,
+        subValue: `最新: ${s.latest_date || '-'}`,
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+    ]
+  }, [dp.statistics])
 
   const columns: Column<DcDailyData>[] = [
     {
@@ -361,84 +274,28 @@ export default function DcDailyPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="东财概念板块行情"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">总记录数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{(statistics.total_records ?? 0).toLocaleString()}</p>
-                </div>
-                <Database className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">板块数量</p>
-                  <p className="text-xl sm:text-2xl font-bold">{(statistics.board_count ?? 0).toLocaleString()}</p>
-                </div>
-                <Layers className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">交易日数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{(statistics.date_count ?? 0).toLocaleString()}</p>
-                </div>
-                <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">平均涨跌幅</p>
-                  <p className={`text-xl sm:text-2xl font-bold ${pctChangeColor(statistics.avg_pct_change)}`}>
-                    {statistics.avg_pct_change != null ? formatPct(statistics.avg_pct_change) : '-'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    最新: {statistics.latest_date || '-'}
-                  </p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选区域 */}
       <Card>
@@ -455,7 +312,7 @@ export default function DcDailyPage() {
               <DatePicker date={tradeDate} onDateChange={setTradeDate} />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -468,31 +325,26 @@ export default function DcDailyPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             mobileCard={mobileCard}
             tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
             sort={{
-              key: sortKey,
-              direction: sortDirection,
-              onSort: (key, direction) => {
-                const newKey = direction ? key : null
-                setSortKey(newKey)
-                setSortDirection(direction)
-                loadData(1, newKey, direction)
-              }
+              key: dp.sortKey,
+              direction: dp.sortDirection,
+              onSort: dp.handleSort,
             }}
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
 
-      {/* 同步参数对话框 */}
+      {/* 同步参数对话框（自定义） */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -553,8 +405,8 @@ export default function DcDailyPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={handleSync} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />提交中...</>
               ) : '提交同步任务'}
             </Button>

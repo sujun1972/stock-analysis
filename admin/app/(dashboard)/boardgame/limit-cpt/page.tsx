@@ -1,153 +1,63 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { useDataPage } from '@/hooks/useDataPage'
 import { limitCptApi, type LimitCptData, type LimitCptStatistics } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
-import { RefreshCw, TrendingUp } from 'lucide-react'
-
-const PAGE_SIZE = 100
+import { toDateStr } from '@/lib/date-utils'
+import { RefreshCw, TrendingUp, BarChart3, Layers, Calendar } from 'lucide-react'
 
 export default function LimitCptPage() {
-  const [data, setData] = useState<LimitCptData[]>([])
-  const [statistics, setStatistics] = useState<LimitCptStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const syncing = isTaskRunning('tasks.sync_limit_cpt')
 
-  useEffect(() => {
-    loadData(1).catch(() => {})
-  }, [])
-
-  const loadData = async (
-    targetPage: number = page,
-    overrideSortKey?: string | null,
-    overrideSortDir?: 'asc' | 'desc' | null
-  ) => {
-    setIsLoading(true)
-    try {
-      const tradeDateStr = tradeDate
-        ? `${tradeDate.getFullYear()}-${String(tradeDate.getMonth() + 1).padStart(2, '0')}-${String(tradeDate.getDate()).padStart(2, '0')}`
-        : undefined
-
-      const params = {
-        trade_date: tradeDateStr,
-        page: targetPage,
-        page_size: PAGE_SIZE,
-        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
-        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined
-      }
-
-      const response = await limitCptApi.getData(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items)
-        setTotal(response.data.total)
-        setPage(targetPage)
-        if (response.data.statistics) {
-          setStatistics(response.data.statistics)
-        }
-        // 回填后端解析的实际日期（初始加载时 tradeDate 为空）
-        if (!tradeDate && response.data.trade_date) {
-          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
-        }
-      }
-    } catch (err: any) {
-      toast.error('加载数据失败', { description: err.message })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'limit_cpt',
-    syncFn: (params) => apiClient.post('/api/limit-cpt/sync-async', null, { params }),
+  const dp = useDataPage<LimitCptData, LimitCptStatistics>({
+    apiCall: (params) => limitCptApi.getData(params),
+    syncFn: (params) => limitCptApi.syncAsync(params),
     taskName: 'tasks.sync_limit_cpt',
-    onSuccess: loadData,
+    bulkOps: {
+      tableKey: 'limit_cpt',
+      syncFn: (params) => apiClient.post('/api/limit-cpt/sync-async', null, { params }),
+      taskName: 'tasks.sync_limit_cpt',
+    },
+    paginationMode: 'page',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      return params
+    },
+    onBackfillDate: (dateStr) => setTradeDate(new Date(dateStr + 'T00:00:00')),
+    syncSuccessMessage: '最强板块统计数据已更新',
   })
 
-  const handleQuery = () => {
-    loadData(1).catch(() => {})
-  }
-
-  // 异步同步
-  const handleSync = async () => {
-    try {
-      const response = await limitCptApi.syncAsync({})
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', { description: '最强板块统计数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
-
-  // 清理回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      { label: '交易天数', value: s.trading_days, icon: Calendar, iconColor: 'text-blue-600' },
+      { label: '板块数量', value: s.concept_count, icon: Layers, iconColor: 'text-green-600' },
+      {
+        label: '平均涨停家数',
+        value: <span className="text-red-600">{s.avg_up_nums?.toFixed(2) || 0}家</span>,
+        icon: BarChart3,
+        iconColor: 'text-red-600',
+      },
+      {
+        label: '最大涨停家数',
+        value: <span className="text-red-600">{s.max_up_nums || 0}家</span>,
+        icon: TrendingUp,
+        iconColor: 'text-orange-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<LimitCptData>[] = useMemo(() => [
@@ -308,86 +218,28 @@ export default function LimitCptPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
+            <Button onClick={() => dp.handleSyncDirect({})} disabled={dp.syncing}>
+              {dp.syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="最强板块统计"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">交易天数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.trading_days}</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">板块数量</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.concept_count}</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">平均涨停家数</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">
-                    {statistics.avg_up_nums?.toFixed(2) || 0}家
-                  </p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-red-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大涨停家数</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">
-                    {statistics.max_up_nums || 0}家
-                  </p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选区 */}
       <Card>
@@ -401,7 +253,7 @@ export default function LimitCptPage() {
               <DatePicker date={tradeDate} onDateChange={setTradeDate} />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -410,56 +262,28 @@ export default function LimitCptPage() {
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">最强板块统计</h3>
-          </div>
-          <div className="divide-y">
-            {!isLoading && data.map((item, index) => (
-              <div
-                key={index}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-          {isLoading && <div className="p-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" /></div>}
-          {!isLoading && data.length === 0 && <div className="p-8 text-center text-muted-foreground">暂无数据</div>}
-        </div>
-
-        {/* 桌面端 */}
-        <div className="hidden sm:block">
+      <Card>
+        <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
+            mobileCard={mobileCard}
             emptyMessage="暂无数据"
             tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
             sort={{
-              key: sortKey,
-              direction: sortDirection,
-              onSort: (key, direction) => {
-                const newKey = direction ? key : null
-                setSortKey(newKey)
-                setSortDirection(direction)
-                loadData(1, newKey, direction)
-              }
+              key: dp.sortKey,
+              direction: dp.sortDirection,
+              onSort: dp.handleSort,
             }}
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
-        </div>
+        </CardContent>
       </Card>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -8,24 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { useDataPage } from '@/hooks/useDataPage'
 import { marginSecsApi } from '@/lib/api'
 import type { MarginSecsItem, MarginSecsStatistics } from '@/lib/api/margin-secs'
 import { apiClient } from '@/lib/api-client'
+import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useSystemConfig } from '@/contexts'
-import { toast } from 'sonner'
 import { RefreshCw, BarChart3, TrendingUp, Building2, CalendarDays } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // 交易所常量
@@ -48,33 +41,14 @@ const EXCHANGE_COLORS: Record<string, string> = {
   BSE: '#ffc658',
 }
 
-const PAGE_SIZE = 100
-
 export default function MarginSecsPage() {
-  const [data, setData] = useState<MarginSecsItem[]>([])
-  const [statistics, setStatistics] = useState<MarginSecsStatistics | null>(null)
-  const [exchangeDistribution, setExchangeDistribution] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-
-  // 筛选状态
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [exchange, setExchange] = useState('ALL')
+  const [exchangeDistribution, setExchangeDistribution] = useState<any[]>([])
 
-  // 同步弹窗
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const { config } = useSystemConfig()
 
-  // 从 task store 实时派生——不用本地 useState
-  const syncing = isTaskRunning('extended.sync_margin_secs') || isTaskRunning('tasks.sync_margin_secs_full_history')
-
-  // 判断是否为股票（ETF/基金/债券不跳转）
-  // 5xxxxx = 上海ETF/基金，1xxxxx = 深圳ETF/基金，821xxx = 北交所债券
   const isStock = (tsCode: string) => {
     const code = tsCode.split('.')[0]
     return !code.startsWith('5') && !code.startsWith('1') && !code.startsWith('821')
@@ -87,42 +61,27 @@ export default function MarginSecsPage() {
     window.open(url.replace('{code}', formatStockCode(tsCode)), '_blank')
   }
 
-  // 时区安全的日期字符串构建
-  const toDateStr = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  // 加载主数据
-  const loadData = async (targetPage: number = page) => {
-    setIsLoading(true)
-    try {
-      const params: any = {
-        page: targetPage,
-        page_size: PAGE_SIZE,
-      }
+  const dp = useDataPage<MarginSecsItem, MarginSecsStatistics>({
+    apiCall: (params) => marginSecsApi.getMarginSecs(params),
+    syncFn: () => marginSecsApi.syncMarginSecsAsync(),
+    taskName: ['extended.sync_margin_secs', 'tasks.sync_margin_secs_full_history'],
+    bulkOps: {
+      tableKey: 'margin_secs',
+      syncFn: (params) => apiClient.post('/api/margin-secs/sync-full-history', null, { params }),
+      taskName: 'tasks.sync_margin_secs_full_history',
+    },
+    paginationMode: 'page',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (tradeDate) params.trade_date = toDateStr(tradeDate)
       if (tsCode) params.ts_code = tsCode
       if (exchange && exchange !== 'ALL') params.exchange = exchange
-
-      const response = await marginSecsApi.getMarginSecs(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics || null)
-        setTotal(response.data.total || 0)
-        setPage(targetPage)
-        // 回填后端解析的实际日期
-        if (!tradeDate && response.data.trade_date) {
-          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
-        }
-      } else {
-        toast.error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      toast.error(err.message || '加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+      return params
+    },
+    onBackfillDate: (dateStr) => setTradeDate(new Date(dateStr + 'T00:00:00')),
+    syncSuccessMessage: '融资融券标的数据已更新',
+  })
 
   // 加载交易所分布图表（独立，不阻断主流程）
   const loadExchangeDistribution = async () => {
@@ -136,88 +95,22 @@ export default function MarginSecsPage() {
     }
   }
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'margin_secs',
-    syncFn: (params) => apiClient.post('/api/margin-secs/sync-full-history', null, { params }),
-    taskName: 'tasks.sync_margin_secs_full_history',
-    onSuccess: loadData,
-  })
-
-  // 初始加载：只跑一次
   useEffect(() => {
-    loadData(1).catch(() => {})
     loadExchangeDistribution().catch(() => {})
   }, [])
 
-  const handleQuery = () => {
-    loadData(1).catch(() => {})
-  }
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      { label: '标的数量', value: `${s.unique_stocks ?? 0} 只`, subValue: '当日不重复标的数', icon: BarChart3, iconColor: 'text-blue-600' },
+      { label: '总记录数', value: (s.total_count ?? 0).toLocaleString(), subValue: '当前筛选范围内', icon: TrendingUp, iconColor: 'text-orange-600' },
+      { label: '交易所数', value: `${s.exchange_count ?? 0} 个`, subValue: '涵盖交易所数量', icon: Building2, iconColor: 'text-green-600' },
+      { label: '数据天数', value: `${s.trading_days ?? 0} 天`, subValue: '数据覆盖交易日数', icon: CalendarDays, iconColor: 'text-purple-600' },
+    ]
+  }, [dp.statistics])
 
-  // 同步确认
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      // 不传日期参数，由后端从 sync_configs 自动计算
-      const response = await marginSecsApi.syncMarginSecsAsync()
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now(),
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            loadExchangeDistribution().catch(() => {})
-            toast.success('数据同步完成', { description: '融资融券标的数据已更新' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-        toast.success(response.message || '同步任务已提交')
-      } else {
-        toast.error(response.message || '提交同步任务失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
-
-  // 组件卸载清理
-  useEffect(() => {
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
-
-  // 表格列定义
   const columns: Column<MarginSecsItem>[] = [
     {
       key: 'name',
@@ -249,7 +142,6 @@ export default function MarginSecsPage() {
     },
   ]
 
-  // 移动端卡片视图
   const mobileCard = (item: MarginSecsItem) => (
     <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
       <div className="flex justify-between items-start">
@@ -281,83 +173,37 @@ export default function MarginSecsPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="融资融券标的"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 — 左文字右图标 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">标的数量</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.unique_stocks ?? 0} 只</p>
-                  <p className="text-xs text-gray-400 mt-0.5">当日不重复标的数</p>
-                </div>
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步融资融券标的"
+        description="将从 Tushare 增量同步最新融资融券标的数据，无需选择日期。"
+        disabled={dp.syncing}
+      />
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">总记录数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{(statistics.total_count ?? 0).toLocaleString()}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">当前筛选范围内</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">交易所数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.exchange_count ?? 0} 个</p>
-                  <p className="text-xs text-gray-400 mt-0.5">涵盖交易所数量</p>
-                </div>
-                <Building2 className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">数据天数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.trading_days ?? 0} 天</p>
-                  <p className="text-xs text-gray-400 mt-0.5">数据覆盖交易日数</p>
-                </div>
-                <CalendarDays className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 交易所分布图表 */}
       {exchangeDistribution.length > 0 && (
@@ -432,7 +278,7 @@ export default function MarginSecsPage() {
               <DatePicker date={tradeDate} onDateChange={setTradeDate} />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -445,41 +291,19 @@ export default function MarginSecsPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             mobileCard={mobileCard}
             emptyMessage="暂无融资融券标的数据"
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage),
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
-
-      {/* 同步日期选择弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步融资融券标的</DialogTitle>
-            <DialogDescription>
-              将从 Tushare 增量同步最新融资融券标的数据，无需选择日期。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>
-              {syncing ? (
-                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-              ) : '确认同步'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

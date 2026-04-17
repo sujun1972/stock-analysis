@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,155 +8,51 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-
-import { toast } from 'sonner'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { useDataPage } from '@/hooks/useDataPage'
 import { limitListApi, type LimitListData, type LimitListStatistics } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
+import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
-import { useTaskStore } from '@/stores/task-store'
 import { useSystemConfig } from '@/contexts'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { TrendingUp, TrendingDown, Zap, BarChart3, ListFilter, RefreshCw, Layers } from 'lucide-react'
 
-const PAGE_SIZE = 50
+// ============== 页面组件 ==============
 
 export default function LimitListPage() {
-  const [data, setData] = useState<LimitListData[]>([])
-  const [statistics, setStatistics] = useState<LimitListStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [limitType, setLimitType] = useState<string>('ALL')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
-
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const syncing = isTaskRunning('tasks.sync_limit_list')
   const { config } = useSystemConfig()
 
-  const openStockAnalysis = (tsCode: string) => {
+  const openStockAnalysis = (code: string) => {
     const url = config?.stock_analysis_url
     if (!url) return
-    window.open(url.replace('{code}', formatStockCode(tsCode)), '_blank')
+    window.open(url.replace('{code}', formatStockCode(code)), '_blank')
   }
 
-  useEffect(() => {
-    loadData(1).catch(() => {})
-  }, [])
-
-  const buildDateStr = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-  const loadData = async (
-    targetPage: number = page,
-    overrideSortKey?: string | null,
-    overrideSortDir?: 'asc' | 'desc' | null
-  ) => {
-    setIsLoading(true)
-    try {
-      const tradeDateStr = tradeDate ? buildDateStr(tradeDate) : undefined
-
-      const params = {
-        trade_date: tradeDateStr,
-        ts_code: tsCode.trim() || undefined,
-        limit_type: limitType !== 'ALL' ? limitType : undefined,
-        page: targetPage,
-        page_size: PAGE_SIZE,
-        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
-        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined
-      }
-
-      const response = await limitListApi.getData(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items)
-        setTotal(response.data.total)
-        setStatistics(response.data.statistics)
-        setPage(targetPage)
-        // 回填后端解析的实际日期（初始加载时 tradeDate 为空）
-        if (!tradeDate && response.data.trade_date) {
-          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || '加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'limit_list',
-    syncFn: (params) => apiClient.post('/api/limit-list/sync-async', null, { params }),
+  const dp = useDataPage<LimitListData, LimitListStatistics>({
+    apiCall: (params) => limitListApi.getData(params),
+    syncFn: (params) => limitListApi.syncAsync(params),
     taskName: 'tasks.sync_limit_list',
-    onSuccess: loadData,
+    bulkOps: {
+      tableKey: 'limit_list',
+      syncFn: (params) => apiClient.post('/api/limit-list/sync-async', null, { params }),
+      taskName: 'tasks.sync_limit_list',
+    },
+    paginationMode: 'page',
+    pageSize: 50,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      if (tsCode.trim()) params.ts_code = tsCode.trim()
+      if (limitType !== 'ALL') params.limit_type = limitType
+      return params
+    },
+    onBackfillDate: (dateStr) => setTradeDate(new Date(dateStr + 'T00:00:00')),
+    syncSuccessMessage: '涨跌停列表数据同步完成',
   })
-
-  const handleQuery = () => {
-    loadData(1).catch(() => {})
-  }
-
-  const handleSync = async () => {
-    try {
-      const response = await limitListApi.syncAsync({})
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            toast.success('数据同步完成')
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-        toast.success(response.message || '同步任务已提交')
-      } else {
-        toast.error(response.message || '提交同步任务失败')
-      }
-    } catch (error: any) {
-      toast.error(error.message || '提交同步任务失败')
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
 
   // 涨跌停类型色彩
   const limitTypeColor = (type: string | null) => {
@@ -165,6 +61,42 @@ export default function LimitListPage() {
     if (type === 'Z') return 'text-orange-500'
     return ''
   }
+
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '总记录数',
+        value: s.total_count.toLocaleString(),
+        subValue: `交易天数: ${s.trade_days}`,
+        icon: BarChart3,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '涉及股票',
+        value: s.stock_count.toLocaleString(),
+        subValue: `均涨跌幅: ${s.avg_pct_chg?.toFixed(2)}%`,
+        icon: Layers,
+        iconColor: 'text-purple-600',
+      },
+      {
+        label: '最大连板数',
+        value: <span className="text-red-600">{s.max_limit_times}</span>,
+        subValue: `均连板: ${s.avg_limit_times?.toFixed(1)}`,
+        icon: TrendingUp,
+        iconColor: 'text-red-600',
+      },
+      {
+        label: '最大涨跌幅',
+        value: <span className="text-red-600">+{s.max_pct_chg?.toFixed(2)}%</span>,
+        subValue: `本页条数: ${dp.data.length}`,
+        icon: TrendingDown,
+        iconColor: 'text-orange-600',
+      },
+    ]
+  }, [dp.statistics, dp.data.length])
 
   const columns: Column<LimitListData>[] = [
     {
@@ -207,61 +139,14 @@ export default function LimitListPage() {
       width: 90,
       cellClassName: 'text-right whitespace-nowrap'
     },
-    {
-      key: 'limit_times',
-      header: '连板',
-      accessor: (row) => row.limit_times ?? '-',
-      width: 60,
-      cellClassName: 'text-right font-semibold text-red-600'
-    },
-    {
-      key: 'open_times',
-      header: '炸板次数',
-      accessor: (row) => row.open_times !== null ? row.open_times : '-',
-      width: 80,
-      cellClassName: 'text-right'
-    },
-    {
-      key: 'first_time',
-      header: '首封',
-      accessor: (row) => row.first_time || '-',
-      width: 80,
-      cellClassName: 'whitespace-nowrap'
-    },
-    {
-      key: 'last_time',
-      header: '最后封板',
-      accessor: (row) => row.last_time || '-',
-      width: 80,
-      cellClassName: 'whitespace-nowrap'
-    },
-    {
-      key: 'close',
-      header: '收盘价',
-      accessor: (row) => row.close?.toFixed(2) ?? '-',
-      width: 80,
-      cellClassName: 'text-right whitespace-nowrap'
-    },
-    {
-      key: 'amount',
-      header: '成交额(万)',
-      accessor: (row) => row.amount ? (row.amount / 10000).toFixed(0) : '-',
-      width: 100,
-      cellClassName: 'text-right whitespace-nowrap'
-    },
-    {
-      key: 'turnover_ratio',
-      header: '换手率%',
-      accessor: (row) => row.turnover_ratio ? row.turnover_ratio.toFixed(2) + '%' : '-',
-      width: 90,
-      cellClassName: 'text-right whitespace-nowrap'
-    },
-    {
-      key: 'industry',
-      header: '行业',
-      accessor: (row) => row.industry || '-',
-      cellClassName: 'whitespace-nowrap'
-    },
+    { key: 'limit_times', header: '连板', accessor: (row) => row.limit_times ?? '-', width: 60, cellClassName: 'text-right font-semibold text-red-600' },
+    { key: 'open_times', header: '炸板次数', accessor: (row) => row.open_times !== null ? row.open_times : '-', width: 80, cellClassName: 'text-right' },
+    { key: 'first_time', header: '首封', accessor: (row) => row.first_time || '-', width: 80, cellClassName: 'whitespace-nowrap' },
+    { key: 'last_time', header: '最后封板', accessor: (row) => row.last_time || '-', width: 80, cellClassName: 'whitespace-nowrap' },
+    { key: 'close', header: '收盘价', accessor: (row) => row.close?.toFixed(2) ?? '-', width: 80, cellClassName: 'text-right whitespace-nowrap' },
+    { key: 'amount', header: '成交额(万)', accessor: (row) => row.amount ? (row.amount / 10000).toFixed(0) : '-', width: 100, cellClassName: 'text-right whitespace-nowrap' },
+    { key: 'turnover_ratio', header: '换手率%', accessor: (row) => row.turnover_ratio ? row.turnover_ratio.toFixed(2) + '%' : '-', width: 90, cellClassName: 'text-right whitespace-nowrap' },
+    { key: 'industry', header: '行业', accessor: (row) => row.industry || '-', cellClassName: 'whitespace-nowrap' },
   ]
 
   const mobileCard = (item: LimitListData) => (
@@ -327,80 +212,28 @@ export default function LimitListPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.handleSyncDirect({})} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="涨跌停列表"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">总记录数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_count.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">交易天数: {statistics.trade_days}</p>
-                </div>
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">涉及股票</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.stock_count.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">均涨跌幅: {statistics.avg_pct_chg?.toFixed(2)}%</p>
-                </div>
-                <Layers className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大连板数</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">{statistics.max_limit_times}</p>
-                  <p className="text-xs text-muted-foreground">均连板: {statistics.avg_limit_times?.toFixed(1)}</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-red-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大涨跌幅</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">+{statistics.max_pct_chg?.toFixed(2)}%</p>
-                  <p className="text-xs text-muted-foreground">本页条数: {data.length}</p>
-                </div>
-                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选和操作区域 */}
       <Card>
@@ -419,9 +252,7 @@ export default function LimitListPage() {
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">涨跌停类型</label>
               <Select value={limitType} onValueChange={setLimitType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="全部" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">全部</SelectItem>
                   <SelectItem value="U">涨停</SelectItem>
@@ -432,14 +263,10 @@ export default function LimitListPage() {
             </div>
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">股票代码</label>
-              <Input
-                placeholder="如 000001 或 000001.SZ"
-                value={tsCode}
-                onChange={(e) => setTsCode(e.target.value)}
-              />
+              <Input placeholder="如 000001 或 000001.SZ" value={tsCode} onChange={(e) => setTsCode(e.target.value)} />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -452,25 +279,20 @@ export default function LimitListPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             mobileCard={mobileCard}
             tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
             sort={{
-              key: sortKey,
-              direction: sortDirection,
-              onSort: (key, direction) => {
-                const newKey = direction ? key : null
-                setSortKey(newKey)
-                setSortDirection(direction)
-                loadData(1, newKey, direction)
-              }
+              key: dp.sortKey,
+              direction: dp.sortDirection,
+              onSort: dp.handleSort,
             }}
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>

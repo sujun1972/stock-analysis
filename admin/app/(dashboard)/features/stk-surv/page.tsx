@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -9,165 +9,101 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
 import { stkSurvApi, type StkSurvData, type StkSurvStatistics } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
 import { RefreshCw, FileText, Building2, Calendar, Users } from 'lucide-react'
 
-const toDateStr = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
 export default function StkSurvPage() {
-  const [data, setData] = useState<StkSurvData[]>([])
-  const [statistics, setStatistics] = useState<StkSurvStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  // 查询筛选状态
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [receMode, setReceMode] = useState('')
   const [orgType, setOrgType] = useState('')
 
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 同步对话框状态
-  const [showSyncDialog, setShowSyncDialog] = useState(false)
+  // 同步弹窗额外字段
   const [syncTsCode, setSyncTsCode] = useState('')
   const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-
-  // 从 task store 实时派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_stk_surv')
-
-  const loadData = useCallback(async (targetPage: number = 1) => {
-    try {
-      setIsLoading(true)
-
-      const params: any = {
-        page: targetPage,
-        page_size: pageSize
-      }
+  const dp = useDataPage<StkSurvData, StkSurvStatistics>({
+    apiCall: (params) => stkSurvApi.getData(params),
+    syncFn: (params) => stkSurvApi.syncAsync(params),
+    taskName: 'tasks.sync_stk_surv',
+    bulkOps: {
+      tableKey: 'stk_surv',
+      syncFn: (params) => apiClient.post('/api/stk-surv/sync-async', null, { params }),
+      taskName: 'tasks.sync_stk_surv',
+    },
+    paginationMode: 'page',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (receMode) params.rece_mode = receMode
       if (orgType) params.org_type = orgType
-
-      const response = await stkSurvApi.getData(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics || null)
-        setTotal(response.data.total || 0)
-        setPage(targetPage)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      toast.error('加载失败', { description: err.message || '加载数据失败' })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [startDate, endDate, tsCode, receMode, orgType, pageSize])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'stk_surv',
-    syncFn: (params) => apiClient.post('/api/stk-surv/sync-async', null, { params }),
-    taskName: 'tasks.sync_stk_surv',
-    onSuccess: loadData,
+      return params
+    },
+    syncSuccessMessage: '机构调研数据同步完成',
   })
 
-  useEffect(() => {
-    loadData(1).catch(() => {})
-  }, [])
-
-  // 组件卸载时清理回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleSyncConfirm = async () => {
-    setShowSyncDialog(false)
-
-    try {
-      const params: any = {}
-      if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
-      if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await stkSurvApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            toast.success('数据同步完成', { description: '机构调研数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
+  // 覆盖同步确认：需要额外传 syncTsCode / syncTradeDate
+  const handleCustomSyncConfirm = async () => {
+    dp.setSyncDialogOpen(false)
+    const params: Record<string, unknown> = {}
+    if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
+    if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
+    if (dp.syncStartDate) params.start_date = toDateStr(dp.syncStartDate)
+    if (dp.syncEndDate) params.end_date = toDateStr(dp.syncEndDate)
+    await dp.handleSyncDirect(params)
   }
 
   const truncateText = (text: string | null | undefined, maxLength: number = 30): string => {
     if (!text) return '-'
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
   }
+
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '总记录数',
+        value: s.total_records.toLocaleString(),
+        subValue: '条调研记录',
+        icon: FileText,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '股票数',
+        value: s.unique_stocks.toLocaleString(),
+        subValue: '个上市公司',
+        icon: Building2,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '调研日期数',
+        value: s.unique_dates.toLocaleString(),
+        subValue: '天',
+        icon: Calendar,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '机构类型数',
+        value: s.unique_org_types.toLocaleString(),
+        subValue: '种机构类型',
+        icon: Users,
+        iconColor: 'text-muted-foreground',
+      },
+    ]
+  }, [dp.statistics])
 
   const columns: Column<StkSurvData>[] = useMemo(() => [
     {
@@ -279,83 +215,28 @@ export default function StkSurvPage() {
         }
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setShowSyncDialog(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="机构调研"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">总记录数</p>
-                  <p className="text-2xl font-bold mt-1">{statistics.total_records.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-1">条调研记录</p>
-                </div>
-                <FileText className="h-8 w-8 text-muted-foreground shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">股票数</p>
-                  <p className="text-2xl font-bold mt-1">{statistics.unique_stocks.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-1">个上市公司</p>
-                </div>
-                <Building2 className="h-8 w-8 text-muted-foreground shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">调研日期数</p>
-                  <p className="text-2xl font-bold mt-1">{statistics.unique_dates.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-1">天</p>
-                </div>
-                <Calendar className="h-8 w-8 text-muted-foreground shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">机构类型数</p>
-                  <p className="text-2xl font-bold mt-1">{statistics.unique_org_types.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-1">种机构类型</p>
-                </div>
-                <Users className="h-8 w-8 text-muted-foreground shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选区域 */}
       <Card>
@@ -410,8 +291,8 @@ export default function StkSurvPage() {
                 <Label className="mb-2 block">结束日期</Label>
                 <DatePicker date={endDate} onDateChange={setEndDate} />
               </div>
-              <Button onClick={() => loadData(1)} disabled={isLoading} className="w-full sm:w-auto">
-                {isLoading ? '查询中...' : '查询'}
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="w-full sm:w-auto">
+                {dp.isLoading ? '查询中...' : '查询'}
               </Button>
             </div>
           </div>
@@ -423,76 +304,61 @@ export default function StkSurvPage() {
         <CardContent className="p-0">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无数据"
             mobileCard={mobileCard}
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => loadData(newPage),
-              onPageSizeChange: () => {},
-              pageSizeOptions: [30]
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
 
       {/* 同步对话框 */}
-      <Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
-        <DialogContent className="sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle>同步机构调研数据</DialogTitle>
-            <DialogDescription>
-              所有参数均为可选，不填写参数将同步最新数据
-            </DialogDescription>
-          </DialogHeader>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={handleCustomSyncConfirm}
+        title="同步机构调研数据"
+        description="所有参数均为可选，不填写参数将同步最新数据"
+        disabled={dp.syncing}
+      >
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="sync-ts-code">股票代码</Label>
+            <Input
+              id="sync-ts-code"
+              placeholder="如：000001.SZ"
+              value={syncTsCode}
+              onChange={(e) => setSyncTsCode(e.target.value)}
+            />
+          </div>
 
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="sync-ts-code">股票代码</Label>
-              <Input
-                id="sync-ts-code"
-                placeholder="如：000001.SZ"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value)}
-              />
-            </div>
+          <div className="grid gap-2">
+            <Label>调研日期</Label>
+            <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择调研日期" />
+          </div>
 
-            <div className="grid gap-2">
-              <Label>调研日期</Label>
-              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择调研日期" />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>日期范围（可选）</Label>
-              <div className="flex gap-2 items-center">
-                <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="开始日期" />
-                <span className="text-muted-foreground">至</span>
-                <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="结束日期" />
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 border border-amber-200 dark:border-amber-800">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>注意：</strong>此接口消耗 5000 积分，单次最大返回 100 条数据。
-              </p>
+          <div className="grid gap-2">
+            <Label>日期范围（可选）</Label>
+            <div className="flex gap-2 items-center">
+              <DatePicker date={dp.syncStartDate} onDateChange={dp.setSyncStartDate} placeholder="开始日期" />
+              <span className="text-muted-foreground">至</span>
+              <DatePicker date={dp.syncEndDate} onDateChange={dp.setSyncEndDate} placeholder="结束日期" />
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSyncDialog(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>
-              {syncing ? (
-                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-              ) : (
-                <><RefreshCw className="h-4 w-4 mr-1" />开始同步</>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 border border-amber-200 dark:border-amber-800">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              <strong>注意：</strong>此接口消耗 5000 积分，单次最大返回 100 条数据。
+            </p>
+          </div>
+        </div>
+      </SyncDialog>
     </div>
   )
 }

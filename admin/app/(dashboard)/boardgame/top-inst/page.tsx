@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,160 +8,52 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-
-import { toast } from 'sonner'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { useDataPage } from '@/hooks/useDataPage'
 import { topInstApi, type TopInstItem, type TopInstStatistics } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
+import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
-import { useTaskStore } from '@/stores/task-store'
 import { useSystemConfig } from '@/contexts'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { TrendingUp, TrendingDown, BarChart3, ListFilter, RefreshCw, Building2 } from 'lucide-react'
 
-const PAGE_SIZE = 100
+// ============== 页面组件 ==============
 
 export default function TopInstPage() {
-  const [data, setData] = useState<TopInstItem[]>([])
-  const [statistics, setStatistics] = useState<TopInstStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [side, setSide] = useState<string>('ALL')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
-
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const syncing = isTaskRunning('tasks.sync_top_inst')
   const { config } = useSystemConfig()
 
-  const openStockAnalysis = (tsCode: string) => {
+  const openStockAnalysis = (code: string) => {
     const url = config?.stock_analysis_url
     if (!url) return
-    window.open(url.replace('{code}', formatStockCode(tsCode)), '_blank')
+    window.open(url.replace('{code}', formatStockCode(code)), '_blank')
   }
 
-  useEffect(() => {
-    loadData(1).catch(() => {})
-  }, [])
-
-  const loadData = async (
-    targetPage: number = page,
-    overrideSortKey?: string | null,
-    overrideSortDir?: 'asc' | 'desc' | null
-  ) => {
-    setIsLoading(true)
-    try {
-      const tradeDateStr = tradeDate
-        ? `${tradeDate.getFullYear()}-${String(tradeDate.getMonth() + 1).padStart(2, '0')}-${String(tradeDate.getDate()).padStart(2, '0')}`
-        : undefined
-
-      const params = {
-        trade_date: tradeDateStr,
-        ts_code: tsCode.trim() || undefined,
-        side: side !== 'ALL' ? side : undefined,
-        page: targetPage,
-        page_size: PAGE_SIZE,
-        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
-        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined
-      }
-
-      const [dataResponse, statsResponse] = await Promise.all([
-        topInstApi.getTopInst(params),
-        topInstApi.getStatistics({ trade_date: tradeDateStr, ts_code: params.ts_code })
-      ])
-
-      if (dataResponse.code === 200 && dataResponse.data) {
-        setData(dataResponse.data.items)
-        setTotal(dataResponse.data.total)
-        setPage(targetPage)
-        // 回填后端解析的实际日期（初始加载时 tradeDate 为空）
-        if (!tradeDate && dataResponse.data.trade_date) {
-          setTradeDate(new Date(dataResponse.data.trade_date + 'T00:00:00'))
-        }
-      }
-
-      if (statsResponse.code === 200 && statsResponse.data) {
-        setStatistics(statsResponse.data)
-      }
-    } catch (error: any) {
-      toast.error(error.message || '加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'top_inst',
-    syncFn: (params) => apiClient.post('/api/top-inst/sync-async', null, { params }),
+  const dp = useDataPage<TopInstItem, TopInstStatistics>({
+    apiCall: (params) => topInstApi.getTopInst(params),
+    statisticsCall: (params) => topInstApi.getStatistics(params),
+    syncFn: (params) => topInstApi.syncAsync(params),
     taskName: 'tasks.sync_top_inst',
-    onSuccess: loadData,
+    bulkOps: {
+      tableKey: 'top_inst',
+      syncFn: (params) => apiClient.post('/api/top-inst/sync-async', null, { params }),
+      taskName: 'tasks.sync_top_inst',
+    },
+    paginationMode: 'page',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
+      if (tsCode.trim()) params.ts_code = tsCode.trim()
+      if (side !== 'ALL') params.side = side
+      return params
+    },
+    onBackfillDate: (dateStr) => setTradeDate(new Date(dateStr + 'T00:00:00')),
+    syncSuccessMessage: '龙虎榜机构明细数据同步完成',
   })
-
-  const handleQuery = () => {
-    loadData(1).catch(() => {})
-  }
-
-  const handleSync = async () => {
-    try {
-      const response = await topInstApi.syncAsync({})
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            toast.success('数据同步完成')
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-        toast.success(response.message || '同步任务已提交')
-      } else {
-        toast.error(response.message || '提交同步任务失败')
-      }
-    } catch (error: any) {
-      toast.error(error.message || '提交同步任务失败')
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
 
   // Service 已将金额从元转为万元，÷10000 转为亿元显示
   const formatYi = (val: number | null | undefined) => {
@@ -169,8 +61,43 @@ export default function TopInstPage() {
     return (val / 10000).toFixed(2) + '亿'
   }
 
-  // 买入红色，卖出绿色
-  const sideColor = (side: string) => side === '0' ? 'text-red-600' : 'text-green-600'
+  const sideColor = (s: string) => s === '0' ? 'text-red-600' : 'text-green-600'
+
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '上榜营业部',
+        value: s.exalter_count,
+        subValue: `总记录: ${s.total_records}`,
+        icon: Building2,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '上榜股票数',
+        value: s.stock_count,
+        subValue: `交易天数: ${s.trading_days}`,
+        icon: BarChart3,
+        iconColor: 'text-purple-600',
+      },
+      {
+        label: '累计净买入',
+        value: <span className="text-red-600">{formatYi(s.total_net_buy)}</span>,
+        subValue: `均值: ${formatYi(s.avg_net_buy)}`,
+        icon: TrendingUp,
+        iconColor: 'text-red-600',
+      },
+      {
+        label: '最大净买入',
+        value: <span className="text-red-600">+{formatYi(s.max_net_buy)}</span>,
+        subValue: `累计净卖出: ${formatYi(Math.abs(s.total_net_sell))}`,
+        icon: TrendingDown,
+        iconColor: 'text-orange-600',
+      },
+    ]
+  }, [dp.statistics])
 
   const columns: Column<TopInstItem>[] = [
     {
@@ -211,11 +138,7 @@ export default function TopInstPage() {
     {
       key: 'buy',
       header: '买入额',
-      accessor: (row) => (
-        <span className="text-red-600">
-          {formatYi(row.buy)}
-        </span>
-      ),
+      accessor: (row) => <span className="text-red-600">{formatYi(row.buy)}</span>,
       width: 110,
       sortable: true,
       cellClassName: 'text-right whitespace-nowrap'
@@ -223,11 +146,7 @@ export default function TopInstPage() {
     {
       key: 'sell',
       header: '卖出额',
-      accessor: (row) => (
-        <span className="text-green-600">
-          {formatYi(row.sell)}
-        </span>
-      ),
+      accessor: (row) => <span className="text-green-600">{formatYi(row.sell)}</span>,
       width: 110,
       sortable: true,
       cellClassName: 'text-right whitespace-nowrap'
@@ -237,10 +156,9 @@ export default function TopInstPage() {
       header: '净成交额',
       accessor: (row) => {
         if (row.net_buy === null) return '-'
-        const value = row.net_buy
         return (
-          <span className={value >= 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
-            {value >= 0 ? '+' : ''}{formatYi(value)}
+          <span className={row.net_buy >= 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+            {row.net_buy >= 0 ? '+' : ''}{formatYi(row.net_buy)}
           </span>
         )
       },
@@ -276,7 +194,6 @@ export default function TopInstPage() {
     }
   ]
 
-  // 移动端卡片视图
   const mobileCard = (item: TopInstItem) => (
     <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
       <div className="flex justify-between items-start mb-2">
@@ -330,97 +247,28 @@ export default function TopInstPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
+            <Button onClick={() => dp.handleSyncDirect({})} disabled={dp.syncing}>
+              {dp.syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="龙虎榜机构明细"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">上榜营业部</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.exalter_count}</p>
-                  <p className="text-xs text-muted-foreground">总记录: {statistics.total_records}</p>
-                </div>
-                <Building2 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">上榜股票数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.stock_count}</p>
-                  <p className="text-xs text-muted-foreground">交易天数: {statistics.trading_days}</p>
-                </div>
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">累计净买入</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">
-                    {formatYi(statistics.total_net_buy)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    均值: {formatYi(statistics.avg_net_buy)}
-                  </p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-red-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大净买入</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">
-                    +{formatYi(statistics.max_net_buy)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    累计净卖出: {formatYi(Math.abs(statistics.total_net_sell))}
-                  </p>
-                </div>
-                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选和操作区域 */}
       <Card>
@@ -438,18 +286,12 @@ export default function TopInstPage() {
             </div>
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">股票代码</label>
-              <Input
-                placeholder="如 000001 或 000001.SZ"
-                value={tsCode}
-                onChange={(e) => setTsCode(e.target.value)}
-              />
+              <Input placeholder="如 000001 或 000001.SZ" value={tsCode} onChange={(e) => setTsCode(e.target.value)} />
             </div>
             <div className="flex-1 w-full sm:w-auto">
               <label className="text-sm font-medium mb-1 block">买卖类型</label>
               <Select value={side} onValueChange={setSide}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="全部" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">全部</SelectItem>
                   <SelectItem value="0">买入</SelectItem>
@@ -458,7 +300,7 @@ export default function TopInstPage() {
               </Select>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -471,25 +313,20 @@ export default function TopInstPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             mobileCard={mobileCard}
             tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
             sort={{
-              key: sortKey,
-              direction: sortDirection,
-              onSort: (key, direction) => {
-                const newKey = direction ? key : null
-                setSortKey(newKey)
-                setSortDirection(direction)
-                loadData(1, newKey, direction)
-              }
+              key: dp.sortKey,
+              direction: dp.sortDirection,
+              onSort: dp.handleSort,
             }}
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>

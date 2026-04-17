@@ -1,177 +1,107 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
-import { DataTable, Column } from '@/components/common/DataTable'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { financialDataApi, type FinaIndicatorData, type FinaIndicatorStatistics } from '@/lib/api/financial-data'
-import { useTaskStore } from '@/stores/task-store'
-import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, Percent, PieChart, Activity } from 'lucide-react'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
+import { financialDataApi } from '@/lib/api/financial-data'
+import type { FinaIndicatorData, FinaIndicatorStatistics } from '@/lib/api/financial-data'
+import { toDateStr } from '@/lib/date-utils'
+import { RefreshCw, TrendingUp, Percent, PieChart, Activity } from 'lucide-react'
 
-const toDateStr = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// ============== 工具函数 ==============
+
+const formatDate8 = (dateStr: string) => {
+  if (!dateStr || dateStr.length !== 8) return dateStr
+  return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+}
+
+const formatNumber = (value: number | null | undefined, decimals: number = 2) => {
+  if (value === null || value === undefined) return '-'
+  return value.toFixed(decimals)
+}
+
+const formatPercent = (value: number | null | undefined, decimals: number = 2) => {
+  if (value === null || value === undefined) return '-'
+  return `${value.toFixed(decimals)}%`
+}
+
+// ============== 页面组件 ==============
 
 export default function FinaIndicatorPage() {
-  const [data, setData] = useState<FinaIndicatorData[]>([])
-  const [statistics, setStatistics] = useState<FinaIndicatorStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // 查询参数
+  // 查询筛选状态
   const [tsCode, setTsCode] = useState('')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [period, setPeriod] = useState<Date | undefined>(undefined)
 
-  // 分页
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 同步弹窗状态
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  const syncing = isTaskRunning('tasks.sync_fina_indicator') || isTaskRunning('tasks.sync_fina_indicator_full_history')
-
-  // 加载数据
-  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const response = await financialDataApi.getFinaIndicator({
-        ts_code: tsCode || undefined,
-        start_date: startDate ? toDateStr(startDate) : undefined,
-        end_date: endDate ? toDateStr(endDate) : undefined,
-        period: period ? toDateStr(period) : undefined,
-        limit: currentPageSize,
-        offset: (currentPage - 1) * currentPageSize
-      })
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setTotal(response.data.total || 0)
-        if (response.data.statistics) setStatistics(response.data.statistics)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载失败', { description: err.message })
-    } finally {
-      setLoading(false)
-    }
-  }, [tsCode, startDate, endDate, period, page, pageSize])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'fina_indicator',
-    syncFn: (params) => financialDataApi.syncFinaIndicatorFullHistoryAsync(params),
-    taskName: 'tasks.sync_fina_indicator_full_history',
-    onSuccess: loadData,
+  const dp = useDataPage<FinaIndicatorData, FinaIndicatorStatistics>({
+    apiCall: (params) => financialDataApi.getFinaIndicator(params),
+    syncFn: () => financialDataApi.syncFinaIndicatorAsync(),
+    taskName: ['tasks.sync_fina_indicator', 'tasks.sync_fina_indicator_full_history'],
+    bulkOps: {
+      tableKey: 'fina_indicator',
+      syncFn: (params) => financialDataApi.syncFinaIndicatorFullHistoryAsync(params),
+      taskName: 'tasks.sync_fina_indicator_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tsCode) params.ts_code = tsCode
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
+      if (period) params.period = toDateStr(period)
+      return params
+    },
+    syncSuccessMessage: '财务指标数据同步完成',
   })
 
-  // 初始化加载
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '平均EPS',
+        value: `${formatNumber(s.avg_eps, 4)} 元`,
+        subValue: '每股收益平均值',
+        icon: Activity,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '平均ROE',
+        value: `${formatNumber(s.avg_roe)}%`,
+        subValue: '净资产收益率平均值',
+        icon: TrendingUp,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '平均资产负债率',
+        value: `${formatNumber(s.avg_debt_ratio)}%`,
+        subValue: '负债占资产比例',
+        icon: PieChart,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '平均净利率',
+        value: `${formatNumber(s.avg_netprofit_margin)}%`,
+        subValue: '净利润占营收比例',
+        icon: Percent,
+        iconColor: 'text-muted-foreground',
+      },
+    ]
+  }, [dp.statistics])
 
-  // 异步同步
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      const response = await financialDataApi.syncFinaIndicatorAsync()
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', { description: '财务指标数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
-
-  // 组件卸载清理
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 格式化日期
-  const formatDate = (dateStr: string) => {
-    if (!dateStr || dateStr.length !== 8) return dateStr
-    return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-  }
-
-  // 格式化数字
-  const formatNumber = (value: number | null | undefined, decimals: number = 2) => {
-    if (value === null || value === undefined) return '-'
-    return value.toFixed(decimals)
-  }
-
-  // 格式化百分比
-  const formatPercent = (value: number | null | undefined, decimals: number = 2) => {
-    if (value === null || value === undefined) return '-'
-    return `${value.toFixed(decimals)}%`
-  }
-
-  // 桌面端表格列定义
+  // 表格列定义
   const columns: Column<FinaIndicatorData>[] = useMemo(() => [
     {
       key: 'ts_code',
@@ -181,12 +111,12 @@ export default function FinaIndicatorPage() {
     {
       key: 'ann_date',
       header: '公告日期',
-      accessor: (row) => formatDate(row.ann_date)
+      accessor: (row) => formatDate8(row.ann_date)
     },
     {
       key: 'end_date',
       header: '报告期',
-      accessor: (row) => formatDate(row.end_date)
+      accessor: (row) => formatDate8(row.end_date)
     },
     {
       key: 'eps',
@@ -242,64 +172,6 @@ export default function FinaIndicatorPage() {
     }
   ], [])
 
-  // 移动端卡片视图
-  const mobileCard = (item: FinaIndicatorData) => (
-    <div className="p-4 space-y-3 border-b last:border-b-0 hover:bg-blue-50 active:bg-blue-100 transition-colors">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="font-semibold text-base">{item.ts_code}</div>
-          <div className="text-sm text-muted-foreground">
-            报告期: {formatDate(item.end_date)}
-          </div>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {formatDate(item.ann_date)}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <span className="text-muted-foreground">EPS: </span>
-          <span className="font-medium">{formatNumber(item.eps, 4)}元</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">ROE: </span>
-          <span className={`font-medium ${item.roe && item.roe >= 15 ? 'text-red-600' : ''}`}>
-            {formatPercent(item.roe)}
-          </span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">资产负债率: </span>
-          <span className={`font-medium ${item.debt_to_assets && item.debt_to_assets >= 70 ? 'text-orange-600' : ''}`}>
-            {formatPercent(item.debt_to_assets)}
-          </span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">毛利率: </span>
-          <span className="font-medium">{formatPercent(item.grossprofit_margin)}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">净利率: </span>
-          <span className="font-medium">{formatPercent(item.netprofit_margin)}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">ROA: </span>
-          <span className="font-medium">{formatPercent(item.roa)}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">流动比率: </span>
-          <span className="font-medium">{formatNumber(item.current_ratio)}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">EPS增长: </span>
-          <span className={`font-medium ${item.basic_eps_yoy && item.basic_eps_yoy >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-            {formatPercent(item.basic_eps_yoy)}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -311,96 +183,39 @@ export default function FinaIndicatorPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="财务指标"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">平均EPS</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_eps, 4)} 元</p>
-                  <p className="text-xs text-muted-foreground mt-1">每股收益平均值</p>
-                </div>
-                <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">平均ROE</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_roe)}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">净资产收益率平均值</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">平均资产负债率</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_debt_ratio)}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">负债占资产比例</p>
-                </div>
-                <PieChart className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">平均净利率</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.avg_netprofit_margin)}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">净利润占营收比例</p>
-                </div>
-                <Percent className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 查询表单 */}
       <Card>
         <CardHeader>
           <CardTitle>数据查询</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label htmlFor="ts_code">股票代码</Label>
-              <Input
-                id="ts_code"
-                placeholder="如：600000.SH"
-                value={tsCode}
-                onChange={(e) => setTsCode(e.target.value)}
-              />
+              <Input id="ts_code" placeholder="如：600000.SH" value={tsCode} onChange={(e) => setTsCode(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>开始日期</Label>
@@ -415,10 +230,10 @@ export default function FinaIndicatorPage() {
               <DatePicker date={period} onDateChange={setPeriod} placeholder="选择报告期" />
             </div>
           </div>
-          <div className="flex gap-2 mt-4">
-            <Button onClick={() => loadData()} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-              查询
+          <div className="flex gap-2">
+            <Button onClick={dp.handleQuery} disabled={dp.isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${dp.isLoading ? 'animate-spin' : ''}`} />
+              {dp.isLoading ? '查询中...' : '查询'}
             </Button>
           </div>
         </CardContent>
@@ -429,17 +244,70 @@ export default function FinaIndicatorPage() {
         <CardContent className="pt-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无财务指标数据"
-            mobileCard={mobileCard}
+            mobileCard={(item) => (
+              <div className="p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-semibold text-base">{item.ts_code}</div>
+                    <div className="text-sm text-muted-foreground">
+                      报告期: {formatDate8(item.end_date)}
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {formatDate8(item.ann_date)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">EPS: </span>
+                    <span className="font-medium">{formatNumber(item.eps, 4)}元</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">ROE: </span>
+                    <span className={`font-medium ${item.roe && item.roe >= 15 ? 'text-red-600' : ''}`}>
+                      {formatPercent(item.roe)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">资产负债率: </span>
+                    <span className={`font-medium ${item.debt_to_assets && item.debt_to_assets >= 70 ? 'text-orange-600' : ''}`}>
+                      {formatPercent(item.debt_to_assets)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">毛利率: </span>
+                    <span className="font-medium">{formatPercent(item.grossprofit_margin)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">净利率: </span>
+                    <span className="font-medium">{formatPercent(item.netprofit_margin)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">ROA: </span>
+                    <span className="font-medium">{formatPercent(item.roa)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">流动比率: </span>
+                    <span className="font-medium">{formatNumber(item.current_ratio)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">EPS增长: </span>
+                    <span className={`font-medium ${item.basic_eps_yoy && item.basic_eps_yoy >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatPercent(item.basic_eps_yoy)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => { setPage(newPage); loadData(newPage, pageSize).catch(() => {}) },
-              onPageSizeChange: (newSize) => { setPageSize(newSize); setPage(1); loadData(1, newSize).catch(() => {}) },
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
+              onPageSizeChange: dp.handlePageSizeChange,
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
           />
@@ -447,20 +315,14 @@ export default function FinaIndicatorPage() {
       </Card>
 
       {/* 同步弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>同步财务指标</DialogTitle>
-            <DialogDescription>
-              将从 Tushare 增量同步最新财务指标数据，无需选择日期。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步财务指标"
+        description="将从 Tushare 增量同步最新财务指标数据，无需选择日期。"
+        disabled={dp.syncing}
+      />
     </div>
   )
 }

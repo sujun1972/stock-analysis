@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -8,167 +8,108 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { stkHoldertradeApi, type StkHoldertradeData, type StkHoldertradeStatistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
-import { toast } from 'sonner'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
+import { stkHoldertradeApi, type StkHoldertradeData, type StkHoldertradeStatistics } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
+import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, TrendingDown, Users, FileText } from 'lucide-react'
 
+// ============== 工具函数 ==============
+
+const formatHolderType = (type: string) => {
+  const types: Record<string, string> = { 'G': '高管', 'P': '个人', 'C': '公司' }
+  return types[type] || type
+}
+
+const formatTradeType = (type: string) => type === 'IN' ? '增持' : type === 'DE' ? '减持' : type
+
+const formatNumber = (num: number | null | undefined, decimals: number = 2) => {
+  if (num === null || num === undefined) return '-'
+  return num.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
+// ============== 页面组件 ==============
+
 export default function StkHoldertradePage() {
-  const [data, setData] = useState<StkHoldertradeData[]>([])
-  const [statistics, setStatistics] = useState<StkHoldertradeStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState<string>('')
   const [holderType, setHolderType] = useState<string>('ALL')
   const [tradeType, setTradeType] = useState<string>('ALL')
 
-  // 同步弹窗状态
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
-
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(100)
-  const [total, setTotal] = useState(0)
-
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  // 从 task store 实时派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_stk_holdertrade')
-
-  // 构建本地时间日期字符串
-  const toDateStr = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  const loadData = useCallback(async (newPage?: number) => {
-    const currentPage = newPage ?? page
-    try {
-      setLoading(true)
-      setError(null)
-
-      const params: any = { limit: pageSize, offset: (currentPage - 1) * pageSize }
+  const dp = useDataPage<StkHoldertradeData, StkHoldertradeStatistics>({
+    apiCall: (params) => stkHoldertradeApi.getStkHoldertrade(params),
+    syncFn: (params) => stkHoldertradeApi.syncAsync(params),
+    taskName: 'tasks.sync_stk_holdertrade',
+    bulkOps: {
+      tableKey: 'stk_holdertrade',
+      syncFn: (params) => apiClient.post('/api/stk-holdertrade/sync-full-history', null, { params }),
+      taskName: 'tasks.sync_stk_holdertrade_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode) params.ts_code = tsCode
       if (holderType && holderType !== 'ALL') params.holder_type = holderType
       if (tradeType && tradeType !== 'ALL') params.trade_type = tradeType
-
-      const response = await stkHoldertradeApi.getStkHoldertrade(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setTotal(response.data.total || 0)
-        setStatistics(response.data.statistics || null)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载失败', { description: err.message || '无法加载股东增减持数据' })
-    } finally {
-      setLoading(false)
-    }
-  }, [startDate, endDate, tsCode, holderType, tradeType, pageSize, page])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'stk_holdertrade',
-    syncFn: (params) => apiClient.post('/api/stk-holdertrade/sync-full-history', null, { params }),
-    taskName: 'tasks.sync_stk_holdertrade_full_history',
-    onSuccess: loadData,
+      return params
+    },
+    syncSuccessMessage: '股东增减持数据同步完成',
   })
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '总记录数',
+        value: s.total_count?.toLocaleString(),
+        subValue: `涉及 ${s.stock_count} 只股票`,
+        icon: FileText,
+        iconColor: 'text-blue-500',
+      },
+      {
+        label: '增持记录',
+        value: <span className="text-red-600">{s.increase_count?.toLocaleString()}</span>,
+        subValue: `平均比例 ${formatNumber(s.avg_increase_ratio, 2)}%`,
+        icon: TrendingUp,
+        iconColor: 'text-red-500',
+      },
+      {
+        label: '减持记录',
+        value: <span className="text-green-600">{s.decrease_count?.toLocaleString()}</span>,
+        subValue: `平均比例 ${formatNumber(s.avg_decrease_ratio, 2)}%`,
+        icon: TrendingDown,
+        iconColor: 'text-green-500',
+      },
+      {
+        label: '累计变动',
+        value: (
+          <div className="text-sm mt-1">
+            <div className="flex justify-between mb-1">
+              <span className="text-red-600">增持:</span>
+              <span className="font-semibold">{formatNumber(s.total_increase_vol, 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-600">减持:</span>
+              <span className="font-semibold">{formatNumber(s.total_decrease_vol, 0)}</span>
+            </div>
+          </div>
+        ),
+        icon: Users,
+        iconColor: 'text-purple-500',
+      },
+    ]
+  }, [dp.statistics])
 
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      const params: any = {}
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await stkHoldertradeApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', { description: '股东增减持数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [])
-
-  const formatHolderType = (type: string) => {
-    const types: Record<string, string> = { 'G': '高管', 'P': '个人', 'C': '公司' }
-    return types[type] || type
-  }
-
-  const formatTradeType = (type: string) => type === 'IN' ? '增持' : type === 'DE' ? '减持' : type
-
-  const formatNumber = (num: number | null | undefined, decimals: number = 2) => {
-    if (num === null || num === undefined) return '-'
-    return num.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
-  }
-
+  // 表格列定义
   const columns: Column<StkHoldertradeData>[] = useMemo(() => [
     { key: 'ts_code', header: '股票代码', accessor: (row) => row.ts_code },
     { key: 'ann_date', header: '公告日期', accessor: (row) => row.ann_date },
@@ -236,115 +177,42 @@ export default function StkHoldertradePage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="股东增减持"
             />
           </div>
         }
       />
 
-      {/* 同步弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步数据</DialogTitle>
-            <DialogDescription>选择同步日期范围（留空则同步最新数据）。</DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新数据" />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新数据" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步数据"
+        description="选择同步日期范围（留空则同步最新数据）。"
+        disabled={dp.syncing}
+        showDateRange
+        startDate={dp.syncStartDate}
+        onStartDateChange={dp.setSyncStartDate}
+        endDate={dp.syncEndDate}
+        onEndDateChange={dp.setSyncEndDate}
+      />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">总记录数</p>
-                  <p className="text-2xl font-bold">{statistics.total_count?.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">涉及 {statistics.stock_count} 只股票</p>
-                </div>
-                <FileText className="h-8 w-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">增持记录</p>
-                  <p className="text-2xl font-bold text-red-600">{statistics.increase_count?.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">平均比例 {formatNumber(statistics.avg_increase_ratio, 2)}%</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-red-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">减持记录</p>
-                  <p className="text-2xl font-bold text-green-600">{statistics.decrease_count?.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">平均比例 {formatNumber(statistics.avg_decrease_ratio, 2)}%</p>
-                </div>
-                <TrendingDown className="h-8 w-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">累计变动</p>
-                  <div className="text-sm mt-1">
-                    <div className="flex justify-between mb-1">
-                      <span className="text-red-600">增持:</span>
-                      <span className="font-semibold">{formatNumber(statistics.total_increase_vol, 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-green-600">减持:</span>
-                      <span className="font-semibold">{formatNumber(statistics.total_decrease_vol, 0)}</span>
-                    </div>
-                  </div>
-                </div>
-                <Users className="h-8 w-8 text-purple-500" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选区域 */}
       <Card>
@@ -366,9 +234,7 @@ export default function StkHoldertradePage() {
             <div>
               <label className="text-sm font-medium mb-2 block">股东类型</label>
               <Select value={holderType} onValueChange={setHolderType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">全部</SelectItem>
                   <SelectItem value="G">高管</SelectItem>
@@ -380,9 +246,7 @@ export default function StkHoldertradePage() {
             <div>
               <label className="text-sm font-medium mb-2 block">交易类型</label>
               <Select value={tradeType} onValueChange={setTradeType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">全部</SelectItem>
                   <SelectItem value="IN">增持</SelectItem>
@@ -391,7 +255,7 @@ export default function StkHoldertradePage() {
               </Select>
             </div>
           </div>
-          <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading}>查询</Button>
+          <Button onClick={dp.handleQuery} disabled={dp.isLoading}>查询</Button>
         </CardContent>
       </Card>
 
@@ -400,18 +264,15 @@ export default function StkHoldertradePage() {
         <CardContent className="pt-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无股东增减持数据"
             mobileCard={mobileCard}
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage: number) => { setPage(newPage); loadData(newPage) },
-              onPageSizeChange: () => {},
-              pageSizeOptions: [100]
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>

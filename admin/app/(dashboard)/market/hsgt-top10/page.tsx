@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -15,173 +15,81 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { hsgtTop10Api, type HsgtTop10Data, type HsgtTop10Statistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
+import { useDataPage } from '@/hooks/useDataPage'
+import { hsgtTop10Api, type HsgtTop10Data, type HsgtTop10Statistics } from '@/lib/api'
+import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, DollarSign } from 'lucide-react'
 
-const toDateStr = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+// ============== 页面组件 ==============
 
 export default function HsgtTop10Page() {
-  // 数据状态
-  const [data, setData] = useState<HsgtTop10Data[]>([])
-  const [statistics, setStatistics] = useState<HsgtTop10Statistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // 筛选条件
+  // 查询筛选状态
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [marketType, setMarketType] = useState<string>('ALL')
 
-  // 同步弹窗状态（与查询日期解耦）
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
-
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 任务存储
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_hsgt_top10')
-
-  // 加载数据
-  const loadData = useCallback(async (targetPage = page, targetPageSize = pageSize) => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const params: any = {
-        limit: targetPageSize,
-        offset: (targetPage - 1) * targetPageSize,
-      }
-
+  const dp = useDataPage<HsgtTop10Data, HsgtTop10Statistics>({
+    apiCall: (params) => hsgtTop10Api.getHsgtTop10(params),
+    statisticsCall: (params) => hsgtTop10Api.getStatistics(params),
+    syncFn: (params) => hsgtTop10Api.syncAsync(params),
+    taskName: 'tasks.sync_hsgt_top10',
+    bulkOps: {
+      tableKey: 'hsgt_top10',
+      syncFn: (params) => hsgtTop10Api.syncFullHistory(params),
+      taskName: 'tasks.sync_hsgt_top10_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (marketType && marketType !== 'ALL') params.market_type = marketType
-
-      const [dataResponse, statsResponse] = await Promise.all([
-        hsgtTop10Api.getHsgtTop10(params),
-        hsgtTop10Api.getStatistics({
-          start_date: params.start_date,
-          end_date: params.end_date,
-          market_type: params.market_type
-        })
-      ])
-
-      if (dataResponse.code === 200 && dataResponse.data) {
-        setData(dataResponse.data.items)
-        setTotal(dataResponse.data.total)
-      } else {
-        throw new Error(dataResponse.message || '加载数据失败')
-      }
-
-      if (statsResponse.code === 200 && statsResponse.data) {
-        setStatistics(statsResponse.data)
-      }
-    } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载失败', { description: err.message || '无法加载数据' })
-    } finally {
-      setLoading(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate, tsCode, marketType])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'hsgt_top10',
-    syncFn: (params) => hsgtTop10Api.syncFullHistory(params),
-    taskName: 'tasks.sync_hsgt_top10_full_history',
-    onSuccess: loadData,
+      return params
+    },
+    syncSuccessMessage: '沪深股通十大成交股数据同步完成',
   })
 
-  // 初始加载
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  // 组件卸载时清理回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      const params: any = {}
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await hsgtTop10Api.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', { description: '沪深股通十大成交股数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '平均成交金额',
+        value: `${s.avg_amount_yi.toFixed(2)}`,
+        subValue: '亿元',
+        icon: DollarSign,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '平均净成交金额',
+        value: <span className={s.avg_net_amount_yi >= 0 ? 'text-red-600' : 'text-green-600'}>{s.avg_net_amount_yi >= 0 ? '+' : ''}{s.avg_net_amount_yi.toFixed(2)}</span>,
+        subValue: '亿元',
+        icon: TrendingUp,
+        iconColor: 'text-orange-600',
+      },
+      {
+        label: '最大成交金额',
+        value: `${s.max_amount_yi.toFixed(2)}`,
+        subValue: '亿元',
+        icon: Activity,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '统计股票数',
+        value: `${s.stock_count}`,
+        subValue: `${s.trading_days} 个交易日`,
+        icon: TrendingDown,
+        iconColor: 'text-purple-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<HsgtTop10Data>[] = useMemo(() => [
@@ -343,109 +251,28 @@ export default function HsgtTop10Page() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="沪深股通十大成交股"
             />
           </div>
         }
       />
 
-      {/* 同步弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步数据</DialogTitle>
-            <DialogDescription>
-              选择同步日期范围（留空则同步最新交易日数据）。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>开始日期（可选）</Label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
-            </div>
-            <div className="space-y-2">
-              <Label>结束日期（可选）</Label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均成交金额</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.avg_amount_yi.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">亿元</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均净成交金额</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${statistics.avg_net_amount_yi >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {statistics.avg_net_amount_yi >= 0 ? '+' : ''}{statistics.avg_net_amount_yi.toFixed(2)}
-              </div>
-              <p className="text-xs text-muted-foreground">亿元</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">最大成交金额</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.max_amount_yi.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">亿元</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">统计股票数</CardTitle>
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.stock_count}</div>
-              <p className="text-xs text-muted-foreground">{statistics.trading_days} 个交易日</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选和操作区域 */}
       <Card>
@@ -493,7 +320,7 @@ export default function HsgtTop10Page() {
               </Select>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => { setPage(1); loadData(1) }} disabled={loading} className="flex-1">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1">
                 查询
               </Button>
             </div>
@@ -505,28 +332,33 @@ export default function HsgtTop10Page() {
       <Card>
         <DataTable
           columns={columns}
-          data={data}
-          loading={loading}
-          error={error}
+          data={dp.data}
+          loading={dp.isLoading}
           emptyMessage="暂无数据"
           mobileCard={mobileCard}
           pagination={{
-            page,
-            pageSize,
-            total,
-            onPageChange: (newPage) => {
-              setPage(newPage)
-              loadData(newPage)
-            },
-            onPageSizeChange: (newPageSize) => {
-              setPageSize(newPageSize)
-              setPage(1)
-              loadData(1, newPageSize)
-            },
-            pageSizeOptions: [10, 20, 30, 50, 100]
+            page: dp.page,
+            pageSize: dp.pageSize,
+            total: dp.total,
+            onPageChange: dp.handlePageChange,
           }}
         />
       </Card>
+
+      {/* 同步弹窗 */}
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步数据"
+        description="选择同步日期范围（留空则同步最新交易日数据）。"
+        disabled={dp.syncing}
+        showDateRange
+        startDate={dp.syncStartDate}
+        onStartDateChange={dp.setSyncStartDate}
+        endDate={dp.syncEndDate}
+        onEndDateChange={dp.setSyncEndDate}
+      />
     </div>
   )
 }

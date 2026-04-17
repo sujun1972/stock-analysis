@@ -1,18 +1,17 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ggtDailyApi, type GgtDailyData, type GgtDailyStatistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
+import { useDataPage } from '@/hooks/useDataPage'
+import { ggtDailyApi, type GgtDailyData, type GgtDailyStatistics } from '@/lib/api'
+import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, DollarSign } from 'lucide-react'
 import {
   LineChart,
@@ -25,149 +24,68 @@ import {
   ResponsiveContainer
 } from 'recharts'
 
-const toDateStr = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+// ============== 页面组件 ==============
 
 export default function GgtDailyPage() {
-  // 数据状态
-  const [data, setData] = useState<GgtDailyData[]>([])
-  const [statistics, setStatistics] = useState<GgtDailyStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // 筛选条件
+  // 查询筛选状态
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
 
-  // 同步弹窗状态（与查询日期解耦）
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
-
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 任务存储
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_ggt_daily')
-
-  // 加载数据
-  const loadData = useCallback(async (targetPage = page, targetPageSize = pageSize) => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const offset = (targetPage - 1) * targetPageSize
-      const params: any = { limit: targetPageSize, offset }
-
+  const dp = useDataPage<GgtDailyData, GgtDailyStatistics>({
+    apiCall: (params) => ggtDailyApi.getGgtDaily(params),
+    syncFn: (params) => ggtDailyApi.syncAsync(params),
+    taskName: 'tasks.sync_ggt_daily',
+    bulkOps: {
+      tableKey: 'ggt_daily',
+      syncFn: (params) => ggtDailyApi.syncFullHistory(params),
+      taskName: 'tasks.sync_ggt_daily_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
-
-      const response = await ggtDailyApi.getGgtDaily(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items)
-        setTotal(response.data.total)
-        setStatistics(response.data.statistics)
-      } else {
-        throw new Error(response.message || '加载数据失败')
-      }
-    } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载失败', { description: err.message || '无法加载数据' })
-    } finally {
-      setLoading(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'ggt_daily',
-    syncFn: (params) => ggtDailyApi.syncFullHistory(params),
-    taskName: 'tasks.sync_ggt_daily_full_history',
-    onSuccess: loadData,
+      return params
+    },
+    syncSuccessMessage: '港股通每日成交统计数据同步完成',
   })
 
-  // 初始加载和分页变化时重新加载数据
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  // 组件卸载时清理回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      const params: any = {}
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await ggtDailyApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', { description: '港股通每日成交统计数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '平均买入金额',
+        value: <span className="text-red-600">{s.avg_buy_amount?.toFixed(2) || '0.00'}</span>,
+        subValue: '亿元',
+        icon: TrendingUp,
+        iconColor: 'text-red-600',
+      },
+      {
+        label: '平均卖出金额',
+        value: <span className="text-green-600">{s.avg_sell_amount?.toFixed(2) || '0.00'}</span>,
+        subValue: '亿元',
+        icon: TrendingDown,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '累计买入金额',
+        value: `${s.total_buy_amount?.toFixed(2) || '0.00'}`,
+        subValue: '亿元',
+        icon: DollarSign,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '统计天数',
+        value: `${s.total_count || 0}`,
+        subValue: '交易日',
+        icon: Activity,
+        iconColor: 'text-orange-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<GgtDailyData>[] = useMemo(() => [
@@ -224,13 +142,13 @@ export default function GgtDailyPage() {
 
   // 图表数据
   const chartData = useMemo(() => {
-    return data.map(item => ({
+    return dp.data.map(item => ({
       date: item.trade_date,
       买入金额: item.buy_amount || 0,
       卖出金额: item.sell_amount || 0,
       净额: (item.buy_amount || 0) - (item.sell_amount || 0)
-    })).reverse() // 图表按时间正序显示
-  }, [data])
+    })).reverse()
+  }, [dp.data])
 
   return (
     <div className="space-y-6">
@@ -243,115 +161,28 @@ export default function GgtDailyPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="港股通每日成交"
             />
           </div>
         }
       />
 
-      {/* 同步弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步数据</DialogTitle>
-            <DialogDescription>
-              选择同步日期范围（留空则同步最新交易日数据）。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>开始日期（可选）</Label>
-              <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="留空同步最新交易日" />
-            </div>
-            <div className="space-y-2">
-              <Label>结束日期（可选）</Label>
-              <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="留空同步最新交易日" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均买入金额</CardTitle>
-              <TrendingUp className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {statistics.avg_buy_amount?.toFixed(2) || '0.00'}
-              </div>
-              <p className="text-xs text-muted-foreground">亿元</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均卖出金额</CardTitle>
-              <TrendingDown className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {statistics.avg_sell_amount?.toFixed(2) || '0.00'}
-              </div>
-              <p className="text-xs text-muted-foreground">亿元</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">累计买入金额</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {statistics.total_buy_amount?.toFixed(2) || '0.00'}
-              </div>
-              <p className="text-xs text-muted-foreground">亿元</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">统计天数</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {statistics.total_count || 0}
-              </div>
-              <p className="text-xs text-muted-foreground">交易日</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 趋势图表 */}
       {chartData.length > 0 && (
@@ -429,12 +260,8 @@ export default function GgtDailyPage() {
             </div>
 
             <div className="flex gap-2">
-              <Button
-                onClick={() => { setPage(1); loadData(1) }}
-                disabled={loading}
-                variant="outline"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} variant="outline">
+                <RefreshCw className={`mr-2 h-4 w-4 ${dp.isLoading ? 'animate-spin' : ''}`} />
                 查询
               </Button>
             </div>
@@ -447,19 +274,33 @@ export default function GgtDailyPage() {
         <CardContent className="p-0">
           <DataTable
             columns={columns}
-            data={data}
-            loading={loading}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无数据"
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => { setPage(newPage); loadData(newPage) },
-              onPageSizeChange: (newSize) => { setPageSize(newSize); setPage(1); loadData(1, newSize) }
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
+
+      {/* 同步弹窗 */}
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步数据"
+        description="选择同步日期范围（留空则同步最新交易日数据）。"
+        disabled={dp.syncing}
+        showDateRange
+        startDate={dp.syncStartDate}
+        onStartDateChange={dp.setSyncStartDate}
+        endDate={dp.syncEndDate}
+        onEndDateChange={dp.setSyncEndDate}
+      />
     </div>
   )
 }

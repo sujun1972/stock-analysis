@@ -1,18 +1,17 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, Column } from '@/components/common/DataTable'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { ggtMonthlyApi, type GgtMonthlyData, type GgtMonthlyStatistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { Label } from '@/components/ui/label'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
+import { useDataPage } from '@/hooks/useDataPage'
+import { ggtMonthlyApi, type GgtMonthlyData, type GgtMonthlyStatistics } from '@/lib/api'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react'
 import {
   LineChart,
@@ -25,170 +24,84 @@ import {
   ResponsiveContainer
 } from 'recharts'
 
-export default function GgtMonthlyPage() {
-  const [data, setData] = useState<GgtMonthlyData[]>([])
-  const [statistics, setStatistics] = useState<GgtMonthlyStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// ============== 工具函数 ==============
 
-  // 筛选条件
+const formatNumber = (num: number | null | undefined, decimals: number = 2) => {
+  if (num === null || num === undefined) return '0.00'
+  return num.toFixed(decimals)
+}
+
+// ============== 页面组件 ==============
+
+export default function GgtMonthlyPage() {
+  // 查询筛选状态
   const [startMonth, setStartMonth] = useState('')
   const [endMonth, setEndMonth] = useState('')
 
-  // 同步弹窗状态（与查询月度解耦）
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  // 同步弹窗额外状态（月度范围用 Input 而非 DatePicker）
   const [syncStartMonth, setSyncStartMonth] = useState('')
   const [syncEndMonth, setSyncEndMonth] = useState('')
 
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 任务存储
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_ggt_monthly')
-
-  // 加载数据
-  const loadData = useCallback(async (targetPage = page, targetPageSize = pageSize) => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const offset = (targetPage - 1) * targetPageSize
-      const response = await ggtMonthlyApi.getData({
-        start_month: startMonth || undefined,
-        end_month: endMonth || undefined,
-        limit: targetPageSize,
-        offset
-      })
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setTotal(response.data.total || 0)
-        setStatistics(response.data.statistics || null)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      setError(err.message || '加载数据失败')
-      toast.error('加载失败', {
-        description: err.message || '无法加载港股通每月成交统计数据'
-      })
-    } finally {
-      setLoading(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startMonth, endMonth])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'ggt_monthly',
-    syncFn: (_params) => ggtMonthlyApi.syncAsync({}),
+  const dp = useDataPage<GgtMonthlyData, GgtMonthlyStatistics>({
+    apiCall: (params) => ggtMonthlyApi.getData(params),
+    syncFn: (params) => ggtMonthlyApi.syncAsync(params),
     taskName: 'tasks.sync_ggt_monthly',
-    onSuccess: loadData,
+    bulkOps: {
+      tableKey: 'ggt_monthly',
+      syncFn: () => ggtMonthlyApi.syncAsync({}),
+      taskName: 'tasks.sync_ggt_monthly',
+    },
+    paginationMode: 'offset',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (startMonth) params.start_month = startMonth
+      if (endMonth) params.end_month = endMonth
+      return params
+    },
+    syncSuccessMessage: '港股通每月成交统计数据同步完成',
   })
 
-  // 初始加载和分页/筛选变化时重新加载
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  // 组件卸载时清理所有活跃的任务回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      const params: { start_month?: string; end_month?: string } = {}
-      if (syncStartMonth) params.start_month = syncStartMonth
-      if (syncEndMonth) params.end_month = syncEndMonth
-
-      const response = await ggtMonthlyApi.syncAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '港股通每月成交统计数据已更新'
-            })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', {
-        description: err.message || '无法同步数据'
-      })
-    }
+  // 自定义同步确认（月度参数，不用标准的 date 弹窗）
+  const handleCustomSyncConfirm = async () => {
+    const params: Record<string, unknown> = {}
+    if (syncStartMonth) params.start_month = syncStartMonth
+    if (syncEndMonth) params.end_month = syncEndMonth
+    dp.setSyncDialogOpen(false)
+    await dp.handleSyncDirect(params)
   }
 
-  // 格式化数字
-  const formatNumber = (num: number | null | undefined, decimals: number = 2) => {
-    if (num === null || num === undefined) return '0.00'
-    return num.toFixed(decimals)
-  }
-
-  // 准备图表数据
-  const chartData = useMemo(() => {
-    return data.slice(0, 12).reverse().map(item => ({
-      month: item.month,
-      日均买入: item.day_buy_amt,
-      日均卖出: item.day_sell_amt,
-      总买入: item.total_buy_amt,
-      总卖出: item.total_sell_amt
-    }))
-  }, [data])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '日均买入均值',
+        value: `${formatNumber(s.avg_day_buy_amt)}亿`,
+        icon: DollarSign,
+        iconColor: 'text-blue-500',
+      },
+      {
+        label: '累计总买入',
+        value: `${formatNumber(s.sum_total_buy_amt)}亿`,
+        icon: TrendingUp,
+        iconColor: 'text-green-500',
+      },
+      {
+        label: '最大总买入',
+        value: `${formatNumber(s.max_total_buy_amt)}亿`,
+        icon: Activity,
+        iconColor: 'text-orange-500',
+      },
+      {
+        label: '最大总卖出',
+        value: `${formatNumber(s.max_total_sell_amt)}亿`,
+        icon: TrendingDown,
+        iconColor: 'text-red-500',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<GgtMonthlyData>[] = useMemo(() => [
@@ -267,6 +180,17 @@ export default function GgtMonthlyPage() {
     </div>
   ), [])
 
+  // 准备图表数据
+  const chartData = useMemo(() => {
+    return dp.data.slice(0, 12).reverse().map(item => ({
+      month: item.month,
+      日均买入: item.day_buy_amt,
+      日均卖出: item.day_sell_amt,
+      总买入: item.total_buy_amt,
+      总卖出: item.total_sell_amt
+    }))
+  }, [dp.data])
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -278,123 +202,28 @@ export default function GgtMonthlyPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="港股通每月成交"
             />
           </div>
         }
       />
 
-      {/* 同步弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步数据</DialogTitle>
-            <DialogDescription>
-              选择同步月度范围（留空则同步最新月度数据）。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="sync-start-month">开始月度（可选）</Label>
-              <Input
-                id="sync-start-month"
-                type="month"
-                value={syncStartMonth}
-                onChange={(e) => setSyncStartMonth(e.target.value)}
-                placeholder="YYYY-MM"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sync-end-month">结束月度（可选）</Label>
-              <Input
-                id="sync-end-month"
-                type="month"
-                value={syncEndMonth}
-                onChange={(e) => setSyncEndMonth(e.target.value)}
-                placeholder="YYYY-MM"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">日均买入均值</p>
-                  <p className="text-2xl font-bold">{formatNumber(statistics.avg_day_buy_amt)}亿</p>
-                </div>
-                <DollarSign className="h-8 w-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">累计总买入</p>
-                  <p className="text-2xl font-bold">{formatNumber(statistics.sum_total_buy_amt)}亿</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">最大总买入</p>
-                  <p className="text-2xl font-bold">{formatNumber(statistics.max_total_buy_amt)}亿</p>
-                </div>
-                <Activity className="h-8 w-8 text-orange-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">最大总卖出</p>
-                  <p className="text-2xl font-bold">{formatNumber(statistics.max_total_sell_amt)}亿</p>
-                </div>
-                <TrendingDown className="h-8 w-8 text-red-500" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 趋势图表 */}
       {chartData.length > 0 && (
@@ -461,11 +290,11 @@ export default function GgtMonthlyPage() {
             <div className="flex gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
-                onClick={() => { setPage(1); loadData(1) }}
-                disabled={loading}
+                onClick={dp.handleQuery}
+                disabled={dp.isLoading}
                 className="flex-1 sm:flex-initial"
               >
-                <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 mr-1 ${dp.isLoading ? 'animate-spin' : ''}`} />
                 查询
               </Button>
             </div>
@@ -478,22 +307,52 @@ export default function GgtMonthlyPage() {
         <CardContent className="p-0">
           <DataTable
             columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无数据"
             mobileCard={mobileCard}
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => { setPage(newPage); loadData(newPage) },
-              onPageSizeChange: (newPageSize) => { setPageSize(newPageSize); setPage(1); loadData(1, newPageSize) },
-              pageSizeOptions: [10, 20, 30, 50, 100]
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
+
+      {/* 同步弹窗（自定义月度输入） */}
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={handleCustomSyncConfirm}
+        title="同步数据"
+        description="选择同步月度范围（留空则同步最新月度数据）。"
+        disabled={dp.syncing}
+      >
+        <div className="py-4 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="sync-start-month">开始月度（可选）</Label>
+            <Input
+              id="sync-start-month"
+              type="month"
+              value={syncStartMonth}
+              onChange={(e) => setSyncStartMonth(e.target.value)}
+              placeholder="YYYY-MM"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sync-end-month">结束月度（可选）</Label>
+            <Input
+              id="sync-end-month"
+              type="month"
+              value={syncEndMonth}
+              onChange={(e) => setSyncEndMonth(e.target.value)}
+              placeholder="YYYY-MM"
+            />
+          </div>
+        </div>
+      </SyncDialog>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,175 +8,94 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { toast } from 'sonner'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
 import { incomeApi } from '@/lib/api'
 import type { IncomeData, IncomeStatistics } from '@/lib/api/income-api'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { toDateStr } from '@/lib/date-utils'
 import { TrendingUp, TrendingDown, DollarSign, PieChart, RefreshCw } from 'lucide-react'
 
+// ============== 工具函数 ==============
+
+const formatAmount = (amount: number | null | undefined): string => {
+  if (amount === null || amount === undefined) return '-'
+  return amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// ============== 页面组件 ==============
+
 export default function IncomePage() {
-  const [data, setData] = useState<IncomeData[]>([])
-  const [statistics, setStatistics] = useState<IncomeStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  // 查询筛选状态
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [tsCode, setTsCode] = useState('')
   const [reportType, setReportType] = useState<string>('all')
   const [compType, setCompType] = useState<string>('all')
 
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
+  const dp = useDataPage<IncomeData, IncomeStatistics>({
+    apiCall: (params) => incomeApi.getData(params),
+    statisticsCall: (params) => incomeApi.getStatistics(params),
+    syncFn: () => incomeApi.syncAsync(),
+    taskName: ['tasks.sync_income', 'tasks.sync_income_full_history'],
+    bulkOps: {
+      tableKey: 'income',
+      syncFn: (params) => incomeApi.syncFullHistoryAsync(params),
+      taskName: 'tasks.sync_income_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 30,
 
-  // 同步弹窗状态
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  // 从 task store 实时派生，后台任务运行期间保持禁用
-  const syncing = isTaskRunning('tasks.sync_income') || isTaskRunning('tasks.sync_income_full_history')
-
-  useEffect(() => {
-    loadData().catch(() => {})
-  }, [])
-
-  // 分页变化时重新加载数据
-  useEffect(() => {
-    loadData().catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize])
-
-  // 组件卸载时清理所有活跃的任务回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const loadData = async () => {
-    try {
-      setIsLoading(true)
-
-      const params = {
-        start_date: startDate ? formatDate(startDate) : undefined,
-        end_date: endDate ? formatDate(endDate) : undefined,
-        ts_code: tsCode || undefined,
-        report_type: reportType !== 'all' ? reportType : undefined,
-        comp_type: compType !== 'all' ? compType : undefined,
-        limit: pageSize,
-        offset: (page - 1) * pageSize
-      }
-
-      const [dataResponse, statsResponse] = await Promise.all([
-        incomeApi.getData(params),
-        incomeApi.getStatistics(params)
-      ])
-
-      if (dataResponse.code === 200 && dataResponse.data) {
-        setData(dataResponse.data.items)
-        setTotal(dataResponse.data.total || dataResponse.data.items.length)
-      }
-
-      if (statsResponse.code === 200 && statsResponse.data) {
-        setStatistics(statsResponse.data)
-      }
-    } catch (error) {
-      toast.error('加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'income',
-    syncFn: (params) => incomeApi.syncFullHistoryAsync(params),
-    taskName: 'tasks.sync_income_full_history',
-    onSuccess: loadData,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
+      if (tsCode) params.ts_code = tsCode
+      if (reportType !== 'all') params.report_type = reportType
+      if (compType !== 'all') params.comp_type = compType
+      return params
+    },
+    syncSuccessMessage: '利润表数据同步完成',
   })
 
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      // 不传日期参数，由后端从 sync_configs 自动计算增量起始日期
-      const response = await incomeApi.syncAsync()
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '记录数',
+        value: s.total_count.toLocaleString(),
+        subValue: `股票数: ${s.stock_count}`,
+        icon: PieChart,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '平均营业收入',
+        value: formatAmount(s.avg_revenue),
+        subValue: '万元',
+        icon: DollarSign,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '平均净利润',
+        value: <span className={(s.avg_net_income ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>{formatAmount(s.avg_net_income)}</span>,
+        subValue: '万元',
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '平均每股收益',
+        value: s.avg_eps.toFixed(4),
+        subValue: '元/股',
+        icon: TrendingDown,
+        iconColor: 'text-muted-foreground',
+      },
+    ]
+  }, [dp.statistics])
 
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        // 注册任务完成回调：自动刷新数据
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', {
-              description: '利润表数据已更新'
-            })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', {
-              description: task.error || '同步过程中发生错误'
-            })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-        toast.success('同步任务已提交', {
-          description: '可在任务面板查看进度'
-        })
-      } else {
-        toast.error(response.message || '同步任务提交失败')
-      }
-    } catch (error) {
-      toast.error('同步任务提交失败')
-    }
-  }
-
-  // 本地时间构建 YYYY-MM-DD，避免 toISOString() UTC 偏移问题
-  const formatDate = (date: Date): string => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
-  const formatAmount = (amount: number | null | undefined): string => {
-    if (amount === null || amount === undefined) return '-'
-    return amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  }
-
+  // 表格列定义
   const columns: Column<IncomeData>[] = [
     {
       key: 'ts_code',
@@ -229,18 +148,10 @@ export default function IncomePage() {
       header: '报告类型',
       accessor: (row) => {
         const types: Record<string, string> = {
-          '1': '合并报表',
-          '2': '单季合并',
-          '3': '调整单季',
-          '4': '调整合并',
-          '5': '调整前合并',
-          '6': '母公司',
-          '7': '母公司单季',
-          '8': '母公司调整单季',
-          '9': '母公司调整',
-          '10': '母公司调整前',
-          '11': '调整前合并',
-          '12': '母公司调整前'
+          '1': '合并报表', '2': '单季合并', '3': '调整单季',
+          '4': '调整合并', '5': '调整前合并', '6': '母公司',
+          '7': '母公司单季', '8': '母公司调整单季', '9': '母公司调整',
+          '10': '母公司调整前', '11': '调整前合并', '12': '母公司调整前'
         }
         return types[row.report_type] || row.report_type
       },
@@ -259,85 +170,28 @@ export default function IncomePage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="利润表"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">记录数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_count.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-1">股票数: {statistics.stock_count}</p>
-                </div>
-                <PieChart className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">平均营业收入</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatAmount(statistics.avg_revenue)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">万元</p>
-                </div>
-                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">平均净利润</p>
-                  <p className={`text-xl sm:text-2xl font-bold ${(statistics.avg_net_income ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatAmount(statistics.avg_net_income)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">万元</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">平均每股收益</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.avg_eps.toFixed(4)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">元/股</p>
-                </div>
-                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选和操作区域 */}
       <Card>
@@ -348,29 +202,20 @@ export default function IncomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">股票代码</label>
-              <Input
-                placeholder="如：600000.SH"
-                value={tsCode}
-                onChange={(e) => setTsCode(e.target.value)}
-              />
+              <Input placeholder="如：600000.SH" value={tsCode} onChange={(e) => setTsCode(e.target.value)} />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">开始日期（报告期）</label>
               <DatePicker date={startDate} onDateChange={setStartDate} />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">结束日期（报告期）</label>
               <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">报告类型</label>
               <Select value={reportType} onValueChange={setReportType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部</SelectItem>
                   <SelectItem value="1">合并报表</SelectItem>
@@ -382,13 +227,10 @@ export default function IncomePage() {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">公司类型</label>
               <Select value={compType} onValueChange={setCompType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部</SelectItem>
                   <SelectItem value="1">一般工商业</SelectItem>
@@ -399,21 +241,11 @@ export default function IncomePage() {
               </Select>
             </div>
           </div>
-
           <div className="flex flex-wrap gap-2">
-            <Button onClick={loadData} disabled={isLoading}>
-              {isLoading ? '查询中...' : '查询'}
+            <Button onClick={dp.handleQuery} disabled={dp.isLoading}>
+              {dp.isLoading ? '查询中...' : '查询'}
             </Button>
-            <Button
-              onClick={() => {
-                setTsCode('')
-                setStartDate(undefined)
-                setEndDate(undefined)
-                setReportType('all')
-                setCompType('all')
-              }}
-              variant="ghost"
-            >
+            <Button onClick={() => { setTsCode(''); setStartDate(undefined); setEndDate(undefined); setReportType('all'); setCompType('all') }} variant="ghost">
               重置
             </Button>
           </div>
@@ -425,19 +257,14 @@ export default function IncomePage() {
         <CardContent className="pt-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => {
-                setPage(newPage)
-              },
-              onPageSizeChange: (newPageSize) => {
-                setPageSize(newPageSize)
-                setPage(1)
-              },
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
+              onPageSizeChange: dp.handlePageSizeChange,
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
             mobileCard={(item) => (
@@ -470,21 +297,15 @@ export default function IncomePage() {
         </CardContent>
       </Card>
 
-      {/* 同步数据弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步利润表</DialogTitle>
-            <DialogDescription>
-              将从 Tushare 增量同步最新利润表数据，无需选择日期。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* 同步弹窗 */}
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步利润表"
+        description="将从 Tushare 增量同步最新利润表数据，无需选择日期。"
+        disabled={dp.syncing}
+      />
     </div>
   )
 }

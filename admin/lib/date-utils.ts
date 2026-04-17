@@ -31,6 +31,14 @@ export { endOfDay } from 'date-fns/endOfDay'
 export { zhCN } from 'date-fns/locale/zh-CN'
 
 /**
+ * 时区安全的日期字符串构建（YYYY-MM-DD）。
+ * 使用本地时间，避免 toISOString() 在 UTC+8 偏移 -1 天的问题。
+ */
+export function toDateStr(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+/**
  * 格式化日期为 YYYY-MM-DD
  */
 export function formatDate(date: Date | string): string {

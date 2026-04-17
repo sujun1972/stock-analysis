@@ -8,18 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { moneyflowApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
+import { moneyflowApi } from '@/lib/api'
+import { toDateStr } from '@/lib/date-utils'
 import { useSystemConfig } from '@/contexts'
-import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, BarChart3, TrendingDown, ListFilter } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { formatStockCode } from '@/lib/utils'
 
-// 数据类型定义
+// ============== 类型定义 ==============
+
 interface MoneyflowData {
   trade_date: string
   ts_code: string
@@ -50,90 +50,52 @@ interface Statistics {
   stock_count: number
 }
 
-const PAGE_SIZE = 100
-
-const toDateStr = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+// ============== 页面组件 ==============
 
 export default function MoneyflowPage() {
-  const [data, setData] = useState<MoneyflowData[]>([])
-  const [topStocks, setTopStocks] = useState<MoneyflowData[]>([])
-  const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-
-  // 筛选状态 — 改为单日期模式，初始为空等待后端回填
+  // 查询筛选状态（页面个性化）
   const [tsCode, setTsCode] = useState('')
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
 
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
+  // TOP 20 图表数据（独立加载）
+  const [topStocks, setTopStocks] = useState<MoneyflowData[]>([])
 
-  // 任务回调引用
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
   const { config } = useSystemConfig()
 
-  // 从 task store 实时派生 — 不用 useState(false)
-  const syncing = isTaskRunning('tasks.sync_moneyflow')
-
-  // 加载数据
-  const loadData = useCallback(async (targetPage: number = 1) => {
-    setIsLoading(true)
-    try {
-      const params: any = {
-        limit: PAGE_SIZE,
-        offset: (targetPage - 1) * PAGE_SIZE
-      }
+  const dp = useDataPage<MoneyflowData, Statistics>({
+    apiCall: (params) => moneyflowApi.getMoneyflow(params),
+    syncFn: (params) => moneyflowApi.syncMoneyflowAsync(params),
+    taskName: 'tasks.sync_moneyflow',
+    bulkOps: {
+      tableKey: 'moneyflow',
+      syncFn: (params) => moneyflowApi.syncMoneyflowFullHistoryAsync({
+        start_date: params?.start_date as string | undefined,
+      }),
+      taskName: 'tasks.sync_moneyflow_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (tsCode) params.ts_code = tsCode
       if (tradeDate) params.trade_date = toDateStr(tradeDate)
-
-      const response = await moneyflowApi.getMoneyflow(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics || null)
-        setTotal(response.data.total || 0)
-        setPage(targetPage)
-        // 后端回填最近有数据的交易日
-        if (!tradeDate && response.data.trade_date) {
-          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
-        }
-      } else {
-        throw new Error(response.message || '获取数据失败')
+      return params
+    },
+    onBackfillDate: (dateStr) => {
+      if (!tradeDate) {
+        setTradeDate(new Date(dateStr + 'T00:00:00'))
       }
-    } catch (err: any) {
-      toast.error('加载失败', { description: err.message || '加载数据失败' })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [tsCode, tradeDate])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'moneyflow',
-    syncFn: (params) => moneyflowApi.syncMoneyflowFullHistoryAsync({
-      start_date: params?.start_date,
-    }),
-    taskName: 'tasks.sync_moneyflow_full_history',
-    onSuccess: loadData,
+    },
+    syncSuccessMessage: '个股资金流向数据同步完成',
   })
 
-  const openStockAnalysis = (tsCode: string) => {
+  const openStockAnalysis = useCallback((code: string) => {
     const url = config?.stock_analysis_url
     if (!url) return
-    window.open(url.replace('{code}', formatStockCode(tsCode)), '_blank')
-  }
+    window.open(url.replace('{code}', formatStockCode(code)), '_blank')
+  }, [config?.stock_analysis_url])
 
-  // 加载TOP排名图表数据
+  // 加载 TOP 排名图表数据
   const loadTopStocks = useCallback(async () => {
     try {
       const response = await moneyflowApi.getTopMoneyflowTushare({ limit: 20 })
@@ -145,75 +107,63 @@ export default function MoneyflowPage() {
     }
   }, [])
 
-  // 初始加载
+  // 初始加载 TOP 数据（主数据由 useDataPage autoLoad 处理）
+  const topLoadedRef = useRef(false)
   useEffect(() => {
-    loadData(1)
+    if (!topLoadedRef.current) {
+      topLoadedRef.current = true
+      loadTopStocks()
+    }
+  }, [loadTopStocks])
+
+  // 同步时不传 trade_date，让后端从交易日历自动取最新交易日
+  const handleSync = useCallback(async () => {
+    const params: Record<string, unknown> = {}
+    if (tsCode) params.ts_code = tsCode
+    await dp.handleSyncDirect(params)
+    // 同步完成后也刷新 TOP 数据（通过回调 loadData 已在 hook 中处理）
     loadTopStocks()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tsCode, dp, loadTopStocks])
 
-  const handleQuery = () => {
-    loadData(1).catch(() => {})
-  }
-
-  // 异步同步 — 不传日期，让后端从交易日历自动取最新交易日
-  const handleSync = async () => {
-    try {
-      const params: any = {}
-      if (tsCode) params.ts_code = tsCode
-      // 注意：不传 trade_date，避免把查询筛选日期误传给同步，导致重复同步旧日期
-
-      const response = await moneyflowApi.syncMoneyflowAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            loadTopStocks().catch(() => {})
-            toast.success('数据同步完成', { description: '个股资金流向数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success(response.message || '同步任务已提交')
-      } else {
-        toast.error(response.message || '提交同步任务失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
-
-  // 组件卸载清理
-  useEffect(() => {
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '平均净流入',
+        value: (
+          <span className={(s.avg_net ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
+            {s.avg_net != null ? `${s.avg_net >= 0 ? '+' : ''}${s.avg_net.toFixed(2)}` : '-'}万
+          </span>
+        ),
+        icon: TrendingUp,
+        iconColor: 'text-orange-600',
+      },
+      {
+        label: '累计净流入',
+        value: (
+          <span className={(s.total_net ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
+            {s.total_net != null ? `${s.total_net >= 0 ? '+' : ''}${s.total_net.toFixed(2)}` : '-'}万
+          </span>
+        ),
+        icon: BarChart3,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '最大净流入',
+        value: <span className="text-red-600">{s.max_net != null ? `+${s.max_net.toFixed(2)}` : '-'}万</span>,
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '统计股票数',
+        value: `${s.stock_count ?? 0}只`,
+        icon: TrendingDown,
+        iconColor: 'text-purple-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<MoneyflowData>[] = useMemo(() => [
@@ -323,7 +273,7 @@ export default function MoneyflowPage() {
   })), [topStocks])
 
   // 移动端卡片视图
-  const mobileCard = (item: MoneyflowData) => (
+  const mobileCard = useCallback((item: MoneyflowData) => (
     <div className="p-4 hover:bg-blue-50 active:bg-blue-100 dark:hover:bg-gray-800 dark:active:bg-gray-700 transition-colors">
       <div className="flex justify-between items-start mb-2">
         <div>
@@ -366,7 +316,7 @@ export default function MoneyflowPage() {
         </div>
       </div>
     </div>
-  )
+  ), [openStockAnalysis])
 
   return (
     <div className="space-y-6">
@@ -379,82 +329,28 @@ export default function MoneyflowPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={handleSync} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="个股资金流向"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 — 左文字右图标布局 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">平均净流入</p>
-                  <p className={`text-xl sm:text-2xl font-bold ${(statistics.avg_net ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {statistics.avg_net != null ? `${statistics.avg_net >= 0 ? '+' : ''}${statistics.avg_net.toFixed(2)}` : '-'}万
-                  </p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">累计净流入</p>
-                  <p className={`text-xl sm:text-2xl font-bold ${(statistics.total_net ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {statistics.total_net != null ? `${statistics.total_net >= 0 ? '+' : ''}${statistics.total_net.toFixed(2)}` : '-'}万
-                  </p>
-                </div>
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大净流入</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">
-                    {statistics.max_net != null ? `+${statistics.max_net.toFixed(2)}` : '-'}万
-                  </p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">统计股票数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.stock_count ?? 0}只</p>
-                </div>
-                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* TOP 20 图表 */}
       {topStocks.length > 0 && (
@@ -516,7 +412,7 @@ export default function MoneyflowPage() {
               <DatePicker date={tradeDate} onDateChange={setTradeDate} />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -532,16 +428,16 @@ export default function MoneyflowPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无个股资金流向数据"
             mobileCard={mobileCard}
             tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>

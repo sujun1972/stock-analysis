@@ -1,12 +1,20 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
+import { moneyflowApi } from '@/lib/api'
+import { apiClient } from '@/lib/api-client'
+import { toDateStr } from '@/lib/date-utils'
+import { RefreshCw, TrendingUp, BarChart3, ListFilter, DollarSign, Activity } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import {
   Dialog,
   DialogContent,
@@ -15,16 +23,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { moneyflowApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, BarChart3, ListFilter, DollarSign, Activity } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { useTaskStore } from '@/stores/task-store'
 
-// 数据类型定义
+// ============== 类型定义 ==============
+
 interface MoneyflowIndDcData {
   trade_date: string
   content_type: string
@@ -61,7 +64,7 @@ interface Statistics {
   sector_count: number
 }
 
-const PAGE_SIZE = 100
+// ============== 工具函数 ==============
 
 const toYi = (val: number | null | undefined) => {
   if (val === null || val === undefined) return '-'
@@ -71,72 +74,43 @@ const toYi = (val: number | null | undefined) => {
 const pctColor = (val: number | null | undefined) =>
   (val ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'
 
+// ============== 页面组件 ==============
+
 export default function MoneyflowIndDcPage() {
-  const [data, setData] = useState<MoneyflowIndDcData[]>([])
-  const [topSectors, setTopSectors] = useState<MoneyflowIndDcData[]>([])
-  const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  // 查询筛选状态（页面个性化）
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
   const [contentType, setContentType] = useState<string>('all')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+
+  // 同步弹窗额外状态（该页面同步弹窗含自定义字段）
   const [syncDate, setSyncDate] = useState<Date | undefined>(undefined)
   const [syncContentType, setSyncContentType] = useState<string>('all')
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  // 从 task store 实时派生——不用本地 useState
-  const syncing = isTaskRunning('tasks.sync_moneyflow_ind_dc')
+  // TOP 板块图表数据（独立加载，不走 useDataPage）
+  const [topSectors, setTopSectors] = useState<MoneyflowIndDcData[]>([])
 
-  useEffect(() => {
-    loadData(1).catch(() => {})
-    loadTopSectors().catch(() => {})
-  }, [])
+  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
 
-  const toDateStr = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  const loadData = async (
-    targetPage: number = page,
-    overrideSortKey?: string | null,
-    overrideSortDir?: 'asc' | 'desc' | null
-  ) => {
-    setIsLoading(true)
-    try {
-      const tradeDateStr = tradeDate ? toDateStr(tradeDate) : undefined
-
-      const params: any = {
-        trade_date: tradeDateStr,
-        page: targetPage,
-        page_size: PAGE_SIZE,
-        sort_by: (overrideSortKey !== undefined ? overrideSortKey : sortKey) ?? undefined,
-        sort_order: (overrideSortDir !== undefined ? overrideSortDir : sortDirection) ?? undefined,
-      }
+  const dp = useDataPage<MoneyflowIndDcData, Statistics>({
+    apiCall: (params) => moneyflowApi.getMoneyflowIndDc(params),
+    taskName: 'tasks.sync_moneyflow_ind_dc',
+    bulkOps: {
+      tableKey: 'moneyflow_ind_dc',
+      syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-full-history', null, { params }),
+      taskName: 'tasks.sync_moneyflow_ind_dc_full_history',
+    },
+    paginationMode: 'page',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tradeDate) params.trade_date = toDateStr(tradeDate)
       if (contentType && contentType !== 'all') params.content_type = contentType
+      return params
+    },
+    onBackfillDate: (dateStr) => setTradeDate(new Date(dateStr + 'T00:00:00')),
+  })
 
-      const response = await moneyflowApi.getMoneyflowIndDc(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setTotal(response.data.total || 0)
-        setStatistics(response.data.statistics || null)
-        setPage(targetPage)
-        // 回填后端解析的实际日期
-        if (!tradeDate && response.data.trade_date) {
-          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || '加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadTopSectors = async () => {
+  // 独立加载 TOP 板块
+  const loadTopSectors = useCallback(async () => {
     try {
       const response = await moneyflowApi.getTopMoneyflowIndustries({ limit: 20 })
       if (response.code === 200 && response.data) {
@@ -145,35 +119,19 @@ export default function MoneyflowIndDcPage() {
     } catch {
       // 图表加载失败不阻断主流程
     }
-  }
+  }, [])
 
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'moneyflow_ind_dc',
-    syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-full-history', null, { params }),
-    taskName: 'tasks.sync_moneyflow_ind_dc_full_history',
-    onSuccess: loadData,
-  })
+  useEffect(() => {
+    loadTopSectors().catch(() => {})
+  }, [loadTopSectors])
 
-  const handleQuery = () => {
-    loadData(1).catch(() => {})
-  }
-
+  // 自定义同步确认（该页面同步逻辑特殊：全部时提交三个任务）
   const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
+    dp.setSyncDialogOpen(false)
     try {
       const syncDateStr = syncDate ? toDateStr(syncDate) : undefined
       const ct = syncContentType !== 'all' ? syncContentType : undefined
 
-      // 若选了"全部"，依次提交三个任务（行业/概念/地域）
       const types = ct ? [ct] : ['行业', '概念', '地域']
 
       for (const type of types) {
@@ -193,16 +151,14 @@ export default function MoneyflowIndDcPage() {
             startTime: Date.now()
           })
 
-          const completionCallback = (task: any) => {
+          const completionCallback = (task: { status: string }) => {
             if (task.status === 'success') {
-              loadData(1).catch(() => {})
+              dp.loadData(1)
               loadTopSectors().catch(() => {})
               toast.success(`${type}数据同步完成`)
             }
             unregisterCompletionCallback(taskId, completionCallback)
-            activeCallbacksRef.current.delete(taskId)
           }
-          activeCallbacksRef.current.set(taskId, completionCallback)
           registerCompletionCallback(taskId, completionCallback)
           triggerPoll()
         } else {
@@ -211,21 +167,43 @@ export default function MoneyflowIndDcPage() {
       }
 
       toast.success(ct ? '同步任务已提交' : '已提交行业/概念/地域三个同步任务')
-    } catch (error: any) {
-      toast.error(error.message || '提交同步任务失败')
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '提交同步任务失败'
+      toast.error(message)
     }
   }
 
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '板块数',
+        value: `${s.sector_count ?? 0}个`,
+        icon: BarChart3,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '主力资金均值(亿)',
+        value: <span className={pctColor(s.avg_net_amount)}>{(s.avg_net_amount ?? 0) >= 0 ? '+' : ''}{(s.avg_net_amount ?? 0).toFixed(2)}</span>,
+        icon: Activity,
+        iconColor: 'text-orange-600',
+      },
+      {
+        label: '最大净流入(亿)',
+        value: <span className="text-red-600">+{(s.max_net_amount ?? 0).toFixed(2)}</span>,
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '超大单均值(亿)',
+        value: <span className={pctColor(s.avg_buy_elg_amount)}>{(s.avg_buy_elg_amount ?? 0) >= 0 ? '+' : ''}{(s.avg_buy_elg_amount ?? 0).toFixed(2)}</span>,
+        icon: DollarSign,
+        iconColor: 'text-purple-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<MoneyflowIndDcData>[] = useMemo(() => [
@@ -391,85 +369,28 @@ export default function MoneyflowIndDcPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="板块资金流向(DC)"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 — 左文字右图标 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">板块数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.sector_count ?? 0}个</p>
-                </div>
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">主力资金均值(亿)</p>
-                  <p className={`text-xl sm:text-2xl font-bold ${pctColor(statistics.avg_net_amount)}`}>
-                    {(statistics.avg_net_amount ?? 0) >= 0 ? '+' : ''}{(statistics.avg_net_amount ?? 0).toFixed(2)}
-                  </p>
-                </div>
-                <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">最大净流入(亿)</p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600">
-                    +{(statistics.max_net_amount ?? 0).toFixed(2)}
-                  </p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">超大单均值(亿)</p>
-                  <p className={`text-xl sm:text-2xl font-bold ${pctColor(statistics.avg_buy_elg_amount)}`}>
-                    {(statistics.avg_buy_elg_amount ?? 0) >= 0 ? '+' : ''}{(statistics.avg_buy_elg_amount ?? 0).toFixed(2)}
-                  </p>
-                </div>
-                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* TOP 20 图表 */}
       {chartData.length > 0 && (
@@ -508,7 +429,7 @@ export default function MoneyflowIndDcPage() {
         </Card>
       )}
 
-      {/* 筛选区域（仅查询控件，同步按钮在 PageHeader） */}
+      {/* 筛选区域 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -537,7 +458,7 @@ export default function MoneyflowIndDcPage() {
               </Select>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleQuery} disabled={isLoading} className="flex-1 sm:flex-none">
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="flex-1 sm:flex-none">
                 查询
               </Button>
             </div>
@@ -550,33 +471,28 @@ export default function MoneyflowIndDcPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             mobileCard={mobileCard}
             emptyMessage="暂无板块资金流向数据"
             tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
             sort={{
-              key: sortKey,
-              direction: sortDirection,
-              onSort: (key, direction) => {
-                const newKey = direction ? key : null
-                setSortKey(newKey)
-                setSortDirection(direction)
-                loadData(1, newKey, direction)
-              }
+              key: dp.sortKey,
+              direction: dp.sortDirection,
+              onSort: dp.handleSort,
             }}
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
 
-      {/* 同步日期选择弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+      {/* 同步日期选择弹窗（自定义内容，不用 SyncDialog） */}
+      <Dialog open={dp.syncDialogOpen} onOpenChange={dp.setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>同步板块资金流向数据</DialogTitle>
@@ -609,11 +525,11 @@ export default function MoneyflowIndDcPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>
+            <Button variant="outline" onClick={() => dp.setSyncDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={handleSyncConfirm} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : '确认同步'}
             </Button>

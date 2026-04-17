@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -8,151 +8,75 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { stkLimitDApi, type StkLimitDData, type StkLimitDStatistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
+import { useDataPage } from '@/hooks/useDataPage'
+import { stkLimitDApi, type StkLimitDData, type StkLimitDStatistics } from '@/lib/api'
+import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, CalendarDays } from 'lucide-react'
 
-const toDateStr = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+// ============== 页面组件 ==============
 
 export default function StkLimitDPage() {
-  const [data, setData] = useState<StkLimitDData[]>([])
-  const [statistics, setStatistics] = useState<StkLimitDStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // 筛选条件
+  // 查询筛选状态
   const [tsCode, setTsCode] = useState('')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
 
-  // 同步弹窗状态（与查询日期解耦）
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-
-  // 分页状态
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 任务管理
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  // 从 task store 派生 syncing 状态（普通同步或全量同步任一在跑均禁用按钮）
-  const syncing = isTaskRunning('tasks.sync_stk_limit_d_incremental') || isTaskRunning('tasks.sync_stk_limit_d_full_history')
-
-  // 加载数据（targetPage/targetPageSize 直接传入，绕过 setState 异步延迟）
-  const loadData = useCallback(async (targetPage = 1, targetPageSize = pageSize) => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const params: any = { page: targetPage, page_size: targetPageSize }
+  const dp = useDataPage<StkLimitDData, StkLimitDStatistics>({
+    apiCall: (params) => stkLimitDApi.getData(params),
+    syncFn: () => stkLimitDApi.syncAsync(),
+    taskName: ['tasks.sync_stk_limit_d_incremental', 'tasks.sync_stk_limit_d_full_history'],
+    bulkOps: {
+      tableKey: 'stk_limit_d',
+      syncFn: (params) => stkLimitDApi.syncFullHistory(params),
+      taskName: 'tasks.sync_stk_limit_d_full_history',
+    },
+    paginationMode: 'page',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (tsCode.trim()) params.ts_code = tsCode.trim()
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
-
-      const response = await stkLimitDApi.getData(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics)
-        setTotal(response.data.total || 0)
-        setPage(targetPage)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      setError(err.message || '加载失败')
-      toast.error('加载失败', { description: err.message })
-    } finally {
-      setLoading(false)
-    }
-  }, [tsCode, startDate, endDate, pageSize])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'stk_limit_d',
-    syncFn: (params) => stkLimitDApi.syncFullHistory(params),
-    taskName: 'tasks.sync_stk_limit_d_full_history',
-    onSuccess: loadData,
+      return params
+    },
+    syncSuccessMessage: '每日涨跌停价格数据同步完成',
   })
 
-  // 初始加载
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  // 清理任务回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      // 不传日期参数，由后端从 sync_configs 自动计算增量起始日期
-      const response = await stkLimitDApi.syncAsync()
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData().catch(() => {})
-            toast.success('数据同步完成', { description: '每日涨跌停价格数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-
-        toast.success('任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '总记录数',
+        value: s.total_records.toLocaleString(),
+        icon: DollarSign,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '交易日数',
+        value: `${s.trading_days}`,
+        icon: CalendarDays,
+        iconColor: 'text-orange-600',
+      },
+      {
+        label: '股票数量',
+        value: `${s.stock_count}`,
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '平均涨幅空间',
+        value: `${s.avg_up_range.toFixed(2)}`,
+        subValue: '元',
+        icon: TrendingDown,
+        iconColor: 'text-purple-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<StkLimitDData>[] = useMemo(() => [
@@ -245,94 +169,28 @@ export default function StkLimitDPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  同步中...
-                </>
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  同步数据
-                </>
+                <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="每日涨跌停价格"
             />
           </div>
         }
       />
 
-      {/* 同步确认弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步每日涨跌停价格</DialogTitle>
-            <DialogDescription>
-              将从 Tushare 增量同步最新涨跌停价格数据，无需选择日期。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总记录数</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_records.toLocaleString()}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">交易日数</CardTitle>
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.trading_days}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">股票数量</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.stock_count}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">平均涨幅空间</CardTitle>
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.avg_up_range.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">元</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 筛选和操作区域 */}
       <Card>
@@ -372,11 +230,11 @@ export default function StkLimitDPage() {
             <div className="flex items-end">
               <Button
                 variant="default"
-                onClick={() => loadData(1)}
-                disabled={loading}
+                onClick={dp.handleQuery}
+                disabled={dp.isLoading}
                 className="w-full"
               >
-                {loading ? '查询中...' : '查询'}
+                {dp.isLoading ? '查询中...' : '查询'}
               </Button>
             </div>
           </div>
@@ -387,26 +245,28 @@ export default function StkLimitDPage() {
       <Card>
         <DataTable
           columns={columns}
-          data={data}
-          loading={loading}
-          error={error}
+          data={dp.data}
+          loading={dp.isLoading}
           emptyMessage="暂无数据"
           mobileCard={mobileCard}
           pagination={{
-            page,
-            pageSize,
-            total,
-            onPageChange: (newPage) => {
-              loadData(newPage)
-            },
-            onPageSizeChange: (newPageSize) => {
-              setPageSize(newPageSize)
-              loadData(1, newPageSize)
-            },
-            pageSizeOptions: [10, 20, 30, 50, 100]
+            page: dp.page,
+            pageSize: dp.pageSize,
+            total: dp.total,
+            onPageChange: dp.handlePageChange,
           }}
         />
       </Card>
+
+      {/* 同步确认弹窗（无日期参数） */}
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步每日涨跌停价格"
+        description="将从 Tushare 增量同步最新涨跌停价格数据，无需选择日期。"
+        disabled={dp.syncing}
+      />
     </div>
   )
 }

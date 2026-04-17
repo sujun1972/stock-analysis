@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,175 +8,117 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { toast } from 'sonner'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
 import { ccassHoldDetailApi, type CcassHoldDetailData, type CcassHoldDetailStatistics } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
+import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, TrendingUp, Users, Calendar, Database, ListFilter } from 'lucide-react'
 
-const toDateStr = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// ============== 工具函数 ==============
+
+const formatNumber = (value: number | null | undefined, decimals = 0): string => {
+  if (value === null || value === undefined) return '-'
+  return value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
+// ============== 页面组件 ==============
 
 export default function CcassHoldDetailPage() {
-  const [data, setData] = useState<CcassHoldDetailData[]>([])
-  const [statistics, setStatistics] = useState<CcassHoldDetailStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null)
-
   // 查询条件
   const [tsCode, setTsCode] = useState('')
   const [participantId, setParticipantId] = useState('')
   const [tradeDate, setTradeDate] = useState<Date | undefined>(undefined)
 
-  // 同步对话框
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  // 同步弹窗额外字段
   const [syncTsCode, setSyncTsCode] = useState('')
   const [syncHkCode, setSyncHkCode] = useState('')
   const [syncTradeDate, setSyncTradeDate] = useState<Date | undefined>(undefined)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  const syncing = isTaskRunning('tasks.sync_ccass_hold_detail')
-
-  const PAGE_SIZE = 100
-
-  const loadData = useCallback(async (targetPage = 1, overrideSortKey = sortKey, overrideSortDir = sortDirection) => {
-    setIsLoading(true)
-    try {
-      const params: any = { page: targetPage, page_size: PAGE_SIZE }
+  const dp = useDataPage<CcassHoldDetailData, CcassHoldDetailStatistics>({
+    apiCall: (params) => ccassHoldDetailApi.getData(params),
+    syncFn: (params) => ccassHoldDetailApi.syncAsync(params),
+    taskName: 'tasks.sync_ccass_hold_detail',
+    bulkOps: {
+      tableKey: 'ccass_hold_detail',
+      syncFn: (params) => apiClient.post('/api/ccass-hold-detail/sync-async', null, { params }),
+      taskName: 'tasks.sync_ccass_hold_detail',
+    },
+    paginationMode: 'page',
+    pageSize: 100,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (tsCode) params.ts_code = tsCode
       if (participantId) params.col_participant_id = participantId
       if (tradeDate) params.trade_date = toDateStr(tradeDate)
-      if (overrideSortKey) {
-        params.sort_by = overrideSortKey
-        params.sort_order = overrideSortDir ?? 'desc'
-      }
-
-      const response = await ccassHoldDetailApi.getData(params)
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setTotal(response.data.total || 0)
-        setStatistics(response.data.statistics || null)
-        setPage(targetPage)
-
-        // 初次加载且未选日期时，回填后端解析的默认日期
-        if (!tradeDate && response.data.trade_date) {
-          setTradeDate(new Date(response.data.trade_date + 'T00:00:00'))
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || '加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [tsCode, participantId, tradeDate, sortKey, sortDirection])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'ccass_hold_detail',
-    syncFn: (params) => apiClient.post('/api/ccass-hold-detail/sync-async', null, { params }),
-    taskName: 'tasks.sync_ccass_hold_detail',
-    onSuccess: loadData,
+      return params
+    },
+    onBackfillDate: (dateStr) => {
+      if (!tradeDate) setTradeDate(new Date(dateStr + 'T00:00:00'))
+    },
+    syncSuccessMessage: 'CCASS持股明细数据同步完成',
   })
 
-  useEffect(() => {
-    loadData(1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const closeSyncDialog = () => {
-    setSyncDialogOpen(false)
-    setSyncTsCode('')
-    setSyncHkCode('')
-    setSyncTradeDate(undefined)
-    setSyncStartDate(undefined)
-    setSyncEndDate(undefined)
-  }
-
-  const handleSyncConfirm = async () => {
+  // 覆盖同步确认：需要额外传 syncTsCode / syncHkCode / syncTradeDate，且需要验证至少填写一个参数
+  const handleCustomSyncConfirm = async () => {
     const hasTsCode = syncTsCode.trim() !== ''
     const hasHkCode = syncHkCode.trim() !== ''
     const hasTradeDate = syncTradeDate !== undefined
-    const hasDateRange = syncStartDate !== undefined || syncEndDate !== undefined
+    const hasDateRange = dp.syncStartDate !== undefined || dp.syncEndDate !== undefined
 
     if (!hasTsCode && !hasHkCode && !hasTradeDate && !hasDateRange) {
+      const { toast } = await import('sonner')
       toast.error('请至少填写股票代码、港交所代码、交易日期或日期范围中的一个')
       return
     }
 
-    closeSyncDialog()
-
-    const params: any = {}
+    dp.setSyncDialogOpen(false)
+    const params: Record<string, unknown> = {}
     if (syncTsCode.trim()) params.ts_code = syncTsCode.trim()
     if (syncHkCode.trim()) params.hk_code = syncHkCode.trim()
     if (syncTradeDate) params.trade_date = toDateStr(syncTradeDate)
-    if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-    if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-    const response = await ccassHoldDetailApi.syncAsync(params)
-    if (response.code === 200 && response.data) {
-      const taskId = response.data.celery_task_id
-      addTask({
-        taskId,
-        taskName: response.data.task_name,
-        displayName: response.data.display_name,
-        taskType: 'data_sync',
-        status: 'running',
-        progress: 0,
-        startTime: Date.now()
-      })
-
-      const completionCallback = (task: any) => {
-        if (task.status === 'success') {
-          loadData(1).catch(() => {})
-          toast.success('数据同步完成')
-        }
-        unregisterCompletionCallback(taskId, completionCallback)
-        activeCallbacksRef.current.delete(taskId)
-      }
-      activeCallbacksRef.current.set(taskId, completionCallback)
-      registerCompletionCallback(taskId, completionCallback)
-      triggerPoll()
-    }
+    if (dp.syncStartDate) params.start_date = toDateStr(dp.syncStartDate)
+    if (dp.syncEndDate) params.end_date = toDateStr(dp.syncEndDate)
+    await dp.handleSyncDirect(params)
   }
 
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((cb, taskId) => unregisterCompletionCallback(taskId, cb))
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
-
-  const formatNumber = (value: number | null | undefined, decimals = 0): string => {
-    if (value === null || value === undefined) return '-'
-    return value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
-  }
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '总记录数',
+        value: formatNumber(s.total_records),
+        subValue: '条',
+        icon: Database,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '交易日数',
+        value: formatNumber(s.trading_days),
+        subValue: '天',
+        icon: Calendar,
+        iconColor: 'text-orange-600',
+      },
+      {
+        label: '股票数',
+        value: formatNumber(s.stock_count),
+        subValue: '只',
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '机构数',
+        value: formatNumber(s.participant_count),
+        subValue: '个',
+        icon: Users,
+        iconColor: 'text-purple-600',
+      },
+    ]
+  }, [dp.statistics])
 
   const columns = useMemo((): Column<CcassHoldDetailData>[] => [
     {
@@ -243,78 +185,26 @@ export default function CcassHoldDetailPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing
                 ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
                 : <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="CCASS持股明细"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">总记录数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.total_records)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">条</p>
-                </div>
-                <Database className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">交易日数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.trading_days)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">天</p>
-                </div>
-                <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">股票数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.stock_count)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">只</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">机构数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{formatNumber(statistics.participant_count)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">个</p>
-                </div>
-                <Users className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 查询筛选 */}
       <Card>
@@ -350,8 +240,8 @@ export default function CcassHoldDetailPage() {
               <Label>交易日期</Label>
               <DatePicker date={tradeDate} onDateChange={setTradeDate} placeholder="留空加载最新" />
             </div>
-            <Button onClick={() => loadData(1)} disabled={isLoading}>
-              {isLoading ? '查询中...' : '查询'}
+            <Button onClick={dp.handleQuery} disabled={dp.isLoading}>
+              {dp.isLoading ? '查询中...' : '查询'}
             </Button>
           </div>
         </CardContent>
@@ -362,25 +252,20 @@ export default function CcassHoldDetailPage() {
         <CardContent className="pt-4">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无数据"
             tableClassName="table-fixed w-full [&_th]:border-r [&_th]:border-gray-200 [&_td]:border-r [&_td]:border-gray-100 [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0"
             sort={{
-              key: sortKey,
-              direction: sortDirection,
-              onSort: (key: string, direction: 'asc' | 'desc' | null) => {
-                const newKey = direction ? key : null
-                setSortKey(newKey)
-                setSortDirection(direction)
-                loadData(1, newKey, direction)
-              }
+              key: dp.sortKey,
+              direction: dp.sortDirection,
+              onSort: dp.handleSort,
             }}
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (p) => loadData(p)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
             mobileCard={(row) => (
               <div className="p-4 space-y-2">
@@ -410,56 +295,46 @@ export default function CcassHoldDetailPage() {
       </Card>
 
       {/* 同步对话框 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>同步中央结算系统持股明细</DialogTitle>
-            <DialogDescription>
-              请至少填写一个参数（股票代码、港交所代码、交易日期或日期范围）。消耗 8000 积分/次，单次最大 6000 条。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-1">
-              <Label>股票代码</Label>
-              <Input
-                placeholder="如：00960.HK"
-                value={syncTsCode}
-                onChange={(e) => setSyncTsCode(e.target.value.toUpperCase())}
-              />
-              <p className="text-xs text-muted-foreground">港股代码格式，如：00960.HK</p>
-            </div>
-            <div className="space-y-1">
-              <Label>港交所代码</Label>
-              <Input
-                placeholder="如：95009"
-                value={syncHkCode}
-                onChange={(e) => setSyncHkCode(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>交易日期（可选）</Label>
-              <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择交易日期" />
-            </div>
-            <div className="space-y-1">
-              <Label>日期范围（可选）</Label>
-              <div className="flex gap-2 items-center">
-                <DatePicker date={syncStartDate} onDateChange={setSyncStartDate} placeholder="开始日期" />
-                <span className="text-muted-foreground">至</span>
-                <DatePicker date={syncEndDate} onDateChange={setSyncEndDate} placeholder="结束日期" />
-              </div>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={handleCustomSyncConfirm}
+        title="同步中央结算系统持股明细"
+        description="请至少填写一个参数（股票代码、港交所代码、交易日期或日期范围）。消耗 8000 积分/次，单次最大 6000 条。"
+        disabled={dp.syncing || (!syncTsCode.trim() && !syncHkCode.trim() && !syncTradeDate && !dp.syncStartDate && !dp.syncEndDate)}
+      >
+        <div className="space-y-4 py-4">
+          <div className="space-y-1">
+            <Label>股票代码</Label>
+            <Input
+              placeholder="如：00960.HK"
+              value={syncTsCode}
+              onChange={(e) => setSyncTsCode(e.target.value.toUpperCase())}
+            />
+            <p className="text-xs text-muted-foreground">港股代码格式，如：00960.HK</p>
+          </div>
+          <div className="space-y-1">
+            <Label>港交所代码</Label>
+            <Input
+              placeholder="如：95009"
+              value={syncHkCode}
+              onChange={(e) => setSyncHkCode(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>交易日期（可选）</Label>
+            <DatePicker date={syncTradeDate} onDateChange={setSyncTradeDate} placeholder="选择交易日期" />
+          </div>
+          <div className="space-y-1">
+            <Label>日期范围（可选）</Label>
+            <div className="flex gap-2 items-center">
+              <DatePicker date={dp.syncStartDate} onDateChange={dp.setSyncStartDate} placeholder="开始日期" />
+              <span className="text-muted-foreground">至</span>
+              <DatePicker date={dp.syncEndDate} onDateChange={dp.setSyncEndDate} placeholder="结束日期" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeSyncDialog}>取消</Button>
-            <Button
-              onClick={handleSyncConfirm}
-              disabled={syncing || (!syncTsCode.trim() && !syncHkCode.trim() && !syncTradeDate && !syncStartDate && !syncEndDate)}
-            >
-              确认同步
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </SyncDialog>
     </div>
   )
 }

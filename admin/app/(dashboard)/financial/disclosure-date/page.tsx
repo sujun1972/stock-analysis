@@ -1,155 +1,88 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
-import { DataTable, Column } from '@/components/common/DataTable'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
-import { toast } from 'sonner'
-import { RefreshCw, FileText, Calendar, TrendingUp, CheckCircle, Clock } from 'lucide-react'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { financialDataApi, type DisclosureDateData, type DisclosureDateStatistics } from '@/lib/api/financial-data'
-import { useTaskStore } from '@/stores/task-store'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
+import { financialDataApi } from '@/lib/api/financial-data'
+import type { DisclosureDateData, DisclosureDateStatistics } from '@/lib/api/financial-data'
+import { toDateStr } from '@/lib/date-utils'
+import { RefreshCw, FileText, Calendar, TrendingUp, CheckCircle, Clock } from 'lucide-react'
 
-const toDateStr = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// ============== 页面组件 ==============
 
 export default function DisclosureDatePage() {
-  const [data, setData] = useState<DisclosureDateData[]>([])
-  const [statistics, setStatistics] = useState<DisclosureDateStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // 筛选条件
+  // 查询筛选状态
   const [tsCode, setTsCode] = useState('')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
 
-  // 分页
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const [total, setTotal] = useState(0)
-
-  // 同步弹窗
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-
-  // 任务回调存储
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-
-  // 从 task store 派生 syncing 状态
-  const syncing = isTaskRunning('tasks.sync_disclosure_date') || isTaskRunning('tasks.sync_disclosure_date_full_history')
-
-  // 加载数据
-  const loadData = useCallback(async (currentPage = page, currentPageSize = pageSize) => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const response = await financialDataApi.getDisclosureDate({
-        ts_code: tsCode || undefined,
-        start_date: startDate ? toDateStr(startDate) : undefined,
-        end_date: endDate ? toDateStr(endDate) : undefined,
-        limit: currentPageSize,
-        offset: (currentPage - 1) * currentPageSize
-      })
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics)
-        setTotal(response.data.total || 0)
-      } else {
-        throw new Error(response.message || '加载失败')
-      }
-    } catch (err: any) {
-      const errorMsg = err.message || '加载数据失败'
-      setError(errorMsg)
-      toast.error('加载失败', { description: errorMsg })
-    } finally {
-      setLoading(false)
-    }
-  }, [tsCode, startDate, endDate, page, pageSize])
-
-  // 初始加载
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'disclosure_date',
-    syncFn: (params) => financialDataApi.syncDisclosureDateFullHistoryAsync(params),
-    taskName: 'tasks.sync_disclosure_date_full_history',
-    onSuccess: loadData,
+  const dp = useDataPage<DisclosureDateData, DisclosureDateStatistics>({
+    apiCall: (params) => financialDataApi.getDisclosureDate(params),
+    syncFn: () => financialDataApi.syncDisclosureDateAsync(),
+    taskName: ['tasks.sync_disclosure_date', 'tasks.sync_disclosure_date_full_history'],
+    bulkOps: {
+      tableKey: 'disclosure_date',
+      syncFn: (params) => financialDataApi.syncDisclosureDateFullHistoryAsync(params),
+      taskName: 'tasks.sync_disclosure_date_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
+      if (tsCode) params.ts_code = tsCode
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
+      return params
+    },
+    syncSuccessMessage: '财报披露计划数据同步完成',
   })
 
-  // 组件卸载时清理回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [unregisterCompletionCallback])
-
-  // 同步确认
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      const response = await financialDataApi.syncDisclosureDateAsync()
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1, pageSize).catch(() => {})
-            toast.success('数据同步完成', { description: '财报披露计划数据已更新' })
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('同步任务已提交', { description: '可在任务面板查看进度' })
-      } else {
-        throw new Error(response.message || '同步失败')
-      }
-    } catch (err: any) {
-      toast.error('同步失败', { description: err.message || '无法同步数据' })
-    }
-  }
+  // 统计卡片（5列布局）
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '总记录数',
+        value: (s.total_count || 0).toLocaleString(),
+        icon: FileText,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '股票数量',
+        value: (s.stock_count || 0).toLocaleString(),
+        icon: TrendingUp,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '报告期数量',
+        value: (s.period_count || 0).toLocaleString(),
+        icon: Calendar,
+        iconColor: 'text-muted-foreground',
+      },
+      {
+        label: '已披露',
+        value: <span className="text-green-600">{(s.disclosed_count || 0).toLocaleString()}</span>,
+        icon: CheckCircle,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '待披露',
+        value: <span className="text-yellow-600">{(s.pending_count || 0).toLocaleString()}</span>,
+        icon: Clock,
+        iconColor: 'text-yellow-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<DisclosureDateData>[] = useMemo(() => [
@@ -195,7 +128,7 @@ export default function DisclosureDatePage() {
 
   // 移动端卡片视图
   const mobileCard = useCallback((item: DisclosureDateData) => (
-    <div className="space-y-2">
+    <div className="p-4 space-y-2">
       <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">股票代码</span>
         <span className="font-medium">{item.ts_code}</span>
@@ -244,102 +177,42 @@ export default function DisclosureDatePage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="财报披露计划"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">总记录数</p>
-                  <p className="text-2xl font-bold">{statistics.total_count || 0}</p>
-                </div>
-                <FileText className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">股票数量</p>
-                  <p className="text-2xl font-bold">{statistics.stock_count || 0}</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">报告期数量</p>
-                  <p className="text-2xl font-bold">{statistics.period_count || 0}</p>
-                </div>
-                <Calendar className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">已披露</p>
-                  <p className="text-2xl font-bold text-green-600">{statistics.disclosed_count || 0}</p>
-                </div>
-                <CheckCircle className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">待披露</p>
-                  <p className="text-2xl font-bold text-yellow-600">{statistics.pending_count || 0}</p>
-                </div>
-                <Clock className="h-8 w-8 text-yellow-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards
+        items={statsCards}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
+      />
 
       {/* 筛选和操作 */}
       <Card>
         <CardHeader>
           <CardTitle>数据查询</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1 w-full sm:w-auto">
               <Label className="mb-2 block">股票代码</Label>
-              <Input
-                placeholder="如: 600000.SH"
-                value={tsCode}
-                onChange={(e) => setTsCode(e.target.value)}
-              />
+              <Input placeholder="如: 600000.SH" value={tsCode} onChange={(e) => setTsCode(e.target.value)} />
             </div>
             <div className="flex-1 w-full sm:w-auto">
               <Label className="mb-2 block">开始日期（报告期）</Label>
@@ -350,8 +223,8 @@ export default function DisclosureDatePage() {
               <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => loadData()} disabled={loading}>
-                查询
+              <Button onClick={dp.handleQuery} disabled={dp.isLoading}>
+                {dp.isLoading ? '查询中...' : '查询'}
               </Button>
             </div>
           </div>
@@ -359,109 +232,35 @@ export default function DisclosureDatePage() {
       </Card>
 
       {/* 数据表格 */}
-      <Card className="p-0 sm:p-0 overflow-hidden">
-        {/* 移动端视图 */}
-        <div className="sm:hidden">
-          <div className="px-4 py-3 border-b bg-muted/50">
-            <h3 className="text-sm font-medium">财报披露计划数据</h3>
-          </div>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {!loading && !error && data.map((item, index) => (
-              <div
-                key={`${item.ts_code}-${item.end_date}-${index}`}
-                className={`p-4 transition-colors ${
-                  index % 2 === 0
-                    ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                    : 'bg-gray-50 dark:bg-gray-950 hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100 dark:active:bg-blue-900/30'
-                }`}
-              >
-                {mobileCard(item)}
-              </div>
-            ))}
-          </div>
-
-          {loading && (
-            <div className="p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          {!loading && !error && data.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无数据</p>
-            </div>
-          )}
-
-          {/* 移动端分页 */}
-          {!loading && !error && data.length > 0 && (
-            <div className="p-4 border-t bg-muted/30">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { const newPage = Math.max(1, page - 1); setPage(newPage); loadData(newPage, pageSize).catch(() => {}) }}
-                  disabled={page === 1}
-                >
-                  上一页
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  第 {page} / {Math.ceil(total / pageSize)} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { const newPage = Math.min(Math.ceil(total / pageSize), page + 1); setPage(newPage); loadData(newPage, pageSize).catch(() => {}) }}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 桌面端表格 */}
-        <div className="hidden sm:block">
+      <Card>
+        <CardContent className="pt-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
+            data={dp.data}
+            loading={dp.isLoading}
             emptyMessage="暂无数据"
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: (newPage) => { setPage(newPage); loadData(newPage, pageSize).catch(() => {}) },
-              onPageSizeChange: (newPageSize) => { setPageSize(newPageSize); setPage(1); loadData(1, newPageSize).catch(() => {}) },
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
+              onPageSizeChange: dp.handlePageSizeChange,
               pageSizeOptions: [10, 20, 30, 50, 100]
             }}
+            mobileCard={mobileCard}
           />
-        </div>
+        </CardContent>
       </Card>
 
       {/* 同步弹窗 */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>同步财报披露计划</DialogTitle>
-            <DialogDescription>
-              将从 Tushare 增量同步最新财报披露计划数据，无需选择日期。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步财报披露计划"
+        description="将从 Tushare 增量同步最新财报披露计划数据，无需选择日期。"
+        disabled={dp.syncing}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,15 +8,22 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
-import { toast } from 'sonner'
-import { RefreshCw, Calendar, TrendingUp, BarChart2, CheckCircle } from 'lucide-react'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { useDataPage } from '@/hooks/useDataPage'
 import { tradeCalApi } from '@/lib/api'
 import type { TradeCalData, TradeCalStatistics } from '@/lib/api'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { apiClient } from '@/lib/api-client'
+import { toDateStr } from '@/lib/date-utils'
+import { RefreshCw, Calendar, TrendingUp, BarChart2, CheckCircle } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 const EXCHANGE_OPTIONS = [
   { value: 'SSE', label: 'SSE 上交所' },
@@ -29,13 +36,6 @@ const EXCHANGE_OPTIONS = [
 ]
 
 export default function TradeCalPage() {
-  const [data, setData] = useState<TradeCalData[]>([])
-  const [statistics, setStatistics] = useState<TradeCalStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const pageSize = 30
-
   const [exchange, setExchange] = useState('SSE')
   const [isOpen, setIsOpen] = useState<string>('all')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
@@ -47,139 +47,49 @@ export default function TradeCalPage() {
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
   const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  const syncing = isTaskRunning('tasks.sync_trade_cal')
-
-  const loadData = async (currentPage = page) => {
-    setIsLoading(true)
-    try {
-      const params: any = {
-        exchange,
-        page: currentPage,
-        page_size: pageSize,
-      }
-      if (startDate) params.start_date = startDate.toISOString().split('T')[0]
-      if (endDate) params.end_date = endDate.toISOString().split('T')[0]
-      if (isOpen !== 'all') params.is_open = isOpen
-
-      const response = await tradeCalApi.getData(params)
-      if (response.code === 200 && response.data) {
-        setData(response.data.items)
-        setTotal(response.data.total)
-      }
-    } catch {
-      toast.error('加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadStatistics = async () => {
-    try {
-      const response = await tradeCalApi.getStatistics({ exchange })
-      if (response.code === 200 && response.data) {
-        setStatistics(response.data)
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'trade_cal',
-    syncFn: (params) => apiClient.post('/api/trade-cal/sync-async', null, { params }),
+  const dp = useDataPage<TradeCalData, TradeCalStatistics>({
+    apiCall: (params) => tradeCalApi.getData(params),
+    statisticsCall: (params) => tradeCalApi.getStatistics(params),
+    syncFn: (params) => tradeCalApi.syncAsync(params),
     taskName: 'tasks.sync_trade_cal',
-    onSuccess: () => loadData(1),
+    bulkOps: {
+      tableKey: 'trade_cal',
+      syncFn: (params) => apiClient.post('/api/trade-cal/sync-async', null, { params }),
+      taskName: 'tasks.sync_trade_cal',
+    },
+    paginationMode: 'page',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = { exchange }
+      if (startDate) params.start_date = toDateStr(startDate)
+      if (endDate) params.end_date = toDateStr(endDate)
+      if (isOpen !== 'all') params.is_open = isOpen
+      return params
+    },
+    syncSuccessMessage: '交易日历同步完成',
   })
 
-  useEffect(() => {
-    loadData(1)
-    setPage(1)
-    loadStatistics()
-  }, [exchange])
-
-  const handleQuery = () => {
-    setPage(1)
-    loadData(1)
-  }
-
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage)
-    loadData(newPage)
-  }
-
-  const toDateStr = (date: Date) => {
-    const y = date.getFullYear()
-    const m = String(date.getMonth() + 1).padStart(2, '0')
-    const d = String(date.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
-  }
-
+  // 自定义同步处理（使用独立参数，不传查询筛选日期）
   const handleSyncConfirm = async () => {
     setSyncDialogOpen(false)
-    try {
-      // 使用同步弹窗独立参数，不传查询筛选日期
-      const params: any = {}
-      if (syncExchange) params.exchange = syncExchange
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await tradeCalApi.syncAsync(params)
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1).catch(() => {})
-            loadStatistics().catch(() => {})
-            setPage(1)
-            toast.success('交易日历同步完成')
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-
-        triggerPoll()
-        toast.success('同步任务已提交')
-      }
-    } catch {
-      toast.error('提交同步任务失败')
-    }
+    const params: Record<string, unknown> = {}
+    if (syncExchange) params.exchange = syncExchange
+    if (syncStartDate) params.start_date = toDateStr(syncStartDate)
+    if (syncEndDate) params.end_date = toDateStr(syncEndDate)
+    await dp.handleSyncDirect(params)
   }
 
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-  }, [])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      { label: '总天数', value: s.total_days ?? 0, subValue: `${s.year} 年`, icon: Calendar, iconColor: 'text-blue-600' },
+      { label: '交易日', value: <span className="text-green-600">{s.trading_days ?? 0}</span>, subValue: '开市天数', icon: CheckCircle, iconColor: 'text-green-500' },
+      { label: '休市天数', value: s.non_trading_days ?? 0, subValue: '含周末节假日', icon: BarChart2, iconColor: 'text-gray-500' },
+      { label: '交易日占比', value: <span className="text-blue-600">{s.trading_day_ratio ?? 0}%</span>, subValue: '全年交易占比', icon: TrendingUp, iconColor: 'text-blue-500' },
+    ]
+  }, [dp.statistics])
 
   const columns: Column<TradeCalData>[] = [
     {
@@ -212,6 +122,22 @@ export default function TradeCalPage() {
     },
   ]
 
+  const mobileCard = (item: TradeCalData) => (
+    <div className="p-4 space-y-2">
+      <div className="flex justify-between items-center">
+        <span className="font-medium">{item.cal_date}</span>
+        <span>{item.is_open === 1
+          ? <span className="text-green-600 text-sm font-medium">交易日</span>
+          : <span className="text-muted-foreground text-sm">休市</span>
+        }</span>
+      </div>
+      <div className="flex justify-between text-sm text-muted-foreground">
+        <span>交易所：{item.exchange}</span>
+        <span>上一交易日：{item.pretrade_date ?? '-'}</span>
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -232,28 +158,28 @@ export default function TradeCalPage() {
         }
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="交易日历"
             />
           </div>
         }
       />
 
-      {/* 同步弹窗 */}
+      {/* 同步弹窗（自定义，含交易所选择） */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
@@ -285,64 +211,15 @@ export default function TradeCalPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>确认同步</Button>
+            <Button onClick={handleSyncConfirm} disabled={dp.syncing}>确认同步</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 统计卡片 */}
-      {statistics && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">总天数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.total_days ?? 0}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{statistics.year} 年</p>
-                </div>
-                <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">交易日</p>
-                  <p className="text-xl sm:text-2xl font-bold text-green-600">{statistics.trading_days ?? 0}</p>
-                  <p className="text-xs text-muted-foreground mt-1">开市天数</p>
-                </div>
-                <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">休市天数</p>
-                  <p className="text-xl sm:text-2xl font-bold">{statistics.non_trading_days ?? 0}</p>
-                  <p className="text-xs text-muted-foreground mt-1">含周末节假日</p>
-                </div>
-                <BarChart2 className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">交易日占比</p>
-                  <p className="text-xl sm:text-2xl font-bold text-blue-600">{statistics.trading_day_ratio ?? 0}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">全年交易占比</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards
+        items={statsCards}
+        className="grid grid-cols-2 sm:grid-cols-4 gap-4"
+      />
 
       {/* 筛选区域 */}
       <Card>
@@ -351,7 +228,7 @@ export default function TradeCalPage() {
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">交易所</span>
-              <Select value={exchange} onValueChange={setExchange}>
+              <Select value={exchange} onValueChange={(v) => { setExchange(v); setTimeout(() => dp.handleQuery(), 0) }}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -383,7 +260,7 @@ export default function TradeCalPage() {
               <span className="text-xs text-muted-foreground">结束日期</span>
               <DatePicker date={endDate} onDateChange={setEndDate} />
             </div>
-            <Button onClick={handleQuery}>查询</Button>
+            <Button onClick={dp.handleQuery}>查询</Button>
           </div>
         </CardContent>
       </Card>
@@ -393,29 +270,15 @@ export default function TradeCalPage() {
         <CardContent className="pt-4">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
+            mobileCard={mobileCard}
             pagination={{
-              page,
-              pageSize,
-              total,
-              onPageChange: handlePageChange
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
-            mobileCard={(item) => (
-              <div className="p-4 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">{item.cal_date}</span>
-                  <span>{item.is_open === 1
-                    ? <span className="text-green-600 text-sm font-medium">交易日</span>
-                    : <span className="text-muted-foreground text-sm">休市</span>
-                  }</span>
-                </div>
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>交易所：{item.exchange}</span>
-                  <span>上一交易日：{item.pretrade_date ?? '-'}</span>
-                </div>
-              </div>
-            )}
           />
         </CardContent>
       </Card>

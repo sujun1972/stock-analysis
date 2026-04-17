@@ -1,25 +1,18 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { SyncDialog } from '@/components/common/SyncDialog'
+import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
+import { useDataPage } from '@/hooks/useDataPage'
 import { moneyflowApi } from '@/lib/api'
 import { apiClient } from '@/lib/api-client'
-import { useTaskStore } from '@/stores/task-store'
-import { useDataBulkOps } from '@/hooks/useDataBulkOps'
-import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { toast } from 'sonner'
+import { toDateStr } from '@/lib/date-utils'
 import {
   TrendingUp,
   TrendingDown,
@@ -39,14 +32,16 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 
+// ============== 类型定义 ==============
+
 interface MoneyflowData {
   trade_date: string
-  ggt_ss: number      // 港股通（上海）
-  ggt_sz: number      // 港股通（深圳）
-  hgt: number         // 沪股通
-  sgt: number         // 深股通
-  north_money: number // 北向资金
-  south_money: number // 南向资金
+  ggt_ss: number
+  ggt_sz: number
+  hgt: number
+  sgt: number
+  north_money: number
+  south_money: number
 }
 
 interface Statistics {
@@ -63,13 +58,8 @@ interface Statistics {
   count: number
 }
 
-const PAGE_SIZE = 30
+// ============== 工具函数 ==============
 
-// 时区安全的日期字符串构建（避免 toISOString UTC 偏移）
-const toDateStr = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-// 百万元 → 亿元
 const toYi = (value: number | null | undefined, decimals = 2) => {
   if (value === null || value === undefined) return '0.00'
   return (value / 100).toFixed(decimals)
@@ -83,132 +73,68 @@ const formatDate = (dateStr: string) => {
   return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
 }
 
+// ============== 页面组件 ==============
+
 export default function MoneyflowHsgtPage() {
-  const [data, setData] = useState<MoneyflowData[]>([])
-  const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  // 查询筛选状态（页面个性化）
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
-  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>(undefined)
-  const [syncEndDate, setSyncEndDate] = useState<Date | undefined>(undefined)
 
-  const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, isTaskRunning } = useTaskStore()
-  const activeCallbacksRef = useRef<Map<string, any>>(new Map())
-
-  // 从 task store 实时派生——不用本地 useState
-  const syncing = isTaskRunning('tasks.sync_moneyflow_hsgt')
-
-  const loadData = useCallback(async (targetPage: number = 1) => {
-    setIsLoading(true)
-    try {
-      const params: any = {
-        limit: PAGE_SIZE,
-        offset: (targetPage - 1) * PAGE_SIZE,
-      }
+  const dp = useDataPage<MoneyflowData, Statistics>({
+    apiCall: (params) => moneyflowApi.getMoneyflowHsgt(params),
+    syncFn: (params) => moneyflowApi.syncMoneyflowHsgtAsync(params),
+    taskName: 'tasks.sync_moneyflow_hsgt',
+    bulkOps: {
+      tableKey: 'moneyflow_hsgt',
+      syncFn: (params) => apiClient.post('/api/moneyflow-hsgt/sync-full-history', null, { params }),
+      taskName: 'tasks.sync_moneyflow_hsgt_full_history',
+    },
+    paginationMode: 'offset',
+    pageSize: 30,
+    buildParams: () => {
+      const params: Record<string, unknown> = {}
       if (startDate) params.start_date = toDateStr(startDate)
       if (endDate) params.end_date = toDateStr(endDate)
-
-      const response = await moneyflowApi.getMoneyflowHsgt(params)
-
-      if (response.code === 200 && response.data) {
-        setData(response.data.items || [])
-        setStatistics(response.data.statistics || null)
-        setTotal(response.data.total || 0)
-        setPage(targetPage)
-      } else {
-        throw new Error(response.message || '获取数据失败')
-      }
-    } catch (err: any) {
-      toast.error(err.message || '加载数据失败')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [startDate, endDate])
-
-  const {
-    handleFullSync,
-    handleClear,
-    fullSyncing,
-    isClearing,
-    isClearDialogOpen,
-    setIsClearDialogOpen,
-    cleanup,
-    earliestHistoryDate,
-  } = useDataBulkOps({
-    tableKey: 'moneyflow_hsgt',
-    syncFn: (params) => apiClient.post('/api/moneyflow-hsgt/sync-full-history', null, { params }),
-    taskName: 'tasks.sync_moneyflow_hsgt_full_history',
-    onSuccess: loadData,
+      return params
+    },
+    syncSuccessMessage: '沪深港通资金流向数据同步完成',
   })
 
-  // 仅在 mount 时加载，后续由用户点击查询按钮触发
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadData(1) }, [])
-
-  const handleQuery = () => loadData(1)
-
-  const handleSyncConfirm = async () => {
-    setSyncDialogOpen(false)
-    try {
-      // 不传查询日期，仅传用户在弹窗中显式选择的日期
-      const params: any = {}
-      if (syncStartDate) params.start_date = toDateStr(syncStartDate)
-      if (syncEndDate) params.end_date = toDateStr(syncEndDate)
-
-      const response = await moneyflowApi.syncMoneyflowHsgtAsync(params)
-
-      if (response.code === 200 && response.data) {
-        const taskId = response.data.celery_task_id
-        addTask({
-          taskId,
-          taskName: response.data.task_name,
-          displayName: response.data.display_name,
-          taskType: 'data_sync',
-          status: 'running',
-          progress: 0,
-          startTime: Date.now()
-        })
-
-        const completionCallback = (task: any) => {
-          if (task.status === 'success') {
-            loadData(1)
-            toast.success('沪深港通资金流向数据同步完成')
-          } else if (task.status === 'failure') {
-            toast.error('数据同步失败', { description: task.error || '同步过程中发生错误' })
-          }
-          unregisterCompletionCallback(taskId, completionCallback)
-          activeCallbacksRef.current.delete(taskId)
-        }
-        activeCallbacksRef.current.set(taskId, completionCallback)
-        registerCompletionCallback(taskId, completionCallback)
-        triggerPoll()
-
-        toast.success('同步任务已提交', {
-          description: `"${response.data.display_name}" 已开始执行，可在任务面板查看进度`
-        })
-      } else {
-        throw new Error(response.message || '提交同步任务失败')
-      }
-    } catch (err: any) {
-      toast.error(err.message || '提交同步任务失败')
-    }
-  }
-
-  // 组件卸载时清理所有活跃的任务回调
-  useEffect(() => {
-    return () => {
-      const callbacks = activeCallbacksRef.current
-      callbacks.forEach((callback, taskId) => {
-        unregisterCompletionCallback(taskId, callback)
-      })
-      callbacks.clear()
-      cleanup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // 统计卡片
+  const statsCards: StatisticsCardItem[] = useMemo(() => {
+    if (!dp.statistics) return []
+    const s = dp.statistics
+    return [
+      {
+        label: '北向资金均值',
+        value: <span className={pctColor(s.avg_north)}>{(s.avg_north ?? 0) >= 0 ? '+' : ''}{toYi(s.avg_north)}亿</span>,
+        subValue: `近${s.count}个交易日`,
+        icon: Activity,
+        iconColor: 'text-orange-600',
+      },
+      {
+        label: '累计净流入',
+        value: <span className={pctColor(s.total_north)}>{(s.total_north ?? 0) >= 0 ? '+' : ''}{toYi(s.total_north)}亿</span>,
+        subValue: '期间总计',
+        icon: TrendingDown,
+        iconColor: 'text-blue-600',
+      },
+      {
+        label: '北向最大流入',
+        value: <span className="text-red-600 dark:text-red-400">+{toYi(s.max_north)}亿</span>,
+        subValue: '单日最高',
+        icon: TrendingUp,
+        iconColor: 'text-green-600',
+      },
+      {
+        label: '南向最大流出',
+        value: <span className="text-green-600 dark:text-green-400">{toYi(s.max_south)}亿</span>,
+        subValue: '单日最高',
+        icon: DollarSign,
+        iconColor: 'text-purple-600',
+      },
+    ]
+  }, [dp.statistics])
 
   // 表格列定义
   const columns: Column<MoneyflowData>[] = useMemo(() => [
@@ -325,12 +251,12 @@ export default function MoneyflowHsgtPage() {
 
   // 趋势图数据（时序倒序 → 正序）
   const chartData = useMemo(() => {
-    return [...data].reverse().map(item => ({
+    return [...dp.data].reverse().map(item => ({
       date: formatDate(item.trade_date),
       北向资金: item.north_money !== null ? item.north_money / 100 : null,
       南向资金: item.south_money !== null ? item.south_money / 100 : null,
     }))
-  }, [data])
+  }, [dp.data])
 
   return (
     <div className="space-y-6">
@@ -343,91 +269,28 @@ export default function MoneyflowHsgtPage() {
         </>}
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => setSyncDialogOpen(true)} disabled={syncing}>
-              {syncing ? (
+            <Button onClick={() => dp.setSyncDialogOpen(true)} disabled={dp.syncing}>
+              {dp.syncing ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-1" />同步数据</>
               )}
             </Button>
             <BulkOpsButtons
-              onFullSync={handleFullSync}
-              onClearConfirm={handleClear}
-              isClearDialogOpen={isClearDialogOpen}
-              setIsClearDialogOpen={setIsClearDialogOpen}
-              fullSyncing={fullSyncing}
-              isClearing={isClearing}
-              earliestHistoryDate={earliestHistoryDate}
+              onFullSync={dp.handleFullSync}
+              onClearConfirm={dp.handleClear}
+              isClearDialogOpen={dp.isClearDialogOpen}
+              setIsClearDialogOpen={dp.setIsClearDialogOpen}
+              fullSyncing={dp.fullSyncing}
+              isClearing={dp.isClearing}
+              earliestHistoryDate={dp.earliestHistoryDate}
               tableName="沪深港通资金流向"
             />
           </div>
         }
       />
 
-      {/* 统计卡片 — 左文字右图标 */}
-      {statistics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">北向资金均值</p>
-                  <p className={`text-xl sm:text-2xl font-bold mt-1 ${pctColor(statistics.avg_north)}`}>
-                    {(statistics.avg_north ?? 0) >= 0 ? '+' : ''}{toYi(statistics.avg_north)}亿
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">近{statistics.count}个交易日</p>
-                </div>
-                <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">累计净流入</p>
-                  <p className={`text-xl sm:text-2xl font-bold mt-1 ${pctColor(statistics.total_north)}`}>
-                    {(statistics.total_north ?? 0) >= 0 ? '+' : ''}{toYi(statistics.total_north)}亿
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">期间总计</p>
-                </div>
-                <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">北向最大流入</p>
-                  <p className="text-xl sm:text-2xl font-bold mt-1 text-red-600 dark:text-red-400">
-                    +{toYi(statistics.max_north)}亿
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">单日最高</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">南向最大流出</p>
-                  <p className="text-xl sm:text-2xl font-bold mt-1 text-green-600 dark:text-green-400">
-                    {toYi(statistics.max_south)}亿
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">单日最高</p>
-                </div>
-                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <StatisticsCards items={statsCards} />
 
       {/* 趋势图 */}
       {chartData.length > 0 && (
@@ -464,7 +327,7 @@ export default function MoneyflowHsgtPage() {
         </Card>
       )}
 
-      {/* 筛选区域（仅查询控件，同步按钮在 PageHeader） */}
+      {/* 筛选区域 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -482,7 +345,7 @@ export default function MoneyflowHsgtPage() {
               <label className="text-sm font-medium mb-1 block">结束日期</label>
               <DatePicker date={endDate} onDateChange={setEndDate} placeholder="选择结束日期" />
             </div>
-            <Button onClick={handleQuery} disabled={isLoading} className="w-full sm:w-auto">
+            <Button onClick={dp.handleQuery} disabled={dp.isLoading} className="w-full sm:w-auto">
               查询
             </Button>
           </div>
@@ -494,58 +357,35 @@ export default function MoneyflowHsgtPage() {
         <CardContent className="p-0 sm:p-6">
           <DataTable
             columns={columns}
-            data={data}
-            loading={isLoading}
+            data={dp.data}
+            loading={dp.isLoading}
             mobileCard={mobileCard}
             emptyMessage="暂无沪深港通资金流向数据"
             tableClassName="table-fixed w-full [&_th]:border-r [&_td]:border-r [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th]:!text-center"
             pagination={{
-              page,
-              pageSize: PAGE_SIZE,
-              total,
-              onPageChange: (newPage) => loadData(newPage)
+              page: dp.page,
+              pageSize: dp.pageSize,
+              total: dp.total,
+              onPageChange: dp.handlePageChange,
             }}
           />
         </CardContent>
       </Card>
 
-      {/* 同步弹窗（不预填查询日期，让后端取最新交易日） */}
-      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>同步沪深港通资金流向数据</DialogTitle>
-            <DialogDescription>
-              选择同步日期范围（留空则同步最新交易日数据）。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">开始日期（可选）</label>
-              <DatePicker
-                date={syncStartDate}
-                onDateChange={setSyncStartDate}
-                placeholder="留空同步最新交易日"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">结束日期（可选）</label>
-              <DatePicker
-                date={syncEndDate}
-                onDateChange={setSyncEndDate}
-                placeholder="留空同步最新交易日"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSyncConfirm} disabled={syncing}>
-              {syncing ? (
-                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" />同步中...</>
-              ) : '确认同步'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* 同步弹窗 */}
+      <SyncDialog
+        open={dp.syncDialogOpen}
+        onOpenChange={dp.setSyncDialogOpen}
+        onConfirm={dp.handleSyncConfirm}
+        title="同步沪深港通资金流向数据"
+        description="选择同步日期范围（留空则同步最新交易日数据）。"
+        disabled={dp.syncing}
+        showDateRange
+        startDate={dp.syncStartDate}
+        onStartDateChange={dp.setSyncStartDate}
+        endDate={dp.syncEndDate}
+        onEndDateChange={dp.setSyncEndDate}
+      />
     </div>
   )
 }
