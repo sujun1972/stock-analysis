@@ -449,13 +449,13 @@ class StockDataCollectionService:
         atr_history = atr.dropna().iloc[-n:]
         percentile = round(float((atr_history < last_atr).sum() / len(atr_history) * 100))
 
-        # 定性
+        # 定性（仅描述事实，不给操作建议）
         if percentile >= 80:
-            desc = f'波动率处于历史高位（{percentile}%分位），市场情绪剧烈，注意设宽止损'
+            desc = f'波动率处于历史高位（{percentile}%分位），市场情绪剧烈'
         elif percentile >= 60:
             desc = f'波动率偏高（{percentile}%分位），波动活跃'
         elif percentile <= 20:
-            desc = f'波动率处于历史低位（{percentile}%分位），市场交投清淡，可能酝酿变盘'
+            desc = f'波动率处于历史低位（{percentile}%分位），市场交投清淡'
         elif percentile <= 40:
             desc = f'波动率偏低（{percentile}%分位），波动收敛'
         else:
@@ -536,15 +536,13 @@ class StockDataCollectionService:
         if boll_bullish and rsi_overbought:
             rsi_val = rsi_short.get('rsi_value', 0)
             conflicts.append(
-                f"价格贴近布林上轨且 RSI7={rsi_val:.0f} 进入超买区，"
-                f"属于「加速上涨」还是「诱多衰竭」需量价验证"
+                f"价格贴近布林上轨且 RSI7={rsi_val:.0f} 进入超买区（>70）"
             )
 
-        # 均线空头 + 短线看多信号
+        # 均线空头 + 短线指标偏多
         if ma_bearish and (macd_bullish or boll_bullish):
             conflicts.append(
-                '均线系统处于空头排列，但短线指标出现看多信号，'
-                '可能是下跌中继反弹而非趋势反转'
+                '均线系统处于空头排列，但短线指标（MACD/布林）出现偏多信号'
             )
 
         # ---- 共振确认（区分周线大势和日线短线方向） ----
@@ -552,20 +550,18 @@ class StockDataCollectionService:
         bearish_signals = sum([ma_bearish, macd_bearish, boll_bearish])
 
         if bullish_signals >= 3:
-            confirmations.append('均线、MACD、布林线多维共振看多，趋势信号较强')
+            confirmations.append('均线、MACD、布林线三指标方向一致偏多')
         elif bearish_signals >= 3:
-            confirmations.append('均线、MACD、布林线多维共振看空，趋势信号较强')
+            confirmations.append('均线、MACD、布林线三指标方向一致偏空')
         elif ma_bullish and boll_bullish and macd_diverging:
-            # 大势看多但 MACD 日线出现偏空分化 — 精确描述而非笼统说"共振看多"
             confirmations.append(
-                '周线级别（均线、布林线）大势看多；但日线 MACD 高位黏合偏空，长短周期出现分化'
+                '均线、布林线方向偏多；日线 MACD 高位黏合偏空，长短周期出现分化'
             )
 
         if macd_bullish and boll_bullish and not rsi_overbought:
-            confirmations.append('MACD 看多 + 布林上半通道 + RSI 未超买，上涨空间尚可')
+            confirmations.append('MACD 零轴上方 + 布林上半通道 + RSI 未超买')
         elif macd_diverging and boll_bullish and not rsi_overbought:
-            # MACD 偏空但布林和 RSI 尚好 — 不能说"上涨空间尚可"，而应标注分化
-            confirmations.append('布林上半通道 + RSI 未超买，但日线 MACD 动能减弱，上行需量能配合')
+            confirmations.append('布林上半通道 + RSI 未超买，但日线 MACD 动能减弱')
 
         # 量价确认
         if vp:
@@ -575,9 +571,9 @@ class StockDataCollectionService:
                 vol_ratio = last_d.get('vol_ratio', 1)
                 pct = last_d.get('pct_change', 0)
                 if pct > 1 and vol_ratio >= 1.3:
-                    confirmations.append(f"最近一日放量上涨（量比 {vol_ratio}x），资金进场确认")
+                    confirmations.append(f"最近一日放量上涨（量比 {vol_ratio}x）")
                 elif pct < -1 and vol_ratio >= 1.3:
-                    risks.append(f"最近一日放量下跌（量比 {vol_ratio}x），资金出逃信号")
+                    risks.append(f"最近一日放量下跌（量比 {vol_ratio}x）")
 
         # ---- 风险因素 ----
         # MA120 压制
@@ -590,17 +586,17 @@ class StockDataCollectionService:
         if weekly_macd_bearish:
             risks.append(f"周线 MACD 处于零轴下方（{weekly_macd.get('zero_axis', '')}），中线趋势偏空")
 
-        # RSI 超买风险
+        # RSI 超买
         if rsi_overbought:
-            risks.append(f"RSI7 进入超买区（{rsi_short.get('rsi_value', 0):.0f}），短线存在回调压力")
+            risks.append(f"RSI7 进入超买区（{rsi_short.get('rsi_value', 0):.0f}，>70）")
 
         # 布林收口
         if '收窄' in daily_boll.get('channel_width', '') or '收口' in daily_boll.get('pattern', ''):
-            risks.append('日线布林通道收口，波动率即将放大，需关注变盘方向')
+            risks.append('日线布林通道收口，波动率收窄')
 
         # ATR 异常
         if atr and atr.get('percentile', 50) >= 80:
-            risks.append(f"波动率处于历史高位（{atr['percentile']}%分位），注意设宽止损")
+            risks.append(f"波动率处于历史高位（{atr['percentile']}%分位）")
 
         # ---- 支撑/阻力阶梯 ----
         price_pos = technical.get('price_position', {})
@@ -645,7 +641,7 @@ class StockDataCollectionService:
             return None
 
         # ---- 综合推理任务（统一替代各子模块散落的分析提示） ----
-        prompt_parts = ['请作为资深策略分析师，基于上述全部技术指标数据，完成以下交叉验证推理：']
+        prompt_parts = ['基于上述全部技术指标数据，完成以下交叉验证推理：']
         task_num = 1
 
         if conflicts:
@@ -721,10 +717,10 @@ class StockDataCollectionService:
             nearest_r = resistance_ladder[0]
             nearest_s = support_ladder[0]
             prompt_parts.append(
-                f'{task_num}. 风盈比计算：当前乖离率 {bias_val:+.1f}%，'
+                f'{task_num}. 盈亏比计算：当前乖离率 {bias_val:+.1f}%，'
                 f'上方阻力空间 +{abs(nearest_r[2]):.1f}%（{nearest_r[0]}），'
                 f'下方支撑空间 {nearest_s[2]:.1f}%（{nearest_s[0]}），'
-                f'请结合此风盈比评估当前追高/加仓的合理性，并给出仓位建议'
+                f'请计算盈亏比并评估当前价格位置的性价比'
             )
             task_num += 1
 
@@ -1201,10 +1197,10 @@ class StockDataCollectionService:
                 if anomalies:
                     lines.append(f"    异动: {'; '.join(anomalies)}")
 
-        # --- 多维指标交叉验证 ---
+        # --- 信号汇总 ---
         if cross_verification:
             lines.append("")
-            lines.append("多维指标交叉验证:")
+            lines.append("信号汇总:")
             conflicts = cross_verification.get('conflicts', [])
             if conflicts:
                 lines.append("  矛盾点:")
@@ -1248,13 +1244,13 @@ class StockDataCollectionService:
                     count = int(cnt_val)
                     triggered = (signal_val == '+9') if direction == '上涨' else (signal_val == '-9')
                     if triggered:
-                        qualifier = f"已触发九转{signal_label}信号，日线级别存在短线反转风险"
+                        qualifier = f"已触发九转{signal_label}信号（连续{count}日）"
                     elif count >= 7:
-                        qualifier = f"接近九转阈值，关注后续1-2日是否触发{signal_label}信号"
+                        qualifier = f"接近九转阈值（{count}/9），尚未触发"
                     elif count >= 4:
-                        qualifier = f"处于{direction}序列中段，序列延续中"
+                        qualifier = f"处于{direction}序列中段（{count}/9）"
                     else:
-                        qualifier = f"处于{direction}序列初期，未触发极值反转信号"
+                        qualifier = f"处于{direction}序列初期（{count}/9）"
                     lines.append(f"  {direction}计数: {count}")
                     lines.append(f"  {direction}状态: {qualifier}")
             signals = nine_turn.get('recent_signals', [])
@@ -1264,7 +1260,7 @@ class StockDataCollectionService:
                     lines.append(f"    - 日期: {s.get('date', '')}")
                     lines.append(f"      类型: {s.get('type', '')}")
             if not up_c and not down_c:
-                lines.append("  状态: 无连续计数（多空交替频繁，暂无趋势性信号）")
+                lines.append("  状态: 无连续计数（多空交替频繁）")
 
         lines.append("```")
         lines.append("")

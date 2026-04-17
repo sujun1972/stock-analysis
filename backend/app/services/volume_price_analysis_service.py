@@ -79,9 +79,9 @@ class VolumePriceAnalysisService:
         if down_vol > 0:
             vp_ratio = round(up_vol / down_vol, 2)
             if vp_ratio > 1.3:
-                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（多头量能占优，反攻覆盖抛压）'
+                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（上涨日量能占优）'
             elif vp_ratio < 0.7:
-                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（空头量能占优，下跌动能更强）'
+                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（下跌日量能占优）'
             else:
                 vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（多空量能接近，势均力敌）'
         elif up_vol > 0:
@@ -178,14 +178,14 @@ class VolumePriceAnalysisService:
         # 大涨 (>5%)
         if big_up:
             if heavy:
-                return f'放量突破长阳（涨{pct:.1f}%量比{vol_ratio}x，多头强攻）'
+                return f'放量长阳（涨{pct:.1f}%，量比{vol_ratio}x）'
             if normal:
                 return f'温和放量长阳（涨{pct:.1f}%，量价配合健康）'
             return f'缩量长阳（涨{pct:.1f}%，上方压力有限但追涨需谨慎）'
         # 中涨 (2%-5%)
         if mid_up:
             if heavy:
-                return '显著放量上涨（资金强势介入）'
+                return '显著放量上涨'
             if normal:
                 return '温和放量上涨（量价配合健康）'
             return '缩量上涨（上方压力有限但动能不足）'
@@ -208,7 +208,7 @@ class VolumePriceAnalysisService:
         # 中跌 (-5%~-2%)
         if mid_down:
             if heavy:
-                return '放量下跌（警示：回调动能偏大）'
+                return '放量下跌（量比1.5x+）'
             if normal:
                 return '温和放量下跌（抛压释放）'
             return '缩量下跌（正常调整）'
@@ -283,18 +283,17 @@ class VolumePriceAnalysisService:
             if ratio > 1.3:
                 if up_days > down_days:
                     return (
-                        f'整体呈现"上涨放量、下跌缩量"特征（上涨日均量/下跌日均量={ratio:.1f}x），'
-                        f'疑似资金处于温和吸筹阶段'
+                        f'上涨放量、下跌缩量（上涨日均量/下跌日均量={ratio:.1f}x，'
+                        f'涨{up_days}日/跌{down_days}日）'
                     )
                 else:
                     return (
-                        f'上涨日放量但上涨天数偏少（涨{up_days}日/跌{down_days}日），'
-                        f'可能为脉冲式反弹而非趋势反转'
+                        f'上涨日放量但上涨天数偏少（涨{up_days}日/跌{down_days}日，'
+                        f'上涨日均量/下跌日均量={ratio:.1f}x）'
                     )
             elif ratio < 0.7:
                 return (
-                    f'呈现"上涨缩量、下跌放量"特征（上涨日均量/下跌日均量={ratio:.1f}x），'
-                    f'资金逢高出逃迹象明显'
+                    f'上涨缩量、下跌放量（上涨日均量/下跌日均量={ratio:.1f}x）'
                 )
             else:
                 return '上涨与下跌日均量接近，多空势均力敌，方向待选择'
@@ -324,7 +323,7 @@ class VolumePriceAnalysisService:
                 date_str = str(max_vol_idx)[:10]
                 return (
                     f'上方存在历史天量密集区（{date_str}，价格约{round(max_vol_close, 2)}），'
-                    f'距当前价 +{pct_away}%，反弹至此区域将面临较大抛压'
+                    f'距当前价 +{pct_away}%'
                 )
             else:
                 return '历史天量位置已在当前价下方，上方暂无重大历史抛压阻力'
@@ -354,16 +353,16 @@ class VolumePriceAnalysisService:
             date_str = str(idx)[:10]
 
             if ratio >= 2.0 and p > 2:
-                anomalies.append(f'{date_str} 出现倍量阳线（量比{ratio:.1f}x, +{p:.1f}%），为短线核心资金介入标志')
+                anomalies.append(f'{date_str} 倍量阳线（量比{ratio:.1f}x, +{p:.1f}%）')
             elif ratio >= 2.0 and p < -2:
-                anomalies.append(f'{date_str} 出现倍量阴线（量比{ratio:.1f}x, {p:.1f}%），警惕恐慌性抛售')
+                anomalies.append(f'{date_str} 倍量阴线（量比{ratio:.1f}x, {p:.1f}%）')
             elif ratio >= 2.0 and abs(p) <= 2:
                 anomalies.append(f'{date_str} 放巨量但涨跌幅有限（量比{ratio:.1f}x），多空剧烈换手')
 
         # 检测缩量到极致（近5日量能 < 60日均量的50%）
         vol_60_mean = float(volume.mean())
         if vol_60_mean > 0 and vol_5d_mean < vol_60_mean * 0.5:
-            anomalies.append('近5日量能萎缩至60日均量的50%以下，可能接近地量见底')
+            anomalies.append('近5日量能萎缩至60日均量的50%以下')
 
         return anomalies
 
@@ -402,35 +401,24 @@ class VolumePriceAnalysisService:
             last_label = last["pattern"].split("（")[0]
 
             if top1_up and last_down and top1['date'] != last['date']:
-                prefix = f'请分析 {top1["date"]} 的"{top1_label}"与 {last["date"]} 的"{last_label}"之间的博弈关系。'
-                if is_bullish:
-                    suffix = '在当前多头趋势中，这是上涨途中的正常获利回吐，还是主力资金的高位出货？'
-                else:
-                    suffix = '这究竟是主力资金的"拉高出货"，还是底部启动初期的"暴力洗盘"？'
-                prompt_parts.append(prefix + suffix)
+                prompt_parts.append(
+                    f'请分析 {top1["date"]} 的"{top1_label}"与 {last["date"]} 的"{last_label}"之间的量价关系。'
+                )
             elif top1_down and last_up and top1['date'] != last['date']:
-                prefix = f'请分析 {top1["date"]} 的"{top1_label}"后 {last["date"]} 出现反弹的含义。'
-                if is_bullish:
-                    suffix = '在当前多头趋势中，这是上升途中的良性洗盘，还是主力资金的高位出货信号？'
-                elif is_bearish:
-                    suffix = '在当前空头趋势中，这是恐慌释放后的超跌反弹，还是新一轮下跌的中继？'
-                else:
-                    suffix = '这是阶段性底部确认，还是下行趋势中的中继反弹？'
-                prompt_parts.append(prefix + suffix)
+                prompt_parts.append(
+                    f'请分析 {top1["date"]} 的"{top1_label}"与 {last["date"]} 的"{last_label}"之间的量价关系。'
+                )
             elif top1_up:
                 prompt_parts.append(
-                    f'请评估 {top1["date"]} 的放量上涨（量比{top1["vol_ratio"]}x）的持续性，'
-                    f'后续量能是否需要维持在该级别才能确认趋势有效？'
+                    f'请评估 {top1["date"]} 的放量上涨（量比{top1["vol_ratio"]}x）后的量能变化趋势。'
                 )
             elif top1_down:
                 prompt_parts.append(
-                    f'请评估 {top1["date"]} 的放量下跌（量比{top1["vol_ratio"]}x）是否为恐慌性抛售的末端，'
-                    f'后续缩量企稳是否为见底信号？'
+                    f'请评估 {top1["date"]} 的放量下跌（量比{top1["vol_ratio"]}x）后的量能变化趋势。'
                 )
         else:
             prompt_parts.append(
-                '近5日量能整体平淡，请分析当前缩量状态是蓄势待变还是市场冷淡，'
-                '突破需要什么级别的量能配合？'
+                '近5日量能整体平淡，请分析当前缩量状态的量能级别。'
             )
 
         # 补充中长线视角的关键信息

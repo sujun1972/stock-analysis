@@ -25,9 +25,9 @@ class MaAnalysisService:
 
     # 各周期级别的排列形态描述词
     _LEVEL_DESC = {
-        '短期': {'bullish': '短线反弹', 'bearish': '短线走弱'},
-        '中期': {'bullish': '中线走强', 'bearish': '中线弱势'},
-        '长期': {'bullish': '长线多头确认', 'bearish': '长线空头格局'},
+        '短期': {'bullish': '短线向上', 'bearish': '短线向下'},
+        '中期': {'bullish': '中线向上', 'bearish': '中线向下'},
+        '长期': {'bullish': '长线偏多', 'bearish': '长线偏空'},
     }
 
     @classmethod
@@ -241,7 +241,7 @@ class MaAnalysisService:
             if ma5 > ma10 and close < ma20:
                 signals.append('短线回暖但受 MA20 压制')
             elif ma5 < ma10 and close > ma20:
-                signals.append('短线走弱但 MA20 仍有支撑')
+                signals.append('短线均线向下但价格仍在 MA20 上方')
 
         return '；'.join(signals) if signals else '短期均线无明显异动'
 
@@ -295,15 +295,15 @@ class MaAnalysisService:
 
         if is_bullish_trend and short_bullish:
             return (
-                '请结合上述均线多头排列结构，评估当前多头趋势的延续性，'
-                '关注短期均线是否出现走平或拐头迹象，并给出操作建议（持股待涨、逢回调加仓等）。'
+                '请结合上述均线多头排列结构，评估当前趋势的延续性，'
+                '关注短期均线是否出现走平或拐头迹象。'
             )
         elif is_bullish_trend and short_bearish:
             ma20 = ma_vals.get('ma20')
             ref = f'MA20({round(ma20, 2)})' if ma20 else 'MA20'
             return (
-                f'请结合上述均线结构，评估短期死叉是否只是上升趋势中的正常回调。'
-                f'重点关注 {ref} 的支撑有效性，给出操作建议（逢低加仓、破位止损等）。'
+                f'请结合上述均线结构，评估短期死叉在当前多头排列中的含义，'
+                f'重点关注 {ref} 的支撑有效性。'
             )
         elif is_bearish_trend and short_bullish:
             # 找最近阻力
@@ -315,18 +315,16 @@ class MaAnalysisService:
                     break
             ref = nearest or 'MA20'
             return (
-                f'请结合上述均线的多空排列结构，评估当前价格站上短期均线的有效性。'
-                f'这是一次短线的诱多反抽，还是具备向上挑战 {ref} 潜力的底部结构？'
+                f'请结合上述均线的空头排列结构，评估当前价格站上短期均线的有效性，'
+                f'分析与上方阻力 {ref} 的距离和突破概率。'
             )
         elif is_bearish_trend and short_bearish:
             return (
-                '请结合上述均线全面空头排列，评估下跌趋势是否有减速迹象，'
-                '并给出操作建议（空仓观望、关注超跌反弹信号等）。'
+                '请结合上述均线全面空头排列，评估下跌趋势是否有减速迹象。'
             )
         else:
             return (
-                '请结合上述均线结构，分析当前趋势方向的明确程度，'
-                '并给出操作建议（区间操作、等待方向选择后再介入等）。'
+                '请结合上述均线结构，分析当前趋势方向的明确程度。'
             )
 
     # ------------------------------------------------------------------
@@ -352,15 +350,15 @@ class MaAnalysisService:
             bias20 = round((close - ma20) / ma20 * 100, 2)
             result['bias20'] = bias20
             if bias20 > 8:
-                result['bias_desc'] = f'价格大幅偏离 MA20（乖离率 +{bias20}%），存在技术性回调需求'
+                result['bias_desc'] = f'价格大幅偏离 MA20（乖离率 +{bias20}%）'
             elif bias20 > 4:
-                result['bias_desc'] = f'价格偏离 MA20 较多（乖离率 +{bias20}%），关注回踩风险'
+                result['bias_desc'] = f'价格偏离 MA20 较多（乖离率 +{bias20}%）'
             elif bias20 < -8:
-                result['bias_desc'] = f'价格大幅偏离 MA20（乖离率 {bias20}%），存在超跌反弹需求'
+                result['bias_desc'] = f'价格大幅偏离 MA20（乖离率 {bias20}%）'
             elif bias20 < -4:
-                result['bias_desc'] = f'价格偏离 MA20 较多（乖离率 {bias20}%），关注反弹机会'
+                result['bias_desc'] = f'价格偏离 MA20 较多（乖离率 {bias20}%）'
             else:
-                result['bias_desc'] = f'价格围绕 MA20 运行（乖离率 {bias20}%），处于正常水平'
+                result['bias_desc'] = f'价格围绕 MA20 运行（乖离率 {bias20}%）'
 
         # 收敛度
         if all(v is not None for v in [ma5, ma10, ma20]):
@@ -371,8 +369,7 @@ class MaAnalysisService:
             result['convergence_pct'] = convergence
             if convergence < 1.0:
                 result['convergence_desc'] = (
-                    f'MA5/MA10/MA20 高度黏合（极差仅 {convergence}%），均线纠缠蓄势，'
-                    f'一旦放量突破将引发大级别方向选择'
+                    f'MA5/MA10/MA20 高��黏合（极差仅 {convergence}%），均线纠缠'
                 )
             elif convergence < 2.5:
                 result['convergence_desc'] = f'MA5/MA10/MA20 较为收敛（极差 {convergence}%），方向待选择'

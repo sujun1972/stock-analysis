@@ -115,11 +115,13 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 | `CandlestickAnalysisService` | `candlestick_analysis_service.py` | K 线形态识别（单根形态基于真实涨跌幅分档、组合形态含高低位语境、重心趋势） |
 | `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测、近5日量价背离系数） |
 
+**数据层输出原则**：6 个分析服务只输出**结构化事实描述**���数字 → 分类/定性），不输出操作建议或方向性结论（如"看多/看空/回调压力/反弹需求"）。趋势判断、交叉验证推理��操作建议由 LLM 独立完成。
+
 **两套输出格式**：
 - **LangChain Tool 输出**（CIO Agent 调用）：Markdown 表格格式
 - **`collect_and_format()` 输出**（个股专家分析）：技术指标部分使用 YAML 代码块（```` ```yaml ````），其余章节保持 Markdown；综合推理任务在 YAML 外作为自然语言指令
 
-**`_build_cross_verification` 综合推理任务**为动态生成：根据实际检测到的信号（矛盾点、背离、K线危险形态、乖离率盈亏比）自动组装编号任务列表，无背离时不生成背离评估指令，避免 AI 幻觉。输出包含支撑/阻力位阶梯（从 MA、布林带、20日极值自动聚合）。
+**`_build_cross_verification`（信号汇总）**为动态生成：根据实际检测到的信号（矛盾点、背离、K线危险形态、乖离率盈亏比）自动组装编号任务列表，无背离时不生成背离评估指令，避免 AI 幻觉。输出包含支撑/阻力位阶梯（从 MA、布林带、20日极值自动聚合）。
 
 **`ai_output_parser.extract_json_text` 含 JSON 自动修复**：AI 输出截断导致缺少 1-3 个闭合 `}` / `]` 时，自动补全后再存储，避免前端解析失败降级为原始文本。
 

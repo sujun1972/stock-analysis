@@ -177,33 +177,33 @@ class BollAnalysisService:
 
         # 连续 3 根上升且斜率显著
         if slope_1 > threshold and slope_2 > threshold and slope_3 > threshold:
-            return '中轨上行（多头趋势）'
+            return '中轨持续上行'
         # 连续 3 根下降且斜率显著
         if slope_1 < -threshold and slope_2 < -threshold and slope_3 < -threshold:
-            return '中轨下行（空头趋势）'
+            return '中轨持续下行'
 
         # 拐头检测：前面下行，最近上行
         if slope_1 > threshold and slope_2 > 0 and slope_3 < -threshold:
-            return '中轨拐头向上（趋势可能反转）'
+            return '中轨拐头向上'
         if slope_1 > threshold and (slope_3 < -threshold or slope_2 < -threshold * 0.5):
-            return '中轨拐头向上（趋势可能反转）'
+            return '中轨拐头向上'
 
         # 拐头检测：前面上行，最近下行
         if slope_1 < -threshold and slope_2 < 0 and slope_3 > threshold:
-            return '中轨拐头向下（趋势可能反转）'
+            return '中轨拐头向下'
         if slope_1 < -threshold and (slope_3 > threshold or slope_2 > threshold * 0.5):
-            return '中轨拐头向下（趋势可能反转）'
+            return '中轨拐头向下'
 
         # 走平
         if abs(slope_1) <= threshold and abs(slope_2) <= threshold:
-            return '中轨走平（震荡格局）'
+            return '中轨走平'
 
         # 微幅变化但不够显著
         if slope_1 > 0:
             return '中轨微幅上行'
         if slope_1 < 0:
             return '中轨微幅下行'
-        return '中轨走平（震荡格局）'
+        return '中轨走平'
 
     # ------------------------------------------------------------------
     # 维度 4：轨道突破/回踩信号
@@ -350,9 +350,9 @@ class BollAnalysisService:
         all_lower_half = all(lv['percent_b'] < 0.5 for lv in levels)
 
         if all_mid_up and all_upper_half:
-            resonance_state = '多级别布林通道共振看多（所有级别中轨上行且价格在上半通道）'
+            resonance_state = '所有级别中轨上行且价格在上半通道'
         elif all_mid_down and all_lower_half:
-            resonance_state = '多级别布林通道共振看空（所有级别中轨下行且价格在下半通道）'
+            resonance_state = '所有级别中轨下行且价格在下半通道'
         elif all_narrowing:
             resonance_state = '多级别通道同步收窄，大变盘临界'
         else:
@@ -391,8 +391,8 @@ class BollAnalysisService:
                 )
             elif long_up and short_down:
                 battle_analysis = (
-                    f"长短分化：{long_lv['level']}多头格局（{long_pattern}），"
-                    f"{short_lv['level']}出现回调压力（{short_pattern}）"
+                    f"长短分化：{long_lv['level']}开口上行（{long_pattern}），"
+                    f"{short_lv['level']}开口下行（{short_pattern}）"
                 )
             elif long_squeeze and short_up:
                 battle_analysis = (
@@ -403,11 +403,11 @@ class BollAnalysisService:
                 battle_analysis = '多级别蓄势，即将迎来方向选择'
             elif long_down and short_up:
                 battle_analysis = (
-                    f"大趋势偏空（{long_lv['level']}{long_pattern}），"
-                    f"短线出现反弹（{short_lv['level']}{short_pattern}），需警惕反弹受限于{long_lv['level']}下轨压制"
+                    f"{long_lv['level']}开口下行（{long_pattern}），"
+                    f"{short_lv['level']}开口上行（{short_pattern}）"
                 )
             elif long_down and short_down:
-                battle_analysis = f"长短共振下行，空头趋势加速"
+                battle_analysis = f"长短共振下行"
             elif long_down and short_squeeze:
                 battle_analysis = (
                     f"大趋势偏空（{long_lv['level']}{long_pattern}），"
@@ -422,26 +422,21 @@ class BollAnalysisService:
         # ---- 动态分析提示 ----
         if all_mid_up and all_upper_half:
             analysis_prompt = (
-                "请评估布林通道多级别共振上行的持续性，"
-                "关注上轨压力和通道是否有收窄迹象，"
-                "判断当前是趋势中继还是即将见顶回落。"
+                "请评估布林通道多级别上行的持续性，"
+                "关注上轨压力和通道是否有收窄迹象。"
             )
         elif all_mid_down and all_lower_half:
             analysis_prompt = (
-                "请评估布林通道多级别共振下行是否接近尾声，"
-                "关注下轨支撑和通道收窄信号，"
-                "判断是否出现超卖反弹的条件。"
+                "请评估布林通道多级别下行的动能变化，"
+                "关注下轨支撑和通道宽度变化。"
             )
         elif all_narrowing:
             analysis_prompt = (
-                "布林通道多级别同步收窄，请分析变盘方向的概率，"
-                "结合量价和资金流向判断突破方向。"
+                "布林通道多级别同步收窄，请结合量价分析变盘方向的概率。"
             )
         else:
             analysis_prompt = (
-                "请分析长线与短线布林通道方向分歧的含义，"
-                "判断短线通道方向选择是否会影响长线趋势，"
-                "并给出相应操作建议。"
+                "请分析长线与短线布林通道方向分歧的含义。"
             )
 
         return {

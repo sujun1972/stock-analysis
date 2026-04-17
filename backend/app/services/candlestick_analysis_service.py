@@ -118,21 +118,21 @@ class CandlestickAnalysisService:
         if lower_shadow > body * 2 and lower_shadow > total * 0.4:
             if c > o:
                 return '长下影阳线（探底回升，下方有支撑）'
-            return '长下影阴线（下方有买盘但多头力度不足）'
+            return '长下影阴线（下方有买盘承接）'
 
         # 基于实体占比和涨跌幅综合判断K线大小
         # 优先级：涨跌幅 > 实体占比（解决有影线但振幅大的K线被误标为"小阳/阴线"的问题）
         if c > o:
             if pct_abs > 5 or (body_ratio > 0.7 and pct_abs > 3):
-                return f'大阳线（涨幅 {pct_abs}%，多头强势进攻）'
+                return f'大阳线（涨幅 {pct_abs}%）'
             if pct_abs > 2 or body_ratio > 0.7:
-                return f'中阳线（涨幅 {pct_abs}%，多头占优）'
+                return f'中阳线（涨幅 {pct_abs}%）'
             return '小阳线（温和上涨）'
         elif c < o:
             if pct_abs > 5 or (body_ratio > 0.7 and pct_abs > 3):
-                return f'大阴线（跌幅 {pct_abs}%，空头强势打压）'
+                return f'大阴线（跌幅 {pct_abs}%）'
             if pct_abs > 2 or body_ratio > 0.7:
-                return f'中阴线（跌幅 {pct_abs}%，空头占优）'
+                return f'中阴线（跌幅 {pct_abs}%）'
             return '小阴线（温和下跌）'
         return '平盘线'
 
@@ -177,21 +177,21 @@ class CandlestickAnalysisService:
             if not prev_bullish and curr_bullish:
                 if co <= pc and cc >= po and curr_body > prev_body:
                     if at_low:
-                        combos.append(f'{pos_tag}看涨吞没（底部强反转信号，多头强势反包）')
+                        combos.append(f'{pos_tag}看涨吞没（阳线实体覆盖前阴线）')
                     elif at_high:
-                        combos.append(f'{pos_tag}看涨吞没（多头反包，但高位追涨风险较大）')
+                        combos.append(f'{pos_tag}看涨吞没（阳线实体覆盖前阴线）')
                     else:
-                        combos.append('看涨吞没（多头强势反包，可能反转上行）')
+                        combos.append('看涨吞没（阳线实体覆盖前阴线）')
 
             # 看跌吞没：前阳后阴，阴线实体包含阳线实体
             if prev_bullish and not curr_bullish:
                 if co >= pc and cc <= po and curr_body > prev_body:
                     if at_high:
-                        combos.append(f'{pos_tag}看跌吞没（强烈见顶信号，空头强势反包）')
+                        combos.append(f'{pos_tag}看跌吞没（阴线实体覆盖前阳线）')
                     elif at_low:
-                        combos.append(f'{pos_tag}看跌吞没（空头反包，但低位杀跌动能可能有限）')
+                        combos.append(f'{pos_tag}看跌吞没（阴线实体覆盖前阳线）')
                     else:
-                        combos.append('看跌吞没（空头强势反包，可能反转下行）')
+                        combos.append('看跌吞没（阴线实体覆盖前阳线）')
 
             # 孕线（母子线）：当日 K 线实体完全在前一日实体内
             if curr_body < prev_body * 0.5:
@@ -202,14 +202,14 @@ class CandlestickAnalysisService:
                 if curr_high_body <= prev_high_body and curr_low_body >= prev_low_body:
                     if prev_bullish:
                         if at_high:
-                            combos.append(f'{pos_tag}孕线（上涨动能衰竭，高位犹豫是危险信号，关注见顶回落）')
+                            combos.append(f'{pos_tag}孕线（上涨后实体缩小，动能减弱）')
                         else:
-                            combos.append('孕线（上涨后出现犹豫，关注变盘方向）')
+                            combos.append('孕线（上涨后实体缩小）')
                     else:
                         if at_low:
-                            combos.append(f'{pos_tag}孕线（下跌动能衰竭，低位犹豫可能酝酿反弹）')
+                            combos.append(f'{pos_tag}孕线（下跌后实体缩小，动能减弱）')
                         else:
-                            combos.append('孕线（下跌后出现犹豫，关注反转可能）')
+                            combos.append('孕线（下跌后实体缩小）')
 
         # 去重
         return list(dict.fromkeys(combos)) if combos else ['无显著组合形态']
@@ -241,9 +241,9 @@ class CandlestickAnalysisService:
 
         total = len(gravities) - 1
         if rising >= total * 0.7:
-            return 'K 线重心持续上移（多头控盘）'
+            return 'K 线重心持续上移'
         if falling >= total * 0.7:
-            return 'K 线重心持续下移（空头主导）'
+            return 'K 线重心持续下移'
         if rising > falling:
             return 'K 线重心缓慢上移'
         if falling > rising:

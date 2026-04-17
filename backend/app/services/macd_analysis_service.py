@@ -151,9 +151,9 @@ class MacdAnalysisService:
         if avg_abs_diff < abs_dif_mean * 0.15:
             # 黏合状态需标注当前 DIF/DEA 的实际多空关系，避免与数值矛盾
             if last_diff > 0:
-                return '高位黏合偏多（DIF 略高于 DEA，多头优势微弱，方向待选择）'
+                return '高位黏合偏多（DIF 略高于 DEA，方向待选择）'
             elif last_diff < 0:
-                return '高位黏合偏空（DIF 略低于 DEA，空头小幅占优，方向待选择）'
+                return '高位黏合偏空（DIF 略低于 DEA，方向待选择）'
             return '趋于黏合（DIF≈DEA，方向不明）'
 
         # 拒绝死叉（老鸭头）：DIF 向下接近 DEA 但未穿越后重新发散向上
@@ -174,12 +174,12 @@ class MacdAnalysisService:
         # 维持金叉发散 / 维持死叉发散
         if last_diff > 0:
             if float(diff.iloc[-1]) > float(diff.iloc[-2]):
-                return '金叉发散中（多头加速）'
-            return '维持金叉（多头运行）'
+                return '金叉发散中（DIF-DEA 差值扩大）'
+            return '维持金叉（DIF>DEA）'
         else:
             if float(diff.iloc[-1]) < float(diff.iloc[-2]):
-                return '死叉发散中（空头加速）'
-            return '维持死叉（空头运行）'
+                return '死叉发散中（DIF-DEA 差值扩大）'
+            return '维持死叉（DIF<DEA）'
 
     # ------------------------------------------------------------------
     # 柱体动能检测
@@ -197,20 +197,20 @@ class MacdAnalysisService:
 
         if last > 0:
             if last > prev > prev2:
-                return '红柱持续放大（多头动能增强）'
+                return '红柱持续放大'
             elif last > prev:
                 return '红柱放大'
             elif last < prev:
-                return '红柱缩短（多头动能衰减）'
+                return '红柱缩短'
             else:
                 return '红柱持平'
         elif last < 0:
             if last < prev < prev2:
-                return '绿柱持续放大（空头动能增强）'
+                return '绿柱持续放大'
             elif last < prev:
                 return '绿柱放大'
             elif last > prev:
-                return '绿柱缩短（空头动能衰减）'
+                return '绿柱缩短'
             else:
                 return '绿柱持平'
         else:
@@ -280,7 +280,7 @@ class MacdAnalysisService:
                         return (
                             f'顶背离（前高 {d1_date} 价格{c[h1]:.2f}/DIF{d[h1]:.3f} → '
                             f'近高 {d2_date} 价格{c[h2]:.2f}/DIF{d[h2]:.3f}，'
-                            f'间隔{gap}日，价格新高但 DIF 走低，警惕见顶回落）'
+                            f'间隔{gap}日，价格新高但 DIF 走低）'
                         )
                     break  # 只检查最近一组有效高点
 
@@ -307,7 +307,7 @@ class MacdAnalysisService:
                         return (
                             f'底背离（前低 {d1_date} 价格{c[l1]:.2f}/DIF{d[l1]:.3f} → '
                             f'近低 {d2_date} 价格{c[l2]:.2f}/DIF{d[l2]:.3f}，'
-                            f'间隔{gap}日，价格新低但 DIF 走高，关注见底反弹）'
+                            f'间隔{gap}日，价格新低但 DIF 走高）'
                         )
                     break
 
@@ -346,9 +346,9 @@ class MacdAnalysisService:
         # ---- 共振状态（一句话定性） ----
         resonance_state = ''
         if all_bullish:
-            resonance_state = '基础大势共振看多（所有级别均处于零轴上方强势区）'
+            resonance_state = '所有级别均处于零轴上方'
         elif all_bearish:
-            resonance_state = '基础大势共振看空（所有级别均处于零轴下方弱势区）'
+            resonance_state = '所有级别均处于零轴下方'
         else:
             parts = []
             for lv in levels:
@@ -362,9 +362,9 @@ class MacdAnalysisService:
             w = macd_multi['weekly']
             d_lv = macd_multi['daily']
             if '金叉' in w['cross_state'] and '金叉' in d_lv['cross_state']:
-                resonance_state += '，叠加周线+日线金叉共振（强烈看多）'
+                resonance_state += '，叠加周线+日线金叉共振'
             elif '死叉' in w['cross_state'] and '死叉' in d_lv['cross_state']:
-                resonance_state += '，叠加周线+日线死叉共振（强烈看空）'
+                resonance_state += '，叠加周线+日线死叉共振'
 
         # ---- 长短博弈（描述各级别动能的矛盾或协同） ----
         battle_parts = []
@@ -391,36 +391,34 @@ class MacdAnalysisService:
                 short_strengthening = '放大' in short_bar_full or '增强' in short_bar_full
                 if long_weakening and short_strengthening:
                     battle_parts.append(
-                        f"长短分化：{long_lv['level']}上涨动能出现衰减迹象（{long_bar}），"
-                        f"但{short_lv['level']}级别多头再次发力（{short_bar}），"
-                        f"短线可能带动{long_lv['level']}指标二次修复，需警惕冲高回落"
+                        f"长短分化：{long_lv['level']}动能衰减（{long_bar}），"
+                        f"{short_lv['level']}动能放大（{short_bar}）"
                     )
                 elif long_weakening:
                     battle_parts.append(
-                        f"多头格局延续，但{long_lv['level']}动能衰减（{long_bar}），"
-                        f"{short_lv['level']}暂未有效接力，关注趋势延续性"
+                        f"{long_lv['level']}动能衰减（{long_bar}），"
+                        f"{short_lv['level']}暂未有效接力"
                     )
                 elif short_strengthening:
-                    battle_parts.append(f"{long_lv['level']}与{short_lv['level']}同步走强，多头趋势加速")
+                    battle_parts.append(f"{long_lv['level']}与{short_lv['level']}同步放大")
                 else:
-                    battle_parts.append(f"多头格局延续，但{short_lv['level']}动能有衰减迹象")
+                    battle_parts.append(f"零轴上方运行，{short_lv['level']}动能有衰减迹象")
             elif long_dir == short_dir == 'bearish':
                 long_weakening = '缩短' in long_bar_full
                 short_strengthening = '红柱' in short_bar_full or '缩短' in short_bar_full
                 if long_weakening and short_strengthening:
                     battle_parts.append(
-                        f"{long_lv['level']}空头力量开始衰竭（{long_bar}），"
-                        f"同时{short_lv['level']}多头开始发力（{short_bar}）。"
-                        f"当前属于典型的「深水区超跌反弹」结构"
+                        f"{long_lv['level']}绿柱缩短（{long_bar}），"
+                        f"{short_lv['level']}出现红柱（{short_bar}）"
                     )
                 elif long_weakening:
-                    battle_parts.append(f"{long_lv['level']}空头动能衰减（{long_bar}），关注反弹契机")
+                    battle_parts.append(f"{long_lv['level']}绿柱缩短（{long_bar}）")
                 else:
-                    battle_parts.append(f"空头趋势延续，{long_lv['level']}和{short_lv['level']}均偏空")
+                    battle_parts.append(f"零轴下方运行，{long_lv['level']}和{short_lv['level']}均偏空")
             elif long_dir == 'bullish' and short_dir == 'bearish':
-                battle_parts.append(f"{long_lv['level']}大趋势向好，但{short_lv['level']}处于回调周期（{short_lv['cross_state']}）")
+                battle_parts.append(f"{long_lv['level']}零轴上方，{short_lv['level']}处于回调周期（{short_lv['cross_state']}）")
             elif long_dir == 'bearish' and short_dir == 'bullish':
-                battle_parts.append(f"{long_lv['level']}大趋势偏空，{short_lv['level']}出现反弹信号（{short_lv['cross_state']}），需警惕反弹高度受限")
+                battle_parts.append(f"{long_lv['level']}零轴下方，{short_lv['level']}短线转多（{short_lv['cross_state']}）")
             else:
                 battle_parts.append(f"{long_lv['level']}与{short_lv['level']}方向不一致，盘面震荡为主")
 
@@ -442,26 +440,23 @@ class MacdAnalysisService:
         # ---- 动态分析提示（根据实际盘面状态生成） ----
         if all_bullish:
             analysis_prompt = (
-                "请结合上述多级别 MACD 共振看多状态，评估当前多头趋势的持续性，"
-                "关注是否有动能衰减或顶背离风险，并给出操作建议（持股待涨、逢回调加仓、注意止盈等）。"
+                "请结合上述多级别 MACD 状态，评估当前趋势的持续性，"
+                "关注是否有动能衰减或背离迹象。"
             )
         elif all_bearish:
-            # 检查是否有反弹迹象
             has_rebound = any('红柱' in lv.get('bar_momentum', '') for lv in levels)
             if has_rebound:
                 analysis_prompt = (
-                    "请结合上述多级别 MACD 状态，判断当前短线的红柱放大是一次短线中继反弹，"
-                    "还是有望带动中线企稳形成趋势反转？并给出相应操作建议（试探性建仓博反弹、继续观望等待上水、逢高减仓等）。"
+                    "请结合上述多级别 MACD 状态，分析短线红柱放大在零轴下方的含义，"
+                    "评估动能变化的方向和力度。"
                 )
             else:
                 analysis_prompt = (
-                    "请结合上述多级别 MACD 共振看空状态，评估空头趋势是否有见底迹象，"
-                    "并给出操作建议（空仓观望、等待底背离确认、分批建仓条件等）。"
+                    "请结合上述多级别 MACD 状态，评估当前空头动能的变化趋势。"
                 )
         else:
             analysis_prompt = (
-                "请结合上述多级别 MACD 状态，分析各级别方向分歧的含义，"
-                "判断短线方向选择的概率，并给出相应操作建议（轻仓试探、区间操作、等待方向明确等）。"
+                "请结合上述多级别 MACD 状态，分析各级别方向分歧的含义。"
             )
 
         return {

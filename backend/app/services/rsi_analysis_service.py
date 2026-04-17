@@ -270,13 +270,13 @@ class RsiAnalysisService:
         all_extreme_os = all(z == '超卖' for z in zones)
 
         if all_extreme_ob:
-            resonance = '多周期同步超买（RSI 均>80），强烈见顶预警'
+            resonance = '多周期同步超买（RSI 均>80）'
         elif all_extreme_os:
-            resonance = '多周期同步超卖（RSI 均<20），强烈见底信号'
+            resonance = '多周期同步超卖（RSI 均<20）'
         elif all_overbought:
-            resonance = '多周期共振偏强（RSI 均>60），多头格局延续'
+            resonance = '多周期共振偏强（RSI 均>60）'
         elif all_oversold:
-            resonance = '多周期共振偏弱（RSI 均<40），空头格局延续'
+            resonance = '多周期共振偏弱（RSI 均<40）'
         else:
             # 检查是否有单个周期处于极端值
             any_extreme_ob = any(s['rsi_value'] > 80 for s in slices)
@@ -284,14 +284,14 @@ class RsiAnalysisService:
             if any_extreme_ob:
                 extreme_items = [f"RSI{s['period']}({s['rsi_value']})" for s in slices if s['rsi_value'] > 80]
                 resonance = (
-                    f"各周期 RSI 方向分歧，多空博弈中。"
-                    f"⚠️ 短线风险提示：{'/'.join(extreme_items)} 已进入超买区，短线有技术性回调诉求"
+                    f"各周期 RSI 方向分歧。"
+                    f"{'/'.join(extreme_items)} 已进入超买区（>80）"
                 )
             elif any_extreme_os:
                 extreme_items = [f"RSI{s['period']}({s['rsi_value']})" for s in slices if s['rsi_value'] < 20]
                 resonance = (
-                    f"各周期 RSI 方向分歧，多空博弈中。"
-                    f"短线机会提示：{'/'.join(extreme_items)} 已进入超卖区，短线存在技术性反弹需求"
+                    f"各周期 RSI 方向分歧。"
+                    f"{'/'.join(extreme_items)} 已进入超卖区（<20）"
                 )
             else:
                 resonance = '各周期 RSI 方向分歧，多空博弈中'
@@ -307,16 +307,14 @@ class RsiAnalysisService:
             if long_zone in ('弱势', '超卖') and short_zone in ('偏强', '超买', '中性'):
                 if short_s['rsi_value'] > long_s['rsi_value'] + 10:
                     result['divergence_analysis'] = (
-                        f"长线弱势(RSI{long_s['period']}={long_s['rsi_value']})但短线回暖"
-                        f"(RSI{short_s['period']}={short_s['rsi_value']})，"
-                        f"属于超跌反弹结构，反弹高度可能受限"
+                        f"长线弱势(RSI{long_s['period']}={long_s['rsi_value']})，短线回暖"
+                        f"(RSI{short_s['period']}={short_s['rsi_value']})"
                     )
             elif long_zone in ('偏强', '超买') and short_zone in ('弱势', '超卖', '中性'):
                 if long_s['rsi_value'] > short_s['rsi_value'] + 10:
                     result['divergence_analysis'] = (
-                        f"长线偏强(RSI{long_s['period']}={long_s['rsi_value']})但短线回落"
-                        f"(RSI{short_s['period']}={short_s['rsi_value']})，"
-                        f"属于强势回调，回调后有望延续上行"
+                        f"长线偏强(RSI{long_s['period']}={long_s['rsi_value']})，短线回落"
+                        f"(RSI{short_s['period']}={short_s['rsi_value']})"
                     )
 
         # ---- 极值位置 ----
@@ -324,23 +322,19 @@ class RsiAnalysisService:
         for s in slices:
             if s['rsi_value'] > 85:
                 extreme_parts.append(
-                    f"⚠️ RSI{s['period']}({s['rsi_value']}) 进入极端超买区(>85)，"
-                    f"短线有强烈的技术性回调诉求"
+                    f"RSI{s['period']}({s['rsi_value']}) 进入极端超买区（>85）"
                 )
             elif s['rsi_value'] > 80:
                 extreme_parts.append(
-                    f"⚠️ RSI{s['period']}({s['rsi_value']}) 已进入超买区(>80)，"
-                    f"短线面临技术性回调压力"
+                    f"RSI{s['period']}({s['rsi_value']}) 进入超买区（>80）"
                 )
             elif s['rsi_value'] < 15:
                 extreme_parts.append(
-                    f"RSI{s['period']}({s['rsi_value']}) 进入极端超卖区(<15)，"
-                    f"历史上反弹概率极高"
+                    f"RSI{s['period']}({s['rsi_value']}) 进入极端超卖区（<15）"
                 )
             elif s['rsi_value'] < 20:
                 extreme_parts.append(
-                    f"RSI{s['period']}({s['rsi_value']}) 已进入超卖区(<20)，"
-                    f"短线存在技术性反弹需求"
+                    f"RSI{s['period']}({s['rsi_value']}) 进入超卖区（<20）"
                 )
         if extreme_parts:
             result['extreme_warning'] = '；'.join(extreme_parts)
@@ -369,51 +363,47 @@ class RsiAnalysisService:
 
         if '同步超买' in resonance:
             return (
-                '请结合上述 RSI 多周期同步超买状态，评估当前是否面临短期回调风险，'
-                '分析在强趋势中 RSI 钝化的可能性，并给出操作建议（减仓、止盈、等待 RSI 拐头确认等）。'
+                '请结合上述 RSI 多周期同步超买状态，'
+                '分析在强趋势中 RSI 钝化的可能性。'
             )
         if '同步超卖' in resonance:
             return (
-                '请结合上述 RSI 多周期同步超卖状态，评估当前是否已接近底部区域，'
-                '并给出操作建议（分批建仓、等待 RSI 拐头、观察量能配合等）。'
+                '请结合上述 RSI 多周期同步超卖状态，'
+                '评估 RSI 的极端程度和历史分布。'
             )
         if has_extreme:
             return (
-                '请结合上述 RSI 极端值预警，分析当前极端超买/超卖状态的持续性，'
-                '评估 RSI 回归均值的时间窗口，并给出操作建议。'
+                '请结合上述 RSI 极端值，分析当前极端状态的持续性，'
+                '评估 RSI 回归均值的时间窗口。'
             )
         if has_divergence:
             return (
-                '请结合上述 RSI 背离信号，评估背离的有效性和可靠程度，'
-                '分析价格是否可能出现反转，并给出操作建议。'
+                '请结合上述 RSI 背离信号，评估背离的有效性和可靠程度。'
             )
         if '分歧' in resonance:
             divergence_analysis = cross_period.get('divergence_analysis', '')
-            if '超跌反弹' in divergence_analysis:
+            if '长线弱势' in divergence_analysis:
                 return (
                     '请结合上述 RSI 长短分歧（长线弱势但短线回暖），'
-                    '评估当前反弹的力度和持续性，并给出操作建议（轻仓试探、设置止损等）。'
+                    '分析短线动能的持续性。'
                 )
-            if '强势回调' in divergence_analysis:
+            if '长线偏强' in divergence_analysis:
                 return (
                     '请结合上述 RSI 长短分歧（长线偏强但短线回落），'
-                    '评估回调的深度和支撑位，并给出操作建议（逢低加仓、等待 RSI 企稳等）。'
+                    '评估短线回落的深度。'
                 )
             return (
-                '请结合上述各周期 RSI 状态，分析多空博弈的方向选择概率，'
-                '并给出操作建议（观望、区间操作、等待方向明确等）。'
+                '请结合上述各周期 RSI 状态，分析多空博弈的方向。'
             )
         if '偏强' in resonance:
             return (
-                '请结合上述 RSI 多周期共振偏强状态，评估多头趋势的延续性，'
-                '关注是否有动能衰减或超买风险，并给出操作建议。'
+                '请结合上述 RSI 多周期共振偏强状态，评估趋势的延续性，'
+                '关注是否有动能衰减迹象。'
             )
         if '偏弱' in resonance:
             return (
-                '请结合上述 RSI 多周期共振偏弱状态，评估空头趋势是否有见底迹象，'
-                '并给出操作建议（空仓观望、等待超卖信号等）。'
+                '请结合上述 RSI 多周期共振偏弱状态，评估当前动能的变化趋势。'
             )
         return (
-            '请结合上述 RSI 各周期状态，分析当前超买超卖程度和趋势方向，'
-            '并给出操作建议。'
+            '请结合上述 RSI 各周期状态，分析当前超买超卖程度和趋势方向。'
         )
