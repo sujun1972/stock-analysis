@@ -83,9 +83,10 @@ def _fmt_flow(val) -> str:
 
 @tool
 async def get_basic_market(ts_code: str) -> str:
-    """获取股票基础盘面数据：最新收盘价、涨跌幅、成交额、换手率、PE-TTM、PB、总市值、
-    所属行业、东财行业板块近5日涨跌幅、筹码获利比及成本分布。
-    适用场景：了解股票当前估值水平、市场活跃度和行业位置。"""
+    """获取股票基础盘面数据：最新收盘价、涨跌幅、成交额、换手率、PE-TTM（含近3年估值分位）、PB、总市值、
+    所属行业、交易所属性（涨跌幅限制）、最新财报指标（营收/净利润同比、ROE、毛利率）、
+    东财行业板块近5日涨跌幅、筹码获利比及成本分布。
+    适用场景：了解股票当前估值水平、基本面质量、市场活跃度和行业位置。"""
     from app.services.stock_data_collection_service import StockDataCollectionService
 
     svc = StockDataCollectionService()
@@ -103,18 +104,36 @@ async def get_basic_market(ts_code: str) -> str:
         "| 指标 | 数值 |",
         "|------|------|",
         f"| 交易日期 | {data.get('trade_date', 'N/A')} |",
+    ]
+    exchange_note = data.get('exchange_note', '')
+    if exchange_note:
+        lines.append(f"| 交易所 | {exchange_note} |")
+    lines.extend([
         f"| 收盘价 | {_safe_fmt(data.get('close'))} 元 |",
         f"| 涨跌幅 | {_safe_fmt(data.get('pct_change'))}% |",
         f"| 成交额 | {_safe_fmt(data.get('amount'))} 元 |",
         f"| 换手率 | {_safe_fmt(data.get('turnover_rate'))}% |",
         f"| PE-TTM | {_safe_fmt(data.get('pe_ttm'))} |",
+    ])
+    pe_pct = data.get('pe_percentile_3y')
+    if pe_pct is not None:
+        lines.append(f"| PE近3年分位 | {_safe_fmt(pe_pct, 1)}% |")
+    lines.extend([
         f"| PB | {_safe_fmt(data.get('pb'))} |",
         f"| 总市值 | {_fmt_wan(data.get('total_mv'))} |",
         f"| 行业(Tushare) | {data.get('industry', 'N/A')} |",
-    ]
+    ])
     board = data.get("industry_board_name")
     if board:
         lines.append(f"| 东财行业板块 | {board} |")
+    # 财务指标
+    fina = data.get("fina", {})
+    if fina:
+        lines.append(f"| --- 最新财报（{fina.get('end_date', '')}） | --- |")
+        lines.append(f"| 营收同比(YoY) | {_safe_fmt(fina.get('or_yoy'))}% |")
+        lines.append(f"| 归母净利润同比(YoY) | {_safe_fmt(fina.get('netprofit_yoy'))}% |")
+        lines.append(f"| ROE | {_safe_fmt(fina.get('roe'))}% |")
+        lines.append(f"| 毛利率 | {_safe_fmt(fina.get('grossprofit_margin'))}% |")
     chip = data.get("chip", {})
     if chip:
         lines.append(f"| 筹码获利比 | {_safe_fmt(chip.get('winner_rate'))}% |")

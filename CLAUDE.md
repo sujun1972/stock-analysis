@@ -95,8 +95,8 @@ CIOAgentService                      ← backend/app/services/cio_agent_service.
 create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（LangGraph）
     ↓
 7 个 LangChain Tool                  ← backend/app/services/langchain_tools.py
-    ├── get_basic_market             基础盘面（价格、估值、行业、筹码）
-    ├── get_capital_flow             资金流向（主力净流入、北向资金）
+    ├── get_basic_market             基础盘面（价格、估值分位、交易所属性、财务指标、行业、筹码）
+    ├── get_capital_flow             资金流向（主力净流入、北向资金；北交所自动跳过北向）
     ├── get_shareholder_info         股东信息（人数变化、减持、解禁）
     ├── get_technical_indicators     技术指标（均线结构、RSI、多级别MACD、量价动能）
     ├── get_financial_reports        财报披露日期
