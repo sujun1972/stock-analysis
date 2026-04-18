@@ -6,7 +6,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useMLStore } from '@/store/mlStore';
+import { useMLStore } from '@/stores/ml-store';
 import * as echarts from 'echarts';
 
 export default function FeatureImportance() {

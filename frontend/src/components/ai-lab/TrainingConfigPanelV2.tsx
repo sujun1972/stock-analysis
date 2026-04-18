@@ -6,8 +6,8 @@
 'use client';
 
 import { useState, useMemo, memo } from 'react';
-import { useMLStore } from '@/store/mlStore';
-import axios from 'axios';
+import { useMLStore } from '@/stores/ml-store';
+import axiosInstance from '@/lib/api/axios-instance'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,6 @@ import { MultiStockSelector } from './MultiStockSelector';
 import { Layers, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 interface TrainingConfigPanelProps {
   isInDialog?: boolean;
@@ -72,7 +71,7 @@ const TrainingConfigPanelV2 = memo(function TrainingConfigPanelV2({ isInDialog =
         ),
       };
 
-      const response = await axios.post(`${API_BASE}/ml/train`, requestData);
+      const response = await axiosInstance.post(`/api/ml/train`, requestData);
       const task = response.data;
 
       setCurrentTask(task);
@@ -110,7 +109,7 @@ const TrainingConfigPanelV2 = memo(function TrainingConfigPanelV2({ isInDialog =
   const startPolling = (taskId: string) => {
     const interval = setInterval(async () => {
       try {
-        const response = await axios.get(`${API_BASE}/ml/tasks/${taskId}`);
+        const response = await axiosInstance.get(`/api/ml/tasks/${taskId}`);
         const task = response.data;
 
         setCurrentTask(task);

@@ -4,6 +4,15 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import * as echarts from 'echarts'
 import { apiClient } from '@/lib/api-client'
+import {
+  formatVolume as formatVolumeUtil,
+  removeDateTimePart as removeDateTimePartUtil,
+  formatDateWithWeekday as formatDateWithWeekdayUtil,
+  loadIndicatorSettings,
+  saveIndicatorSettings,
+  CHART_LAYOUT,
+  type IndicatorSettings,
+} from './chart-utils'
 
 interface ChartData {
   date: string
@@ -97,32 +106,9 @@ export default function EChartsStockChart({
    *    - 从 localStorage 读取用户偏好
    *    - 自动保存设置变化到 localStorage
    */
-  const [visibleIndicators, setVisibleIndicators] = useState(() => {
-    // 优先使用外部控制的指标设置
-    if (externalVisibleIndicators) {
-      return externalVisibleIndicators
-    }
-
-    // 独立模式：从 localStorage 读取
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('chart_visible_indicators')
-      if (saved) {
-        try {
-          return JSON.parse(saved)
-        } catch (e) {
-          console.error('Failed to parse saved indicators:', e)
-        }
-      }
-    }
-
-    // 默认配置：开启成交量和MACD
-    return {
-      volume: true,
-      macd: true,
-      kdj: false,
-      rsi: false,
-      boll: false
-    }
+  const [visibleIndicators, setVisibleIndicators] = useState<IndicatorSettings>(() => {
+    if (externalVisibleIndicators) return externalVisibleIndicators
+    return loadIndicatorSettings()
   })
 
   /**
@@ -139,8 +125,8 @@ export default function EChartsStockChart({
    * 仅在非外部控制时执行
    */
   useEffect(() => {
-    if (!externalVisibleIndicators && typeof window !== 'undefined') {
-      localStorage.setItem('chart_visible_indicators', JSON.stringify(visibleIndicators))
+    if (!externalVisibleIndicators) {
+      saveIndicatorSettings(visibleIndicators)
     }
   }, [visibleIndicators, externalVisibleIndicators])
 
@@ -174,45 +160,9 @@ export default function EChartsStockChart({
   // 检查是否有权益曲线数据
   const hasEquityData = backtestMode && equityCurve && equityCurve.length > 0
 
-  /**
-   * 格式化成交量：将大数值转换为中国习惯的万/亿单位
-   * @param value - 原始成交量数值
-   * @returns 格式化后的字符串（如 "1.23亿" 或 "5678万"）
-   */
-  const formatVolume = (value: number): string => {
-    if (value >= 100000000) {
-      return (value / 100000000).toFixed(2) + '亿'
-    } else if (value >= 10000) {
-      return (value / 10000).toFixed(2) + '万'
-    }
-    return value.toFixed(0)
-  }
-
-  /**
-   * 去除日期字符串中的时间部分
-   * @param dateStr - 日期字符串（如 "2025-01-23" 或 "2025-01-23 00:00:00"）
-   * @returns 只包含日期的字符串（如 "2025-01-23"）
-   */
-  const removeDateTimePart = useCallback((dateStr: string): string => {
-    // 兼容 "2026-03-13 00:00:00" 和 "2026-03-13T00:00:00" 两种格式
-    return dateStr.split('T')[0].split(' ')[0]
-  }, [])
-
-  /**
-   * 格式化日期：添加星期信息
-   * @param dateStr - 日期字符串（如 "2025-01-23" 或 "2025-01-23 00:00:00"）
-   * @returns 格式化后的日期字符串（如 "2025年01月23日 星期四"）
-   */
-  const formatDateWithWeekday = useCallback((dateStr: string): string => {
-    const dateOnly = removeDateTimePart(dateStr)
-    const date = new Date(dateOnly)
-    const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const weekday = weekdays[date.getDay()]
-    return `${year}年${month}月${day}日 ${weekday}`
-  }, [removeDateTimePart])
+  const formatVolume = formatVolumeUtil
+  const removeDateTimePart = removeDateTimePartUtil
+  const formatDateWithWeekday = formatDateWithWeekdayUtil
 
   // 检查数据是否可用
   // RSI支持多周期：RSI6, RSI12, RSI24

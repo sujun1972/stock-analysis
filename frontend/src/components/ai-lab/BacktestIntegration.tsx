@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useMLStore } from '@/store/mlStore';
+import { useMLStore } from '@/stores/ml-store';
 import { useRouter } from 'next/navigation';
 
 export default function BacktestIntegration() {

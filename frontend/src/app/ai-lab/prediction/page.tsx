@@ -7,7 +7,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMLStore } from '@/store/mlStore';
+import { useMLStore } from '@/stores/ml-store';
 import PredictionChart from '@/components/ai-lab/PredictionChart';
 import FeatureSnapshotViewer from '@/components/ai-lab/FeatureSnapshotViewer';
 import { Button } from '@/components/ui/button';
@@ -20,9 +20,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Play, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import axiosInstance from '@/lib/api/axios-instance'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 function PredictionPageContent() {
   const router = useRouter();
@@ -39,7 +38,7 @@ function PredictionPageContent() {
     const loadModels = async () => {
       setLoadingModels(true);
       try {
-        const response = await axios.get(`${API_BASE}/ml/models`, {
+        const response = await axiosInstance.get(`/api/ml/models`, {
           params: { limit: 100 }
         });
         setModels(response.data.models || []);
@@ -103,7 +102,7 @@ function PredictionPageContent() {
     try {
       // 从模型的配置中获取日期范围，如果没有则使用默认值
       const config = model.config || {};
-      const response = await axios.post(`${API_BASE}/ml/predict`, {
+      const response = await axiosInstance.post(`/api/ml/predict`, {
         experiment_id: model.id,  // 使用实验ID（新版）
         symbol: model.symbol,
         start_date: config.start_date || '2020-01-01',

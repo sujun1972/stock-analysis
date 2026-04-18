@@ -6,9 +6,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMLStore } from '@/store/mlStore';
+import { useMLStore } from '@/stores/ml-store';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import axiosInstance from '@/lib/api/axios-instance'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,7 +18,6 @@ import { useToast } from '@/hooks/use-toast';
 import { extractApiError } from '@/lib/error-formatter';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 interface ModelCardProps {
   model: any;
@@ -186,7 +185,7 @@ export default function ModelList() {
       if (filterSymbol) params.symbol = filterSymbol;
       if (filterModelType) params.model_type = filterModelType;
 
-      const response = await axios.get(`${API_BASE}/ml/models`, { params });
+      const response = await axiosInstance.get(`/api/ml/models`, { params });
       setModels(response.data.models || []);
     } catch (error) {
       console.error('加载模型列表失败:', error);
@@ -238,7 +237,7 @@ export default function ModelList() {
     if (!modelToDelete) return;
 
     try {
-      await axios.delete(`${API_BASE}/ml/tasks/${modelToDelete.model_id}`);
+      await axiosInstance.delete(`/api/ml/tasks/${modelToDelete.model_id}`);
 
       // 如果删除的是当前选中的模型，清空选中状态
       if (selectedModel?.model_id === modelToDelete.model_id) {
@@ -276,7 +275,7 @@ export default function ModelList() {
       const config = model.config;
 
       // 创建回测任务
-      const response = await axios.post(`${API_BASE}/backtest/run`, {
+      const response = await axiosInstance.post(`/api/backtest/run`, {
         symbols: model.symbol,
         start_date: config.start_date,
         end_date: config.end_date,

@@ -10,7 +10,7 @@ export interface ExperimentBatch {
 
   // 实验策略
   strategy: 'grid' | 'random' | 'bayesian'
-  param_space?: Record<string, any>
+  param_space?: Record<string, unknown>
 
   // 统计信息
   total_experiments: number
@@ -23,7 +23,7 @@ export interface ExperimentBatch {
   status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
 
   // 配置
-  config?: Record<string, any>
+  config?: Record<string, unknown>
 
   // 时间戳
   created_at: string
@@ -49,13 +49,13 @@ export interface Experiment {
   experiment_hash?: string
 
   // 训练配置
-  config: Record<string, any>
+  config: Record<string, unknown>
 
   // 训练结果
   model_id?: string
   model_path?: string
-  train_metrics?: Record<string, any>
-  feature_importance?: Record<string, any>
+  train_metrics?: Record<string, unknown>
+  feature_importance?: Record<string, unknown>
 
   // 回测结果
   backtest_status?: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
@@ -66,9 +66,9 @@ export interface Experiment {
     win_rate?: number
     calmar_ratio?: number
     profit_factor?: number
-    [key: string]: any
+    [key: string]: number | undefined
   }
-  backtest_trades?: any
+  backtest_trades?: unknown
 
   // 综合评分
   rank_score?: number
@@ -112,15 +112,15 @@ export interface TopModel {
   profit_factor?: number
 
   // 训练配置
-  config: Record<string, any>
+  config: Record<string, unknown>
 
   // 训练指标 (可选，用于详细分析)
-  train_metrics?: Record<string, any>
+  train_metrics?: Record<string, unknown>
 }
 
 export interface BatchConfig {
   batch_name: string
-  param_space?: any
+  param_space?: Record<string, unknown>
   template?: string
   strategy: string
   max_experiments?: number
@@ -154,7 +154,7 @@ interface ExperimentStore {
 
   // 实验查询
   fetchExperiments: (batchId: number, status?: string) => Promise<void>
-  fetchTopModels: (batchId: number, topN?: number, filters?: any) => Promise<void>
+  fetchTopModels: (batchId: number, topN?: number, filters?: { min_sharpe?: number; max_drawdown?: number; min_annual_return?: number }) => Promise<void>
 
   // 实时监控
   subscribeToProgress: (batchId: number) => void
@@ -197,8 +197,8 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.message || '获取批次列表失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('fetchBatches error:', error)
     }
   },
@@ -215,8 +215,8 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.message || '获取批次信息失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('fetchBatchInfo error:', error)
     }
   },
@@ -246,8 +246,8 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.detail || data.message || '创建批次失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('createBatch error:', error)
       throw error
     }
@@ -277,8 +277,8 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.detail || '启动批次失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('startBatch error:', error)
       throw error
     }
@@ -302,8 +302,8 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.detail || '取消批次失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('cancelBatch error:', error)
       throw error
     }
@@ -327,8 +327,8 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.detail || '删除批次失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('deleteBatch error:', error)
       throw error
     }
@@ -353,13 +353,13 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.message || '获取实验列表失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('fetchExperiments error:', error)
     }
   },
 
-  fetchTopModels: async (batchId: number, topN: number = 10, filters?: any) => {
+  fetchTopModels: async (batchId: number, topN: number = 10, filters?: { min_sharpe?: number; max_drawdown?: number; min_annual_return?: number }) => {
     try {
       set({ loading: true, error: null })
 
@@ -379,8 +379,8 @@ export const useExperimentStore = create<ExperimentStore>()(
       } else {
         throw new Error(data.message || '获取Top模型失败')
       }
-    } catch (error: any) {
-      set({ error: error.message, loading: false })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '操作失败', loading: false })
       console.error('fetchTopModels error:', error)
     }
   },
@@ -410,14 +410,15 @@ export const useExperimentStore = create<ExperimentStore>()(
     }
 
     // 保存引用以便取消订阅
-    ;(window as any).__experimentEventSource = eventSource
+    const w = window as Window & { __experimentEventSource?: EventSource }
+    w.__experimentEventSource = eventSource
   },
 
   unsubscribeFromProgress: () => {
-    const eventSource = (window as any).__experimentEventSource
-    if (eventSource) {
-      eventSource.close()
-      delete (window as any).__experimentEventSource
+    const w = window as Window & { __experimentEventSource?: EventSource }
+    if (w.__experimentEventSource) {
+      w.__experimentEventSource.close()
+      delete w.__experimentEventSource
     }
   },
 

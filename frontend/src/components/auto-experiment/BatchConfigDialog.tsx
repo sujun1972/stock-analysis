@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, FlaskConical, Sparkles, Settings2 } from 'lucide-react'
-import { useExperimentStore, fetchTemplates } from '@/store/experimentStore'
+import { useExperimentStore, fetchTemplates } from '@/stores/experiment-store'
 import { useToast } from '@/hooks/use-toast'
 
 interface BatchConfigDialogProps {

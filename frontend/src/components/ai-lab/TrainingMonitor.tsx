@@ -6,7 +6,7 @@
 'use client';
 
 import { memo } from 'react';
-import { useMLStore } from '@/store/mlStore';
+import { useMLStore } from '@/stores/ml-store';
 
 const TrainingMonitor = memo(function TrainingMonitor() {
   const { currentTask } = useMLStore();

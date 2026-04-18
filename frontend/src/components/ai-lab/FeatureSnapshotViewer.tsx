@@ -7,10 +7,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useMLStore } from '@/store/mlStore';
-import axios from 'axios';
+import { useMLStore } from '@/stores/ml-store';
+import axiosInstance from '@/lib/api/axios-instance'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 interface FeatureSnapshot {
   date: string;
@@ -36,7 +35,7 @@ export default function FeatureSnapshotViewer() {
     setLoading(true);
     try {
       // 调用后端API获取指定日期的特征数据
-      const response = await axios.get(`${API_BASE}/ml/features/snapshot`, {
+      const response = await axiosInstance.get(`/api/ml/features/snapshot`, {
         params: {
           symbol: selectedModel.symbol,
           date: date,

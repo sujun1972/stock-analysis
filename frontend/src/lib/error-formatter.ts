@@ -10,67 +10,46 @@ interface PydanticValidationError {
   type: string
   loc: (string | number)[]
   msg: string
-  input?: any
+  input?: unknown
 }
 
-/**
- * 格式化错误信息为字符串
- * 处理 Pydantic 验证错误等复杂对象
- *
- * @param error - 任何类型的错误对象
- * @returns 格式化后的错误字符串
- *
- * @example
- * // 字符串错误
- * formatErrorMessage("网络错误") // "网络错误"
- *
- * // Pydantic 验证错误数组
- * formatErrorMessage([
- *   { type: "value_error", loc: ["body", "name"], msg: "field required" }
- * ]) // "body.name: field required"
- *
- * // 标准 Error 对象
- * formatErrorMessage(new Error("Something went wrong")) // "Something went wrong"
- *
- * // 未知对象
- * formatErrorMessage({ code: 500, message: "Internal error" }) // '{"code":500,"message":"Internal error"}'
- */
-export function formatErrorMessage(error: any): string {
-  // 如果已经是字符串，直接返回
+interface ErrorLike {
+  message?: string
+  msg?: string
+  loc?: (string | number)[] | string
+}
+
+export function formatErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error
   }
 
-  // 如果是数组（Pydantic 验证错误）
   if (Array.isArray(error)) {
     return error
-      .map((err: any) => {
+      .map((err: unknown) => {
         if (typeof err === 'string') return err
 
-        // Pydantic 错误格式: {type, loc, msg, input}
-        if (err.msg && err.loc) {
-          const location = Array.isArray(err.loc) ? err.loc.join('.') : err.loc
-          return `${location}: ${err.msg}`
+        const e = err as PydanticValidationError
+        if (e.msg && e.loc) {
+          const location = Array.isArray(e.loc) ? e.loc.join('.') : e.loc
+          return `${location}: ${e.msg}`
         }
 
-        return err.msg || JSON.stringify(err)
+        return e.msg || JSON.stringify(err)
       })
       .join('; ')
   }
 
-  // 如果是对象，尝试提取错误信息
   if (typeof error === 'object' && error !== null) {
-    // 标准错误对象
-    if (error.message) return error.message
-    // Pydantic 单个错误
-    if (error.msg) {
-      if (error.loc) {
-        const location = Array.isArray(error.loc) ? error.loc.join('.') : error.loc
-        return `${location}: ${error.msg}`
+    const e = error as ErrorLike
+    if (e.message) return e.message
+    if (e.msg) {
+      if (e.loc) {
+        const location = Array.isArray(e.loc) ? e.loc.join('.') : e.loc
+        return `${location}: ${e.msg}`
       }
-      return error.msg
+      return e.msg
     }
-    // 其他对象，转为 JSON
     try {
       return JSON.stringify(error)
     } catch {
@@ -78,27 +57,16 @@ export function formatErrorMessage(error: any): string {
     }
   }
 
-  // 其他情况
   return String(error)
 }
 
-/**
- * 从 API 错误响应中提取错误信息
- *
- * @param error - Axios 错误对象或其他错误
- * @param fallbackMessage - 默认错误信息
- * @returns 格式化后的错误字符串
- *
- * @example
- * extractApiError(axiosError, "操作失败")
- */
-export function extractApiError(error: any, fallbackMessage: string = '操作失败'): string {
-  // 尝试从不同的错误结构中提取信息
+export function extractApiError(error: unknown, fallbackMessage: string = '操作失败'): string {
+  const e = error as { response?: { data?: { detail?: unknown; message?: string } }; message?: string } | null
   const errorDetail =
-    error?.response?.data?.detail ||  // FastAPI 错误
-    error?.response?.data?.message || // 自定义错误格式
-    error?.response?.data ||          // 其他格式
-    error?.message ||                 // 标准错误对象
+    e?.response?.data?.detail ||
+    e?.response?.data?.message ||
+    e?.response?.data ||
+    e?.message ||
     fallbackMessage
 
   return formatErrorMessage(errorDetail)

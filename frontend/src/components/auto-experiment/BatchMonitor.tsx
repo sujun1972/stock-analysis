@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Activity, CheckCircle, XCircle, Clock } from 'lucide-react'
-import { useExperimentStore } from '@/store/experimentStore'
+import { useExperimentStore } from '@/stores/experiment-store'
 
 interface BatchMonitorProps {
   batchId: number

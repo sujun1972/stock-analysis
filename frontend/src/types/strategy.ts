@@ -45,12 +45,12 @@ export interface Strategy {
   tags?: string[]
 
   // 默认参数
-  default_params?: Record<string, any>
+  default_params?: Record<string, unknown>
 
   // 状态和验证
   validation_status: 'pending' | 'passed' | 'failed' | 'validating'
-  validation_errors?: Record<string, any>
-  validation_warnings?: Record<string, any>
+  validation_errors?: Record<string, string | string[]>
+  validation_warnings?: Record<string, string | string[]>
   risk_level: 'safe' | 'low' | 'medium' | 'high'
   is_enabled: boolean
 
@@ -93,7 +93,7 @@ export interface CreateStrategyRequest {
   description?: string
   category?: string
   tags?: string[]
-  default_params?: Record<string, any>
+  default_params?: Record<string, unknown>
 }
 
 /**
@@ -107,7 +107,7 @@ export interface UpdateStrategyRequest {
   description?: string
   category?: string
   tags?: string[]
-  default_params?: Record<string, any>
+  default_params?: Record<string, unknown>
   is_enabled?: boolean
 }
 
@@ -146,7 +146,7 @@ export interface StrategyStatistics {
 export interface StrategyTestResponse {
   success: boolean
   message: string
-  details?: any
+  details?: Record<string, unknown>
 }
 
 // ========== 旧类型定义（向后兼容，标记为废弃）==========
@@ -161,16 +161,16 @@ export interface StrategyTypeMeta {
   description: string
   category?: string
   risk_level?: string
-  default_params: Record<string, any>
+  default_params: Record<string, unknown>
   param_schema: {
     [key: string]: {
       type: 'integer' | 'float' | 'boolean' | 'string' | 'select'
       min?: number
       max?: number
       step?: number
-      options?: Array<{ value: any; label: string }>
+      options?: Array<{ value: string | number | boolean; label: string }>
       description?: string
-      default: any
+      default: string | number | boolean
     }
   }
 }
@@ -184,7 +184,7 @@ export interface StrategyConfig {
   strategy_type: string
   name: string
   description?: string
-  config: Record<string, any>
+  config: Record<string, unknown>
   is_active: boolean
   created_at: string
   updated_at: string
@@ -208,7 +208,7 @@ export interface DynamicStrategy {
   validation_errors?: Array<{ type: string; message: string }>
   validation_warnings?: Array<{ type: string; message: string }>
   test_status?: 'untested' | 'passed' | 'failed'
-  test_results?: any
+  test_results?: Record<string, unknown>
   is_enabled: boolean
   created_at: string
   updated_at: string
@@ -230,7 +230,7 @@ export interface BacktestRequest {
   rebalance_freq?: 'D' | 'W' | 'M'
 
   // 策略参数（用于覆盖默认参数，例如 ML 模型 ID）
-  strategy_params?: Record<string, any>
+  strategy_params?: Record<string, unknown>
 
   // 离场策略（可选，支持多个）
   exit_strategy_ids?: number[]
@@ -241,7 +241,7 @@ export interface BacktestRequest {
   /** @deprecated */
   strategy_name?: string
   /** @deprecated */
-  strategy_config?: Record<string, any>
+  strategy_config?: Record<string, unknown>
 }
 
 /**
@@ -251,10 +251,10 @@ export interface StrategyExecution {
   id: number
   strategy_id: number
   execution_type: 'backtest' | 'live_trading' | 'paper_trading'
-  execution_params: any
+  execution_params: Record<string, unknown>
   status: 'pending' | 'running' | 'completed' | 'failed'
-  result?: any
-  metrics?: any
+  result?: Record<string, unknown>
+  metrics?: Record<string, number>
   error_message?: string
   execution_duration_ms?: number
   started_at?: string
@@ -268,7 +268,7 @@ export interface StrategyExecution {
 export interface CreateStrategyConfigRequest {
   strategy_type: string
   name: string
-  config: Record<string, any>
+  config: Record<string, unknown>
   description?: string
 }
 
@@ -372,7 +372,7 @@ export interface PublishReview {
   new_status: string
   comment?: string
   created_at: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 /**

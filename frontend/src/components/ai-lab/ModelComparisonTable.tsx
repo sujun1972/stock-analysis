@@ -8,7 +8,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Trophy } from 'lucide-react';
-import type { MLTrainingTask } from '@/store/mlStore';
+import type { MLTrainingTask } from '@/stores/ml-store';
 
 interface ModelComparisonTableProps {
   task: MLTrainingTask;

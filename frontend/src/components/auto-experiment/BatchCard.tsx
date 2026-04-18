@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Play, Pause, X, MoreVertical, TrendingUp, Eye, Trash2, FileText } from 'lucide-react'
-import { ExperimentBatch } from '@/store/experimentStore'
+import { ExperimentBatch } from '@/stores/experiment-store'
 import { useRouter } from 'next/navigation'
 
 interface BatchCardProps {

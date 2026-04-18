@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -87,8 +87,7 @@ export default function StrategyConfigsPage() {
   }
 
   // 筛选配置
-  const filteredConfigs = (configs || []).filter(config => {
-    // 搜索过滤
+  const filteredConfigs = useMemo(() => (configs || []).filter(config => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       const matchName = config.name.toLowerCase().includes(query)
@@ -97,17 +96,15 @@ export default function StrategyConfigsPage() {
       if (!matchName && !matchType && !matchDesc) return false
     }
 
-    // 类型过滤
     if (filterType !== 'all' && config.strategy_type !== filterType) {
       return false
     }
 
-    // 状态过滤
     if (filterStatus === 'active' && !config.is_active) return false
     if (filterStatus === 'inactive' && config.is_active) return false
 
     return true
-  })
+  }), [configs, searchQuery, filterType, filterStatus])
 
   // 打开创建对话框
   const handleOpenCreateDialog = () => {

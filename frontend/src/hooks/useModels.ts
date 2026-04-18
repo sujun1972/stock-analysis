@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import axiosInstance from '@/lib/api/axios-instance'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export function useModels(params?: {
   skip?: number
@@ -15,7 +14,7 @@ export function useModels(params?: {
   return useQuery({
     queryKey: ['models', 'list', params],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/api/ml/models`, { params })
+      const response = await axiosInstance.get(`/api/ml/models`, { params })
       return response.data
     },
     staleTime: 3 * 60 * 1000,
@@ -26,7 +25,7 @@ export function useModel(modelId: number) {
   return useQuery({
     queryKey: ['models', 'detail', modelId],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/api/ml/models/${modelId}`)
+      const response = await axiosInstance.get(`/api/ml/models/${modelId}`)
       return response.data
     },
     enabled: !!modelId,
@@ -39,7 +38,7 @@ export function useTrainModel() {
 
   return useMutation({
     mutationFn: async (config: any) => {
-      const response = await axios.post(`${API_BASE}/api/ml/train`, config)
+      const response = await axiosInstance.post(`/api/ml/train`, config)
       return response.data
     },
     onSuccess: () => {
@@ -53,7 +52,7 @@ export function useDeleteModel() {
 
   return useMutation({
     mutationFn: async (modelId: number) => {
-      const response = await axios.delete(`${API_BASE}/api/ml/models/${modelId}`)
+      const response = await axiosInstance.delete(`/api/ml/models/${modelId}`)
       return response.data
     },
     onSuccess: () => {
@@ -66,7 +65,7 @@ export function usePrediction(modelId: number) {
   return useQuery({
     queryKey: ['models', 'prediction', modelId],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/api/ml/models/${modelId}/prediction`)
+      const response = await axiosInstance.get(`/api/ml/models/${modelId}/prediction`)
       return response.data
     },
     enabled: !!modelId,

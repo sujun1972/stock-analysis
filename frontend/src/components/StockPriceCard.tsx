@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
+import { loadIndicatorSettings, saveIndicatorSettings, type IndicatorSettings } from './chart-utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -191,25 +192,7 @@ export default function StockPriceCard({
    * - 默认开启成交量和MACD，其他指标默认关闭
    * - 支持5种技术指标：成交量、MACD、KDJ、RSI、BOLL
    */
-  const [visibleIndicators, setVisibleIndicators] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('chart_visible_indicators')
-      if (saved) {
-        try {
-          return JSON.parse(saved)
-        } catch (e) {
-          console.error('Failed to parse saved indicators:', e)
-        }
-      }
-    }
-    return {
-      volume: true,   // 成交量 - 默认开启
-      macd: true,     // MACD - 默认开启
-      kdj: false,     // KDJ - 默认关闭
-      rsi: false,     // RSI - 默认关闭
-      boll: false     // BOLL - 默认关闭
-    }
-  })
+  const [visibleIndicators, setVisibleIndicators] = useState<IndicatorSettings>(loadIndicatorSettings)
 
   /**
    * 持久化指标设置
@@ -217,9 +200,7 @@ export default function StockPriceCard({
    * - 通知父组件指标变化（如果提供了回调）
    */
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('chart_visible_indicators', JSON.stringify(visibleIndicators))
-    }
+    saveIndicatorSettings(visibleIndicators)
     if (onIndicatorsChange) {
       onIndicatorsChange(Object.keys(visibleIndicators).filter(key => visibleIndicators[key as keyof typeof visibleIndicators]))
     }

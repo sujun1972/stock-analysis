@@ -6,9 +6,9 @@
 'use client';
 
 import { useEffect, useState, useCallback, memo } from 'react';
-import { useMLStore } from '@/store/mlStore';
+import { useMLStore } from '@/stores/ml-store';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import axiosInstance from '@/lib/api/axios-instance'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +42,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 interface ModelTableProps {
   showTrainingDialog: boolean;
@@ -304,7 +303,7 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
       // 批量删除所有选中的实验（使用实验ID）
       await Promise.all(
         selectedExperiments.map((exp: any) =>
-          axios.delete(`${API_BASE}/experiment/${exp.id}`)
+          axiosInstance.delete(`/api/experiment/${exp.id}`)
         )
       );
 

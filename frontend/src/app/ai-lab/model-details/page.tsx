@@ -14,7 +14,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMLStore } from '@/store/mlStore';
+import { useMLStore } from '@/stores/ml-store';
 import FeatureImportance from '@/components/ai-lab/FeatureImportance';
 import TrainingHistory from '@/components/ai-lab/TrainingHistory';
 import { Button } from '@/components/ui/button';
@@ -27,10 +27,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { PlayCircle, TrendingUp, Loader2, Download } from 'lucide-react';
-import axios from 'axios';
+import axiosInstance from '@/lib/api/axios-instance'
 import { useToast } from '@/hooks/use-toast';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 function ModelDetailsPageContent() {
   const router = useRouter();
@@ -47,7 +46,7 @@ function ModelDetailsPageContent() {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const response = await axios.get(`${API_BASE}/ml/models`, {
+        const response = await axiosInstance.get(`/api/ml/models`, {
           params: { limit: 100 }
         });
         setModels(response.data.models || []);
@@ -88,7 +87,7 @@ function ModelDetailsPageContent() {
     setError('');
 
     try {
-      const response = await axios.get(`${API_BASE}/experiment/${experimentId}`);
+      const response = await axiosInstance.get(`/api/experiment/${experimentId}`);
       const experiment = response.data.data;
 
       // 转换为旧的task格式以兼容现有组件

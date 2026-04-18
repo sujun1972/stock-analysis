@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, TrendingUp, BarChart3, Settings2, FileText } from 'lucide-react'
-import { useExperimentStore, TopModel } from '@/store/experimentStore'
+import { useExperimentStore, TopModel } from '@/stores/experiment-store'
 import { BatchMonitor } from '@/components/auto-experiment/BatchMonitor'
 import ModelActionsMenu from '@/components/ai-lab/ModelActionsMenu'
 
