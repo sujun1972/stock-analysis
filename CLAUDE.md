@@ -123,7 +123,7 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 
 **`_build_cross_verification`（信号汇总）**为动态生成：根据实际检测到的信号（矛盾点、背离、K线危险形态、乖离率盈亏比）自动组装编号任务列表，无背离时不生成背离评估指令，避免 AI 幻觉。输出包含支撑/阻力位阶梯（从 MA、布林带、20日极值自动聚合）。
 
-**`ai_output_parser.extract_json_text` 含 JSON 自动修复**：AI 输出截断导致缺少 1-3 个闭合 `}` / `]` 时，自动补全后再存储，避免前端解析失败降级为原始文本。
+**`ai_output_parser.extract_json_text` 含 JSON 自动修复**：两级修复策略——① 中间修复（`_repair_misplaced_keys`）：通过深度追踪检测应在顶层的 key 被嵌入子对象时，在其前方插入缺失的 `}`；② 末尾补全（`_repair_trailing`）：AI 截断导致缺少 1-3 个闭合 `}` / `]` 时自动补全。`_EXPECTED_TOP_KEYS` 集合定义了专家分析 JSON 的顶层字段名。
 
 - **触发方式**：`analysis_type == "cio_directive"` 时自动走 Agent 路径（`/generate` 和 `/generate-multi` 端点）
 - **非 CIO 类型**不走 Agent，保持现有直接调用方式

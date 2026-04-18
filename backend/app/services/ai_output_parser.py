@@ -26,12 +26,21 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
-# markdown ```json ... ``` 代码块提取
-_JSON_BLOCK_PATTERN = re.compile(r'```json\s*(\{[\s\S]*?\})\s*```')
+# markdown ```json ... ``` 代码块提取（贪婪匹配，确保捕获到最外层 }）
+_JSON_BLOCK_PATTERN = re.compile(r'```json\s*(\{[\s\S]*\})\s*```')
 
 # 去掉 markdown 标识（非捕获组版本）
 _LEADING_MD = re.compile(r'^```(?:json)?\s*\n?', re.MULTILINE)
 _TRAILING_MD = re.compile(r'\n?```\s*$', re.MULTILINE)
+
+# AI 专家分析 JSON 中预期出现在顶层（depth=1）的关键字段，
+# 用于 _repair_misplaced_keys 检测嵌套错位
+_EXPECTED_TOP_KEYS = {
+    "expert_identity", "stock_target", "analysis_date",
+    "probability_metrics", "dimensions", "trading_strategy",
+    "final_score", "comprehensive_score", "score",
+    "macro_environment", "risk_factors", "investment_suggestion",
+}
 
 
 def extract_json_text(ai_response: str) -> Optional[str]:
@@ -50,7 +59,16 @@ def extract_json_text(ai_response: str) -> Optional[str]:
     # 策略1: ```json { ... } ``` 代码块
     matches = _JSON_BLOCK_PATTERN.findall(ai_response)
     if matches:
-        return matches[0]
+        candidate = matches[0]
+        try:
+            json.loads(candidate)
+            return candidate
+        except (json.JSONDecodeError, ValueError):
+            # 代码块内 JSON 不合法，尝试修复
+            repaired = _try_repair_json(candidate)
+            if repaired is not None:
+                return repaired
+            return candidate  # 返回原文，让调用方决定降级
 
     # 策略2: 去掉首尾 ``` 标识
     cleaned = _LEADING_MD.sub('', ai_response.strip())
@@ -70,7 +88,7 @@ def extract_json_text(ai_response: str) -> Optional[str]:
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # 策略4: 修复 AI 常见的不完整 JSON（缺少闭合花括号/方括号）
+    # 策略4: 修复 AI 常见的不完整 JSON
     repaired = _try_repair_json(cleaned)
     if repaired is not None:
         return repaired
@@ -79,16 +97,27 @@ def extract_json_text(ai_response: str) -> Optional[str]:
 
 
 def _try_repair_json(text: str) -> Optional[str]:
-    """尝试修复 AI 输出中缺少闭合花括号/方括号的不完整 JSON。
+    """尝试修复 AI 输出中结构损坏的 JSON。
 
-    AI 模型（尤其长输出时）经常截断最后的 } 或 ]，
-    导致花括号/方括号不配对。此函数通过补全缺失的闭合符号来修复。
+    处理两类常见错误：
+    1. 中间遗漏：嵌套对象缺少闭合 }，导致后续同级字段被错误嵌入上级对象
+    2. 末尾截断：AI 输出被截断，缺少最后的 } 或 ]
     """
     if not text or not text.strip().startswith('{'):
         return None
 
-    # 计算结构性花括号/方括号的嵌套深度（跳过字符串内部的）
-    open_stack = []  # 记录未闭合的开括号类型
+    # 优先尝试中间修复（检测顶层 key 出现在错误深度）
+    mid_repaired = _repair_misplaced_keys(text)
+    if mid_repaired is not None:
+        return mid_repaired
+
+    # 再尝试纯末尾补全
+    return _repair_trailing(text)
+
+
+def _repair_trailing(text: str) -> Optional[str]:
+    """在末尾补全缺失的闭合符号（最多 3 个）。"""
+    open_stack = []
     in_string = False
     escape_next = False
 
@@ -112,24 +141,114 @@ def _try_repair_json(text: str) -> Optional[str]:
                     open_stack.pop()
 
     if not open_stack:
-        return None  # 已经配对完整，无需修复
+        return None
 
-    # 最多补 3 个闭合符号（避免对完全损坏的文本做大手术）
     if len(open_stack) > 3:
         logger.warning(f"JSON 缺失 {len(open_stack)} 个闭合符号，超过修复阈值，跳过")
         return None
 
-    # 补全缺失的闭合符号（逆序：最内层先关闭）
     suffix = '\n' + '\n'.join(reversed(open_stack))
     repaired = text + suffix
 
     try:
         json.loads(repaired)
-        logger.info(f"JSON 自动修复成功：补全了 {len(open_stack)} 个闭合符号 {''.join(reversed(open_stack))}")
+        logger.info(f"JSON 末尾修复成功：补全了 {''.join(reversed(open_stack))}")
         return repaired
     except (json.JSONDecodeError, ValueError):
-        logger.debug(f"JSON 修复后仍无法解析，放弃")
+        logger.debug("JSON 末尾修复后仍无法解析，放弃")
         return None
+
+
+def _repair_misplaced_keys(text: str) -> Optional[str]:
+    """通过深度追踪检测并修复中间缺失的闭合 }。
+
+    典型场景：AI 生成嵌套 JSON 时漏掉父对象的 }，例如：
+        "dimensions": {
+            "sentiment_index": { ... }    ← 正确关闭了子对象
+        ←── 这里漏掉了 dimensions 的 }
+        "trading_strategy": { ... }       ← 被错误地归入 dimensions
+
+    算法：逐字符扫描并维护括号深度，当发现 _EXPECTED_TOP_KEYS 中的 key
+    出现在 depth > 1 时，定位其前方的逗号并插入缺失的 }。
+    """
+    depth = 0
+    in_string = False
+    escape_next = False
+    insertions: list[tuple[int, int]] = []  # (comma_pos, missing_brace_count)
+    i = 0
+
+    while i < len(text):
+        ch = text[i]
+
+        if escape_next:
+            escape_next = False
+            i += 1
+            continue
+        if ch == '\\' and in_string:
+            escape_next = True
+            i += 1
+            continue
+
+        if ch == '"':
+            if not in_string:
+                in_string = True
+                # 尝试提取 key 名（快速查找闭合引号，key 名不含转义引号）
+                end_quote = text.find('"', i + 1)
+                if end_quote > 0:
+                    key = text[i + 1:end_quote]
+                    rest = text[end_quote + 1:].lstrip()
+                    if rest.startswith(':') and key in _EXPECTED_TOP_KEYS and depth > 1:
+                        missing = depth - 1
+                        # 向前跳过空白找到分隔逗号
+                        scan = i - 1
+                        while scan >= 0 and text[scan] in ' \t\n\r':
+                            scan -= 1
+                        if scan >= 0 and text[scan] == ',':
+                            insertions.append((scan, missing))
+                            depth -= missing
+            else:
+                in_string = False
+            i += 1
+            continue
+
+        if not in_string:
+            if ch in ('{', '['):
+                depth += 1
+            elif ch in ('}', ']'):
+                depth -= 1
+
+        i += 1
+
+    if not insertions:
+        return None
+
+    # 从后向前插入以保持前面的位置索引不偏移
+    fixed = text
+    for comma_pos, _ in reversed(insertions):
+        line_start = fixed.rfind('\n', 0, comma_pos) + 1
+        indent = ''
+        for ch in fixed[line_start:comma_pos]:
+            if ch in ' \t':
+                indent += ch
+            else:
+                break
+        # 在逗号前插入 }，逗号保留给下一个 key
+        fixed = fixed[:comma_pos] + '}\n' + indent + fixed[comma_pos:]
+
+    try:
+        json.loads(fixed)
+        logger.info(f"JSON 中间修复成功：在 {len(insertions)} 处插入了缺失的 }}")
+        return fixed
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # 中间修复后仍需末尾补全的情况
+    result = _repair_trailing(fixed)
+    if result is not None:
+        logger.info("JSON 中间+末尾联合修复成功")
+        return result
+
+    return None
 
 
 def parse_ai_json(
@@ -148,7 +267,7 @@ def parse_ai_json(
     """
     json_text = extract_json_text(ai_response)
     if json_text is None:
-        logger.debug(f"[ai_output_parser] 无法从 AI 响应中提取 JSON 文本")
+        logger.debug("[ai_output_parser] 无法从 AI 响应中提取 JSON 文本")
         return None
 
     try:
