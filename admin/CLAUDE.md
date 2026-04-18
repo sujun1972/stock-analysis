@@ -428,15 +428,54 @@ onSort: (key, direction) => {
 your-page/
 ├── page.tsx          # 主页面（编排组合，目标 200-300 行）
 ├── hooks/
-│   ├── index.ts
+│   ├── index.ts      # export * from './useXxxData' 等
 │   ├── useXxxData.ts    # 数据加载
 │   ├── useXxxConfig.ts  # 配置管理
 │   └── useXxxActions.ts # 操作逻辑
 └── components/
-    ├── index.ts
+    ├── index.ts      # export * from './XxxCard' 等
     ├── ControlPanel.tsx
     └── XxxCard.tsx
 ```
+
+### 拆分规范
+
+- Hook 文件和组件文件均需 `'use client'` 指令
+- barrel `index.ts` 使用 `export * from './xxx'` 模式
+- 所有导出为具名导出（非 default export）
+- 返回 JSX 的 Hook（如表格列定义 `useMemo`）也需 `.tsx` 扩展名
+- Hook 放 `hooks/`，组件放 `components/`——不要在 `components/` 中放 Hook
+- 不添加 `@author`/`@since` 等 JSDoc 元数据注释
+- 组件内的显而易见的 JSX 区域注释（如 `{/* 筛选器 */}`）可省略
+
+### 已拆分的页面
+
+| 页面 | 路由 |
+|------|------|
+| 用户管理 | `/users` |
+| 盘前预期 | `/sentiment/premarket` |
+| 同步配置 | `/settings/sync-config` |
+| 策略列表 | `/strategies` |
+| AI 情绪分析 | `/sentiment/ai-analysis` |
+| 定时任务 | `/settings/scheduler` |
+| 模板编辑 | `/settings/prompt-templates/[key]` |
+| 性能监控 | `/monitoring/performance` |
+| 数据质量 | `/monitoring/data-quality` |
+| LLM 调用日志 | `/logs/llm-calls` |
+| AI 配置 | `/settings/ai-config` |
+| 板块资金流向 | `/moneyflow/ind-dc` |
+| 新建策略 | `/strategies/new` |
+
+### AdminLayout 拆分
+
+`components/layouts/AdminLayout.tsx` 已拆分为三个文件：
+- `navigation-config.ts` — `NavItem` 接口 + `navItems` 菜单配置数组
+- `SidebarMenuItem.tsx` — 菜单项渲染组件
+- `AdminLayout.tsx` — 布局骨架 + 状态管理
+
+### lib/api/index.ts 简化
+
+使用 `export { xxxApi } from './xxx'` 直接重导出，不再通过中间变量别名。目标 200 行以内。
 
 ---
 
