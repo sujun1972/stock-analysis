@@ -6,7 +6,7 @@
 - TaskConfigService: 任务配置管理（CRUD）
 - TaskHistoryService: 任务执行历史查询
 - TaskExecutionService: 任务执行和状态查询
-- ScheduledTaskService: 统一服务（向后兼容）
+- ScheduledTaskService: 聚合门面（委托给上述 4 个子服务）
 """
 
 from .cron_service import CronService
@@ -17,12 +17,10 @@ from .task_execution_service import TaskExecutionService
 
 class ScheduledTaskService:
     """
-    定时任务管理统一服务（向后兼容）
+    定时任务管理聚合门面
 
-    这是一个聚合服务，将所有子服务的功能聚合在一起，
-    保持与旧代码的向后兼容性。
-
-    新代码推荐直接使用专门的服务类：
+    将 4 个子服务的功能聚合在一起，供端点层统一调用。
+    端点内需要单一职责时，也可以直接使用专门的服务类：
     - CronService: Cron 表达式工具
     - TaskConfigService: 任务配置管理
     - TaskHistoryService: 执行历史查询
@@ -103,5 +101,5 @@ __all__ = [
     'TaskConfigService',
     'TaskHistoryService',
     'TaskExecutionService',
-    'ScheduledTaskService',  # 向后兼容
+    'ScheduledTaskService',
 ]

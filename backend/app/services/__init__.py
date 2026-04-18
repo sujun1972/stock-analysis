@@ -30,13 +30,13 @@ from .daily_basic_service import DailyBasicService
 from .block_trade_service import BlockTradeService
 from .hk_hold_service import HkHoldService
 
-# 定时任务管理服务（新架构：模块化）
+# 定时任务管理服务（模块化）
 from .scheduler import (
     CronService,
     TaskConfigService,
     TaskHistoryService,
     TaskExecutionService,
-    ScheduledTaskService,  # 向后兼容的统一服务
+    ScheduledTaskService,  # 聚合门面（CronService + TaskConfigService + TaskHistoryService + TaskExecutionService）
 )
 
 # 任务历史记录辅助服务
@@ -69,7 +69,7 @@ __all__ = [
     "TaskConfigService",
     "TaskHistoryService",
     "TaskExecutionService",
-    "ScheduledTaskService",  # 向后兼容
+    "ScheduledTaskService",
     # 任务历史记录辅助服务
     "TaskHistoryHelper",
 ]
