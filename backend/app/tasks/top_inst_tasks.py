@@ -1,94 +1,20 @@
-"""
-龙虎榜机构明细 Celery 任务
-"""
-import asyncio
-from typing import Optional
-from app.celery_app import celery_app
-from app.tasks.extended_sync_tasks import run_async_in_celery
-from app.services.top_inst_service import TopInstService
-from loguru import logger
+"""龙虎榜机构明细同步任务（工厂生成）"""
 
+from app.tasks._task_factory import make_full_history_task, make_incremental_task
 
-@celery_app.task(bind=True, name="tasks.sync_top_inst")
-def sync_top_inst_task(
-    self,
-    trade_date: Optional[str] = None,
-    ts_code: Optional[str] = None
-):
-    """
-    同步龙虎榜机构明细数据
+sync_top_inst_task = make_incremental_task(
+    name="tasks.sync_top_inst",
+    service_path="app.services.top_inst_service:TopInstService",
+    display_name="龙虎榜机构明细",
+    raw_sync_method="sync_top_inst",
+    raw_param_names=("trade_date", "ts_code"),
+)
 
-    Args:
-        trade_date: 交易日期，格式：YYYYMMDD（可选，默认为前一个交易日）
-        ts_code: 股票代码（可选）
-
-    Returns:
-        同步结果字典
-    """
-    try:
-        logger.info(f"开始执行龙虎榜机构明细同步任务: trade_date={trade_date}, ts_code={ts_code}")
-
-        # 使用辅助函数运行异步代码
-        service = TopInstService()
-        if not any([trade_date, ts_code]):
-            result = run_async_in_celery(service.sync_incremental)
-        else:
-            result = run_async_in_celery(
-                service.sync_top_inst,
-                trade_date=trade_date,
-                ts_code=ts_code
-            )
-
-        logger.info(f"龙虎榜机构明细同步任务完成: {result}")
-        return result
-
-    except Exception as e:
-        logger.error(f"龙虎榜机构明细同步任务失败: {e}")
-        raise
-
-
-@celery_app.task(
-    bind=True,
+sync_top_inst_full_history_task = make_full_history_task(
     name="tasks.sync_top_inst_full_history",
-    max_retries=0,
+    service_path="app.services.top_inst_service:TopInstService",
+    table_key="top_inst",
+    display_name="龙虎榜机构明细",
     soft_time_limit=7200,
     time_limit=10800,
-    acks_late=False,
 )
-def sync_top_inst_full_history_task(
-    self,
-    start_date: Optional[str] = None,
-    concurrency: int = 5,
-    **kwargs
-):
-    """按自然月切片全量同步龙虎榜机构明细历史数据（支持中断续继）"""
-    from app.core.redis_lock import redis_client, redis_lock
-    from app.tasks.sync_tasks import _DummyContext
-
-    LOCK_KEY = "sync:top_inst:full_history:lock"
-    logger.info(f"[Celery] 开始龙虎榜机构明细全量历史同步 start_date={start_date} concurrency={concurrency}")
-
-    if redis_client is None:
-        return {"status": "error", "message": "Redis 不可用"}
-
-    with redis_lock.acquire(LOCK_KEY, timeout=7200, blocking=False) if redis_lock else _DummyContext() as acquired:
-        if not acquired and redis_lock:
-            return {"status": "locked", "message": "已有全量同步任务正在进行"}
-
-        service = TopInstService()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(
-                service.sync_full_history(
-                    redis_client=redis_client,
-                    start_date=start_date,
-                    concurrency=concurrency,
-                    update_state_fn=self.update_state
-                )
-            )
-        finally:
-            loop.close()
-
-    logger.info(f"[Celery] 龙虎榜机构明细全量历史同步结束: 成功={result.get('success')}, 跳过={result.get('skipped')}, 失败={result.get('errors')}")
-    return result
