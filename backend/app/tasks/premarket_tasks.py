@@ -14,9 +14,9 @@
 from celery import Task
 from datetime import datetime
 from loguru import logger
-import os
 
 from app.celery_app import celery_app
+from app.core.config import settings
 from src.premarket.fetcher import PremarketDataFetcher
 from src.database.connection_pool_manager import ConnectionPoolManager
 from app.services.premarket_analysis_service import premarket_analysis_service
@@ -31,14 +31,7 @@ class PremarketTask(Task):
     @property
     def pool_manager(self):
         if self._pool_manager is None:
-            db_config = {
-                'host': os.getenv('DATABASE_HOST', 'timescaledb'),
-                'port': int(os.getenv('DATABASE_PORT', '5432')),
-                'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
-                'user': os.getenv('DATABASE_USER', 'stock_user'),
-                'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
-            }
-            self._pool_manager = ConnectionPoolManager(db_config)
+            self._pool_manager = ConnectionPoolManager(settings.db_config_dict())
         return self._pool_manager
 
 
@@ -167,14 +160,7 @@ def sync_premarket_data_task(date: str = None):
 
         logger.info(f"手动同步盘前数据: {date}")
 
-        db_config = {
-            'host': os.getenv('DATABASE_HOST', 'timescaledb'),
-            'port': int(os.getenv('DATABASE_PORT', '5432')),
-            'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
-            'user': os.getenv('DATABASE_USER', 'stock_user'),
-            'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
-        }
-        pool_manager = ConnectionPoolManager(db_config)
+        pool_manager = ConnectionPoolManager(settings.db_config_dict())
 
         fetcher = PremarketDataFetcher(pool_manager)
         result = fetcher.sync_premarket_data(date)

@@ -15,12 +15,12 @@ AI策略生成服务
 """
 
 import json
-import os
 import re
 import time
 from typing import Dict, Any, Optional, Tuple
 from loguru import logger
 
+from app.core.config import settings
 from app.core.exceptions import AIServiceError
 from app.services.langchain_client import LangChainClient
 
@@ -198,7 +198,7 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
         """从 ai_provider_configs 表获取指定提供商的配置；找不到时回退到 DEEPSEEK_API_KEY 环境变量。"""
         _DEFAULT = {
             "provider": "deepseek",
-            "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+            "api_key": settings.DEEPSEEK_API_KEY,
             "api_base_url": "https://api.deepseek.com/v1",
             "model_name": model or "deepseek-chat",
             "max_tokens": 4000,
@@ -207,13 +207,7 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
         }
         try:
             import psycopg2
-            conn = psycopg2.connect(
-                host=os.getenv("DATABASE_HOST", "timescaledb"),
-                port=int(os.getenv("DATABASE_PORT", "5432")),
-                dbname=os.getenv("DATABASE_NAME", "stock_analysis"),
-                user=os.getenv("DATABASE_USER", "stock_user"),
-                password=os.getenv("DATABASE_PASSWORD", "stock_password_123"),
-            )
+            conn = psycopg2.connect(**settings.db_config_dict_dbname())
             cur = conn.cursor()
             if provider:
                 cur.execute(

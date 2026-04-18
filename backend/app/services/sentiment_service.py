@@ -7,7 +7,6 @@
 import asyncio
 import json
 import math
-import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional
@@ -16,6 +15,7 @@ from loguru import logger
 from src.sentiment.fetcher import SentimentDataFetcher
 from src.database.connection_pool_manager import ConnectionPoolManager
 
+from app.core.config import settings
 from app.core.exceptions import DatabaseError, ExternalAPIError
 from app.services.config_service import ConfigService
 
@@ -40,15 +40,7 @@ class MarketSentimentService:
     def _get_fetcher(self) -> SentimentDataFetcher:
         """获取数据抓取器实例（懒加载）"""
         if self._fetcher is None:
-            # 获取数据库配置
-            db_config = {
-                'host': os.getenv('DATABASE_HOST', 'timescaledb'),
-                'port': int(os.getenv('DATABASE_PORT', '5432')),
-                'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
-                'user': os.getenv('DATABASE_USER', 'stock_user'),
-                'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
-            }
-            self._pool_manager = ConnectionPoolManager(db_config)
+            self._pool_manager = ConnectionPoolManager(settings.db_config_dict())
             self._fetcher = SentimentDataFetcher(self._pool_manager)
         return self._fetcher
 

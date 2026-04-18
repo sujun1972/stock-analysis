@@ -503,17 +503,10 @@ def _log_task_execution(date: str, status: str, result: dict):
         result: 执行结果
     """
     try:
-        import os
         from src.database.connection_pool_manager import ConnectionPoolManager
+        from app.core.config import settings
 
-        db_config = {
-            'host': os.getenv('DATABASE_HOST', 'timescaledb'),
-            'port': int(os.getenv('DATABASE_PORT', '5432')),
-            'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
-            'user': os.getenv('DATABASE_USER', 'stock_user'),
-            'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
-        }
-        pool_manager = ConnectionPoolManager(db_config)
+        pool_manager = ConnectionPoolManager(settings.db_config_dict())
         conn = pool_manager.get_connection()
         cursor = conn.cursor()
 

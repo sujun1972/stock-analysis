@@ -5,7 +5,6 @@
 """
 
 import sys
-import os
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from loguru import logger
@@ -17,21 +16,15 @@ from src.sentiment.sentiment_analyzer import SentimentAnalyzer
 from src.sentiment.hot_money_classifier import HotMoneyClassifier
 from src.sentiment.cycle_calculator import SentimentCycleCalculator
 
+from app.core.config import settings
+
 
 class SentimentCycleService:
     """情绪周期服务"""
 
     def __init__(self):
         """初始化服务"""
-        # 数据库配置
-        db_config = {
-            'host': os.getenv('DATABASE_HOST', 'timescaledb'),
-            'port': int(os.getenv('DATABASE_PORT', 5432)),
-            'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
-            'user': os.getenv('DATABASE_USER', 'stock_user'),
-            'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
-        }
-        self.pool_manager = ConnectionPoolManager(db_config)
+        self.pool_manager = ConnectionPoolManager(settings.db_config_dict())
         self.analyzer = SentimentAnalyzer(self.pool_manager)
         self.classifier = HotMoneyClassifier(self.pool_manager)
         self.calculator = SentimentCycleCalculator(self.pool_manager)

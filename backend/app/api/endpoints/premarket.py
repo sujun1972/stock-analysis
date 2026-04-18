@@ -16,9 +16,9 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from datetime import datetime, timedelta
 from loguru import logger
 from typing import Optional
-import os
 
 from app.api.error_handler import handle_api_errors
+from app.core.config import settings
 from src.premarket.fetcher import PremarketDataFetcher
 from src.database.connection_pool_manager import ConnectionPoolManager
 from app.services.premarket_analysis_service import premarket_analysis_service
@@ -34,14 +34,7 @@ router = APIRouter(
 
 def get_pool_manager():
     """获取数据库连接池（依赖注入）"""
-    db_config = {
-        'host': os.getenv('DATABASE_HOST', 'timescaledb'),
-        'port': int(os.getenv('DATABASE_PORT', '5432')),
-        'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
-        'user': os.getenv('DATABASE_USER', 'stock_user'),
-        'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
-    }
-    return ConnectionPoolManager(db_config)
+    return ConnectionPoolManager(settings.db_config_dict())
 
 
 @router.post("/sync")

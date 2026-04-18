@@ -15,7 +15,6 @@
 """
 
 import json
-import os
 import re
 import time
 from typing import Dict, Any, Optional
@@ -23,6 +22,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from src.database.connection_pool_manager import ConnectionPoolManager
+from app.core.config import settings
 from app.services.ai_service import AIStrategyService
 from app.core.exceptions import AIServiceError
 
@@ -37,14 +37,7 @@ class PremarketAnalysisService:
     def _get_pool_manager(self) -> ConnectionPoolManager:
         """获取数据库连接池"""
         if self._pool_manager is None:
-            db_config = {
-                'host': os.getenv('DATABASE_HOST', 'timescaledb'),
-                'port': int(os.getenv('DATABASE_PORT', '5432')),
-                'database': os.getenv('DATABASE_NAME', 'stock_analysis'),
-                'user': os.getenv('DATABASE_USER', 'stock_user'),
-                'password': os.getenv('DATABASE_PASSWORD', 'stock_password_123')
-            }
-            self._pool_manager = ConnectionPoolManager(db_config)
+            self._pool_manager = ConnectionPoolManager(settings.db_config_dict())
         return self._pool_manager
 
     # LLM碰撞测试Prompt模板
@@ -573,7 +566,7 @@ class PremarketAnalysisService:
                 logger.warning(f"未找到AI提供商配置: {provider}，使用默认配置")
                 return {
                     "provider": "deepseek",
-                    "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+                    "api_key": settings.DEEPSEEK_API_KEY,
                     "api_base_url": "https://api.deepseek.com/v1",
                     "model_name": model or "deepseek-chat",
                     "max_tokens": 4000,
@@ -600,7 +593,7 @@ class PremarketAnalysisService:
             # 失败时返回默认配置
             return {
                 "provider": "deepseek",
-                "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+                "api_key": settings.DEEPSEEK_API_KEY,
                 "api_base_url": "https://api.deepseek.com/v1",
                 "model_name": model or "deepseek-chat",
                 "max_tokens": 4000,

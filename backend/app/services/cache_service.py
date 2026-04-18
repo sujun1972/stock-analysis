@@ -46,15 +46,15 @@ class CacheService:
             self.redis_client = None
 
     def _init_cache_config(self):
-        """初始化缓存配置"""
-        # 缓存时间配置（秒）
+        """初始化缓存配置（TTL 来自 settings.cache_ttl）"""
+        ttl = self.settings.cache_ttl
         self.cache_ttl = {
-            'realtime': 30,        # 实时数据30秒
-            'minute': 60,          # 分钟数据1分钟
-            'daily': 300,          # 日线数据5分钟
-            'static': 3600,        # 静态数据1小时
-            'analysis': 1800,      # 分析结果30分钟
-            'hot': 120,           # 热点数据2分钟
+            'realtime': ttl.realtime,
+            'minute': ttl.minute,
+            'daily': ttl.daily,
+            'static': ttl.static,
+            'analysis': ttl.analysis,
+            'hot': ttl.hot,
         }
 
         # 缓存键前缀

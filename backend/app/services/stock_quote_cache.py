@@ -13,12 +13,9 @@ import pytz
 from loguru import logger
 
 from app.core.cache import cache
+from app.core.config import settings
 from app.repositories.base_repository import BaseRepository
 
-
-# ── TTL 常量 ──────────────────────────────────────────────
-TTL_TRADING = 60       # 交易时间：1 分钟
-TTL_NON_TRADING = 3600  # 非交易时间：1 小时
 
 # Redis key 前缀
 KEY_PREFIX = "stock:quote"
@@ -35,8 +32,8 @@ def is_trading_hours() -> bool:
 
 
 def quote_ttl() -> int:
-    """根据当前是否交易时间返回合适的 TTL"""
-    return TTL_TRADING if is_trading_hours() else TTL_NON_TRADING
+    """根据当前是否交易时间返回合适的 TTL（来自 settings.cache_ttl）"""
+    return settings.cache_ttl.quote_trading if is_trading_hours() else settings.cache_ttl.quote_non_trading
 
 
 class _QuoteRepository(BaseRepository):
