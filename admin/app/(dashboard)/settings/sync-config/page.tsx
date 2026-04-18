@@ -22,7 +22,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { syncDashboardApi, type SyncOverviewItem, type CategoryStat, type SyncConfigUpdate, type ScheduleUpdate, type SyncStrategy, type ApiParams } from '@/lib/api/sync-dashboard'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance, configApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { useConfigStore } from '@/stores/config-store'
 import Link from 'next/link'
@@ -757,7 +757,7 @@ export default function SyncConfigPage() {
     try {
       const tokenToSave = tokenInput.trim() ? tokenInput.trim() : undefined
       const maxRpm = parseInt(maxRpmInput, 10)
-      await apiClient.updateDataSourceConfig({
+      await configApi.updateDataSourceConfig({
         tushare_token: tokenToSave,
         earliest_history_date: earliestDate || undefined,
         max_requests_per_minute: isNaN(maxRpm) ? 0 : maxRpm,
@@ -828,7 +828,7 @@ export default function SyncConfigPage() {
           }
         }
       }
-      const resp = await apiClient.post(endpoint, null, { params })
+      const resp = await axiosInstance.post(endpoint, null, { params }) as any
       if (resp.code === 200 && resp.data) {
         const taskId = resp.data.celery_task_id
         addTask({

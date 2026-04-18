@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { brokerRecommendApi, type BrokerRecommendData, type BrokerRecommendStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
@@ -80,7 +80,7 @@ export default function BrokerRecommendPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'broker_recommend',
-    syncFn: (params) => apiClient.post('/api/broker-recommend/sync-async', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/broker-recommend/sync-async', null, { params }),
     taskName: 'tasks.sync_broker_recommend',
     onSuccess: loadData,
   })

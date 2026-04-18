@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { apiClient } from '@/lib/api-client'
+import { schedulerApi } from '@/lib/api'
 import {
   Dialog,
   DialogContent,
@@ -86,7 +86,7 @@ export default function SchedulerSettingsPage() {
   const loadTasks = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await apiClient.getScheduledTasks()
+      const response = await schedulerApi.getScheduledTasks()
       if (response.data) {
         setTasks(response.data)
       }
@@ -115,10 +115,10 @@ export default function SchedulerSettingsPage() {
       )
 
       // 调用API更新后端
-      await apiClient.toggleScheduledTask(taskId)
+      await schedulerApi.toggleScheduledTask(taskId)
 
       // 静默刷新，只更新数据不影响UI状态
-      const response = await apiClient.getScheduledTasks()
+      const response = await schedulerApi.getScheduledTasks()
       if (response.data) {
         setTasks(response.data)
       }
@@ -145,7 +145,7 @@ export default function SchedulerSettingsPage() {
     try {
       setExecutingTasks(prev => new Set(prev).add(task.id))
 
-      const response = await apiClient.executeScheduledTask(task.id)
+      const response = await schedulerApi.executeScheduledTask(task.id)
 
       // 兼容 success/code 两种响应格式
       const isSuccess = response.success || response.code === 200
@@ -167,7 +167,7 @@ export default function SchedulerSettingsPage() {
         })
         // 静默刷新任务列表（延迟1s等待后端写入）
         setTimeout(async () => {
-          const refreshed = await apiClient.getScheduledTasks().catch(() => null)
+          const refreshed = await schedulerApi.getScheduledTasks().catch(() => null)
           if (refreshed?.data) setTasks(refreshed.data)
         }, 1000)
       } else {
@@ -190,7 +190,7 @@ export default function SchedulerSettingsPage() {
     if (!editingTask) return
 
     try {
-      await apiClient.updateScheduledTask(editingTask.id, {
+      await schedulerApi.updateScheduledTask(editingTask.id, {
         display_name: editingTask.display_name,
         description: editingTask.description,
         category: editingTask.category,

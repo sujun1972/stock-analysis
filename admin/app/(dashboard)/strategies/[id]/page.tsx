@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Edit, AlertCircle, Copy, Check } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
-import { apiClient } from '@/lib/api-client'
+import { strategyApi } from '@/lib/api'
 import logger from '@/lib/logger'
 
 // 策略类型显示名称
@@ -51,7 +51,7 @@ export default function StrategyDetailPage() {
   useEffect(() => {
     const fetchStrategy = async () => {
       try {
-        const result = await apiClient.getStrategy(Number(strategyId))
+        const result = await strategyApi.getStrategy(Number(strategyId))
         if (result.success || result.data) {
           setStrategy(result.data || result as any)
         } else {

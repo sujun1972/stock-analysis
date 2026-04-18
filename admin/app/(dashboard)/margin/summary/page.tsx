@@ -12,7 +12,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { marginApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, BarChart3, ListFilter } from 'lucide-react'
 
@@ -67,7 +67,7 @@ export default function MarginSummaryPage() {
     taskName: 'tasks.sync_margin',
     bulkOps: {
       tableKey: 'margin',
-      syncFn: (params) => apiClient.post('/api/margin/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/margin/sync-async', null, { params }),
       taskName: 'tasks.sync_margin',
     },
     paginationMode: 'page',

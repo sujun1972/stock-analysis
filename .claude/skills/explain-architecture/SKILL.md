@@ -488,7 +488,7 @@ Zustand Store (全局状态)
 // 1. 用户点击"同步"按钮
 const handleDailySync = async () => {
   // 调用 API 启动异步任务
-  const response = await apiClient.syncDailyBatch({
+  const response = await syncApi.syncDailyBatch({
     start_date: '2024-01-01',
     end_date: '2024-12-31'
   })
@@ -551,7 +551,7 @@ self.update_state(
 // admin/hooks/use-task-polling.ts
 // 应用启动时恢复正在执行的任务
 async function restoreActiveTasks(silent = false) {
-  const response = await apiClient.get('/api/sentiment/tasks/active')
+  const response = await axiosInstance.get('/api/sentiment/tasks/active')
 
   tasks.forEach((task) => {
     if (!taskStore.tasks.has(task.task_id)) {

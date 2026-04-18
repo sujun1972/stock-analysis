@@ -26,7 +26,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { dcIndexApi, type DcIndexData, type DcIndexStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { pctChangeColor, formatStockCode } from '@/lib/utils'
 import { useSystemConfig } from '@/contexts'
@@ -69,7 +69,7 @@ export default function DcIndexPage() {
     taskName: 'tasks.sync_dc_index',
     bulkOps: {
       tableKey: 'dc_index',
-      syncFn: (params) => apiClient.post('/api/dc-index/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/dc-index/sync-async', null, { params }),
       taskName: 'tasks.sync_dc_index',
     },
     paginationMode: 'page',

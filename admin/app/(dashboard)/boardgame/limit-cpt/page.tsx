@@ -10,7 +10,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { limitCptApi, type LimitCptData, type LimitCptStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, BarChart3, Layers, Calendar } from 'lucide-react'
 
@@ -23,7 +23,7 @@ export default function LimitCptPage() {
     taskName: 'tasks.sync_limit_cpt',
     bulkOps: {
       tableKey: 'limit_cpt',
-      syncFn: (params) => apiClient.post('/api/limit-cpt/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/limit-cpt/sync-async', null, { params }),
       taskName: 'tasks.sync_limit_cpt',
     },
     paginationMode: 'page',

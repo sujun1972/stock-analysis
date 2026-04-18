@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toast } from 'sonner'
 import logger from '@/lib/logger'
 import type { ApiResponse } from '@/types'
@@ -30,9 +30,9 @@ export function usePremarketData(formatDate: (d: Date) => string) {
       // 并行加载所有数据，使用 Promise.allSettled 确保单个请求失败不影响其他请求
       // 404 错误会被 axios 拦截器静默处理，不会在控制台显示
       const [overnightRes, analysisRes, newsRes] = await Promise.allSettled([
-        apiClient.get(`/api/premarket/overnight-data/${dateStr}`),
-        apiClient.get(`/api/premarket/collision-analysis/${dateStr}`),
-        apiClient.get(`/api/premarket/news/${dateStr}`)
+        axiosInstance.get(`/api/premarket/overnight-data/${dateStr}`),
+        axiosInstance.get(`/api/premarket/collision-analysis/${dateStr}`),
+        axiosInstance.get(`/api/premarket/news/${dateStr}`)
       ])
 
       // 处理外盘数据
@@ -66,7 +66,7 @@ export function usePremarketData(formatDate: (d: Date) => string) {
   // 加载历史记录
   const loadHistory = useCallback(async () => {
     try {
-      const response = await apiClient.get<ApiResponse<AnalysisHistory[]>>('/api/premarket/history?limit=10') as any
+      const response = await axiosInstance.get<ApiResponse<AnalysisHistory[]>>('/api/premarket/history?limit=10') as any
       if (response.code === 200 && response.data) {
         setHistory(response.data)
       }

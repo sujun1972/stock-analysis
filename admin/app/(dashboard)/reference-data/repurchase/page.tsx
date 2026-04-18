@@ -14,7 +14,7 @@ import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { RefreshCw, TrendingUp, Briefcase, DollarSign, BarChart3 } from 'lucide-react'
 
 export default function RepurchasePage() {
@@ -96,7 +96,7 @@ export default function RepurchasePage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'repurchase',
-    syncFn: (params) => apiClient.post('/api/repurchase/sync-full-history', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/repurchase/sync-full-history', null, { params }),
     taskName: 'tasks.sync_repurchase_full_history',
     onSuccess: loadData,
   })

@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { userApi, axiosInstance } from '@/lib/api';
 import { queryKeys } from '@/lib/query/keys';
 import { getQueryConfig, QUERY_PRESETS } from '@/lib/query/config';
 import { toast } from 'sonner';
@@ -85,7 +85,7 @@ export function useUserList(params?: UserListParams) {
   return useQuery({
     queryKey: queryKeys.users.list(params),
     queryFn: async () => {
-      const response = await apiClient.getUsers(params);
+      const response = await userApi.getUsers(params);
       if (response.code !== 200) {
         throw new Error(response.message || '获取用户列表失败');
       }
@@ -111,7 +111,7 @@ export function useUser(id: number | string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.users.detail(String(id)),
     queryFn: async () => {
-      const response = await apiClient.getUser(typeof id === 'number' ? id : parseInt(id));
+      const response = await userApi.getUser(typeof id === 'number' ? id : parseInt(id));
       if (response.code !== 200) {
         throw new Error(response.message || '获取用户详情失败');
       }
@@ -131,7 +131,7 @@ export function useCreateUser() {
 
   return useMutation({
     mutationFn: async (data: CreateUserDto) => {
-      const response = await apiClient.createUser(data);
+      const response = await userApi.createUser(data);
       if (response.code !== 200) {
         throw new Error(response.message || '创建用户失败');
       }
@@ -158,7 +158,7 @@ export function useUpdateUser() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: number | string; data: UpdateUserDto }) => {
-      const response = await apiClient.updateUser(typeof id === 'number' ? id : parseInt(id), data);
+      const response = await userApi.updateUser(typeof id === 'number' ? id : parseInt(id), data);
       if (response.code !== 200) {
         throw new Error(response.message || '更新用户失败');
       }
@@ -186,7 +186,7 @@ export function useDeleteUser() {
 
   return useMutation({
     mutationFn: async (id: number | string) => {
-      const response = await apiClient.deleteUser(typeof id === 'number' ? id : parseInt(id));
+      const response = await userApi.deleteUser(typeof id === 'number' ? id : parseInt(id));
       if (response.code !== 200) {
         throw new Error(response.message || '删除用户失败');
       }
@@ -215,7 +215,7 @@ export function useBatchDeleteUsers() {
   return useMutation({
     mutationFn: async (ids: (number | string)[]) => {
       const results = await Promise.all(
-        ids.map((id) => apiClient.deleteUser(typeof id === 'number' ? id : parseInt(id)))
+        ids.map((id) => userApi.deleteUser(typeof id === 'number' ? id : parseInt(id)))
       );
       const failed = results.filter((r) => r.code !== 200);
       if (failed.length > 0) {
@@ -265,7 +265,7 @@ export function useResetUserQuota() {
 
   return useMutation({
     mutationFn: async (id: number | string) => {
-      const response = await apiClient.post(`/api/users/${id}/reset-quota`);
+      const response = await axiosInstance.post(`/api/users/${id}/reset-quota`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '重置配额失败');
       }
@@ -290,7 +290,7 @@ export function useToggleUserStatus() {
 
   return useMutation({
     mutationFn: async ({ id, is_active }: { id: number | string; is_active: boolean }) => {
-      const response = await apiClient.updateUser(typeof id === 'number' ? id : parseInt(id), { is_active });
+      const response = await userApi.updateUser(typeof id === 'number' ? id : parseInt(id), { is_active });
       if (response.code !== 200) {
         throw new Error(response.message || '切换用户状态失败');
       }
@@ -316,7 +316,7 @@ export function useToggleUserStatus() {
 export function useSendVerificationEmail() {
   return useMutation({
     mutationFn: async (id: number | string) => {
-      const response = await apiClient.post(`/api/users/${id}/send-verification`);
+      const response = await axiosInstance.post(`/api/users/${id}/send-verification`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '发送验证邮件失败');
       }
@@ -349,7 +349,7 @@ export function useSearchUsers(keyword: string, enabled = true) {
         } as UserListResponse;
       }
 
-      const response = await apiClient.getUsers({
+      const response = await userApi.getUsers({
         search: keyword,
         page_size: 20,
       });
@@ -379,7 +379,7 @@ export function useUserStatistics() {
   return useQuery({
     queryKey: [...queryKeys.users.all, 'statistics'],
     queryFn: async () => {
-      const response = await apiClient.get('/api/users/statistics');
+      const response = await axiosInstance.get('/api/users/statistics') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取用户统计失败');
       }

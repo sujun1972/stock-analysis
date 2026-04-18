@@ -12,7 +12,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { topInstApi, type TopInstItem, type TopInstStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
 import { useSystemConfig } from '@/contexts'
@@ -39,7 +39,7 @@ export default function TopInstPage() {
     taskName: 'tasks.sync_top_inst',
     bulkOps: {
       tableKey: 'top_inst',
-      syncFn: (params) => apiClient.post('/api/top-inst/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/top-inst/sync-async', null, { params }),
       taskName: 'tasks.sync_top_inst',
     },
     paginationMode: 'page',

@@ -105,7 +105,7 @@ export type PaginatedResponse<T> = ApiResponse<PaginatedData<T>>
  * @returns 如果成功且有数据，返回 true
  *
  * @example
- * const response = await apiClient.get('/api/users')
+ * const response = await axiosInstance.get('/api/users')
  * if (isSuccessResponse(response)) {
  *   // TypeScript 知道 response.data 一定存在
  *   console.log(response.data)

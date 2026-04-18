@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom'
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import logger from '@/lib/logger'
 import type { Concept } from '@/types/stock'
 
@@ -76,15 +76,18 @@ export function LazyConceptSelect({
     try {
       // 如果是code类型，从concepts中查找
       if (valueType === 'code') {
-        const response = await apiClient.getConceptsList({ page: 1, page_size: 1000 })
-        const concept = response.items.find(c => c.code === value)
+        const response = await axiosInstance.get('/api/concepts/list', {
+          params: { page: 1, page_size: 1000 },
+        }) as any
+        const data = response.data || { items: [] }
+        const concept = data.items.find((c: Concept) => c.code === value)
         if (concept) {
           setSelectedConcept(concept)
         }
       } else {
         // 如果是id类型，直接调用API获取
-        const concept = await apiClient.getConcept(parseInt(value))
-        setSelectedConcept(concept)
+        const response = await axiosInstance.get(`/api/concepts/${parseInt(value)}`) as any
+        setSelectedConcept(response.data)
       }
     } catch (error) {
       logger.error('加载选中概念失败', error)
@@ -95,19 +98,18 @@ export function LazyConceptSelect({
   const loadConcepts = async (searchQuery: string = '', pageNum: number = 1, append: boolean = false) => {
     setLoading(true)
     try {
-      const response = await apiClient.getConceptsList({
-        page: pageNum,
-        page_size: 50,
-        search: searchQuery || undefined,
-      })
+      const apiResponse = await axiosInstance.get('/api/concepts/list', {
+        params: { page: pageNum, page_size: 50, search: searchQuery || undefined },
+      }) as any
+      const responseData = apiResponse.data || { items: [], total_pages: 0 }
 
       if (append) {
-        setConcepts(prev => [...prev, ...response.items])
+        setConcepts(prev => [...prev, ...responseData.items])
       } else {
-        setConcepts(response.items)
+        setConcepts(responseData.items)
       }
 
-      setHasMore(pageNum < response.total_pages)
+      setHasMore(pageNum < responseData.total_pages)
       setPage(pageNum)
     } catch (error) {
       logger.error('加载概念列表失败', error)

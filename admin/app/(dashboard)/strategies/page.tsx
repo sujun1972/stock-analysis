@@ -19,7 +19,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, Edit, Trash2, AlertCircle, Users, ClipboardList, Ban, MoreVertical, Info, Check } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
-import { apiClient } from '@/lib/api-client'
+import { strategyApi, axiosInstance } from '@/lib/api'
 import logger from '@/lib/logger'
 import { DataTable, type Column } from '@/components/common/DataTable'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -157,7 +157,7 @@ export default function StrategiesPage() {
       if (filterUserId && filterUserId !== 'all') params.user_id = filterUserId
       if (filterPublishStatus && filterPublishStatus !== 'all') params.publish_status = filterPublishStatus
 
-      const response = await apiClient.get('/api/strategies', { params }) as any
+      const response = await axiosInstance.get('/api/strategies', { params }) as any
 
       if (response?.code === 200 && response.data) {
         const { items, total } = response.data
@@ -191,7 +191,7 @@ export default function StrategiesPage() {
         params.append('search', searchQuery)
       }
 
-      const response = await apiClient.get(`/api/users?${params}`) as any
+      const response = await axiosInstance.get(`/api/users?${params}`) as any
 
       if (response?.code === 200 && response.data?.users) {
         setUsers(response.data.users)
@@ -222,7 +222,7 @@ export default function StrategiesPage() {
     setUpdatingUser(true)
     try {
       const userId = selectedUserId ? parseInt(selectedUserId) : null
-      await apiClient.put(`/api/strategies/${editingStrategy.id}`, {
+      await axiosInstance.put(`/api/strategies/${editingStrategy.id}`, {
         user_id: userId
       })
       toast.success('用户归属更新成功')
@@ -239,7 +239,7 @@ export default function StrategiesPage() {
   // 切换策略启用状态
   const toggleStrategyStatus = async (strategy: Strategy) => {
     try {
-      await apiClient.put(`/api/strategies/${strategy.id}`, {
+      await axiosInstance.put(`/api/strategies/${strategy.id}`, {
         is_enabled: !strategy.is_enabled
       })
       toast.success(strategy.is_enabled ? '策略已禁用' : '策略已启用')
@@ -255,7 +255,7 @@ export default function StrategiesPage() {
     if (!deletingStrategy) return
 
     try {
-      await apiClient.deleteStrategy(deletingStrategy.id)
+      await strategyApi.deleteStrategy(deletingStrategy.id)
       toast.success('策略删除成功')
       setDeleteDialogOpen(false)
       fetchStrategies()
@@ -268,7 +268,7 @@ export default function StrategiesPage() {
   // 取消发布策略
   const handleUnpublish = async (strategy: Strategy) => {
     try {
-      await apiClient.unpublishStrategy(strategy.id)
+      await strategyApi.unpublishStrategy(strategy.id)
       toast.success('策略已取消发布')
       fetchStrategies()
     } catch (error) {

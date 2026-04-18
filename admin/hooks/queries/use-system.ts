@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { axiosInstance } from '@/lib/api';
 import { queryKeys } from '@/lib/query/keys';
 import { getQueryConfig, QUERY_PRESETS, QUERY_TIME } from '@/lib/query/config';
 import { toast } from 'sonner';
@@ -80,7 +80,7 @@ export function useSystemSettings() {
   return useQuery({
     queryKey: queryKeys.system.settings(),
     queryFn: async () => {
-      const response = await apiClient.getSystemSettings();
+      const response = await axiosInstance.get('/api/config/system') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取系统设置失败');
       }
@@ -100,7 +100,7 @@ export function useUpdateSystemSettings() {
 
   return useMutation({
     mutationFn: async (settings: Partial<SystemSettings>) => {
-      const response = await apiClient.updateSystemSettings(settings);
+      const response = await axiosInstance.post('/api/config/system', settings) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '更新系统设置失败');
       }
@@ -128,7 +128,7 @@ export function useHealthStatus(refetchInterval?: number) {
   return useQuery({
     queryKey: queryKeys.system.health(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/health');
+      const response = await axiosInstance.get('/api/health') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取健康状态失败');
       }
@@ -148,7 +148,7 @@ export function useSystemMetrics(refetchInterval?: number) {
   return useQuery({
     queryKey: queryKeys.monitor.metrics(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/metrics');
+      const response = await axiosInstance.get('/api/metrics') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取系统指标失败');
       }
@@ -166,7 +166,7 @@ export function useSystemMetrics(refetchInterval?: number) {
 export function useTestDatabaseConnection() {
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post('/api/test/database');
+      const response = await axiosInstance.post('/api/test/database') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '数据库连接测试失败');
       }
@@ -188,7 +188,7 @@ export function useTestDatabaseConnection() {
 export function useTestRedisConnection() {
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post('/api/test/redis');
+      const response = await axiosInstance.post('/api/test/redis') as any;
       if (response.code !== 200) {
         throw new Error(response.message || 'Redis连接测试失败');
       }
@@ -212,7 +212,7 @@ export function useClearSystemCache() {
 
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post('/api/cache/clear');
+      const response = await axiosInstance.post('/api/cache/clear') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '清除缓存失败');
       }
@@ -236,7 +236,7 @@ export function useClearSystemCache() {
 export function useRestartService() {
   return useMutation({
     mutationFn: async (service: 'api' | 'worker' | 'scheduler') => {
-      const response = await apiClient.post(`/api/services/${service}/restart`);
+      const response = await axiosInstance.post(`/api/services/${service}/restart`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '服务重启失败');
       }
@@ -264,7 +264,7 @@ export function useSystemLogs(params?: {
   return useQuery({
     queryKey: [...queryKeys.system.all, 'logs', params],
     queryFn: async () => {
-      const response = await apiClient.get('/api/logs', { params });
+      const response = await axiosInstance.get('/api/logs', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取系统日志失败');
       }
@@ -322,7 +322,7 @@ export function useToggleMaintenanceMode() {
 export function useExportSystemConfig() {
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.get('/api/system/export');
+      const response = await axiosInstance.get('/api/system/export') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '导出配置失败');
       }
@@ -363,7 +363,7 @@ export function useImportSystemConfig() {
       const text = await configFile.text();
       const config = JSON.parse(text);
 
-      const response = await apiClient.post('/api/system/import', config);
+      const response = await axiosInstance.post('/api/system/import', config) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '导入配置失败');
       }

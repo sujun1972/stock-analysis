@@ -12,7 +12,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { stkNineturnApi, type StkNineturnData, type StkNineturnStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useSystemConfig } from '@/contexts'
@@ -38,7 +38,7 @@ export default function StkNineturnPage() {
     taskName: 'tasks.sync_stk_nineturn',
     bulkOps: {
       tableKey: 'stk_nineturn',
-      syncFn: (params) => apiClient.post('/api/stk-nineturn/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/stk-nineturn/sync-async', null, { params }),
       taskName: 'tasks.sync_stk_nineturn',
     },
     paginationMode: 'page',

@@ -12,7 +12,7 @@
 
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { useTaskStore, TaskType, TaskStatus } from '@/stores/task-store'
 import logger from '@/lib/logger'
 
@@ -31,7 +31,7 @@ let discoveryInterval: NodeJS.Timeout | null = null
 async function pollTaskStatus(taskId: string): Promise<boolean> {
   try {
     // 调用统一的任务状态查询接口
-    const res = await apiClient.get(`/api/sentiment/sync/status/${taskId}`) as any
+    const res = await axiosInstance.get(`/api/sentiment/sync/status/${taskId}`) as any
 
     if (res.code !== 200 || !res.data) {
       return false
@@ -262,7 +262,7 @@ export function addTaskToQueue(
  */
 async function restoreActiveTasks(silent = false) {
   try {
-    const res = await apiClient.get('/api/sentiment/tasks/active') as any
+    const res = await axiosInstance.get('/api/sentiment/tasks/active') as any
 
     if (res.data?.tasks) {
       const tasks = res.data.tasks

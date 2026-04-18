@@ -5,7 +5,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useTaskStore } from '@/stores/task-store'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import logger from '@/lib/logger'
 
 /**
@@ -108,7 +108,7 @@ export function useTaskPolling(enabled: boolean = true, interval: number = 3000)
 async function fetchTaskStatus(taskId: string, taskName: string) {
   try {
     // 1. 尝试通用的 Celery 任务状态查询
-    const celeryResponse = await apiClient.get(`/api/celery/task/${taskId}`)
+    const celeryResponse = await axiosInstance.get(`/api/celery/task/${taskId}`)
     if (celeryResponse.data) {
       return mapCeleryStatus(celeryResponse.data)
     }
@@ -119,7 +119,7 @@ async function fetchTaskStatus(taskId: string, taskName: string) {
   try {
     // 2. 尝试AI策略生成任务API
     if (taskName.includes('ai_strategy') || taskName.includes('generate_strategy')) {
-      const response = await apiClient.get(`/api/ai-strategy/task/${taskId}`)
+      const response = await axiosInstance.get(`/api/ai-strategy/task/${taskId}`)
       if (response.data) {
         return {
           status: mapStatus(response.data.state),
@@ -136,7 +136,7 @@ async function fetchTaskStatus(taskId: string, taskName: string) {
   try {
     // 3. 尝试市场情绪任务API
     if (taskName.includes('sentiment')) {
-      const response = await apiClient.get(`/api/sentiment/task/${taskId}`)
+      const response = await axiosInstance.get(`/api/sentiment/task/${taskId}`)
       if (response.data) {
         return {
           status: mapStatus(response.data.status),

@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PageHeader } from '@/components/common/PageHeader'
-import { apiClient } from '@/lib/api-client'
+import { strategyApi } from '@/lib/api'
 import logger from '@/lib/logger'
 
 // 动态导入 Monaco Editor (客户端组件)
@@ -71,7 +71,7 @@ export default function NewStrategyPage() {
     setError(null)
 
     try {
-      const result = await apiClient.validateStrategy(formData.code)
+      const result = await strategyApi.validateStrategy(formData.code)
       if (result.success || result.data) {
         setValidationResult(result.data || result)
       } else {
@@ -127,10 +127,10 @@ export default function NewStrategyPage() {
         payload.user_id = parseInt(formData.user_id)
       }
 
-      const result = await apiClient.createStrategy(payload)
+      const result = await strategyApi.createStrategy(payload)
 
       if (result.success || result.data) {
-        const strategyId = result.data?.strategy_id || (result as any).strategy_id
+        const strategyId = (result.data as any)?.strategy_id || (result as any).strategy_id
         // 成功跳转到策略详情页
         router.push(`/strategies/${strategyId}`)
       } else {

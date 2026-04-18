@@ -14,7 +14,7 @@ import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { RefreshCw, TrendingUp, TrendingDown, Users, BarChart3 } from 'lucide-react'
 
 export default function StkHolderNumberPage() {
@@ -95,7 +95,7 @@ export default function StkHolderNumberPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'stk_holdernumber',
-    syncFn: (params) => apiClient.post('/api/stk-holdernumber/sync-full-history', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/stk-holdernumber/sync-full-history', null, { params }),
     taskName: 'tasks.sync_stk_holdernumber_full_history',
     onSuccess: loadData,
   })

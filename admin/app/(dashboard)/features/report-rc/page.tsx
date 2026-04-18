@@ -12,7 +12,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { reportRcApi, type ReportRcData, type ReportRcStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useSystemConfig } from '@/contexts'
@@ -42,7 +42,7 @@ export default function ReportRcPage() {
     taskName: 'tasks.sync_report_rc',
     bulkOps: {
       tableKey: 'report_rc',
-      syncFn: (params) => apiClient.post('/api/report-rc/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/report-rc/sync-async', null, { params }),
       taskName: 'tasks.sync_report_rc',
     },
     paginationMode: 'page',

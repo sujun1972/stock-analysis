@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { axiosInstance } from '@/lib/api';
 import { queryKeys } from '@/lib/query/keys';
 import { getQueryConfig, QUERY_TIME } from '@/lib/query/config';
 import { toast } from 'sonner';
@@ -91,7 +91,7 @@ export function useMonitorData(refetchInterval?: number) {
   return useQuery({
     queryKey: queryKeys.monitor.health(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/monitor');
+      const response = await axiosInstance.get('/api/monitor') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取监控数据失败');
       }
@@ -111,7 +111,7 @@ export function useActiveTasks(autoRefresh = true) {
   return useQuery({
     queryKey: queryKeys.monitor.activeTasks(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/sentiment/tasks/active');
+      const response = await axiosInstance.get('/api/sentiment/tasks/active') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取活动任务失败');
       }
@@ -130,7 +130,7 @@ export function useTaskStatistics() {
   return useQuery({
     queryKey: [...queryKeys.monitor.all, 'task-statistics'],
     queryFn: async () => {
-      const response = await apiClient.get('/api/tasks/statistics');
+      const response = await axiosInstance.get('/api/tasks/statistics') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取任务统计失败');
       }
@@ -147,7 +147,7 @@ export function useTaskStatistics() {
 export function useCancelTask() {
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiClient.post(`/api/tasks/${taskId}/cancel`);
+      const response = await axiosInstance.post(`/api/tasks/${taskId}/cancel`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '取消任务失败');
       }
@@ -169,7 +169,7 @@ export function useCancelTask() {
 export function useRetryTask() {
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiClient.post(`/api/tasks/${taskId}/retry`);
+      const response = await axiosInstance.post(`/api/tasks/${taskId}/retry`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '重试任务失败');
       }
@@ -194,7 +194,7 @@ export function useCleanupTasks() {
       status?: 'completed' | 'failed' | 'cancelled';
       older_than_days?: number;
     }) => {
-      const response = await apiClient.post('/api/tasks/cleanup', params);
+      const response = await axiosInstance.post('/api/tasks/cleanup', params) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '清理任务失败');
       }
@@ -221,7 +221,7 @@ export function useServiceLogs(service: string, params?: {
   return useQuery({
     queryKey: [...queryKeys.monitor.all, 'service-logs', service, params],
     queryFn: async () => {
-      const response = await apiClient.get(`/api/services/${service}/logs`, { params });
+      const response = await axiosInstance.get(`/api/services/${service}/logs`, { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取服务日志失败');
       }
@@ -241,7 +241,7 @@ export function useServiceLogs(service: string, params?: {
 export function useResetCircuitBreaker() {
   return useMutation({
     mutationFn: async (breakerName: string) => {
-      const response = await apiClient.post(`/api/circuit-breakers/${breakerName}/reset`);
+      const response = await axiosInstance.post(`/api/circuit-breakers/${breakerName}/reset`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '重置熔断器失败');
       }
@@ -268,7 +268,7 @@ export function usePerformanceHistory(params?: {
   return useQuery({
     queryKey: [...queryKeys.monitor.all, 'performance-history', params],
     queryFn: async () => {
-      const response = await apiClient.get('/api/metrics/history', { params });
+      const response = await axiosInstance.get('/api/metrics/history', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取性能历史数据失败');
       }
@@ -298,7 +298,7 @@ export function useAlerts(params?: {
   return useQuery({
     queryKey: [...queryKeys.monitor.all, 'alerts', params],
     queryFn: async () => {
-      const response = await apiClient.get('/api/alerts', { params });
+      const response = await axiosInstance.get('/api/alerts', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取告警列表失败');
       }
@@ -330,7 +330,7 @@ export function useAlerts(params?: {
 export function useAcknowledgeAlert() {
   return useMutation({
     mutationFn: async ({ alertId, note }: { alertId: string; note?: string }) => {
-      const response = await apiClient.post(`/api/alerts/${alertId}/acknowledge`, { note });
+      const response = await axiosInstance.post(`/api/alerts/${alertId}/acknowledge`, { note }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '确认告警失败');
       }
@@ -352,7 +352,7 @@ export function useAcknowledgeAlert() {
 export function useResolveAlert() {
   return useMutation({
     mutationFn: async ({ alertId, resolution }: { alertId: string; resolution?: string }) => {
-      const response = await apiClient.post(`/api/alerts/${alertId}/resolve`, { resolution });
+      const response = await axiosInstance.post(`/api/alerts/${alertId}/resolve`, { resolution }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '解决告警失败');
       }

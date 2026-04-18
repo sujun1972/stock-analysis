@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { syncApi, axiosInstance } from '@/lib/api';
 import { queryKeys } from '@/lib/query/keys';
 import { getQueryConfig, QUERY_TIME } from '@/lib/query/config';
 import { toast } from 'sonner';
@@ -86,7 +86,7 @@ export function useStockListSyncStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.sync.stockListStatus(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/sync/stock-list/status');
+      const response = await axiosInstance.get('/api/sync/stock-list/status') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取同步状态失败');
       }
@@ -109,7 +109,7 @@ export function useSyncStockList() {
 
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.syncStockList();
+      const response = await syncApi.syncStockList();
       if (response.code !== 200) {
         throw new Error(response.message || '启动股票列表同步失败');
       }
@@ -133,7 +133,7 @@ export function useDailyDataSyncStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.sync.dailyDataStatus(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/sync/daily/status');
+      const response = await axiosInstance.get('/api/sync/daily/status') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取日线同步状态失败');
       }
@@ -156,8 +156,8 @@ export function useSyncDailyDataBatch() {
 
   return useMutation({
     mutationFn: async (params: SyncBatchParams) => {
-      const response = await apiClient.syncDailyBatch({
-        codes: params.stock_codes,
+      const response = await syncApi.syncDailyBatch({
+        stock_codes: params.stock_codes,
         start_date: params.start_date,
         end_date: params.end_date
       });
@@ -184,7 +184,7 @@ export function useMinuteDataSyncStatus(enabled = true) {
   return useQuery({
     queryKey: [...queryKeys.sync.all, 'minute-status'],
     queryFn: async () => {
-      const response = await apiClient.get('/api/sync/minute/status');
+      const response = await axiosInstance.get('/api/sync/minute/status') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取分钟数据同步状态失败');
       }
@@ -212,10 +212,9 @@ export function useSyncMinuteData() {
       // 注意：syncMinuteData 只支持单个股票，需要遍历处理
       const results = [];
       for (const code of params.stock_codes) {
-        const response = await apiClient.syncMinuteData(code, {
-          period: params.frequency,
-          // 如果有日期范围，需要转换为天数
-          // 这里简化处理，实际可能需要更复杂的逻辑
+        const response = await syncApi.syncMinuteData({
+          stock_codes: [code],
+          freq: params.frequency,
         });
         if (response.code !== 200) {
           throw new Error(response.message || `同步 ${code} 分钟数据失败`);
@@ -247,7 +246,7 @@ export function useDelistedStocks(params?: {
   return useQuery({
     queryKey: queryKeys.sync.delistedStocks(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/stocks/delisted', { params });
+      const response = await axiosInstance.get('/api/stocks/delisted', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取退市股票列表失败');
       }
@@ -266,7 +265,7 @@ export function useDelistedStocks(params?: {
 export function useSyncDelistedStocks() {
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post('/api/sync/delisted-stocks');
+      const response = await axiosInstance.post('/api/sync/delisted-stocks') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '同步退市股票失败');
       }
@@ -295,7 +294,7 @@ export function useNewStocks(params?: {
   return useQuery({
     queryKey: queryKeys.sync.newStocks(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/stocks/new', { params });
+      const response = await axiosInstance.get('/api/stocks/new', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取新股列表失败');
       }
@@ -316,7 +315,7 @@ export function useSyncNewStocks() {
     mutationFn: async (params?: {
       days?: number; // 获取最近N天的新股
     }) => {
-      const response = await apiClient.post('/api/sync/new-stocks', params);
+      const response = await axiosInstance.post('/api/sync/new-stocks', params) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '同步新股数据失败');
       }
@@ -339,7 +338,7 @@ export function useRealtimeDataStatus() {
   return useQuery({
     queryKey: queryKeys.sync.realtimeData(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/sync/realtime/status');
+      const response = await axiosInstance.get('/api/sync/realtime/status') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取实时数据状态失败');
       }
@@ -370,10 +369,10 @@ export function useToggleRealtimeSync() {
         ? '/api/sync/realtime/start'
         : '/api/sync/realtime/stop';
 
-      const response = await apiClient.post(endpoint, {
+      const response = await axiosInstance.post(endpoint, {
         stock_codes: params.stock_codes,
         update_frequency: params.update_frequency,
-      });
+      }) as any;
 
       if (response.code !== 200) {
         throw new Error(response.message || `${params.action === 'start' ? '启动' : '停止'}实时同步失败`);
@@ -398,7 +397,7 @@ export function useToggleRealtimeSync() {
 export function useCancelSyncTask() {
   return useMutation({
     mutationFn: async (taskType: 'stock-list' | 'daily' | 'minute' | 'realtime') => {
-      const response = await apiClient.post(`/api/sync/${taskType}/cancel`);
+      const response = await axiosInstance.post(`/api/sync/${taskType}/cancel`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '取消同步任务失败');
       }
@@ -427,7 +426,7 @@ export function useSyncHistory(params?: {
   return useQuery({
     queryKey: [...queryKeys.sync.all, 'history', params],
     queryFn: async () => {
-      const response = await apiClient.get('/api/sync/history', { params });
+      const response = await axiosInstance.get('/api/sync/history', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取同步历史失败');
       }
@@ -458,7 +457,7 @@ export function useCleanupSyncData() {
       data_type: 'daily' | 'minute' | 'realtime';
       older_than_days: number;
     }) => {
-      const response = await apiClient.post('/api/sync/cleanup', params);
+      const response = await axiosInstance.post('/api/sync/cleanup', params) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '清理数据失败');
       }

@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { CalendarIcon, PlayIcon, RefreshCwIcon, TrendingUpIcon, TrendingDownIcon, AlertTriangleIcon, CheckCircle2Icon, Clock, FileTextIcon, CopyIcon } from "lucide-react"
 import { format, zhCN } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
-import { apiClient } from "@/lib/api-client"
+import { axiosInstance } from "@/lib/api"
 import { toast } from "sonner"
 import { addTaskToQueue } from "@/hooks/use-task-polling"
 import logger from "@/lib/logger"
@@ -104,7 +104,7 @@ export default function SentimentAIAnalysisPage() {
     setIsLoading(true)
 
     try {
-      const response = await apiClient.get(`/api/sentiment/ai-analysis/${dateStr}`) as any
+      const response = await axiosInstance.get(`/api/sentiment/ai-analysis/${dateStr}`) as any
 
       if (response.code === 200 && response.data) {
         setAnalysisData(response.data)
@@ -132,7 +132,7 @@ export default function SentimentAIAnalysisPage() {
     setPromptDialogOpen(true)
     try {
       const dateStr = formatDate(date)
-      const response = await apiClient.get(`/api/sentiment/ai-analysis/preview-prompt`, {
+      const response = await axiosInstance.get(`/api/sentiment/ai-analysis/preview-prompt`, {
         params: { date: dateStr }
       }) as any
       if (response.code === 200 && response.data) {
@@ -156,7 +156,7 @@ export default function SentimentAIAnalysisPage() {
     setIsGenerating(true)
 
     try {
-      const response = await apiClient.post("/api/sentiment/ai-analysis/generate", null, {
+      const response = await axiosInstance.post("/api/sentiment/ai-analysis/generate", null, {
         params: { date: dateStr, provider: aiProvider }
       }) as any
 
@@ -207,7 +207,7 @@ export default function SentimentAIAnalysisPage() {
       attempts++
 
       try {
-        const statusRes = await apiClient.get(`/api/sentiment/sync/status/${taskId}`) as any
+        const statusRes = await axiosInstance.get(`/api/sentiment/sync/status/${taskId}`) as any
 
         if (statusRes.code === 200 && statusRes.data) {
           const { status, result, message, progress } = statusRes.data
@@ -273,7 +273,7 @@ export default function SentimentAIAnalysisPage() {
     setIsLoadingProviders(true)
     try {
       // Backend 使用 ApiResponse 格式，数据在 response.data 中
-      const response = await apiClient.get('/api/ai-strategy/providers') as any
+      const response = await axiosInstance.get('/api/ai-strategy/providers') as any
 
       if (response.code !== 200) {
         logger.error('Failed to load AI providers', response)

@@ -233,6 +233,52 @@ export class StrategyApiClient extends BaseApiClient {
       params: { before_date: beforeDate }
     })
   }
+
+  /**
+   * 获取待审核策略列表
+   */
+  async getPendingReviewStrategies(params?: {
+    page?: number
+    page_size?: number
+  }): Promise<ApiResponse<Strategy[]> & { meta?: any }> {
+    return this.get('/api/admin/strategies/pending-review', { params })
+  }
+
+  /**
+   * 批准策略发布
+   */
+  async approveStrategy(
+    strategyId: number,
+    data: { comment?: string; auto_enable?: boolean }
+  ): Promise<ApiResponse<{ strategy_id: number; publish_status: string; is_enabled: boolean }>> {
+    return this.post(`/api/admin/strategies/${strategyId}/approve`, data)
+  }
+
+  /**
+   * 拒绝策略发布
+   */
+  async rejectStrategy(
+    strategyId: number,
+    data: { reason: string }
+  ): Promise<ApiResponse<{ strategy_id: number; publish_status: string; reject_reason: string }>> {
+    return this.post(`/api/admin/strategies/${strategyId}/reject`, data)
+  }
+
+  /**
+   * 获取策略审核历史
+   */
+  async getStrategyReviewHistory(strategyId: number): Promise<ApiResponse<any[]>> {
+    return this.get(`/api/admin/strategies/${strategyId}/review-history`)
+  }
+
+  /**
+   * 取消策略发布（管理员）
+   */
+  async unpublishStrategy(
+    strategyId: number
+  ): Promise<ApiResponse<{ strategy_id: number; publish_status: string; is_enabled: boolean }>> {
+    return this.post(`/api/admin/strategies/${strategyId}/unpublish`)
+  }
 }
 
 export const strategyApi = new StrategyApiClient()

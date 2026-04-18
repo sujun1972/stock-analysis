@@ -42,7 +42,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
-import { apiClient } from '@/lib/api-client'
+import { configApi } from '@/lib/api'
 import logger from '@/lib/logger'
 
 interface AIProvider {
@@ -88,7 +88,7 @@ export default function AIConfigPage() {
 
   const fetchProviders = useCallback(async () => {
     try {
-      const response = await apiClient.getAIProviders()
+      const response = await configApi.getAIProviders()
       setProviders(response.data || response as any)
     } catch (error) {
       logger.error('获取AI提供商列表失败', error)
@@ -164,7 +164,7 @@ export default function AIConfigPage() {
         updateData.timeout = formData.timeout
         if (formData.description) updateData.description = formData.description
 
-        await apiClient.updateAIProvider(editingProvider.provider, updateData)
+        await configApi.updateAIProvider(editingProvider.provider, updateData)
 
         toast({
           title: '更新成功',
@@ -172,7 +172,7 @@ export default function AIConfigPage() {
         })
       } else {
         // 创建
-        await apiClient.createAIProvider(formData)
+        await configApi.createAIProvider(formData)
 
         toast({
           title: '创建成功',
@@ -196,7 +196,7 @@ export default function AIConfigPage() {
     if (!confirm(`确定要删除 ${provider} 吗？`)) return
 
     try {
-      await apiClient.deleteAIProvider(provider)
+      await configApi.deleteAIProvider(provider)
 
       toast({
         title: '删除成功',

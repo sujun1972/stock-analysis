@@ -13,7 +13,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -84,13 +84,15 @@ export default function SystemLogsPage() {
       setError(null)
 
       // 查询日志
-      const logsResponse = await apiClient.querySystemLogs({
-        log_type: logType,
-        level: levelFilter === 'all' ? undefined : levelFilter,
-        module: moduleFilter || undefined,
-        search: searchTerm || undefined,
-        page,
-        page_size: pageSize
+      const logsResponse = await axiosInstance.get('/api/system-logs/query', {
+        params: {
+          log_type: logType,
+          level: levelFilter === 'all' ? undefined : levelFilter,
+          module: moduleFilter || undefined,
+          search: searchTerm || undefined,
+          page,
+          page_size: pageSize
+        }
       }) as any
 
       if (logsResponse?.code === 200 && logsResponse.data) {
@@ -101,8 +103,8 @@ export default function SystemLogsPage() {
       }
 
       // 获取统计信息
-      const statsResponse = await apiClient.getSystemLogStatistics({
-        log_type: logType
+      const statsResponse = await axiosInstance.get('/api/system-logs/statistics', {
+        params: { log_type: logType }
       }) as any
 
       if (statsResponse?.code === 200 && statsResponse.data) {

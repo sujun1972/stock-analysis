@@ -13,7 +13,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { useDataPage } from '@/hooks/useDataPage'
 import { stkAuctionCApi } from '@/lib/api/stk-auction-c'
 import type { StkAuctionCData, StkAuctionCStatistics } from '@/lib/api/stk-auction-c'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, TrendingUp, BarChart3, DollarSign, Activity } from 'lucide-react'
@@ -47,7 +47,7 @@ export default function StkAuctionCPage() {
     taskName: 'tasks.sync_stk_auction_c',
     bulkOps: {
       tableKey: 'stk_auction_c',
-      syncFn: (params) => apiClient.post('/api/stk-auction-c/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/stk-auction-c/sync-async', null, { params }),
       taskName: 'tasks.sync_stk_auction_c',
     },
     paginationMode: 'page',

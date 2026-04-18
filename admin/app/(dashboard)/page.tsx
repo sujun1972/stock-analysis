@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/common/PageHeader'
-import { apiClient } from '@/lib/api-client'
+import { syncApi } from '@/lib/api'
 import logger from '@/lib/logger'
 import {
   Activity,
@@ -38,7 +38,7 @@ export default function AdminDashboard() {
     try {
       setLoading(true)
       // 获取系统状态
-      const syncStatus = await apiClient.getSyncStatus()
+      const syncStatus = await syncApi.getSyncStatus()
 
       // 构建统计数据
       setStats({

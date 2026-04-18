@@ -14,7 +14,7 @@ import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { marginSecsApi } from '@/lib/api'
 import type { MarginSecsItem, MarginSecsStatistics } from '@/lib/api/margin-secs'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
 import { useSystemConfig } from '@/contexts'
@@ -67,7 +67,7 @@ export default function MarginSecsPage() {
     taskName: ['extended.sync_margin_secs', 'tasks.sync_margin_secs_full_history'],
     bulkOps: {
       tableKey: 'margin_secs',
-      syncFn: (params) => apiClient.post('/api/margin-secs/sync-full-history', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/margin-secs/sync-full-history', null, { params }),
       taskName: 'tasks.sync_margin_secs_full_history',
     },
     paginationMode: 'page',

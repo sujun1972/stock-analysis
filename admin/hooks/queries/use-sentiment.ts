@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { axiosInstance } from '@/lib/api';
 import { queryKeys } from '@/lib/query/keys';
 import { getQueryConfig, QUERY_TIME } from '@/lib/query/config';
 import { toast } from 'sonner';
@@ -133,7 +133,7 @@ export function usePremarketAnalysis(date: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.sentiment.premarket(date),
     queryFn: async () => {
-      const response = await apiClient.get(`/api/sentiment/premarket/${date}`);
+      const response = await axiosInstance.get(`/api/sentiment/premarket/${date}`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取盘前分析失败');
       }
@@ -152,7 +152,7 @@ export function useOvernightData(date: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.sentiment.overnightData(date),
     queryFn: async () => {
-      const response = await apiClient.get(`/api/sentiment/overnight/${date}`);
+      const response = await axiosInstance.get(`/api/sentiment/overnight/${date}`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取隔夜数据失败');
       }
@@ -170,7 +170,7 @@ export function useOvernightData(date: string, enabled = true) {
 export function useSyncOvernightData() {
   return useMutation({
     mutationFn: async (date: string) => {
-      const response = await apiClient.post('/api/sentiment/overnight/sync', { date });
+      const response = await axiosInstance.post('/api/sentiment/overnight/sync', { date }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '同步隔夜数据失败');
       }
@@ -193,7 +193,7 @@ export function useCollisionAnalysis(date: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.sentiment.collisionAnalysis(date),
     queryFn: async () => {
-      const response = await apiClient.get(`/api/sentiment/collision/${date}`);
+      const response = await axiosInstance.get(`/api/sentiment/collision/${date}`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取碰撞分析失败');
       }
@@ -211,7 +211,7 @@ export function useCollisionAnalysis(date: string, enabled = true) {
 export function useGenerateAIAnalysis() {
   return useMutation({
     mutationFn: async (params: AIAnalysisParams) => {
-      const response = await apiClient.post('/api/ai-strategy/generate-report', params);
+      const response = await axiosInstance.post('/api/ai-strategy/generate-report', params) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '生成AI分析失败');
       }
@@ -238,7 +238,7 @@ export function useSentimentCycle(params?: {
   return useQuery({
     queryKey: queryKeys.sentiment.cycle(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/sentiment/cycle', { params });
+      const response = await axiosInstance.get('/api/sentiment/cycle', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取情绪周期失败');
       }
@@ -261,7 +261,7 @@ export function useAIProviders() {
   return useQuery({
     queryKey: queryKeys.sentiment.aiProviders(),
     queryFn: async () => {
-      const response = await apiClient.get('/api/ai-strategy/providers');
+      const response = await axiosInstance.get('/api/ai-strategy/providers') as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取AI提供商失败');
       }
@@ -284,7 +284,7 @@ export function usePremarketNews(date: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.sentiment.news(date),
     queryFn: async () => {
-      const response = await apiClient.get(`/api/sentiment/news/${date}`);
+      const response = await axiosInstance.get(`/api/sentiment/news/${date}`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取盘前新闻失败');
       }
@@ -306,7 +306,7 @@ export function useSyncMarketNews() {
       sources?: string[];
       keywords?: string[];
     }) => {
-      const response = await apiClient.post('/api/sentiment/news/sync', params);
+      const response = await axiosInstance.post('/api/sentiment/news/sync', params) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '同步新闻失败');
       }
@@ -329,7 +329,7 @@ export function useAnalysisHistory(date: string) {
   return useQuery({
     queryKey: queryKeys.sentiment.history(date),
     queryFn: async () => {
-      const response = await apiClient.get(`/api/sentiment/history/${date}`);
+      const response = await axiosInstance.get(`/api/sentiment/history/${date}`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取历史分析失败');
       }
@@ -353,9 +353,9 @@ export function useMoneyEffect(date?: string) {
   return useQuery({
     queryKey: [...queryKeys.sentiment.all, 'money-effect', date],
     queryFn: async () => {
-      const response = await apiClient.get('/api/sentiment/money-effect', {
+      const response = await axiosInstance.get('/api/sentiment/money-effect', {
         params: { date }
-      });
+      }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '计算赚钱效应失败');
       }
@@ -385,7 +385,7 @@ export function useHotMoneyFlow(params?: {
   return useQuery({
     queryKey: [...queryKeys.sentiment.all, 'hot-money', params],
     queryFn: async () => {
-      const response = await apiClient.get('/api/sentiment/hot-money', { params });
+      const response = await axiosInstance.get('/api/sentiment/hot-money', { params }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取游资动向失败');
       }

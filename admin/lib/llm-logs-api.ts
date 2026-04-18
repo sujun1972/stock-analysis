@@ -3,7 +3,7 @@
  * 提供LLM调用记录的查询、统计和分析功能
  */
 
-import { apiClient } from './api-client'
+import { axiosInstance } from './api'
 
 export interface LLMCallLog {
   id: number
@@ -146,9 +146,9 @@ export async function getLLMCallLogs(params: LLMCallLogQuery = {}) {
   queryParams.append('page', String(params.page || 1))
   queryParams.append('page_size', String(params.page_size || 20))
 
-  // 注意：apiClient.get 返回的已经是 response.data（见 api-client.ts:302）
+  // 注意：axiosInstance.get 返回的已经是 response.data（见 base.ts 响应拦截器）
   // 所以这里的 response 结构是 { success: true, data: { logs: [...], pagination: {...} } }
-  const response = await apiClient.get(`/api/llm-logs/list?${queryParams.toString()}`)
+  const response = await axiosInstance.get(`/api/llm-logs/list?${queryParams.toString()}`) as any
 
   return response as {
     success: boolean
@@ -171,7 +171,7 @@ export async function getLLMCallLogs(params: LLMCallLogQuery = {}) {
  * @returns LLM调用日志详情
  */
 export async function getLLMCallLogDetail(callId: string) {
-  const response = await apiClient.get(`/api/llm-logs/detail/${callId}`)
+  const response = await axiosInstance.get(`/api/llm-logs/detail/${callId}`)
   return response.data as LLMCallLog
 }
 
@@ -187,7 +187,7 @@ export async function getLLMStatistics(startDate?: string, endDate?: string) {
   if (startDate) queryParams.append('start_date', startDate)
   if (endDate) queryParams.append('end_date', endDate)
 
-  const response = await apiClient.get(`/api/llm-logs/statistics?${queryParams.toString()}`)
+  const response = await axiosInstance.get(`/api/llm-logs/statistics?${queryParams.toString()}`)
   return response.data as LLMCallStatistics[]
 }
 
@@ -205,7 +205,7 @@ export async function getLLMStatistics(startDate?: string, endDate?: string) {
  * ```
  */
 export async function getLLMSummary(days: number = 7) {
-  const response = await apiClient.get(`/api/llm-logs/summary?days=${days}`)
+  const response = await axiosInstance.get(`/api/llm-logs/summary?days=${days}`)
   return response.data as LLMSummary
 }
 
@@ -216,7 +216,7 @@ export async function getLLMSummary(days: number = 7) {
  * @returns 最近的LLM调用日志列表（按时间倒序）
  */
 export async function getRecentLLMCalls(limit: number = 10) {
-  const response = await apiClient.get(`/api/llm-logs/recent?limit=${limit}`)
+  const response = await axiosInstance.get(`/api/llm-logs/recent?limit=${limit}`)
   return response.data as LLMCallLog[]
 }
 
@@ -248,7 +248,7 @@ export async function getCostAnalysis(params: {
   if (params.end_date) queryParams.append('end_date', params.end_date)
   queryParams.append('group_by', params.group_by || 'provider')
 
-  const response = await apiClient.get(`/api/llm-logs/cost-analysis?${queryParams.toString()}`)
+  const response = await axiosInstance.get(`/api/llm-logs/cost-analysis?${queryParams.toString()}`)
   return response.data as CostAnalysis
 }
 

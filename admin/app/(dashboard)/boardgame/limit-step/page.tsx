@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { limitStepApi, type LimitStepData, type LimitStepStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { formatStockCode } from '@/lib/utils'
 import { useTaskStore } from '@/stores/task-store'
 import { useSystemConfig } from '@/contexts'
@@ -96,7 +96,7 @@ export default function LimitStepPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'limit_step',
-    syncFn: (params) => apiClient.post('/api/limit-step/sync-async', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/limit-step/sync-async', null, { params }),
     taskName: 'tasks.sync_limit_step',
     onSuccess: loadData,
   })

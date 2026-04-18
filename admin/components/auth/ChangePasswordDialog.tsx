@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 
 interface ChangePasswordDialogProps {
   open: boolean
@@ -73,7 +73,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
     }
 
     try {
-      await apiClient.post('/api/auth/change-password', {
+      await axiosInstance.post('/api/auth/change-password', {
         current_password: passwordForm.current_password,
         new_password: passwordForm.new_password,
       })

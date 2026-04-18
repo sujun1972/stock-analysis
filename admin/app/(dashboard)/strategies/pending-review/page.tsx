@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Clock, User, Calendar, AlertCircle, Eye, CheckCircle } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
-import { apiClient } from '@/lib/api-client'
+import { strategyApi } from '@/lib/api'
 import logger from '@/lib/logger'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,7 @@ export default function PendingReviewStrategiesPage() {
     setLoading(true)
     setError(null)
     try {
-      const response = await apiClient.getPendingReviewStrategies({
+      const response = await strategyApi.getPendingReviewStrategies({
         page: currentPage,
         page_size: 20,
       }) as any

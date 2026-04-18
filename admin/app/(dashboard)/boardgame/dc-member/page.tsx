@@ -11,7 +11,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { dcMemberApi, type DcMemberData, type DcMemberStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
 import { useSystemConfig } from '@/contexts'
@@ -38,7 +38,7 @@ export default function DcMemberPage() {
     taskName: 'tasks.sync_dc_member',
     bulkOps: {
       tableKey: 'dc_member',
-      syncFn: (params) => apiClient.post('/api/dc-member/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/dc-member/sync-async', null, { params }),
       taskName: 'tasks.sync_dc_member',
     },
     paginationMode: 'page',

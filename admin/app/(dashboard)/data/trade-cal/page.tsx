@@ -13,7 +13,7 @@ import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { tradeCalApi } from '@/lib/api'
 import type { TradeCalData, TradeCalStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, Calendar, TrendingUp, BarChart2, CheckCircle } from 'lucide-react'
 import {
@@ -54,7 +54,7 @@ export default function TradeCalPage() {
     taskName: 'tasks.sync_trade_cal',
     bulkOps: {
       tableKey: 'trade_cal',
-      syncFn: (params) => apiClient.post('/api/trade-cal/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/trade-cal/sync-async', null, { params }),
       taskName: 'tasks.sync_trade_cal',
     },
     paginationMode: 'page',

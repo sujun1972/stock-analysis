@@ -11,7 +11,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { slbLenApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import type { SlbLenData, SlbLenStatistics } from '@/lib/api/slb-len'
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, BarChart3, ListFilter } from 'lucide-react'
@@ -27,7 +27,7 @@ export default function SlbLenPage() {
     taskName: 'tasks.sync_slb_len',
     bulkOps: {
       tableKey: 'slb_len',
-      syncFn: (params) => apiClient.post('/api/slb-len/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/slb-len/sync-async', null, { params }),
       taskName: 'tasks.sync_slb_len',
     },
     paginationMode: 'offset',

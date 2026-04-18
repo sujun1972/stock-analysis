@@ -11,7 +11,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { moneyflowApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, TrendingDown, Activity, DollarSign, ListFilter } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -75,7 +75,7 @@ export default function MoneyflowMktDcPage() {
     taskName: 'tasks.sync_moneyflow_mkt_dc',
     bulkOps: {
       tableKey: 'moneyflow_mkt_dc',
-      syncFn: (params) => apiClient.post('/api/moneyflow-mkt-dc/sync-full-history', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/moneyflow-mkt-dc/sync-full-history', null, { params }),
       taskName: 'tasks.sync_moneyflow_mkt_dc_full_history',
     },
     paginationMode: 'offset',

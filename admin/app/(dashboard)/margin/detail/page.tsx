@@ -12,7 +12,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { marginApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
 import { useSystemConfig } from '@/contexts'
@@ -66,7 +66,7 @@ export default function MarginDetailPage() {
     taskName: 'tasks.sync_margin_detail',
     bulkOps: {
       tableKey: 'margin_detail',
-      syncFn: (params) => apiClient.post('/api/margin-detail/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/margin-detail/sync-async', null, { params }),
       taskName: 'tasks.sync_margin_detail',
     },
     paginationMode: 'page',

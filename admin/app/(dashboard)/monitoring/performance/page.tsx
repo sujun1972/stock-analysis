@@ -19,7 +19,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { apiClient } from '@/lib/api-client'
+import { monitorApi } from '@/lib/api'
 import logger from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -104,7 +104,7 @@ export default function MonitorPage() {
       setIsLoading(true)
       setError(null)
 
-      const healthResponse = await apiClient.healthCheck()
+      const healthResponse = await monitorApi.healthCheck()
 
       if (healthResponse) {
         setHealth(healthResponse as any)

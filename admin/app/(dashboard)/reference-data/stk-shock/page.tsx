@@ -14,7 +14,7 @@ import { useTaskStore } from '@/stores/task-store'
 import { RefreshCw, FileBarChart, TrendingUp, Calendar } from 'lucide-react'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 
 export default function StkShockPage() {
   const [data, setData] = useState<StkShockData[]>([])
@@ -152,7 +152,7 @@ export default function StkShockPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'stk_shock',
-    syncFn: (params) => apiClient.post('/api/stk-shock/sync-full-history', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/stk-shock/sync-full-history', null, { params }),
     taskName: 'tasks.sync_stk_shock_full_history',
     onSuccess: loadData,
   })

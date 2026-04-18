@@ -1,13 +1,14 @@
 /**
  * @file lib/api/index.ts
- * @description API 客户端统一导出文件
- * @author Claude
- * @created 2024-03-16
- * @updated 2024-03-20
+ * @description API 客户端统一导出（模块化架构）
+ *
+ * 所有 API 调用统一从此文件导入：
+ *   import { stockApi, syncApi, axiosInstance } from '@/lib/api'
+ *
+ * - 各模块 API（如 stockApi）提供类型安全的方法
+ * - axiosInstance 用于尚无模块覆盖的端点（通用 get/post）
  */
 
-// 导入所有需要的模块
-// 使用别名避免名称冲突，确保正确的模块导入和导出
 import { BaseApiClient, axiosInstance as axiosInst, API_BASE_URL } from './base'
 import { AuthApiClient, authApi as authApiInst } from './auth'
 import { StockApiClient, stockApi as stockApiInst } from './stocks'
@@ -71,6 +72,7 @@ import { StockStApiClient, stockStApi as stockStApiInst } from './stock-st-api'
 import { TradeCalApiClient, tradeCalApi as tradeCalApiInst } from './trade-cal-api'
 import { SyncDashboardApiClient, syncDashboardApi as syncDashboardApiInst } from './sync-dashboard'
 import { StockAiAnalysisApiClient, stockAiAnalysisApi as stockAiAnalysisApiInst } from './stock-ai-analysis'
+import { DataOpsApiClient, dataOpsApi as dataOpsApiInst } from './data-ops'
 
 // 重新导出基础类和实例
 export { BaseApiClient, API_BASE_URL }
@@ -428,325 +430,6 @@ export type {
   TradeCalSyncParams
 } from './trade-cal-api'
 
-// 创建统一的 API 客户端对象（向后兼容）
-export const apiClient = {
-  // 认证相关
-  login: authApiInst.login.bind(authApiInst),
-  register: authApiInst.register.bind(authApiInst),
-  refresh: authApiInst.refresh.bind(authApiInst),
-  logout: authApiInst.logout.bind(authApiInst),
-  getCurrentUser: authApiInst.getCurrentUser.bind(authApiInst),
-  updatePassword: authApiInst.updatePassword.bind(authApiInst),
-  updateProfile: authApiInst.updateProfile.bind(authApiInst),
-
-  // 用户管理
-  getUsers: userApiInst.getUsers.bind(userApiInst),
-  getUser: userApiInst.getUser.bind(userApiInst),
-  createUser: userApiInst.createUser.bind(userApiInst),
-  updateUser: userApiInst.updateUser.bind(userApiInst),
-  deleteUser: userApiInst.deleteUser.bind(userApiInst),
-  batchDeleteUsers: userApiInst.batchDeleteUsers.bind(userApiInst),
-  toggleUserStatus: userApiInst.toggleUserStatus.bind(userApiInst),
-  resetUserPassword: userApiInst.resetUserPassword.bind(userApiInst),
-  getUserStatistics: userApiInst.getUserStatistics.bind(userApiInst),
-  getUserQuota: userApiInst.getUserQuota.bind(userApiInst),
-  updateUserQuota: userApiInst.updateUserQuota.bind(userApiInst),
-
-  // 股票相关
-  getStockList: stockApiInst.getStockList.bind(stockApiInst),
-  getStock: stockApiInst.getStock.bind(stockApiInst),
-  updateStock: stockApiInst.updateStock.bind(stockApiInst),
-  updateStockList: stockApiInst.updateStockList.bind(stockApiInst),
-  getStockDaily: stockApiInst.getStockDaily.bind(stockApiInst),
-  getStockMinute: stockApiInst.getStockMinute.bind(stockApiInst),
-  syncStockData: stockApiInst.syncStockData.bind(stockApiInst),
-  batchSyncStockData: stockApiInst.batchSyncStockData.bind(stockApiInst),
-  searchStocks: stockApiInst.searchStocks.bind(stockApiInst),
-
-  // 策略相关
-  getStrategies: strategyApiInst.getStrategies.bind(strategyApiInst),
-  getStrategy: strategyApiInst.getStrategy.bind(strategyApiInst),
-  createStrategy: strategyApiInst.createStrategy.bind(strategyApiInst),
-  updateStrategy: strategyApiInst.updateStrategy.bind(strategyApiInst),
-  deleteStrategy: strategyApiInst.deleteStrategy.bind(strategyApiInst),
-  batchDeleteStrategies: strategyApiInst.batchDeleteStrategies.bind(strategyApiInst),
-  validateStrategy: strategyApiInst.validateStrategy.bind(strategyApiInst),
-  testStrategy: strategyApiInst.testStrategy.bind(strategyApiInst),
-  runBacktest: strategyApiInst.runBacktest.bind(strategyApiInst),
-  toggleStrategy: strategyApiInst.toggleStrategy.bind(strategyApiInst),
-  togglePublish: strategyApiInst.togglePublish.bind(strategyApiInst),
-  cloneStrategy: strategyApiInst.cloneStrategy.bind(strategyApiInst),
-  getStrategyStatistics: strategyApiInst.getStrategyStatistics.bind(strategyApiInst),
-  getUserStrategies: strategyApiInst.getUserStrategies.bind(strategyApiInst),
-  assignStrategiesToUser: strategyApiInst.assignStrategiesToUser.bind(strategyApiInst),
-  removeUserStrategy: strategyApiInst.removeUserStrategy.bind(strategyApiInst),
-  getStrategyTypes: strategyApiInst.getStrategyTypes.bind(strategyApiInst),
-  exportStrategy: strategyApiInst.exportStrategy.bind(strategyApiInst),
-  importStrategy: strategyApiInst.importStrategy.bind(strategyApiInst),
-  getStrategyLogs: strategyApiInst.getStrategyLogs.bind(strategyApiInst),
-  clearStrategyLogs: strategyApiInst.clearStrategyLogs.bind(strategyApiInst),
-
-  // 市场情绪相关
-  syncSentimentData: sentimentApiInst.syncSentimentData.bind(sentimentApiInst),
-  syncSentimentBatch: sentimentApiInst.syncSentimentBatch.bind(sentimentApiInst),
-  getSyncTaskStatus: sentimentApiInst.getSyncTaskStatus.bind(sentimentApiInst),
-  getTradingCalendar: sentimentApiInst.getTradingCalendar.bind(sentimentApiInst),
-  syncTradingCalendar: sentimentApiInst.syncTradingCalendar.bind(sentimentApiInst),
-
-  // 资金流向相关
-  syncMoneyflowHsgtAsync: moneyflowApiInst.syncMoneyflowHsgtAsync.bind(moneyflowApiInst),
-  getMoneyflowMktDc: moneyflowApiInst.getMoneyflowMktDc.bind(moneyflowApiInst),
-  syncMoneyflowMktDcAsync: moneyflowApiInst.syncMoneyflowMktDcAsync.bind(moneyflowApiInst),
-  getMoneyflowIndDc: moneyflowApiInst.getMoneyflowIndDc.bind(moneyflowApiInst),
-  syncMoneyflowIndDcAsync: moneyflowApiInst.syncMoneyflowIndDcAsync.bind(moneyflowApiInst),
-  getTopMoneyflowIndustries: moneyflowApiInst.getTopMoneyflowIndustries.bind(moneyflowApiInst),
-  getMoneyflowStockDc: moneyflowApiInst.getMoneyflowStockDc.bind(moneyflowApiInst),
-  syncMoneyflowStockDcAsync: moneyflowApiInst.syncMoneyflowStockDcAsync.bind(moneyflowApiInst),
-  getTopMoneyflowStocks: moneyflowApiInst.getTopMoneyflowStocks.bind(moneyflowApiInst),
-  getMoneyflow: moneyflowApiInst.getMoneyflow.bind(moneyflowApiInst),
-  syncMoneyflowAsync: moneyflowApiInst.syncMoneyflowAsync.bind(moneyflowApiInst),
-  getTopMoneyflowTushare: moneyflowApiInst.getTopMoneyflowTushare.bind(moneyflowApiInst),
-
-  // 融资融券相关
-  getMargin: marginApiInst.getMargin.bind(marginApiInst),
-  getMarginStatistics: marginApiInst.getMarginStatistics.bind(marginApiInst),
-  syncMarginAsync: marginApiInst.syncMarginAsync.bind(marginApiInst),
-  getMarginDetail: marginApiInst.getMarginDetail.bind(marginApiInst),
-  getMarginDetailStatistics: marginApiInst.getMarginDetailStatistics.bind(marginApiInst),
-  getMarginDetailTopStocks: marginApiInst.getMarginDetailTopStocks.bind(marginApiInst),
-  syncMarginDetailAsync: marginApiInst.syncMarginDetailAsync.bind(marginApiInst),
-
-  // 融资融券标的相关
-  getMarginSecs: marginSecsApiInst.getMarginSecs.bind(marginSecsApiInst),
-  getLatestMarginSecs: marginSecsApiInst.getLatestMarginSecs.bind(marginSecsApiInst),
-  syncMarginSecsAsync: marginSecsApiInst.syncMarginSecsAsync.bind(marginSecsApiInst),
-
-  // 转融资交易汇总相关
-  getSlbLen: slbLenApiInst.getSlbLen.bind(slbLenApiInst),
-  getSlbLenStatistics: slbLenApiInst.getSlbLenStatistics.bind(slbLenApiInst),
-  getLatestSlbLen: slbLenApiInst.getLatestSlbLen.bind(slbLenApiInst),
-  syncSlbLenAsync: slbLenApiInst.syncSlbLenAsync.bind(slbLenApiInst),
-
-  // 定时任务相关
-  getScheduledTasks: schedulerApiInst.getScheduledTasks.bind(schedulerApiInst),
-  getScheduledTask: schedulerApiInst.getScheduledTask.bind(schedulerApiInst),
-  createScheduledTask: schedulerApiInst.createScheduledTask.bind(schedulerApiInst),
-  updateScheduledTask: schedulerApiInst.updateScheduledTask.bind(schedulerApiInst),
-  deleteScheduledTask: schedulerApiInst.deleteScheduledTask.bind(schedulerApiInst),
-  toggleScheduledTask: schedulerApiInst.toggleScheduledTask.bind(schedulerApiInst),
-  executeScheduledTask: schedulerApiInst.executeScheduledTask.bind(schedulerApiInst),
-  getTaskExecutionStatus: schedulerApiInst.getTaskExecutionStatus.bind(schedulerApiInst),
-  getTaskExecutionHistory: schedulerApiInst.getTaskExecutionHistory.bind(schedulerApiInst),
-  getRecentExecutionHistory: schedulerApiInst.getRecentExecutionHistory.bind(schedulerApiInst),
-  validateCronExpression: schedulerApiInst.validateCronExpression.bind(schedulerApiInst),
-
-  // Celery 任务相关
-  getTasks: celeryTasksApiInst.getTasks.bind(celeryTasksApiInst),
-  getActiveTasks: celeryTasksApiInst.getActiveTasks.bind(celeryTasksApiInst),
-  getRecentHistory: celeryTasksApiInst.getRecentHistory.bind(celeryTasksApiInst),
-  getStatistics: celeryTasksApiInst.getStatistics.bind(celeryTasksApiInst),
-  getTask: celeryTasksApiInst.getTask.bind(celeryTasksApiInst),
-  cancelTask: celeryTasksApiInst.cancelTask.bind(celeryTasksApiInst),
-  deleteTask: celeryTasksApiInst.deleteTask.bind(celeryTasksApiInst),
-
-  // 系统配置相关
-  getDataSourceConfig: configApiInst.getDataSourceConfig.bind(configApiInst),
-  updateDataSourceConfig: configApiInst.updateDataSourceConfig.bind(configApiInst),
-  getAllConfigs: configApiInst.getAllConfigs.bind(configApiInst),
-  getAIProviders: configApiInst.getAIProviders.bind(configApiInst),
-  getAIProvider: configApiInst.getAIProvider.bind(configApiInst),
-  createAIProvider: configApiInst.createAIProvider.bind(configApiInst),
-  updateAIProvider: configApiInst.updateAIProvider.bind(configApiInst),
-  deleteAIProvider: configApiInst.deleteAIProvider.bind(configApiInst),
-  testAIProvider: configApiInst.testAIProvider.bind(configApiInst),
-  setDefaultAIProvider: configApiInst.setDefaultAIProvider.bind(configApiInst),
-
-  // 数据同步相关
-  getSyncStatus: syncApiInst.getSyncStatus.bind(syncApiInst),
-  syncStockList: syncApiInst.syncStockList.bind(syncApiInst),
-  syncNewStocks: syncApiInst.syncNewStocks.bind(syncApiInst),
-  syncDailyBatch: syncApiInst.syncDailyBatch.bind(syncApiInst),
-  syncDailyStock: syncApiInst.syncDailyStock.bind(syncApiInst),
-  syncMinuteData: syncApiInst.syncMinuteData.bind(syncApiInst),
-  syncRealtimeQuotes: syncApiInst.syncRealtimeQuotes.bind(syncApiInst),
-  abortSync: syncApiInst.abortSync.bind(syncApiInst),
-  pauseSync: syncApiInst.pauseSync.bind(syncApiInst),
-  resumeSync: syncApiInst.resumeSync.bind(syncApiInst),
-  getSyncHistory: syncApiInst.getSyncHistory.bind(syncApiInst),
-  getSyncStatistics: syncApiInst.getSyncStatistics.bind(syncApiInst),
-  getModuleSyncStatus: syncApiInst.getModuleSyncStatus.bind(syncApiInst),
-  getAllModulesStatus: syncApiInst.getAllModulesStatus.bind(syncApiInst),
-  syncAllModules: syncApiInst.syncAllModules.bind(syncApiInst),
-  syncExtendedData: syncApiInst.syncExtendedData.bind(syncApiInst),
-
-  // 扩展数据相关
-  getDailyBasic: extendedDataApiInst.getDailyBasic.bind(extendedDataApiInst),
-  syncDailyBasic: extendedDataApiInst.syncDailyBasic.bind(extendedDataApiInst),
-  getHkHold: extendedDataApiInst.getHkHold.bind(extendedDataApiInst),
-  syncHkHold: extendedDataApiInst.syncHkHold.bind(extendedDataApiInst),
-  getLimitPrices: extendedDataApiInst.getLimitPrices.bind(extendedDataApiInst),
-  syncLimitPrices: extendedDataApiInst.syncLimitPrices.bind(extendedDataApiInst),
-  getAdjFactor: extendedDataApiInst.getAdjFactor.bind(extendedDataApiInst),
-  syncAdjFactor: extendedDataApiInst.syncAdjFactor.bind(extendedDataApiInst),
-  getSuspendInfo: extendedDataApiInst.getSuspendInfo.bind(extendedDataApiInst),
-  getExtendedDataSummary: extendedDataApiInst.getExtendedDataSummary.bind(extendedDataApiInst),
-
-  // 系统监控相关
-  healthCheck: monitorApiInst.healthCheck.bind(monitorApiInst),
-  getSystemStatus: monitorApiInst.getSystemStatus.bind(monitorApiInst),
-  getSystemMetrics: monitorApiInst.getSystemMetrics.bind(monitorApiInst),
-  getDatabaseStats: monitorApiInst.getDatabaseStats.bind(monitorApiInst),
-  getApiPerformance: monitorApiInst.getApiPerformance.bind(monitorApiInst),
-  getNotificationChannels: monitorApiInst.getNotificationChannels.bind(monitorApiInst),
-  testNotificationChannel: monitorApiInst.testNotificationChannel.bind(monitorApiInst),
-  sendNotification: monitorApiInst.sendNotification.bind(monitorApiInst),
-
-  // 龙虎榜相关
-  getTopList: topListApiInst.getTopList.bind(topListApiInst),
-  getTopListStatistics: topListApiInst.getStatistics.bind(topListApiInst),
-  getLatestTopList: topListApiInst.getLatest.bind(topListApiInst),
-  getTopListTopRank: topListApiInst.getTopRank.bind(topListApiInst),
-  syncTopListAsync: topListApiInst.syncAsync.bind(topListApiInst),
-
-  // 龙虎榜机构明细相关
-  getTopInst: topInstApiInst.getTopInst.bind(topInstApiInst),
-  getTopInstStatistics: topInstApiInst.getStatistics.bind(topInstApiInst),
-  getLatestTopInst: topInstApiInst.getLatest.bind(topInstApiInst),
-  syncTopInstAsync: topInstApiInst.syncAsync.bind(topInstApiInst),
-
-  // 涨跌停列表相关
-  getLimitList: limitListApiInst.getData.bind(limitListApiInst),
-  getLimitListStatistics: limitListApiInst.getStatistics.bind(limitListApiInst),
-  getLatestLimitList: limitListApiInst.getLatest.bind(limitListApiInst),
-  getTopLimitUp: limitListApiInst.getTopLimitUp.bind(limitListApiInst),
-  syncLimitListAsync: limitListApiInst.syncAsync.bind(limitListApiInst),
-
-  // 连板天梯相关
-  getLimitStep: limitStepApiInst.getData.bind(limitStepApiInst),
-  getLimitStepStatistics: limitStepApiInst.getStatistics.bind(limitStepApiInst),
-  getLatestLimitStep: limitStepApiInst.getLatest.bind(limitStepApiInst),
-  getTopLimitStep: limitStepApiInst.getTop.bind(limitStepApiInst),
-  syncLimitStepAsync: limitStepApiInst.syncAsync.bind(limitStepApiInst),
-
-  // 最强板块统计相关
-  getLimitCpt: limitCptApiInst.getData.bind(limitCptApiInst),
-  getLimitCptStatistics: limitCptApiInst.getStatistics.bind(limitCptApiInst),
-  getLatestLimitCpt: limitCptApiInst.getLatest.bind(limitCptApiInst),
-  getLimitCptTopRank: limitCptApiInst.getTopRank.bind(limitCptApiInst),
-  syncLimitCptAsync: limitCptApiInst.syncAsync.bind(limitCptApiInst),
-
-  // 卖方盈利预测数据相关
-  getReportRc: reportRcApiInst.getData.bind(reportRcApiInst),
-  getReportRcStatistics: reportRcApiInst.getStatistics.bind(reportRcApiInst),
-  getLatestReportRc: reportRcApiInst.getLatest.bind(reportRcApiInst),
-  getTopRatedStocks: reportRcApiInst.getTopRated.bind(reportRcApiInst),
-  syncReportRcAsync: reportRcApiInst.syncAsync.bind(reportRcApiInst),
-
-  // 每日筹码及胜率相关
-  getCyqPerf: cyqPerfApiInst.getData.bind(cyqPerfApiInst),
-  getCyqPerfStatistics: cyqPerfApiInst.getStatistics.bind(cyqPerfApiInst),
-  getLatestCyqPerf: cyqPerfApiInst.getLatest.bind(cyqPerfApiInst),
-  getTopWinnerStocks: cyqPerfApiInst.getTopWinner.bind(cyqPerfApiInst),
-  syncCyqPerfAsync: cyqPerfApiInst.syncAsync.bind(cyqPerfApiInst),
-
-  // 个股异常波动相关
-  getStkShock: stkShockApiInst.getData.bind(stkShockApiInst),
-  getStkShockStatistics: stkShockApiInst.getStatistics.bind(stkShockApiInst),
-  getLatestStkShock: stkShockApiInst.getLatest.bind(stkShockApiInst),
-  syncStkShockAsync: stkShockApiInst.syncAsync.bind(stkShockApiInst),
-
-  // 交易所重点提示证券相关
-  getStkAlert: stkAlertApiInst.getData.bind(stkAlertApiInst),
-  getStkAlertStatistics: stkAlertApiInst.getStatistics.bind(stkAlertApiInst),
-  getLatestStkAlert: stkAlertApiInst.getLatest.bind(stkAlertApiInst),
-  getActiveStkAlert: stkAlertApiInst.getActive.bind(stkAlertApiInst),
-  syncStkAlertAsync: stkAlertApiInst.syncAsync.bind(stkAlertApiInst),
-
-  // 股票回购相关
-  getRepurchase: repurchaseApiInst.getData.bind(repurchaseApiInst),
-  getRepurchaseStatistics: repurchaseApiInst.getStatistics.bind(repurchaseApiInst),
-  getLatestRepurchase: repurchaseApiInst.getLatest.bind(repurchaseApiInst),
-  syncRepurchaseAsync: repurchaseApiInst.syncAsync.bind(repurchaseApiInst),
-
-  // 业绩预告相关
-  getForecast: forecastApiInst.getData.bind(forecastApiInst),
-  getForecastStatistics: forecastApiInst.getStatistics.bind(forecastApiInst),
-  getLatestForecast: forecastApiInst.getLatest.bind(forecastApiInst),
-  syncForecastAsync: forecastApiInst.syncAsync.bind(forecastApiInst),
-
-  // 限售股解禁相关
-  getShareFloat: shareFloatApiInst.getData.bind(shareFloatApiInst),
-  getShareFloatStatistics: shareFloatApiInst.getStatistics.bind(shareFloatApiInst),
-  getLatestShareFloat: shareFloatApiInst.getLatest.bind(shareFloatApiInst),
-  syncShareFloatAsync: shareFloatApiInst.syncAsync.bind(shareFloatApiInst),
-
-  // 大宗交易相关
-  getBlockTrade: blockTradeApiInst.getData.bind(blockTradeApiInst),
-  getBlockTradeStatistics: blockTradeApiInst.getStatistics.bind(blockTradeApiInst),
-  getLatestBlockTrade: blockTradeApiInst.getLatest.bind(blockTradeApiInst),
-  syncBlockTradeAsync: blockTradeApiInst.syncAsync.bind(blockTradeApiInst),
-
-  // 股东增减持相关
-  getStkHoldertrade: stkHoldertradeApiInst.getStkHoldertrade.bind(stkHoldertradeApiInst),
-  getStkHoldertradeStatistics: stkHoldertradeApiInst.getStatistics.bind(stkHoldertradeApiInst),
-  getLatestStkHoldertrade: stkHoldertradeApiInst.getLatest.bind(stkHoldertradeApiInst),
-  syncStkHoldertradeAsync: stkHoldertradeApiInst.syncAsync.bind(stkHoldertradeApiInst),
-
-  // 利润表相关
-  getIncomeData: incomeApiInst.getData.bind(incomeApiInst),
-  getIncomeStatistics: incomeApiInst.getStatistics.bind(incomeApiInst),
-  getLatestIncome: incomeApiInst.getLatest.bind(incomeApiInst),
-  syncIncomeAsync: incomeApiInst.syncAsync.bind(incomeApiInst),
-
-  // 资产负债表相关
-  getBalancesheetData: balancesheetApiInst.getData.bind(balancesheetApiInst),
-  getBalancesheetStatistics: balancesheetApiInst.getStatistics.bind(balancesheetApiInst),
-  getLatestBalancesheet: balancesheetApiInst.getLatest.bind(balancesheetApiInst),
-  syncBalancesheetAsync: balancesheetApiInst.syncAsync.bind(balancesheetApiInst),
-
-  // 现金流量表相关
-  getCashflowData: cashflowApiInst.getCashflowData.bind(cashflowApiInst),
-  getCashflowStatistics: cashflowApiInst.getStatistics.bind(cashflowApiInst),
-  getLatestCashflow: cashflowApiInst.getLatest.bind(cashflowApiInst),
-  syncCashflowAsync: cashflowApiInst.syncAsync.bind(cashflowApiInst),
-
-  // 业绩快报相关
-  getExpressData: expressApiInst.getData.bind(expressApiInst),
-  getExpressStatistics: expressApiInst.getStatistics.bind(expressApiInst),
-  syncExpressAsync: expressApiInst.syncAsync.bind(expressApiInst),
-
-  // 分红送股相关
-  getDividend: financialDataApiInst.getDividend.bind(financialDataApiInst),
-  getDividendStatistics: financialDataApiInst.getDividendStatistics.bind(financialDataApiInst),
-  syncDividendAsync: financialDataApiInst.syncDividendAsync.bind(financialDataApiInst),
-
-  // 主营业务构成相关
-  getFinaMainbz: financialDataApiInst.getFinaMainbz.bind(financialDataApiInst),
-  getFinaMainbzStatistics: financialDataApiInst.getFinaMainbzStatistics.bind(financialDataApiInst),
-  syncFinaMainbzAsync: financialDataApiInst.syncFinaMainbzAsync.bind(financialDataApiInst),
-
-  // AH股比价相关
-  getStkAhComparison: stkAhComparisonApiInst.getData.bind(stkAhComparisonApiInst),
-  getStkAhComparisonStatistics: stkAhComparisonApiInst.getStatistics.bind(stkAhComparisonApiInst),
-  getLatestStkAhComparison: stkAhComparisonApiInst.getLatest.bind(stkAhComparisonApiInst),
-  getTopPremiumStocks: stkAhComparisonApiInst.getTopPremium.bind(stkAhComparisonApiInst),
-  syncStkAhComparisonAsync: stkAhComparisonApiInst.syncAsync.bind(stkAhComparisonApiInst),
-
-  // 股票日线数据相关
-  getStockDailyData: stockDailyApiInst.getData.bind(stockDailyApiInst),
-  getStockDailyStatistics: stockDailyApiInst.getStatistics.bind(stockDailyApiInst),
-  syncStockDailyAsync: stockDailyApiInst.syncAsync.bind(stockDailyApiInst),
-  syncStockDailyFullHistory: stockDailyApiInst.syncFullHistory.bind(stockDailyApiInst),
-  getStockDailyFullHistoryProgress: stockDailyApiInst.getFullHistoryProgress.bind(stockDailyApiInst),
-
-  // 保留原有的通用方法
-  get: axiosInst.get.bind(axiosInst),
-  post: axiosInst.post.bind(axiosInst),
-  put: axiosInst.put.bind(axiosInst),
-  patch: axiosInst.patch.bind(axiosInst),
-  delete: axiosInst.delete.bind(axiosInst),
-}
-
 // 重新导出个股异常波动 API
 export { StkShockApiClient }
 export const stkShockApi = stkShockApiInst
@@ -967,5 +650,8 @@ export type {
   StockAiAnalysisData,
 } from './stock-ai-analysis'
 
-// 导出默认实例
-export default apiClient
+// 重新导出数据操作 API
+export { DataOpsApiClient }
+export const dataOpsApi = dataOpsApiInst
+export type { ClearTableParams, ClearTableResult } from './data-ops'
+

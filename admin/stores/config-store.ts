@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { apiClient } from '@/lib/api-client';
+import { configApi } from '@/lib/api';
 import logger from '@/lib/logger';
 
 export interface DataSourceConfig {
@@ -58,7 +58,7 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const response = await apiClient.getDataSourceConfig();
+      const response = await configApi.getDataSourceConfig();
 
       if (response.data) {
         set({

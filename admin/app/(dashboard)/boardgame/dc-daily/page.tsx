@@ -26,7 +26,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { dcDailyApi, type DcDailyData, type DcDailyStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { pctChangeColor } from '@/lib/utils'
 import { RefreshCw, Database, Calendar, Layers, TrendingUp, AlertTriangle, ListFilter } from 'lucide-react'
@@ -55,7 +55,7 @@ export default function DcDailyPage() {
     taskName: 'tasks.sync_dc_daily',
     bulkOps: {
       tableKey: 'dc_daily',
-      syncFn: (params) => apiClient.post('/api/dc-daily/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/dc-daily/sync-async', null, { params }),
       taskName: 'tasks.sync_dc_daily',
     },
     paginationMode: 'page',

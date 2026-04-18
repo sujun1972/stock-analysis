@@ -13,7 +13,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { stkSurvApi, type StkSurvData, type StkSurvStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, FileText, Building2, Calendar, Users } from 'lucide-react'
@@ -36,7 +36,7 @@ export default function StkSurvPage() {
     taskName: 'tasks.sync_stk_surv',
     bulkOps: {
       tableKey: 'stk_surv',
-      syncFn: (params) => apiClient.post('/api/stk-surv/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/stk-surv/sync-async', null, { params }),
       taskName: 'tasks.sync_stk_surv',
     },
     paginationMode: 'page',

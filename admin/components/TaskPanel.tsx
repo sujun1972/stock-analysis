@@ -42,8 +42,7 @@ import {
   CalendarIcon
 } from 'lucide-react'
 import { useTaskStore, TaskType } from '@/stores/task-store'
-import { apiClient } from '@/lib/api-client'
-import { celeryTasksApi } from '@/lib/api'
+import { axiosInstance, celeryTasksApi } from '@/lib/api'
 
 interface TaskPanelProps {
   open: boolean
@@ -73,7 +72,7 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
   // 手动刷新任务列表（从API重新加载）
   const handleRefresh = async () => {
     try {
-      const response = await apiClient.get('/api/celery/task-history?limit=100') as any
+      const response = await axiosInstance.get('/api/celery/task-history?limit=100') as any
       if (response.code === 200 && response.data?.tasks) {
         const historyTasks = response.data.tasks.map((t: any) => ({
           taskId: t.celery_task_id,
@@ -109,7 +108,7 @@ export function TaskPanel({ open, onOpenChange }: TaskPanelProps) {
   // 清理僵尸任务（运行中但超过1小时未完成的任务）
   const handleCleanupStale = async () => {
     try {
-      const response = await apiClient.post('/api/celery/task-history/cleanup-stale') as any
+      const response = await axiosInstance.post('/api/celery/task-history/cleanup-stale') as any
       if (response.code === 200) {
         logger.info(`[TaskPanel] 清理了 ${response.data.deleted_count} 个僵尸任务`)
         // 重新加载任务列表

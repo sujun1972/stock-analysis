@@ -11,7 +11,7 @@ import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { moneyflowApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, BarChart3, ListFilter, DollarSign, Activity } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -95,7 +95,7 @@ export default function MoneyflowIndDcPage() {
     taskName: 'tasks.sync_moneyflow_ind_dc',
     bulkOps: {
       tableKey: 'moneyflow_ind_dc',
-      syncFn: (params) => apiClient.post('/api/moneyflow-ind-dc/sync-full-history', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/moneyflow-ind-dc/sync-full-history', null, { params }),
       taskName: 'tasks.sync_moneyflow_ind_dc_full_history',
     },
     paginationMode: 'page',

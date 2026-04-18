@@ -12,7 +12,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { cyqPerfApi, type CyqPerfData, type CyqPerfStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, TrendingUp, TrendingDown, BarChart3, DollarSign, ListFilter } from 'lucide-react'
@@ -33,7 +33,7 @@ export default function CyqPerfPage() {
     taskName: 'tasks.sync_cyq_perf',
     bulkOps: {
       tableKey: 'cyq_perf',
-      syncFn: (params) => apiClient.post('/api/cyq-perf/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/cyq-perf/sync-async', null, { params }),
       taskName: 'tasks.sync_cyq_perf',
     },
     paginationMode: 'page',

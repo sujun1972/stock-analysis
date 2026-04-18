@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toast } from 'sonner'
 import logger from '@/lib/logger'
 
@@ -26,7 +26,7 @@ export function useAIProviders() {
     setIsLoadingProviders(true)
     try {
       // Backend 使用 ApiResponse 格式，数据在 response.data 中
-      const response = await apiClient.get('/api/ai-strategy/providers') as any
+      const response = await axiosInstance.get('/api/ai-strategy/providers') as any
 
       if (response.code !== 200) {
         logger.error('Failed to load AI providers', response)

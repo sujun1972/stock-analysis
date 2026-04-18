@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { X, Plus, Trash2, Save, Loader2, Tag } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import logger from '@/lib/logger'
 import type { StockInfo, Concept } from '@/types/stock'
 import {
@@ -47,8 +47,8 @@ export function StockDetailDialog({
 
     setLoading(true)
     try {
-      const concepts = await apiClient.getStockConcepts(stock.code)
-      setStockConcepts(concepts || [])
+      const response = await axiosInstance.get(`/api/concepts/stock/${stock.code}`) as any
+      setStockConcepts(response.data || [])
     } catch (error: any) {
       logger.error('加载股票概念失败', error)
       toast.error('加载股票概念失败: ' + (error.message || '未知错误'))
@@ -60,12 +60,11 @@ export function StockDetailDialog({
   // 远程搜索概念（支持后端分页和搜索）
   const handleSearchConcepts = async (query: string): Promise<Concept[]> => {
     try {
-      const response = await apiClient.getConceptsList({
-        search: query,
-        page: 1,
-        page_size: 50, // 每次最多加载50条
-      })
-      return response.items || []
+      const response = await axiosInstance.get('/api/concepts/list', {
+        params: { search: query, page: 1, page_size: 50 },
+      }) as any
+      const data = response.data || { items: [] }
+      return data.items || []
     } catch (error: any) {
       logger.error('搜索概念失败', error)
       return []
@@ -76,8 +75,8 @@ export function StockDetailDialog({
   const handleFetchSelectedConcept = async (conceptId: string): Promise<Concept | null> => {
     try {
       const id = Number(conceptId)
-      const concept = await apiClient.getConcept(id)
-      return concept
+      const response = await axiosInstance.get(`/api/concepts/${id}`) as any
+      return response.data
     } catch (error: any) {
       logger.error('获取概念详情失败', error)
       return null
@@ -126,7 +125,7 @@ export function StockDetailDialog({
     setSaving(true)
     try {
       const conceptIds = stockConcepts.map(c => c.id)
-      await apiClient.updateStockConcepts(stock.code, conceptIds)
+      await axiosInstance.put(`/api/concepts/stock/${stock.code}/concepts`, conceptIds)
       toast.success('概念更新成功')
       onUpdate?.()
     } catch (error: any) {

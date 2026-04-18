@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toast } from 'sonner'
 import type { ApiResponse } from '@/types'
 import type { SyncResult } from '@/types/premarket'
@@ -24,7 +24,7 @@ export function usePremarketActions(
     const loadingToastId = toast.info("正在同步盘前数据...")
 
     try {
-      const res = await apiClient.post<ApiResponse<SyncResult>>(
+      const res = await axiosInstance.post<ApiResponse<SyncResult>>(
         `/api/premarket/sync?date=${dateStr}`
       ) as any
 
@@ -57,7 +57,7 @@ export function usePremarketActions(
     const loadingToastId = toast.info("正在调用AI生成碰撞分析，请稍候...")
 
     try {
-      const res = await apiClient.post<ApiResponse<any>>(
+      const res = await axiosInstance.post<ApiResponse<any>>(
         `/api/premarket/collision-analysis/generate?date=${dateStr}&provider=${aiProvider}`
       ) as any
 

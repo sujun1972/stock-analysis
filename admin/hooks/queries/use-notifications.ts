@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { schedulerApi, axiosInstance } from '@/lib/api';
 import { queryKeys } from '@/lib/query/keys';
 import { getQueryConfig, QUERY_TIME } from '@/lib/query/config';
 import { toast } from 'sonner';
@@ -91,7 +91,7 @@ export function useNotificationChannels() {
   return useQuery({
     queryKey: queryKeys.notifications.channels(),
     queryFn: async () => {
-      const response = await apiClient.getNotificationChannels();
+      const response = await axiosInstance.get('/api/notification-channels') as any;
       if (response?.code !== 200) {
         throw new Error(response?.message || '获取通知渠道失败');
       }
@@ -109,7 +109,7 @@ export function useNotificationChannel(channelType: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.notifications.channel(channelType),
     queryFn: async () => {
-      const response = await apiClient.get(`/api/notification-channels/${channelType}`);
+      const response = await axiosInstance.get(`/api/notification-channels/${channelType}`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取通知渠道配置失败');
       }
@@ -134,9 +134,9 @@ export function useUpdateNotificationChannel() {
       channelType: string;
       config: NotificationChannel['config'];
     }) => {
-      const response = await apiClient.patch(`/api/notification-channels/${channelType}`, {
+      const response = await axiosInstance.patch(`/api/notification-channels/${channelType}`, {
         config,
-      });
+      }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '更新通知渠道失败');
       }
@@ -168,7 +168,7 @@ export function useToggleNotificationChannel() {
 
   return useMutation({
     mutationFn: async (channelType: string) => {
-      const response = await apiClient.toggleNotificationChannel(channelType);
+      const response = await axiosInstance.post(`/api/notification-channels/${channelType}/toggle`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '切换通知渠道状态失败');
       }
@@ -205,10 +205,10 @@ export function useTestNotificationChannel() {
       channelType: string;
       testMessage?: string;
     }) => {
-      const response = await apiClient.testNotificationChannel(
-        channelType,
-        testMessage || '这是一条测试消息'
-      );
+      const response = await axiosInstance.post(
+        `/api/notification-channels/${channelType}/test`,
+        { test_target: testMessage || '这是一条测试消息' }
+      ) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '测试通知渠道失败');
       }
@@ -236,7 +236,7 @@ export function useScheduledTasks(params?: {
   return useQuery({
     queryKey: queryKeys.notifications.scheduledTasks(),
     queryFn: async () => {
-      const response = await apiClient.getScheduledTasks();
+      const response = await schedulerApi.getScheduledTasks();
       if (response.code !== 200) {
         throw new Error(response.message || '获取定时任务失败');
       }
@@ -255,7 +255,7 @@ export function useScheduledTask(taskId: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.notifications.scheduledTask(taskId),
     queryFn: async () => {
-      const response = await apiClient.get(`/api/scheduled-tasks/${taskId}`);
+      const response = await axiosInstance.get(`/api/scheduled-tasks/${taskId}`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取定时任务详情失败');
       }
@@ -281,7 +281,7 @@ export function useCreateScheduledTask() {
       enabled?: boolean;
       params?: any;
     }) => {
-      const response = await apiClient.createScheduledTask(task);
+      const response = await schedulerApi.createScheduledTask(task);
       if (response.code !== 200) {
         throw new Error(response.message || '创建定时任务失败');
       }
@@ -320,7 +320,7 @@ export function useUpdateScheduledTask() {
         params?: any;
       };
     }) => {
-      const response = await apiClient.updateScheduledTask(Number(taskId), updates);
+      const response = await schedulerApi.updateScheduledTask(Number(taskId), updates);
       if (response.code !== 200) {
         throw new Error(response.message || '更新定时任务失败');
       }
@@ -351,7 +351,7 @@ export function useDeleteScheduledTask() {
 
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiClient.deleteScheduledTask(Number(taskId));
+      const response = await schedulerApi.deleteScheduledTask(Number(taskId));
       if (response.code !== 200) {
         throw new Error(response.message || '删除定时任务失败');
       }
@@ -379,7 +379,7 @@ export function useDeleteScheduledTask() {
 export function useRunScheduledTask() {
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiClient.post(`/api/scheduled-tasks/${taskId}/run`);
+      const response = await axiosInstance.post(`/api/scheduled-tasks/${taskId}/run`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '执行定时任务失败');
       }
@@ -403,7 +403,7 @@ export function useToggleScheduledTask() {
 
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiClient.post(`/api/scheduled-tasks/${taskId}/toggle`);
+      const response = await axiosInstance.post(`/api/scheduled-tasks/${taskId}/toggle`) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '切换任务状态失败');
       }
@@ -435,9 +435,9 @@ export function useNotificationTemplates(channelType?: string) {
   return useQuery({
     queryKey: [...queryKeys.notifications.all, 'templates', channelType],
     queryFn: async () => {
-      const response = await apiClient.get('/api/notification-templates', {
+      const response = await axiosInstance.get('/api/notification-templates', {
         params: { channel_type: channelType },
-      });
+      }) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '获取通知模板失败');
       }
@@ -458,7 +458,7 @@ export function useSendTestNotification() {
       variables?: Record<string, any>;
       recipients?: string[];
     }) => {
-      const response = await apiClient.post('/api/notifications/send-test', params);
+      const response = await axiosInstance.post('/api/notifications/send-test', params) as any;
       if (response.code !== 200) {
         throw new Error(response.message || '发送测试通知失败');
       }

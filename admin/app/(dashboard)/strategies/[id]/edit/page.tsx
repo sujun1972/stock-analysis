@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import { AlertCircle, CheckCircle, Loader, Save } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { PageHeader } from '@/components/common/PageHeader'
-import { apiClient } from '@/lib/api-client'
+import { strategyApi } from '@/lib/api'
 import logger from '@/lib/logger'
 
 // 动态导入 Monaco Editor (客户端组件)
@@ -63,7 +63,7 @@ export default function EditStrategyPage() {
   useEffect(() => {
     const fetchStrategy = async () => {
       try {
-        const result = await apiClient.getStrategy(Number(strategyId))
+        const result = await strategyApi.getStrategy(Number(strategyId))
         const strategy = result.data || result as any
 
         if (strategy && (result.success || strategy.id)) {
@@ -99,7 +99,7 @@ export default function EditStrategyPage() {
     setError(null)
 
     try {
-      const result = await apiClient.validateStrategy(formData.code)
+      const result = await strategyApi.validateStrategy(formData.code)
       if (result.success || result.data) {
         setValidationResult(result.data || result)
       } else {
@@ -161,7 +161,7 @@ export default function EditStrategyPage() {
         payload.default_params = defaultParams
       }
 
-      const result = await apiClient.updateStrategy(Number(strategyId), payload)
+      const result = await strategyApi.updateStrategy(Number(strategyId), payload)
 
       if (result.success || result.data) {
         // 成功跳转到策略详情页

@@ -12,7 +12,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { ccassHoldApi, type CcassHoldData, type CcassHoldStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, TrendingUp, Users, Percent, Database, ListFilter } from 'lucide-react'
@@ -38,7 +38,7 @@ export default function CcassHoldPage() {
     taskName: 'tasks.sync_ccass_hold',
     bulkOps: {
       tableKey: 'ccass_hold',
-      syncFn: (params) => apiClient.post('/api/ccass-hold/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/ccass-hold/sync-async', null, { params }),
       taskName: 'tasks.sync_ccass_hold',
     },
     paginationMode: 'page',

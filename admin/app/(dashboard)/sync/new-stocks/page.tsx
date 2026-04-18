@@ -11,8 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, Calendar, BarChart3, PieChart } from 'lucide-react'
-import { newStockApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { newStockApi, axiosInstance } from '@/lib/api'
 import type { NewStockData, NewStockStatistics } from '@/lib/api/new-stock-api'
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
@@ -92,7 +91,7 @@ export default function NewStocksPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'new_stocks',
-    syncFn: (params) => apiClient.post('/api/new-stocks/sync-async', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/new-stocks/sync-async', null, { params }),
     taskName: 'sync.new_stocks',
     onSuccess: loadData,
   })

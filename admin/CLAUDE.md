@@ -212,7 +212,7 @@ const {
   isClearDialogOpen, setIsClearDialogOpen, cleanup, earliestHistoryDate,
 } = useDataBulkOps({
   tableKey: 'daily_basic',
-  syncFn: (params) => apiClient.post('/api/daily-basic/sync-async', null, { params }),
+  syncFn: (params) => dailyBasicApi.syncAsync(params),
   taskName: 'tasks.sync_daily_basic',
   onSuccess: () => loadData(1),
 })
@@ -247,32 +247,39 @@ useEffect(() => { return () => cleanup() }, [])
 
 ```
 lib/api/
-├── base.ts           # 基础 API 类和 axios 实例
-├── auth.ts           # 认证相关
+├── base.ts           # BaseApiClient 基类 + axiosInstance（Token 刷新、拦截器）
+├── index.ts          # 统一导出（所有模块实例 + 类型）
+├── auth.ts           # 认证（登录/注册/Token 刷新）
 ├── users.ts          # 用户管理
-├── stocks.ts         # 股票相关
-├── moneyflow.ts      # 资金流向
-├── margin.ts         # 融资融券
+├── stocks.ts         # 股票基础信息
+├── strategies.ts     # 策略管理
+├── config.ts         # 系统配置 + AI 提供商
+├── sync.ts           # 数据同步
+├── data-ops.ts       # 数据操作（清空表）
 ├── scheduler.ts      # 定时任务
 ├── celery-tasks.ts   # Celery 任务管理
-├── config.ts         # 系统配置
-├── sync.ts           # 数据同步
-├── extended-data.ts  # 扩展数据
 ├── monitor.ts        # 系统监控
-└── index.ts          # 统一导出
+├── extended-data.ts  # 扩展数据
+├── moneyflow.ts      # 资金流向
+├── margin.ts         # 融资融券
+├── *-api.ts          # 各数据表同步 API（60+ 模块）
+└── sync-dashboard.ts # 同步仪表盘配置
 ```
 
 ### 使用规范
 
 ```typescript
-// ✅ 新功能开发：从模块导入
+// ✅ 使用模块化 API 实例（类型安全）
 import { moneyflowApi, marginApi } from '@/lib/api'
 
-// ✅ 旧代码：向后兼容，继续可用
-import { apiClient } from '@/lib/api-client'
+// ✅ 尚无模块覆盖的端点，使用 axiosInstance（通用 get/post）
+import { axiosInstance } from '@/lib/api'
+const response = await axiosInstance.get('/api/some-endpoint') as any
 ```
 
-新功能必须创建独立的模块文件（如 `lib/api/your-api.ts`），继承 `BaseApiClient`，并在 `lib/api/index.ts` 中导出。
+- `lib/api-client.ts` 已删除，**禁止**使用 `import { apiClient } from '@/lib/api-client'`
+- 新功能必须创建独立的模块文件（如 `lib/api/your-api.ts`），继承 `BaseApiClient`，并在 `lib/api/index.ts` 中导出
+- `axiosInstance` 的响应拦截器自动返回 `response.data`，因此返回值是 `{ code, data, message }` 而非 `AxiosResponse`；访问时需 `as any` 断言以绕过 TypeScript 类型
 
 ---
 

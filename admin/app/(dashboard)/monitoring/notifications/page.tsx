@@ -24,7 +24,7 @@ import {
   TrendingUp,
   XCircle,
 } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toast } from 'sonner'
 // 动态导入 Recharts 图表库（仅客户端加载，减少初始包大小）
 import {
@@ -99,20 +99,20 @@ export default function NotificationMonitoringPage() {
 
       // 并行加载所有数据
       const [health, realtime, performance, trend, reasons] = await Promise.all([
-        apiClient.get('/api/notification-monitoring/health-check'),
-        apiClient.get('/api/notification-monitoring/realtime'),
-        apiClient.get('/api/notification-monitoring/channel-performance'),
-        apiClient.get('/api/notification-monitoring/daily-trend', {
+        axiosInstance.get('/api/notification-monitoring/health-check'),
+        axiosInstance.get('/api/notification-monitoring/realtime'),
+        axiosInstance.get('/api/notification-monitoring/channel-performance'),
+        axiosInstance.get('/api/notification-monitoring/daily-trend', {
           params: { days: 7 }
         }),
-        apiClient.get('/api/notification-monitoring/failure-reasons'),
+        axiosInstance.get('/api/notification-monitoring/failure-reasons'),
       ])
 
-      setHealthStatus(health.data.data)
-      setRealtimeStats(realtime.data.data)
-      setChannelPerformance(performance.data.data)
-      setDailyTrend(trend.data.data)
-      setFailureReasons(reasons.data.data)
+      setHealthStatus((health as any).data)
+      setRealtimeStats((realtime as any).data)
+      setChannelPerformance((performance as any).data)
+      setDailyTrend((trend as any).data)
+      setFailureReasons((reasons as any).data)
     } catch (error) {
       console.error('加载监控数据失败:', error)
       toast.error('加载监控数据失败')
@@ -123,8 +123,8 @@ export default function NotificationMonitoringPage() {
 
   const triggerHealthCheck = async () => {
     try {
-      const response = await apiClient.post('/api/notification-monitoring/check-and-alert')
-      const result = response.data.data
+      const response = await axiosInstance.post('/api/notification-monitoring/check-and-alert') as any
+      const result = response.data
 
       if (result.alerts_triggered && result.alerts_triggered.length > 0) {
         toast.warning(`发现 ${result.alerts_triggered.length} 条异常告警`)

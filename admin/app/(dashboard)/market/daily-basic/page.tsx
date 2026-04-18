@@ -12,7 +12,7 @@ import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, Database, TrendingUp, BarChart3, Package } from 'lucide-react'
 
@@ -59,13 +59,13 @@ export default function DailyBasicPage() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
 
   const dp = useDataPage<DailyBasicData, DailyBasicStatistics>({
-    apiCall: (params) => apiClient.get('/api/daily-basic', { params }),
-    statisticsCall: (params) => apiClient.get('/api/daily-basic/statistics', { params }),
-    syncFn: () => apiClient.post('/api/daily-basic/sync-async'),
+    apiCall: (params) => axiosInstance.get('/api/daily-basic', { params }),
+    statisticsCall: (params) => axiosInstance.get('/api/daily-basic/statistics', { params }),
+    syncFn: () => axiosInstance.post('/api/daily-basic/sync-async'),
     taskName: ['tasks.sync_daily_basic_incremental', 'tasks.sync_daily_basic_full_history'],
     bulkOps: {
       tableKey: 'daily_basic',
-      syncFn: (params) => apiClient.post('/api/daily-basic/sync-full-history', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/daily-basic/sync-full-history', null, { params }),
       taskName: 'tasks.sync_daily_basic_full_history',
     },
     paginationMode: 'page',

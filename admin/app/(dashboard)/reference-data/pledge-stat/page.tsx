@@ -14,7 +14,7 @@ import { extendedDataApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 
 interface PledgeStatData {
   ts_code: string
@@ -170,7 +170,7 @@ export default function PledgeStatPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'pledge_stat',
-    syncFn: (params) => apiClient.post('/api/pledge-stat/sync-full-history', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/pledge-stat/sync-full-history', null, { params }),
     taskName: 'tasks.sync_pledge_stat_full_history',
     onSuccess: loadData,
   })

@@ -13,7 +13,7 @@ import { stkHighShockApi, type StkHighShockData, type StkHighShockStatistics } f
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 
 export default function StkHighShockPage() {
   const [data, setData] = useState<StkHighShockData[]>([])
@@ -145,7 +145,7 @@ export default function StkHighShockPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'stk_high_shock',
-    syncFn: (params) => apiClient.post('/api/stk-high-shock/sync-full-history', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/stk-high-shock/sync-full-history', null, { params }),
     taskName: 'tasks.sync_stk_high_shock_full_history',
     onSuccess: loadData,
   })

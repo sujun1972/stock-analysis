@@ -12,7 +12,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { hkHoldApi, type HkHoldData, type HkHoldStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, BarChart3, Users, TrendingUp, Percent } from 'lucide-react'
@@ -42,7 +42,7 @@ export default function HkHoldPage() {
     taskName: 'tasks.sync_hk_hold',
     bulkOps: {
       tableKey: 'hk_hold',
-      syncFn: (params) => apiClient.post('/api/hk-hold/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/hk-hold/sync-async', null, { params }),
       taskName: 'tasks.sync_hk_hold',
     },
     paginationMode: 'page',

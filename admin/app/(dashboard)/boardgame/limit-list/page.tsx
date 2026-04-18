@@ -12,7 +12,7 @@ import { StatisticsCards, type StatisticsCardItem } from '@/components/common/St
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { limitListApi, type LimitListData, type LimitListStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { formatStockCode } from '@/lib/utils'
 import { useSystemConfig } from '@/contexts'
@@ -38,7 +38,7 @@ export default function LimitListPage() {
     taskName: 'tasks.sync_limit_list',
     bulkOps: {
       tableKey: 'limit_list',
-      syncFn: (params) => apiClient.post('/api/limit-list/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/limit-list/sync-async', null, { params }),
       taskName: 'tasks.sync_limit_list',
     },
     paginationMode: 'page',

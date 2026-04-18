@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { cyqChipsApi, type CyqChipsData, type CyqChipsStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
@@ -94,7 +94,7 @@ export default function CyqChipsPage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'cyq_chips',
-    syncFn: (params) => apiClient.post('/api/cyq-chips/sync-async', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/cyq-chips/sync-async', null, { params }),
     taskName: 'tasks.sync_cyq_chips',
     onSuccess: loadData,
   })

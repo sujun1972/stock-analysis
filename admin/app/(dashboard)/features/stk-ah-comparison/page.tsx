@@ -12,7 +12,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { stkAhComparisonApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { RefreshCw, TrendingUp, TrendingDown, BarChart3, Activity } from 'lucide-react'
@@ -53,7 +53,7 @@ export default function StkAhComparisonPage() {
     taskName: 'tasks.sync_stk_ah_comparison',
     bulkOps: {
       tableKey: 'stk_ah_comparison',
-      syncFn: (params) => apiClient.post('/api/stk-ah-comparison/sync-async', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/stk-ah-comparison/sync-async', null, { params }),
       taskName: 'tasks.sync_stk_ah_comparison',
     },
     paginationMode: 'page',

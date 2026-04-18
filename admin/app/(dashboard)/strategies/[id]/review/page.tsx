@@ -15,7 +15,7 @@ import {
   Ban,
 } from 'lucide-react'
 import { Strategy } from '@/types/strategy'
-import { apiClient } from '@/lib/api-client'
+import { strategyApi } from '@/lib/api'
 import logger from '@/lib/logger'
 import PublishStatusBadge from '@/components/strategies/PublishStatusBadge'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -49,7 +49,7 @@ export default function StrategyReviewPage() {
     setLoading(true)
     setError(null)
     try {
-      const response = await apiClient.getStrategy(strategyId) as any
+      const response = await strategyApi.getStrategy(strategyId) as any
       if (response?.code === 200 && response.data) {
         setStrategy(response.data)
       } else {
@@ -66,7 +66,7 @@ export default function StrategyReviewPage() {
   // 加载审核历史
   const fetchReviewHistory = useCallback(async () => {
     try {
-      const response: any = await apiClient.getStrategyReviewHistory(strategyId)
+      const response: any = await strategyApi.getStrategyReviewHistory(strategyId)
       if (Array.isArray(response)) {
         setReviewHistory(response)
       } else if (response.data && Array.isArray(response.data)) {
@@ -88,7 +88,7 @@ export default function StrategyReviewPage() {
 
     setApproving(true)
     try {
-      await apiClient.approveStrategy(strategyId, {
+      await strategyApi.approveStrategy(strategyId, {
         comment: approveComment || undefined,
         auto_enable: autoEnable,
       })
@@ -112,7 +112,7 @@ export default function StrategyReviewPage() {
 
     setRejecting(true)
     try {
-      await apiClient.rejectStrategy(strategyId, {
+      await strategyApi.rejectStrategy(strategyId, {
         reason: rejectReason,
       })
 
@@ -135,7 +135,7 @@ export default function StrategyReviewPage() {
 
     setUnpublishing(true)
     try {
-      await apiClient.unpublishStrategy(strategyId)
+      await strategyApi.unpublishStrategy(strategyId)
       alert('策略已取消发布')
       // 刷新策略信息和审核历史
       await fetchStrategy()

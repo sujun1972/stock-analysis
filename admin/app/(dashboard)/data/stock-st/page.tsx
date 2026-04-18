@@ -14,7 +14,7 @@ import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
 import { useDataPage } from '@/hooks/useDataPage'
 import { stockStApi } from '@/lib/api'
 import type { StockStData, StockStStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, BarChart3, Calendar, TrendingUp, Tag } from 'lucide-react'
 
@@ -31,7 +31,7 @@ export default function StockStPage() {
     taskName: 'tasks.sync_stock_st_incremental',
     bulkOps: {
       tableKey: 'stock_st',
-      syncFn: (params) => apiClient.post('/api/stock-st/sync-full-history', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/stock-st/sync-full-history', null, { params }),
       taskName: 'tasks.sync_stock_st_full_history',
     },
     paginationMode: 'page',

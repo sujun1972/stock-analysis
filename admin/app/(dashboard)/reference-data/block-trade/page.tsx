@@ -13,7 +13,7 @@ import { useTaskStore } from '@/stores/task-store'
 import { toast } from 'sonner'
 import { useDataBulkOps } from '@/hooks/useDataBulkOps'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { RefreshCw, TrendingUp, Briefcase, DollarSign, BarChart3 } from 'lucide-react'
 
 export default function BlockTradePage() {
@@ -91,7 +91,7 @@ export default function BlockTradePage() {
     earliestHistoryDate,
   } = useDataBulkOps({
     tableKey: 'block_trade',
-    syncFn: (params) => apiClient.post('/api/block-trade/sync-full-history', null, { params }),
+    syncFn: (params) => axiosInstance.post('/api/block-trade/sync-full-history', null, { params }),
     taskName: 'tasks.sync_block_trade_full_history',
     onSuccess: loadData,
   })

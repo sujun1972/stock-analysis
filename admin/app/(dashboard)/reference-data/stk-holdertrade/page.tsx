@@ -13,7 +13,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { stkHoldertradeApi, type StkHoldertradeData, type StkHoldertradeStatistics } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import { RefreshCw, TrendingUp, TrendingDown, Users, FileText } from 'lucide-react'
 
@@ -46,7 +46,7 @@ export default function StkHoldertradePage() {
     taskName: 'tasks.sync_stk_holdertrade',
     bulkOps: {
       tableKey: 'stk_holdertrade',
-      syncFn: (params) => apiClient.post('/api/stk-holdertrade/sync-full-history', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/stk-holdertrade/sync-full-history', null, { params }),
       taskName: 'tasks.sync_stk_holdertrade_full_history',
     },
     paginationMode: 'offset',

@@ -15,13 +15,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-// 先设置API客户端实例
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import logger from '@/lib/logger'
-
-if (typeof window !== 'undefined') {
-  ;(window as any).__apiClientInstance = apiClient
-}
 
 // 类型定义
 export type UserRole = 'super_admin' | 'admin' | 'vip_user' | 'normal_user' | 'trial_user';
@@ -89,7 +84,7 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
         try {
           // /api/auth/login 现在返回标准 ApiResponse 格式
-          const response = await apiClient.post<{
+          const response = await axiosInstance.post<{
             access_token: string;
             refresh_token: string;
             user: User;
@@ -134,7 +129,7 @@ export const useAuthStore = create<AuthStore>()(
       register: async (data: RegisterRequest) => {
         set({ isLoading: true, error: null });
         try {
-          await apiClient.post('/api/auth/register', data);
+          await axiosInstance.post('/api/auth/register', data);
 
           set({
             isLoading: false,
@@ -157,7 +152,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           if (refreshToken) {
             // 撤销refresh token
-            await apiClient.post('/api/auth/logout', {
+            await axiosInstance.post('/api/auth/logout', {
               refresh_token: refreshToken,
             }).catch(() => {
               // 忽略登出错误
@@ -189,7 +184,7 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           // /api/auth/refresh 现在返回标准 ApiResponse 格式
-          const response = await apiClient.post<{
+          const response = await axiosInstance.post<{
             access_token: string;
             refresh_token: string;
           }>('/api/auth/refresh', {
@@ -232,7 +227,7 @@ export const useAuthStore = create<AuthStore>()(
       updateProfile: async (data: Partial<User>) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await apiClient.patch<User>('/api/profile', data);
+          const response = await axiosInstance.patch<User>('/api/profile', data);
 
           if (!response.data) {
             throw new Error('更新响应数据为空');

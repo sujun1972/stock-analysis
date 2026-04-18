@@ -11,7 +11,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useTaskStore } from '@/stores/task-store'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import logger from '@/lib/logger'
 
 /**
@@ -35,7 +35,7 @@ export function useTaskSync(enabled: boolean = true, interval: number = 30000) {
     const syncAllTasks = async () => {
       try {
         // 从后端获取任务历史（包括运行中的和已完成的）
-        const response = await apiClient.get('/api/celery/task-history?limit=100') as any
+        const response = await axiosInstance.get('/api/celery/task-history?limit=100') as any
 
         if (response.code === 200 && response.data?.tasks) {
           const historyTasks = response.data.tasks.map((t: any) => ({

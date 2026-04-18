@@ -11,7 +11,7 @@ import { SyncDialog } from '@/components/common/SyncDialog'
 import { StatisticsCards, type StatisticsCardItem } from '@/components/common/StatisticsCards'
 import { useDataPage } from '@/hooks/useDataPage'
 import { moneyflowApi } from '@/lib/api'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
 import {
   TrendingUp,
@@ -86,7 +86,7 @@ export default function MoneyflowHsgtPage() {
     taskName: 'tasks.sync_moneyflow_hsgt',
     bulkOps: {
       tableKey: 'moneyflow_hsgt',
-      syncFn: (params) => apiClient.post('/api/moneyflow-hsgt/sync-full-history', null, { params }),
+      syncFn: (params) => axiosInstance.post('/api/moneyflow-hsgt/sync-full-history', null, { params }),
       taskName: 'tasks.sync_moneyflow_hsgt_full_history',
     },
     paginationMode: 'offset',

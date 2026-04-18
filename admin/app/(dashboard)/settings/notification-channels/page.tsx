@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
 import { Mail, MessageSquare, Settings, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { axiosInstance, monitorApi } from '@/lib/api'
 import type { NotificationChannelConfig } from '@/types/notification-channel'
 import { maskSensitiveInfo, isEmailConfig, isTelegramConfig } from '@/types/notification-channel'
 import EmailConfigForm from '@/components/settings/EmailConfigForm'
@@ -26,7 +26,7 @@ export default function NotificationChannelsPage() {
   const loadChannels = async () => {
     setIsLoading(true)
     try {
-      const response = await apiClient.getNotificationChannels() as any
+      const response = await monitorApi.getNotificationChannels() as any
       if (response?.code === 200 && response.data) {
         setChannels(response.data)
       } else {
@@ -57,7 +57,7 @@ export default function NotificationChannelsPage() {
   const handleToggleChannel = async (channelType: string) => {
     setTogglingChannel(channelType)
     try {
-      const response = await apiClient.toggleNotificationChannel(channelType) as any
+      const response = await axiosInstance.post(`/api/notification-channels/${channelType}/toggle`) as any
       if (response?.code === 200 && response.data) {
         setChannels(prev =>
           prev.map(ch => (ch.channel_type === channelType ? response.data! : ch))
@@ -92,7 +92,7 @@ export default function NotificationChannelsPage() {
     description?: string
   ) => {
     try {
-      const response = await apiClient.updateNotificationChannel(channelType, {
+      const response = await axiosInstance.put(`/api/notification-channels/${channelType}`, {
         config,
         description,
       }) as any
@@ -121,7 +121,10 @@ export default function NotificationChannelsPage() {
   // 测试渠道
   const handleTestChannel = async (channelType: string, testTarget: string) => {
     try {
-      const response = await apiClient.testNotificationChannel(channelType, testTarget)
+      const response = await axiosInstance.post(
+        `/api/notification-channels/${channelType}/test`,
+        { test_target: testTarget }
+      ) as any
       return response.data || { success: false, message: '测试失败' }
     } catch (error: any) {
       throw error

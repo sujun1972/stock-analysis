@@ -18,7 +18,7 @@
 
 import { useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { apiClient } from '@/lib/api-client'
+import { dataOpsApi } from '@/lib/api'
 import { useTaskStore } from '@/stores/task-store'
 import { useConfigStore } from '@/stores/config-store'
 
@@ -121,7 +121,7 @@ export function useDataBulkOps(options: DataBulkOpsOptions) {
   const handleClear = useCallback(async () => {
     try {
       setIsClearing(true)
-      const response = await apiClient.clearTableData({ table_key: tableKey })
+      const response = await dataOpsApi.clearTableData({ table_key: tableKey })
       if (response.code === 200) {
         toast.success('数据已清空', { description: `表 ${tableKey} 已清空` })
         onSuccess?.()
