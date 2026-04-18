@@ -78,9 +78,8 @@ class FinaIndicatorRepository(BaseRepository):
 
         query += " ORDER BY ann_date DESC, ts_code"
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
 
         if offset:
             query += " OFFSET %s"
@@ -118,9 +117,8 @@ class FinaIndicatorRepository(BaseRepository):
         """
         params = [period]
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
 
         result = self.execute_query(query, tuple(params))
         return [self._row_to_dict(row) for row in result]
@@ -167,9 +165,8 @@ class FinaIndicatorRepository(BaseRepository):
 
         query += " ORDER BY ann_date DESC, end_date DESC"
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
 
         result = self.execute_query(query, tuple(params))
         return [self._row_to_dict(row) for row in result]

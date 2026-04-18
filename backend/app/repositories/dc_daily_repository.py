@@ -93,9 +93,8 @@ class DcDailyRepository(BaseRepository):
                 {order_clause}
             """
 
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            query += " LIMIT %s"
+            params.append(self._enforce_limit(limit))
 
             if offset:
                 query += " OFFSET %s"

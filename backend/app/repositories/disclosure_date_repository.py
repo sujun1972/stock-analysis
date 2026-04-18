@@ -83,8 +83,8 @@ class DisclosureDateRepository(BaseRepository):
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-            limit_clause = f"LIMIT {limit}" if limit else ""
-            offset_clause = f"OFFSET {offset}" if offset else ""
+            limit_clause = f"LIMIT {self._enforce_limit(limit)}"
+            offset_clause = f"OFFSET {int(offset)}" if offset else ""
 
             query = f"""
                 SELECT

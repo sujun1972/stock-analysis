@@ -244,7 +244,7 @@ class StockAiAnalysisRepository(BaseRepository):
             ORDER BY {sort_by} {order_dir}
             LIMIT %s OFFSET %s
         """
-        params.extend([limit, offset])
+        params.extend([self._enforce_limit(limit), offset])
         try:
             result = self.execute_query(query, tuple(params))
             return [self._row_to_dict(row) for row in result]

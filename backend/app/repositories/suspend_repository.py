@@ -69,9 +69,8 @@ class SuspendRepository(BaseRepository):
 
         query += " ORDER BY trade_date DESC, ts_code"
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
         if offset:
             query += " OFFSET %s"
             params.append(offset)

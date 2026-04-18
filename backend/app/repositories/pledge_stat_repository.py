@@ -127,9 +127,8 @@ class PledgeStatRepository(BaseRepository):
                 ORDER BY end_date DESC, pledge_ratio DESC
             """
 
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            query += " LIMIT %s"
+            params.append(self._enforce_limit(limit))
 
             if offset:
                 query += " OFFSET %s"

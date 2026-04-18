@@ -61,9 +61,8 @@ class DividendRepository(BaseRepository):
 
         query += " ORDER BY ann_date DESC"
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
 
         result = self.execute_query(query, tuple(params))
         return [self._row_to_dict(row) for row in result]
@@ -139,9 +138,8 @@ class DividendRepository(BaseRepository):
 
         query += " ORDER BY ann_date DESC"
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
 
         if offset:
             query += " OFFSET %s"

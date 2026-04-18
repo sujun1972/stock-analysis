@@ -77,9 +77,9 @@ class IncomeRepository(BaseRepository):
 
             query += " ORDER BY end_date DESC, ts_code"
 
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            effective_limit = self._enforce_limit(limit)
+            query += " LIMIT %s"
+            params.append(effective_limit)
 
             result = self.execute_query(query, tuple(params))
 
@@ -151,7 +151,7 @@ class IncomeRepository(BaseRepository):
 
             query += " ORDER BY end_date DESC, ts_code"
             query += " LIMIT %s OFFSET %s"
-            params.extend([limit, offset])
+            params.extend([self._enforce_limit(limit), offset])
 
             result = self.execute_query(query, tuple(params))
 

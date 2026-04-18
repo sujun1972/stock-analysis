@@ -159,11 +159,11 @@ class BalancesheetRepository(BaseRepository):
                 ORDER BY ann_date DESC, ts_code ASC
             """
 
-            if limit:
-                query += f" LIMIT {limit}"
+            effective_limit = self._enforce_limit(limit)
+            query += f" LIMIT {effective_limit}"
 
             if offset:
-                query += f" OFFSET {offset}"
+                query += f" OFFSET {int(offset)}"
 
             result = self.execute_query(query, tuple(params))
 

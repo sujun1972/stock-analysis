@@ -82,8 +82,7 @@ class MoneyflowHsgtRepository(BaseRepository):
                 ORDER BY trade_date DESC
             """
 
-            if limit:
-                query += f" LIMIT {int(limit)}"
+            query += f" LIMIT {self._enforce_limit(limit)}"
             if offset > 0:
                 query += f" OFFSET {int(offset)}"
 

@@ -22,6 +22,9 @@ class BaseRepository:
     所有具体的 Repository 应继承此类
     """
 
+    # 无界查询的硬上限：防止误用 find_all/get_by_date_range 拉取整张表
+    DEFAULT_MAX_LIMIT: int = 10000
+
     def __init__(self, db: Optional[DatabaseManager] = None):
         """
         初始化 Repository
@@ -54,6 +57,35 @@ class BaseRepository:
                 identifier=identifier,
             )
         return identifier
+
+    @classmethod
+    def _enforce_limit(cls, limit: Optional[int]) -> int:
+        """
+        统一的 LIMIT 兜底 / 上限校验
+
+        - limit 为 None：返回 DEFAULT_MAX_LIMIT（无界查询的兜底值）
+        - limit 为正整数且 ≤ DEFAULT_MAX_LIMIT：原样返回
+        - limit > DEFAULT_MAX_LIMIT 或 ≤ 0：抛 ValueError（由 API 层转 400）
+
+        Args:
+            limit: 调用方传入的 limit（允许 None）
+
+        Returns:
+            最终生效的 limit 整数
+
+        Raises:
+            ValueError: limit 超过 DEFAULT_MAX_LIMIT 或非正数
+        """
+        if limit is None:
+            return cls.DEFAULT_MAX_LIMIT
+        if not isinstance(limit, int) or limit <= 0:
+            raise ValueError(f"limit 必须为正整数，收到: {limit!r}")
+        if limit > cls.DEFAULT_MAX_LIMIT:
+            raise ValueError(
+                f"limit 不能超过 {cls.DEFAULT_MAX_LIMIT}（收到 {limit}），"
+                f"如需导出更大数据集请使用分页或专用批量接口"
+            )
+        return limit
 
     def execute_query(self, query: str, params: Optional[Tuple] = None) -> List[Tuple]:
         """
@@ -141,7 +173,13 @@ class BaseRepository:
                 reason=str(e),
             )
 
-    def find_by_id(self, table: str, id_value: Any, id_column: str = "id") -> Optional[Tuple]:
+    def find_by_id(
+        self,
+        table: str,
+        id_value: Any,
+        id_column: str = "id",
+        columns: Optional[List[str]] = None,
+    ) -> Optional[Tuple]:
         """
         根据 ID 查找单条记录
 
@@ -149,6 +187,7 @@ class BaseRepository:
             table: 表名
             id_value: ID 值
             id_column: ID 列名（默认 'id'）
+            columns: 需要返回的列名白名单；默认 None 返回所有列（SELECT *）
 
         Returns:
             记录元组，不存在则返回 None
@@ -157,7 +196,14 @@ class BaseRepository:
         table = self._validate_identifier(table, "table")
         id_column = self._validate_identifier(id_column, "id_column")
 
-        query = f"SELECT * FROM {table} WHERE {id_column} = %s"
+        if columns:
+            col_clause = ", ".join(
+                self._validate_identifier(c, "column") for c in columns
+            )
+        else:
+            col_clause = "*"
+
+        query = f"SELECT {col_clause} FROM {table} WHERE {id_column} = %s"
         results = self.execute_query(query, (id_value,))
         return results[0] if results else None
 
@@ -169,20 +215,26 @@ class BaseRepository:
         order_by: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        columns: Optional[List[str]] = None,
     ) -> List[Tuple]:
         """
-        查找多条记录
+        查找多条记录（强制 LIMIT 保护，防止误拉整表）
 
         Args:
             table: 表名
             where: WHERE 子句（不含 WHERE 关键字，使用参数化查询）
             params: 参数
             order_by: 排序子句（如 "created_at DESC"，仅限受信任的输入）
-            limit: 限制数量
+            limit: 限制数量。None 时使用 DEFAULT_MAX_LIMIT（10000）兜底；
+                   超过 DEFAULT_MAX_LIMIT 抛 ValueError
             offset: 偏移量
+            columns: 需要返回的列名白名单；默认 None 返回所有列（SELECT *）
 
         Returns:
             记录列表
+
+        Raises:
+            ValueError: limit 超过 DEFAULT_MAX_LIMIT 或非正数
 
         注意：
             - where 子句应使用 %s 占位符，不应直接拼接用户输入
@@ -191,7 +243,14 @@ class BaseRepository:
         # 验证表名防止 SQL 注入
         table = self._validate_identifier(table, "table")
 
-        query = f"SELECT * FROM {table}"
+        if columns:
+            col_clause = ", ".join(
+                self._validate_identifier(c, "column") for c in columns
+            )
+        else:
+            col_clause = "*"
+
+        query = f"SELECT {col_clause} FROM {table}"
 
         if where:
             query += f" WHERE {where}"
@@ -203,8 +262,9 @@ class BaseRepository:
                 self._validate_identifier(order_parts[0], "order_by column")
             query += f" ORDER BY {order_by}"
 
-        if limit is not None:
-            query += f" LIMIT {int(limit)}"
+        # 强制 LIMIT：None 兜底为 DEFAULT_MAX_LIMIT，超限抛 ValueError
+        effective_limit = self._enforce_limit(limit)
+        query += f" LIMIT {effective_limit}"
 
         if offset is not None:
             query += f" OFFSET {int(offset)}"

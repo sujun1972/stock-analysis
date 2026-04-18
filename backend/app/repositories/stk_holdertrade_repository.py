@@ -138,9 +138,8 @@ class StkHoldertradeRepository(BaseRepository):
 
             query += " ORDER BY ann_date DESC, ts_code"
 
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            query += " LIMIT %s"
+            params.append(self._enforce_limit(limit))
 
             if offset:
                 query += " OFFSET %s"

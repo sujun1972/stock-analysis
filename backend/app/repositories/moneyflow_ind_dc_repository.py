@@ -113,8 +113,7 @@ class MoneyflowIndDcRepository(BaseRepository):
                 {order_clause}
             """
 
-            if limit:
-                query += f" LIMIT {int(limit)}"
+            query += f" LIMIT {self._enforce_limit(limit)}"
             if offset > 0:
                 query += f" OFFSET {int(offset)}"
 

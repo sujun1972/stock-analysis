@@ -46,14 +46,13 @@ class StockRealtimeRepository(BaseRepository):
             """
 
             params = []
-            if limit:
-                query += " LIMIT %s"
-                params.append(limit)
+            query += " LIMIT %s"
+            params.append(self._enforce_limit(limit))
             if offset:
                 query += " OFFSET %s"
                 params.append(offset)
 
-            result = self.execute_query(query, tuple(params) if params else None)
+            result = self.execute_query(query, tuple(params))
             return [self._row_to_dict(row) for row in result]
 
         except PsycopgDatabaseError as e:

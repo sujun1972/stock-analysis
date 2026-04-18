@@ -60,8 +60,8 @@ class TopListRepository(BaseRepository):
                 params.append(ts_code)
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-            limit_clause = f"LIMIT {limit}" if limit else ""
-            offset_clause = f"OFFSET {offset}" if offset else ""
+            limit_clause = f"LIMIT {self._enforce_limit(limit)}"
+            offset_clause = f"OFFSET {int(offset)}" if offset else ""
 
             # 排序：仅允许白名单列，防止 SQL 注入
             order = 'DESC' if sort_order.lower() != 'asc' else 'ASC'

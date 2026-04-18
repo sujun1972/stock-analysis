@@ -280,7 +280,8 @@ class StrategyRepository(BaseRepository):
         count_query = f"SELECT COUNT(*) FROM strategies s WHERE {where_sql}"
 
         # 查询数据
-        offset = (page - 1) * page_size
+        effective_page_size = self._enforce_limit(page_size)
+        offset = (page - 1) * effective_page_size
         data_query = f"""
             SELECT {select_fields}
             FROM strategies s
@@ -299,7 +300,7 @@ class StrategyRepository(BaseRepository):
             total = cursor.fetchone()[0]
 
             # 获取数据
-            cursor.execute(data_query, params + [page_size, offset])
+            cursor.execute(data_query, params + [effective_page_size, offset])
             rows = cursor.fetchall()
             cursor.close()
 

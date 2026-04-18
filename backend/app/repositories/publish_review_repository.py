@@ -184,7 +184,8 @@ class PublishReviewRepository(BaseRepository):
         count_query = f"SELECT COUNT(*) FROM strategy_publish_reviews r WHERE {where_sql}"
 
         # 查询数据
-        offset = (page - 1) * page_size
+        effective_page_size = self._enforce_limit(page_size)
+        offset = (page - 1) * effective_page_size
         data_query = f"""
             SELECT
                 r.id, r.strategy_id, r.reviewer_id, r.action,
@@ -207,7 +208,7 @@ class PublishReviewRepository(BaseRepository):
             total = cursor.fetchone()[0]
 
             # 获取数据
-            cursor.execute(data_query, params + [page_size, offset])
+            cursor.execute(data_query, params + [effective_page_size, offset])
             rows = cursor.fetchall()
             cursor.close()
 

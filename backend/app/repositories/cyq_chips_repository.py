@@ -165,9 +165,8 @@ class CyqChipsRepository(BaseRepository):
 
         query += " ORDER BY trade_date DESC, price DESC"
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
 
         result = self.execute_query(query, tuple(params))
         return [self._row_to_dict(row) for row in result]
@@ -207,9 +206,8 @@ class CyqChipsRepository(BaseRepository):
 
         query += " ORDER BY ts_code, price DESC"
 
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
+        query += " LIMIT %s"
+        params.append(self._enforce_limit(limit))
 
         result = self.execute_query(query, tuple(params))
         return [self._row_to_dict(row) for row in result]

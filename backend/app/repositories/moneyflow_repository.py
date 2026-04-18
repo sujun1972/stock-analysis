@@ -92,8 +92,8 @@ class MoneyflowRepository(BaseRepository):
                 ORDER BY trade_date DESC, net_mf_amount DESC
             """
 
-            if limit:
-                query += f" LIMIT {int(limit)}"
+            effective_limit = self._enforce_limit(limit)
+            query += f" LIMIT {effective_limit}"
             if offset > 0:
                 query += f" OFFSET {int(offset)}"
 

@@ -279,9 +279,9 @@ class StockBasicRepository(BaseRepository):
                 query = base_query + " ORDER BY code"
                 params = []
 
-            if limit:
-                query += f" LIMIT %s"
-                params.append(limit)
+            effective_limit = self._enforce_limit(limit)
+            query += " LIMIT %s"
+            params.append(effective_limit)
 
             if offset:
                 query += f" OFFSET %s"
