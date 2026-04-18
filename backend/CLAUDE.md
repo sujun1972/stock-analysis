@@ -571,7 +571,7 @@ for item in items:
     item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
 
 # 同步 Service（被 asyncio.to_thread 调用，不能 await）
-quotes = stock_quote_cache._repo.get_quotes(ts_codes)
+quotes = stock_quote_cache.get_quotes_sync(ts_codes)
 ```
 
 **缓存字段**：name, latest_price, pct_change, change_amount, open, high, low, pre_close, volume, amount, turnover, amplitude, trade_time

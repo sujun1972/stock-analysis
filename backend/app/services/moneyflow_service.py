@@ -111,8 +111,8 @@ class MoneyflowService:
 
         # 5. 注入股票名称（通过 StockQuoteCache 同步方法）
         if items:
-            ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
-            quotes = stock_quote_cache._repo.get_quotes(ts_codes)
+            ts_codes = [item['ts_code'] for item in items]
+            quotes = stock_quote_cache.get_quotes_sync(ts_codes)
             for item in items:
                 item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
 
@@ -168,8 +168,8 @@ class MoneyflowService:
 
         # 3. 注入股票名称
         if items:
-            ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
-            quotes = stock_quote_cache._repo.get_quotes(ts_codes)
+            ts_codes = [item['ts_code'] for item in items]
+            quotes = stock_quote_cache.get_quotes_sync(ts_codes)
             for item in items:
                 item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
 

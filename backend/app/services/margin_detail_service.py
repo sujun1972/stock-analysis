@@ -418,7 +418,7 @@ class MarginDetailService(TushareSyncBase):
             # 注入标的名称（股票从 StockQuoteCache，ETF/基金从 margin_secs 回退）
             if data:
                 ts_codes = list(dict.fromkeys(item['ts_code'] for item in data))
-                quotes = await asyncio.to_thread(stock_quote_cache._repo.get_quotes, ts_codes)
+                quotes = await asyncio.to_thread(stock_quote_cache.get_quotes_sync, ts_codes)
                 # 找出无名称的代码，从 margin_secs 补充（ETF/基金）
                 missing_codes = [
                     code for code in ts_codes

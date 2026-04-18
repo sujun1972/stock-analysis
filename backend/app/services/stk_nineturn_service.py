@@ -243,7 +243,7 @@ class StkNineturnService(TushareSyncBase):
 
             if items:
                 ts_codes = list(dict.fromkeys(item['ts_code'] for item in items))
-                quotes = await asyncio.to_thread(stock_quote_cache._repo.get_quotes, ts_codes)
+                quotes = await asyncio.to_thread(stock_quote_cache.get_quotes_sync, ts_codes)
                 for item in items:
                     item['name'] = quotes.get(item['ts_code'], {}).get('name', '')
 

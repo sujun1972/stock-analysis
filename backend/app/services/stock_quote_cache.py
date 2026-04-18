@@ -243,6 +243,20 @@ class StockQuoteCache:
 
         return ts_code
 
+    def get_quotes_sync(self, ts_codes: List[str]) -> Dict[str, dict]:
+        """
+        批量获取股票行情（同步版本，不走 Redis，直接查数据库）。
+
+        用于 Service 在同步上下文中注入股票名称（如被 `asyncio.to_thread` 包围的同步方法，
+        或已在后台线程中执行的任务）。调用方应自行决定是否用 `asyncio.to_thread` 包裹。
+
+        返回字段与 `get_quotes_batch` 一致。
+        """
+        unique_codes = list(dict.fromkeys(ts_codes))
+        if not unique_codes:
+            return {}
+        return self._repo.get_quotes(unique_codes)
+
     async def invalidate(self, ts_codes: List[str]) -> None:
         """主动失效指定股票的缓存（行情更新后调用）"""
         for code in ts_codes:

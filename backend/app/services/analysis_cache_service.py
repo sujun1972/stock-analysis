@@ -16,8 +16,8 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
+from app.core.cache import cache
 from app.repositories.sync_history_repository import SyncHistoryRepository
-from app.services.cache_service import get_cache_service
 
 
 # ────────────────────────────────────────────────────────
@@ -94,28 +94,6 @@ ANALYSIS_DEPENDENCIES: Dict[str, List[str]] = {
         'stk_ah_comparison', 'stk_surv', 'broker_recommend',
         'report_rc',
     ],
-
-    # 全量依赖（用于需要所有数据都未变更才能使用缓存的场景）
-    'all': [
-        'stock_basic', 'new_stocks', 'trade_cal', 'stock_st',
-        'stock_daily', 'adj_factor', 'daily_basic', 'stk_limit_d', 'suspend',
-        'hsgt_top10', 'ggt_top10', 'ggt_daily', 'ggt_monthly',
-        'moneyflow', 'moneyflow_stock_dc', 'moneyflow_ind_dc',
-        'moneyflow_mkt_dc', 'moneyflow_hsgt',
-        'margin', 'margin_detail', 'margin_secs', 'slb_len',
-        'top_list', 'top_inst', 'limit_list', 'limit_step', 'limit_cpt',
-        'dc_index', 'dc_member', 'dc_daily',
-        'report_rc', 'cyq_perf', 'cyq_chips',
-        'ccass_hold', 'ccass_hold_detail', 'hk_hold',
-        'stk_auction_o', 'stk_auction_c', 'stk_nineturn',
-        'stk_ah_comparison', 'stk_surv', 'broker_recommend',
-        'stk_shock', 'stk_high_shock', 'stk_alert',
-        'pledge_stat', 'repurchase', 'share_float', 'block_trade',
-        'stk_holdernumber', 'stk_holdertrade',
-        'income', 'balancesheet', 'cashflow', 'forecast', 'express',
-        'dividend', 'fina_indicator', 'fina_audit', 'fina_mainbz',
-        'disclosure_date',
-    ],
 }
 
 # Redis 缓存 TTL（秒），作为兜底过期时间（即使依赖未变也最多缓存这么久）
@@ -134,7 +112,7 @@ class AnalysisCacheService:
 
     def __init__(self):
         self._sync_history_repo = SyncHistoryRepository()
-        self._cache_service = get_cache_service()
+        self._cache = cache
 
     def _make_cache_key(self, analysis_type: str, params_hash: str) -> str:
         return f"analysis_cache:{analysis_type}:{params_hash}"
@@ -189,7 +167,7 @@ class AnalysisCacheService:
         params_hash = self._hash_params(params)
         cache_key = self._make_cache_key(analysis_type, params_hash)
 
-        cached = await self._cache_service.get(cache_key)
+        cached = await self._cache.get(cache_key)
         if cached is None:
             return None
 
@@ -236,7 +214,7 @@ class AnalysisCacheService:
             'data': data,
         }
 
-        return await self._cache_service.set(
+        return await self._cache.set(
             cache_key, cache_value, ttl=ANALYSIS_CACHE_TTL
         )
 
@@ -251,11 +229,11 @@ class AnalysisCacheService:
             删除的缓存键数量
         """
         pattern = f"analysis_cache:{analysis_type}:*"
-        return await self._cache_service.delete_pattern(pattern)
+        return await self._cache.delete_pattern(pattern)
 
     async def invalidate_all(self) -> int:
         """清除所有分析缓存。"""
-        return await self._cache_service.delete_pattern("analysis_cache:*")
+        return await self._cache.delete_pattern("analysis_cache:*")
 
 
 # 单例

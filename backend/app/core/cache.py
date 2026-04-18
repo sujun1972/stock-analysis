@@ -6,10 +6,11 @@ Redis 缓存管理器
 
 import json
 import hashlib
-from typing import Any, Optional, Callable, Union
+from typing import Any, Optional, Callable
 from functools import wraps
 from redis import asyncio as aioredis
 from redis.exceptions import RedisError
+from loguru import logger
 
 from app.core.config import settings
 
@@ -40,7 +41,7 @@ class CacheManager:
                 # 测试连接
                 await self._redis.ping()
             except (RedisError, Exception) as e:
-                print(f"Redis connection failed: {e}. Caching disabled.")
+                logger.warning(f"Redis connection failed: {e}. Caching disabled.")
                 self._enabled = False
                 self._redis = None
 
@@ -66,7 +67,7 @@ class CacheManager:
                 return None
             return json.loads(value)
         except (RedisError, json.JSONDecodeError) as e:
-            print(f"Cache get error for key {key}: {e}")
+            logger.warning(f"Cache get error for key {key}: {e}")
             return None
 
     async def set(
@@ -95,7 +96,7 @@ class CacheManager:
             await redis.setex(key, ttl, serialized)
             return True
         except (RedisError, TypeError) as e:
-            print(f"Cache set error for key {key}: {e}")
+            logger.warning(f"Cache set error for key {key}: {e}")
             return False
 
     async def delete(self, key: str) -> bool:
@@ -116,7 +117,7 @@ class CacheManager:
             await redis.delete(key)
             return True
         except RedisError as e:
-            print(f"Cache delete error for key {key}: {e}")
+            logger.warning(f"Cache delete error for key {key}: {e}")
             return False
 
     async def delete_pattern(self, pattern: str) -> int:
@@ -142,7 +143,7 @@ class CacheManager:
                 await redis.delete(*keys)
             return len(keys)
         except RedisError as e:
-            print(f"Cache delete_pattern error for pattern {pattern}: {e}")
+            logger.warning(f"Cache delete_pattern error for pattern {pattern}: {e}")
             return 0
 
     async def get_or_set(
@@ -184,7 +185,7 @@ class CacheManager:
         try:
             return await redis.exists(key) > 0
         except RedisError as e:
-            print(f"Cache exists error for key {key}: {e}")
+            logger.warning(f"Cache exists error for key {key}: {e}")
             return False
 
     async def get_ttl(self, key: str) -> int:
@@ -204,7 +205,7 @@ class CacheManager:
         try:
             return await redis.ttl(key)
         except RedisError as e:
-            print(f"Cache get_ttl error for key {key}: {e}")
+            logger.warning(f"Cache get_ttl error for key {key}: {e}")
             return -2
 
     async def close(self):
