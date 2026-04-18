@@ -153,8 +153,8 @@ export default function BatchDetailPage() {
                               {model.model_id}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {model.config?.symbol} · {model.config?.model_type} ·
-                              T{model.config?.target_period}
+                              {String(model.config?.symbol ?? '')} · {String(model.config?.model_type ?? '')} ·
+                              T{String(model.config?.target_period ?? '')}
                             </div>
                           </div>
                         </div>
@@ -194,7 +194,7 @@ export default function BatchDetailPage() {
                               id: model.experiment_id,
                               experiment_id: model.experiment_id,
                               model_id: model.model_id,
-                              symbol: model.config?.symbol || '',
+                              symbol: String(model.config?.symbol ?? ''),
                               config: model.config
                             }}
                             triggerButton={

@@ -1,9 +1,9 @@
 import axiosInstance, { apiGet, apiPost, apiPut, apiPatch } from './axios-instance'
-import type { ApiResponse } from '@/types'
+import type { ApiResponse, InAppNotification, NotificationSettings } from '@/types'
 
 // ========== 健康检查 ==========
 
-export async function healthCheck(): Promise<ApiResponse<unknown>> {
+export async function healthCheck(): Promise<ApiResponse<{ status: string }>> {
   const response = await axiosInstance.get('/health')
   return response.data
 }
@@ -24,7 +24,7 @@ export async function updateDataSourceConfig(params: {
   minute_data_source?: string
   realtime_data_source?: string
   tushare_token?: string
-}): Promise<ApiResponse<unknown>> {
+}): Promise<ApiResponse<{ message: string }>> {
   return apiPost('/api/config/source', params)
 }
 
@@ -44,11 +44,11 @@ export async function trainModel(params: {
 
 // ========== Scheduler API ==========
 
-export async function getScheduledTasks(): Promise<ApiResponse<unknown[]>> {
+export async function getScheduledTasks(): Promise<ApiResponse<Array<Record<string, unknown>>>> {
   return apiGet('/api/scheduler/tasks')
 }
 
-export async function getScheduledTask(taskId: number): Promise<ApiResponse<unknown>> {
+export async function getScheduledTask(taskId: number): Promise<ApiResponse<Record<string, unknown>>> {
   return apiGet(`/api/scheduler/tasks/${taskId}`)
 }
 
@@ -81,11 +81,11 @@ export async function toggleScheduledTask(taskId: number): Promise<ApiResponse<{
   return apiPost(`/api/scheduler/tasks/${taskId}/toggle`)
 }
 
-export async function getTaskExecutionHistory(taskId: number, limit: number = 20): Promise<ApiResponse<unknown[]>> {
+export async function getTaskExecutionHistory(taskId: number, limit: number = 20): Promise<ApiResponse<Array<Record<string, unknown>>>> {
   return apiGet(`/api/scheduler/tasks/${taskId}/history`, { params: { limit } })
 }
 
-export async function getRecentExecutionHistory(limit: number = 50): Promise<ApiResponse<unknown[]>> {
+export async function getRecentExecutionHistory(limit: number = 50): Promise<ApiResponse<Array<Record<string, unknown>>>> {
   return apiGet('/api/scheduler/history/recent', { params: { limit } })
 }
 
@@ -116,13 +116,13 @@ export async function checkDataFreshness(params?: {
   return apiGet('/api/market/refresh-check', { params: params || {} })
 }
 
-export async function getRealtimeInfo(code: string): Promise<ApiResponse<unknown>> {
+export async function getRealtimeInfo(code: string): Promise<ApiResponse<Record<string, unknown>>> {
   return apiGet(`/api/market/realtime-info/${code}`)
 }
 
 // ========== 个人资料相关API ==========
 
-export async function getProfile(): Promise<ApiResponse<unknown>> {
+export async function getProfile(): Promise<ApiResponse<Record<string, unknown>>> {
   return apiGet('/api/profile')
 }
 
@@ -130,30 +130,30 @@ export async function updateProfile(data: {
   full_name?: string
   phone?: string
   avatar_url?: string
-}): Promise<ApiResponse<unknown>> {
+}): Promise<ApiResponse<Record<string, unknown>>> {
   return apiPatch('/api/profile', data)
 }
 
-export async function changePassword(oldPassword: string, newPassword: string): Promise<ApiResponse<unknown>> {
+export async function changePassword(oldPassword: string, newPassword: string): Promise<ApiResponse<{ message: string }>> {
   return apiPost('/api/profile/change-password', {
     old_password: oldPassword,
     new_password: newPassword,
   })
 }
 
-export async function getQuota(): Promise<ApiResponse<unknown>> {
+export async function getQuota(): Promise<ApiResponse<Record<string, unknown>>> {
   return apiGet('/api/profile/quota')
 }
 
 // ========== 用户通知相关API ==========
 
-export async function getNotificationSettings(): Promise<ApiResponse<unknown>> {
+export async function getNotificationSettings(): Promise<ApiResponse<NotificationSettings>> {
   return apiGet('/api/notifications/settings')
 }
 
 export async function updateNotificationSettings(
-  settings: Record<string, unknown>
-): Promise<ApiResponse<unknown>> {
+  settings: NotificationSettings
+): Promise<ApiResponse<NotificationSettings>> {
   return apiPut('/api/notifications/settings', settings)
 }
 
@@ -161,7 +161,7 @@ export async function getInAppNotifications(params?: {
   unread_only?: boolean
   limit?: number
   offset?: number
-}): Promise<ApiResponse<unknown[]>> {
+}): Promise<ApiResponse<InAppNotification[]>> {
   return apiGet('/api/notifications/in-app', { params })
 }
 
@@ -180,6 +180,6 @@ export async function getUnreadCount(): Promise<ApiResponse<{ unread_count: numb
 export async function getNotificationLogs(params?: {
   limit?: number
   offset?: number
-}): Promise<ApiResponse<unknown[]>> {
+}): Promise<ApiResponse<Array<Record<string, unknown>>>> {
   return apiGet('/api/notifications/logs', { params })
 }

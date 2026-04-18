@@ -70,10 +70,10 @@ export default function BacktestHistoryContent() {
         params.status_filter = statusFilter
       }
 
-      const response = await apiClient.get('/api/backtest-history', { params })
+      const response = await apiClient.get<{ items: BacktestRecord[]; total: number }>('/api/backtest-history', { params })
 
-      // apiClient.get 已返回 response.data，直接访问 success 和 data
-      if (response.success) {
+      // apiClient.get 已返回 response.data，直接访问 code 和 data
+      if (response.code === 200) {
         setRecords(response.data.items)
         setTotal(response.data.total)
       } else {

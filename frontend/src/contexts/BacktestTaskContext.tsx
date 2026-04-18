@@ -104,7 +104,7 @@ export function BacktestTaskProvider({ children }: { children: React.ReactNode }
 
           // 处理完成状态
           if (statusData.status === 'SUCCESS') {
-            const execId = statusData.execution_id || statusData.result?.execution_id || task.executionId
+            const execId = statusData.execution_id || (statusData.result as Record<string, unknown>)?.execution_id || task.executionId
 
             // 显示成功通知
             toast({

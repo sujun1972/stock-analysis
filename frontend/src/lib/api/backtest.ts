@@ -3,11 +3,11 @@ import type { BacktestRequest, ApiResponse } from '@/types'
 
 // ========== 统一回测API ==========
 
-export async function runBacktestV2(params: BacktestRequest): Promise<ApiResponse<unknown>> {
+export async function runBacktestV2(params: BacktestRequest): Promise<ApiResponse<{ execution_id: number; error?: string; strategy_name?: string }>> {
   return apiPost('/api/backtest/run-v3', params)
 }
 
-export async function runUnifiedBacktest(params: BacktestRequest): Promise<ApiResponse<unknown>> {
+export async function runUnifiedBacktest(params: BacktestRequest): Promise<ApiResponse<{ execution_id: number; error?: string; strategy_name?: string }>> {
   return apiPost('/api/backtest', params)
 }
 
@@ -39,7 +39,7 @@ export async function cancelBacktest(taskId: string): Promise<{ message: string;
   return response.data
 }
 
-export async function getBacktestResult(taskId: string): Promise<ApiResponse<unknown>> {
+export async function getBacktestResult(taskId: string): Promise<ApiResponse<Record<string, unknown>>> {
   return apiGet(`/api/backtest/result/${taskId}`)
 }
 
@@ -52,7 +52,7 @@ export async function runBacktest(params: {
   initial_cash?: number
   strategy_id?: string
   strategy_params?: Record<string, unknown>
-}): Promise<ApiResponse<unknown>> {
+}): Promise<ApiResponse<{ execution_id: number; error?: string; strategy_name?: string }>> {
   return runUnifiedBacktest({
     strategy_id: 0,
     strategy_type: 'predefined',
@@ -65,10 +65,27 @@ export async function runBacktest(params: {
   })
 }
 
-export async function getStrategyList(): Promise<ApiResponse<unknown[]>> {
+export async function getStrategyList(): Promise<ApiResponse<Array<{ id: string; name: string; description: string; version: string; parameter_count: number }>>> {
   return apiGet('/api/strategy/list')
 }
 
-export async function getStrategyMetadata(strategyId: string = 'complex_indicator'): Promise<ApiResponse<unknown>> {
+export async function getStrategyMetadata(strategyId: string = 'complex_indicator'): Promise<ApiResponse<{
+  id: string
+  name: string
+  description: string
+  version: string
+  parameters: Array<{
+    name: string
+    label: string
+    type: 'integer' | 'float' | 'boolean' | 'select'
+    default: unknown
+    min_value?: number
+    max_value?: number
+    step?: number
+    options?: Array<{ value: unknown; label: string }>
+    description: string
+    category: string
+  }>
+}>> {
   return apiGet('/api/strategy/metadata', { params: { strategy_id: strategyId } })
 }

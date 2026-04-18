@@ -264,7 +264,7 @@ export function useBacktestForm(): UseBacktestFormReturn {
           setIsRunning(false)
           clearInterval(pollInterval)
 
-          const execId = statusData.execution_id || statusData.result?.execution_id
+          const execId = statusData.execution_id || (statusData.result as Record<string, unknown>)?.execution_id as number | undefined
           if (execId) {
             setExecutionId(execId)
           }

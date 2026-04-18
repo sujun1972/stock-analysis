@@ -214,12 +214,28 @@ export interface StockListItem {
   added_at: string
 }
 
-// API响应类型
-export interface ApiResponse<T> {
-  success: boolean
-  data?: T
+// API响应类型（匹配后端实际格式）
+export interface ApiResponse<T = unknown> {
+  code: number
+  data: T
   message?: string
   error?: string
+  // 兼容旧代码中使用 success 的写法
+  success?: boolean
+}
+
+// AI分析记录类型
+export interface StockAnalysisRecord {
+  id: number
+  ts_code: string
+  analysis_type: string
+  analysis_text: string
+  score: number | null
+  prompt_text: string | null
+  ai_provider: string | null
+  ai_model: string | null
+  version: number
+  created_at: string
 }
 
 // 分页响应类型（匹配后端 v2.0 格式）

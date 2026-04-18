@@ -31,20 +31,11 @@ import {
   BookOpen,
 } from 'lucide-react'
 
+import type { StockAnalysisRecord } from '@/types'
+
 // ── 类型 ──────────────────────────────────────────────────────
 
-export interface AnalysisRecord {
-  id: number
-  ts_code: string
-  analysis_type: string
-  analysis_text: string
-  score: number | null
-  prompt_text: string | null
-  ai_provider: string | null
-  ai_model: string | null
-  version: number
-  created_at: string
-}
+export type AnalysisRecord = StockAnalysisRecord
 
 export interface HotMoneyViewDialogProps {
   open: boolean

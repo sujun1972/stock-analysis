@@ -11,6 +11,7 @@ import type {
   PaginatedResponse,
   StockList,
   StockListItem,
+  StockAnalysisRecord,
 } from '@/types'
 
 // ========== 股票相关API ==========
@@ -148,11 +149,11 @@ export async function getStockConcepts(stockCode: string): Promise<Concept[]> {
   return response.data.data || []
 }
 
-export async function syncConcepts(source: string = 'ths'): Promise<ApiResponse<unknown>> {
+export async function syncConcepts(source: string = 'ths'): Promise<ApiResponse<{ count: number }>> {
   return apiPost('/api/concepts/sync', null, { params: { source } })
 }
 
-export async function updateStockConcepts(stockCode: string, conceptIds: number[]): Promise<ApiResponse<unknown>> {
+export async function updateStockConcepts(stockCode: string, conceptIds: number[]): Promise<ApiResponse<{ count: number }>> {
   return apiPut(`/api/concepts/stock/${stockCode}/concepts`, { concept_ids: conceptIds })
 }
 
@@ -198,7 +199,7 @@ export async function getFeatures(
 export async function calculateFeatures(
   code: string,
   params?: { feature_types?: string[] }
-): Promise<ApiResponse<unknown>> {
+): Promise<ApiResponse<{ message: string }>> {
   return apiPost(`/api/features/calculate/${code}`, params)
 }
 
@@ -302,11 +303,11 @@ export async function saveStockAnalysis(params: {
   prompt_text?: string
   ai_provider?: string
   ai_model?: string
-}): Promise<ApiResponse<unknown>> {
+}): Promise<ApiResponse<{ id: number }>> {
   return apiPost('/api/stock-ai-analysis/', params)
 }
 
-export async function getLatestStockAnalysis(tsCode: string, analysisType: string): Promise<ApiResponse<unknown>> {
+export async function getLatestStockAnalysis(tsCode: string, analysisType: string): Promise<ApiResponse<{ id: number; score: number | null; version: number; analysis_text: string; created_at: string }>> {
   return apiGet('/api/stock-ai-analysis/latest', { params: { ts_code: tsCode, analysis_type: analysisType } })
 }
 
@@ -315,7 +316,7 @@ export async function getStockAnalysisHistory(
   analysisType: string,
   limit = 50,
   offset = 0
-): Promise<ApiResponse<unknown>> {
+): Promise<ApiResponse<{ items: StockAnalysisRecord[]; total: number }>> {
   return apiGet('/api/stock-ai-analysis/history', {
     params: { ts_code: tsCode, analysis_type: analysisType, limit, offset },
   })
@@ -324,11 +325,11 @@ export async function getStockAnalysisHistory(
 export async function updateStockAnalysis(
   recordId: number,
   params: { analysis_text: string; score?: number }
-): Promise<ApiResponse<unknown>> {
+): Promise<ApiResponse<{ id: number }>> {
   return apiPut(`/api/stock-ai-analysis/${recordId}`, params)
 }
 
-export async function deleteStockAnalysis(recordId: number): Promise<ApiResponse<unknown>> {
+export async function deleteStockAnalysis(recordId: number): Promise<ApiResponse<{ id: number }>> {
   const response = await axiosInstance.delete(`/api/stock-ai-analysis/${recordId}`)
   return response.data
 }
@@ -339,7 +340,7 @@ export async function generateStockAnalysis(params: {
   stock_code: string
   analysis_type: string
   template_key: string
-}): Promise<ApiResponse<unknown>> {
+}): Promise<ApiResponse<{ analysis_text: string; score?: number }>> {
   return apiPost('/api/stock-ai-analysis/generate', params)
 }
 
@@ -349,11 +350,11 @@ export async function generateMultiAnalysis(params: {
   stock_code: string
   analysis_types: string[]
   include_cio?: boolean
-}): Promise<ApiResponse<unknown>> {
+}): Promise<ApiResponse<{ expert_count: number; errors: Array<{ type: string; error: string }>; total_generation_time: number }>> {
   return apiPost('/api/stock-ai-analysis/generate-multi', params)
 }
 
-export async function collectStockData(tsCode: string, stockName: string): Promise<ApiResponse<unknown>> {
+export async function collectStockData(tsCode: string, stockName: string): Promise<ApiResponse<{ text: string }>> {
   return apiPost('/api/stock-data-collection/collect', {
     ts_code: tsCode,
     stock_name: stockName,
@@ -364,6 +365,6 @@ export async function collectStockData(tsCode: string, stockName: string): Promi
 export async function getPromptTemplateByKey(
   templateKey: string,
   params?: { stock_name?: string; stock_code?: string; ts_code?: string }
-): Promise<ApiResponse<unknown>> {
+): Promise<ApiResponse<{ content: string; key: string; name: string }>> {
   return apiGet(`/api/prompt-templates/by-key/${templateKey}`, { params })
 }
