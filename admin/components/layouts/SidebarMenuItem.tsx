@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronRight, ChevronDown } from 'lucide-react'
@@ -16,7 +17,7 @@ interface SidebarMenuItemProps {
   onMenuClick: () => void
 }
 
-export function SidebarMenuItem({
+export const SidebarMenuItem = memo(function SidebarMenuItem({
   item,
   pathname,
   isCollapsed,
@@ -205,4 +206,4 @@ export function SidebarMenuItem({
       )}
     </Link>
   )
-}
+})

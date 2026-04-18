@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useState, useEffect } from 'react'
+import { ReactNode, useState, useEffect, useCallback, useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { useSidebarStore } from '@/stores/sidebar-store'
@@ -54,13 +54,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }, [pathname])
 
   // 精确路径匹配，避免 /data/margin 匹配到 /data/margin-detail
-  const isActive = (item: NavItem) => {
+  const isItemActive = useCallback((item: NavItem) => {
     if (item.children) {
-      // parent 自身 href 精确匹配（如 /boardgame 页面本身）
       if (item.href && pathname === item.href) {
         return true
       }
-      // 检查子菜单是否有激活项
       return item.children.some(child => {
         if (!child.href) return false
         if (child.href === '/') return pathname === '/'
@@ -74,21 +72,28 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       return pathname === item.href || pathname.startsWith(item.href + '/')
     }
     return false
-  }
+  }, [pathname])
 
-  const toggleMenu = (menuName: string) => {
+  // 预计算所有菜单项的激活状态，避免渲染时重复计算
+  const activeMap = useMemo(() => {
+    const map = new Map<string, boolean>()
+    navItems.forEach(item => map.set(item.name, isItemActive(item)))
+    return map
+  }, [isItemActive])
+
+  const toggleMenu = useCallback((menuName: string) => {
     setOpenMenus(prev =>
       prev.includes(menuName)
         ? prev.filter(name => name !== menuName)
         : [...prev, menuName]
     )
-  }
+  }, [])
 
-  const handleMenuClick = () => {
+  const handleMenuClick = useCallback(() => {
     if (window.innerWidth < 768) {
       setCollapsed(true)
     }
-  }
+  }, [setCollapsed])
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
@@ -142,7 +147,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               pathname={pathname}
               isCollapsed={isCollapsed}
               isOpen={openMenus.includes(item.name)}
-              isActive={isActive(item)}
+              isActive={activeMap.get(item.name) ?? false}
               onToggleMenu={toggleMenu}
               onMenuClick={handleMenuClick}
             />
